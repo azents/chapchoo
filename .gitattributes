@@ -1,0 +1,4 @@
+python/libs/chapchoo-admin-client/chapchooadminclient_README.md whitespace=-trailing-space
+python/libs/chapchoo-admin-client/src/** whitespace=-trailing-space
+python/libs/chapchoo-public-client/chapchoopublicclient_README.md whitespace=-trailing-space
+python/libs/chapchoo-public-client/src/** whitespace=-trailing-space

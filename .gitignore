@@ -1,0 +1,48 @@
+### Project ###
+.env
+.chapchoo-dev.env
+**/.env
+**/.env.local
+**/.env.*.local
+!**/.env.example
+.claude/scheduled_tasks.lock
+.claude/worktrees/
+/db-data
+/temporal-db-data
+.turbo/
+.pnpm-store/
+node_modules/
+storybook-static/
+
+### Intellij ###
+.idea/
+
+### macOS ###
+.DS_Store
+.AppleDouble
+.LSOverride
+
+### VisualStudioCode ###
+.vscode/
+*.code-workspace
+!chapchoo.code-workspace
+
+# obsidian
+.vault/
+.obsidian/workspace/
+
+.mcp.json
+/config.json
+/opencode.json
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+*.tsbuildinfo
+.next/
+.eslintcache
+.prettiercache
+.claude/convention-audit-state.json
+.claude/living-spec-audit-state.json

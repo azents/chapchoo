@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      TURBO_TELEMETRY_DISABLED: "1"
+      STORYBOOK_DISABLE_TELEMETRY: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: typescript/package.json
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: typescript/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: typescript
+      - run: uvx pre-commit run --all-files
+      - run: uv run --locked --project .codex python -m unittest discover -s .codex/hooks -p '*_test.py'
+      - run: python -m unittest scripts.tests.test_docs_catalog
+      - run: python scripts/docs_catalog.py validate
+      - name: Validate inherited skill packages and helper tests
+        run: |
+          for skill in .claude/skills/*; do
+            uv run --locked --project .codex python .claude/skills/skill-creator/scripts/quick_validate.py "$skill"
+          done
+          python -m unittest discover -s .claude/skills/ci-optimization/scripts -p '*_test.py'
+          for skill in convention-audit living-spec-audit skill-creator; do
+            uv run --locked --project .codex --with 'pytest==9.1.1' python -m pytest ".claude/skills/$skill/scripts" -q
+          done
+      - run: pnpm run format:check && pnpm run lint && pnpm run typecheck
+        working-directory: typescript
+      - run: pnpm --filter @chapchoo/web test && pnpm run build && pnpm run build-storybook --filter=@chapchoo/web
+        working-directory: typescript

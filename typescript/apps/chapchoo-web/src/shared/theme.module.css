@@ -1,0 +1,18 @@
+.switchInput:checked:not(:disabled):not([data-disabled]) + .switchTrack {
+  --switch-text-color: var(--chapchoo-switch-foreground);
+  --switch-thumb-bg: var(--chapchoo-switch-foreground);
+}
+
+@media (hover: hover) {
+  .chipLabel[data-checked]:not([data-disabled]):hover {
+    color: var(--chapchoo-chip-hover-foreground);
+    --chip-icon-color: var(--chapchoo-chip-hover-foreground);
+  }
+}
+
+@media (hover: none) {
+  .chipLabel[data-checked]:not([data-disabled]):active {
+    color: var(--chapchoo-chip-hover-foreground);
+    --chip-icon-color: var(--chapchoo-chip-hover-foreground);
+  }
+}
