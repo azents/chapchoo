@@ -1,0 +1,36 @@
+[workspace]
+members = ["crates/chapchoo-domain", "crates/chapchoo-crypto"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT"
+publish = false
+
+[workspace.dependencies]
+base64 = "0.22.1"
+bcrypt = "0.19.3"
+chacha20poly1305 = { version = "0.11.0", features = ["zeroize"] }
+email_address = { version = "0.2.9", default-features = false }
+hkdf = "0.12.4"
+getrandom = { version = "0.4.3", features = ["std"] }
+hmac = "0.12.1"
+sha2 = "0.10.9"
+subtle = "2.6.1"
+thiserror = "2.0.18"
+zeroize = { version = "1.9.0", features = ["derive"] }
+chapchoo-domain = { path = "crates/chapchoo-domain" }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "deny"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+dbg_macro = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
