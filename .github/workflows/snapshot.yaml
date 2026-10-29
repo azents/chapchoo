@@ -1,0 +1,142 @@
+name: Snapshot
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      dispatch_downstream:
+        description: Notify the Home snapshot updater after publishing
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: snapshot-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Native snapshot ${{ matrix.architecture }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            architecture: amd64
+            machine: x86_64
+          - runner: ubuntu-24.04-arm
+            architecture: arm64
+            machine: aarch64
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Build native independent images and exercise deployment prefixes
+        env:
+          ARCHITECTURE: ${{ matrix.architecture }}
+          MACHINE: ${{ matrix.machine }}
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = "$MACHINE"
+          docker_machine="$(docker info --format '{{.Architecture}}')"
+          case "$MACHINE:$docker_machine" in
+            x86_64:x86_64|x86_64:amd64|aarch64:aarch64|aarch64:arm64) ;;
+            *) echo 'Snapshot builder must be native'; exit 1 ;;
+          esac
+          for component in backend general-web admin-web; do
+            docker build --target "$component" \
+              --build-arg GENERAL_PUBLIC_URL=https://chapchoo.internal.hardtack.me \
+              --build-arg ADMIN_PUBLIC_URL=https://chapchoo.internal.hardtack.me/admin \
+              --label "org.opencontainers.image.source=https://github.com/azents/chapchoo" \
+              --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+              -f images/chapchoo/Dockerfile -t "chapchoo-$component:acceptance" .
+          done
+          python3 scripts/test-container-images.py \
+            --backend chapchoo-backend:acceptance \
+            --general chapchoo-general-web:acceptance \
+            --admin chapchoo-admin-web:acceptance --admin-base-path /admin
+      - name: Push only locally verified architecture images
+        env:
+          ARCHITECTURE: ${{ matrix.architecture }}
+        run: |
+          set -euo pipefail
+          mkdir -p image-metadata
+          for component in backend general-web admin-web; do
+            image="ghcr.io/azents/chapchoo-$component-snapshot"
+            # A rerun gets a distinct staging tag, never racing another attempt.
+            tag="run-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$ARCHITECTURE"
+            docker tag "chapchoo-$component:acceptance" "$image:$tag"
+            docker push "$image:$tag"
+            digest="$(docker image inspect "$image:$tag" --format '{{index .RepoDigests 0}}' | cut -d@ -f2)"
+            test "${digest#sha256:}" != "$digest"
+            jq -n --arg component "$component" --arg architecture "$ARCHITECTURE" \
+              --arg image "$image" --arg digest "$digest" \
+              '{component:$component,architecture:$architecture,image:$image,digest:$digest}' \
+              > "image-metadata/$component-$ARCHITECTURE.json"
+          done
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-image-metadata-${{ matrix.architecture }}
+          path: image-metadata/*.json
+          if-no-files-found: error
+
+  publish:
+    name: Publish complete snapshot
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: native-image-metadata-*
+          path: image-metadata
+          merge-multiple: true
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - name: Publish matching multiarchitecture indexes and immutable metadata
+        run: python3 scripts/publish-snapshot.py --metadata image-metadata --output snapshot-payload.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: snapshot-payload
+          path: snapshot-payload.json
+          if-no-files-found: error
+
+  dispatch:
+    name: Notify Home
+    needs: publish
+    if: github.ref == 'refs/heads/main' && (github.event_name != 'workflow_dispatch' || inputs.dispatch_downstream)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    env:
+      DOWNSTREAM_REPOSITORY: ${{ vars.DOWNSTREAM_DEPLOY_REPOSITORY }}
+      HAS_TOKEN: ${{ secrets.DOWNSTREAM_DEPLOY_TOKEN != '' }}
+    steps:
+      # Home independently verifies this finished source workflow and downloads
+      # its authenticated snapshot artifact; dispatch is only a wake-up signal.
+      - name: Dispatch published source identity
+        if: env.HAS_TOKEN == 'true' && env.DOWNSTREAM_REPOSITORY != ''
+        env:
+          GH_TOKEN: ${{ secrets.DOWNSTREAM_DEPLOY_TOKEN }}
+        run: |
+          set -euo pipefail
+          jq -n --arg runId "$GITHUB_RUN_ID" \
+            '{event_type:"chapchoo_snapshot_published",client_payload:{runId:$runId}}' > dispatch.json
+          gh api --method POST "/repos/$DOWNSTREAM_REPOSITORY/dispatches" --input dispatch.json
+      - name: Report unconfigured downstream
+        if: env.HAS_TOKEN != 'true' || env.DOWNSTREAM_REPOSITORY == ''
+        run: echo 'Snapshot published; downstream token/repository must be configured before automatic Home updates.'

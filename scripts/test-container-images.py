@@ -44,7 +44,7 @@ def request(port: str, path: str, origin: str | None = None) -> bytes:
         return response.read()
 
 
-def validate(backend: str, general: str, admin: str) -> None:
+def validate(backend: str, general: str, admin: str, admin_base_path: str = "") -> None:
     suffix = secrets.token_hex(6)
     network = f"chapchoo-images-{suffix}"
     containers: list[str] = []
@@ -96,6 +96,7 @@ def validate(backend: str, general: str, admin: str) -> None:
             ("admin", admin, "3004", "50052"),
         ]:
             origin = f"https://{app}.example.invalid"
+            prefix = admin_base_path if app == "admin" else ""
             identifier = docker(
                 "run",
                 "--detach",
@@ -105,7 +106,7 @@ def validate(backend: str, general: str, admin: str) -> None:
                 "--publish",
                 f"127.0.0.1::{listen}",
                 "--env",
-                f"CHAPCHOO_{app.upper()}_WEB_URL={origin}",
+                f"CHAPCHOO_{app.upper()}_WEB_URL={origin}{prefix}",
                 "--env",
                 f"CHAPCHOO_{app.upper()}_BACKEND_URL=http://accounts-backend:{rpc}",
                 image,
@@ -126,7 +127,7 @@ def validate(backend: str, general: str, admin: str) -> None:
             deadline = time.monotonic() + 65
             while True:
                 try:
-                    if b'"status":"ok"' in request(published, "/health"):
+                    if b'"status":"ok"' in request(published, f"{prefix}/health"):
                         break
                 except (OSError, urllib.error.URLError):
                     pass
@@ -135,8 +136,13 @@ def validate(backend: str, general: str, admin: str) -> None:
                         "An independent web image did not become healthy"
                     )
                 time.sleep(0.1)
-            html = request(published, "/login")
-            assets = set(re.findall(rb'/_next/static/[^"<>\s]+\.(?:css|js)', html))
+            html = request(published, f"{prefix}/login")
+            assets = set(
+                re.findall(
+                    rb'(?:"|href=|src=)(/[^"<>\s]*_next/static/[^"<>\s]+\.(?:css|js))',
+                    html,
+                )
+            )
             if not assets:
                 raise RuntimeError("Independent image HTML has no static assets")
             font_found = False
@@ -147,11 +153,15 @@ def validate(backend: str, general: str, admin: str) -> None:
                         rb"(?:\.\./media/|/_next/static/media/)([^)\s]+\.woff2)",
                         content,
                     ):
-                        request(published, "/_next/static/media/" + font.decode())
+                        request(
+                            published, prefix + "/_next/static/media/" + font.decode()
+                        )
                         font_found = True
             if not font_found:
                 raise RuntimeError("Independent image did not serve bundled fonts")
-            result = json.loads(request(published, "/api/trpc/auth.methods", origin))
+            result = json.loads(
+                request(published, f"{prefix}/api/trpc/auth.methods", origin)
+            )
             if "error" in result or "result" not in result:
                 raise RuntimeError(
                     "Independent web image did not reach its private RPC backend"
@@ -193,8 +203,9 @@ def main() -> None:
     parser.add_argument("--backend", required=True)
     parser.add_argument("--general", required=True)
     parser.add_argument("--admin", required=True)
+    parser.add_argument("--admin-base-path", choices=["", "/admin"], default="")
     args = parser.parse_args()
-    validate(args.backend, args.general, args.admin)
+    validate(args.backend, args.general, args.admin, args.admin_base_path)
 
 
 if __name__ == "__main__":

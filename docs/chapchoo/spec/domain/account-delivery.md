@@ -13,6 +13,8 @@ code_paths:
   - infra/charts/chapchoo
   - testenv/chapchoo
   - .github/workflows/linux-package.yaml
+  - .github/workflows/snapshot.yaml
+  - scripts/publish-snapshot.py
 last_verified_at: 2026-10-30
 spec_version: 1
 ---
@@ -112,6 +114,31 @@ promised. Examples under `testenv/chapchoo` do not authorize a cluster write.
 The chart rejects a gRPC catch-all sharing the same ingress class, host and root
 path with an enabled web route. Different web prefixes remain valid, including
 General `/` and Admin `/admin` on one host.
+
+## Snapshot publication and Home handoff
+
+The `Snapshot` workflow follows the requested Azents-style image publication:
+main pushes or explicit main dispatch build on native x86-64/ARM64 runners.
+Each runner builds independent backend/General/Admin images, exercises their
+nonroot/read-only/private-RPC/static/font/shutdown boundary and only then pushes
+architecture staging images. General is compiled at root; the Home Admin image
+is compiled for `/admin`. Distribution archives retain their default root paths.
+
+After both native jobs succeed, publication validates exactly six matching
+component/architecture metadata files, creates three multiarchitecture indexes
+and checks their registry digest and exact Linux platform set. Immutable tags
+include source SHA, run and attempt; only a complete set gets a
+`snapshot-payload` artifact. An optional downstream dispatch carries only run
+identity. Operators configure `DOWNSTREAM_DEPLOY_REPOSITORY` and
+`DOWNSTREAM_DEPLOY_TOKEN`; missing downstream configuration is reported without
+pretending a Home update occurred.
+
+Home owns PostgreSQL/PVC/ExternalSecret prerequisites and private Traefik Gateway
+routes separately from this chart. Its updater verifies the successful canonical
+main Snapshot and downloads that run's artifact before atomically pinning chart
+SHA and all images. It does not trust image data in a dispatch notification or
+infer that Secrets are ready. Initial activation and live acceptance remain
+explicit; no new nginx controller or public plaintext RPC is introduced.
 
 ## Verification boundary
 

@@ -189,6 +189,25 @@ an emulation service. Capture architecture, libc/native dependencies, selected
 role startup, real assets, owned shutdown, foreign-resource safety and the
 three product journeys in root-owned acceptance evidence before release.
 
+## Home snapshot images
+
+The `Snapshot` workflow builds and runs these same targets on native amd64 and
+arm64 before pushing architecture staging images and combining the complete
+three-component indexes. The General snapshot uses root and the Admin snapshot
+uses `/admin`, matching `https://chapchoo.internal.hardtack.me`. The extracted
+Linux distributions keep their existing root-prefix defaults. Native package CI
+also exercises the `/admin` image rather than treating prefix compilation as
+metadata-only evidence.
+
+The publication artifact carries one immutable source SHA/run/attempt and each
+index's registry digest. Home independently verifies the source run and complete
+artifact before proposing chart/image pins. Set the source repository variable
+`DOWNSTREAM_DEPLOY_REPOSITORY=hardtack/home` and a least-privilege
+`DOWNSTREAM_DEPLOY_TOKEN` Secret to enable notifications. A missing notification
+configuration is reported explicitly. Main workflow publication, credential
+readiness, Home initial full sync and live acceptance are separate gates; none
+is established merely by this source configuration.
+
 ## Focused validation
 
 ```sh

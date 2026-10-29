@@ -202,3 +202,30 @@ General followed by Admin. The first-ready-exit test separately observes prompt
 failure detection and the approved20s+5s cleanup; its initial5s whole-process-exit
 assertion incorrectly conflated those budgets. It still requires no final ready
 announcement, failure exit and disappearance of both owned groups.
+
+## Requested Home snapshot follow-up
+
+The requester subsequently selected the Azents snapshot + Home Argo deployment
+pattern and `chapchoo.internal.hardtack.me`. This refines the environment of the
+existing deployment work; it does not add product/versioning authority.
+
+- Keep PR #6 atdea1927 and its exact-head source/native successes. Implement this
+  focused follow-up on `feat/snapshot-publishing` stacked on `feat/accounts-delivery`.
+- Root owns native snapshot workflow/publication metadata and prefix-image checks;
+  root also owns the separate Home worktree's dedicated namespace/PostgreSQL/PVC,
+  ExternalSecret references, private Gateway root/Admin-prefix routes and updater.
+- Publish three independent multiarchitecture image indexes only after each
+  native runner executes the images. Home pins chart SHA and images from one
+  authenticated complete source run, never caller-supplied dispatch image data.
+- Home prerequisites remain a separate Application from product PreSync hooks.
+  Initial acknowledgement/auto-sync stays off until actual prerequisites and
+  first immutable image publication are confirmed. The updater preserves this
+  operator state; missing values never become guessed image digests or keys.
+- Current main/PRs are not merged by the agent. GitHub Actions Secret/variable
+  management returned403 with this installation, and no Secret values are read
+  or copied. Record required Infisical/GitHub references and batch activation
+  approval after completing review, both PRs and their exact-head CI.
+- Same reviewer `/root/accounts-reviewer` reviews the integrated follow-up across
+  both repositories read-only; root owns all actual validation and corrections.
+- Design delta: None; actual live installation/upgrade/TLS/product gates remain
+  pending rather than being replaced by render or workflow-unit evidence.
