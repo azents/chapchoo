@@ -5,7 +5,7 @@ repos:
         name: Rust format, lint, test and dependency boundaries
         entry: bash scripts/check-rust.sh
         language: system
-        files: ^(rust/|scripts/check-rust\.)
+        files: ^(rust/|scripts/check-rust\.|scripts/run-rust-tests\.py)
         pass_filenames: false
       - id: ensure-claude-md-link
         name: Ensure CLAUDE.md imports AGENTS.md

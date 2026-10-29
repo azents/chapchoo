@@ -21,6 +21,14 @@ bounded blocking admission rather than calling it on an async executor thread.
 These primitives do not authorize an installation-key change or persist data.
 No actual installation secret belongs in source control, test fixtures or logs.
 
+The persistence phase adds real SQLite/PostgreSQL integration tests. The Rust
+quality script starts and removes a private Unix-socket PostgreSQL instance when
+`initdb` and `pg_ctl` are available. Otherwise explicitly supply
+`CHAPCHOO_TEST_POSTGRES_URL` for a disposable test server with schema-creation
+permission. Never point this setting at a production database. Tests use isolated
+schemas and do not count missing PostgreSQL prerequisites as skipped successes.
+CI supplies a fresh PostgreSQL service to each validation job.
+
 ## Frontend
 
 The scaffold uses the same frontend foundation as Azents: Next.js App Router,
