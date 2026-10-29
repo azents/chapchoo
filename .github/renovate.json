@@ -1,0 +1,136 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "docker:pinDigests",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "dependencyDashboard": true,
+  "dependencyDashboardLabels": [
+    "dependencies"
+  ],
+  "labels": [
+    "dependencies"
+  ],
+  "reviewers": [
+    "hardtack"
+  ],
+  "timezone": "Asia/Seoul",
+  "schedule": [
+    "before 3am"
+  ],
+  "automerge": false,
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "minimumReleaseAge": null,
+    "labels": [
+      "security"
+    ],
+    "schedule": [
+      "at any time"
+    ]
+  },
+  "osvVulnerabilityAlerts": true,
+  "minimumReleaseAge": "7 days",
+  "pre-commit": {
+    "enabled": true
+  },
+  "prHourlyLimit": 3,
+  "prConcurrentLimit": 6,
+  "prCreation": "immediate",
+  "packageRules": [
+    {
+      "description": "Require Dependency Dashboard approval before opening major update PRs",
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "Group Python development and test tools",
+      "matchManagers": [
+        "pep621"
+      ],
+      "matchPackageNames": [
+        "pytest",
+        "pytest-asyncio",
+        "ruff",
+        "testcontainers",
+        "ty"
+      ],
+      "groupName": "Python development and test tools"
+    },
+    {
+      "description": "Group TypeScript development dependencies",
+      "matchManagers": [
+        "npm"
+      ],
+      "matchDepTypes": [
+        "devDependencies"
+      ],
+      "groupName": "TypeScript development dependencies"
+    },
+    {
+      "description": "Update Turbo in the workspace and frontend Dockerfiles together",
+      "matchPackageNames": [
+        "turbo"
+      ],
+      "groupName": "Turbo"
+    },
+    {
+      "description": "Group GitHub Actions updates",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "groupName": "GitHub Actions"
+    },
+    {
+      "description": "Group pre-commit hook updates",
+      "matchManagers": [
+        "pre-commit"
+      ],
+      "groupName": "pre-commit hooks"
+    },
+    {
+      "description": "Disable Python runtime version updates while allowing digest pinning and refreshes",
+      "matchDepNames": [
+        "python",
+        "cpython"
+      ],
+      "matchUpdateTypes": [
+        "major",
+        "minor",
+        "patch",
+        "pin",
+        "replacement"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Keep @types/node on the Node.js 24 major used by the TypeScript workspace",
+      "matchPackageNames": [
+        "@types/node"
+      ],
+      "allowedVersions": "/^24\\./"
+    }
+  ],
+  "enabledManagers": [
+    "pep621",
+    "npm",
+    "github-actions",
+    "pre-commit",
+    "dockerfile",
+    "docker-compose",
+    "helmv3",
+    "helm-values"
+  ],
+  "ignorePaths": [
+    "**/node_modules/**"
+  ],
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": [
+      "before 2am on monday"
+    ]
+  }
+}

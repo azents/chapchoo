@@ -1,0 +1,9 @@
+packages:
+  - "packages/*"
+  - "apps/*"
+allowBuilds:
+  "@parcel/watcher": false
+  "@swc/core": true
+  esbuild: false
+  sharp: true
+  unrs-resolver: true

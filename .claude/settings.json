@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "test -f \"$(git rev-parse --git-path hooks/pre-commit)\" || uvx pre-commit install"
+          }
+        ]
+      }
+    ]
+  }
+}
