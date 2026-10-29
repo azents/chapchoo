@@ -42,6 +42,7 @@ __pycache__/
 .coverage
 *.tsbuildinfo
 .next/
+rust/target/
 .eslintcache
 .prettiercache
 .claude/convention-audit-state.json

@@ -1,5 +1,26 @@
 # Development
 
+## Rust foundation
+
+The account/team implementation is being delivered in phases. The first phase
+contains typed domain values and common cryptographic primitives, not a runnable
+backend service. Install the pinned toolchain and run its integrated checks:
+
+```sh
+rustup toolchain install 1.99.1 --profile minimal --component clippy,rustfmt
+bash scripts/check-rust.sh
+```
+
+`rust/rust-toolchain.toml` is the toolchain authority. The workspace lockfile is
+committed; checks deny unsafe code, unhandled lint warnings, production unwraps/
+expects and secret-revealing diagnostic formatting. Domain and crypto crates
+have explicit dependency boundaries and do not depend on persistence or RPC.
+Password hashing is synchronous CPU work: the future service layer must provide
+bounded blocking admission rather than calling it on an async executor thread.
+
+These primitives do not authorize an installation-key change or persist data.
+No actual installation secret belongs in source control, test fixtures or logs.
+
 ## Frontend
 
 The scaffold uses the same frontend foundation as Azents: Next.js App Router,
