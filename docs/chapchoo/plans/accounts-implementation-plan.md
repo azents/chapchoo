@@ -14,14 +14,15 @@ tags: [accounts, implementation, backend, frontend]
 - Design delta: None.
 - Implementation owner/integrator: `/root`.
 - Single independent read-only reviewer: `/root/accounts-reviewer`.
-- Existing Specs: no implemented product Specs exist in this greenfield checkout.
+- Current Specs: credential primitives, account storage and RPC/CLI behavior;
+  later web and delivery surfaces are not implied by those backend Specs.
 - Approval and explicit implementation request received on 2026-10-29 KST.
 
 ## Delivery Phases
 
 | Phase | Branch/base | Approved mechanisms | Deliverable and boundary |
 | --- | --- | --- | --- |
-| 1/5 | `feat/accounts-foundation` / `chore/bootstrap-chapchoo` | M23, M24, M30, M32, M36, M37, M41 | Rust workspace, typed domain/credential primitives, common crypto boundary, deterministic tests and quality commands; adopt approved snapshot and plans in the same PR |
+| 1/5 | `feat/accounts-foundation` / `main` after bootstrap merge | M23, M24, M30, M32, M36, M37, M41 | Rust workspace, typed domain/credential primitives, common crypto boundary, deterministic tests and quality commands; adopt approved snapshot and plans in the same PR |
 | 2/5 | `feat/accounts-persistence` / phase 1 | M2, M4, M10-M12, M16-M22, M25, M26, M29, M36, M40 | Both-engine Diesel migrations and completed operations, constraint/concurrency tests, explicit preparation and fixed-key checks |
 | 3/5 | `feat/accounts-rpc-cli` / phase 2 | M1, M3, M5, M6, M8, M13-M15, M18-M22, M25, M28, M30-M32, M43 | Generated RPC contracts, shared services, mail adapter, operator/foreground CLI, owned shutdown and protocol tests |
 | 4/5 | `feat/accounts-web` / phase 3 | M1, M3, M4, M7, M25, M27, M34, M38, M42 | Shared UI extraction, general/Admin account/team screens, generated Node gRPC adapters, writable-cookie renewal and representative browser journeys |
@@ -67,6 +68,12 @@ behavior to Living Specs, sets matching implemented dates only after complete
 verification, then removes this plan and all phase plans.
 
 ## Context and Scope Checkpoints
+
+Bootstrap PR #1 was merged by the requester at `9031127`. Its original commit
+is preserved as a merge parent. PR #2 was reopened and retargeted to main after
+its deleted base closed it; head `486c962` was unchanged and new CI passed.
+PR #3 remains open at `563e9a9` with phase 1 as base and successful exact-head
+CI. No implementation PR has been merged by the implementation agent.
 
 At every phase boundary record changed interfaces, approved coverage, unauthorized
 addition check, removal evidence, integrated test results, reviewer findings,

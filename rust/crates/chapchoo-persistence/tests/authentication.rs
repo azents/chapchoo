@@ -82,10 +82,54 @@ async fn exercise(store: Store) -> Result<(), TestError> {
             .is_some()
     );
     let member_draft = account("member", "member@example.invalid", "Aa1!member")?;
+    assert!(matches!(
+        store
+            .revoke_grant(
+                &admin.token.digest(),
+                "grant-signup",
+                GrantKind::PasswordReset,
+                NOW,
+            )
+            .await,
+        Err(StoreError::NotFound)
+    ));
+    let mismatched = account("wrong-recipient", "other@example.invalid", "Aa1!other")?;
+    assert!(matches!(
+        store
+            .redeem_signup(&proof.digest(), &mismatched, NOW, policy)
+            .await,
+        Err(StoreError::EmailMismatch)
+    ));
     let member = store
         .redeem_signup(&proof.digest(), &member_draft, NOW, policy)
         .await?;
     assert!(!member.user.is_admin);
+    let duplicate = BearerSecret::generate()?;
+    store
+        .issue_signup_grant(
+            &admin.token.digest(),
+            &email,
+            &GrantDraft {
+                id: "duplicate-email".to_owned(),
+                proof: duplicate.digest(),
+                expires_at: NOW + 1000,
+            },
+            NOW,
+        )
+        .await?;
+    let duplicate_draft = account("duplicate-user", "member@example.invalid", "Aa1!duplicate")?;
+    assert!(matches!(
+        store
+            .redeem_signup(&duplicate.digest(), &duplicate_draft, NOW, policy)
+            .await,
+        Err(StoreError::EmailRegistered)
+    ));
+    assert!(
+        store
+            .preview_grant(&duplicate.digest(), GrantKind::Signup, NOW)
+            .await?
+            .is_some()
+    );
     assert_eq!(store.teams(&member.token.digest(), NOW).await?.len(), 1);
     assert!(
         store

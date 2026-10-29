@@ -7,6 +7,12 @@ repos:
         language: system
         files: ^(rust/|scripts/check-rust\.|scripts/run-rust-tests\.py)
         pass_filenames: false
+      - id: rpc-contracts
+        name: Generated RPC contracts and live Node/Rust interoperability
+        entry: bash scripts/check-rpc.sh
+        language: system
+        files: ^(proto/|rust/|typescript/packages/chapchoo-rpc-client/|scripts/(generate-rpc-clients\.sh|check-rpc\.sh|test-rpc-clients\.py|run-rust-tests\.py))
+        pass_filenames: false
       - id: ensure-claude-md-link
         name: Ensure CLAUDE.md imports AGENTS.md
         entry: bash scripts/ensure-claude-md-link.sh
@@ -81,5 +87,6 @@ exclude: |
     python/libs/chapchoo-public-client/.*|
     typescript/packages/chapchoo-admin-client/src/generated/.*|
     typescript/packages/chapchoo-public-client/src/generated/.*|
+    typescript/packages/chapchoo-rpc-client/src/generated/.*|
     .*pnpm-lock\.yaml$
   )$

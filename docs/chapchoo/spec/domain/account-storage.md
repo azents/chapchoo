@@ -24,8 +24,8 @@ spec_version: 1
 ## Current Reachability
 
 The persistence library exposes explicit preparation/readiness and completed
-account/team/session operations with owned asynchronous pool leases. No public
-network server or command-line service is activated by these library functions.
+account/team/session operations with owned asynchronous pool leases. The
+[RPC and operator composition](account-rpc.md) calls these library boundaries.
 
 Preparation embeds separate SQLite/PostgreSQL migrations. PostgreSQL stores
 native Team-kind, membership-role, grant-kind and invitation-status enums;
@@ -73,7 +73,7 @@ of any arbitrary manual SQL statement.
   when a later migration fails. These functions do not promise release rollback.
 
 The operator preserves the database and original root together. Runtime
-application startup eventually invokes only readiness, not preparation. A
+application startup invokes only readiness, not preparation. A
 changed root, absent history or incorrect migration set does not authorize
 adopting a new key, deleting data or creating the first administrator.
 
@@ -104,9 +104,9 @@ User's sessions together, without returning a new session.
 Correct email-code verification consumes its challenge once. An unknown email
 returns a committed registration-required outcome, not unrestricted signup.
 Wrong codes neither consume nor extend a challenge. Creating a new request
-retains other still-unconsumed, unexpired challenges. The future service must
-check mail configuration before email-only issuance and deliver only after
-commit; the repository sends no email and stores no raw code.
+retains other still-unconsumed, unexpired challenges. The service checks mail
+configuration before email-only issuance and delivers after commit; the
+repository sends no email and stores no raw code.
 
 Collaborative Team creation atomically creates owner membership. Current
 membership and owner reference determine permissions, including after concurrent
@@ -126,6 +126,12 @@ operation. Signup does not accept an invitation.
 The operator recovery method promotes an existing User only. It has no network
 authentication and must only be wired into the operator CLI capability, not a
 public/general/Admin RPC. Connection/readiness authority is still required.
+
+Grant revocation is scoped to its expected Signup/PasswordReset kind inside
+the accepting transaction. Typed rejections distinguish mismatched recipient,
+registered email, duplicate membership, processed invitation, owner-leave
+restriction and unique Team-handle conflicts. Generic integrity/DB errors do not
+become fabricated specific business outcomes.
 
 ## Verification Boundary
 

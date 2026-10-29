@@ -1,0 +1,22 @@
+[package]
+name = "chapchoo-service"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+chapchoo-crypto.workspace = true
+chapchoo-domain.workspace = true
+chapchoo-persistence.workspace = true
+tokio.workspace = true
+zeroize.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+base64.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true
