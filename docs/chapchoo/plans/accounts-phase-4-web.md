@@ -157,6 +157,16 @@ tags: [accounts, implementation, frontend, authentication]
   identity2/list1 before → identity3/list2 after; the error/refresh screen cleared.
   No security/authority boundary changed; the review policy requires affected
   validation rather than another full review for this correction.
+- The first PR #5 remote CI at `5823521` passed Rust but exposed clean-checkout
+  tooling prerequisites: typed lint ran before web-core declarations existed;
+  the restricted fixture child invoked pnpm and triggered noninteractive module
+  reconfiguration before Next build. Root added package-build ordering and emitted
+  output restoration to workspace tasks, hashed the public build URL, and used
+  the installed Next executable directly for fixture build/start. Cold lint with
+  removed library outputs and a second cached-output restore both passed. The
+  three product journeys plus focused cookie-order test passed again using direct
+  Next builds; both default builds/Storybooks and affected quality gates passed.
+  A new exact-head remote CI result is still required before phase progression.
 - Design delta: None. No new mechanism or deferred approved phase-4 removal.
   The next phase remains Linux packages/owned children/Docker/Helm, with explicit
   cluster/namespace/exposure/data scope required before live infrastructure writes.

@@ -205,8 +205,8 @@ export class Assembly {
       const env = this.webEnvironment(url, backendPort);
       await this.owner.run(
         `${name} production build`,
-        "pnpm",
-        ["exec", "next", "build"],
+        join(cwd, "node_modules/.bin/next"),
+        ["build"],
         cwd,
         env,
         120_000,

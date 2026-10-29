@@ -46,6 +46,9 @@ both` on distinct reserved loopback ports. Installation key and setup proof
   bind `127.0.0.1` and await their readiness line. No compiled-path constant is
   forged at runtime. Node app children receive only an explicit safe environment
   allowlist plus their own public URL, backend URL, bind host and production mode.
+  Both build and listener launch the already installed app-local Next executable
+  directly. Preparation does not invoke a package-manager wrapper that could try
+  to reinstall workspace modules under the restricted child environment.
 - `generalUrl`, `adminUrl`, `administrator`, `member`, `second`, `setupProof`,
   `resetPassword`, `teamName`, and `teamHandle` are private-run in-memory fixture
   values. They must not be printed or attached to reports.

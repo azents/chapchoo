@@ -120,6 +120,12 @@ pnpm run build-storybook --filter=@chapchoo/web
 pnpm run build-storybook --filter=@chapchoo/admin-web
 ```
 
+Workspace lint/typecheck, dev and Storybook commands build their library
+prerequisites first. Turbo restores emitted `dist`/Next outputs from its cache;
+public build URLs participate in the build cache key. Development passes only
+the explicit public URL, listener and backend client settings to app commands.
+This does not pass database/root/bootstrap credentials into a web process.
+
 General uses port 3003 and Storybook 6006; Admin uses 3004 and Storybook 6007:
 
 ```sh
