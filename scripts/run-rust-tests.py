@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import getpass
 import os
 import shutil
@@ -13,7 +14,15 @@ from urllib.parse import urlencode
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def run_tests(environment: dict[str, str]) -> None:
+def run_tests(environment: dict[str, str], rpc_clients: bool) -> None:
+    if rpc_clients:
+        subprocess.run(
+            ["python3", str(ROOT / "scripts/test-rpc-clients.py")],
+            cwd=ROOT,
+            env=environment,
+            check=True,
+        )
+        return
     subprocess.run(
         ["cargo", "test", "--locked", "--workspace"],
         cwd=ROOT / "rust",
@@ -23,10 +32,13 @@ def run_tests(environment: dict[str, str]) -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--rpc-clients", action="store_true")
+    options = parser.parse_args()
     environment = dict(os.environ)
     if environment.get("CHAPCHOO_TEST_POSTGRES_URL"):
         # This explicit value must identify a disposable test server, never production.
-        run_tests(environment)
+        run_tests(environment, options.rpc_clients)
         return
     if not shutil.which("initdb") or not shutil.which("pg_ctl"):
         raise SystemExit(
@@ -63,7 +75,7 @@ def main() -> None:
                     {"host": str(path), "port": "5432", "user": getpass.getuser()}
                 )
             )
-            run_tests(environment)
+            run_tests(environment, options.rpc_clients)
         finally:
             subprocess.run(
                 ["pg_ctl", "-D", str(data), "-m", "immediate", "-w", "stop"],

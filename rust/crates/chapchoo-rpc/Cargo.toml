@@ -1,0 +1,27 @@
+[package]
+name = "chapchoo-rpc"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+chapchoo-crypto.workspace = true
+chapchoo-domain.workspace = true
+chapchoo-protocol.workspace = true
+chapchoo-service.workspace = true
+prost-types.workspace = true
+tonic.workspace = true
+tracing.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+chapchoo-persistence.workspace = true
+base64.workspace = true
+tempfile.workspace = true
+tokio.workspace = true
+tokio-stream.workspace = true
+
+[lints]
+workspace = true

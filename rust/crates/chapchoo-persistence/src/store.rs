@@ -54,6 +54,18 @@ pub enum StoreError {
     InvalidInput,
     #[error("Invalid or unusable proof")]
     InvalidProof,
+    #[error("Email does not match the proof recipient")]
+    EmailMismatch,
+    #[error("Email is already registered")]
+    EmailRegistered,
+    #[error("User is already a member")]
+    AlreadyMember,
+    #[error("Invitation has already been processed")]
+    AlreadyProcessed,
+    #[error("Ownership transfer is required before leaving")]
+    OwnerTransferRequired,
+    #[error("Team handle is already in use")]
+    HandleConflict,
     #[error("Registration through a signup link is required")]
     RegistrationRequired,
     #[error("Stored account state is inconsistent")]
@@ -77,6 +89,24 @@ impl From<diesel::result::Error> for StoreError {
 }
 
 impl StoreError {
+    pub(crate) fn unique_field(
+        error: diesel::result::Error,
+        postgres_constraint: &str,
+        sqlite_column: &str,
+        reason: Self,
+    ) -> Self {
+        if let diesel::result::Error::DatabaseError(
+            diesel::result::DatabaseErrorKind::UniqueViolation,
+            info,
+        ) = &error
+            && (info.constraint_name() == Some(postgres_constraint)
+                || info.message() == format!("UNIQUE constraint failed: {sqlite_column}"))
+        {
+            return reason;
+        }
+        error.into()
+    }
+
     pub(crate) fn pool(error: impl Error + Send + Sync + 'static) -> Self {
         Self::Pool(Box::new(error))
     }

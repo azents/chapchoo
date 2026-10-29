@@ -319,7 +319,9 @@ impl Store {
                 .bind::<Text, _>(&create.handle)
                 .bind::<Text, _>(&user.id)
                 .bind::<BigInt, _>(now)
-                .execute(connection).await.map_err(conflict)?;
+                .execute(connection).await.map_err(|error| StoreError::unique_field(
+                    error, "teams_handle_key", "teams.handle", StoreError::HandleConflict
+                ))?;
             diesel::sql_query(
                 dialect.query("INSERT INTO memberships(team_id,user_id,role) VALUES(?,?,'MEMBER')"),
             )
@@ -402,7 +404,14 @@ impl Store {
                     .bind::<Text, _>(&team.id)
                     .execute(connection)
                     .await
-                    .map_err(conflict)?;
+                    .map_err(|error| {
+                        StoreError::unique_field(
+                            error,
+                            "teams_handle_key",
+                            "teams.handle",
+                            StoreError::HandleConflict,
+                        )
+                    })?;
                 team.handle = handle.clone();
             }
             let member = membership!(connection, dialect, &team.id, &user.id)
@@ -458,7 +467,7 @@ impl Store {
             if let Some(recipient) = recipients.as_slice().first()
                 && membership!(connection, dialect, &team.id, &recipient.id).is_some()
             {
-                return Err(StoreError::Conflict);
+                return Err(StoreError::AlreadyMember);
             }
             let mut issued_signup_grant_id = None;
             if recipients.is_empty()
@@ -562,11 +571,11 @@ impl Store {
                 .await?;
             let row = rows.pop().ok_or(StoreError::NotFound)?;
             if row.status != "PENDING" {
-                return Err(StoreError::InvalidTransition);
+                return Err(StoreError::AlreadyProcessed);
             }
             if accept {
                 if membership!(connection, dialect, &team.id, &user.id).is_some() {
-                    return Err(StoreError::Conflict);
+                    return Err(StoreError::AlreadyMember);
                 }
                 diesel::sql_query(
                     dialect.query(
@@ -591,7 +600,7 @@ impl Store {
                 .execute(connection)
                 .await?;
             if changed != 1 {
-                return Err(StoreError::InvalidTransition);
+                return Err(StoreError::AlreadyProcessed);
             }
             let mut summary = row.summary()?;
             summary.status = if accept {
@@ -714,7 +723,7 @@ impl Store {
             let role = caller!(connection, dialect, team, &user.id);
             team.collaborative()?;
             if role == TeamRole::Owner {
-                return Err(StoreError::InvalidTransition);
+                return Err(StoreError::OwnerTransferRequired);
             }
             diesel::sql_query(
                 dialect.query("DELETE FROM memberships WHERE team_id=? AND user_id=?"),

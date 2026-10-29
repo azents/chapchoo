@@ -94,7 +94,7 @@ async fn exercise(store: Store, tokens: &[BearerSecret]) -> Result<(), TestError
     ));
     assert!(matches!(
         store.leave_team(&owner, "team-a", NOW).await,
-        Err(StoreError::InvalidTransition)
+        Err(StoreError::OwnerTransferRequired)
     ));
     assert!(matches!(
         store.delete_team(&owner, "personal-0", NOW).await,
@@ -143,7 +143,7 @@ async fn exercise(store: Store, tokens: &[BearerSecret]) -> Result<(), TestError
         );
         assert!(matches!(
             store.process_invitation(&digest, id, true, NOW).await,
-            Err(StoreError::InvalidTransition)
+            Err(StoreError::AlreadyProcessed)
         ));
     }
     assert_eq!(store.team_members(&owner, "team-a", NOW).await?.len(), 3);
@@ -221,7 +221,7 @@ async fn exercise(store: Store, tokens: &[BearerSecret]) -> Result<(), TestError
                 NOW
             )
             .await,
-        Err(StoreError::Conflict)
+        Err(StoreError::HandleConflict)
     ));
     assert_eq!(store.team(&owner, "team-a", NOW).await?.name, "Updated");
     assert!(matches!(
@@ -237,7 +237,7 @@ async fn exercise(store: Store, tokens: &[BearerSecret]) -> Result<(), TestError
                 NOW
             )
             .await,
-        Err(StoreError::Conflict)
+        Err(StoreError::AlreadyMember)
     ));
     // Unknown no-mail recipient gets an invitation but no automatic signup grant.
     let unknown = store
@@ -369,7 +369,7 @@ async fn exercise(store: Store, tokens: &[BearerSecret]) -> Result<(), TestError
         results
             .iter()
             .filter_map(|result| result.as_ref().err())
-            .all(|error| matches!(error, StoreError::InvalidTransition))
+            .all(|error| matches!(error, StoreError::AlreadyProcessed))
     );
     assert_eq!(store.team_members(&owner, "team-a", NOW).await?.len(), 4);
     store
@@ -474,7 +474,7 @@ async fn exercise(store: Store, tokens: &[BearerSecret]) -> Result<(), TestError
             .await
     });
     match (transfer.await?, leave.await?) {
-        (Ok(summary), Err(StoreError::InvalidTransition)) => {
+        (Ok(summary), Err(StoreError::OwnerTransferRequired)) => {
             assert_eq!(summary.owner_user_id, "user-3");
             assert_eq!(
                 store

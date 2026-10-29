@@ -146,7 +146,15 @@ macro_rules! new_account {
         .bind::<Bool, _>($admin)
         .bind::<BigInt, _>($now)
         .execute($connection)
-        .await?;
+        .await
+        .map_err(|error| {
+            StoreError::unique_field(
+                error,
+                "users_email_key_key",
+                "users.email_key",
+                StoreError::EmailRegistered,
+            )
+        })?;
         diesel::sql_query($dialect.query(
             "INSERT INTO teams(id,kind,name,handle,owner_user_id,created_at)
              VALUES(?,'PERSONAL','Personal',?,?,?)",
@@ -349,11 +357,11 @@ impl Store {
             let [grant] = rows.as_slice() else {
                 return Err(StoreError::InvalidProof);
             };
-            if grant.kind != "SIGNUP"
-                || !grant.usable(now)
-                || grant.email_key != draft.email.lookup_key()
-            {
+            if grant.kind != "SIGNUP" || !grant.usable(now) {
                 return Err(StoreError::InvalidProof);
+            }
+            if grant.email_key != draft.email.lookup_key() {
+                return Err(StoreError::EmailMismatch);
             }
             let user = new_account!(connection, dialect, draft, false, now);
             let changed = diesel::sql_query(dialect.query(
@@ -557,6 +565,7 @@ impl Store {
         &self,
         actor: &SecretDigest,
         id: &str,
+        kind: GrantKind,
         now: i64,
     ) -> Result<(), StoreError> {
         operation!(self, |connection, dialect| {
@@ -564,9 +573,10 @@ impl Store {
             if !actor.is_admin {
                 return Err(StoreError::Forbidden);
             }
-            let count = diesel::sql_query(
-                dialect.query("UPDATE grants SET revoked_at=? WHERE id=? AND revoked_at IS NULL"),
-            )
+            let count = diesel::sql_query(dialect.query(&format!(
+                "UPDATE grants SET revoked_at=? WHERE id=? AND kind={} AND revoked_at IS NULL",
+                kind.sql()
+            )))
             .bind::<BigInt, _>(now)
             .bind::<Text, _>(id)
             .execute(connection)
