@@ -9,7 +9,7 @@ if [[ "$actual" != "$expected" ]]; then
 fi
 cargo fmt --all -- --check
 cargo clippy --locked --workspace --all-targets -- -D warnings
-cargo test --locked --workspace
+python3 ../scripts/run-rust-tests.py
 cargo metadata --locked --format-version 1 --no-deps | python3 -c '
 import json, sys
 packages = {p["name"]: p for p in json.load(sys.stdin)["packages"]}
@@ -18,6 +18,11 @@ allowed = {
     "chapchoo-crypto": {
         "base64", "bcrypt", "chacha20poly1305", "chapchoo-domain", "getrandom", "hkdf",
         "hmac", "sha2", "subtle", "thiserror", "zeroize",
+    },
+    "chapchoo-persistence": {
+        "chapchoo-crypto", "chapchoo-domain", "diesel", "diesel-async",
+        "diesel_migrations", "libsqlite3-sys", "thiserror", "zeroize", "tokio",
+        "base64", "tempfile",
     },
 }
 for name, dependencies in allowed.items():
