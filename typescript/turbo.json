@@ -57,6 +57,7 @@
     "format:check": {},
     "typecheck": {
       "dependsOn": [
+        "^build",
         "^generate"
       ]
     },

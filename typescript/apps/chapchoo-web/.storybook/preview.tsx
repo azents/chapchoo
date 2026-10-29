@@ -1,10 +1,10 @@
+import { AppMantineProvider } from "@chapchoo/ui/provider";
 import { NextIntlClientProvider } from "next-intl";
 import en from "../messages/en-US.json";
 import fr from "../messages/fr-FR.json";
 import ja from "../messages/ja-JP.json";
 import ko from "../messages/ko-KR.json";
 import { isSupportedLocale } from "../src/shared/lib/locale";
-import { AppMantineProvider } from "../src/shared/providers/mantine";
 import type { Preview } from "@storybook/nextjs-vite";
 
 import "@mantine/core/styles.css";

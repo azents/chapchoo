@@ -2,10 +2,11 @@
   "name": "@chapchoo/web",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "dev": "next dev --port 3003",
+    "dev": "next dev --hostname 127.0.0.1 --port 3003",
     "build": "next build",
-    "start": "next start",
+    "start": "next start --hostname 127.0.0.1 --port 3003",
     "test": "node --experimental-strip-types --test 'src/**/*.test.mts'",
     "storybook": "STORYBOOK_DISABLE_TELEMETRY=1 storybook dev -p 6006",
     "build-storybook": "STORYBOOK_DISABLE_TELEMETRY=1 storybook build",
@@ -16,14 +17,23 @@
     "format:check": "prettier --check --cache 'src/**/*.{ts,tsx,mts}' '.storybook/**/*.{ts,tsx}' 'messages/**/*.json'"
   },
   "dependencies": {
+    "@chapchoo/ui": "workspace:*",
+    "@chapchoo/web-core": "workspace:*",
     "@mantine/core": "^9.5.1",
     "@mantine/hooks": "^9.5.1",
     "@mantine/modals": "^9.5.1",
+    "@tanstack/react-query": "^5.105.0",
+    "@trpc/client": "11.19.0",
+    "@trpc/react-query": "11.19.0",
+    "@trpc/server": "11.19.0",
     "geist": "^1.7.2",
     "next": "16.4.1",
     "next-intl": "^4.13.6",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "server-only": "0.0.1",
+    "superjson": "^2.2.6",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@eslint-community/eslint-plugin-eslint-comments": "^4.7.2",

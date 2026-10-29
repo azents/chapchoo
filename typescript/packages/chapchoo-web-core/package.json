@@ -1,0 +1,59 @@
+{
+  "name": "@chapchoo/web-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "default": "./dist/browser.js"
+    },
+    "./config": {
+      "types": "./dist/config.d.ts",
+      "default": "./dist/config.js"
+    },
+    "./cookies": {
+      "types": "./dist/cookies.d.ts",
+      "default": "./dist/cookies.js"
+    },
+    "./errors": {
+      "types": "./dist/errors.d.ts",
+      "default": "./dist/errors.js"
+    },
+    "./rpc": {
+      "types": "./dist/rpc.d.ts",
+      "default": "./dist/rpc.js"
+    },
+    "./session": {
+      "types": "./dist/session.d.ts",
+      "default": "./dist/session.js"
+    },
+    "./boundary": {
+      "types": "./dist/boundary.d.ts",
+      "default": "./dist/boundary.js"
+    },
+    "./validation": {
+      "types": "./dist/validation.d.ts",
+      "default": "./dist/validation.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "pnpm run build && node --test test/*.test.mjs",
+    "lint": "eslint src test --max-warnings 0",
+    "lint:fix": "eslint src test --max-warnings 0 --fix",
+    "format": "prettier --write 'src/**/*.ts' 'test/**/*.mjs' '*.mjs' 'package.json'",
+    "format:check": "prettier --check 'src/**/*.ts' 'test/**/*.mjs' '*.mjs' 'package.json'"
+  },
+  "dependencies": {
+    "@chapchoo/rpc-client": "workspace:*",
+    "@grpc/grpc-js": "1.14.6",
+    "@trpc/server": "11.19.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "eslint": "^10.8.1",
+    "typescript": "^6.0.3"
+  }
+}

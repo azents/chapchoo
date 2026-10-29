@@ -90,5 +90,43 @@ jobs:
           done
       - run: pnpm run format:check && pnpm run lint && pnpm run typecheck
         working-directory: typescript
-      - run: pnpm --filter @chapchoo/web test && pnpm run build && pnpm run build-storybook --filter=@chapchoo/web
+      - name: Account web tests, product builds and component stories
+        run: |
+          pnpm --filter @chapchoo/ui test
+          pnpm --filter @chapchoo/web-core test
+          pnpm --filter @chapchoo/web test
+          pnpm --filter @chapchoo/admin-web test
+          pnpm --filter @chapchoo/e2e test:unit
+          pnpm run build
+          pnpm run build-storybook --filter=@chapchoo/web --filter=@chapchoo/admin-web
+        working-directory: typescript
+  accounts-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      TURBO_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable installer
+        with:
+          toolchain: 1.99.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: typescript/package.json
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: typescript/pnpm-lock.yaml
+      - name: Expose runner PostgreSQL tools
+        run: |
+          echo "$(pg_config --bindir)" >> "$GITHUB_PATH"
+          test -x "$(pg_config --bindir)/initdb"
+          test -x "$(pg_config --bindir)/pg_ctl"
+      - run: pnpm install --frozen-lockfile
+        working-directory: typescript
+      - run: pnpm --filter @chapchoo/e2e exec playwright install chromium
+        working-directory: typescript
+      - run: pnpm --filter @chapchoo/e2e test:e2e
         working-directory: typescript
