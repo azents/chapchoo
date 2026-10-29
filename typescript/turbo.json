@@ -10,7 +10,16 @@
     "build": {
       "dependsOn": [
         "^build",
-        "^generate"
+        "^generate",
+        "generate"
+      ],
+      "outputs": [
+        "dist/**",
+        ".next/**",
+        "!.next/cache/**"
+      ],
+      "env": [
+        "CHAPCHOO_PUBLIC_URL"
       ],
       "passThroughEnv": [
         "CI",
@@ -22,13 +31,20 @@
     },
     "dev": {
       "dependsOn": [
+        "^build",
         "^generate"
+      ],
+      "passThroughEnv": [
+        "CHAPCHOO_PUBLIC_URL",
+        "CHAPCHOO_WEB_HOST",
+        "CHAPCHOO_BACKEND_URL"
       ],
       "cache": false,
       "persistent": true
     },
     "storybook": {
       "dependsOn": [
+        "^build",
         "^generate"
       ],
       "cache": false,
@@ -36,6 +52,7 @@
     },
     "build-storybook": {
       "dependsOn": [
+        "^build",
         "^generate"
       ],
       "outputs": [
@@ -44,11 +61,13 @@
     },
     "lint": {
       "dependsOn": [
+        "^build",
         "^generate"
       ]
     },
     "lint:fix": {
       "dependsOn": [
+        "^build",
         "^generate"
       ],
       "cache": false
@@ -57,6 +76,7 @@
     "format:check": {},
     "typecheck": {
       "dependsOn": [
+        "^build",
         "^generate"
       ]
     },

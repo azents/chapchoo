@@ -60,7 +60,7 @@ database/key authority; it is not a remote RPC.
 
 `CHAPCHOO_GENERAL_WEB_URL` controls issued link destinations (default
 `http://localhost:3000`). HTTP accepts loopback hosts only; remote URLs require
-HTTPS. This phase does not serve the product web screens yet.
+HTTPS. The independent Node web applications below serve the product screens.
 Optional `CHAPCHOO_SESSION_VALIDITY_DAYS` defaults to 180; optional
 `CHAPCHOO_SESSION_ABSOLUTE_DAYS` imposes a positive absolute lifetime cap.
 Rotation/previous-token overlap default to 10/5 minutes.
@@ -98,7 +98,7 @@ credentials in JavaScript storage.
 
 ## Frontend
 
-The scaffold uses the same frontend foundation as Azents: Next.js App Router,
+The apps use the same frontend foundation as Azents: Next.js App Router,
 React, TypeScript, Mantine and its theme, Geist fonts, cookie/header-based
 next-intl localization, pnpm workspaces, Turborepo, ESLint, Prettier, and Storybook.
 The initial dependency ranges and pinned Next.js version come from the recorded
@@ -112,26 +112,57 @@ pnpm run format:check
 pnpm run lint
 pnpm run typecheck
 pnpm --filter @chapchoo/web test
+pnpm --filter @chapchoo/admin-web test
+pnpm --filter @chapchoo/ui test
+pnpm --filter @chapchoo/web-core test
 pnpm run build
 pnpm run build-storybook --filter=@chapchoo/web
+pnpm run build-storybook --filter=@chapchoo/admin-web
 ```
 
-The dev app uses port 3003; Storybook uses port 6006:
+Workspace lint/typecheck, dev and Storybook commands build their library
+prerequisites first. Turbo restores emitted `dist`/Next outputs from its cache;
+public build URLs participate in the build cache key. Development passes only
+the explicit public URL, listener and backend client settings to app commands.
+This does not pass database/root/bootstrap credentials into a web process.
+
+General uses port 3003 and Storybook 6006; Admin uses 3004 and Storybook 6007:
 
 ```sh
 pnpm run storybook --filter=@chapchoo/web
+pnpm run dev --filter=@chapchoo/admin-web
 ```
 
-The app renders one localized Hello World screen. Supported locales match the
+General renders account/password and personal/team journeys. Admin renders
+initial administrator setup, administrator login, and signup/reset link management.
+Both use `@chapchoo/ui` for the original shared theme and controls, and
+app-owned tRPC adapters backed by `@chapchoo/web-core` and generated Node gRPC.
+Supported locales match the
 upstream web app: `en-US`, `ko-KR`, `ja-JP`, and `fr-FR`. Locale selection uses the
 `locale` cookie, then Accept-Language, then English; no locale URL segments.
-There is no account-preference lookup in the scaffold UI.
+There is no account-preference lookup in the UI.
 Storybook renders the same theme and translation providers with static fixtures.
 
-Backend clients, tRPC routes, authentication, Sentry upload configuration, and
-Azents product pages were deliberately not copied. The Rust backend commands
-above are independent of this scaffold; product web integration and deployment
-packaging remain later phases.
+Each app reads configuration only through `src/config/index.ts`.
+`CHAPCHOO_PUBLIC_URL` supplies the exact public origin/path (defaults:
+`http://localhost:3003` and `http://localhost:3004`); build and runtime base paths
+must match. `CHAPCHOO_WEB_HOST` defaults to `127.0.0.1`; local HTTP requires a
+loopback public host and listener. Remote public URLs require HTTPS.
+`CHAPCHOO_BACKEND_URL` selects the corresponding general/Admin endpoint (defaults:
+`http://127.0.0.1:50051` and `http://127.0.0.1:50052`). HTTPS backend calls use
+normal CA/hostname verification. Node apps never receive the installation key,
+database URL or setup proof through their ordinary configuration.
+
+Browser calls use POST and exact configured Origin admission, one operation per
+request, no automatic retry and distinct HttpOnly cookies. SSR authenticates
+read-only. See [the account web Spec](docs/chapchoo/spec/domain/account-web.md)
+for renewal and cookie policy; do not copy real credentials into commands/logs.
+
+The three assembled browser journeys and disposable PostgreSQL/process ownership
+are documented in
+[`@chapchoo/e2e`](typescript/packages/chapchoo-e2e/README.md).
+Sentry upload configuration and Azents product pages were not copied. Unified
+packaging and deployment remain a separate phase.
 
 ## Repository tooling
 

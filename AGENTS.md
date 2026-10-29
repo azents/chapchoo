@@ -1,8 +1,8 @@
 # Project Rules for Chapchoo
 
-Chapchoo is a new project alongside Azents. This checkout contains a scaffold web
-app and the account/team Rust backend. Product web integration, agent execution
-and deployment packaging remain distinct from the implemented backend surface.
+Chapchoo is a new project alongside Azents. This checkout contains general/Admin
+account web applications and the account/team Rust backend. Agent execution and
+deployment packaging remain distinct from the implemented account surface.
 Do not treat product intentions or inherited examples as implemented behavior.
 
 ## Language
@@ -12,7 +12,8 @@ intentionally use other languages.
 
 ## Structure
 
-- `typescript/apps/chapchoo-web/`: Next.js App Router Hello World app.
+- `typescript/apps/chapchoo-web/`: general Next.js account/team application.
+- `typescript/apps/chapchoo-admin-web/`: independent installation Admin application.
 - `typescript/packages/`: shared packages, including the generated Node RPC client.
 - `rust/crates/`: typed domain, crypto, persistence, protocol, services and adapters.
 - `rust/apps/chapchoo/`: foreground backend and operator composition root.
