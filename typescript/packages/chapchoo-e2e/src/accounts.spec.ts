@@ -58,7 +58,7 @@ async function issuedLink(
     const expected = new URL(fixture.generalUrl);
     valid =
       url.origin === expected.origin &&
-      url.pathname === `${expected.pathname}/${kind}` &&
+      url.pathname === `${expected.pathname.replace(/\/$/, "")}/${kind}` &&
       /^[A-Za-z0-9_-]{43}$/.test(url.searchParams.get("token") ?? "");
   } catch {
     /* The generic assertion must not publish the issued URL. */

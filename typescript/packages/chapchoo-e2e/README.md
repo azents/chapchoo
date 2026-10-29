@@ -34,6 +34,21 @@ toolchain, Node 24, pnpm, and Chromium runtime libraries. Missing prerequisites
 fail; there is no SQLite fallback or skipped browser execution. Package metadata
 pins `@playwright/test` to **1.64.1**.
 
+### Extracted package mode
+
+Set `CHAPCHOO_E2E_PACKAGE_ROOT` to an absolute extracted distribution root containing
+`chapchoo`, `runtime/bin/node` and both standalone web trees. This mode never
+falls back to source builds. The fixture prepares its private PostgreSQL database
+through that binary and launches `serve --role both --web both` with root-path
+public URLs. The product command gets a PATH containing no host tools; its web
+children must use bundled Node. Successful graceful product exit is required,
+in addition to the owned PostgreSQL/process cleanup checks.
+
+The runner still requires its own Node/pnpm/Chromium/PostgreSQL tools and builds
+the shared test-client libraries. These are test prerequisites, not deployment
+host dependencies. Package mode does not rebuild `.next` or change compiled paths.
+Default-root app outputs must already have been assembled into the artifact.
+
 ## Fixture API and lifecycle
 
 - `Assembly.create(): Promise<Assembly>` prepares one private temporary data and

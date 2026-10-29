@@ -6,12 +6,12 @@ spec_type: domain
 domain: accounts
 code_paths:
   - proto/chapchoo/accounts.proto
-  - rust/crates/chapchoo-protocol/**
-  - rust/crates/chapchoo-service/**
-  - rust/crates/chapchoo-rpc/**
-  - rust/crates/chapchoo-mail/**
-  - rust/apps/chapchoo/**
-  - typescript/packages/chapchoo-rpc-client/**
+  - rust/crates/chapchoo-protocol
+  - rust/crates/chapchoo-service
+  - rust/crates/chapchoo-rpc
+  - rust/crates/chapchoo-mail
+  - rust/apps/chapchoo
+  - typescript/packages/chapchoo-rpc-client
 last_verified_at: 2026-10-30
 spec_version: 1
 ---
@@ -100,7 +100,8 @@ deployment binds require a trusted internal network and a separate operator TLS
 edge for external access. The executable does not issue certificates or provide
 native gRPC TLS.
 
-Selected roles are one failure unit. Readiness follows configuration, read-only
+Selected backend roles and optional bundled web children are one failure unit.
+Readiness follows configuration, read-only
 DB/schema/key checks, dependency construction and successful binds. Partial bind
 failure drops already acquired sockets. SIGINT/SIGTERM withdraws admission before
 drain. Owned tasks are joined; a component exit or cleanup timeout returns failure.
@@ -110,8 +111,10 @@ Defaults are 60 seconds for startup, 20 for graceful shutdown and a further
 Unary gRPC health for an empty/selected service rereads read-only database
 readiness with bounded probe capacity. `chapchoo.liveness` reports process
 responsiveness independently. Unknown services return NOT_FOUND; Watch is not
-implemented. No daemon, automatic restart, web-child launch or process scan exists
-in this phase.
+implemented. Optional `--web general|admin|both` starts executable-relative bundled
+Node children; `--role none` permits web-only execution without loading DB/key
+configuration. There is no daemon, automatic restart or global process scan.
+See [Linux delivery](account-delivery.md) for child ownership and package layout.
 
 ## Verification boundary
 
@@ -123,6 +126,6 @@ explicit preparation, readiness failure, local recovery, common Auth and owned
 termination/partial-startup cleanup. The SES SDK is tested against a local
 provider fixture, not an external mailbox.
 
-Product web journeys, packaged Node children, Linux distribution artifacts and
-Helm/Argo CD execution belong to later phases and are not established by these
-backend tests.
+The backend tests do not establish packaged browser or cluster acceptance.
+Those verification boundaries are recorded in the
+[web](account-web.md) and [delivery](account-delivery.md) Specs.

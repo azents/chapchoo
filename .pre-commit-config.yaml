@@ -13,6 +13,18 @@ repos:
         language: system
         files: ^(proto/|rust/|typescript/packages/chapchoo-rpc-client/|scripts/(generate-rpc-clients\.sh|check-rpc\.sh|test-rpc-clients\.py|run-rust-tests\.py))
         pass_filenames: false
+      - id: linux-package-contracts
+        name: Validate safe Linux artifact assembly and independent image contracts
+        entry: python3 -m unittest scripts.tests.test_package_linux
+        language: system
+        files: ^(scripts/(package-linux\.py|tests/test_package_linux\.py)|images/chapchoo/)
+        pass_filenames: false
+      - id: helm-chart-contracts
+        name: Render and validate Helm and Argo preparation contracts offline
+        entry: uv run --locked --project .codex python scripts/check-chart.py
+        language: system
+        files: ^(infra/charts/chapchoo/|scripts/(check-chart\.py|tests/test_chart_contracts\.py)|testenv/chapchoo/(chart-values\.yaml|argocd-example\.yaml))
+        pass_filenames: false
       - id: ensure-claude-md-link
         name: Ensure CLAUDE.md imports AGENTS.md
         entry: bash scripts/ensure-claude-md-link.sh
@@ -50,6 +62,7 @@ repos:
         exclude: openapi\.json$
       - id: check-yaml
         args: [--allow-multiple-documents]
+        exclude: ^infra/charts/chapchoo/templates/
       - id: fix-byte-order-marker
         exclude: ^.*\.csv$
   - repo: https://github.com/astral-sh/ruff-pre-commit

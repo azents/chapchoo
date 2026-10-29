@@ -4,11 +4,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test as base } from "@playwright/test";
-import { buildEnvironment, safeEnvironment } from "./config/index.js";
+import {
+  buildEnvironment,
+  installedPackageRoot,
+  safeEnvironment,
+} from "./config/index.js";
 import { ProcessOwner } from "./processes.js";
 import { fixtureUser, secret, safeMessage } from "./safety.js";
 import { seedRegisteredUser } from "./seed.js";
 import type { FixtureUser } from "./safety.js";
+import type { OwnedChild } from "./processes.js";
 
 const repository = fileURLToPath(new URL("../../../../", import.meta.url));
 const typescript = join(repository, "typescript");
@@ -51,6 +56,8 @@ export class Assembly {
   private readonly owner: ProcessOwner;
   private postgresAttempted = false;
   private closed = false;
+  private product: OwnedChild | null = null;
+  private productReady = false;
 
   private constructor(
     private readonly directory: string,
@@ -58,12 +65,14 @@ export class Assembly {
     private readonly adminPort: number,
     generalWebPort: number,
     adminWebPort: number,
+    private readonly packageRoot: string | null,
   ) {
     this.owner = new ProcessOwner(join(directory, "owned-processes.jsonl"));
-    this.generalUrl = `http://127.0.0.1:${generalWebPort}/app`;
-    this.adminUrl = `http://127.0.0.1:${adminWebPort}/admin`;
+    this.generalUrl = `http://127.0.0.1:${generalWebPort}${packageRoot ? "" : "/app"}`;
+    this.adminUrl = `http://127.0.0.1:${adminWebPort}${packageRoot ? "" : "/admin"}`;
   }
   static async create(): Promise<Assembly> {
+    const packageRoot = installedPackageRoot();
     const directory = await mkdtemp(join(tmpdir(), "chapchoo-e2e-"));
     const ports = new Set<number>();
     let assembly: Assembly | null = null;
@@ -75,7 +84,14 @@ export class Assembly {
       if (!general || !admin || !generalWeb || !adminWeb) {
         throw new Error("Could not allocate isolated fixture ports");
       }
-      assembly = new Assembly(directory, general, admin, generalWeb, adminWeb);
+      assembly = new Assembly(
+        directory,
+        general,
+        admin,
+        generalWeb,
+        adminWeb,
+        packageRoot,
+      );
       await assembly.start();
       return assembly;
     } catch (error) {
@@ -155,19 +171,28 @@ export class Assembly {
     );
     const backendEnv = {
       ...safeEnvironment(),
+      // The fixture runner needs development tools; the installed command does
+      // not. Its deployment PATH deliberately contains no host Node/pnpm/Turbo.
+      ...(this.packageRoot
+        ? { PATH: join(this.directory, "no-host-tools") }
+        : {}),
       CHAPCHOO_POSTGRES_URL: `postgresql://fixture@localhost/postgres?host=${encodeURIComponent(socket)}`,
       CHAPCHOO_INSTALLATION_KEY: `${secret()}=`,
     };
     const rust = join(repository, "rust");
-    await this.owner.run(
-      "Product binary build",
-      "cargo",
-      ["build", "--locked", "-p", "chapchoo"],
-      rust,
-      buildEnvironment(),
-      300_000,
-    );
-    const binary = join(rust, "target/debug/chapchoo");
+    if (!this.packageRoot) {
+      await this.owner.run(
+        "Product binary build",
+        "cargo",
+        ["build", "--locked", "-p", "chapchoo"],
+        rust,
+        buildEnvironment(),
+        300_000,
+      );
+    }
+    const binary = this.packageRoot
+      ? join(this.packageRoot, "chapchoo")
+      : join(rust, "target/debug/chapchoo");
     await this.owner.run(
       "Product schema preparation",
       binary,
@@ -176,7 +201,7 @@ export class Assembly {
       backendEnv,
       60_000,
     );
-    const backend = this.owner.start(
+    this.product = this.owner.start(
       "Product foreground server",
       binary,
       [
@@ -187,16 +212,36 @@ export class Assembly {
         `127.0.0.1:${this.generalPort}`,
         "--admin-listen",
         `127.0.0.1:${this.adminPort}`,
+        ...(this.packageRoot
+          ? [
+              "--web",
+              "both",
+              "--general-web-listen",
+              `127.0.0.1:${new URL(this.generalUrl).port}`,
+              "--admin-web-listen",
+              `127.0.0.1:${new URL(this.adminUrl).port}`,
+            ]
+          : []),
       ],
       repository,
       {
         ...backendEnv,
         CHAPCHOO_SETUP_PROOF: this.setupProof,
         CHAPCHOO_GENERAL_WEB_URL: this.generalUrl,
+        CHAPCHOO_ADMIN_WEB_URL: this.adminUrl,
         RUST_LOG: "chapchoo=info",
       },
     );
-    await backend.ready(/Selected backend roles are ready/, 60_000);
+    await this.product.ready(
+      this.packageRoot
+        ? /Selected components are ready/
+        : /Selected backend roles are ready/,
+      60_000,
+    );
+    this.productReady = true;
+    if (this.packageRoot) {
+      return;
+    }
     for (const [name, url, backendPort] of [
       ["chapchoo-web", this.generalUrl, this.generalPort],
       ["chapchoo-admin-web", this.adminUrl, this.adminPort],
@@ -237,6 +282,9 @@ export class Assembly {
     let failed = false;
     try {
       await this.owner.stopRunning();
+      if (this.productReady) {
+        await this.product?.finished(5_000);
+      }
     } catch {
       failed = true;
     }

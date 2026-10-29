@@ -1,0 +1,89 @@
+{{- if .Values.backend.enabled }}
+{{- $roles := list "both" }}
+{{- if eq .Values.backend.topology "separate" }}{{- $roles = list "general" "admin" }}{{- end }}
+{{- range $role := $roles }}
+{{- $context := dict "root" $ "component" (printf "backend-%s" $role) }}
+{{- $port := 50051 }}{{- $business := "chapchoo.accounts.General" }}
+{{- if eq $role "admin" }}{{- $port = 50052 }}{{- $business = "chapchoo.accounts.Admin" }}{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "chapchoo.fullname" $ }}-backend-{{ $role }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "chapchoo.labels" $context | fromJson | toYaml | nindent 4 }}
+spec:
+  replicas: {{ $.Values.backend.replicas }}
+  selector:
+    matchLabels:
+      {{- include "chapchoo.selector" $context | fromJson | toYaml | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "chapchoo.selector" $context | fromJson | toYaml | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ $.Values.terminationGracePeriodSeconds }}
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: backend
+          image: {{ include "chapchoo.image" $.Values.backend.image | quote }}
+          imagePullPolicy: {{ $.Values.backend.image.pullPolicy }}
+          args: [serve, --role, {{ $role }}]
+          ports:
+            {{- if has $role (list "general" "both") }}
+            - name: general-grpc
+              containerPort: 50051
+            {{- end }}
+            {{- if has $role (list "admin" "both") }}
+            - name: admin-grpc
+              containerPort: 50052
+            {{- end }}
+          env:
+            {{- include "chapchoo.backendEnv" $ | fromJsonArray | toYaml | nindent 12 }}
+          startupProbe:
+            grpc: {port: {{ $port }}, service: chapchoo.liveness}
+            periodSeconds: 3
+            timeoutSeconds: 3
+            failureThreshold: 30
+          livenessProbe:
+            grpc: {port: {{ $port }}, service: chapchoo.liveness}
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            grpc: {port: {{ $port }}, service: {{ $business }}}
+            periodSeconds: 5
+            timeoutSeconds: 7
+            failureThreshold: 2
+          resources:
+            {{- toYaml $.Values.backend.resources | nindent 12 }}
+          securityContext:
+            {{- include "chapchoo.securityContext" $ | fromJson | toYaml | nindent 12 }}
+{{- end }}
+{{- range $role := list "general" "admin" }}
+{{- $selected := printf "backend-%s" $role }}
+{{- if eq $.Values.backend.topology "combined" }}{{- $selected = "backend-both" }}{{- end }}
+{{- $port := 50051 }}{{- if eq $role "admin" }}{{- $port = 50052 }}{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "chapchoo.fullname" $ }}-{{ $role }}-grpc
+  namespace: {{ $.Release.Namespace }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "chapchoo.selector" (dict "root" $ "component" $selected) | fromJson | toYaml | nindent 4 }}
+  ports:
+    - name: grpc
+      port: {{ $port }}
+      targetPort: {{ $port }}
+      protocol: TCP
+      appProtocol: kubernetes.io/h2c
+{{- end }}
+{{- end }}

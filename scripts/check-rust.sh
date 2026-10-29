@@ -44,7 +44,7 @@ allowed = {
         "chapchoo-crypto", "chapchoo-domain", "chapchoo-persistence", "chapchoo-service",
         "chapchoo-rpc", "chapchoo-mail", "clap", "tokio", "tokio-stream", "tokio-util",
         "tonic", "tonic-health", "tracing", "tracing-subscriber", "thiserror", "zeroize",
-        "url", "base64", "tempfile", "chapchoo-protocol",
+        "url", "base64", "tempfile", "chapchoo-protocol", "nix",
     },
 }
 for name, dependencies in allowed.items():

@@ -1,0 +1,82 @@
+{{- range $role := list "general" "admin" }}
+{{- $web := index $.Values $role }}
+{{- if $web.enabled }}
+{{- $context := dict "root" $ "component" (printf "%s-web" $role) }}
+{{- $port := 3003 }}{{- $grpcPort := 50051 }}
+{{- if eq $role "admin" }}{{- $port = 3004 }}{{- $grpcPort = 50052 }}{{- end }}
+{{- $backend := default (printf "http://%s-%s-grpc:%d" (include "chapchoo.fullname" $) $role $grpcPort) $web.backendUrl }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "chapchoo.fullname" $ }}-{{ $role }}-web
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "chapchoo.labels" $context | fromJson | toYaml | nindent 4 }}
+spec:
+  replicas: {{ $web.replicas }}
+  selector:
+    matchLabels:
+      {{- include "chapchoo.selector" $context | fromJson | toYaml | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "chapchoo.selector" $context | fromJson | toYaml | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ $.Values.terminationGracePeriodSeconds }}
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: web
+          image: {{ include "chapchoo.image" $web.image | quote }}
+          imagePullPolicy: {{ $web.image.pullPolicy }}
+          args: [serve, --role, none, --web, {{ $role }}]
+          env:
+            - name: CHAPCHOO_{{ upper $role }}_WEB_URL
+              value: {{ $web.publicUrl | quote }}
+            - name: CHAPCHOO_{{ upper $role }}_WEB_LISTEN
+              value: {{ printf "0.0.0.0:%d" $port | quote }}
+            - name: CHAPCHOO_{{ upper $role }}_BACKEND_URL
+              value: {{ $backend | quote }}
+          ports:
+            - name: http
+              containerPort: {{ $port }}
+          startupProbe:
+            httpGet: {path: {{ printf "%s/health" $web.compiledBasePath | quote }}, port: {{ $port }}, scheme: HTTP}
+            periodSeconds: 3
+            timeoutSeconds: 3
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: {path: {{ printf "%s/health" $web.compiledBasePath | quote }}, port: {{ $port }}, scheme: HTTP}
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: {path: {{ printf "%s/health" $web.compiledBasePath | quote }}, port: {{ $port }}, scheme: HTTP}
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          resources:
+            {{- toYaml $web.resources | nindent 12 }}
+          securityContext:
+            {{- include "chapchoo.securityContext" $ | fromJson | toYaml | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "chapchoo.fullname" $ }}-{{ $role }}-web
+  namespace: {{ $.Release.Namespace }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "chapchoo.selector" $context | fromJson | toYaml | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ $port }}
+      targetPort: {{ $port }}
+      protocol: TCP
+{{- end }}
+{{- end }}

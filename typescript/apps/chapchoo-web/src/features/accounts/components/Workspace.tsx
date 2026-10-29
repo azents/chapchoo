@@ -74,7 +74,7 @@ export function Workspace(props: WorkspaceProps): ReactNode {
             : c.deleteTeam;
   return (
     <ApplicationShell
-      contextLabel={team?.personal ? c.personal : c.workspace}
+      contextLabel={team?.personal ? c.personal : c.team}
       title={team?.name ?? c.contexts}
       identityLabel={identity}
       navigation={[

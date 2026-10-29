@@ -1,5 +1,11 @@
-import { chmodSync, lstatSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import {
+  chmodSync,
+  lstatSync,
+  mkdirSync,
+  realpathSync,
+  statSync,
+} from "node:fs";
+import { isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // This module defines the environment boundary itself; it is not a barrel.
@@ -7,6 +13,30 @@ export const privateOutputRoot = fileURLToPath(
   new URL("../../test-results/", import.meta.url),
 );
 export const runnerOutput = join(privateOutputRoot, "run");
+
+/** An explicit archive run never falls back to source builds or host Node. */
+export function installedPackageRoot(): string | null {
+  const value = process.env.CHAPCHOO_E2E_PACKAGE_ROOT;
+  if (value === void 0) {
+    return null;
+  }
+  if (!isAbsolute(value)) {
+    throw new Error(
+      "Installed package acceptance requires an absolute artifact root",
+    );
+  }
+  const root = realpathSync(value);
+  if (
+    !statSync(root).isDirectory() ||
+    !statSync(join(root, "chapchoo")).isFile() ||
+    !statSync(join(root, "runtime/bin/node")).isFile()
+  ) {
+    throw new Error(
+      "Installed package acceptance requires complete built artifacts",
+    );
+  }
+  return root;
+}
 
 /** The runner may recreate `run`; its enclosing private directory stays 0700. */
 export function preparePrivateOutput(): string {

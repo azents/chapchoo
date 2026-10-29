@@ -1,0 +1,68 @@
+{{- if .Values.webIngress.enabled }}
+{{- range $role := list "general" "admin" }}
+{{- $web := index $.Values $role }}
+{{- if $web.enabled }}
+{{- $host := (urlParse $web.publicUrl).hostname }}
+{{- $path := default "/" $web.compiledBasePath }}
+{{- $port := 3003 }}{{- if eq $role "admin" }}{{- $port = 3004 }}{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "chapchoo.fullname" $ }}-{{ $role }}-web
+  namespace: {{ $.Release.Namespace }}
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: HTTP
+spec:
+  ingressClassName: {{ $.Values.webIngress.className | quote }}
+  tls:
+    - hosts: [{{ $host | quote }}]
+      secretName: {{ $.Values.webIngress.existingTlsSecret | quote }}
+  rules:
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          - path: {{ $path | quote }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "chapchoo.fullname" $ }}-{{ $role }}-web
+                port: {number: {{ $port }}}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- if .Values.grpcIngress.enabled }}
+{{- range $role := list "general" "admin" }}
+{{- $route := index $.Values.grpcIngress $role }}
+{{- if $route.enabled }}
+{{- $port := 50051 }}{{- if eq $role "admin" }}{{- $port = 50052 }}{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "chapchoo.fullname" $ }}-{{ $role }}-grpc
+  namespace: {{ $.Release.Namespace }}
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: GRPC
+spec:
+  ingressClassName: {{ $.Values.grpcIngress.className | quote }}
+  tls:
+    - hosts: [{{ $route.host | quote }}]
+      secretName: {{ $route.existingTlsSecret | quote }}
+  rules:
+    - host: {{ $route.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "chapchoo.fullname" $ }}-{{ $role }}-grpc
+                port: {number: {{ $port }}}
+{{- end }}
+{{- end }}
+{{- end }}
