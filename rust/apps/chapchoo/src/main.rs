@@ -2,9 +2,10 @@
 mod config;
 mod health;
 mod runtime;
+mod web;
 
 use clap::Parser;
-use config::{Cli, Command};
+use config::{Cli, Command, Role};
 use std::{backtrace::Backtrace, error::Error, process::ExitCode, time::Duration};
 
 type AppError = Box<dyn Error + Send + Sync>;
@@ -55,19 +56,25 @@ fn main() -> ExitCode {
 }
 
 async fn execute(cli: Cli) -> Result<(), AppError> {
-    let config = config::BackendConfig::load()?;
     match cli.command {
         Command::Prepare => {
+            let config = config::BackendConfig::load()?;
             config.prepare().await?;
             tracing::info!("Schema preparation completed");
         }
         Command::GrantAdmin { email } => {
+            let config = config::BackendConfig::load()?;
             let email = chapchoo_domain::EmailAddress::parse(&email)?;
             let store = config.connect().await?;
             store.grant_administrator(&email).await?;
             tracing::info!("Administrator assignment completed for the existing account");
         }
         Command::Serve(options) => {
+            let config = if options.role == Role::None {
+                None
+            } else {
+                Some(config::BackendConfig::load()?)
+            };
             runtime::serve(config, options).await?;
         }
     }

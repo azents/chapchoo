@@ -35,6 +35,8 @@ Routes remain locale-less. The locale cookie, then Accept-Language, then English
 select en-US, ko-KR, ja-JP or fr-FR. Forms, statuses and failures use aligned
 localized messages. Normal UI shows the consequence/next action rather than raw
 protocol reasons, stack traces or implementation metadata.
+Collaborative context badges use localized Team terminology; personal contexts
+retain the distinct personal-space label.
 
 ## Node transport and request ownership
 
@@ -125,8 +127,11 @@ Next's compiled basePath is derived from the same build-time public URL path.
 Only that safe public path is embedded as a compiled configuration constant.
 Runtime public path must match it; missing/mismatched compiled configuration
 fails rather than pretending to provide dynamic prefix rewriting. Shared assets
-are included through standalone tracing/transpilation configuration. This does
-not itself establish unified package or deployment acceptance.
+are included through standalone tracing/transpilation configuration.
+GET `/health` under the compiled prefix validates runtime web configuration and
+returns no-store process health. It does not establish backend/schema readiness
+or an authenticated product journey. [Linux delivery](account-delivery.md)
+describes executable-relative standalone execution and its acceptance boundary.
 
 Canonical generated reason metadata is validated before conversion to typed
 localized failures. Unknown/missing reasons retain generic transport failure.
@@ -161,5 +166,6 @@ horizontal overflow. No proof/password screen was captured.
 Both apps' format/lint/typecheck, unit tests, production build and Storybook build
 have passed in root-integrated validation, together with backend/protocol gates.
 Independent review precedes the phase PR; exact-head CI follows PR creation.
-Packaged web-child lifecycle, Linux distribution and Helm/Argo CD verification
-remain delivery-phase work.
+The same three journeys also pass from the extracted x86-64 distribution using
+bundled Node, with no host Node/pnpm/Turbo on the product PATH. This is local
+artifact evidence, not a native ARM64 or deployed Helm/Argo acceptance claim.

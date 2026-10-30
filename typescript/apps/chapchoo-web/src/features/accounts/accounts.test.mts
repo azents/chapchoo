@@ -1,10 +1,31 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import en from "../../../messages/en-US.json" with { type: "json" };
 import fr from "../../../messages/fr-FR.json" with { type: "json" };
 import ja from "../../../messages/ja-JP.json" with { type: "json" };
 import ko from "../../../messages/ko-KR.json" with { type: "json" };
 import { accountError } from "./errors.ts";
+
+void test("collaborative context badges use the approved localized Team term", () => {
+  for (const [locale, expected] of [
+    [en, "Team"],
+    [ko, "팀"],
+    [ja, "チーム"],
+    [fr, "Équipe"],
+  ] as const) {
+    assert.equal(locale.accounts.team, expected);
+    assert.equal("workspace" in locale.accounts, false);
+  }
+  const component = readFileSync(
+    new URL("./components/Workspace.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    component,
+    /contextLabel=\{team\?\.personal \? c\.personal : c\.team\}/,
+  );
+});
 
 void test("all product locales have the same complete message keys", () => {
   const expected = Object.keys(en.accounts).sort();

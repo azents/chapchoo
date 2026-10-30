@@ -161,8 +161,29 @@ for renewal and cookie policy; do not copy real credentials into commands/logs.
 The three assembled browser journeys and disposable PostgreSQL/process ownership
 are documented in
 [`@chapchoo/e2e`](typescript/packages/chapchoo-e2e/README.md).
-Sentry upload configuration and Azents product pages were not copied. Unified
-packaging and deployment remain a separate phase.
+Sentry upload configuration and Azents product pages were not copied.
+
+## Installed Linux and deployment validation
+
+The source-free Linux bundle contains the executable, matching official Node,
+both standalone applications and static assets. It needs no host Node/pnpm/Turbo.
+See [the delivery Spec](docs/chapchoo/spec/domain/account-delivery.md),
+[independent image commands](images/chapchoo/README.md), and
+[chart prerequisites](infra/charts/chapchoo/README.md). Assembly consumes explicit
+built inputs and rejects overwrites; it does not build or download dependencies.
+
+```sh
+python3 -m unittest scripts.tests.test_package_linux
+uv run --locked --project .codex python scripts/check-chart.py
+python3 scripts/test-installed-linux.py --root /absolute/extracted/chapchoo-linux-x86_64 --architecture x86_64
+python3 scripts/test-container-images.py --backend local-backend:tag --general local-general:tag --admin local-admin:tag
+```
+
+Native x86-64/ARM64 CI uses the fixed Bookworm release builder, architecture-matched
+standalone outputs/Node, bundle lifecycle checks and the same three PostgreSQL
+browser journeys. The image check owns only its ephemeral Docker containers and
+network. Neither command authorizes cluster deployment. Live Helm/Argo acceptance
+still requires explicit environment, exposure, data/Secret and full-sync scope.
 
 ## Repository tooling
 

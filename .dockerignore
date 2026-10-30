@@ -2,7 +2,14 @@
 
 **/.env
 **/.env.*
-!**/.env.example
+**/.aws
+**/.ssh
+**/.kube
+**/*.key
+**/*.pem
+**/*.sqlite*
+**/*.db*
+.azents
 
 ### git ###
 **/.git/**
@@ -48,10 +55,15 @@ node_modules
 **/pnpm-lock.yaml
 !typescript/pnpm-lock.yaml
 **/.next
+**/storybook-static
 **/dist
 **/build
 **/.turbo
 .turbo
+rust/target
+**/test-results
+**/playwright-report
+typescript/packages/chapchoo-e2e/artifacts
 
 ### Terraform & Infrastructure ###
 infra/**

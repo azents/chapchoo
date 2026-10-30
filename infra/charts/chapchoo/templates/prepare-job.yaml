@@ -1,0 +1,43 @@
+{{- if .Values.backend.enabled }}
+{{- $context := dict "root" . "component" "prepare" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "chapchoo.fullname" . }}-prepare
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "chapchoo.labels" $context | fromJson | toYaml | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-10"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/sync-wave: "-10"
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+spec:
+  activeDeadlineSeconds: {{ .Values.prepare.activeDeadlineSeconds }}
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        {{- include "chapchoo.selector" $context | fromJson | toYaml | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: prepare
+          image: {{ include "chapchoo.image" .Values.backend.image | quote }}
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          args: [prepare]
+          env:
+            {{- include "chapchoo.databaseEnv" . | fromJsonArray | toYaml | nindent 12 }}
+          resources:
+            {{- toYaml .Values.prepare.resources | nindent 12 }}
+          securityContext:
+            {{- include "chapchoo.securityContext" . | fromJson | toYaml | nindent 12 }}
+{{- end }}

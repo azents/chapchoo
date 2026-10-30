@@ -1,0 +1,48 @@
+# Reference only. Replace destination, immutable revision, image references and
+# all prerequisites before authorizing a real full-application sync.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: chapchoo-example
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/azents/chapchoo.git
+    targetRevision: REPLACE_WITH_APPROVED_COMMIT
+    path: infra/charts/chapchoo
+    helm:
+      releaseName: chapchoo
+      # Kustomize SMP replaces this opaque object in full. Preserve every
+      # prerequisite and image value when adapting an environment overlay.
+      valuesObject:
+        prerequisitesConfirmed: true
+        backend:
+          image:
+            repository: registry.example.invalid/chapchoo/backend
+            tag: REPLACE_WITH_APPROVED_COMMIT
+        database:
+          existingSecret: prereq-postgres
+        installationKey:
+          existingSecret: prereq-fixed-installation-key
+        setupProof:
+          existingSecret: prereq-initial-setup
+        general:
+          publicUrl: https://chapchoo.example.invalid
+          image:
+            repository: registry.example.invalid/chapchoo/general-web
+            tag: REPLACE_WITH_APPROVED_COMMIT
+        admin:
+          publicUrl: https://admin.example.invalid
+          image:
+            repository: registry.example.invalid/chapchoo/admin-web
+            tag: REPLACE_WITH_APPROVED_COMMIT
+        webIngress:
+          enabled: true
+          className: REPLACE_WITH_EXISTING_NGINX_CLASS
+          existingTlsSecret: prereq-web-tls
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: REPLACE_WITH_APPROVED_NAMESPACE
+  # Deliberately no automated sync/prune, CreateNamespace, retry loop or
+  # ApplyOutOfSyncOnly: preparation requires an explicitly approved full sync.

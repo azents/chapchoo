@@ -1,0 +1,85 @@
+# No database, credentials, certificate, ingress controller or secret provider is
+# provisioned by this chart. Confirm prerequisites before a full deployment.
+prerequisitesConfirmed: false
+fullnameOverride: ""
+imagePullSecrets: []
+terminationGracePeriodSeconds: 30
+backend:
+  enabled: true
+  topology: combined
+  replicas: 1
+  image:
+    repository: ""
+    tag: ""
+    digest: ""
+    pullPolicy: IfNotPresent
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {cpu: "1", memory: 512Mi}
+database:
+  existingSecret: ""
+  urlKey: postgres-url
+installationKey:
+  existingSecret: ""
+  key: installation-key
+setupProof:
+  existingSecret: ""
+  key: setup-proof
+prepare:
+  activeDeadlineSeconds: 300
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {cpu: "1", memory: 256Mi}
+mail:
+  enabled: false
+  sender: ""
+  region: ""
+  existingCredentialsSecret: ""
+  accessKeyIdKey: access-key-id
+  secretAccessKeyKey: secret-access-key
+general:
+  enabled: true
+  replicas: 1
+  publicUrl: ""
+  # Must describe the prefix compiled into this specific image. Root is "".
+  compiledBasePath: ""
+  backendUrl: ""
+  image:
+    repository: ""
+    tag: ""
+    digest: ""
+    pullPolicy: IfNotPresent
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {cpu: "1", memory: 512Mi}
+admin:
+  enabled: true
+  replicas: 1
+  publicUrl: ""
+  compiledBasePath: ""
+  backendUrl: ""
+  image:
+    repository: ""
+    tag: ""
+    digest: ""
+    pullPolicy: IfNotPresent
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {cpu: "1", memory: 512Mi}
+webIngress:
+  enabled: false
+  controller: ingress-nginx
+  className: ""
+  existingTlsSecret: ""
+grpcIngress:
+  enabled: false
+  controller: ingress-nginx
+  className: ""
+  general:
+    enabled: true
+    host: ""
+    existingTlsSecret: ""
+  admin:
+    enabled: false
+    host: ""
+    existingTlsSecret: ""

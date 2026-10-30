@@ -1,0 +1,117 @@
+name: Native Linux packages
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-package-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-package:
+    name: Native ${{ matrix.architecture }} package
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            architecture: x86_64
+            node-architecture: x64
+          - runner: ubuntu-24.04-arm
+            architecture: aarch64
+            node-architecture: arm64
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      TURBO_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Assert native runner and builder architecture
+        env:
+          EXPECTED_ARCH: ${{ matrix.architecture }}
+        run: |
+          test "$(uname -m)" = "$EXPECTED_ARCH"
+          docker_arch="$(docker info --format '{{.Architecture}}')"
+          case "$EXPECTED_ARCH:$docker_arch" in
+            x86_64:x86_64|x86_64:amd64|aarch64:aarch64|aarch64:arm64) ;;
+            *) echo 'Docker must use the same native architecture'; exit 1 ;;
+          esac
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable installer
+        with:
+          toolchain: 1.99.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: typescript/package.json
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24.22.1"
+          cache: pnpm
+          cache-dependency-path: typescript/pnpm-lock.yaml
+      - name: Expose required native PostgreSQL tools
+        run: |
+          echo "$(pg_config --bindir)" >> "$GITHUB_PATH"
+          test -x "$(pg_config --bindir)/initdb"
+          test -x "$(pg_config --bindir)/pg_ctl"
+      - run: pnpm install --frozen-lockfile
+        working-directory: typescript
+      - name: Build native standalone applications
+        run: pnpm exec turbo run build --filter=@chapchoo/web --filter=@chapchoo/admin-web
+        working-directory: typescript
+      - name: Build and extract the Bookworm release binary
+        run: |
+          docker build --target backend -f images/chapchoo/Dockerfile -t chapchoo-package-backend:ci .
+          mkdir -p "$RUNNER_TEMP/package-inputs"
+          id="$(docker create chapchoo-package-backend:ci)"
+          trap 'docker rm "$id" >/dev/null' EXIT
+          docker cp "$id:/opt/chapchoo/chapchoo" "$RUNNER_TEMP/package-inputs/chapchoo"
+          chmod 755 "$RUNNER_TEMP/package-inputs/chapchoo"
+      - name: Assemble the pinned architecture-matched runtime
+        env:
+          ARCHITECTURE: ${{ matrix.architecture }}
+          NODE_ARCHITECTURE: ${{ matrix.node-architecture }}
+        run: |
+          cd "$RUNNER_TEMP/package-inputs"
+          curl --fail --silent --show-error --location --retry 3 --output SHASUMS256.txt https://nodejs.org/dist/v24.22.1/SHASUMS256.txt
+          curl --fail --silent --show-error --location --retry 3 --output "node-v24.22.1-linux-$NODE_ARCHITECTURE.tar.xz" "https://nodejs.org/dist/v24.22.1/node-v24.22.1-linux-$NODE_ARCHITECTURE.tar.xz"
+          cd "$GITHUB_WORKSPACE"
+          mkdir -p "$RUNNER_TEMP/artifacts" "$RUNNER_TEMP/installed"
+          python3 scripts/package-linux.py --architecture "$ARCHITECTURE" \
+            --binary "$RUNNER_TEMP/package-inputs/chapchoo" \
+            --node-archive "$RUNNER_TEMP/package-inputs/node-v24.22.1-linux-$NODE_ARCHITECTURE.tar.xz" \
+            --node-shasums "$RUNNER_TEMP/package-inputs/SHASUMS256.txt" \
+            --general-standalone typescript/apps/chapchoo-web/.next/standalone \
+            --general-static typescript/apps/chapchoo-web/.next/static \
+            --admin-standalone typescript/apps/chapchoo-admin-web/.next/standalone \
+            --admin-static typescript/apps/chapchoo-admin-web/.next/static \
+            --output "$RUNNER_TEMP/artifacts/chapchoo-linux-$ARCHITECTURE.tar.gz"
+          cd "$RUNNER_TEMP/artifacts"
+          sha256sum --check "chapchoo-linux-$ARCHITECTURE.tar.gz.sha256"
+          tar -xzf "chapchoo-linux-$ARCHITECTURE.tar.gz" -C "$RUNNER_TEMP/installed"
+          echo "CHAPCHOO_E2E_PACKAGE_ROOT=$RUNNER_TEMP/installed/chapchoo-linux-$ARCHITECTURE" >> "$GITHUB_ENV"
+      - name: Exercise the extracted SQLite bundle, fonts and SIGINT
+        env:
+          ARCHITECTURE: ${{ matrix.architecture }}
+        run: python3 scripts/test-installed-linux.py --architecture "$ARCHITECTURE" --root "$CHAPCHOO_E2E_PACKAGE_ROOT"
+      - run: pnpm --filter @chapchoo/e2e exec playwright install --with-deps chromium
+        working-directory: typescript
+      - name: Exercise the same three PostgreSQL product journeys from the bundle
+        run: pnpm --filter @chapchoo/e2e test:e2e
+        working-directory: typescript
+      - name: Build and run independent native images
+        run: |
+          docker build --target general-web -f images/chapchoo/Dockerfile -t chapchoo-package-general:ci .
+          docker build --target admin-web -f images/chapchoo/Dockerfile -t chapchoo-package-admin:ci .
+          python3 scripts/test-container-images.py --backend chapchoo-package-backend:ci --general chapchoo-package-general:ci --admin chapchoo-package-admin:ci
+      - name: Upload only the verified source-free archive and checksum
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: chapchoo-linux-${{ matrix.architecture }}
+          path: ${{ runner.temp }}/artifacts/*
+          if-no-files-found: error
+          retention-days: 7

@@ -23,7 +23,6 @@
     "invalidProof": "This link has expired, was already used, or is unavailable. Ask for a new link.",
     "signupSent": "If signup is available for this address, a link has been sent. Check your email.",
     "resetDone": "Your password was changed. Log in with your new password.",
-    "workspace": "Workspace",
     "contexts": "Your spaces",
     "personal": "Personal space",
     "personalDescription": "Your personal space is always available. It cannot be shared, left, or deleted.",
