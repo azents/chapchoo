@@ -41,7 +41,10 @@ production derivative while design originals remain in common UI assets.
 Narrow editable controls, including compound inner inputs and editable text
 surfaces, use a 16px minimum while preserving larger user text and pinch zoom;
 native selects retain their platform-owned line box. Visual principles remain
-in root DESIGN.md. Desktop uses a side navigation pane; narrow views wrap
+in root DESIGN.md. Shared button and chip labels use untrimmed intrinsic line
+boxes; action controls grow for wrapped or enlarged text rather than clipping
+glyph extents. Auth footers link only to other auth modes and omit the current
+login/signup/reset destination. Desktop uses a side navigation pane; narrow views wrap
 the same navigation above full-width content. Sectioned forms/rows/tables replace
 the former scaffold layout without changing app-owned actions or permissions. General-purpose design work lives in the independent
 [design reference workspace](design-reference.md); app Storybooks retain their

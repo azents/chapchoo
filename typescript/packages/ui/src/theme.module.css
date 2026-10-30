@@ -2,12 +2,32 @@
   outline: 0.125rem solid var(--chapchoo-color-focus);
   outline-offset: 0.1875rem;
 }
-.button {
+.button.button {
   font-weight: 500;
   min-height: 2.5rem;
   white-space: normal;
   height: auto;
   padding-block: var(--mantine-spacing-sm);
+  line-height: var(--chapchoo-line-height-control);
+}
+/* Preserve the complete glyph box while the root owns focus/loading masking. */
+.buttonInner.buttonInner {
+  height: auto;
+}
+.buttonLabel.buttonLabel {
+  height: auto;
+  line-height: inherit;
+  white-space: normal;
+  overflow: visible;
+  text-box-trim: none;
+}
+.chipLabel.chipLabel {
+  height: auto;
+  min-height: var(--chip-size);
+  line-height: var(--chapchoo-line-height-control);
+  padding-block: var(--mantine-spacing-xs);
+  white-space: normal;
+  text-box-trim: none;
 }
 .button:disabled {
   color: var(--chapchoo-color-muted);
@@ -89,7 +109,7 @@
     font-size: var(--chapchoo-font-input-mobile);
     line-height: 1.25;
   }
-  .button {
+  .button.button {
     min-height: 2.75rem;
   }
   .touchTarget.touchTarget {

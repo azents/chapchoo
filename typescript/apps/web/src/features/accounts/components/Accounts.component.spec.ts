@@ -114,3 +114,59 @@ test("narrow text-editing controls share the minimum size without restricting zo
     "32px",
   );
 });
+
+test("shared action labels retain complete line boxes when wrapped or enlarged", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 950 });
+  await page.goto(
+    "/iframe.html?id=shared-ui-control-typography--labels&viewMode=story",
+  );
+  const labels = page.locator(".mantine-Button-label,.mantine-Chip-label");
+  await expect(labels).toHaveCount(6);
+  for (const size of ["100%", "200%"]) {
+    await page.evaluate((value) => {
+      document.documentElement.style.fontSize = value;
+    }, size);
+    for (const label of await labels.all()) {
+      await expect(label).toHaveCSS("text-box-trim", "none");
+      const metrics = await label.evaluate((element) => {
+        const style = getComputedStyle(element);
+        const root = element.closest("button") ?? element;
+        const box = root.getBoundingClientRect();
+        const text = document.createRange();
+        text.selectNodeContents(element);
+        return {
+          lineHeight: parseFloat(style.lineHeight),
+          fontSize: parseFloat(style.fontSize),
+          loading: root.hasAttribute("data-loading"),
+          textFits: [...text.getClientRects()].every(
+            (rect) => rect.top >= box.top && rect.bottom <= box.bottom,
+          ),
+        };
+      });
+      expect(metrics.lineHeight / metrics.fontSize).toBeCloseTo(1.5);
+      // Mantine intentionally translates the pending label behind its spinner.
+      if (!metrics.loading) {
+        expect(metrics.textFits).toBe(true);
+      }
+    }
+  }
+});
+
+test("auth footer links lead to other modes rather than the current screen", async ({
+  page,
+}) => {
+  for (const [story, current] of [
+    ["password-login", "/login"],
+    ["request-signup", "/signup"],
+    ["administrator-link-required", "/reset-password"],
+  ]) {
+    await page.goto(
+      `/iframe.html?id=accounts-authentication--${story}&viewMode=story`,
+    );
+    await expect(page.locator("main")).toBeVisible();
+    await expect(page.locator(`a[href="${current}"]`)).toHaveCount(0);
+    await expect(page.locator("main a")).toHaveCount(2);
+  }
+});
