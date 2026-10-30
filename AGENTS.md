@@ -15,6 +15,10 @@ intentionally use other languages.
 - `typescript/apps/chapchoo-web/`: general Next.js account/team application.
 - `typescript/apps/chapchoo-admin-web/`: independent installation Admin application.
 - `typescript/packages/`: shared packages, including the generated Node RPC client.
+- `typescript/packages/chapchoo-design-reference/`: independent cross-platform
+  design reference Storybook; read its README and scoped Agent instructions for
+  ownership and promotion. Existing Azents-derived styling is provisional, not
+  Chapchoo's approved design system.
 - `rust/crates/`: typed domain, crypto, persistence, protocol, services and adapters.
 - `rust/apps/chapchoo/`: foreground backend and operator composition root.
 - `python/apps/`, `python/libs/`: reserved application/library layout.

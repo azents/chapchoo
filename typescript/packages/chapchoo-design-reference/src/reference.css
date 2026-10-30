@@ -1,0 +1,40 @@
+/* Neutral scaffolding styles; these are not Chapchoo design tokens. */
+.reference-frame {
+  color: CanvasText;
+  background: Canvas;
+  font-family: system-ui, sans-serif;
+  line-height: 1.6;
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.reference-frame h1 {
+  font-size: 1.75rem;
+  line-height: 1.25;
+}
+
+.reference-frame h2 {
+  font-size: 1.125rem;
+}
+
+.reference-frame section {
+  margin-block: 2rem;
+}
+
+.reference-label {
+  font-size: 0.875rem;
+}
+
+.reference-outline {
+  border: 1px dashed currentColor;
+  padding: 1rem;
+  max-width: 24rem;
+}
+
+.reference-common-preview {
+  width: 100%;
+  min-height: 16rem;
+  border: 0;
+}
