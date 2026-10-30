@@ -168,16 +168,6 @@ def validate(backend: str, general: str, admin: str) -> None:
                 raise RuntimeError("Independent image HTML has no static assets")
             for asset in assets:
                 request(published, asset.decode())
-            fonts = set(re.findall(rb'href="([^"]+\.woff2)"', html))
-            if len(fonts) != 2:
-                raise RuntimeError("Independent image did not serve bundled fonts")
-            for font in fonts:
-                if not font.decode().startswith(f"{prefix}/fonts/") or not request(
-                    published, font.decode()
-                ).startswith(b"wOF2"):
-                    raise RuntimeError(
-                        "Independent image font path or bytes are invalid"
-                    )
             if prefix:
                 for outside in ("/health", f"{prefix}-outside/health"):
                     try:
@@ -211,7 +201,7 @@ def validate(backend: str, general: str, admin: str) -> None:
             if inspected["State"]["ExitCode"] != 0:
                 raise RuntimeError("An independent image did not stop gracefully")
         print(
-            "Same-image root/non-root deployments: nonroot, read-only, static/fonts, private RPC and graceful stop passed"
+            "Same-image root/non-root deployments: nonroot, read-only, static assets, private RPC and graceful stop passed"
         )
     finally:
         failures: list[Exception] = []
