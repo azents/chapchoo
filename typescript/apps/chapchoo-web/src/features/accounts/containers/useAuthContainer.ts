@@ -2,7 +2,6 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { useMessages } from "next-intl";
-import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { trpc } from "@/shared/rpc/client";
 import { accountError } from "../errors";
@@ -10,7 +9,6 @@ import type { AuthInput, AuthProps, Submission } from "../types";
 
 export function useAuthContainer(input: AuthInput): AuthProps {
   const copy = useMessages().accounts;
-  const router = useRouter();
   const client = useQueryClient();
   const utils = trpc.useUtils();
   const [email, setEmail] = useState("");
@@ -140,8 +138,7 @@ export function useAuthContainer(input: AuthInput): AuthProps {
     client.clear();
     setPassword("");
     setCode("");
-    router.replace("/");
-    router.refresh();
+    window.location.replace(`${input.basePath}/`);
   }
   async function submit(sendCode: boolean): Promise<void> {
     if (busy.current) {

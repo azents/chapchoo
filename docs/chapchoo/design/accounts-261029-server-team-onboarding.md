@@ -10,11 +10,11 @@ snapshot_id: accounts-261029
 # Server Account and Team Onboarding Design
 
 - Snapshot: `accounts-261029`
-- Revision: `37`
-- State: approved revision36 plus requester-approved deployment clarification D38;
-  revision37 implementation requested on2026-10-30, live validation pending.
+- Revision: `38`
+- State: approved revision36 plus requester-approved deployment clarifications
+  D38/D39; revision38 implementation requested on2026-10-30, live validation pending.
 - Authority: [Requirements](../requirements/accounts-261029-server-team-onboarding.md)
-  and [accepted decisions through D37](../adr/accounts-261029-server-team-onboarding.md).
+  and [accepted decisions through D39](../adr/accounts-261029-server-team-onboarding.md).
 
 This revision consolidates agreed boundaries and maps required operations to the
 two protocol surfaces. It defines request data, state transitions, and relational
@@ -1854,3 +1854,31 @@ in manifests, existing Secret reuse, invalid material failure, create-conflict
 validation, CLI rename/new-name-only checks, URL special-character escaping,
 both DB RPC gates, actual native image startup/prefix/cleanup and exact-head CI.
 No live Secret read/write or first deployment is claimed by offline evidence.
+
+## Revision38 — Runtime-only reusable distribution
+
+Requester instructions on2026-10-30 authorize M45 under the reusable-distribution
+Requirements clarification and ADR-D39, in addition to the unchanged active
+M1–M34/M36–M44 set. Build-time public path/origin selection is replaced, not kept
+as a compatibility mode. No environment-specific snapshot/release image variant
+remains. Toolchain and source inputs are not deployment configuration.
+
+| ID | Mechanism | Authority |
+| --- | --- | --- |
+| M45 | One environment-independent artifact with runtime-only web origin/path/client endpoints, standard publication and Azents-aligned Home deployment | Reusable-distribution clarification; ADR-D39 |
+
+Compile the Next app without deployment values or injected compiled-path
+constants. The runtime Node entrypoint validates configured public/listener/RPC
+values, owns the public mount boundary and uses the supported Next server API.
+Explicitly package its runtime dependencies. Browser navigation and server
+redirects receive safe runtime path information; private endpoints/keys never
+enter browser output. All static/font/lazy-chunk paths must follow the runtime
+mount with no generated HTML/JavaScript rewriting.
+
+Keep one build/assembly path for development snapshots and release promotion.
+Verify the same image identity and unchanged extracted artifact under distinct
+runtime configurations without rebuilding. Remove compiledBasePath metadata,
+build URL/path flags, obsolete mismatch tests and build-cache environment inputs.
+Home routes/values use runtime public URLs and mirror the current Azents
+component/nested Helm Application layout and naming. Existing initialization,
+data preservation, Secret scope and exact-head validation remain required.

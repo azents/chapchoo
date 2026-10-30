@@ -6,7 +6,7 @@ import type { ReactElement } from "react";
 
 export default async function Home(): Promise<ReactElement> {
   if (!(await readIdentity())) {
-    redirect("/login");
+    redirect(`${getPublicConfig().publicBasePath}/login`);
   }
   return (
     <WorkspacePage basePath={getPublicConfig().publicBasePath} teamId="" />

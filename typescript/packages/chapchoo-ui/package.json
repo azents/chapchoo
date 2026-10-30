@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./theme": "./src/theme.ts",
+    "./FontFaces": "./src/FontFaces.tsx",
     "./provider": "./src/provider.tsx",
     "./AuthPanel": "./src/AuthPanel.tsx",
     "./ApplicationShell": "./src/ApplicationShell.tsx",

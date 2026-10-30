@@ -11,7 +11,7 @@ export default async function Team({
 }): Promise<ReactElement> {
   const { teamId } = await params;
   if (!(await readIdentity())) {
-    redirect("/login");
+    redirect(`${getPublicConfig().publicBasePath}/login`);
   }
   return (
     <WorkspacePage

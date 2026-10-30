@@ -87,8 +87,10 @@ jobs:
             --node-shasums "$RUNNER_TEMP/package-inputs/SHASUMS256.txt" \
             --general-standalone typescript/apps/chapchoo-web/.next/standalone \
             --general-static typescript/apps/chapchoo-web/.next/static \
+            --general-public typescript/apps/chapchoo-web/public \
             --admin-standalone typescript/apps/chapchoo-admin-web/.next/standalone \
             --admin-static typescript/apps/chapchoo-admin-web/.next/static \
+            --admin-public typescript/apps/chapchoo-admin-web/public \
             --output "$RUNNER_TEMP/artifacts/chapchoo-linux-$ARCHITECTURE.tar.gz"
           cd "$RUNNER_TEMP/artifacts"
           sha256sum --check "chapchoo-linux-$ARCHITECTURE.tar.gz.sha256"
@@ -106,8 +108,8 @@ jobs:
       - name: Build and run independent native images
         run: |
           docker build --target general-web -f images/chapchoo/Dockerfile -t chapchoo-package-general:ci .
-          docker build --target admin-web --build-arg ADMIN_PUBLIC_URL=https://chapchoo.internal.hardtack.me/admin -f images/chapchoo/Dockerfile -t chapchoo-package-admin:ci .
-          python3 scripts/test-container-images.py --backend chapchoo-package-backend:ci --general chapchoo-package-general:ci --admin chapchoo-package-admin:ci --admin-base-path /admin
+          docker build --target admin-web -f images/chapchoo/Dockerfile -t chapchoo-package-admin:ci .
+          python3 scripts/test-container-images.py --backend chapchoo-package-backend:ci --general chapchoo-package-general:ci --admin chapchoo-package-admin:ci
       - name: Upload only the verified source-free archive and checksum
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

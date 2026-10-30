@@ -3,7 +3,7 @@
 {{- $web := index $.Values $role }}
 {{- if $web.enabled }}
 {{- $host := (urlParse $web.publicUrl).hostname }}
-{{- $path := default "/" $web.compiledBasePath }}
+{{- $path := default "/" (trimSuffix "/" (urlParse $web.publicUrl).path) }}
 {{- $port := 3003 }}{{- if eq $role "admin" }}{{- $port = 3004 }}{{- end }}
 ---
 apiVersion: networking.k8s.io/v1

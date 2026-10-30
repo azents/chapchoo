@@ -14,19 +14,13 @@
         "generate"
       ],
       "outputs": [
+        "public/fonts/**",
         "dist/**",
         ".next/**",
         "!.next/cache/**"
       ],
-      "env": [
-        "CHAPCHOO_PUBLIC_URL"
-      ],
       "passThroughEnv": [
-        "CI",
-        "SENTRY_AUTH_TOKEN",
-        "SENTRY_ORG",
-        "SENTRY_PROJECT",
-        "SITE_GOOGLE_ANALYTICS_ID"
+        "CI"
       ]
     },
     "dev": {

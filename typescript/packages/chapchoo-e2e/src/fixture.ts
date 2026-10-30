@@ -119,6 +119,7 @@ export class Assembly {
       NODE_ENV: "production",
       CHAPCHOO_WEB_HOST: "127.0.0.1",
       CHAPCHOO_PUBLIC_URL: url,
+      PORT: new URL(url).port,
       CHAPCHOO_BACKEND_URL: `http://127.0.0.1:${port}`,
     };
   }
@@ -249,17 +250,25 @@ export class Assembly {
       const cwd = join(typescript, "apps", name);
       const env = this.webEnvironment(url, backendPort);
       await this.owner.run(
+        `${name} font assets`,
+        process.execPath,
+        [join(typescript, "scripts/stage-web-fonts.mjs"), name],
+        cwd,
+        safeEnvironment(),
+        30_000,
+      );
+      await this.owner.run(
         `${name} production build`,
         join(cwd, "node_modules/.bin/next"),
-        ["build"],
+        ["build", "--webpack"],
         cwd,
-        env,
+        safeEnvironment(),
         120_000,
       );
       const web = this.owner.start(
         `${name} production listener`,
-        join(cwd, "node_modules/.bin/next"),
-        ["start", "--hostname", "127.0.0.1", "--port", new URL(url).port],
+        process.execPath,
+        ["server.mjs"],
         cwd,
         env,
       );

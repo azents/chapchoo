@@ -65,10 +65,6 @@
         "publicUrl": {
           "type": "string"
         },
-        "compiledBasePath": {
-          "type": "string",
-          "pattern": "^$|^/[^; %\\\\?#]+$"
-        },
         "backendUrl": {
           "type": "string"
         },
@@ -83,7 +79,6 @@
         "enabled",
         "replicas",
         "publicUrl",
-        "compiledBasePath",
         "backendUrl",
         "image",
         "resources"

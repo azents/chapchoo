@@ -41,18 +41,16 @@ COPY --from=backend-build /src/rust/target/release/chapchoo /inputs/chapchoo
 
 FROM web-build-base AS general-build
 ARG TARGETARCH
-ARG GENERAL_PUBLIC_URL=http://localhost:3003
 RUN mkdir -p apps/chapchoo-web/public \
-    && CHAPCHOO_PUBLIC_URL="$GENERAL_PUBLIC_URL" pnpm exec turbo run build --filter=@chapchoo/web \
+    && pnpm exec turbo run build --filter=@chapchoo/web \
     && python3 /src/images/chapchoo/stage-web.py --app general --architecture "$TARGETARCH" \
        --typescript-root /src/typescript --binary /inputs/chapchoo --node /usr/local/bin/node \
        --node-license /usr/local/LICENSE --output /out/general
 
 FROM web-build-base AS admin-build
 ARG TARGETARCH
-ARG ADMIN_PUBLIC_URL=http://localhost:3004
 RUN mkdir -p apps/chapchoo-admin-web/public \
-    && CHAPCHOO_PUBLIC_URL="$ADMIN_PUBLIC_URL" pnpm exec turbo run build --filter=@chapchoo/admin-web \
+    && pnpm exec turbo run build --filter=@chapchoo/admin-web \
     && python3 /src/images/chapchoo/stage-web.py --app admin --architecture "$TARGETARCH" \
        --typescript-root /src/typescript --binary /inputs/chapchoo --node /usr/local/bin/node \
        --node-license /usr/local/LICENSE --output /out/admin

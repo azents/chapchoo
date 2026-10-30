@@ -60,8 +60,8 @@
 {{- fail "Kubernetes publicUrl must be explicit HTTPS without credentials, query or fragment" -}}
 {{- end -}}
 {{- $path := trimSuffix "/" $parsed.path -}}
-{{- if or (contains "//" $path) (contains "%" $url) (regexMatch "[;%\\\\]" $path) (regexMatch "(^|/)\\.{1,2}(/|$)" $path) (ne $path .basePath) -}}
-{{- fail "publicUrl path must equal the image compiledBasePath, without rewrites, escapes or duplicate slashes" -}}
+{{- if or (contains "//" $path) (contains "%" $url) (regexMatch "[;%\\\\]" $path) (regexMatch "(^|/)\\.{1,2}(/|$)" $path) -}}
+{{- fail "publicUrl path must be canonical, without rewrites, escapes or duplicate slashes" -}}
 {{- end -}}
 {{- end -}}
 
@@ -84,7 +84,7 @@
 {{- end -}}
 {{- $_ := required "database.existingSecret is required for external PostgreSQL" .Values.database.existingSecret -}}
 {{- $_ := required "secretKey.existingSecret is required; the fixed key is never generated or replaced" .Values.secretKey.existingSecret -}}
-{{- include "chapchoo.validatePublicUrl" (dict "url" .Values.general.publicUrl "basePath" .Values.general.compiledBasePath) -}}
+{{- include "chapchoo.validatePublicUrl" (dict "url" .Values.general.publicUrl) -}}
 {{- end -}}
 {{- if and .Values.mail.enabled (not .Values.backend.enabled) -}}
 {{- fail "mail configuration belongs to an enabled backend" -}}
@@ -97,7 +97,7 @@
 {{- range $role := list "general" "admin" -}}
 {{- $web := index $.Values $role -}}
 {{- if $web.enabled -}}
-{{- include "chapchoo.validatePublicUrl" (dict "url" $web.publicUrl "basePath" $web.compiledBasePath) -}}
+{{- include "chapchoo.validatePublicUrl" (dict "url" $web.publicUrl) -}}
 {{- if and (not $.Values.backend.enabled) (empty $web.backendUrl) -}}
 {{- fail "A web-only deployment requires an explicit matching backendUrl" -}}
 {{- end -}}
@@ -126,7 +126,7 @@
 {{- end -}}
 {{- end -}}
 {{- end -}}
-{{- if and .Values.general.enabled .Values.admin.enabled (eq (urlParse .Values.general.publicUrl).hostname (urlParse .Values.admin.publicUrl).hostname) (eq .Values.general.compiledBasePath .Values.admin.compiledBasePath) -}}
+{{- if and .Values.general.enabled .Values.admin.enabled (eq (urlParse .Values.general.publicUrl).hostname (urlParse .Values.admin.publicUrl).hostname) (eq (trimSuffix "/" (urlParse .Values.general.publicUrl).path) (trimSuffix "/" (urlParse .Values.admin.publicUrl).path)) -}}
 {{- fail "General and Admin web Ingress routes must be distinct after HTTPS port normalization" -}}
 {{- end -}}
 {{- end -}}
@@ -143,7 +143,7 @@
 {{- if and $.Values.webIngress.enabled (eq $.Values.webIngress.className $.Values.grpcIngress.className) -}}
 {{- range $webRole := list "general" "admin" -}}
 {{- $web := index $.Values $webRole -}}
-{{- if and $web.enabled (empty $web.compiledBasePath) (eq (urlParse $web.publicUrl).hostname $route.host) -}}
+{{- if and $web.enabled (empty (trimSuffix "/" (urlParse $web.publicUrl).path)) (eq (urlParse $web.publicUrl).hostname $route.host) -}}
 {{- fail "A gRPC catch-all and a root web Ingress cannot share the same ingress class and host" -}}
 {{- end -}}
 {{- end -}}

@@ -42,6 +42,7 @@ __pycache__/
 .coverage
 *.tsbuildinfo
 .next/
+typescript/apps/*/public/fonts/
 rust/target/
 .eslintcache
 .prettiercache

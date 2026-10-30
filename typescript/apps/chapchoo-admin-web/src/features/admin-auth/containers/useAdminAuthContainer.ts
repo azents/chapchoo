@@ -1,6 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { errorKey } from "@/shared/lib/errors";
 import { trpc } from "@/shared/rpc/client";
@@ -22,7 +21,6 @@ export function useAdminAuthContainer({
 }: AdminAuthInput): AdminAuthProps {
   const text = useTranslations("AdminAuth");
   const errors = useTranslations("Errors");
-  const router = useRouter();
   const cache = useQueryClient();
   const [method, setMethod] = useState<AuthMethod>("password");
   const [email, setEmail] = useState("");
@@ -39,8 +37,7 @@ export function useAdminAuthContainer({
 
   function authenticated(): void {
     cache.clear();
-    router.replace("/");
-    router.refresh();
+    window.location.replace(`${basePath}/`);
   }
 
   const login = trpc.auth.passwordLogin.useMutation({

@@ -5,6 +5,7 @@
 {{- $port := 3003 }}{{- $grpcPort := 50051 }}
 {{- if eq $role "admin" }}{{- $port = 3004 }}{{- $grpcPort = 50052 }}{{- end }}
 {{- $backend := default (printf "http://%s-%s-grpc:%d" (include "chapchoo.fullname" $) $role $grpcPort) $web.backendUrl }}
+{{- $basePath := trimSuffix "/" (urlParse $web.publicUrl).path }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -45,17 +46,17 @@ spec:
             - name: http
               containerPort: {{ $port }}
           startupProbe:
-            httpGet: {path: {{ printf "%s/health" $web.compiledBasePath | quote }}, port: {{ $port }}, scheme: HTTP}
+            httpGet: {path: {{ printf "%s/health" $basePath | quote }}, port: {{ $port }}, scheme: HTTP}
             periodSeconds: 3
             timeoutSeconds: 3
             failureThreshold: 30
           livenessProbe:
-            httpGet: {path: {{ printf "%s/health" $web.compiledBasePath | quote }}, port: {{ $port }}, scheme: HTTP}
+            httpGet: {path: {{ printf "%s/health" $basePath | quote }}, port: {{ $port }}, scheme: HTTP}
             periodSeconds: 10
             timeoutSeconds: 3
             failureThreshold: 3
           readinessProbe:
-            httpGet: {path: {{ printf "%s/health" $web.compiledBasePath | quote }}, port: {{ $port }}, scheme: HTTP}
+            httpGet: {path: {{ printf "%s/health" $basePath | quote }}, port: {{ $port }}, scheme: HTTP}
             periodSeconds: 5
             timeoutSeconds: 3
             failureThreshold: 2

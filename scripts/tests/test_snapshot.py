@@ -17,6 +17,12 @@ SPEC = importlib.util.spec_from_file_location(
 assert SPEC is not None and SPEC.loader is not None
 publisher = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(publisher)
+ACCEPTANCE_SPEC = importlib.util.spec_from_file_location(
+    "container_acceptance", ROOT / "scripts/test-container-images.py"
+)
+assert ACCEPTANCE_SPEC is not None and ACCEPTANCE_SPEC.loader is not None
+acceptance = importlib.util.module_from_spec(ACCEPTANCE_SPEC)
+ACCEPTANCE_SPEC.loader.exec_module(acceptance)
 
 
 class SnapshotTest(unittest.TestCase):
@@ -139,7 +145,17 @@ class SnapshotTest(unittest.TestCase):
         text = (ROOT / ".github/workflows/snapshot.yaml").read_text()
         self.assertIn("ubuntu-24.04-arm", text)
         self.assertIn('test "$(uname -m)" = "$MACHINE"', text)
-        self.assertIn("--admin-base-path /admin", text)
+        self.assertIn("--general chapchoo-general-web:acceptance", text)
+        self.assertIn("--admin chapchoo-admin-web:acceptance", text)
+        self.assertEqual(
+            acceptance.WEB_MOUNTS,
+            (
+                ("general", "3003", "50051", ""),
+                ("admin", "3004", "50052", ""),
+                ("general", "3003", "50051", "/app"),
+                ("admin", "3004", "50052", "/admin"),
+            ),
+        )
         self.assertLess(
             text.index("scripts/test-container-images.py"), text.index("docker push")
         )

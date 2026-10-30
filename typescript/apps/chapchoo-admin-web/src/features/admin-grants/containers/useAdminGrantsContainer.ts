@@ -1,7 +1,6 @@
 import { useClipboard } from "@mantine/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { errorKey } from "@/shared/lib/errors";
 import { trpc } from "@/shared/rpc/client";
@@ -56,7 +55,6 @@ export function useAdminGrantsContainer({
   const authText = useTranslations("AdminAuth");
   const errors = useTranslations("Errors");
   const locale = useLocale();
-  const router = useRouter();
   const cache = useQueryClient();
   const utils = trpc.useUtils();
   const clipboard = useClipboard();
@@ -80,7 +78,7 @@ export function useAdminGrantsContainer({
 
   async function refresh(): Promise<void> {
     if (initial.type === "ERROR") {
-      router.refresh();
+      window.location.reload();
       return;
     }
     await refreshAdminState(utils);
@@ -113,8 +111,7 @@ export function useAdminGrantsContainer({
   const logout = trpc.auth.logout.useMutation({
     onSuccess: () => {
       cache.clear();
-      router.replace("/login");
-      router.refresh();
+      window.location.replace(`${basePath}/login`);
     },
   });
   const pending =

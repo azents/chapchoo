@@ -1,6 +1,7 @@
 import "server-only";
 import { RpcFailure } from "@chapchoo/web-core/errors";
 import { redirect } from "next/navigation";
+import { getPublicConfig } from "@/config/index";
 import { readIdentity } from "@/shared/server/identity";
 import type { InitialAdminIdentity } from "../types";
 
@@ -9,8 +10,7 @@ export async function loadAdminIdentity(): Promise<InitialAdminIdentity> {
   try {
     const identity = await readIdentity();
     if (!identity) {
-      // Next.js applies basePath when rendering this redirect.
-      redirect("/login");
+      redirect(`${getPublicConfig().publicBasePath}/login`);
     }
     return { type: "LOADED", email: identity.email };
   } catch (error) {

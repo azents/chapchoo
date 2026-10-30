@@ -427,7 +427,6 @@ class ChartContractsTest(unittest.TestCase):
             {
                 "general": {
                     "publicUrl": "https://chapchoo.example.invalid/app",
-                    "compiledBasePath": "/app",
                 },
                 "grpcIngress": {"general": {"host": "chapchoo.example.invalid"}},
             }
@@ -495,13 +494,11 @@ class ChartContractsTest(unittest.TestCase):
             {"general": {"publicUrl": "https://u:p@example.invalid"}},
             {"general": {"publicUrl": "https://example.invalid/?untrusted=1"}},
             {"general": {"publicUrl": "https://example.invalid/#untrusted"}},
-            {"admin": {"compiledBasePath": "/different"}},
             {"admin": {"publicUrl": "https://example.invalid//admin"}},
             {"admin": {"publicUrl": "https://example.invalid/%61dmin"}},
             {
                 "admin": {
                     "publicUrl": "https://example.invalid/admin/..",
-                    "compiledBasePath": "/admin/..",
                 }
             },
             {"admin": {"backendUrl": "https://rpc.example.invalid/rewritten"}},
@@ -519,7 +516,6 @@ class ChartContractsTest(unittest.TestCase):
             {
                 "admin": {
                     "publicUrl": "https://chapchoo.example.invalid:443",
-                    "compiledBasePath": "",
                 }
             },
             {

@@ -521,3 +521,14 @@ and reuse rather than a required external secret-store value; and `SECRET_KEY`
 terminology for the existing fixed server key. Existing key bytes, database
 binding, one-time setup consumption and no-key-replacement constraints remain
 unchanged. Operator instructions include generation/issuance and safe storage.
+
+## Reusable distribution clarification — 2026-10-30
+
+The requester requires every deployment setting, including public URLs and paths,
+to be determined at execution time. Published open-source images must not contain
+environment-specific build/compile settings. A snapshot is a development
+distribution channel, not an internal-specific build; a release of the same
+commit promotes the same artifact/output rather than a channel-specific variant.
+All distribution outputs follow established open-source/community standards.
+Private environment wiring stays separate, and Home deployment layout, naming
+and management follow the current corresponding Azents pattern.

@@ -122,7 +122,7 @@ pnpm run build-storybook --filter=@chapchoo/admin-web
 
 Workspace lint/typecheck, dev and Storybook commands build their library
 prerequisites first. Turbo restores emitted `dist`/Next outputs from its cache;
-public build URLs participate in the build cache key. Development passes only
+deployment configuration is read only by running listeners. Development passes only
 the explicit public URL, listener and backend client settings to app commands.
 This does not pass database/root/bootstrap credentials into a web process.
 
@@ -145,8 +145,8 @@ Storybook renders the same theme and translation providers with static fixtures.
 
 Each app reads configuration only through `src/config/index.ts`.
 `CHAPCHOO_PUBLIC_URL` supplies the exact public origin/path (defaults:
-`http://localhost:3003` and `http://localhost:3004`); build and runtime base paths
-must match. `CHAPCHOO_WEB_HOST` defaults to `127.0.0.1`; local HTTP requires a
+`http://localhost:3003` and `http://localhost:3004`). One deployment-neutral build
+can run at root or a different mount without rebuilding. `CHAPCHOO_WEB_HOST` defaults to `127.0.0.1`; local HTTP requires a
 loopback public host and listener. Remote public URLs require HTTPS.
 `CHAPCHOO_BACKEND_URL` selects the corresponding general/Admin endpoint (defaults:
 `http://127.0.0.1:50051` and `http://127.0.0.1:50052`). HTTPS backend calls use

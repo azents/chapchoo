@@ -123,12 +123,15 @@ replace configured origin trust. Backend HTTPS uses grpc-js's CA/hostname
 verification without plaintext fallback; internal plaintext requires the
 operator's trusted network boundary.
 
-Next's compiled basePath is derived from the same build-time public URL path.
-Only that safe public path is embedded as a compiled configuration constant.
-Runtime public path must match it; missing/mismatched compiled configuration
-fails rather than pretending to provide dynamic prefix rewriting. Shared assets
-are included through standalone tracing/transpilation configuration.
-GET `/health` under the compiled prefix validates runtime web configuration and
+Next builds have no deployment public path. The documented production-server
+configuration phase reads the runtime mount and asset prefix. A public custom
+server accepts only that mount, strips it before Next dispatch, and uses the
+documented webpack configuration extension with automatic chunk public paths.
+Shared Geist font files are build inputs, served as ordinary public assets with
+runtime-prefixed CSS font faces. Browser navigation and server redirects use the
+safe runtime path rather than the framework's compiled basePath. Shared assets
+are included through tracing/transpilation configuration.
+GET `/health` under the runtime prefix validates runtime web configuration and
 returns no-store process health. It does not establish backend/schema readiness
 or an authenticated product journey. [Linux delivery](account-delivery.md)
 describes executable-relative standalone execution and its acceptance boundary.
@@ -147,7 +150,7 @@ inspection from enumerating native credentials, SQL or proof material.
 Focused tests cover Origin/POST admission, cookie attributes/caps/disposition,
 renewal ownership and concurrent context isolation, post-renewal domain failure,
 revocation and authentication infrastructure failure, decoded response validation,
-read-only SSR, safe source preservation and compiled/runtime prefix validation.
+read-only SSR, safe source preservation and runtime prefix validation.
 A bounded-overlap response-loss/reordering authority model remains lower-layer
 evidence. A separate controlled real-Chromium/HTTP test verifies actual delayed
 cookie overwrite/deletion and HttpOnly JavaScript non-exposure using the product
