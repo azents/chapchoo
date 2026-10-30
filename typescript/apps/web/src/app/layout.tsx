@@ -1,9 +1,16 @@
 import { FontFaces } from "@chapchoo/ui/FontFaces";
-import { AppMantineProvider } from "@chapchoo/ui/provider";
-import { ColorSchemeScript } from "@mantine/core";
+import {
+  bodyColorModeBootstrap,
+  colorModeBootstrap,
+  preferenceCookie,
+  resolvedCookie,
+  resolveServerColorMode,
+} from "@chapchoo/web-core/color-mode";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
+import { cookies } from "next/headers";
 import { getPublicConfig } from "@/config";
+import { AppearanceProvider } from "@/shared/appearance/AppearanceProvider";
 import { RpcProvider } from "@/shared/rpc/provider";
 import type { Metadata, Viewport } from "next";
 import type { ReactElement, ReactNode } from "react";
@@ -30,17 +37,30 @@ export default async function RootLayout({
   const { publicBasePath } = getPublicConfig();
   const locale = await getLocale();
   const messages = await getMessages();
+  const store = await cookies();
+  const initial = resolveServerColorMode(
+    store.get(preferenceCookie)?.value,
+    store.get(resolvedCookie)?.value,
+  );
   return (
-    <html lang={locale} suppressHydrationWarning>
+    <html
+      lang={locale}
+      data-mantine-color-scheme={initial.mode}
+      data-color-mode-preference={initial.preference}
+      suppressHydrationWarning
+    >
       <head>
         <FontFaces basePath={publicBasePath} />
-        <ColorSchemeScript forceColorScheme="light" />
+        <script
+          dangerouslySetInnerHTML={{ __html: colorModeBootstrap(initial) }}
+        />
       </head>
-      <body>
+      <body data-color-mode={initial.mode} suppressHydrationWarning>
+        <script dangerouslySetInnerHTML={{ __html: bodyColorModeBootstrap }} />
         <NextIntlClientProvider locale={locale} messages={messages}>
-          <AppMantineProvider>
+          <AppearanceProvider initial={initial}>
             <RpcProvider basePath={publicBasePath}>{children}</RpcProvider>
-          </AppMantineProvider>
+          </AppearanceProvider>
         </NextIntlClientProvider>
       </body>
     </html>

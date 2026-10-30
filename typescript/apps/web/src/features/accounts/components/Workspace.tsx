@@ -1,6 +1,7 @@
 "use client";
 
 import { ApplicationShell } from "@chapchoo/ui/ApplicationShell";
+import { ColorModeSelector } from "@chapchoo/ui/ColorModeSelector";
 import { ConfirmationDialog } from "@chapchoo/ui/ConfirmationDialog";
 import { ContentSection } from "@chapchoo/ui/ContentSection";
 import {
@@ -94,14 +95,19 @@ export function Workspace(props: WorkspaceProps): ReactNode {
         })),
       ]}
       actions={
-        <Button
-          variant="subtle"
-          size="xs"
-          onClick={props.onLogout}
-          disabled={pending}
-        >
-          {c.logout}
-        </Button>
+        <>
+          {props.appearance ? (
+            <ColorModeSelector {...props.appearance} />
+          ) : null}
+          <Button
+            variant="subtle"
+            size="xs"
+            onClick={props.onLogout}
+            disabled={pending}
+          >
+            {c.logout}
+          </Button>
+        </>
       }
     >
       {submission.type === "ERROR" && props.confirmation === null ? (

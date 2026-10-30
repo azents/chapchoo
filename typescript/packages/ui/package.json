@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./ColorModeSelector": "./src/ColorModeSelector.tsx",
     "./theme": "./src/theme.ts",
     "./designTokens": "./src/designTokens.ts",
     "./Mascot": "./src/Mascot.tsx",

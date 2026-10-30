@@ -1,4 +1,10 @@
 {
+  "Appearance": {
+    "label": "Apparence",
+    "system": "Système",
+    "light": "Clair",
+    "dark": "Sombre"
+  },
   "accounts": {
     "login": "Se connecter",
     "signup": "Créer un compte",

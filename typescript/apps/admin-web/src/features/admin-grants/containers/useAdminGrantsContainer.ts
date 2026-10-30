@@ -2,6 +2,7 @@ import { useClipboard } from "@mantine/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
+import { useAppearanceControl } from "@/shared/appearance/useAppearanceControl";
 import { errorKey } from "@/shared/lib/errors";
 import { trpc } from "@/shared/rpc/client";
 import { refreshAdminState } from "../refreshAdminState";
@@ -52,6 +53,7 @@ export function useAdminGrantsContainer({
   initial,
 }: AdminGrantsInput): AdminGrantsProps {
   const text = useTranslations("AdminGrants");
+  const appearance = useAppearanceControl();
   const authText = useTranslations("AdminAuth");
   const errors = useTranslations("Errors");
   const locale = useLocale();
@@ -189,6 +191,7 @@ export function useAdminGrantsContainer({
   }
   return {
     kind,
+    appearance,
     basePath,
     identityLabel: identity.isSuccess
       ? identity.data.email

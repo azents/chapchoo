@@ -10,6 +10,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useMessages } from "next-intl";
 import { useEffect, useRef, useState } from "react";
+import { useAppearanceControl } from "@/shared/appearance/useAppearanceControl";
 import { trpc } from "@/shared/rpc/client";
 import { accountError } from "../errors";
 import type {
@@ -36,6 +37,7 @@ export function useWorkspaceContainer({
   basePath: string;
 }): WorkspaceProps {
   const copy = useMessages().accounts;
+  const appearance = useAppearanceControl();
   const client = useQueryClient();
   const utils = trpc.useUtils();
   const [name, setName] = useState("");
@@ -266,6 +268,7 @@ export function useWorkspaceContainer({
   }
   return {
     basePath,
+    appearance,
     copy,
     state,
     submission,

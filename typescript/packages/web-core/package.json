@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./color-mode": {
+      "types": "./dist/color-mode.d.ts",
+      "default": "./dist/color-mode.js"
+    },
     "./browser": {
       "types": "./dist/browser.d.ts",
       "default": "./dist/browser.js"

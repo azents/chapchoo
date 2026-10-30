@@ -25,6 +25,16 @@ async function isolatedPage(browser: Browser): Promise<Page> {
   page.on("pageerror", (error) =>
     websiteErrors.push(safeMessage(error.message)),
   );
+  page.on("console", (message) => {
+    if (
+      message.type() === "error" &&
+      /hydration|hydrating|did not match|server.rendered|react.dev\/errors\/418/i.test(
+        message.text(),
+      )
+    ) {
+      websiteErrors.push("React reported an appearance hydration mismatch");
+    }
+  });
   return page;
 }
 
@@ -171,7 +181,76 @@ test.describe("Assembled account and team acceptance", () => {
   test("administrator bootstrap and issued signup reach the personal context", async ({
     assembly,
   }) => {
+    await administrator.emulateMedia({ colorScheme: "dark" });
+    await administrator.addInitScript(() => {
+      function firstContentFrame(): void {
+        if (!document.querySelector("main")) {
+          requestAnimationFrame(firstContentFrame);
+          return;
+        }
+        const root = document.documentElement;
+        const mode = root.dataset.mantineColorScheme;
+        root.dataset.firstFrameMode ??= mode;
+        if (
+          mode &&
+          root.dataset.appearanceModeHistory?.split(",").at(-1) !== mode
+        ) {
+          root.dataset.appearanceModeHistory = root.dataset
+            .appearanceModeHistory
+            ? `${root.dataset.appearanceModeHistory},${mode}`
+            : mode;
+        }
+        if (root.dataset.appearanceObservation !== "done")
+          requestAnimationFrame(firstContentFrame);
+      }
+      requestAnimationFrame(firstContentFrame);
+    });
+    await administrator.goto(`${assembly.generalUrl}/login`);
+    await expect(administrator.locator("html")).toHaveAttribute(
+      "data-first-frame-mode",
+      "dark",
+    );
+    const appearance = administrator.getByRole("combobox", {
+      name: "Appearance",
+      exact: true,
+    });
+    await expect(appearance).toHaveValue("system");
+    const initialEmail = administrator.getByRole("textbox", {
+      name: "Email address",
+      exact: true,
+    });
+    await initialEmail.fill("draft@example.com");
+    await administrator.evaluate(() => {
+      document.documentElement.dataset.appearanceObservation = "done";
+    });
+    await expect(administrator.locator("html")).toHaveAttribute(
+      "data-appearance-mode-history",
+      "dark",
+    );
+    await appearance.focus();
+    await appearance.selectOption("light");
+    await expect(initialEmail).toHaveValue("draft@example.com");
+    await expect(appearance).toBeFocused();
+    await administrator.emulateMedia({ colorScheme: "light" });
+    await appearance.selectOption("dark");
+    await expect(administrator.locator("body")).toHaveAttribute(
+      "data-color-mode",
+      "dark",
+    );
+    const rendered = await administrator.request.get(
+      `${assembly.generalUrl}/login`,
+    );
+    expect(await rendered.text()).toMatch(
+      /<html[^>]*data-mantine-color-scheme="dark"/,
+    );
     await administrator.goto(`${assembly.adminUrl}/setup`);
+    await expect(
+      administrator.getByRole("combobox", { name: "Appearance", exact: true }),
+    ).toHaveValue("dark");
+    await expect(administrator.locator("html")).toHaveAttribute(
+      "data-first-frame-mode",
+      "dark",
+    );
     await administrator
       .getByRole("textbox", { name: "Email", exact: true })
       .fill(assembly.administrator.email);

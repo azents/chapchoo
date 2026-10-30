@@ -12,6 +12,12 @@ const meta = {
   title: "Accounts/Authentication",
   component: Auth,
   args: {
+    appearance: {
+      value: "system",
+      label: "Appearance",
+      labels: { system: "System", light: "Light", dark: "Dark" },
+      onChange: (): void => {},
+    },
     basePath: "",
     copy: messages.accounts,
     mode: "LOGIN",
@@ -99,4 +105,14 @@ export const InvalidCredentials: Story = {
     },
   },
 };
-export const Korean: Story = { args: { copy: korean.accounts } };
+export const Korean: Story = {
+  args: {
+    copy: korean.accounts,
+    appearance: {
+      value: "system",
+      label: "화면 모드",
+      labels: { system: "시스템", light: "라이트", dark: "다크" },
+      onChange: (): void => {},
+    },
+  },
+};

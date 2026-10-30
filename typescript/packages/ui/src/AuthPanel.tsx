@@ -8,6 +8,7 @@ export interface AuthPanelProps {
   description?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
+  actions?: ReactNode;
   basePath?: string;
 }
 
@@ -17,11 +18,13 @@ export function AuthPanel({
   description,
   children,
   footer,
+  actions,
   basePath = "",
 }: AuthPanelProps): ReactNode {
   return (
     <Box component="main" className={classes.page}>
       <div className={classes.brand}>chapchoo</div>
+      {actions ? <div className={classes.actions}>{actions}</div> : null}
       <div className={classes.panel}>
         <div className={classes.heading}>
           <Mascot basePath={basePath} size={72} />

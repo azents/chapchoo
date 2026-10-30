@@ -17,7 +17,7 @@ const preview: Preview = {
   parameters: { layout: "fullscreen", nextjs: { appDirectory: true } },
   globalTypes: {
     locale: { toolbar: { items: ["en-US", "ko-KR", "ja-JP", "fr-FR"] } },
-    colorScheme: { toolbar: { items: ["light"] } },
+    colorScheme: { toolbar: { items: ["light", "dark"] } },
   },
   initialGlobals: { locale: "en-US", colorScheme: "light" },
   decorators: [
@@ -25,9 +25,21 @@ const preview: Preview = {
       const value: unknown = context.globals.locale;
       const locale =
         typeof value === "string" && isSupportedLocale(value) ? value : "en-US";
+      if (context.parameters.ownsAppearanceProvider === true) {
+        return (
+          <NextIntlClientProvider locale={locale} messages={messages[locale]}>
+            <FontFaces basePath="" />
+            <Story />
+          </NextIntlClientProvider>
+        );
+      }
       return (
         <NextIntlClientProvider locale={locale} messages={messages[locale]}>
-          <AppMantineProvider forceColorScheme="light">
+          <AppMantineProvider
+            forceColorScheme={
+              context.globals.colorScheme === "dark" ? "dark" : "light"
+            }
+          >
             <FontFaces basePath="" />
             <Story />
           </AppMantineProvider>

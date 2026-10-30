@@ -39,3 +39,27 @@ export const SharedReuse: Story = {
     );
   },
 };
+
+export const DarkReuse: Story = {
+  render: (): ReactElement => {
+    if (new URLSearchParams(window.location.search).has("common-ui-document")) {
+      return (
+        <Suspense fallback={<p>Loading common UI…</p>}>
+          <CommonUiPreview />
+        </Suspense>
+      );
+    }
+    return (
+      <ReferenceFrame
+        title="Adaptive common UI reuse"
+        note="Real shared web components, dark semantic colors and transparent identity art."
+      >
+        <iframe
+          className="reference-common-preview"
+          title="Dark common UI example"
+          src="./iframe.html?id=ownership-examples-common-ui-reuse--dark-reuse&viewMode=story&common-ui-document&dark"
+        />
+      </ReferenceFrame>
+    );
+  },
+};

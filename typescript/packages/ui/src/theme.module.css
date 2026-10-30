@@ -50,11 +50,11 @@
 .input.input:focus-within {
   border-color: var(--chapchoo-color-focus);
 }
-.paper {
+.paper.paper {
   background: var(--chapchoo-color-surface);
 }
-.modal {
-  background: var(--chapchoo-color-canvas);
+.modal.modal {
+  background: var(--chapchoo-color-overlay);
   box-shadow: var(--mantine-shadow-sm);
 }
 .navLink.navLink {
@@ -78,6 +78,13 @@
   min-height: 2.5rem;
   font-size: var(--mantine-font-size-sm);
   white-space: normal;
+}
+.menuDropdown.menuDropdown {
+  background: var(--chapchoo-color-overlay);
+  border-color: var(--chapchoo-color-border);
+}
+.modalHeader.modalHeader {
+  background: var(--chapchoo-color-overlay);
 }
 .tableHeading.tableHeading {
   color: var(--chapchoo-color-secondary);

@@ -1,4 +1,10 @@
 {
+  "Appearance": {
+    "label": "Apparence",
+    "system": "Système",
+    "light": "Clair",
+    "dark": "Sombre"
+  },
   "AdminAuth": {
     "loginTitle": "Se connecter à Chapchoo Admin",
     "loginDescription": "Utilisez un compte disposant des droits d’administration du serveur.",
