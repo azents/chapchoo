@@ -30,6 +30,10 @@ extracted theme/token sources preserve the scaffold's definitions. Product
 routes and stories replace Hello World; there is no second Admin theme or Refine
 layer. App containers own data/state/navigation; shared presentation receives
 props/callbacks and imports no business RPC, environment, cookie or token store.
+The inherited Azents-derived visual styling remains provisional, not an approved
+Chapchoo design system. General-purpose design work lives in the independent
+[design reference workspace](design-reference.md); app Storybooks retain their
+product-state review role.
 
 Routes remain locale-less. The locale cookie, then Accept-Language, then English
 select en-US, ko-KR, ja-JP or fr-FR. Forms, statuses and failures use aligned

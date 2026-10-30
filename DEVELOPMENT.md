@@ -143,6 +143,23 @@ upstream web app: `en-US`, `ko-KR`, `ja-JP`, and `fr-FR`. Locale selection uses 
 There is no account-preference lookup in the UI.
 Storybook renders the same theme and translation providers with static fixtures.
 
+### Independent design references
+
+`@chapchoo/design-reference` is a separate React/Vite Storybook on port 6008:
+
+```sh
+pnpm run storybook --filter=@chapchoo/design-reference
+pnpm run build-storybook --filter=@chapchoo/design-reference
+pnpm run check:design-boundaries
+```
+
+See its [authoring and promotion guide](typescript/packages/chapchoo-design-reference/README.md).
+It holds general cross-platform references, local experiments and non-web
+representations, not app functional tests or UI QA. Existing common UI can be
+reused, but the Azents-derived theme is provisional, not an approved Chapchoo
+design system. This workspace establishes structure for subsequent design work;
+it does not formalize the existing palette or screens.
+
 Each app reads configuration only through `src/config/index.ts`.
 `CHAPCHOO_PUBLIC_URL` supplies the exact public origin/path (defaults:
 `http://localhost:3003` and `http://localhost:3004`). One deployment-neutral build

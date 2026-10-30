@@ -101,7 +101,7 @@ jobs:
           pnpm --filter @chapchoo/admin-web test
           pnpm --filter @chapchoo/e2e test:unit
           pnpm run build
-          pnpm run build-storybook --filter=@chapchoo/web --filter=@chapchoo/admin-web
+          pnpm run build-storybook --filter=@chapchoo/web --filter=@chapchoo/admin-web --filter=@chapchoo/design-reference
         working-directory: typescript
   accounts-browser:
     runs-on: ubuntu-latest
