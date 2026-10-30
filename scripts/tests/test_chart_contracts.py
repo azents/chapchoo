@@ -123,18 +123,16 @@ class ChartContractsTest(unittest.TestCase):
         self.assertEqual(container["args"], ["prepare"])
         self.assertNotIn("envFrom", container)
         env = self.environment(container)
-        self.assertEqual(
-            set(env), {"CHAPCHOO_POSTGRES_URL", "CHAPCHOO_INSTALLATION_KEY"}
-        )
+        self.assertEqual(set(env), {"CHAPCHOO_POSTGRES_URL", "CHAPCHOO_SECRET_KEY"})
         self.assertEqual(
             env["CHAPCHOO_POSTGRES_URL"]["valueFrom"]["secretKeyRef"],
             {"name": "fixture-postgres", "key": "postgres-url", "optional": False},
         )
         self.assertEqual(
-            env["CHAPCHOO_INSTALLATION_KEY"]["valueFrom"]["secretKeyRef"],
+            env["CHAPCHOO_SECRET_KEY"]["valueFrom"]["secretKeyRef"],
             {
-                "name": "fixture-installation-key",
-                "key": "installation-key",
+                "name": "fixture-secret-key",
+                "key": "secret-key",
                 "optional": False,
             },
         )
@@ -185,10 +183,8 @@ class ChartContractsTest(unittest.TestCase):
                         "fixture-postgres",
                     )
                     self.assertEqual(
-                        env["CHAPCHOO_INSTALLATION_KEY"]["valueFrom"]["secretKeyRef"][
-                            "name"
-                        ],
-                        "fixture-installation-key",
+                        env["CHAPCHOO_SECRET_KEY"]["valueFrom"]["secretKeyRef"]["name"],
+                        "fixture-secret-key",
                     )
                     self.assertNotIn("CHAPCHOO_SQLITE_PATH", env)
                     self.assertEqual(
@@ -266,7 +262,7 @@ class ChartContractsTest(unittest.TestCase):
                 {
                     "backend": {"enabled": False},
                     "database": {"existingSecret": ""},
-                    "installationKey": {"existingSecret": ""},
+                    "secretKey": {"existingSecret": ""},
                     role: {"backendUrl": f"https://{role}-rpc.example.invalid"},
                     other: {"enabled": False},
                     "grpcIngress": {"enabled": False},
@@ -319,6 +315,76 @@ class ChartContractsTest(unittest.TestCase):
                 for ingress in self.kind(private_admin, "Ingress")
             )
         )
+
+    def test_generated_setup_proof_is_separate_ordered_and_narrowly_authorized(
+        self,
+    ) -> None:
+        overrides = {"setupProof": {"existingSecret": ""}}
+        documents = self.render(overrides)
+        repeated = self.render(overrides)
+        self.assertEqual(documents, repeated)
+        self.assertEqual(self.kind(documents, "Secret"), [])
+        jobs = self.kind(documents, "Job")
+        self.assertEqual(len(jobs), 2)
+        bootstrap = next(
+            j for j in jobs if j["metadata"]["name"].endswith("-setup-proof")
+        )
+        prepare = next(j for j in jobs if j["metadata"]["name"].endswith("-prepare"))
+        self.assertEqual(
+            bootstrap["metadata"]["annotations"]["helm.sh/hook-weight"], "-20"
+        )
+        self.assertEqual(
+            bootstrap["metadata"]["annotations"]["argocd.argoproj.io/sync-wave"], "-20"
+        )
+        self.assertEqual(
+            prepare["metadata"]["annotations"]["helm.sh/hook-weight"], "-10"
+        )
+        pod = bootstrap["spec"]["template"]["spec"]
+        self.assertTrue(pod["automountServiceAccountToken"])
+        self.assertFalse(
+            prepare["spec"]["template"]["spec"]["automountServiceAccountToken"]
+        )
+        self.assertEqual(bootstrap["spec"]["backoffLimit"], 0)
+        env = self.environment(pod["containers"][0])
+        self.assertEqual(
+            set(env), {"POD_NAMESPACE", "SETUP_SECRET_NAME", "SETUP_SECRET_KEY"}
+        )
+        self.assertNotIn("secretKeyRef", json.dumps(env))
+        name = bootstrap["metadata"]["name"]
+        self.assertEqual(pod["serviceAccountName"], name)
+        (role,) = self.kind(documents, "Role")
+        self.assertEqual(
+            role["rules"],
+            [
+                {
+                    "apiGroups": [""],
+                    "resources": ["secrets"],
+                    "resourceNames": [name],
+                    "verbs": ["get"],
+                },
+                {"apiGroups": [""], "resources": ["secrets"], "verbs": ["create"]},
+            ],
+        )
+        for kind in ["Role", "RoleBinding", "ServiceAccount"]:
+            (item,) = self.kind(documents, kind)
+            self.assertEqual(
+                item["metadata"]["annotations"]["helm.sh/hook-weight"], "-30"
+            )
+        backend = self.component(documents, "backend-both")
+        backend_env = self.environment(
+            backend["spec"]["template"]["spec"]["containers"][0]
+        )
+        self.assertEqual(
+            backend_env["CHAPCHOO_SETUP_PROOF"]["valueFrom"]["secretKeyRef"]["name"],
+            name,
+        )
+        self.assertNotIn(
+            "CHAPCHOO_SETUP_PROOF",
+            self.environment(prepare["spec"]["template"]["spec"]["containers"][0]),
+        )
+        explicit = self.render()
+        self.assertEqual(self.kind(explicit, "Role"), [])
+        self.assertEqual(len(self.kind(explicit, "Job")), 1)
 
     def test_mail_credentials_are_backend_only_and_not_preparation_prerequisites(
         self,
@@ -414,9 +480,10 @@ class ChartContractsTest(unittest.TestCase):
         default = self.template(fixture=False)
         self.assertNotEqual(default.returncode, 0)
         invalid = [
+            {"setupProof": {"existingSecret": "", "key": "different.field"}},
             {"prerequisitesConfirmed": False},
             {"database": {"existingSecret": ""}},
-            {"installationKey": {"existingSecret": ""}},
+            {"secretKey": {"existingSecret": ""}},
             {"backend": {"image": {"repository": ""}}},
             {"backend": {"topology": "unknown"}},
             {"backend": {"service": {"type": "LoadBalancer"}}},

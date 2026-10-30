@@ -202,3 +202,48 @@ General followed by Admin. The first-ready-exit test separately observes prompt
 failure detection and the approved20s+5s cleanup; its initial5s whole-process-exit
 assertion incorrectly conflated those budgets. It still requires no final ready
 announcement, failure exit and disappearance of both owned groups.
+
+## Requested Home snapshot follow-up
+
+The requester subsequently selected the Azents snapshot + Home Argo deployment
+pattern and `chapchoo.internal.hardtack.me`. This refines the environment of the
+existing deployment work; it does not add product/versioning authority.
+
+- Keep PR #6 atdea1927 and its exact-head source/native successes. Implement this
+  focused follow-up on `feat/snapshot-publishing` stacked on `feat/accounts-delivery`.
+- Root owns native snapshot workflow/publication metadata and prefix-image checks;
+  root also owns the separate Home worktree's dedicated namespace/PostgreSQL/PVC,
+  ExternalSecret references, private Gateway root/Admin-prefix routes and updater.
+- Publish three independent multiarchitecture image indexes only after each
+  native runner executes the images. Home pins chart SHA and images from one
+  authenticated complete source run, never caller-supplied dispatch image data.
+- Home prerequisites remain a separate Application from product PreSync hooks.
+  Initial acknowledgement/auto-sync stays off until actual prerequisites and
+  first immutable image publication are confirmed. The updater preserves this
+  operator state; missing values never become guessed image digests or keys.
+- Current main/PRs are not merged by the agent. GitHub Actions Secret/variable
+  management returned403 with this installation, and no Secret values are read
+  or copied. Record required Infisical/GitHub references and batch activation
+  approval after completing review, both PRs and their exact-head CI.
+- Same reviewer `/root/accounts-reviewer` reviews the integrated follow-up across
+  both repositories read-only; root owns all actual validation and corrections.
+- Design delta: None for the initial snapshot follow-up; actual live
+  installation/upgrade/TLS/product gates remain pending rather than being replaced
+  by render or workflow-unit evidence.
+
+## Approved secret feedback — revision37
+
+The subsequent explicit implementation request approves the consolidated
+PASSWORD-only, setup-proof generation and SECRET_KEY naming changes. Requirements
+clarification, ADR-D38 and Design37/M44 record this before code changes. This is
+an approved delta from revision36's broad chart-no-secret-creation boundary,
+limited to first-admin proof. No existing DB or cryptographic format changes.
+
+Root owns the Rust/config/client-fixture rename, separate proof hook/script/RBAC,
+backend-only pinned kubectl, Home template/refs and documentation. The same
+read-only reviewer checks the final cross-repository diff. Root validation covers
+old-binary-created DB binding with the same key under the new configuration name,
+negative previous-name admission, both DB RPC gates, actual images/native client,
+archive browser journeys, idempotent/invalid/racing proof fixtures, chart hook and
+permission ordering, actual URL escaping with reserved/space/Unicode characters,
+all hooks and exact-head CI. No new actual cluster Secret access is performed.

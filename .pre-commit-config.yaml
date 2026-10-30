@@ -13,6 +13,12 @@ repos:
         language: system
         files: ^(proto/|rust/|typescript/packages/chapchoo-rpc-client/|scripts/(generate-rpc-clients\.sh|check-rpc\.sh|test-rpc-clients\.py|run-rust-tests\.py))
         pass_filenames: false
+      - id: snapshot-contracts
+        name: Validate complete native snapshot publication contracts
+        entry: python3 -m unittest scripts.tests.test_snapshot
+        language: system
+        files: ^(\.github/workflows/snapshot\.yaml|scripts/(publish-snapshot\.py|tests/test_snapshot\.py))
+        pass_filenames: false
       - id: linux-package-contracts
         name: Validate safe Linux artifact assembly and independent image contracts
         entry: python3 -m unittest scripts.tests.test_package_linux
@@ -21,9 +27,9 @@ repos:
         pass_filenames: false
       - id: helm-chart-contracts
         name: Render and validate Helm and Argo preparation contracts offline
-        entry: uv run --locked --project .codex python scripts/check-chart.py
+        entry: bash -c 'uv run --locked --project .codex python scripts/check-chart.py && python3 -m unittest scripts.tests.test_setup_proof'
         language: system
-        files: ^(infra/charts/chapchoo/|scripts/(check-chart\.py|tests/test_chart_contracts\.py)|testenv/chapchoo/(chart-values\.yaml|argocd-example\.yaml))
+        files: ^(infra/charts/chapchoo/|scripts/(check-chart\.py|tests/test_(chart_contracts|setup_proof)\.py)|testenv/chapchoo/(chart-values\.yaml|argocd-example\.yaml))
         pass_filenames: false
       - id: ensure-claude-md-link
         name: Ensure CLAUDE.md imports AGENTS.md

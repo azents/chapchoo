@@ -19,7 +19,7 @@ have explicit dependency boundaries and do not depend on persistence or RPC.
 Password hashing uses bounded blocking admission in the application service.
 Cancellation retains its permit until the started CPU worker actually completes.
 
-These primitives do not authorize an installation-key change or persist data.
+These primitives do not authorize a server-secret-key change or persist data.
 No actual installation secret belongs in source control, test fixtures or logs.
 
 The persistence phase adds real SQLite/PostgreSQL integration tests. The Rust
@@ -33,7 +33,7 @@ CI supplies a fresh PostgreSQL service to each validation job.
 ### Local backend and operator commands
 
 Supply one database through `CHAPCHOO_SQLITE_PATH` or
-`CHAPCHOO_POSTGRES_URL`, plus `CHAPCHOO_INSTALLATION_KEY` containing the original
+`CHAPCHOO_POSTGRES_URL`, plus `CHAPCHOO_SECRET_KEY` containing the original
 32-byte root encoded as padded URL-safe base64. Obtain/store the root securely
 outside the checkout. There is no automatic generation or replacement.
 

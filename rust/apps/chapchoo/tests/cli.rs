@@ -22,7 +22,7 @@ fn command(path: &Path) -> Command {
     command
         .env_clear()
         .env("CHAPCHOO_SQLITE_PATH", path)
-        .env("CHAPCHOO_INSTALLATION_KEY", URL_SAFE.encode([1; 32]))
+        .env("CHAPCHOO_SECRET_KEY", URL_SAFE.encode([1; 32]))
         .env("RUST_LOG", "chapchoo=info")
         .env("NO_COLOR", "1");
     command
@@ -58,6 +58,23 @@ async fn terminate(child: &mut Child) -> Result<(), TestError> {
 }
 
 #[tokio::test]
+async fn secret_key_name_is_required_without_previous_name_fallback() -> Result<(), TestError> {
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("rename.sqlite");
+    let failed = command(&path)
+        .env_remove("CHAPCHOO_SECRET_KEY")
+        .env("CHAPCHOO_INSTALLATION_KEY", URL_SAFE.encode([1; 32]))
+        .arg("prepare")
+        .output()
+        .await?;
+    assert!(!failed.status.success());
+    assert!(!path.exists());
+    let prepared = command(&path).arg("prepare").output().await?;
+    assert!(prepared.status.success());
+    Ok(())
+}
+
+#[tokio::test]
 async fn prepare_readiness_common_auth_recovery_and_owned_shutdown() -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("cli.sqlite");
@@ -70,7 +87,7 @@ async fn prepare_readiness_common_auth_recovery_and_owned_shutdown() -> Result<(
     let prepared = command(&path).arg("prepare").output().await?;
     assert!(prepared.status.success());
     let wrong_key = command(&path)
-        .env("CHAPCHOO_INSTALLATION_KEY", URL_SAFE.encode([2; 32]))
+        .env("CHAPCHOO_SECRET_KEY", URL_SAFE.encode([2; 32]))
         .args(["serve", "--role", "admin"])
         .output()
         .await?;

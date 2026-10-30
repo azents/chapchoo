@@ -23,10 +23,9 @@ spec:
             tag: REPLACE_WITH_APPROVED_COMMIT
         database:
           existingSecret: prereq-postgres
-        installationKey:
-          existingSecret: prereq-fixed-installation-key
-        setupProof:
-          existingSecret: prereq-initial-setup
+        secretKey:
+          existingSecret: prereq-fixed-secret-key
+        # First-admin proof is generated once by the earlier bootstrap hook.
         general:
           publicUrl: https://chapchoo.example.invalid
           image:

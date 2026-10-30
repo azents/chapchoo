@@ -33,7 +33,7 @@ void test("fixture passwords, proof URL parameters and bearer headers are masked
 void test("diagnostic tails omit commands, environment, raw stacks and URLs", () => {
   const token = "L".repeat(43);
   const result = diagnosticTail(
-    `$ run --secret argument\nCHAPCHOO_INSTALLATION_KEY=${token}=\nEnvironment: private values\nArguments: private arguments\n    at private.stack (source:1)\n 17: private.rust.stack\nError: cannot connect postgres://fixture:private@localhost/db\nCode: fixture Aa1!${token} Bearer ${token}\n`,
+    `$ run --secret argument\nCHAPCHOO_SECRET_KEY=${token}=\nEnvironment: private values\nArguments: private arguments\n    at private.stack (source:1)\n 17: private.rust.stack\nError: cannot connect postgres://fixture:private@localhost/db\nCode: fixture Aa1!${token} Bearer ${token}\n`,
   );
   for (const forbidden of [
     token,

@@ -1865,3 +1865,35 @@ Verify external TLS validation, HTTP/2 forwarding, gRPC status/trailers and
 authorization metadata, private backend exposure, and separate general/Admin
 routing. Use a deployment-owned endpoint with explicit authorization for live
 tests. Rendered ingress configuration alone does not establish these outcomes.
+
+## D38 — Operator secret configuration simplification
+
+Accepted 2026-10-30 by the requester's explicit implementation instruction after
+the consolidated feedback brief. This refines the unimplemented deployment
+contract; fixed key bytes, binding and setup transaction authority do not change.
+
+- Rename the fixed server configuration to `CHAPCHOO_SECRET_KEY` and chart
+  `secretKey`. Remove the prior configuration name rather than adding aliases.
+  The requester subsequently clarified that Home's external path is the shared
+  server scope `/chapchoo/SECRET_KEY`, not an authentication-only folder.
+- Home keeps PostgreSQL PASSWORD as its sole external source and derives the
+  password-bearing URL in its ExternalSecret template, with URI userinfo escaping.
+- Without an explicitly supplied existing setup Secret, a distinct chart hook
+  generates32 random bytes as43-character URL-safe proof, creates a persistent
+  named Kubernetes Secret once and reuses/validates it on later deployments.
+  No Helm render randomness, cluster lookup or Secret value in Git/render/logs.
+- A dedicated bootstrap service account has get on the one named Secret and
+  namespace-scoped Secret create only. Kubernetes RBAC cannot resource-name
+  restrict create; no list/update/patch/delete is granted. Only that Job mounts
+  its API token. The schema prepare Job retains its existing DB/key-only role.
+- Order bootstrap RBAC before bootstrap Job before schema preparation in both
+  Helm hooks and Argo PreSync. Concurrent create failure may accept only a
+  separately verified existing valid Secret, never replace it or replay writes.
+- Persist the proof independently of hook ownership; deleting a Job/release does
+  not delete it. Existing DB setup consumption remains the final one-time gate.
+
+Alternatives rejected: manual proof in Infisical burdens first installation;
+random Helm render introduces Argo drift; `lookup` depends on rendering access;
+mutating an existing proof risks invalidating operator-visible setup material.
+The bootstrap uses pinned architecture-matched kubectl shipped only in the
+backend image, not a shell-built HTTP client or a web image credential authority.

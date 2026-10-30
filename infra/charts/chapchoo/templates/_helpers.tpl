@@ -29,7 +29,7 @@
 {{- define "chapchoo.databaseEnv" -}}
 {{- list
   (include "chapchoo.secretEnv" (dict "name" "CHAPCHOO_POSTGRES_URL" "secret" .Values.database.existingSecret "key" .Values.database.urlKey) | fromJson)
-  (include "chapchoo.secretEnv" (dict "name" "CHAPCHOO_INSTALLATION_KEY" "secret" .Values.installationKey.existingSecret "key" .Values.installationKey.key) | fromJson)
+  (include "chapchoo.secretEnv" (dict "name" "CHAPCHOO_SECRET_KEY" "secret" .Values.secretKey.existingSecret "key" .Values.secretKey.key) | fromJson)
   | toJson -}}
 {{- end -}}
 
@@ -38,9 +38,8 @@
 {{- $env = append $env (dict "name" "CHAPCHOO_GENERAL_LISTEN" "value" "0.0.0.0:50051") -}}
 {{- $env = append $env (dict "name" "CHAPCHOO_ADMIN_LISTEN" "value" "0.0.0.0:50052") -}}
 {{- $env = append $env (dict "name" "CHAPCHOO_GENERAL_WEB_URL" "value" .Values.general.publicUrl) -}}
-{{- if .Values.setupProof.existingSecret -}}
-{{- $env = append $env (include "chapchoo.secretEnv" (dict "name" "CHAPCHOO_SETUP_PROOF" "secret" .Values.setupProof.existingSecret "key" .Values.setupProof.key) | fromJson) -}}
-{{- end -}}
+{{- $proofSecret := default (printf "%s-setup-proof" (include "chapchoo.fullname" .)) .Values.setupProof.existingSecret -}}
+{{- $env = append $env (include "chapchoo.secretEnv" (dict "name" "CHAPCHOO_SETUP_PROOF" "secret" $proofSecret "key" .Values.setupProof.key) | fromJson) -}}
 {{- if .Values.mail.enabled -}}
 {{- $env = append $env (dict "name" "CHAPCHOO_SES_SENDER" "value" .Values.mail.sender) -}}
 {{- $env = append $env (dict "name" "CHAPCHOO_SES_REGION" "value" .Values.mail.region) -}}
@@ -80,8 +79,11 @@
 {{- fail "Select at least one backend or web component" -}}
 {{- end -}}
 {{- if .Values.backend.enabled -}}
+{{- if and (empty .Values.setupProof.existingSecret) (ne .Values.setupProof.key "setup-proof") -}}
+{{- fail "Generated setup proof uses the fixed setup-proof Secret field" -}}
+{{- end -}}
 {{- $_ := required "database.existingSecret is required for external PostgreSQL" .Values.database.existingSecret -}}
-{{- $_ := required "installationKey.existingSecret is required; the fixed key is never generated or replaced" .Values.installationKey.existingSecret -}}
+{{- $_ := required "secretKey.existingSecret is required; the fixed key is never generated or replaced" .Values.secretKey.existingSecret -}}
 {{- include "chapchoo.validatePublicUrl" (dict "url" .Values.general.publicUrl "basePath" .Values.general.compiledBasePath) -}}
 {{- end -}}
 {{- if and .Values.mail.enabled (not .Values.backend.enabled) -}}

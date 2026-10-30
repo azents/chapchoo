@@ -4,6 +4,8 @@ ARG RUST_IMAGE=rust:1.99.1-bookworm@sha256:9181b56c2a21ab1d5e73cffe04fc762426d30
 ARG NODE_IMAGE=node:24.22.1-bookworm-slim@sha256:be8204d4bd327363357f532187b752ff62759c31bedf98e9e18fc08c9cbd605c
 ARG RUNTIME_IMAGE=debian:bookworm-slim@sha256:99c0b25c46d0214d5a2091092e7908907dcaecd6a962cde0ac700acee222b6f3
 
+FROM registry.k8s.io/kubectl:v1.35.0@sha256:0bb95b2a450875fc8ceaea2f9987a99fe27c228846e2e00b93b65ebb0d59034e AS kubectl-runtime
+
 FROM ${RUST_IMAGE} AS backend-build
 WORKDIR /src
 RUN apt-get update && apt-get install -y --no-install-recommends cmake pkg-config \
@@ -69,6 +71,7 @@ ENTRYPOINT ["/opt/chapchoo/chapchoo"]
 # A backend image contains neither a Node runtime nor a web application.
 FROM runtime-base AS backend
 COPY --from=backend-build --chown=10001:10001 /src/rust/target/release/chapchoo ./chapchoo
+COPY --from=kubectl-runtime /bin/kubectl /usr/local/bin/kubectl
 EXPOSE 50051 50052
 CMD ["serve", "--role", "both", "--general-listen", "0.0.0.0:50051", "--admin-listen", "0.0.0.0:50052"]
 

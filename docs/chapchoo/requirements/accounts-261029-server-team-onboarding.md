@@ -511,3 +511,13 @@ The requester accepted a pre-deployment schema-preparation Job and explicitly
 required the same chart workflow to support Argo CD as well as direct Helm use.
 Confirmation establishes the outcomes and fixed constraints above, not approval
 of an architecture, protocol selection, final Design, or implementation.
+
+## Deployment configuration clarification — 2026-10-30
+
+The requester explicitly approved implementing the consolidated deployment
+feedback: one operator-managed database password rather than a second manually
+maintained password-bearing URL; installation-managed first-admin proof creation
+and reuse rather than a required external secret-store value; and `SECRET_KEY`
+terminology for the existing fixed server key. Existing key bytes, database
+binding, one-time setup consumption and no-key-replacement constraints remain
+unchanged. Operator instructions include generation/issuance and safe storage.

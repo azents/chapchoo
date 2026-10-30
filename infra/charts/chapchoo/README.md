@@ -1,8 +1,10 @@
 # Chapchoo Helm chart
 
 This chart packages the implemented account services and two independent web
-surfaces. It does not provision a database, namespace, credentials, certificates,
-secret provider, ingress controller or Kubernetes API permissions. Rendering is
+surfaces. It does not provision a database, namespace, server key, certificates,
+secret provider or ingress controller. A dedicated hook and minimal namespace
+RBAC generate only the first-admin setup proof when no existing Secret is selected.
+Rendering is
 not evidence of a deployed application, valid TLS or successful product journeys.
 
 ## Prerequisites and explicit values
@@ -16,14 +18,15 @@ Before a deployment, an operator must provide:
    containing its connection URL. All backend roles and the prepare Job use
    `database.existingSecret` / `database.urlKey`.
 2. The installation's original fixed key in an **already existing** Secret,
-   selected by `installationKey.existingSecret` / `installationKey.key`. Preserve
+   selected by `secretKey.existingSecret` / `secretKey.key`. Preserve
    this key through upgrades, restarts and image rollback. The chart does not
    generate, replace, rebind or rotate it.
 3. Immutable, architecture-compatible backend/general-web/admin-web images.
    Each selected image requires `repository` plus `tag` or a SHA-256 `digest`.
    A digest takes precedence when both are supplied.
-4. Explicit HTTPS public URLs and matching image path declarations. An initial
-   setup proof can be supplied through `setupProof.existingSecret`; schema
+4. Explicit HTTPS public URLs and matching image path declarations. The first-admin
+   setup proof is generated once by a separate chart hook unless
+   `setupProof.existingSecret` explicitly selects an existing Secret; schema
    preparation does not initialize the first administrator.
 5. Trusted internal routing and network access for the Job, database, web and
    backend pods. ClusterIP/private addresses alone do not prove a trusted path.
@@ -62,13 +65,15 @@ matching role. There are no backend host ports, NodePorts or LoadBalancers.
 Web Services use 3003 and 3004. Their commands explicitly bind the corresponding
 listener to `0.0.0.0`; loopback CLI defaults would not be reachable from Services.
 Web pods receive only their selected public URL, listener and backend URL.
-They receive no database, installation-key, setup-proof or mail credentials.
+They receive no database, secret-key, setup-proof or mail credentials.
 The backend image does not require Node or web assets.
 
 An enabled backend always needs `general.publicUrl`, even if the chart's general
 web is disabled: issued links still need the intended general web location.
 Optional SES uses backend-only sender/region configuration and an existing
-credential Secret. No provider resource, service account or token is created.
+credential Secret. No mail provider resource is created. The separate setup-proof bootstrap has
+its own narrowly authorized service account; ordinary backend/web and schema
+preparation pods still do not mount API tokens.
 
 ## Public origins, prefixes and TLS edges
 
@@ -182,3 +187,32 @@ Real Helm install/upgrade and Argo full-sync acceptance remain separate gates:
 initial preparation, already-current schema, wrong fixed key, migration failure
 gating, application health, product journeys and TLS behavior. They require
 approved cluster/namespace/exposure, existing data/key scope and actual images.
+
+## One-time setup proof and server secret naming
+
+Use `secretKey.existingSecret` / `secretKey.key` for `CHAPCHOO_SECRET_KEY`.
+The former configuration name is removed; preserve the original32-byte value,
+including its Base64 padding. This does not change key derivation, binding,
+storage or introduce a replacement/migration facility.
+
+By default the chart creates a persistent `<fullname>-setup-proof` Secret through
+a separate bootstrap Job. It never puts random data in rendered YAML or performs
+Helm lookup. Existing valid43-character URL-safe32-byte proof is reused; missing
+or invalid fields are not overwritten. A concurrent create is accepted only
+when rereading a valid existing proof. No proof is printed in logs or arguments.
+The Secret has no hook/release owner reference and survives hook/release deletion.
+An explicit existing Secret skips this bootstrap and retains its prior behavior.
+
+Both controllers order bootstrap SA/Role/Binding at-30, proof Job at-20, schema
+prepare at-10. Bootstrap alone mounts its API token. The Role permits get only
+for the named Secret and Secret create within the namespace; Kubernetes RBAC
+cannot constrain create with resourceNames. No list/update/patch/delete or
+cluster-wide permission is granted. A pinned official kubectl binary lives only
+in the backend image for this Job; web images do not carry that API client.
+Use a Kubernetes server compatible with the shipped kubectl1.35 minor version
+for automatic bootstrap; the inspected Home kubelet1.36 is within one minor.
+
+An authorized operator can retrieve the proof privately from that named Secret
+and enter it in initial Admin setup. Do not put it in logs/chat. DB one-time
+consumption remains authoritative; a new proof cannot reopen completed setup.
+The external DB/key/pull prerequisites remain operator-owned and preexisting.

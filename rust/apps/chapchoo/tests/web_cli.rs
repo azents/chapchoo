@@ -63,7 +63,7 @@ impl Bundle {
             .env("RUST_LOG", "chapchoo=info")
             .env("NO_COLOR", "1")
             // Web-only must not parse these or forward them to its child.
-            .env("CHAPCHOO_INSTALLATION_KEY", "parent-key-canary")
+            .env("CHAPCHOO_SECRET_KEY", "parent-key-canary")
             .env("CHAPCHOO_POSTGRES_URL", "parent-database-canary")
             .env("CHAPCHOO_SETUP_PROOF", "parent-proof-canary")
             .env("AWS_SECRET_ACCESS_KEY", "parent-aws-canary")
@@ -438,7 +438,7 @@ async fn partial_web_failure_releases_only_its_co_selected_backend() -> Result<(
     let prepared = prepare
         .env_clear()
         .env("CHAPCHOO_SQLITE_PATH", &data)
-        .env("CHAPCHOO_INSTALLATION_KEY", &key)
+        .env("CHAPCHOO_SECRET_KEY", &key)
         .arg("prepare")
         .output()
         .await?;
@@ -452,7 +452,7 @@ async fn partial_web_failure_releases_only_its_co_selected_backend() -> Result<(
         .env_remove("CHAPCHOO_POSTGRES_URL")
         .env_remove("CHAPCHOO_SETUP_PROOF")
         .env("CHAPCHOO_SQLITE_PATH", &data)
-        .env("CHAPCHOO_INSTALLATION_KEY", key);
+        .env("CHAPCHOO_SECRET_KEY", key);
     let output = tokio::time::timeout(
         Duration::from_secs(15),
         command
@@ -508,7 +508,7 @@ async fn fixture_web_process() -> Result<(), TestError> {
         return Ok(());
     }
     for name in [
-        "CHAPCHOO_INSTALLATION_KEY",
+        "CHAPCHOO_SECRET_KEY",
         "CHAPCHOO_POSTGRES_URL",
         "CHAPCHOO_SETUP_PROOF",
         "AWS_SECRET_ACCESS_KEY",

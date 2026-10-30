@@ -27,7 +27,7 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    /// Prepare the configured database schema and fixed installation-key binding.
+    /// Prepare the configured database schema and fixed secret-key binding.
     Prepare,
     /// Grant administrator authority to one existing account using local operator access.
     GrantAdmin {
@@ -376,8 +376,8 @@ impl BackendConfig {
             }
             _ => return Err(ConfigError::DatabaseSelection.into()),
         };
-        let key = RootKey::parse(required("CHAPCHOO_INSTALLATION_KEY")?)
-            .map_err(|_| ConfigError::Variable("CHAPCHOO_INSTALLATION_KEY"))?;
+        let key = RootKey::parse(required("CHAPCHOO_SECRET_KEY")?)
+            .map_err(|_| ConfigError::Variable("CHAPCHOO_SECRET_KEY"))?;
         Ok(Self {
             database,
             cipher: Arc::new(CredentialCipher::new(key)?),
@@ -622,7 +622,7 @@ mod tests {
             ("HOME", "/owned-home"),
             ("NODE_EXTRA_CA_CERTS", "/public-certs/fixture-ca.pem"),
             ("CHAPCHOO_POSTGRES_URL", "database-canary"),
-            ("CHAPCHOO_INSTALLATION_KEY", "key-canary"),
+            ("CHAPCHOO_SECRET_KEY", "key-canary"),
             ("CHAPCHOO_SETUP_PROOF", "proof-canary"),
             ("AWS_SECRET_ACCESS_KEY", "aws-canary"),
             ("NODE_OPTIONS", "--require untrusted-preload"),
@@ -634,7 +634,7 @@ mod tests {
         let environment: HashMap<_, _> = web_environment(&config, parent).into_iter().collect();
         for name in [
             "CHAPCHOO_POSTGRES_URL",
-            "CHAPCHOO_INSTALLATION_KEY",
+            "CHAPCHOO_SECRET_KEY",
             "CHAPCHOO_SETUP_PROOF",
             "AWS_SECRET_ACCESS_KEY",
             "NODE_OPTIONS",
