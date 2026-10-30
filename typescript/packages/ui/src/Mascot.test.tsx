@@ -11,7 +11,9 @@ await test("decorative identity art respects root and nested runtime mounts", ()
         <Mascot basePath={basePath} />
       </MantineProvider>,
     );
-    assert.ok(html.includes(`src="${basePath}/design-assets/02-corgi.png"`));
+    assert.ok(
+      html.includes(`src="${basePath}/design-assets/02-corgi-216.webp"`),
+    );
     assert.ok(html.includes('alt=""'));
     assert.ok(html.includes('aria-hidden="true"'));
   }

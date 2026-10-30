@@ -18,7 +18,13 @@ for (const asset of await readdir(join(shared, "fonts"))) {
   await copyFile(join(shared, "fonts", asset), join(output, asset));
 }
 const illustrations = join(app, "public/design-assets");
+await rm(illustrations, { recursive: true, force: true });
 await mkdir(illustrations, { recursive: true });
-for (const asset of await readdir(join(shared, "mascots"))) {
-  await copyFile(join(shared, "mascots", asset), join(illustrations, asset));
+for (const asset of await readdir(join(shared, "illustrations"))) {
+  if (asset.endsWith(".webp")) {
+    await copyFile(
+      join(shared, "illustrations", asset),
+      join(illustrations, asset),
+    );
+  }
 }

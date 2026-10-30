@@ -10,7 +10,7 @@ dark palette. `FontFaces` loads bundled Pretendard and Geist Mono with the calle
 runtime mount. Apps keep locale/data/transport ownership.
 
 `typescript/scripts/stage-web-fonts.mjs` stages common UI fonts/licenses and
-mascot assets into each app's ignored public directories before dev/build and
+small production illustration derivatives into each app's ignored public directories before dev/build and
 Storybook. Build caches restore both staged directories. Storybook serves these
 assets at root; actual apps use `basePath` props so root and non-root deployment
 URLs remain correct. The original mascot prompts/model provenance are under

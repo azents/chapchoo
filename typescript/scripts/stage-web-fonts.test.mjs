@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
@@ -25,10 +25,15 @@ test("both web distributions stage shared fonts, licenses and identity art", asy
       /SIL OPEN FONT LICENSE/i,
     );
     assert.deepEqual(
-      await readFile(new URL("design-assets/02-corgi.png", root)),
+      await readFile(new URL("design-assets/02-corgi-216.webp", root)),
       await readFile(
-        new URL("../packages/ui/assets/mascots/02-corgi.png", import.meta.url),
+        new URL(
+          "../packages/ui/assets/illustrations/02-corgi-216.webp",
+          import.meta.url,
+        ),
       ),
     );
+    const published = await readdir(new URL("design-assets/", root));
+    assert.deepEqual(published, ["02-corgi-216.webp"]);
   }
 });

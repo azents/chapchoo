@@ -22,10 +22,12 @@ import {
 } from "@mantine/core";
 import { toneColors, platformFonts } from "./designTokens";
 import classes from "./theme.module.css";
+import "./editors.css";
 import type { CSSVariablesResolver } from "@mantine/core";
 
 export const themeCssVariables: CSSVariablesResolver = () => ({
   variables: {
+    "--chapchoo-font-input-mobile": "max(16px, 1rem)",
     ...Object.fromEntries(
       Object.entries(toneColors).map(([key, value]) => [
         `--chapchoo-color-${key}`,

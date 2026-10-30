@@ -11,7 +11,7 @@ export function Mascot({
 }): ReactElement {
   return (
     <Image
-      src={`${basePath}/design-assets/02-corgi.png`}
+      src={`${basePath}/design-assets/02-corgi-216.webp`}
       alt=""
       aria-hidden="true"
       w={size}

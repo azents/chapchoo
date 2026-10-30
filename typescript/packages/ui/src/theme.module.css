@@ -82,6 +82,13 @@
   border-color: var(--chapchoo-color-muted);
 }
 @media (max-width: 48em) {
+  .input.input,
+  .input.input input,
+  .input.input textarea,
+  .input.input select {
+    font-size: var(--chapchoo-font-input-mobile);
+    line-height: 1.25;
+  }
   .button {
     min-height: 2.75rem;
   }

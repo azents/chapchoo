@@ -1,7 +1,14 @@
-import { Stack, rem } from "@mantine/core";
+import {
+  NumberInput,
+  Select,
+  Stack,
+  Textarea,
+  TextInput,
+  rem,
+} from "@mantine/core";
 import { EmailField, PasswordField } from "./fields";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import type { ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
 
 function FieldsFixture({
   disabled = false,
@@ -45,3 +52,60 @@ type Story = StoryObj<typeof meta>;
 export const Ready: Story = {};
 export const Disabled: Story = { args: { disabled: true } };
 export const Invalid: Story = { args: { invalid: true } };
+
+export const EditableControls: Story = {
+  render: (): ReactElement => (
+    <Stack maw={rem(480)} p="lg">
+      <FieldsFixture />
+      <TextInput label="Search" type="search" defaultValue="Design notes" />
+      <TextInput
+        label="Verification code"
+        inputMode="numeric"
+        defaultValue="123456"
+      />
+      <TextInput label="Telephone" type="tel" defaultValue="+82 10 1234 5678" />
+      <TextInput label="URL" type="url" defaultValue="https://example.com" />
+      <NumberInput label="Quantity" defaultValue={3} />
+      <Textarea label="Message" defaultValue="A short note." />
+      <Select
+        label="Workspace"
+        data={["Personal", "Team"]}
+        defaultValue="Personal"
+        searchable
+      />
+      <label>
+        Native select
+        <select defaultValue="one">
+          <option value="one">One</option>
+          <option value="two">Two</option>
+        </select>
+      </label>
+      <div
+        role="textbox"
+        aria-label="Editable note"
+        contentEditable
+        suppressContentEditableWarning
+      >
+        Editable note
+      </div>
+      <div
+        role="textbox"
+        aria-label="Bare editable note"
+        ref={(element): void => {
+          element?.setAttribute("contenteditable", "");
+        }}
+        suppressContentEditableWarning
+      >
+        Bare editable note
+      </div>
+      <div
+        role="textbox"
+        aria-label="Plain text note"
+        contentEditable="plaintext-only"
+        suppressContentEditableWarning
+      >
+        Plain text note
+      </div>
+    </Stack>
+  ),
+};

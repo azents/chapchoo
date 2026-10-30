@@ -112,6 +112,15 @@ hierarchy before color or ornament. Do not use mono for ordinary labels or agent
 identities; actual code can use a code font. These roles are not permission to
 make long-form mobile content tiny.
 
+Mobile editable controls use at least **16 CSS px**, with a default **20px line
+height** (1.25 ratio), without enlarging the surrounding labels, buttons, control
+frames or spacing. This applies to actual text/password/search/email/code inputs,
+textareas, selects and editable text surfaces, including inner compound controls.
+Preserve larger user text settings. This is the selected treatment for Safari's
+focus zoom behavior, not a reason to disable pinch zoom or enlarge checkboxes,
+toggles and other non-text controls. The requester selected the input-only
+comparison on 2026-10-30 after reviewing both auth and chat examples.
+
 Write natural, concise labels. Warmth is not baby talk or cheerful filler.
 Explain scope, consequence, unusual behavior and recovery only where useful;
 avoid repeating what the visible control already says. Preserve recognizable
@@ -275,6 +284,11 @@ further feature-specific promotion remains separate from fictional compositions.
   [focus](https://www.w3.org/WAI/WCAG22/Understanding/focus-not-obscured-minimum.html)
   and [status](https://www.w3.org/WAI/WCAG22/Understanding/status-messages.html):
   accessibility source, not a claim that reading it proves implementation conformance.
+- [Primer's mobile input change](https://github.com/primer/css/pull/430) and
+  [Nuxt UI input styling](https://github.com/nuxt/ui/blob/200b0bfb7a5666c870742f3f43c83cf09234aed9/src/theme/input.ts):
+  evidence for keeping editable text at 16px without inflating the surrounding UI.
+  Safari's automatic focus zoom threshold is browser behavior, not a universal
+  Apple visual-design mandate. Scale/viewport workarounds were researched but not selected.
 - [NN/g heuristics](https://www.nngroup.com/articles/ten-usability-heuristics/):
   visibility, user control, consistency, recognition, prevention and recovery.
   Apply as heuristics, not invented numeric laws.
