@@ -1,0 +1,25 @@
+[package]
+name = "chapchoo-persistence"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+chapchoo-crypto.workspace = true
+chapchoo-domain.workspace = true
+diesel.workspace = true
+diesel-async.workspace = true
+diesel_migrations.workspace = true
+libsqlite3-sys.workspace = true
+thiserror.workspace = true
+zeroize.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+base64.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

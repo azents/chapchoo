@@ -1,0 +1,212 @@
+syntax = "proto3";
+
+package chapchoo.accounts;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+// Shared authentication is registered on both independently runnable listeners.
+// Ordinary protected calls carry their opaque token in authorization metadata.
+service Auth {
+  rpc Methods(google.protobuf.Empty) returns (LoginMethods);
+  rpc PasswordLogin(PasswordLoginRequest) returns (AuthSession);
+  rpc SendCode(SendCodeRequest) returns (CodeChallenge);
+  rpc VerifyCode(VerifyCodeRequest) returns (AuthSession);
+  rpc Renew(RenewRequest) returns (AuthSession);
+  rpc Identity(google.protobuf.Empty) returns (User);
+  rpc Logout(google.protobuf.Empty) returns (google.protobuf.Empty);
+}
+
+service General {
+  rpc RequestSignupEmail(SignupEmailRequest) returns (DeliveryAccepted);
+  rpc PreviewSignup(ProofRequest) returns (ProofPreview);
+  rpc RedeemSignup(RedeemSignupRequest) returns (AuthSession);
+  rpc PreviewPasswordReset(ProofRequest) returns (ProofPreview);
+  rpc RedeemPasswordReset(RedeemPasswordResetRequest) returns (google.protobuf.Empty);
+  rpc ListTeams(google.protobuf.Empty) returns (Teams);
+  rpc GetTeam(TeamRequest) returns (Team);
+  rpc CreateTeam(CreateTeamRequest) returns (Team);
+  rpc UpdateTeam(UpdateTeamRequest) returns (Team);
+  rpc ListMembers(TeamRequest) returns (Members);
+  rpc SetMemberRole(SetMemberRoleRequest) returns (google.protobuf.Empty);
+  rpc RemoveMember(MemberRequest) returns (google.protobuf.Empty);
+  rpc TransferOwnership(MemberRequest) returns (google.protobuf.Empty);
+  rpc LeaveTeam(TeamRequest) returns (google.protobuf.Empty);
+  rpc DeleteTeam(TeamRequest) returns (google.protobuf.Empty);
+  rpc InviteMember(InviteMemberRequest) returns (Invitation);
+  rpc ReceivedInvitations(google.protobuf.Empty) returns (Invitations);
+  rpc TeamInvitations(TeamRequest) returns (Invitations);
+  rpc ProcessInvitation(ProcessInvitationRequest) returns (google.protobuf.Empty);
+}
+
+service Admin {
+  rpc SetupStatus(google.protobuf.Empty) returns (SetupStatusResult);
+  rpc Initialize(InitializeRequest) returns (AuthSession);
+  rpc IssueSignupGrant(IssueGrantRequest) returns (IssuedGrant);
+  rpc ListSignupGrants(ListGrantsRequest) returns (Grants);
+  rpc RevokeSignupGrant(GrantRequest) returns (google.protobuf.Empty);
+  rpc IssuePasswordReset(IssueGrantRequest) returns (IssuedGrant);
+  rpc ListPasswordResets(ListGrantsRequest) returns (Grants);
+  rpc RevokePasswordReset(GrantRequest) returns (google.protobuf.Empty);
+}
+
+enum TeamKind {
+  TEAM_KIND_UNSPECIFIED = 0;
+  TEAM_KIND_PERSONAL = 1;
+  TEAM_KIND_COLLABORATIVE = 2;
+}
+
+enum TeamRole {
+  TEAM_ROLE_UNSPECIFIED = 0;
+  TEAM_ROLE_OWNER = 1;
+  TEAM_ROLE_MANAGER = 2;
+  TEAM_ROLE_MEMBER = 3;
+}
+
+enum MembershipRole {
+  MEMBERSHIP_ROLE_UNSPECIFIED = 0;
+  MEMBERSHIP_ROLE_MANAGER = 1;
+  MEMBERSHIP_ROLE_MEMBER = 2;
+}
+
+enum InvitationStatus {
+  INVITATION_STATUS_UNSPECIFIED = 0;
+  INVITATION_STATUS_PENDING = 1;
+  INVITATION_STATUS_ACCEPTED = 2;
+  INVITATION_STATUS_DECLINED = 3;
+}
+
+enum InvitationAction {
+  INVITATION_ACTION_UNSPECIFIED = 0;
+  INVITATION_ACTION_ACCEPT = 1;
+  INVITATION_ACTION_DECLINE = 2;
+}
+
+enum GrantKind {
+  GRANT_KIND_UNSPECIFIED = 0;
+  GRANT_KIND_SIGNUP = 1;
+  GRANT_KIND_PASSWORD_RESET = 2;
+}
+
+// Canonical names are carried in the dedicated domain-reason trailing metadata.
+enum DomainReason {
+  DOMAIN_REASON_UNSPECIFIED = 0;
+  DOMAIN_REASON_INVALID_INPUT = 1;
+  DOMAIN_REASON_INVALID_CREDENTIALS = 2;
+  DOMAIN_REASON_INVALID_SESSION = 3;
+  DOMAIN_REASON_PERMISSION_DENIED = 4;
+  DOMAIN_REASON_NOT_FOUND = 5;
+  DOMAIN_REASON_CONFLICT = 6;
+  DOMAIN_REASON_INVALID_TRANSITION = 7;
+  DOMAIN_REASON_INVALID_PROOF = 8;
+  DOMAIN_REASON_EMAIL_MISMATCH = 9;
+  DOMAIN_REASON_EMAIL_REGISTERED = 10;
+  DOMAIN_REASON_WEAK_PASSWORD = 11;
+  DOMAIN_REASON_INVALID_CODE = 12;
+  DOMAIN_REASON_REGISTRATION_REQUIRED = 13;
+  DOMAIN_REASON_ALREADY_MEMBER = 14;
+  DOMAIN_REASON_ALREADY_PROCESSED = 15;
+  DOMAIN_REASON_OWNER_TRANSFER_REQUIRED = 16;
+  DOMAIN_REASON_HANDLE_CONFLICT = 17;
+  DOMAIN_REASON_MAIL_UNAVAILABLE = 18;
+  DOMAIN_REASON_CAPACITY_EXHAUSTED = 19;
+  DOMAIN_REASON_INTERNAL = 20;
+}
+
+message User {
+  string id = 1;
+  string email = 2;
+  bool is_admin = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+
+message LoginMethods {
+  bool password = 1;
+  bool email_code = 2;
+  bool signup_email = 3;
+}
+
+// Credentials are delivered only by dedicated authentication responses.
+// The web adapter consumes this message server-side and publishes HttpOnly cookies.
+message AuthSession {
+  User user = 1;
+  string token = 2;
+  google.protobuf.Timestamp expires_at = 3;
+  google.protobuf.Timestamp created_at = 4;
+  google.protobuf.Timestamp absolute_expires_at = 5;
+}
+
+message PasswordLoginRequest { string email = 1; string password = 2; }
+message SendCodeRequest { string email = 1; }
+message CodeChallenge { string binding = 1; google.protobuf.Timestamp expires_at = 2; }
+message VerifyCodeRequest { string email = 1; string binding = 2; string code = 3; }
+message RenewRequest { string token = 1; }
+message SignupEmailRequest { string email = 1; }
+message DeliveryAccepted { bool accepted = 1; }
+message ProofRequest { string proof = 1; }
+message ProofPreview {
+  bool usable = 1;
+  optional string email_hint = 2;
+  google.protobuf.Timestamp expires_at = 3;
+}
+message RedeemSignupRequest { string proof = 1; string email = 2; string password = 3; }
+message RedeemPasswordResetRequest { string proof = 1; string password = 2; }
+message SetupStatusResult { bool available = 1; }
+message InitializeRequest { string installation_proof = 1; string email = 2; string password = 3; }
+
+message Team {
+  string id = 1;
+  TeamKind kind = 2;
+  string name = 3;
+  string handle = 4;
+  string owner_user_id = 5;
+  TeamRole caller_role = 6;
+}
+message Teams { repeated Team items = 1; }
+message TeamRequest { string team_id = 1; }
+message CreateTeamRequest { string name = 1; string handle = 2; }
+message UpdateTeamRequest {
+  string team_id = 1;
+  optional string name = 2;
+  optional string handle = 3;
+}
+message Member {
+  string user_id = 1;
+  string email = 2;
+  TeamRole role = 3;
+}
+message Members { repeated Member items = 1; }
+message MemberRequest { string team_id = 1; string user_id = 2; }
+message SetMemberRoleRequest {
+  string team_id = 1;
+  string user_id = 2;
+  MembershipRole role = 3;
+}
+message Invitation {
+  string id = 1;
+  string team_id = 2;
+  string team_name = 3;
+  string team_handle = 4;
+  string recipient_email = 5;
+  InvitationStatus status = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp processed_at = 8;
+}
+message Invitations { repeated Invitation items = 1; }
+message InviteMemberRequest { string team_id = 1; string email = 2; }
+message ProcessInvitationRequest { string invitation_id = 1; InvitationAction action = 2; }
+message IssueGrantRequest { string email = 1; }
+message GrantRequest { string grant_id = 1; }
+message ListGrantsRequest { optional int64 offset = 1; optional int64 limit = 2; }
+message Grant {
+  string id = 1;
+  GrantKind kind = 2;
+  string email = 3;
+  google.protobuf.Timestamp issued_at = 4;
+  google.protobuf.Timestamp expires_at = 5;
+  google.protobuf.Timestamp consumed_at = 6;
+  google.protobuf.Timestamp revoked_at = 7;
+}
+message Grants { repeated Grant items = 1; int64 total = 2; }
+// The newly issued proof is not present in later grant inventory responses.
+message IssuedGrant { Grant grant = 1; string proof = 2; string url = 3; }

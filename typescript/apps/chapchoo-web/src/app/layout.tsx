@@ -1,9 +1,11 @@
+import { AppMantineProvider } from "@chapchoo/ui/provider";
 import { ColorSchemeScript } from "@mantine/core";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
-import { AppMantineProvider } from "@/shared/providers/mantine";
+import { getPublicConfig } from "@/config";
+import { RpcProvider } from "@/shared/rpc/provider";
 import type { Metadata, Viewport } from "next";
 import type { ReactElement, ReactNode } from "react";
 
@@ -12,7 +14,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "chapchoo",
-  description: "chapchoo development scaffold",
+  description: "Chapchoo accounts and team spaces",
 };
 
 export const viewport: Viewport = {
@@ -26,6 +28,7 @@ export default async function RootLayout({
 }: {
   children: ReactNode;
 }): Promise<ReactElement> {
+  const { publicBasePath } = getPublicConfig();
   const locale = await getLocale();
   const messages = await getMessages();
   return (
@@ -40,7 +43,7 @@ export default async function RootLayout({
       <body>
         <NextIntlClientProvider locale={locale} messages={messages}>
           <AppMantineProvider defaultColorScheme="auto">
-            {children}
+            <RpcProvider basePath={publicBasePath}>{children}</RpcProvider>
           </AppMantineProvider>
         </NextIntlClientProvider>
       </body>

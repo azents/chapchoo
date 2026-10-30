@@ -1,0 +1,38 @@
+# Offline fixture only: these images, URLs and Secret names do not provision or
+# identify a real deployment. No credential value is included.
+prerequisitesConfirmed: true
+backend:
+  image:
+    repository: registry.example.invalid/chapchoo/backend
+    tag: offline-contract
+database:
+  existingSecret: fixture-postgres
+secretKey:
+  existingSecret: fixture-secret-key
+setupProof:
+  existingSecret: fixture-setup-proof
+general:
+  publicUrl: https://chapchoo.example.invalid
+  image:
+    repository: registry.example.invalid/chapchoo/general-web
+    tag: offline-contract
+admin:
+  publicUrl: https://chapchoo.example.invalid/admin
+  compiledBasePath: /admin
+  image:
+    repository: registry.example.invalid/chapchoo/admin-web
+    tag: offline-contract
+webIngress:
+  enabled: true
+  className: fixture-nginx
+  existingTlsSecret: fixture-web-tls
+grpcIngress:
+  enabled: true
+  className: fixture-nginx
+  general:
+    host: rpc.example.invalid
+    existingTlsSecret: fixture-rpc-tls
+  admin:
+    enabled: true
+    host: admin-rpc.example.invalid
+    existingTlsSecret: fixture-admin-rpc-tls

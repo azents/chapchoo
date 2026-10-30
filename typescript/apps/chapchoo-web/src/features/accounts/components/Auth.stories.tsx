@@ -1,0 +1,102 @@
+import messages from "../../../../messages/en-US.json";
+import korean from "../../../../messages/ko-KR.json";
+import { Auth } from "./Auth";
+import type { AuthProps } from "../types";
+import type { Meta, StoryObj } from "@storybook/nextjs-vite";
+
+const ready = {
+  type: "LOADED",
+  data: { password: true, emailCode: true, signupEmail: true, email: "" },
+} satisfies AuthProps["state"];
+const meta = {
+  title: "Accounts/Authentication",
+  component: Auth,
+  args: {
+    basePath: "",
+    copy: messages.accounts,
+    mode: "LOGIN",
+    token: "",
+    state: ready,
+    submission: { type: "READY" },
+    email: "member@example.com",
+    password: "",
+    code: "",
+    challenge: false,
+    onEmail: () => {},
+    onPassword: () => {},
+    onCode: () => {},
+    onSubmit: () => {},
+    onSendCode: () => {},
+    onUsePassword: () => {},
+    onRetry: () => {},
+  },
+} satisfies Meta<typeof Auth>;
+export default meta;
+type Story = StoryObj<typeof meta>;
+export const PasswordLogin: Story = {};
+export const EmailCode: Story = { args: { challenge: true } };
+export const CodeOnly: Story = {
+  args: { state: { type: "LOADED", data: { ...ready.data, password: false } } },
+};
+export const PasswordOnly: Story = {
+  args: {
+    state: { type: "LOADED", data: { ...ready.data, emailCode: false } },
+  },
+};
+export const LoginUnavailable: Story = {
+  args: {
+    state: {
+      type: "LOADED",
+      data: { ...ready.data, emailCode: false, password: false },
+    },
+  },
+};
+export const SignupLink: Story = {
+  args: {
+    mode: "SIGNUP",
+    token: "story-proof",
+    email: "",
+    state: {
+      type: "LOADED",
+      data: { ...ready.data, email: "m***@example.com" },
+    },
+  },
+};
+export const RequestSignup: Story = { args: { mode: "SIGNUP" } };
+export const AdministratorLinkRequired: Story = { args: { mode: "RESET" } };
+export const ResetPassword: Story = {
+  args: {
+    mode: "RESET",
+    token: "story-proof",
+    state: {
+      type: "LOADED",
+      data: { ...ready.data, email: "m***@example.com" },
+    },
+  },
+};
+export const ExpiredLink: Story = {
+  args: {
+    mode: "SIGNUP",
+    token: "story-proof",
+    state: { type: "ERROR", message: messages.accounts.invalidProof },
+  },
+};
+export const ResetComplete: Story = {
+  args: {
+    mode: "RESET",
+    token: "story-proof",
+    state: { type: "LOADING" },
+    submission: { type: "DONE", message: messages.accounts.resetDone },
+  },
+};
+export const Loading: Story = { args: { state: { type: "LOADING" } } };
+export const Pending: Story = { args: { submission: { type: "PENDING" } } };
+export const InvalidCredentials: Story = {
+  args: {
+    submission: {
+      type: "ERROR",
+      message: messages.accounts.invalidCredentials,
+    },
+  },
+};
+export const Korean: Story = { args: { copy: korean.accounts } };

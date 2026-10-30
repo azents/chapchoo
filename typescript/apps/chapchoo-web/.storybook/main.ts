@@ -1,7 +1,10 @@
 import type { StorybookConfig } from "@storybook/nextjs-vite";
 
 const config: StorybookConfig = {
-  stories: ["../src/**/*.stories.@(ts|tsx|mdx)"],
+  stories: [
+    "../src/**/*.stories.@(ts|tsx|mdx)",
+    "../../packages/chapchoo-ui/src/**/*.stories.tsx",
+  ],
   addons: [
     "@storybook/addon-docs",
     "@storybook/addon-a11y",

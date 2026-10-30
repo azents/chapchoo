@@ -16,6 +16,19 @@ jobs:
   rust:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      CHAPCHOO_TEST_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/chapchoo_test
+    services:
+      postgres:
+        image: postgres:17.11
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: chapchoo_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d chapchoo_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable installer
@@ -30,12 +43,27 @@ jobs:
       NEXT_TELEMETRY_DISABLED: "1"
       TURBO_TELEMETRY_DISABLED: "1"
       STORYBOOK_DISABLE_TELEMETRY: "1"
+      CHAPCHOO_TEST_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/chapchoo_test
+    services:
+      postgres:
+        image: postgres:17.11
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: chapchoo_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d chapchoo_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.14"
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: Azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v4.2.4
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable installer
         with:
           toolchain: 1.99.1
@@ -65,5 +93,43 @@ jobs:
           done
       - run: pnpm run format:check && pnpm run lint && pnpm run typecheck
         working-directory: typescript
-      - run: pnpm --filter @chapchoo/web test && pnpm run build && pnpm run build-storybook --filter=@chapchoo/web
+      - name: Account web tests, product builds and component stories
+        run: |
+          pnpm --filter @chapchoo/ui test
+          pnpm --filter @chapchoo/web-core test
+          pnpm --filter @chapchoo/web test
+          pnpm --filter @chapchoo/admin-web test
+          pnpm --filter @chapchoo/e2e test:unit
+          pnpm run build
+          pnpm run build-storybook --filter=@chapchoo/web --filter=@chapchoo/admin-web
+        working-directory: typescript
+  accounts-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      TURBO_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable installer
+        with:
+          toolchain: 1.99.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: typescript/package.json
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: typescript/pnpm-lock.yaml
+      - name: Expose runner PostgreSQL tools
+        run: |
+          echo "$(pg_config --bindir)" >> "$GITHUB_PATH"
+          test -x "$(pg_config --bindir)/initdb"
+          test -x "$(pg_config --bindir)/pg_ctl"
+      - run: pnpm install --frozen-lockfile
+        working-directory: typescript
+      - run: pnpm --filter @chapchoo/e2e exec playwright install chromium
+        working-directory: typescript
+      - run: pnpm --filter @chapchoo/e2e test:e2e
         working-directory: typescript

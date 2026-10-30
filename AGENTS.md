@@ -1,7 +1,8 @@
 # Project Rules for Chapchoo
 
-Chapchoo is a new project alongside Azents. This checkout currently contains a
-Hello World frontend and development tooling, not an operational agent service.
+Chapchoo is a new project alongside Azents. This checkout contains general/Admin
+account web applications and the account/team Rust backend. Agent execution and
+deployment packaging remain distinct from the implemented account surface.
 Do not treat product intentions or inherited examples as implemented behavior.
 
 ## Language
@@ -11,12 +12,16 @@ intentionally use other languages.
 
 ## Structure
 
-- `typescript/apps/chapchoo-web/`: Next.js App Router Hello World app.
-- `typescript/packages/`: future shared frontend packages.
+- `typescript/apps/chapchoo-web/`: general Next.js account/team application.
+- `typescript/apps/chapchoo-admin-web/`: independent installation Admin application.
+- `typescript/packages/`: shared packages, including the generated Node RPC client.
+- `rust/crates/`: typed domain, crypto, persistence, protocol, services and adapters.
+- `rust/apps/chapchoo/`: foreground backend and operator composition root.
 - `python/apps/`, `python/libs/`: reserved application/library layout.
 - `swift/apps/`, `swift/libs/`: reserved native application/library layout.
-- `infra/charts/`, `proto/chapchoo/`, `testenv/chapchoo/`, `testdata/`, `images/`:
-  reserved layout; no infrastructure or service contracts exist yet.
+- `proto/chapchoo/`: Protobuf service/message authority.
+- `infra/charts/`, `testenv/chapchoo/`, `testdata/`, `images/`: reserved deployment
+  and assembled-test layout.
 - `docs/chapchoo/`: Requirements, ADR, Design, and Living Spec documentation.
 - `.claude/skills/`: source of truth for repository-local skills.
 - `.agents/skills`: relative symlink exposing the same skills to compatible tools.

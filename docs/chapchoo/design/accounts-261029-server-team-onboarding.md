@@ -10,8 +10,9 @@ snapshot_id: accounts-261029
 # Server Account and Team Onboarding Design
 
 - Snapshot: `accounts-261029`
-- Revision: `36`
-- State: approved Design revision 36; implementation requested and in progress.
+- Revision: `37`
+- State: approved revision36 plus requester-approved deployment clarification D38;
+  revision37 implementation requested on2026-10-30, live validation pending.
 - Authority: [Requirements](../requirements/accounts-261029-server-team-onboarding.md)
   and [accepted decisions through D37](../adr/accounts-261029-server-team-onboarding.md).
 
@@ -1380,7 +1381,7 @@ one idempotent command and one Job, without controller-specific schema logic.
 Preserve failed Job evidence until deliberate cleanup or the next run's
 before-creation cleanup; do not automatically remove a failed Job immediately.
 
-The hook can run before ordinary release resources exist. It therefore uses
+The schema preparation hook can run before ordinary release resources exist. It therefore uses
 already available external PostgreSQL and existing Secret references, renders
 non-secret required command configuration directly, and does not rely on a
 ConfigMap/ServiceAccount created later by the chart. It needs no Kubernetes API
@@ -1393,7 +1394,7 @@ phase ordering takes precedence. Complete prerequisite provisioning first, for
 example through a separate managed prerequisite application, then sync Chapchoo.
 This does not select a secret provider or authorize provisioning a real cluster.
 
-Each Job exits successfully only after required migrations and first-time
+The schema preparation Job exits successfully only after required migrations and first-time
 installation binding preparation/checks succeed. Set bounded Job execution and
 no pod restart loop; a failed invocation is visible to Helm/Argo CD. A later
 controller/operator retry starts a fresh invocation that checks migration
@@ -1821,3 +1822,35 @@ and cannot be reported as passed from these design-only probes.
 
 The complete design-time authority/feasibility review above does not substitute
 for revision-bound requester approval or subsequent implementation verification.
+
+## Revision37 — Secret configuration feedback
+
+The requester approved the consolidated feedback and explicitly requested its
+implementation on2026-10-30. Revision37 preserves M1–M34/M36–M43 and adds M44,
+authorized by the deployment clarification and ADR-D38. The previous blanket
+chart-no-secret-creation constraint is refined only for first-admin proof.
+
+| ID | Mechanism | Authority |
+| --- | --- | --- |
+| M44 | Single PASSWORD external origin, `SECRET_KEY` naming and one-time chart setup-proof creation/preservation | Deployment clarification, ADR-D38; existing M36/M40 |
+
+Backend CLI, tests and deployment configuration use `CHAPCHOO_SECRET_KEY` without
+the previous name fallback. No storage migration, re-encryption or key generation
+is performed by this rename. Home derives the URI from PASSWORD using escaped
+userinfo and references the same generated Secret for backend and preparation.
+
+Default chart bootstrap: named hook SA/Role/Binding at weight/wave-30; a separate
+finite, no-retry bootstrap Job at-20; existing schema prepare remains-10.
+Bootstrap receives only namespace and Secret name, not DB/key/setup credentials.
+The backend image includes pinned official kubectl; shell generation uses
+`/dev/urandom`, base64 and URL-safe alphabet without printing the proof. Private
+temporary files hold values; get/validate/create-never-overwrite handles existing
+and concurrent creation. A generated Secret has no hook/release owner reference.
+Invalid existing material or denied API access fails closed. The existing
+explicit setup Secret setting remains supported and disables generation.
+
+Validation includes rendered order, narrow RBAC/token separation, no random data
+in manifests, existing Secret reuse, invalid material failure, create-conflict
+validation, CLI rename/new-name-only checks, URL special-character escaping,
+both DB RPC gates, actual native image startup/prefix/cleanup and exact-head CI.
+No live Secret read/write or first deployment is claimed by offline evidence.

@@ -1,0 +1,10 @@
+DROP TABLE initial_setup;
+DROP TABLE login_challenges;
+DROP TABLE invitations;
+DROP TABLE grants;
+DROP TABLE auth_sessions;
+DROP TABLE personal_contexts;
+DROP TABLE memberships;
+DROP TABLE teams;
+DROP TABLE users;
+DROP TABLE installation_key_binding;

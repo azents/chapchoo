@@ -1,0 +1,38 @@
+{
+  "name": "@chapchoo/rpc-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./accounts": {
+      "types": "./dist/generated/accounts.d.ts",
+      "default": "./dist/generated/accounts.js"
+    },
+    "./timestamp": {
+      "types": "./dist/generated/google/protobuf/timestamp.d.ts",
+      "default": "./dist/generated/google/protobuf/timestamp.js"
+    }
+  },
+  "scripts": {
+    "generate": "bash ../../../scripts/generate-rpc-clients.sh",
+    "generate:check": "bash ../../../scripts/generate-rpc-clients.sh --check",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "pnpm run build && node --test test/*.test.mjs",
+    "test:live": "pnpm run build && node test/live-rpc.mjs",
+    "lint": "eslint test --max-warnings 0",
+    "lint:fix": "eslint test --max-warnings 0 --fix",
+    "format": "prettier --write 'test/*.mjs' '*.mjs' '*.md'",
+    "format:check": "prettier --check 'test/*.mjs' '*.mjs' '*.md'"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "1.14.6",
+    "@bufbuild/protobuf": "^2.14.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "eslint": "^10.8.1",
+    "ts-proto": "2.18.3",
+    "typescript": "^6.0.3"
+  }
+}
