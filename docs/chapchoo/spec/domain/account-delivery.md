@@ -21,7 +21,7 @@ code_paths:
   - .github/workflows/build-binary.yaml
   - .github/workflows/snapshot.yaml
   - scripts/publish-snapshot.py
-last_verified_at: 2026-10-30
+last_verified_at: 2026-10-31
 spec_version: 1
 ---
 
@@ -130,7 +130,7 @@ General `/` and Admin `/admin` on one host.
 The `Snapshot` workflow follows the requested Azents-style image publication:
 main pushes or explicit main dispatch build on native x86-64/ARM64 runners.
 Each runner builds independent backend/General/Admin images, exercises their
-nonroot/read-only/private-RPC/static/font/shutdown boundary and only then pushes
+nonroot/read-only/private-RPC/static/shutdown boundary and only then pushes
 architecture staging images. All builds are deployment-neutral; test execution
 selects root and non-root paths at runtime. Snapshot is a development distribution
 channel, not a Home build variant. A release of the same commit must promote
