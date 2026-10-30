@@ -1,5 +1,8 @@
 import { resolve } from "node:path";
-import { PHASE_PRODUCTION_SERVER } from "next/constants.js";
+import {
+  PHASE_DEVELOPMENT_SERVER,
+  PHASE_PRODUCTION_SERVER,
+} from "next/constants.js";
 
 /** @returns {Promise<import("next").NextConfig>} */
 export default async function nextConfig(phase) {
@@ -14,10 +17,18 @@ export default async function nextConfig(phase) {
     return { ...shared, assetPrefix: getConfig().basePath };
   }
   const { default: createNextIntlPlugin } = await import("next-intl/plugin");
+  const development = {};
+  if (phase === PHASE_DEVELOPMENT_SERVER) {
+    const { getConfig } = await import("./src/config/index.ts");
+    development.basePath = getConfig().basePath;
+  }
   return createNextIntlPlugin("./src/i18n/request.ts")({
     ...shared,
+    ...development,
     webpack(config, { isServer }) {
-      if (!isServer) config.output.publicPath = "auto";
+      if (!isServer && phase !== PHASE_DEVELOPMENT_SERVER) {
+        config.output.publicPath = "auto";
+      }
       return config;
     },
     output: "standalone",

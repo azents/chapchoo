@@ -30,3 +30,10 @@ export function getListener(): { host: string; port: number } {
 export function getPublicConfig(): { publicBasePath: string } {
   return { publicBasePath: getConfig().basePath };
 }
+
+/** Development Next owns basePath; the production custom mount owns it itself. */
+export function getLoginRedirect(): string {
+  return process.env.NODE_ENV === "development"
+    ? "/login"
+    : `${getConfig().basePath}/login`;
+}

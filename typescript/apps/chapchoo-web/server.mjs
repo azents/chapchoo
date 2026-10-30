@@ -25,6 +25,18 @@ const server = createServer((request, response) => {
     response.writeHead(404).end();
     return;
   }
+  // Canonicalize the public request before Next sees a mount-relative URL.
+  // This keeps framework trailing/duplicate-slash redirects inside the mount.
+  const canonical =
+    pathname
+      .replaceAll("\\", "/")
+      .replace(/\/{2,}/g, "/")
+      .replace(/\/$/, "") || "/";
+  if (prefix && canonical !== pathname) {
+    const query = boundary < 0 ? "" : raw.slice(boundary);
+    response.writeHead(308, { Location: `${canonical}${query}` }).end();
+    return;
+  }
   request.url = prefix ? raw.slice(prefix.length) || "/" : raw;
   if (request.url.startsWith("?")) request.url = `/${request.url}`;
   Promise.resolve(handle(request, response)).catch(() => {

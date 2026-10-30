@@ -241,6 +241,7 @@ export class Assembly {
     );
     this.productReady = true;
     if (this.packageRoot) {
+      await this.verifyCanonicalRedirects();
       return;
     }
     for (const [name, url, backendPort] of [
@@ -273,6 +274,27 @@ export class Assembly {
         env,
       );
       await web.ready(/Ready in/, 60_000);
+    }
+    await this.verifyCanonicalRedirects();
+  }
+  private async verifyCanonicalRedirects(): Promise<void> {
+    for (const base of [this.generalUrl, this.adminUrl]) {
+      for (const suffix of ["/login/", "//login"]) {
+        const response = await fetch(`${base}${suffix}?fixture=canonical`, {
+          redirect: "manual",
+        });
+        const location = response.headers.get("location");
+        if (
+          response.status !== 308 ||
+          location !==
+            `${new URL(base).pathname.replace(/\/$/, "")}/login?fixture=canonical`
+        ) {
+          throw new Error(
+            "Canonical web redirect must preserve the configured public mount and query",
+          );
+        }
+        await response.body?.cancel();
+      }
     }
   }
   async seedSecondUser(): Promise<void> {
