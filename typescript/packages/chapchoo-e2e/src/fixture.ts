@@ -119,6 +119,7 @@ export class Assembly {
       NODE_ENV: "production",
       CHAPCHOO_WEB_HOST: "127.0.0.1",
       CHAPCHOO_PUBLIC_URL: url,
+      PORT: new URL(url).port,
       CHAPCHOO_BACKEND_URL: `http://127.0.0.1:${port}`,
     };
   }
@@ -240,6 +241,7 @@ export class Assembly {
     );
     this.productReady = true;
     if (this.packageRoot) {
+      await this.verifyCanonicalRedirects();
       return;
     }
     for (const [name, url, backendPort] of [
@@ -249,21 +251,50 @@ export class Assembly {
       const cwd = join(typescript, "apps", name);
       const env = this.webEnvironment(url, backendPort);
       await this.owner.run(
+        `${name} font assets`,
+        process.execPath,
+        [join(typescript, "scripts/stage-web-fonts.mjs"), name],
+        cwd,
+        safeEnvironment(),
+        30_000,
+      );
+      await this.owner.run(
         `${name} production build`,
         join(cwd, "node_modules/.bin/next"),
-        ["build"],
+        ["build", "--webpack"],
         cwd,
-        env,
+        safeEnvironment(),
         120_000,
       );
       const web = this.owner.start(
         `${name} production listener`,
-        join(cwd, "node_modules/.bin/next"),
-        ["start", "--hostname", "127.0.0.1", "--port", new URL(url).port],
+        process.execPath,
+        ["server.mjs"],
         cwd,
         env,
       );
       await web.ready(/Ready in/, 60_000);
+    }
+    await this.verifyCanonicalRedirects();
+  }
+  private async verifyCanonicalRedirects(): Promise<void> {
+    for (const base of [this.generalUrl, this.adminUrl]) {
+      for (const suffix of ["/login/", "//login"]) {
+        const response = await fetch(`${base}${suffix}?fixture=canonical`, {
+          redirect: "manual",
+        });
+        const location = response.headers.get("location");
+        if (
+          response.status !== 308 ||
+          location !==
+            `${new URL(base).pathname.replace(/\/$/, "")}/login?fixture=canonical`
+        ) {
+          throw new Error(
+            "Canonical web redirect must preserve the configured public mount and query",
+          );
+        }
+        await response.body?.cancel();
+      }
     }
   }
   async seedSecondUser(): Promise<void> {

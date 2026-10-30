@@ -247,7 +247,7 @@ impl WebConfig {
             public_url,
             backend_url,
             node: root.join("runtime/bin/node"),
-            script: directory.join("server.js"),
+            script: directory.join("server.mjs"),
             directory,
         })
     }
@@ -537,7 +537,7 @@ mod tests {
             assert!(
                 config
                     .script
-                    .ends_with("web/general/apps/chapchoo-web/server.js")
+                    .ends_with("web/general/apps/chapchoo-web/server.mjs")
             );
         }
         assert_eq!(

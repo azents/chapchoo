@@ -15,9 +15,9 @@ a foreign architecture was tested natively, or a cluster was deployed.
   the ELF architecture of Node, Chapchoo and all traced ELF/native addon files.
 - General/Admin Next standalone trees must be built separately on the matching
   platform from the frozen pnpm workspace. Preserve their traced workspace root,
-  not only `server.js`. Include each app's built `.next/static` tree; this retains
-  the real bundled Geist fonts, CSS and other assets. Public roots are explicit
-  optional inputs because the source application need not have a public folder.
+  including the explicit `server.mjs` custom entrypoint. Include each app's built
+  `.next/static` and `public` trees; these retain CSS, chunks and the actual
+  Geist font files staged from the locked package with their license.
 - A package build consumes already built artifacts. It does not build, download,
   run an input executable, install host dependencies, adopt a database, generate
   a key, or use a host Node/pnpm/Turbo fallback.
@@ -66,8 +66,8 @@ artifact acceptance rather than inferred from the Node support table.
 ## Build and assemble an archive
 
 Run source builds on each selected native Linux architecture. The example uses
-root-path web builds; set each app's explicit public URL separately when building
-a prefixed app. Next's compiled prefix must equal its runtime public URL path.
+deployment-neutral builds. Set public URL/path and endpoints only when running
+an artifact; the build needs no deployment configuration.
 
 ```sh
 (cd rust && cargo build --locked --release --package chapchoo)
@@ -91,12 +91,14 @@ python3 scripts/package-linux.py \
   --node-shasums /build-artifacts/SHASUMS256.txt \
   --general-standalone typescript/apps/chapchoo-web/.next/standalone \
   --general-static typescript/apps/chapchoo-web/.next/static \
+  --general-public typescript/apps/chapchoo-web/public \
   --admin-standalone typescript/apps/chapchoo-admin-web/.next/standalone \
   --admin-static typescript/apps/chapchoo-admin-web/.next/static \
+  --admin-public typescript/apps/chapchoo-admin-web/public \
   --output /build-artifacts/chapchoo-linux-x86_64.tar.gz
 ```
 
-Supply `--general-public` / `--admin-public` only when those directories exist.
+The public font directories are produced by each app's normal build command.
 For ARM64 use `--architecture aarch64` and the official `linux-arm64` Node input.
 `--source-date-epoch <integer>` optionally sets deterministic archive timestamps;
 its default is zero. Archives are sorted, normalize ownership/permissions, and
@@ -111,9 +113,9 @@ chapchoo
 LICENSE
 runtime/bin/node
 runtime/LICENSE
-web/general/apps/chapchoo-web/server.js
+web/general/apps/chapchoo-web/server.mjs
 web/general/apps/chapchoo-web/.next/static/...
-web/admin/apps/chapchoo-admin-web/server.js
+web/admin/apps/chapchoo-admin-web/server.mjs
 web/admin/apps/chapchoo-admin-web/.next/static/...
 ```
 
@@ -155,10 +157,8 @@ host or the Agent Runtime.
 docker buildx build --platform linux/amd64 --target backend \
   -f images/chapchoo/Dockerfile -t chapchoo-backend:local --load .
 docker buildx build --platform linux/amd64 --target general-web \
-  --build-arg GENERAL_PUBLIC_URL=https://general.example.invalid \
   -f images/chapchoo/Dockerfile -t chapchoo-general-web:local --load .
 docker buildx build --platform linux/arm64 --target admin-web \
-  --build-arg ADMIN_PUBLIC_URL=https://admin.example.invalid/admin \
   -f images/chapchoo/Dockerfile -t chapchoo-admin-web:local --load .
 ```
 
@@ -174,11 +174,11 @@ docker buildx build --platform linux/arm64 --target admin-web \
   beyond loopback. Configure backend URLs through the corresponding selected
   role variables. Kubernetes may override CMD with the same foreground args;
   it must preserve the explicit wildcard internal listener configuration.
-- Build arguments select the app's compiled public prefix. An operator cannot
-  change that prefix using a runtime environment override. The chart must use
-  matching image/public-path values and reference already-existing backend
+- Public origins, mount paths and endpoints are runtime configuration. The same
+  image ID can run at different paths without rebuilding. The chart references
+  already-existing backend
   Secrets; web pods do not receive those Secret values.
-- Each web process's GET `<compiled-prefix>/health` confirms only web-process
+- Each web process's GET `<runtime-prefix>/health` confirms only web-process
   responsiveness. It is not backend/schema/product-journey evidence. Keep
   backend listeners private and use the established gRPC health contract.
 
@@ -189,15 +189,15 @@ an emulation service. Capture architecture, libc/native dependencies, selected
 role startup, real assets, owned shutdown, foreign-resource safety and the
 three product journeys in root-owned acceptance evidence before release.
 
-## Home snapshot images
+## Snapshot distribution channel
 
 The `Snapshot` workflow builds and runs these same targets on native amd64 and
 arm64 before pushing architecture staging images and combining the complete
-three-component indexes. The General snapshot uses root and the Admin snapshot
-uses `/admin`, matching `https://chapchoo.internal.hardtack.me`. The extracted
-Linux distributions keep their existing root-prefix defaults. Native package CI
-also exercises the `/admin` image rather than treating prefix compilation as
-metadata-only evidence.
+three-component indexes. Snapshot uses the same deployment-neutral application
+build and assembly as other distribution artifacts. Home selects its origins
+and `/admin` at runtime, outside the public artifacts. Native acceptance runs the
+same bytes under root and non-root settings. Release publication of the same
+commit must promote these artifacts/digests, not rebuild a channel-specific image.
 
 The publication artifact carries one immutable source SHA/run/attempt and each
 index's registry digest. Home independently verifies the source run and complete

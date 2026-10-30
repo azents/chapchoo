@@ -2,54 +2,66 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import test from "node:test";
 
-void test("public build prefix matches runtime or fails visibly", () => {
+void test("public paths are read from runtime configuration without compiled constants", () => {
   const source = new URL("./index.ts", import.meta.url).href;
-  const buildScript = `const{getBuildConfig}=await import(${JSON.stringify(source)});console.log(getBuildConfig().basePath);`;
-  const runtimeScript = `const{getConfig}=await import(${JSON.stringify(source)});console.log(getConfig().basePath);`;
-  const publicUrl = "https://example.invalid/chapchoo";
-  const build = execFileSync(
+  const script = `const{getConfig}=await import(${JSON.stringify(source)});console.log(getConfig().basePath);`;
+  for (const path of ["", "/app", "/different/mount"]) {
+    const output = execFileSync(
+      process.execPath,
+      ["--experimental-strip-types", "--input-type=module", "-e", script],
+      {
+        env: {
+          NODE_ENV: "production",
+          CHAPCHOO_PUBLIC_URL: `https://example.invalid${path}`,
+        },
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+    assert.equal(output.trim(), path);
+  }
+});
+
+void test("development serves the configured mount while distributed builds stay neutral", () => {
+  const source = new URL("../../next.config.mjs", import.meta.url).href;
+  const script = `const{default:config}=await import(${JSON.stringify(source)});const dev=await config("phase-development-server");const build=await config("phase-production-build");console.log(JSON.stringify({dev:dev.basePath,build:build.basePath??""}));`;
+  const output = execFileSync(
     process.execPath,
-    ["--experimental-strip-types", "--input-type=module", "-e", buildScript],
-    {
-      env: { NODE_ENV: "production", CHAPCHOO_PUBLIC_URL: publicUrl },
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    },
-  );
-  assert.equal(build.trim(), "/chapchoo");
-  const runtime = execFileSync(
-    process.execPath,
-    ["--experimental-strip-types", "--input-type=module", "-e", runtimeScript],
+    ["--input-type=module", "-e", script],
     {
       env: {
-        NODE_ENV: "production",
-        CHAPCHOO_PUBLIC_URL: publicUrl,
-        CHAPCHOO_COMPILED_BASE_PATH: "/chapchoo",
+        ...process.env,
+        NODE_ENV: "development",
+        CHAPCHOO_PUBLIC_URL: "https://example.invalid/app",
       },
+      cwd: new URL("../../", import.meta.url),
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
     },
   );
-  assert.equal(runtime.trim(), "/chapchoo");
-  for (const env of [
-    { NODE_ENV: "production", CHAPCHOO_PUBLIC_URL: publicUrl },
-    {
-      NODE_ENV: "production",
-      CHAPCHOO_PUBLIC_URL: publicUrl,
-      CHAPCHOO_COMPILED_BASE_PATH: "/other",
-    },
-  ] satisfies NodeJS.ProcessEnv[]) {
-    assert.throws(() =>
-      execFileSync(
-        process.execPath,
-        [
-          "--experimental-strip-types",
-          "--input-type=module",
-          "-e",
-          runtimeScript,
-        ],
-        { env, stdio: ["ignore", "pipe", "pipe"] },
-      ),
+  assert.deepEqual(JSON.parse(output.trim()), { dev: "/app", build: "" });
+});
+
+void test("login redirect prefix has exactly one owner in each server mode", () => {
+  const source = new URL("./index.ts", import.meta.url).href;
+  const script = `const{getLoginRedirect}=await import(${JSON.stringify(source)});console.log(getLoginRedirect());`;
+  const modes: ("development" | "production")[] = ["development", "production"];
+  for (const mode of modes) {
+    const output = execFileSync(
+      process.execPath,
+      ["--input-type=module", "-e", script],
+      {
+        env: {
+          NODE_ENV: mode,
+          CHAPCHOO_PUBLIC_URL: "https://example.invalid/app",
+        },
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+    assert.equal(
+      output.trim(),
+      mode === "development" ? "/login" : "/app/login",
     );
   }
 });

@@ -1,7 +1,6 @@
+import { FontFaces } from "@chapchoo/ui/FontFaces";
 import { AppMantineProvider } from "@chapchoo/ui/provider";
 import { ColorSchemeScript } from "@mantine/core";
-import { GeistMono } from "geist/font/mono";
-import { GeistSans } from "geist/font/sans";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 import { getPublicConfig } from "@/config";
@@ -32,12 +31,9 @@ export default async function RootLayout({
   const locale = await getLocale();
   const messages = await getMessages();
   return (
-    <html
-      lang={locale}
-      className={`${GeistSans.variable} ${GeistMono.variable}`}
-      suppressHydrationWarning
-    >
+    <html lang={locale} suppressHydrationWarning>
       <head>
+        <FontFaces basePath={publicBasePath} />
         <ColorSchemeScript defaultColorScheme="auto" />
       </head>
       <body>

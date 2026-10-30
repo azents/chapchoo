@@ -74,7 +74,7 @@ class PackageLinuxTest(unittest.TestCase):
             standalone = source / "standalone"
             app_root = standalone / "apps" / app
             (app_root / "node_modules").mkdir(parents=True)
-            (app_root / "server.js").write_text(
+            (app_root / "server.mjs").write_text(
                 "// Synthetic server; never executed\n", encoding="utf-8"
             )
             dependency = standalone / "node_modules" / "next"
@@ -130,8 +130,8 @@ class PackageLinuxTest(unittest.TestCase):
                         "chapchoo",
                         "runtime/bin/node",
                         "runtime/LICENSE",
-                        "web/general/apps/chapchoo-web/server.js",
-                        "web/admin/apps/chapchoo-admin-web/server.js",
+                        "web/general/apps/chapchoo-web/server.mjs",
+                        "web/admin/apps/chapchoo-admin-web/server.mjs",
                     ]:
                         self.assertIn(f"{prefix}/{name}", names)
                     font = archive.extractfile(
@@ -340,7 +340,7 @@ class PackageLinuxTest(unittest.TestCase):
         subprocess.run(command, check=True, capture_output=True, text=True)
         self.assertTrue((output / "chapchoo").is_file())
         self.assertTrue((output / "runtime/bin/node").is_file())
-        self.assertTrue((output / "web/general/apps/chapchoo-web/server.js").is_file())
+        self.assertTrue((output / "web/general/apps/chapchoo-web/server.mjs").is_file())
         self.assertFalse((output / "web/admin").exists())
         recursive = [*command[:-1], str(typescript / "recursive-output")]
         result = subprocess.run(recursive, check=False, capture_output=True, text=True)

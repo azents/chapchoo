@@ -8,29 +8,32 @@ if (typeof window !== "undefined") {
   throw new Error("Web server configuration is available only in Node.js");
 }
 
-export function getBuildConfig(): { basePath: string } {
-  const config = webConfig("general", {
-    publicUrl: process.env.CHAPCHOO_PUBLIC_URL ?? "http://localhost:3003",
-    bindHost: "127.0.0.1",
-    backendUrl: "http://127.0.0.1:1",
-  });
-  return { basePath: config.basePath };
-}
-
 export function getConfig(): WebConfig {
   const config = webConfig("general", {
     publicUrl: process.env.CHAPCHOO_PUBLIC_URL ?? "http://localhost:3003",
     bindHost: process.env.CHAPCHOO_WEB_HOST ?? "127.0.0.1",
     backendUrl: process.env.CHAPCHOO_BACKEND_URL ?? "http://127.0.0.1:50051",
   });
-  // nextConfig.env inlines this non-secret build constant in Node output.
-  if (process.env.CHAPCHOO_COMPILED_BASE_PATH !== config.basePath) {
-    throw new Error("Configured public base path does not match the web build");
-  }
   return config;
+}
+
+export function getListener(): { host: string; port: number } {
+  const config = getConfig();
+  const port = Number(process.env.PORT ?? "3003");
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error("Invalid web listener port");
+  }
+  return { host: config.bindHost, port };
 }
 
 /** Safe server-to-provider values; private endpoints stay on the Node side. */
 export function getPublicConfig(): { publicBasePath: string } {
   return { publicBasePath: getConfig().basePath };
+}
+
+/** Development Next owns basePath; the production custom mount owns it itself. */
+export function getLoginRedirect(): string {
+  return process.env.NODE_ENV === "development"
+    ? "/login"
+    : `${getConfig().basePath}/login`;
 }

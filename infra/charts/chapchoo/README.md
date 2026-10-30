@@ -81,13 +81,12 @@ Every Kubernetes public web URL must use HTTPS. Local HTTP is supported only by
 the separate loopback-bound CLI policy; it is not an insecure Kubernetes fallback.
 The public origin is configured, not inferred from forwarding headers.
 
-`general.compiledBasePath` / `admin.compiledBasePath` declare the path already
-compiled into the corresponding image. Use `""` for root, or a prefix such as
-`/admin`. The chart checks that declaration against `publicUrl` and probes
-`<prefix>/health`; no prefix rewrite is introduced and no runtime compiled-path
-override is injected. **The declaration does not inspect or prove an image's
-contents.** Runtime `getConfig()` / health rejection and artifact acceptance must
-independently confirm the actual compiled prefix.
+`general.publicUrl` / `admin.publicUrl` are the runtime path authority. The chart
+derives each Ingress and `<prefix>/health` probe directly from that URL.
+The same image can serve root, `/admin`, or another canonical mount without
+rebuilding. The edge preserves paths; the app owns its runtime mount through
+Next's public custom server and standard asset configuration. Rendering does not
+prove that an artifact ran; browser/static/font acceptance verifies that boundary.
 
 `webIngress.enabled` is optional. The supplied edge adapter targets an existing
 **ingress-nginx** controller: explicitly select `className` and an existing TLS

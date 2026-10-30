@@ -34,8 +34,8 @@ The executable resolves its own installation directory. Archives contain:
 ```text
 chapchoo
 runtime/bin/node
-web/general/apps/chapchoo-web/server.js
-web/admin/apps/chapchoo-admin-web/server.js
+web/general/apps/chapchoo-web/server.mjs
+web/admin/apps/chapchoo-admin-web/server.mjs
 ```
 
 The corresponding app roots contain public/static assets; each traced tree has
@@ -46,8 +46,10 @@ default to 127.0.0.1:3003/3004. `CHAPCHOO_GENERAL_WEB_URL` /
 `CHAPCHOO_GENERAL_BACKEND_URL` / `CHAPCHOO_ADMIN_BACKEND_URL` configure RPC clients.
 A co-selected wildcard backend bind maps to loopback; specific binds keep their
 address. Independently hosted web defaults to local50051/50052. Public HTTP
-requires actual loopback binding; external origins require HTTPS. Compiled and
-runtime public paths must match; runtime prefix rewriting is not provided.
+requires actual loopback binding; external origins require HTTPS. Public paths
+are runtime-only. The public Next custom server accepts only its exact mount
+boundary, then dispatches the mount-relative request to Next without editing
+generated HTML or JavaScript.
 
 Child environment is an allowlist of runtime/locale/CA settings and the selected
 web URL/listener/backend configuration. It excludes database/root/setup/AWS
@@ -93,9 +95,9 @@ operator-provided, never baked into an image.
 independent web deployments and distinct private ClusterIP RPC Services. One
 external PostgreSQL authority and preexisting Secret references are required.
 The chart does not create database/key Secrets or provision a database. Web
-configuration contains only selected listener/public/backend settings. Image
-`compiledBasePath` declarations must agree with URL paths, but declarations alone
-are not proof of the image's compiled configuration; runtime health validates it.
+configuration contains only selected listener/public/backend settings. Public URL
+paths directly determine Ingress and health paths; images contain no selected
+deployment path. Artifact execution, not a declaration, verifies portability.
 
 A single fixed-name prepare Job uses both native Helm pre-install/pre-upgrade
 weight-10 and Argo PreSync wave-10 annotations. It depends only on preexisting
@@ -121,8 +123,10 @@ The `Snapshot` workflow follows the requested Azents-style image publication:
 main pushes or explicit main dispatch build on native x86-64/ARM64 runners.
 Each runner builds independent backend/General/Admin images, exercises their
 nonroot/read-only/private-RPC/static/font/shutdown boundary and only then pushes
-architecture staging images. General is compiled at root; the Home Admin image
-is compiled for `/admin`. Distribution archives retain their default root paths.
+architecture staging images. All builds are deployment-neutral; test execution
+selects root and non-root paths at runtime. Snapshot is a development distribution
+channel, not a Home build variant. A release of the same commit must promote
+the same verified artifact/digest rather than rebuild an application variant.
 
 After both native jobs succeed, publication validates exactly six matching
 component/architecture metadata files, creates three multiarchitecture indexes

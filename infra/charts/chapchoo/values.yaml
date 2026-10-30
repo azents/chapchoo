@@ -41,8 +41,6 @@ general:
   enabled: true
   replicas: 1
   publicUrl: ""
-  # Must describe the prefix compiled into this specific image. Root is "".
-  compiledBasePath: ""
   backendUrl: ""
   image:
     repository: ""
@@ -56,7 +54,6 @@ admin:
   enabled: true
   replicas: 1
   publicUrl: ""
-  compiledBasePath: ""
   backendUrl: ""
   image:
     repository: ""

@@ -1897,3 +1897,30 @@ random Helm render introduces Argo drift; `lookup` depends on rendering access;
 mutating an existing proof risks invalidating operator-visible setup material.
 The bootstrap uses pinned architecture-matched kubectl shipped only in the
 backend image, not a shell-built HTTP client or a web image credential authority.
+
+## D39 — Environment-independent distribution and runtime web mount
+
+Accepted2026-10-30 by the requester's explicit runtime-only configuration,
+same-commit snapshot/release artifact and standard distribution instructions.
+
+Remove deployment-time values from Next compilation, Docker build arguments,
+bundler substitution and artifact variants. Public non-secret values are not
+exempt. One generic build serves any valid runtime origin/path. Snapshot and
+release share/promote application artifacts; Home values do not enter publishing.
+
+Use Next's supported Node server interface with a deployment-neutral compiled
+application and a runtime-owned mount boundary. Prefix ownership belongs to
+the running app rather than immutable Next basePath constants. Runtime mounts
+must cover document/API/static/font/chunk requests and explicit navigation and
+redirects; a proxy-only rewrite or string patch of generated output is not an
+acceptable substitute. Include documented runtime dependencies in packaging.
+
+Home uses the existing Azents root component Application, component directory
+and nested `<product>-helm` Application pattern. Corresponding resources and
+snapshot updater targets follow that layout rather than a new separately named
+prerequisites management surface. DB/proof preparation ordering and existing
+credential isolation remain authoritative.
+
+Reject per-environment rebuilds, internal-only snapshot variants and private
+framework patches. Validate one unchanged artifact under root and non-root
+runtime configuration with actual browser and native-image evidence.

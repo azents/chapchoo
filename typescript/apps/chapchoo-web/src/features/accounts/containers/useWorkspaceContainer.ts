@@ -9,7 +9,6 @@ import {
 } from "@chapchoo/web-core/browser";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMessages } from "next-intl";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/shared/rpc/client";
 import { accountError } from "../errors";
@@ -37,7 +36,6 @@ export function useWorkspaceContainer({
   basePath: string;
 }): WorkspaceProps {
   const copy = useMessages().accounts;
-  const router = useRouter();
   const client = useQueryClient();
   const utils = trpc.useUtils();
   const [name, setName] = useState("");
@@ -119,7 +117,7 @@ export function useWorkspaceContainer({
     setSubmission({ type: "ERROR", message: accountError(reason, copy) });
     if (reason === "DOMAIN_REASON_INVALID_SESSION") {
       client.clear();
-      router.replace("/login");
+      window.location.replace(`${basePath}/login`);
     } else {
       void invalidate();
     }
@@ -136,9 +134,9 @@ export function useWorkspaceContainer({
   useEffect(() => {
     if (invalidSession) {
       client.clear();
-      router.replace("/login");
+      window.location.replace(`${basePath}/login`);
     }
-  }, [invalidSession, client, router]);
+  }, [invalidSession, client, basePath]);
   let state: WorkspaceProps["state"];
   if (queryError) {
     state = {
@@ -241,11 +239,11 @@ export function useWorkspaceContainer({
           break;
         case "LEAVE":
           await leave.mutateAsync({ teamId });
-          router.replace("/");
+          window.location.replace(`${basePath}/`);
           break;
         case "DELETE":
           await deleteTeam.mutateAsync({ teamId });
-          router.replace("/");
+          window.location.replace(`${basePath}/`);
           break;
       }
     });
@@ -259,8 +257,7 @@ export function useWorkspaceContainer({
     try {
       await logout.mutateAsync();
       client.clear();
-      router.replace("/login");
-      router.refresh();
+      window.location.replace(`${basePath}/login`);
     } catch {
       // The mutation callback preserves the current session on uncertain failure.
     } finally {
@@ -284,7 +281,9 @@ export function useWorkspaceContainer({
         const result = await create.mutateAsync({ name, handle });
         setName("");
         setHandle("");
-        router.push(`/teams/${encodeURIComponent(result.id)}`);
+        window.location.assign(
+          `${basePath}/teams/${encodeURIComponent(result.id)}`,
+        );
       });
     },
     onRename: () => {

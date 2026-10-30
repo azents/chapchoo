@@ -50,7 +50,7 @@ impl Bundle {
         ] {
             let app = root.join(app);
             std::fs::create_dir_all(&app)?;
-            std::fs::write(app.join("server.js"), mode)?;
+            std::fs::write(app.join("server.mjs"), mode)?;
         }
         Ok(Self { directory, binary })
     }
@@ -240,9 +240,9 @@ async fn first_ready_web_exit_is_supervised_while_other_web_starts() -> Result<(
     for first in ["general", "admin"] {
         let bundle = Bundle::new("wait-for-termination")?;
         let first_app = if first == "general" {
-            "web/general/apps/chapchoo-web/server.js"
+            "web/general/apps/chapchoo-web/server.mjs"
         } else {
-            "web/admin/apps/chapchoo-admin-web/server.js"
+            "web/admin/apps/chapchoo-admin-web/server.mjs"
         };
         std::fs::write(bundle.directory.path().join(first_app), "serve")?;
         let general_port = port()?;
@@ -499,7 +499,7 @@ fn fixture_requested(name: &str) -> bool {
     let arguments: Vec<_> = std::env::args().collect();
     arguments.windows(2).any(|pair| pair == ["--exact", name])
         && std::env::var_os("CHAPCHOO_PUBLIC_URL").is_some()
-        && Path::new("server.js").is_file()
+        && Path::new("server.mjs").is_file()
 }
 
 #[tokio::test]
@@ -525,7 +525,7 @@ async fn fixture_web_process() -> Result<(), TestError> {
         temporary.join(format!("web-{web_port}.pid")),
         std::process::id().to_string(),
     )?;
-    let mode = std::fs::read_to_string("server.js")?;
+    let mode = std::fs::read_to_string("server.mjs")?;
     if mode == "exit" {
         writeln!(std::io::stdout(), "Ready in fixture")?;
         return Ok(());

@@ -46,8 +46,8 @@ in addition to the owned PostgreSQL/process cleanup checks.
 
 The runner still requires its own Node/pnpm/Chromium/PostgreSQL tools and builds
 the shared test-client libraries. These are test prerequisites, not deployment
-host dependencies. Package mode does not rebuild `.next` or change compiled paths.
-Default-root app outputs must already have been assembled into the artifact.
+host dependencies. Package mode does not rebuild `.next`. The deployment-neutral
+outputs used by the source prefix run are assembled unchanged and tested at root.
 
 ## Fixture API and lifecycle
 
@@ -56,13 +56,14 @@ Default-root app outputs must already have been assembled into the artifact.
   binary, invokes its official `prepare`, and starts foreground `serve --role
 both` on distinct reserved loopback ports. Installation key and setup proof
   are fresh per run; only backend children receive DB/key/setup configuration.
-- The backend readiness line is authoritative. Next production builds use actual
-  fixture public origins with `/app` and `/admin`; the real `next start` listeners
-  bind `127.0.0.1` and await their readiness line. No compiled-path constant is
-  forged at runtime. Node app children receive only an explicit safe environment
+- The backend readiness line is authoritative. Next production builds receive no
+  deployment configuration and use the documented webpack extension of the normal
+  app build. Geist files are staged from the locked dependency first. Runtime
+  `server.mjs` listeners use fixture public origins with `/app` and `/admin`,
+  bind `127.0.0.1` and await their readiness line. Node app children receive only an explicit safe environment
   allowlist plus their own public URL, backend URL, bind host and production mode.
-  Both build and listener launch the already installed app-local Next executable
-  directly. Preparation does not invoke a package-manager wrapper that could try
+  Builds launch the installed app-local Next executable; listeners launch Node
+  with the custom entrypoint. Preparation does not invoke a package-manager wrapper that could try
   to reinstall workspace modules under the restricted child environment.
 - `generalUrl`, `adminUrl`, `administrator`, `member`, `second`, `setupProof`,
   `resetPassword`, `teamName`, and `teamHandle` are private-run in-memory fixture
@@ -86,10 +87,9 @@ wait; backend/Next readiness uses process output events, browser actions await
 roles/URLs/state, and shutdown polls only owned process-group existence. There
 are no fixed sleeps for test ordering or automatic mutation replays.
 
-**Build side effect:** the fixture deliberately builds the two existing app
-outputs for `/app` and `/admin`. Their `.next` outputs retain those baked paths
-after the run. The root integrator must restore default-path builds before later
-packaging, or deliberately build packaging with the intended public prefixes.
+**Build side effect:** the fixture builds the existing app outputs, but no
+deployment path or origin is compiled into them. Those outputs can be assembled
+and run at root or another canonical prefix without rebuilding.
 
 ## Three journeys and evidence
 

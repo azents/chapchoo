@@ -122,20 +122,16 @@ def validate(root: Path, architecture: str) -> None:
                         raise RuntimeError(
                             "Installed HTML did not reference static assets"
                         )
-                    font_found = False
                     for asset in assets:
-                        content = get(origin + asset)
-                        if asset.endswith(".css"):
-                            for font in re.findall(
-                                rb"(?:\.\./media/|/_next/static/media/)([^)\s]+\.woff2)",
-                                content,
-                            ):
-                                get(origin + "/_next/static/media/" + font.decode())
-                                font_found = True
-                    if not font_found:
+                        get(origin + asset)
+                    fonts = set(re.findall(r'href="(/fonts/[^"]+\.woff2)"', html))
+                    if len(fonts) != 2:
                         raise RuntimeError(
                             "Installed page did not serve its bundled fonts"
                         )
+                    for font in fonts:
+                        if not get(origin + font).startswith(b"wOF2"):
+                            raise RuntimeError("Installed font bytes are invalid")
                 process.send_signal(signal.SIGINT)
                 if process.wait(timeout=30) != 0:
                     raise RuntimeError("Installed SIGINT shutdown failed")

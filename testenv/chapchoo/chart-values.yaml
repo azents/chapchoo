@@ -18,7 +18,6 @@ general:
     tag: offline-contract
 admin:
   publicUrl: https://chapchoo.example.invalid/admin
-  compiledBasePath: /admin
   image:
     repository: registry.example.invalid/chapchoo/admin-web
     tag: offline-contract

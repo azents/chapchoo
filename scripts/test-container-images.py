@@ -14,6 +14,13 @@ import time
 import urllib.error
 import urllib.request
 
+WEB_MOUNTS = (
+    ("general", "3003", "50051", ""),
+    ("admin", "3004", "50052", ""),
+    ("general", "3003", "50051", "/app"),
+    ("admin", "3004", "50052", "/admin"),
+)
+
 
 def docker(*arguments: str, env: dict[str, str] | None = None) -> str:
     result = subprocess.run(
@@ -44,7 +51,12 @@ def request(port: str, path: str, origin: str | None = None) -> bytes:
         return response.read()
 
 
-def validate(backend: str, general: str, admin: str, admin_base_path: str = "") -> None:
+def validate(backend: str, general: str, admin: str) -> None:
+    # Pin the local image identities once; each deployment must use these bytes.
+    backend, general, admin = [
+        json.loads(docker("image", "inspect", image))[0]["Id"]
+        for image in (backend, general, admin)
+    ]
     suffix = secrets.token_hex(6)
     network = f"chapchoo-images-{suffix}"
     containers: list[str] = []
@@ -101,12 +113,10 @@ def validate(backend: str, general: str, admin: str, admin_base_path: str = "") 
         # Only web ports are loopback-published; private RPC never gets a host port.
         # A second normal bridge permits those loopback mappings while the backend
         # remains on the explicitly internal application network.
-        for app, image, listen, rpc in [
-            ("general", general, "3003", "50051"),
-            ("admin", admin, "3004", "50052"),
-        ]:
+        images = {"general": general, "admin": admin}
+        for app, listen, rpc, prefix in WEB_MOUNTS:
+            image = images[app]
             origin = f"https://{app}.example.invalid"
-            prefix = admin_base_path if app == "admin" else ""
             identifier = docker(
                 "run",
                 "--detach",
@@ -127,6 +137,7 @@ def validate(backend: str, general: str, admin: str, admin_base_path: str = "") 
             if (
                 inspected["Config"]["User"] != "10001:10001"
                 or not inspected["HostConfig"]["ReadonlyRootfs"]
+                or inspected["Image"] != image
             ):
                 raise RuntimeError(
                     "Independent images must actually run nonroot and read-only"
@@ -155,20 +166,29 @@ def validate(backend: str, general: str, admin: str, admin_base_path: str = "") 
             )
             if not assets:
                 raise RuntimeError("Independent image HTML has no static assets")
-            font_found = False
             for asset in assets:
-                content = request(published, asset.decode())
-                if asset.endswith(b".css"):
-                    for font in re.findall(
-                        rb"(?:\.\./media/|/_next/static/media/)([^)\s]+\.woff2)",
-                        content,
-                    ):
-                        request(
-                            published, prefix + "/_next/static/media/" + font.decode()
-                        )
-                        font_found = True
-            if not font_found:
+                request(published, asset.decode())
+            fonts = set(re.findall(rb'href="([^"]+\.woff2)"', html))
+            if len(fonts) != 2:
                 raise RuntimeError("Independent image did not serve bundled fonts")
+            for font in fonts:
+                if not font.decode().startswith(f"{prefix}/fonts/") or not request(
+                    published, font.decode()
+                ).startswith(b"wOF2"):
+                    raise RuntimeError(
+                        "Independent image font path or bytes are invalid"
+                    )
+            if prefix:
+                for outside in ("/health", f"{prefix}-outside/health"):
+                    try:
+                        request(published, outside)
+                    except urllib.error.HTTPError as error:
+                        if error.code != 404:
+                            raise RuntimeError(
+                                "Runtime mount returned an unexpected status"
+                            ) from None
+                    else:
+                        raise RuntimeError("Runtime mount accepted an outside path")
             result = json.loads(
                 request(published, f"{prefix}/api/trpc/auth.methods", origin)
             )
@@ -191,7 +211,7 @@ def validate(backend: str, general: str, admin: str, admin_base_path: str = "") 
             if inspected["State"]["ExitCode"] != 0:
                 raise RuntimeError("An independent image did not stop gracefully")
         print(
-            "Independent backend/general/Admin images: nonroot, read-only, private RPC and graceful stop passed"
+            "Same-image root/non-root deployments: nonroot, read-only, static/fonts, private RPC and graceful stop passed"
         )
     finally:
         failures: list[Exception] = []
@@ -213,9 +233,8 @@ def main() -> None:
     parser.add_argument("--backend", required=True)
     parser.add_argument("--general", required=True)
     parser.add_argument("--admin", required=True)
-    parser.add_argument("--admin-base-path", choices=["", "/admin"], default="")
     args = parser.parse_args()
-    validate(args.backend, args.general, args.admin, args.admin_base_path)
+    validate(args.backend, args.general, args.admin)
 
 
 if __name__ == "__main__":

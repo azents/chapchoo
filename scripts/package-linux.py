@@ -252,7 +252,7 @@ def copy_web(artifacts: WebArtifacts, destination: Path, architecture: str) -> N
     roots = {path.name for path in artifacts.standalone.iterdir()}
     if not roots.issubset({"apps", "node_modules", "packages", "package.json"}):
         raise PackageError("The standalone input is not a traced Next workspace tree")
-    entry = artifacts.standalone / "apps" / artifacts.app / "server.js"
+    entry = artifacts.standalone / "apps" / artifacts.app / "server.mjs"
     if not entry.is_file() or entry.is_symlink():
         raise PackageError("The traced Next entrypoint is missing")
     if {path.name for path in (artifacts.standalone / "apps").iterdir()} != {

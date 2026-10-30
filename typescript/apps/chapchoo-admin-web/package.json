@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev --hostname 127.0.0.1 --port 3004",
-    "build": "next build",
-    "start": "next start --hostname 127.0.0.1 --port 3004",
+    "dev": "node ../../scripts/stage-web-fonts.mjs chapchoo-admin-web && next dev --webpack --hostname 127.0.0.1 --port 3004",
+    "build": "node ../../scripts/stage-web-fonts.mjs chapchoo-admin-web && next build --webpack",
+    "start": "node server.mjs",
     "test": "tsx --test 'src/**/*.test.mts'",
     "storybook": "STORYBOOK_DISABLE_TELEMETRY=1 storybook dev -p 6007",
     "build-storybook": "STORYBOOK_DISABLE_TELEMETRY=1 storybook build",

@@ -51,8 +51,8 @@ product or Design authority.
   Existing Node URL/TLS verification remains authoritative; no insecure fallback.
 - Archive root contains `chapchoo`, `runtime/bin/node`, and independent traced
   trees `web/general/` and `web/admin/`. Preserve Next workspace layout:
-  `web/general/apps/chapchoo-web/server.js` and
-  `web/admin/apps/chapchoo-admin-web/server.js`, with each app's public/static
+  `web/general/apps/chapchoo-web/server.mjs` and
+  `web/admin/apps/chapchoo-admin-web/server.mjs`, with each app's public/static
   assets at its corresponding app root. The executable locates its own archive
   root; missing artifacts fail instead of using host Node, pnpm or Turbo.
 - Use an explicit web-child environment allowlist: selected public URL, actual
@@ -247,3 +247,21 @@ negative previous-name admission, both DB RPC gates, actual images/native client
 archive browser journeys, idempotent/invalid/racing proof fixtures, chart hook and
 permission ordering, actual URL escaping with reserved/space/Unicode characters,
 all hooks and exact-head CI. No new actual cluster Secret access is performed.
+
+## Runtime-only distribution and standard Home alignment
+
+Requester-approved Requirements clarification, ADR-D39 and Design38/M45 replace
+build-time path/origin selection. Root owns both Next runtime entrypoints and
+config, explicit public mount/navigation/redirect behavior, runtime dependency
+tracing, Docker/publishing/package assembly, chart/runtime values and actual
+same-artifact verification. Home follows the current Azents component Application
+and nested product-helm layout/naming; the separately invented prerequisites
+Application is removed. Corresponding resources only, no added unrelated services.
+
+Build inputs contain no deployment URL/path/credentials. Snapshot is development
+publication of the same generic artifact promoted for a release of that commit.
+Validate the exact unchanged bytes/image under root and non-root runtime mounts,
+including browser actions, redirects, static/font/lazy chunks, cookies and RPC.
+Public Next server APIs and documented tracing replace generated-entry patches;
+no private framework API or HTML/JavaScript rewriting. Same reviewer checks the
+root-integrated complete change after actual gates; root resolves findings.

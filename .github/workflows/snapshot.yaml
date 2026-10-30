@@ -54,8 +54,6 @@ jobs:
           esac
           for component in backend general-web admin-web; do
             docker build --target "$component" \
-              --build-arg GENERAL_PUBLIC_URL=https://chapchoo.internal.hardtack.me \
-              --build-arg ADMIN_PUBLIC_URL=https://chapchoo.internal.hardtack.me/admin \
               --label "org.opencontainers.image.source=https://github.com/azents/chapchoo" \
               --label "org.opencontainers.image.revision=$GITHUB_SHA" \
               -f images/chapchoo/Dockerfile -t "chapchoo-$component:acceptance" .
@@ -63,7 +61,7 @@ jobs:
           python3 scripts/test-container-images.py \
             --backend chapchoo-backend:acceptance \
             --general chapchoo-general-web:acceptance \
-            --admin chapchoo-admin-web:acceptance --admin-base-path /admin
+            --admin chapchoo-admin-web:acceptance
       - name: Push only locally verified architecture images
         env:
           ARCHITECTURE: ${{ matrix.architecture }}
