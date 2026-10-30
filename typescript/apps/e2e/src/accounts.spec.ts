@@ -115,8 +115,8 @@ async function safeScreenshot(page: Page, name: string): Promise<void> {
     true,
   );
   expect(
-    render.loadedFamilies.some((family) => family.includes("Geist")),
-    "The actual product Geist font must be loaded",
+    render.loadedFamilies.some((family) => family.includes("Pretendard")),
+    "The actual product Pretendard font must be loaded",
   ).toBe(true);
   await page.screenshot({
     path: `${directory}${name}.png`,

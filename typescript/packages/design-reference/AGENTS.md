@@ -7,10 +7,6 @@ This package owns general-purpose cross-platform design references, local
 experiments and web representations of non-web UI. App functional testing and
 app UI review remain in the app workspaces.
 
-Current Azents-derived styling is provisional, not an approved Chapchoo design
-system. Initial examples are structural scaffolding. Do not turn existing style
-values into approved tokens or extend their catalog without a design request.
-
 Import existing formal web components from `@chapchoo/ui`; modify them in their
 owning package. Create reference-local components for new experiments and non-web
 representations. Design approval alone is not promotion. Move an implementation

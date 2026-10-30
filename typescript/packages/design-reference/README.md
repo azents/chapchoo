@@ -5,7 +5,7 @@ It is not the product functional-test suite or an app UI QA catalog.
 
 Visual design context and principles live only in root
 [DESIGN.md](../../../DESIGN.md). The `Chapchoo` stories implement the selected
-tone; the older ownership examples retain their explicitly provisional styling.
+tone; the ownership examples demonstrate the same common-UI import boundary.
 Fictional screen examples are not product feature requirements.
 
 ## Catalog
@@ -18,8 +18,9 @@ Fictional screen examples are not product feature requirements.
 Story IDs start with `chapchoo-foundations--` and `chapchoo-products--`.
 The selected theme renders in an isolated document to avoid leaking Mantine CSS
 and document-root variables into the neutral ownership stories. Fields, feedback
-and confirmation reuse existing `@chapchoo/ui` contracts; the new theme and
-compositions remain local to reference. Apple typography is a web representation,
+and confirmation reuse existing `@chapchoo/ui` contracts. Web tokens, theme,
+fonts and mascots are owned by common UI; fictional compositions and the iOS
+typography representation remain reference-local. Apple typography is a web representation,
 not native execution or proof of installed Apple fonts.
 
 ## Run

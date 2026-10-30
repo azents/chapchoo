@@ -8,8 +8,8 @@
     "build": "node ../../scripts/stage-web-fonts.mjs admin-web && next build --webpack",
     "start": "node server.mjs",
     "test": "tsx --test 'src/**/*.test.mts'",
-    "storybook": "STORYBOOK_DISABLE_TELEMETRY=1 storybook dev -p 6007",
-    "build-storybook": "STORYBOOK_DISABLE_TELEMETRY=1 storybook build",
+    "storybook": "node ../../scripts/stage-web-fonts.mjs admin-web && STORYBOOK_DISABLE_TELEMETRY=1 storybook dev -p 6007",
+    "build-storybook": "node ../../scripts/stage-web-fonts.mjs admin-web && STORYBOOK_DISABLE_TELEMETRY=1 storybook build",
     "lint": "eslint src .storybook --max-warnings 0 --cache --cache-strategy content",
     "lint:fix": "eslint src .storybook --max-warnings 0 --fix --cache --cache-strategy content",
     "typecheck": "tsc --noEmit",
@@ -27,7 +27,6 @@
     "@trpc/client": "11.19.0",
     "@trpc/react-query": "11.19.0",
     "@trpc/server": "11.19.0",
-    "geist": "^1.7.2",
     "next": "16.4.1",
     "next-intl": "^4.13.6",
     "react": "^19.3.1",
@@ -39,6 +38,7 @@
   "devDependencies": {
     "@eslint-community/eslint-plugin-eslint-comments": "^4.7.2",
     "@next/eslint-plugin-next": "^16.3.1",
+    "@playwright/test": "1.64.1",
     "@storybook/addon-a11y": "^10.6.3",
     "@storybook/addon-docs": "^10.6.3",
     "@storybook/addon-themes": "^10.6.3",
@@ -59,7 +59,6 @@
     "storybook": "^10.6.3",
     "tsx": "^4.23.13",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.67.0",
-    "@playwright/test": "1.64.1"
+    "typescript-eslint": "^8.67.0"
   }
 }

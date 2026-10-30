@@ -5,8 +5,7 @@ props and callbacks. Product apps and the independent
 [`@chapchoo/design-reference`](../design-reference/README.md) may import
 its explicit subpath exports. This package must not depend on either consumer.
 
-Current Azents-derived colors, typography and theme are provisional, not an
-approved Chapchoo design system. Production use is not evidence of design approval.
+For visual design context, read root [DESIGN.md](../../../DESIGN.md).
 
 Change an existing shared component here and show the result from reference.
 New experiments and mobile/native/non-web representations belong in reference

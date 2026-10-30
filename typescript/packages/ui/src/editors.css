@@ -1,0 +1,17 @@
+/* Native and compound editors share the mobile typography policy. */
+@media (max-width: 48em) {
+  html[data-mantine-color-scheme]
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(
+      [type="color"]
+    ):not([type="file"]):not([type="button"]):not([type="submit"]):not(
+      [type="reset"]
+    ):not([type="image"]):not([type="hidden"]),
+  html[data-mantine-color-scheme] textarea,
+  html[data-mantine-color-scheme] select,
+  html[data-mantine-color-scheme] [contenteditable=""],
+  html[data-mantine-color-scheme] [contenteditable="true"],
+  html[data-mantine-color-scheme] [contenteditable="plaintext-only"] {
+    font-size: var(--chapchoo-font-input-mobile);
+    line-height: 1.25;
+  }
+}

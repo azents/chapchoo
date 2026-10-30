@@ -1,3 +1,4 @@
+import { FontFaces } from "@chapchoo/ui/FontFaces";
 import { AppMantineProvider } from "@chapchoo/ui/provider";
 import { NextIntlClientProvider } from "next-intl";
 import en from "../messages/en-US.json";
@@ -16,7 +17,7 @@ const preview: Preview = {
   parameters: { layout: "fullscreen", nextjs: { appDirectory: true } },
   globalTypes: {
     locale: { toolbar: { items: ["en-US", "ko-KR", "ja-JP", "fr-FR"] } },
-    colorScheme: { toolbar: { items: ["light", "dark"] } },
+    colorScheme: { toolbar: { items: ["light"] } },
   },
   initialGlobals: { locale: "en-US", colorScheme: "light" },
   decorators: [
@@ -26,11 +27,8 @@ const preview: Preview = {
         typeof value === "string" && isSupportedLocale(value) ? value : "en-US";
       return (
         <NextIntlClientProvider locale={locale} messages={messages[locale]}>
-          <AppMantineProvider
-            forceColorScheme={
-              context.globals.colorScheme === "dark" ? "dark" : "light"
-            }
-          >
+          <AppMantineProvider forceColorScheme="light">
+            <FontFaces basePath="" />
             <Story />
           </AppMantineProvider>
         </NextIntlClientProvider>

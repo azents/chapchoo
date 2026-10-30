@@ -23,10 +23,10 @@ import {
   LoadingFeedback,
 } from "@chapchoo/ui/Feedback";
 import { ConfirmationDialog } from "@chapchoo/ui/ConfirmationDialog";
-import { mascots, platformFonts, toneColors } from "./tokens";
+import { mascots, platformFonts, toneColors } from "@chapchoo/ui/designTokens";
 import { makeReferenceTheme, referenceVariables } from "./theme";
 import type { ReactElement, ReactNode } from "react";
-import type { ReferencePlatform } from "./tokens";
+import type { ReferencePlatform } from "@chapchoo/ui/designTokens";
 import "@mantine/core/styles.css";
 import "./tone.css";
 

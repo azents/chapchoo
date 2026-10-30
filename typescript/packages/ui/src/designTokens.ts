@@ -1,4 +1,4 @@
-/** Reference tokens extracted from the selected light concept; not production exports. */
+/** Shared web tokens validated against canonical values in root DESIGN.md. */
 export const toneColors = {
   canvas: "#fdfcf8",
   navigation: "#f3f2e9",

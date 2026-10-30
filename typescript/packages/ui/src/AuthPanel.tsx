@@ -1,4 +1,6 @@
-import { Container, Paper, Stack, Text, Title, rem } from "@mantine/core";
+import { Box, Text, Title } from "@mantine/core";
+import { Mascot } from "./Mascot";
+import classes from "./AuthPanel.module.css";
 import type { ReactNode } from "react";
 
 export interface AuthPanelProps {
@@ -6,33 +8,35 @@ export interface AuthPanelProps {
   description?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
+  basePath?: string;
 }
 
-/** A focused form surface; the app owns submission, state, copy and navigation. */
+/** Focused identity and form; the app owns submission, copy and navigation. */
 export function AuthPanel({
   title,
   description,
   children,
   footer,
+  basePath = "",
 }: AuthPanelProps): ReactNode {
   return (
-    <Container component="main" size={rem(480)} py={{ base: "xl", sm: "4xl" }}>
-      <Paper withBorder p={{ base: "lg", sm: "xl" }} radius="md">
-        <Stack gap="lg">
-          <Stack gap="xs">
-            <Title order={1} size="h2" style={{ overflowWrap: "anywhere" }}>
-              {title}
-            </Title>
-            {description ? (
-              <Text c="dimmed" size="sm">
-                {description}
-              </Text>
-            ) : null}
-          </Stack>
-          {children}
-          {footer}
-        </Stack>
-      </Paper>
-    </Container>
+    <Box component="main" className={classes.page}>
+      <div className={classes.brand}>chapchoo</div>
+      <div className={classes.panel}>
+        <div className={classes.heading}>
+          <Mascot basePath={basePath} size={72} />
+          <Title order={1} size="h2" style={{ overflowWrap: "anywhere" }}>
+            {title}
+          </Title>
+          {description ? (
+            <Text c="dimmed" size="sm">
+              {description}
+            </Text>
+          ) : null}
+        </div>
+        {children}
+        {footer ? <div className={classes.footer}>{footer}</div> : null}
+      </div>
+    </Box>
   );
 }

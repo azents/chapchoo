@@ -1,7 +1,11 @@
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { toneColors, toneMetrics, platformFonts } from "./src/tone/tokens.ts";
+import {
+  toneColors,
+  toneMetrics,
+  platformFonts,
+} from "../ui/src/designTokens.ts";
 
 const document = readFileSync(
   new URL("../../../DESIGN.md", import.meta.url),

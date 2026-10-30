@@ -1,37 +1,39 @@
 # Shared product UI
 
-`@chapchoo/ui` contains the existing Chapchoo Mantine theme and presentation-only
-building blocks for the independent general and Admin apps. Applications import
-explicit subpaths and transpile this workspace package with Next.js.
+`@chapchoo/ui` owns the selected web theme, semantic tokens, bundled assets and
+presentation-only components used by general/Admin apps and design-reference.
+Visual principles live only in root [DESIGN.md](../../../DESIGN.md).
 
-Import `@mantine/core/styles.css` in each app's root layout, then wrap with
-`AppMantineProvider` from `@chapchoo/ui/provider`. Supply the existing Geist font
-CSS variables in each app. The package keeps the original theme's warm palettes,
-spacing, semantic tokens, contrast resolution and component defaults.
+Import `@mantine/core/styles.css` in the app layout and wrap presentation in
+`AppMantineProvider`. It forces the selected light design; there is no unreviewed
+dark palette. `FontFaces` loads bundled Pretendard and Geist Mono with the caller's
+runtime mount. Apps keep locale/data/transport ownership.
 
-The provider's default/forced color-scheme props retain the original behavior.
-The app owns color-mode storage, locale providers, cookie settings and fonts.
+Pretendard uses the official self-hosted unicode-range subsets, loaded only for
+rendered characters through a runtime-prefixed stylesheet. Font files are not
+globally preloaded. See `assets/fonts/README.md` for provenance and update scope.
+
+`typescript/scripts/stage-web-fonts.mjs` stages common UI fonts/licenses and
+small production illustration derivatives into each app's ignored public directories before dev/build and
+Storybook. Build caches restore both staged directories. Storybook serves these
+assets at root; actual apps use `basePath` props so root and non-root deployment
+URLs remain correct. The original mascot prompts/model provenance are under
+`assets/mascots/GENERATION.md`; font licensing remains with the files.
 
 ## Presentation API
 
-- `AuthPanel`: title, optional description/footer and app-owned form content.
-- `ApplicationShell`: visible context label, title, identity label, navigation
-  data/callbacks, actions and workspace content.
-- `Feedback`: loading/error/empty/loaded discriminated states; individual
-  `LoadingFeedback`, `ErrorFeedback` and `EmptyFeedback` are also available.
-- `EmailField` and `PasswordField`: controlled values and callbacks with Mantine
-  input props. Password visibility labels are supplied by the application.
-- `ConfirmationDialog`: controlled opened state, localized labels, confirm/cancel
-  callbacks, ready/pending/error state and optional destructive treatment.
-- `createReactContainer`: connect an app's state hook to its pure component,
-  retaining typed optional component overrides.
+- `AuthPanel`: title, description/footer, app-owned form content and `basePath`.
+- `ApplicationShell`: context/title/identity, navigation, actions, content and
+  `basePath`. Desktop sidebar and wrapping narrow navigation share the same links.
+- `ContentSection`: semantic section heading/description and grouped content.
+- `Mascot`: decorative identity art using an explicit caller mount path.
+- `Feedback`: controlled loading/error/empty/loaded states and individual feedback.
+- `EmailField` / `PasswordField`: controlled input values and callbacks.
+- `ConfirmationDialog`: app-owned action, labels, pending/error and confirmation.
+- `createReactContainer`: typed state-hook/view connection.
+- `designTokens` / `theme`: common token values and the web Mantine adapter.
 
-There is no RPC, environment, credential, cookie, routing or domain authority in
-this package. Do not pass session tokens into any presentation component.
-Navigation destinations and localized copy belong to each application.
-
-Colocated stories use static fixtures. Apps can include
-`../../packages/ui/src/**/*.stories.tsx` in their Storybook story globs
-and retain their existing Mantine/locale/color-scheme decorators. No live API
-provider is needed. The shell collapses to visible wrapping navigation on mobile;
-tabular app content should use `Table.ScrollContainer` to constrain overflow.
+No RPC, credentials, cookie storage or business routing live here. Reference
+imports these implementations for equivalent roles; fictional compositions and
+iOS typography representation remain reference-local. Colocated static stories
+are included in both apps' own Storybooks and use the same font/provider setup.

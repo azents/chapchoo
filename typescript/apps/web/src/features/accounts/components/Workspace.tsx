@@ -2,6 +2,7 @@
 
 import { ApplicationShell } from "@chapchoo/ui/ApplicationShell";
 import { ConfirmationDialog } from "@chapchoo/ui/ConfirmationDialog";
+import { ContentSection } from "@chapchoo/ui/ContentSection";
 import {
   EmptyFeedback,
   ErrorFeedback,
@@ -13,7 +14,6 @@ import {
   Anchor,
   Badge,
   Button,
-  Divider,
   Group,
   Menu,
   Paper,
@@ -24,6 +24,7 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
+import classes from "./Workspace.module.css";
 import type { Copy, WorkspaceProps } from "../types";
 import type { ReactNode } from "react";
 
@@ -74,6 +75,7 @@ export function Workspace(props: WorkspaceProps): ReactNode {
             : c.deleteTeam;
   return (
     <ApplicationShell
+      basePath={props.basePath}
       contextLabel={team?.personal ? c.personal : c.team}
       title={team?.name ?? c.contexts}
       identityLabel={identity}
@@ -117,7 +119,7 @@ export function Workspace(props: WorkspaceProps): ReactNode {
           <Text c="dimmed">{c.contextDescription}</Text>
           <Stack gap="sm">
             {contexts.map((item) => (
-              <Paper key={item.id} withBorder p="md">
+              <Paper key={item.id} className={classes.contextRow}>
                 <Group justify="space-between" wrap="wrap">
                   <Stack gap="xs">
                     <Anchor
@@ -140,74 +142,77 @@ export function Workspace(props: WorkspaceProps): ReactNode {
               </Paper>
             ))}
           </Stack>
-          <Divider />
-          <Title order={2} size="h4">
-            {c.receivedInvitations}
-          </Title>
-          {received.length === 0 ? (
-            <EmptyFeedback
-              title={c.noInvitations}
-              message={c.invitationDescription}
-            />
-          ) : (
-            received.map((item) => (
-              <Paper key={item.id} withBorder p="md">
-                <Group justify="space-between" wrap="wrap">
-                  <Text fw={500} style={{ overflowWrap: "anywhere" }}>
-                    {item.label}
-                  </Text>
-                  <Group gap="xs">
-                    <Button
-                      size="xs"
-                      onClick={() => props.onInvitation(item.id, true)}
-                      disabled={pending}
-                    >
-                      {c.accept}
-                    </Button>
-                    <Button
-                      size="xs"
-                      variant="default"
-                      onClick={() => props.onInvitation(item.id, false)}
-                      disabled={pending}
-                    >
-                      {c.decline}
-                    </Button>
+          <ContentSection title={c.receivedInvitations}>
+            {received.length === 0 ? (
+              <EmptyFeedback
+                title={c.noInvitations}
+                message={c.invitationDescription}
+              />
+            ) : (
+              received.map((item) => (
+                <Paper
+                  key={item.id}
+                  withBorder
+                  p="md"
+                  className={classes.invitation}
+                >
+                  <Group justify="space-between" wrap="wrap">
+                    <Text fw={500} style={{ overflowWrap: "anywhere" }}>
+                      {item.label}
+                    </Text>
+                    <Group gap="xs">
+                      <Button
+                        size="xs"
+                        onClick={() => props.onInvitation(item.id, true)}
+                        disabled={pending}
+                      >
+                        {c.accept}
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="default"
+                        onClick={() => props.onInvitation(item.id, false)}
+                        disabled={pending}
+                      >
+                        {c.decline}
+                      </Button>
+                    </Group>
                   </Group>
-                </Group>
-              </Paper>
-            ))
-          )}
-          <Divider />
-          <Title order={2} size="h4">
-            {c.createTeam}
-          </Title>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              props.onCreate();
-            }}
-          >
-            <Stack gap="sm">
-              <TextInput
-                label={c.teamName}
-                value={props.name}
-                onChange={(event) => props.onName(event.currentTarget.value)}
-                required
-                disabled={pending}
-              />
-              <TextInput
-                label={c.handle}
-                description={c.handleDescription}
-                value={props.handle}
-                onChange={(event) => props.onHandle(event.currentTarget.value)}
-                required
-                disabled={pending}
-              />
-              <Button type="submit" w="fit-content" loading={pending}>
-                {c.createTeam}
-              </Button>
-            </Stack>
-          </form>
+                </Paper>
+              ))
+            )}
+          </ContentSection>
+          <ContentSection title={c.createTeam}>
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                props.onCreate();
+              }}
+            >
+              <Stack gap="sm">
+                <TextInput
+                  label={c.teamName}
+                  value={props.name}
+                  onChange={(event) => props.onName(event.currentTarget.value)}
+                  required
+                  disabled={pending}
+                />
+                <TextInput
+                  label={c.handle}
+                  description={c.handleDescription}
+                  value={props.handle}
+                  onChange={(event) =>
+                    props.onHandle(event.currentTarget.value)
+                  }
+                  required
+                  disabled={pending}
+                />
+                <Button type="submit" w="fit-content" loading={pending}>
+                  {c.createTeam}
+                </Button>
+              </Stack>
+            </form>
+          </ContentSection>
         </>
       ) : team.personal ? (
         <EmptyFeedback title={c.personal} message={c.personalDescription} />
@@ -219,222 +224,215 @@ export function Workspace(props: WorkspaceProps): ReactNode {
               @{team.handle} · {c.teamDescription}
             </Text>
           </Group>
-          <Title order={2} size="h4">
-            {c.members}
-          </Title>
-          <Table.ScrollContainer minWidth={rem(560)}>
-            <Table verticalSpacing="sm">
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>{c.email}</Table.Th>
-                  <Table.Th>{c.role}</Table.Th>
-                  <Table.Th>{c.actions}</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {team.members.map((member) => (
-                  <Table.Tr key={member.id}>
-                    <Table.Td style={{ overflowWrap: "anywhere" }}>
-                      {member.email}
-                    </Table.Td>
-                    <Table.Td>{roleLabel(member.role, c)}</Table.Td>
-                    <Table.Td>
-                      {canManage &&
-                      member.role !== "OWNER" &&
-                      member.email !== identity &&
-                      (team.role === "OWNER" || member.role === "MEMBER") ? (
-                        <Menu position="bottom-end">
-                          <Menu.Target>
-                            <Button
-                              size="xs"
-                              variant="default"
-                              disabled={pending}
-                            >
-                              {c.actions}
-                            </Button>
-                          </Menu.Target>
-                          <Menu.Dropdown>
-                            {team.role === "OWNER" ? (
-                              <>
-                                <Menu.Item
-                                  onClick={() =>
-                                    props.onAction({
-                                      type: "ROLE",
-                                      userId: member.id,
-                                      role:
-                                        member.role === "MANAGER"
-                                          ? "MEMBER"
-                                          : "MANAGER",
-                                      label: member.email,
-                                    })
-                                  }
-                                >
-                                  {member.role === "MANAGER"
-                                    ? c.makeMember
-                                    : c.makeManager}
-                                </Menu.Item>
-                                <Menu.Item
-                                  onClick={() =>
-                                    props.onAction({
-                                      type: "TRANSFER",
-                                      userId: member.id,
-                                      label: member.email,
-                                    })
-                                  }
-                                >
-                                  {c.transfer}
-                                </Menu.Item>
-                              </>
-                            ) : null}
-                            <Menu.Item
-                              color="red"
-                              onClick={() =>
-                                props.onAction({
-                                  type: "REMOVE",
-                                  userId: member.id,
-                                  label: member.email,
-                                })
-                              }
-                            >
-                              {c.remove}
-                            </Menu.Item>
-                          </Menu.Dropdown>
-                        </Menu>
-                      ) : (
-                        <Text size="sm" c="dimmed">
-                          —
-                        </Text>
-                      )}
-                    </Table.Td>
+          <ContentSection title={c.members}>
+            <Table.ScrollContainer minWidth={rem(560)}>
+              <Table verticalSpacing="md" className={classes.memberTable}>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>{c.email}</Table.Th>
+                    <Table.Th>{c.role}</Table.Th>
+                    <Table.Th>{c.actions}</Table.Th>
                   </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          </Table.ScrollContainer>
+                </Table.Thead>
+                <Table.Tbody>
+                  {team.members.map((member) => (
+                    <Table.Tr key={member.id}>
+                      <Table.Td style={{ overflowWrap: "anywhere" }}>
+                        {member.email}
+                      </Table.Td>
+                      <Table.Td>{roleLabel(member.role, c)}</Table.Td>
+                      <Table.Td>
+                        {canManage &&
+                        member.role !== "OWNER" &&
+                        member.email !== identity &&
+                        (team.role === "OWNER" || member.role === "MEMBER") ? (
+                          <Menu position="bottom-end">
+                            <Menu.Target>
+                              <Button
+                                size="xs"
+                                variant="default"
+                                disabled={pending}
+                              >
+                                {c.actions}
+                              </Button>
+                            </Menu.Target>
+                            <Menu.Dropdown>
+                              {team.role === "OWNER" ? (
+                                <>
+                                  <Menu.Item
+                                    onClick={() =>
+                                      props.onAction({
+                                        type: "ROLE",
+                                        userId: member.id,
+                                        role:
+                                          member.role === "MANAGER"
+                                            ? "MEMBER"
+                                            : "MANAGER",
+                                        label: member.email,
+                                      })
+                                    }
+                                  >
+                                    {member.role === "MANAGER"
+                                      ? c.makeMember
+                                      : c.makeManager}
+                                  </Menu.Item>
+                                  <Menu.Item
+                                    onClick={() =>
+                                      props.onAction({
+                                        type: "TRANSFER",
+                                        userId: member.id,
+                                        label: member.email,
+                                      })
+                                    }
+                                  >
+                                    {c.transfer}
+                                  </Menu.Item>
+                                </>
+                              ) : null}
+                              <Menu.Item
+                                color="red"
+                                onClick={() =>
+                                  props.onAction({
+                                    type: "REMOVE",
+                                    userId: member.id,
+                                    label: member.email,
+                                  })
+                                }
+                              >
+                                {c.remove}
+                              </Menu.Item>
+                            </Menu.Dropdown>
+                          </Menu>
+                        ) : (
+                          <Text size="sm" c="dimmed">
+                            —
+                          </Text>
+                        )}
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            </Table.ScrollContainer>
+          </ContentSection>
           {canManage ? (
             <>
-              <Divider />
-              <Title order={2} size="h4">
-                {c.settings}
-              </Title>
-              <form
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  props.onRename();
-                }}
+              <ContentSection title={c.settings}>
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    props.onRename();
+                  }}
+                >
+                  <Stack gap="sm">
+                    <TextInput
+                      label={c.teamName}
+                      placeholder={team.name}
+                      value={props.name}
+                      onChange={(event) =>
+                        props.onName(event.currentTarget.value)
+                      }
+                      maxLength={120}
+                      disabled={pending}
+                    />
+                    <TextInput
+                      label={c.handle}
+                      placeholder={team.handle}
+                      description={c.handleDescription}
+                      value={props.handle}
+                      onChange={(event) =>
+                        props.onHandle(event.currentTarget.value)
+                      }
+                      maxLength={80}
+                      disabled={pending}
+                    />
+                    <Button
+                      w="fit-content"
+                      type="submit"
+                      loading={pending}
+                      disabled={!props.name && !props.handle}
+                    >
+                      {c.save}
+                    </Button>
+                  </Stack>
+                </form>
+              </ContentSection>
+              <ContentSection
+                title={c.invite}
+                description={c.inviteDescription}
               >
-                <Stack gap="sm">
-                  <TextInput
-                    label={c.teamName}
-                    placeholder={team.name}
-                    value={props.name}
-                    onChange={(event) =>
-                      props.onName(event.currentTarget.value)
-                    }
-                    maxLength={120}
-                    disabled={pending}
-                  />
-                  <TextInput
-                    label={c.handle}
-                    placeholder={team.handle}
-                    description={c.handleDescription}
-                    value={props.handle}
-                    onChange={(event) =>
-                      props.onHandle(event.currentTarget.value)
-                    }
-                    maxLength={80}
-                    disabled={pending}
-                  />
-                  <Button
-                    w="fit-content"
-                    type="submit"
-                    loading={pending}
-                    disabled={!props.name && !props.handle}
-                  >
-                    {c.save}
-                  </Button>
-                </Stack>
-              </form>
-              <Divider />
-              <Title order={2} size="h4">
-                {c.invite}
-              </Title>
-              <Text size="sm" c="dimmed">
-                {c.inviteDescription}
-              </Text>
-              <form
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  props.onInvite();
-                }}
-              >
-                <Stack gap="sm">
-                  <EmailField
-                    label={c.email}
-                    value={props.inviteEmail}
-                    onValueChange={props.onInviteEmail}
-                    required
-                    disabled={pending}
-                  />
-                  <Button w="fit-content" type="submit" loading={pending}>
-                    {c.invite}
-                  </Button>
-                </Stack>
-              </form>
-              <Title order={3} size="h5">
-                {c.pendingInvitations}
-              </Title>
-              {team.invitations.length === 0 ? (
-                <Text size="sm" c="dimmed">
-                  {c.noInvitations}
-                </Text>
-              ) : (
-                team.invitations.map((item) => (
-                  <Text
-                    size="sm"
-                    key={item.id}
-                    style={{ overflowWrap: "anywhere" }}
-                  >
-                    {item.email}
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    props.onInvite();
+                  }}
+                >
+                  <Stack gap="sm">
+                    <EmailField
+                      label={c.email}
+                      value={props.inviteEmail}
+                      onValueChange={props.onInviteEmail}
+                      required
+                      disabled={pending}
+                    />
+                    <Button w="fit-content" type="submit" loading={pending}>
+                      {c.invite}
+                    </Button>
+                  </Stack>
+                </form>
+                <Title order={3} size="h5">
+                  {c.pendingInvitations}
+                </Title>
+                {team.invitations.length === 0 ? (
+                  <Text size="sm" c="dimmed">
+                    {c.noInvitations}
                   </Text>
-                ))
-              )}
+                ) : (
+                  team.invitations.map((item) => (
+                    <Text
+                      size="sm"
+                      key={item.id}
+                      style={{ overflowWrap: "anywhere" }}
+                    >
+                      {item.email}
+                    </Text>
+                  ))
+                )}
+              </ContentSection>
             </>
           ) : null}
-          <Divider />
-          <Title order={2} size="h4">
-            {c.membership}
-          </Title>
-          {team.role === "OWNER" ? (
-            <>
-              <Text size="sm" c="dimmed">
-                {c.ownerLeaveDescription}
-              </Text>
+          <ContentSection title={c.membership}>
+            {team.role === "OWNER" ? (
+              <>
+                <Text size="sm" c="dimmed">
+                  {c.ownerLeaveDescription}
+                </Text>
+                <Button
+                  color="red"
+                  variant="outline"
+                  w="fit-content"
+                  disabled={pending}
+                  onClick={() =>
+                    props.onAction({ type: "DELETE", label: team.name })
+                  }
+                >
+                  {c.deleteTeam}
+                </Button>
+              </>
+            ) : (
               <Button
                 color="red"
                 variant="outline"
                 w="fit-content"
                 disabled={pending}
                 onClick={() =>
-                  props.onAction({ type: "DELETE", label: team.name })
+                  props.onAction({ type: "LEAVE", label: team.name })
                 }
               >
-                {c.deleteTeam}
+                {c.leaveTeam}
               </Button>
-            </>
-          ) : (
-            <Button
-              color="red"
-              variant="outline"
-              w="fit-content"
-              disabled={pending}
-              onClick={() =>
-                props.onAction({ type: "LEAVE", label: team.name })
-              }
-            >
-              {c.leaveTeam}
-            </Button>
-          )}
+            )}
+          </ContentSection>
         </>
       )}
       <ConfirmationDialog

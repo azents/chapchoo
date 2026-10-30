@@ -106,7 +106,7 @@ credentials in JavaScript storage.
 ## Frontend
 
 The apps use the same frontend foundation as Azents: Next.js App Router,
-React, TypeScript, Mantine and its theme, Geist fonts, cookie/header-based
+React, TypeScript, Mantine and the shared UI theme, bundled Pretendard/Geist Mono fonts, cookie/header-based
 next-intl localization, pnpm workspaces, Turborepo, ESLint, Prettier, and Storybook.
 The initial dependency ranges and pinned Next.js version come from the recorded
 upstream snapshot.
@@ -153,7 +153,7 @@ pnpm run dev --filter=@chapchoo/admin-web
 
 General renders account/password and personal/team journeys. Admin renders
 initial administrator setup, administrator login, and signup/reset link management.
-Both use `@chapchoo/ui` for the original shared theme and controls, and
+Both use `@chapchoo/ui` for the selected shared theme and controls, and
 app-owned tRPC adapters backed by `@chapchoo/web-core` and generated Node gRPC.
 Supported locales match the
 upstream web app: `en-US`, `ko-KR`, `ja-JP`, and `fr-FR`. Locale selection uses the
@@ -173,9 +173,7 @@ pnpm run check:design-boundaries
 
 See its [authoring and promotion guide](typescript/packages/design-reference/README.md).
 It holds general cross-platform references, local experiments and non-web
-representations, not app functional tests or UI QA. Existing common UI can be
-reused, but the Azents-derived theme is provisional, not an approved Chapchoo
-design system. See root [DESIGN.md](DESIGN.md) for visual design context and the
+representations, not app functional tests or UI QA. Common UI owns the promoted web theme/assets and is reused by reference. See root [DESIGN.md](DESIGN.md) for visual design context and the
 reference package guide for its current catalog.
 
 Each app reads configuration only through `src/config/index.ts`.

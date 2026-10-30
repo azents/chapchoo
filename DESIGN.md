@@ -16,11 +16,11 @@ library are fictional compositions for applying the same tone.
 
 This file is the single authority for visual design principles and discussion
 context. It follows the useful section structure of Google Labs' draft DESIGN.md
-format. The exact values below are canonical; the reference adapter is checked
+format. The exact values below are canonical; the common-UI adapter is checked
 against them. It does not replace technical Requirements, ADRs or Design records,
-and does not authorize app implementation or shared-component promotion.
+The requester subsequently authorized applying it to the existing general/Admin UI on 2026-10-30; this promotes the shared web theme and assets, not fictional product features.
 
-### Canonical reference tokens
+### Canonical design tokens
 
 The following JSON flow object is valid YAML. Its structure combines semantic
 colors, spacing, rounded corners and platform typography with a small layout
@@ -67,7 +67,7 @@ No design-version scheme or external format tooling is required.
 These concrete values encode the approved direction; they were extracted and
 refined for usable contrast, not separately approved one by one. Layout numbers
 are reference starting points, not universal product dimensions. Components use
-semantic tokens through the reference Mantine adapter instead of scattering
+semantic tokens through the common-UI Mantine adapter instead of scattering
 sample colors through production code.
 
 ## Colors
@@ -100,6 +100,10 @@ Respect each platform instead of forcing one font everywhere:
 - **macOS / Android:** identity should remain coherent, but exact typography and
   native navigation are not selected. Do not invent them to complete a catalog.
 
+The requester reaffirmed Pretendard for both English and Korean on 2026-10-31
+KST after comparing it with Geist plus system Korean and Noto Sans plus
+Noto Sans KR on the same login/chat examples.
+
 Viewport width is not platform identity. Linux does not have the Apple fonts;
 its substitute render cannot establish iOS typography. Use an Apple device to
 review those fonts and do not redistribute their files. The bundled Pretendard
@@ -111,6 +115,15 @@ Use a small semantic ladder: 12px captions, 14px labels/compact supporting copy,
 hierarchy before color or ornament. Do not use mono for ordinary labels or agent
 identities; actual code can use a code font. These roles are not permission to
 make long-form mobile content tiny.
+
+Mobile editable controls use at least **16 CSS px**, with a default **20px line
+height** (1.25 ratio), without enlarging the surrounding labels, buttons, control
+frames or spacing. This applies to actual text/password/search/email/code inputs,
+textareas, selects and editable text surfaces, including inner compound controls.
+Preserve larger user text settings. This is the selected treatment for Safari's
+focus zoom behavior, not a reason to disable pinch zoom or enlarge checkboxes,
+toggles and other non-text controls. The requester selected the input-only
+comparison on 2026-10-30 after reviewing both auth and chat examples.
 
 Write natural, concise labels. Warmth is not baby talk or cheerful filler.
 Explain scope, consequence, unusual behavior and recovery only where useful;
@@ -200,7 +213,7 @@ inflated cheeks, hanging jowls, separate chin or shaggy hair outlines.
 
 Use a character as a speaker/companion, near identity, a useful empty state or a
 small greeting, not as wallpaper. On occupied screens it should not compete with
-information. The selected PNGs in the reference's `public/mascots/` are raster
+information. The selected PNGs in the common UI's `assets/mascots/` are raster
 explorations, not claimed vector masters or a completed expression/motion library.
 Do not infer breed-specific jobs, personalities or automatic multi-agent behavior.
 
@@ -252,18 +265,19 @@ Primer React. Current product implementation remains accounts/teams, not the
 future channel/agent vision. None of this authorizes invented product flows.
 
 Open: actual product IA/features, native navigation beyond the font choice, dark
-mode, final icon/logo/motion systems, production illustration masters and common
-component promotion. These do not block making reference compositions.
+mode, final icon/logo/motion systems and production illustration masters.
+The existing general/Admin web surface now uses the selected shared theme;
+further feature-specific promotion remains separate from fictional compositions.
 
 ## References and implementation map
 
 - [Reference library](typescript/packages/design-reference/README.md): runnable
   Storybook, ownership, stories and review conditions; no duplicate principles.
-- [Mascot generation record](typescript/packages/design-reference/public/mascots/GENERATION.md):
+- [Mascot generation record](typescript/packages/ui/assets/mascots/GENERATION.md):
   original prompts, code-verified model identifier, provenance limits and hashes.
-- [Token adapter](typescript/packages/design-reference/src/tone/tokens.ts) and
-  [Mantine adapter](typescript/packages/design-reference/src/tone/theme.ts):
-  reference-only implementation, validated against this document's values.
+- [Token adapter](typescript/packages/ui/src/designTokens.ts) and
+  [Mantine adapter](typescript/packages/ui/src/theme.ts):
+  shared-web implementation and reference import, validated against this document's values.
 - [Google Labs format](https://github.com/google-labs-code/design.md/blob/main/docs/spec.md)
   and [philosophy](https://github.com/google-labs-code/design.md/blob/main/PHILOSOPHY.md):
   specific visual context plus values and rationale. It is a draft, not automatic
@@ -274,6 +288,11 @@ component promotion. These do not block making reference compositions.
   [focus](https://www.w3.org/WAI/WCAG22/Understanding/focus-not-obscured-minimum.html)
   and [status](https://www.w3.org/WAI/WCAG22/Understanding/status-messages.html):
   accessibility source, not a claim that reading it proves implementation conformance.
+- [Primer's mobile input change](https://github.com/primer/css/pull/430) and
+  [Nuxt UI input styling](https://github.com/nuxt/ui/blob/200b0bfb7a5666c870742f3f43c83cf09234aed9/src/theme/input.ts):
+  evidence for keeping editable text at 16px without inflating the surrounding UI.
+  Safari's automatic focus zoom threshold is browser behavior, not a universal
+  Apple visual-design mandate. Scale/viewport workarounds were researched but not selected.
 - [NN/g heuristics](https://www.nngroup.com/articles/ten-usability-heuristics/):
   visibility, user control, consistency, recognition, prevention and recovery.
   Apply as heuristics, not invented numeric laws.

@@ -1,6 +1,7 @@
 "use client";
 
 import { Badge, Box, Group, NavLink, Stack, Text, Title } from "@mantine/core";
+import { Mascot } from "./Mascot";
 import classes from "./ApplicationShell.module.css";
 import type { ReactNode } from "react";
 
@@ -11,7 +12,6 @@ export interface NavigationItem {
   href?: string;
   onSelect?: () => void;
 }
-
 export interface ApplicationShellProps {
   brand?: string;
   contextLabel: string;
@@ -20,41 +20,31 @@ export interface ApplicationShellProps {
   navigation: readonly NavigationItem[];
   actions?: ReactNode;
   children: ReactNode;
+  basePath?: string;
 }
 
-/** Visible app context with app-owned navigation and no routing assumptions. */
+/** Product navigation and orientation without routing or business assumptions. */
 export function ApplicationShell({
-  brand = "Chapchoo",
+  brand = "chapchoo",
   contextLabel,
   title,
   identityLabel,
   navigation,
   actions,
   children,
+  basePath = "",
 }: ApplicationShellProps): ReactNode {
   return (
     <Box className={classes.shell}>
-      <Box component="header" className={classes.header}>
-        <Group justify="space-between" gap="md" wrap="wrap">
-          <Group gap="sm">
-            <Text fw={700}>{brand}</Text>
-            <Badge variant="light">{contextLabel}</Badge>
-          </Group>
-          <Group gap="sm" wrap="wrap">
-            {identityLabel ? (
-              <Text
-                size="sm"
-                c="dimmed"
-                style={{ overflowWrap: "anywhere", minWidth: 0 }}
-              >
-                {identityLabel}
-              </Text>
-            ) : null}
-            {actions}
-          </Group>
-        </Group>
-      </Box>
-      <Box className={classes.layout}>
+      <Box component="aside" className={classes.sidebar}>
+        <div className={classes.brand}>
+          <Text fw={750} size="xl">
+            {brand}
+          </Text>
+          <Badge variant="light" size="sm">
+            {contextLabel}
+          </Badge>
+        </div>
         <Box
           component="nav"
           aria-label={contextLabel}
@@ -84,15 +74,28 @@ export function ApplicationShell({
             ),
           )}
         </Box>
+        <div className={classes.companion}>
+          <Mascot basePath={basePath} size={72} />
+        </div>
+      </Box>
+      <div className={classes.workspace}>
+        <Box component="header" className={classes.header}>
+          <Text size="sm" c="dimmed" className={classes.identity}>
+            {identityLabel}
+          </Text>
+          <Group gap="sm" className={classes.actions}>
+            {actions}
+          </Group>
+        </Box>
         <Box component="main" className={classes.main}>
-          <Stack gap="lg">
-            <Title order={1} size="h2" style={{ overflowWrap: "anywhere" }}>
+          <div className={classes.content}>
+            <Title order={1} size="h2" className={classes.title}>
               {title}
             </Title>
-            {children}
-          </Stack>
+            <Stack gap="xl">{children}</Stack>
+          </div>
         </Box>
-      </Box>
+      </div>
     </Box>
   );
 }
