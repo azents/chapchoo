@@ -47,7 +47,21 @@ class CiStructureTests(unittest.TestCase):
             self.assertIn(required, workflow)
         self.assertNotIn("test:e2e", workflow)
         self.assertNotIn("test-installed-linux.py", workflow)
-        self.assertNotIn("test-container-images.py", workflow)
+        self.assertIn(
+            "python3 scripts/test-container-images.py \\\n"
+            "            --backend chapchoo-package-backend:ci \\\n"
+            "            --general chapchoo-package-general:ci \\\n"
+            "            --admin chapchoo-package-admin:ci",
+            workflow,
+        )
+        self.assertLess(
+            workflow.index("uses: docker/bake-action@"),
+            workflow.index("python3 scripts/test-container-images.py"),
+        )
+        self.assertLess(
+            workflow.index("python3 scripts/test-container-images.py"),
+            workflow.index("python3 scripts/package-linux.py"),
+        )
         ci = (ROOT / ".github/workflows/ci.yaml").read_text()
         self.assertIn("uses: ./.github/workflows/linux-package.yaml", ci)
         browser = ci.split("  browser-e2e:", 1)[1]

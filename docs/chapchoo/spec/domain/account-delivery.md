@@ -162,14 +162,17 @@ focused delayed HttpOnly-cookie test; and independent nonroot/read-only images,
 private RPC routing and graceful stop. Lower Rust lifecycle tests include partial
 startup, foreign listener isolation and resistant-descendant cleanup.
 
-The reusable native build workflow only builds images and archives on actual
-x86-64/ARM64 runners and exports archives/checksums. General CI owns orchestration:
+The reusable native build workflow builds images on actual x86-64/ARM64 runners,
+runs the independent-image smoke check on those existing local images, and
+exports archives/checksums. This checks root/prefixed startup, runtime isolation,
+static assets, private RPC and shutdown before PR merge without another build
+or product E2E. General CI owns product-test orchestration:
 its single downstream `browser-e2e` job waits for the native build and consumes
 that same run's x86-64 archive, verifies its checksum, and runs the three core
 PostgreSQL/browser journeys once using only the bundled executable, Node and web
 outputs. It does not rebuild the product or repeat source/per-architecture E2E.
-ARM64 remains a native build/ELF/assembly gate rather than a second product-test
-lane. Snapshot retains publication-specific independent-image acceptance.
+ARM64 remains a native build/ELF/assembly/image-smoke gate rather than a second
+product-test lane. Snapshot checks the exact images it publishes as well.
 Workflow configuration is not an executed success; actual exact-head CI results
 must be reported separately.
 
