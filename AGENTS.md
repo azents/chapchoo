@@ -51,6 +51,13 @@ Never bypass commit hooks.
 
 ## Documentation
 
+Before visual UI work, read root `DESIGN.md` when present and its linked scoped
+references. Follow the
+[visual-design authoring guide](typescript/packages/design-reference/DESIGN_AUTHORING.md).
+Visual identity guidance is distinct from technical Design and does not approve
+fictional sample features or production component promotion. Mobile useful
+information density is a core requirement; preserve readable content and controls.
+
 Read `docs/chapchoo/AGENTS.md` for the inherited documentation process.
 Read current specs first. Confirm Requirements before material technical design.
 Requirements snapshots become immutable after implementation; ADRs are append-only;
