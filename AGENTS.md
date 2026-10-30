@@ -21,11 +21,9 @@ intentionally use other languages.
   Chapchoo's approved design system.
 - `rust/crates/`: typed domain, crypto, persistence, protocol, services and adapters.
 - `rust/apps/chapchoo/`: foreground backend and operator composition root.
-- `python/apps/`, `python/libs/`: reserved application/library layout.
-- `swift/apps/`, `swift/libs/`: reserved native application/library layout.
 - `proto/chapchoo/`: Protobuf service/message authority.
-- `infra/charts/`, `testenv/chapchoo/`, `testdata/`, `images/`: reserved deployment
-  and assembled-test layout.
+- `infra/charts/`, `testenv/chapchoo/`, `images/`: deployment, acceptance guidance,
+  target-build and packaging support.
 - `docs/chapchoo/`: Requirements, ADR, Design, and Living Spec documentation.
 - `.claude/skills/`: source of truth for repository-local skills.
 - `.agents/skills`: relative symlink exposing the same skills to compatible tools.
