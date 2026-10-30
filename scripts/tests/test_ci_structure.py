@@ -46,6 +46,9 @@ class CiStructureTests(unittest.TestCase):
         self.assertNotIn("push: true", workflow)
         for filename in ["linux-package.yaml", "snapshot.yaml"]:
             text = (ROOT / ".github/workflows" / filename).read_text()
+            self.assertIn(
+                "source: .\n          files: images/chapchoo/ci-bake.hcl", text
+            )
             self.assertIn("fs.read=${{ runner.temp }}/web-artifacts", text)
             self.assertIn("fs.read=${{ runner.temp }}/binary-artifacts", text)
 

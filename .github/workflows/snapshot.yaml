@@ -104,6 +104,7 @@ jobs:
           WEB_ARTIFACTS: ${{ runner.temp }}/web-artifacts
           BINARY_ARTIFACTS: ${{ runner.temp }}/binary-artifacts
         with:
+          source: .
           files: images/chapchoo/ci-bake.hcl
           allow: |
             fs.read=${{ runner.temp }}/web-artifacts
