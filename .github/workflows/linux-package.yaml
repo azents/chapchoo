@@ -94,6 +94,12 @@ jobs:
             general-web.cache-to=type=gha,scope=general-${{ matrix.architecture }},mode=max
             admin-web.cache-from=type=gha,scope=admin-${{ matrix.architecture }}
             admin-web.cache-to=type=gha,scope=admin-${{ matrix.architecture }},mode=max
+      - name: Smoke test the existing native images
+        run: |
+          python3 scripts/test-container-images.py \
+            --backend chapchoo-package-backend:ci \
+            --general chapchoo-package-general:ci \
+            --admin chapchoo-package-admin:ci
       - name: Assemble the pinned architecture-matched runtime
         env:
           ARCHITECTURE: ${{ matrix.architecture }}
