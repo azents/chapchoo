@@ -27,9 +27,9 @@ repos:
         pass_filenames: false
       - id: helm-chart-contracts
         name: Render and validate Helm and Argo preparation contracts offline
-        entry: uv run --locked --project .codex python scripts/check-chart.py
+        entry: bash -c 'uv run --locked --project .codex python scripts/check-chart.py && python3 -m unittest scripts.tests.test_setup_proof'
         language: system
-        files: ^(infra/charts/chapchoo/|scripts/(check-chart\.py|tests/test_chart_contracts\.py)|testenv/chapchoo/(chart-values\.yaml|argocd-example\.yaml))
+        files: ^(infra/charts/chapchoo/|scripts/(check-chart\.py|tests/test_(chart_contracts|setup_proof)\.py)|testenv/chapchoo/(chart-values\.yaml|argocd-example\.yaml))
         pass_filenames: false
       - id: ensure-claude-md-link
         name: Ensure CLAUDE.md imports AGENTS.md

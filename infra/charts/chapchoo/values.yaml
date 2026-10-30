@@ -19,9 +19,9 @@ backend:
 database:
   existingSecret: ""
   urlKey: postgres-url
-installationKey:
+secretKey:
   existingSecret: ""
-  key: installation-key
+  key: secret-key
 setupProof:
   existingSecret: ""
   key: setup-proof

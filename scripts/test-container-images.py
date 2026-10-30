@@ -52,9 +52,7 @@ def validate(backend: str, general: str, admin: str, admin_base_path: str = "") 
     try:
         env = {
             **os.environ,
-            "CHAPCHOO_INSTALLATION_KEY": base64.urlsafe_b64encode(
-                os.urandom(32)
-            ).decode(),
+            "CHAPCHOO_SECRET_KEY": base64.urlsafe_b64encode(os.urandom(32)).decode(),
         }
         backend_id = docker(
             "run",
@@ -69,7 +67,7 @@ def validate(backend: str, general: str, admin: str, admin_base_path: str = "") 
             "--tmpfs",
             "/data:uid=10001,gid=10001,mode=700",
             "--env",
-            "CHAPCHOO_INSTALLATION_KEY",
+            "CHAPCHOO_SECRET_KEY",
             "--env",
             "CHAPCHOO_SQLITE_PATH=/data/accounts.sqlite",
             "--entrypoint",
@@ -88,6 +86,18 @@ def validate(backend: str, general: str, admin: str, admin_base_path: str = "") 
             "-e",
             "/opt/chapchoo/runtime/bin/node",
         )
+        version = json.loads(
+            docker(
+                "exec",
+                backend_id,
+                "/usr/local/bin/kubectl",
+                "version",
+                "--client=true",
+                "--output=json",
+            )
+        )
+        if version["clientVersion"]["gitVersion"] != "v1.35.0":
+            raise RuntimeError("Bootstrap Kubernetes client version is not pinned")
         # Only web ports are loopback-published; private RPC never gets a host port.
         # A second normal bridge permits those loopback mappings while the backend
         # remains on the explicitly internal application network.

@@ -199,7 +199,7 @@
         "urlKey"
       ]
     },
-    "installationKey": {
+    "secretKey": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -371,7 +371,7 @@
     "terminationGracePeriodSeconds",
     "backend",
     "database",
-    "installationKey",
+    "secretKey",
     "setupProof",
     "prepare",
     "mail",

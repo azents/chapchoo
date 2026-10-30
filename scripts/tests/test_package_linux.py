@@ -380,7 +380,7 @@ class PackageLinuxTest(unittest.TestCase):
         self.assertIn('"--role", "none", "--web", "general"', dockerfile)
         self.assertIn('"--role", "none", "--web", "admin"', dockerfile)
         self.assertIn("USER 10001:10001", dockerfile)
-        self.assertNotIn("CHAPCHOO_INSTALLATION_KEY=", dockerfile)
+        self.assertNotIn("CHAPCHOO_SECRET_KEY=", dockerfile)
 
 
 if __name__ == "__main__":

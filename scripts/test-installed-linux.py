@@ -56,9 +56,7 @@ def validate(root: Path, architecture: str) -> None:
             "PATH": str(cwd / "no-host-tools"),
             "LANG": "C.UTF-8",
             "CHAPCHOO_SQLITE_PATH": str(cwd / "accounts.sqlite"),
-            "CHAPCHOO_INSTALLATION_KEY": base64.urlsafe_b64encode(
-                os.urandom(32)
-            ).decode(),
+            "CHAPCHOO_SECRET_KEY": base64.urlsafe_b64encode(os.urandom(32)).decode(),
             "CHAPCHOO_SETUP_PROOF": base64.urlsafe_b64encode(os.urandom(32))
             .decode()
             .rstrip("="),

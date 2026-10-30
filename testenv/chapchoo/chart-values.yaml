@@ -7,8 +7,8 @@ backend:
     tag: offline-contract
 database:
   existingSecret: fixture-postgres
-installationKey:
-  existingSecret: fixture-installation-key
+secretKey:
+  existingSecret: fixture-secret-key
 setupProof:
   existingSecret: fixture-setup-proof
 general:

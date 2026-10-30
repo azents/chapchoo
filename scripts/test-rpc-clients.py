@@ -76,7 +76,7 @@ def ready(process: subprocess.Popen[str], timeout: float = 30) -> None:
 def run_fixture(database: dict[str, str]) -> None:
     environment = {
         "PATH": os.environ["PATH"],
-        "CHAPCHOO_INSTALLATION_KEY": secrets.token_urlsafe(32) + "=",
+        "CHAPCHOO_SECRET_KEY": secrets.token_urlsafe(32) + "=",
         "CHAPCHOO_SETUP_PROOF": secrets.token_urlsafe(32),
         "RUST_LOG": "chapchoo=info",
         "NO_COLOR": "1",

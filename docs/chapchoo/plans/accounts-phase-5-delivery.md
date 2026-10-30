@@ -227,5 +227,23 @@ existing deployment work; it does not add product/versioning authority.
   approval after completing review, both PRs and their exact-head CI.
 - Same reviewer `/root/accounts-reviewer` reviews the integrated follow-up across
   both repositories read-only; root owns all actual validation and corrections.
-- Design delta: None; actual live installation/upgrade/TLS/product gates remain
-  pending rather than being replaced by render or workflow-unit evidence.
+- Design delta: None for the initial snapshot follow-up; actual live
+  installation/upgrade/TLS/product gates remain pending rather than being replaced
+  by render or workflow-unit evidence.
+
+## Approved secret feedback — revision37
+
+The subsequent explicit implementation request approves the consolidated
+PASSWORD-only, setup-proof generation and SECRET_KEY naming changes. Requirements
+clarification, ADR-D38 and Design37/M44 record this before code changes. This is
+an approved delta from revision36's broad chart-no-secret-creation boundary,
+limited to first-admin proof. No existing DB or cryptographic format changes.
+
+Root owns the Rust/config/client-fixture rename, separate proof hook/script/RBAC,
+backend-only pinned kubectl, Home template/refs and documentation. The same
+read-only reviewer checks the final cross-repository diff. Root validation covers
+old-binary-created DB binding with the same key under the new configuration name,
+negative previous-name admission, both DB RPC gates, actual images/native client,
+archive browser journeys, idempotent/invalid/racing proof fixtures, chart hook and
+permission ordering, actual URL escaping with reserved/space/Unicode characters,
+all hooks and exact-head CI. No new actual cluster Secret access is performed.

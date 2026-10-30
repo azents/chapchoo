@@ -55,7 +55,7 @@ keys using HKDF-SHA-256. It exposes no root replacement or rotation API.
 - Email codes contain six uppercase ASCII letters/digits. Generation uses
   rejection sampling, and submitted ASCII alphanumeric codes normalize to
   uppercase. HMAC-SHA-256 binds canonical email, challenge bearer and code.
-- The installation-key check is a purpose-separated MAC of a fixed context.
+- The secret-key check is a purpose-separated MAC of a fixed context.
   The primitive checks equality; the future repository owns one-time binding
   and prevents replacing the stored check.
 

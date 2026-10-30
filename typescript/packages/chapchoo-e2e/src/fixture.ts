@@ -177,7 +177,7 @@ export class Assembly {
         ? { PATH: join(this.directory, "no-host-tools") }
         : {}),
       CHAPCHOO_POSTGRES_URL: `postgresql://fixture@localhost/postgres?host=${encodeURIComponent(socket)}`,
-      CHAPCHOO_INSTALLATION_KEY: `${secret()}=`,
+      CHAPCHOO_SECRET_KEY: `${secret()}=`,
     };
     const rust = join(repository, "rust");
     if (!this.packageRoot) {
