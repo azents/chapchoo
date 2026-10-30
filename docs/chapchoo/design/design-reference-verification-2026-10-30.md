@@ -17,7 +17,7 @@ including coexistence of general references with web-specific common UI.
   importer and declare the existing PostCSS parser for boundary tooling; no
   package versions, overrides or production dependency graph change.
 - Root format, lint and typecheck pass.
-- Dependency boundary fixtures: 28 pass. Actual workspace boundaries pass.
+- Dependency boundary fixtures: 29 pass. Actual workspace boundaries pass.
   Fixtures include named/relative/dynamic/type imports, TypeScript aliases,
   dependency sections, workspace alias ranges, relative/absolute local links,
   CSS imports and CSS Modules compositions.

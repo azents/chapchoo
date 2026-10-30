@@ -88,7 +88,7 @@ function moduleSpecifiers(file) {
 function stylesheetSpecifiers(file) {
   const source = postcss.parse(readFileSync(file, "utf8"), { from: file });
   const result = [];
-  source.walkAtRules("import", (rule) => {
+  source.walkAtRules(/^import$/i, (rule) => {
     const match = rule.params.match(
       /^(?:url\(\s*(?:"([^"]+)"|'([^']+)'|([^)\s]+))\s*\)|"([^"]+)"|'([^']+)')/i,
     );

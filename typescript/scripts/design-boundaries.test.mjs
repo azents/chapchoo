@@ -171,6 +171,7 @@ test("rejects reference-to-app manifest dependencies", (t) => {
 
 for (const statement of [
   '@import "../../chapchoo-design-reference/src/reference.css";',
+  '@IMPORT "../../chapchoo-design-reference/src/reference.css";',
   '@import url("../../chapchoo-design-reference/src/reference.css");',
   "@import url(../../chapchoo-design-reference/src/reference.css) screen;",
   '@import "@chapchoo/design-reference/reference.css" layer(reference);',
