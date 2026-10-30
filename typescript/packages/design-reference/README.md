@@ -8,15 +8,6 @@ theme and controls are provisional. Initial stories explain structure and
 ownership; they are not an approved palette, typography system or screen design.
 Future design work starts from the product's needs, not from cataloging that theme.
 
-## Visual design guidance
-
-Read root `DESIGN.md` when present for the selected visual identity. Use
-[DESIGN_AUTHORING.md](DESIGN_AUTHORING.md) to author and review design context:
-intent plus semantic tokens, platform differences, useful mobile density,
-accessibility, state/recovery guidance and truthful rendered evidence. This
-guide adopts the useful structure of Google Labs' draft format without adopting
-its example aesthetics or changing production ownership.
-
 ## Run
 
 From the repository root, after `pnpm install --frozen-lockfile`:
