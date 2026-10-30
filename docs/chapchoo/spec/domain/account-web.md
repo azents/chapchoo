@@ -11,7 +11,7 @@ code_paths:
   - typescript/packages/web-core
   - typescript/apps/e2e
   - testenv/chapchoo
-last_verified_at: 2026-10-30
+last_verified_at: 2026-10-31
 spec_version: 1
 ---
 
@@ -33,8 +33,15 @@ routes and stories replace Hello World; there is no second Admin theme or Refine
 layer. App containers own data/state/navigation; shared presentation receives
 props/callbacks and imports no business RPC, environment, cookie or token store.
 Both web apps force the selected light theme and load locally bundled Pretendard
-with Geist Mono reserved for code. The runtime mount is passed into font and
-decorative mascot URLs. Desktop uses a side navigation pane; narrow views wrap
+with Geist Mono reserved for code. Pretendard uses the complete official
+unicode-range subset set; the browser fetches only ranges used by rendered text,
+without a whole-font or unused mono preload. The runtime mount is passed into
+font stylesheet, font and decorative mascot URLs. The 72px mascot uses a 216px
+production derivative while design originals remain in common UI assets.
+Narrow editable controls, including compound inner inputs and editable text
+surfaces, use a 16px minimum while preserving larger user text and pinch zoom;
+native selects retain their platform-owned line box. Visual principles remain
+in root DESIGN.md. Desktop uses a side navigation pane; narrow views wrap
 the same navigation above full-width content. Sectioned forms/rows/tables replace
 the former scaffold layout without changing app-owned actions or permissions. General-purpose design work lives in the independent
 [design reference workspace](design-reference.md); app Storybooks retain their

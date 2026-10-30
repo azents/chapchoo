@@ -100,6 +100,10 @@ Respect each platform instead of forcing one font everywhere:
 - **macOS / Android:** identity should remain coherent, but exact typography and
   native navigation are not selected. Do not invent them to complete a catalog.
 
+The requester reaffirmed Pretendard for both English and Korean on 2026-10-31
+KST after comparing it with Geist plus system Korean and Noto Sans plus
+Noto Sans KR on the same login/chat examples.
+
 Viewport width is not platform identity. Linux does not have the Apple fonts;
 its substitute render cannot establish iOS typography. Use an Apple device to
 review those fonts and do not redistribute their files. The bundled Pretendard

@@ -13,13 +13,29 @@ test("both web distributions stage shared fonts, licenses and identity art", asy
     ]);
     assert.equal(result.status, 0, result.stderr.toString());
     const root = new URL(`../apps/${app}/public/`, import.meta.url);
-    for (const font of [
-      "PretendardVariable.woff2",
-      "GeistMono-Variable.woff2",
-    ]) {
+    for (const font of ["GeistMono-Variable.woff2"]) {
       const bytes = await readFile(new URL(`fonts/${font}`, root));
       assert.equal(bytes.subarray(0, 4).toString(), "wOF2");
     }
+    const stylesheet = await readFile(
+      new URL("fonts/pretendard-subsets.css", root),
+      "utf8",
+    );
+    const subsets = [...stylesheet.matchAll(/url\(\.\/pretendard\/([^)]+)\)/g)];
+    assert.equal(subsets.length, 92);
+    assert.equal((stylesheet.match(/unicode-range:/g) ?? []).length, 92);
+    for (const match of subsets) {
+      const bytes = await readFile(
+        new URL(`fonts/pretendard/${match[1]}`, root),
+      );
+      assert.equal(bytes.subarray(0, 4).toString(), "wOF2");
+      assert.ok(bytes.length < 45_000);
+    }
+    assert.ok(
+      !(await readdir(new URL("fonts/", root))).includes(
+        "PretendardVariable.woff2",
+      ),
+    );
     assert.match(
       await readFile(new URL("fonts/Pretendard-LICENSE.txt", root), "utf8"),
       /SIL OPEN FONT LICENSE/i,

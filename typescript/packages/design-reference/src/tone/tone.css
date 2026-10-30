@@ -1,9 +1,4 @@
-@font-face {
-  font-family: Pretendard;
-  src: url("../../../ui/assets/fonts/PretendardVariable.woff2") format("woff2");
-  font-weight: 100 900;
-  font-display: swap;
-}
+@import "../../../ui/assets/fonts/pretendard-subsets.css";
 .tone-page {
   min-height: 100dvh;
   background: var(--cc-canvas);

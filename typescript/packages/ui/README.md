@@ -9,6 +9,10 @@ Import `@mantine/core/styles.css` in the app layout and wrap presentation in
 dark palette. `FontFaces` loads bundled Pretendard and Geist Mono with the caller's
 runtime mount. Apps keep locale/data/transport ownership.
 
+Pretendard uses the official self-hosted unicode-range subsets, loaded only for
+rendered characters through a runtime-prefixed stylesheet. Font files are not
+globally preloaded. See `assets/fonts/README.md` for provenance and update scope.
+
 `typescript/scripts/stage-web-fonts.mjs` stages common UI fonts/licenses and
 small production illustration derivatives into each app's ignored public directories before dev/build and
 Storybook. Build caches restore both staged directories. Storybook serves these

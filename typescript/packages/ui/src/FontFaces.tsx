@@ -2,32 +2,12 @@ import type { ReactElement } from "react";
 
 /** Standard CSS font faces use only the caller's safe runtime mount path. */
 export function FontFaces({ basePath }: { basePath: string }): ReactElement {
-  const sans = `${basePath}/fonts/PretendardVariable.woff2`;
+  const sans = `${basePath}/fonts/pretendard-subsets.css`;
   const mono = `${basePath}/fonts/GeistMono-Variable.woff2`;
   return (
     <>
-      <link
-        rel="preload"
-        href={sans}
-        as="font"
-        type="font/woff2"
-        crossOrigin=""
-      />
-      <link
-        rel="preload"
-        href={mono}
-        as="font"
-        type="font/woff2"
-        crossOrigin=""
-      />
+      <link rel="stylesheet" href={sans} precedence="default" />
       <style>{`
-        @font-face {
-          font-family: "Pretendard";
-          src: url("${sans}") format("woff2");
-          font-style: normal;
-          font-weight: 100 900;
-          font-display: swap;
-        }
         @font-face {
           font-family: "Geist Mono";
           src: url("${mono}") format("woff2");
