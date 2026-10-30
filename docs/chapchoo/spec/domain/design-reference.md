@@ -50,7 +50,8 @@ Root format/lint/typecheck include the package. Root lint runs
 `check:design-boundaries`, which executes isolated boundary fixtures and checks
 workspace manifests and source imports. Other workspaces cannot depend on
 reference; reference cannot depend on product apps. The checker recognizes named,
-relative, dynamic and TypeScript-resolved aliased imports. This is a repository
+relative, dynamic and TypeScript-resolved aliased imports, plus CSS `@import`
+and CSS Modules composition dependencies. This is a repository
 dependency guard, not a runtime security sandbox.
 
 CI builds all three Storybooks. Authors inspect actual rendered stories at

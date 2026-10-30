@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, extname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
+import postcss from "postcss";
 
 const referenceName = "@chapchoo/design-reference";
 const ignored = new Set([
@@ -20,6 +21,7 @@ const extensions = new Set([
   ".jsx",
   ".mjs",
   ".cjs",
+  ".css",
 ]);
 
 function* sourceFiles(directory) {
@@ -42,6 +44,9 @@ function contains(directory, file) {
 }
 
 function moduleSpecifiers(file) {
+  if (extname(file) === ".css") {
+    return stylesheetSpecifiers(file);
+  }
   const source = ts.createSourceFile(
     file,
     readFileSync(file, "utf8"),
@@ -77,6 +82,28 @@ function moduleSpecifiers(file) {
     ts.forEachChild(node, visit);
   }
   visit(source);
+  return result;
+}
+
+function stylesheetSpecifiers(file) {
+  const source = postcss.parse(readFileSync(file, "utf8"), { from: file });
+  const result = [];
+  source.walkAtRules("import", (rule) => {
+    const match = rule.params.match(
+      /^(?:url\(\s*(?:"([^"]+)"|'([^']+)'|([^)\s]+))\s*\)|"([^"]+)"|'([^']+)')/i,
+    );
+    const specifier = match?.slice(1).find((value) => value);
+    if (specifier) {
+      result.push(specifier);
+    }
+  });
+  source.walkDecls(/^(composes|compose-with)$/, (declaration) => {
+    const match = declaration.value.match(/\bfrom\s+(?:"([^"]+)"|'([^']+)')/);
+    const specifier = match?.[1] ?? match?.[2];
+    if (specifier) {
+      result.push(specifier);
+    }
+  });
   return result;
 }
 

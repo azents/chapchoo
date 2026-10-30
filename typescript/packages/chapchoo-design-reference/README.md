@@ -51,7 +51,8 @@ flowchart LR
 
 Common UI and product apps must not import this package. It has no production
 exports. Root lint checks workspace manifests and source dependency edges,
-including relative, dynamic and TypeScript-resolved aliased imports.
+including relative, dynamic and TypeScript-resolved aliased imports, plus CSS
+`@import` and CSS Modules composition edges.
 
 ## Author and review
 

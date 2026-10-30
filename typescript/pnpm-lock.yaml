@@ -17,6 +17,9 @@ importers:
       eslint-plugin-react-hooks:
         specifier: ^7.1.1
         version: 7.1.1(eslint@10.13.0)
+      postcss:
+        specifier: ^8.5.26
+        version: 8.5.32
       prettier:
         specifier: ^3.9.6
         version: 3.9.10

@@ -14,11 +14,13 @@ including coexistence of general references with web-specific common UI.
 ## Deterministic checks
 
 - Frozen pnpm installation succeeds. Lock changes add only the new workspace
-  importer; no package versions, overrides or production dependency graph change.
+  importer and declare the existing PostCSS parser for boundary tooling; no
+  package versions, overrides or production dependency graph change.
 - Root format, lint and typecheck pass.
-- Dependency boundary fixtures: 21 pass. Actual workspace boundaries pass.
+- Dependency boundary fixtures: 28 pass. Actual workspace boundaries pass.
   Fixtures include named/relative/dynamic/type imports, TypeScript aliases,
-  dependency sections, workspace alias ranges and relative/absolute local links.
+  dependency sections, workspace alias ranges, relative/absolute local links,
+  CSS imports and CSS Modules compositions.
 - Existing unit suites: UI 9, web-core 17, General 9, Admin 14, E2E helpers 5:
   **54 passed**, no skips or failures.
 - Root product/package build and static builds for General, Admin and the new
@@ -55,6 +57,11 @@ and manifest alias gaps. The final implementation lazy-loads Mantine only in the
 nested reuse document and recognizes workspace alias ranges and absolute local
 links. Targeted re-review found no remaining issues in those fixes or the
 requester's general-reference/web-specialization clarification.
+
+PR automation additionally identified missing stylesheet edges. The checker now
+uses the existing PostCSS parser to extract CSS imports and module composition
+sources; negative fixtures cover both ownership directions. Commented imports
+remain ignored. The root manifest declares PostCSS directly for this tool.
 
 ## Environment observations
 

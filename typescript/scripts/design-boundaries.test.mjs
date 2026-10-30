@@ -168,3 +168,42 @@ test("rejects reference-to-app manifest dependencies", (t) => {
   );
   assert.equal(checkDesignBoundaries(root).length, 1);
 });
+
+for (const statement of [
+  '@import "../../chapchoo-design-reference/src/reference.css";',
+  '@import url("../../chapchoo-design-reference/src/reference.css");',
+  "@import url(../../chapchoo-design-reference/src/reference.css) screen;",
+  '@import "@chapchoo/design-reference/reference.css" layer(reference);',
+  '.example { composes: example from "../../chapchoo-design-reference/src/reference.module.css"; }',
+]) {
+  test(`rejects reverse stylesheet edge: ${statement}`, (t) => {
+    const { root, write } = fixture(t);
+    write("ui", "src/example.css", statement);
+    assert.equal(checkDesignBoundaries(root).length, 1);
+  });
+}
+
+test("rejects reference-to-app stylesheet import", (t) => {
+  const { root, write } = fixture(t);
+  write(
+    "reference",
+    "src/example.css",
+    '@import "../../../apps/web/src/example.css";',
+  );
+  assert.equal(checkDesignBoundaries(root).length, 1);
+});
+
+test("allows common UI stylesheet reuse and ignores commented imports", (t) => {
+  const { root, write } = fixture(t);
+  write(
+    "reference",
+    "src/example.css",
+    '@import "../../chapchoo-ui/src/style.css";',
+  );
+  write(
+    "ui",
+    "src/example.css",
+    '/* @import "../../chapchoo-design-reference/src/style.css"; */',
+  );
+  assert.deepEqual(checkDesignBoundaries(root), []);
+});
