@@ -107,6 +107,9 @@ jobs:
           BINARY_ARTIFACTS: ${{ runner.temp }}/binary-artifacts
         with:
           files: images/chapchoo/ci-bake.hcl
+          allow: |
+            fs.read=${{ runner.temp }}/web-artifacts
+            fs.read=${{ runner.temp }}/binary-artifacts
           set: |
             backend.cache-from=type=gha,scope=backend-${{ matrix.architecture }}
             backend.cache-to=type=gha,scope=backend-${{ matrix.architecture }},mode=max

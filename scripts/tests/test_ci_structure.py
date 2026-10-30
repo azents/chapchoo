@@ -44,6 +44,10 @@ class CiStructureTests(unittest.TestCase):
         self.assertIn("needs: [web-build, binary-build]", workflow)
         self.assertEqual(workflow.count("uses: docker/bake-action@"), 1)
         self.assertNotIn("push: true", workflow)
+        for filename in ["linux-package.yaml", "snapshot.yaml"]:
+            text = (ROOT / ".github/workflows" / filename).read_text()
+            self.assertIn("fs.read=${{ runner.temp }}/web-artifacts", text)
+            self.assertIn("fs.read=${{ runner.temp }}/binary-artifacts", text)
 
     def test_bake_targets_share_builder_outputs_without_publishing(self) -> None:
         result = subprocess.run(

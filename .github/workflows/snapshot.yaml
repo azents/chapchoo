@@ -105,6 +105,9 @@ jobs:
           BINARY_ARTIFACTS: ${{ runner.temp }}/binary-artifacts
         with:
           files: images/chapchoo/ci-bake.hcl
+          allow: |
+            fs.read=${{ runner.temp }}/web-artifacts
+            fs.read=${{ runner.temp }}/binary-artifacts
           set: |
             backend.tags=chapchoo-backend:acceptance
             general-web.tags=chapchoo-general-web:acceptance
