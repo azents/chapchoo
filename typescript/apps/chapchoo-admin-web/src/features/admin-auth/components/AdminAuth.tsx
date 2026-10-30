@@ -96,7 +96,7 @@ export function AdminAuth(props: AdminAuthProps): ReactElement {
             />
             {setup ? (
               <PasswordField
-                label={text("installationProof")}
+                label={text("setupProof")}
                 visibilityToggleLabel={text("showProof")}
                 autoComplete="off"
                 value={props.installationProof}

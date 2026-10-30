@@ -176,7 +176,7 @@ test.describe("Assembled account and team acceptance", () => {
       .getByRole("textbox", { name: "Email", exact: true })
       .fill(assembly.administrator.email);
     await administrator
-      .getByLabel(/^Installation proof\s*\*?$/)
+      .getByLabel(/^Setup proof\s*\*?$/)
       .fill(assembly.setupProof);
     await administrator
       .getByLabel(/^Password\s*\*?$/)
