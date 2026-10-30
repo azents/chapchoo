@@ -141,7 +141,7 @@ jobs:
           pnpm run build
           pnpm run build-storybook --filter=@chapchoo/web --filter=@chapchoo/admin-web --filter=@chapchoo/design-reference
         working-directory: typescript
-  accounts-browser:
+  browser-e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:

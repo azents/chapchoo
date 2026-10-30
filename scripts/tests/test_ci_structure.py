@@ -23,6 +23,8 @@ class CiStructureTests(unittest.TestCase):
         hooks = (ROOT / ".pre-commit-config.yaml").read_text()
         self.assertIn("entry: bash scripts/check-rust.sh", hooks)
         self.assertIn("entry: bash scripts/check-rpc.sh", hooks)
+        self.assertIn("  browser-e2e:\n", workflow)
+        self.assertIn("run: pnpm --filter @chapchoo/e2e test:e2e", workflow)
         rust_job = workflow.split("  validate:", 1)[0]
         self.assertIn('CARGO_PROFILE_DEV_DEBUG: "0"', rust_job)
         self.assertIn('CARGO_PROFILE_TEST_DEBUG: "0"', rust_job)
