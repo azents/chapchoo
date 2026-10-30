@@ -24,7 +24,7 @@ def run_tests(environment: dict[str, str], rpc_clients: bool) -> None:
         )
         return
     subprocess.run(
-        ["cargo", "test", "--locked", "--workspace"],
+        ["cargo", "test", "--locked", "--workspace", "--timings"],
         cwd=ROOT / "rust",
         env=environment,
         check=True,

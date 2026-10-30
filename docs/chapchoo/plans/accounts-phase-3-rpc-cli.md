@@ -39,8 +39,8 @@ tags: [accounts, implementation, rust, protocol]
 | Workstream | Owner | Owned paths | Depends on | Output | Validation |
 | --- | --- | --- | --- | --- | --- |
 | Contract/generation | /root/accounts-protocol-generation; root owns proto | rust protocol crate, typescript/packages RPC client, generation scripts | approved shapes | generated compatible Rust/Node contract | generation diff check, real Node/Rust calls |
-| Services | /root/accounts-team-storage | rust/crates/chapchoo-service | completed repositories, crypto | typed orchestration and bounded password work | mail/prerequisite/authorization/failure tests |
-| Protocol | /root/accounts-rpc-adapter | rust/crates/chapchoo-rpc | services/contracts | typed ingress and separate service groups | real two-listener RPC, no Admin bypass |
+| Services | /root/accounts-team-storage | rust/crates/service | completed repositories, crypto | typed orchestration and bounded password work | mail/prerequisite/authorization/failure tests |
+| Protocol | /root/accounts-rpc-adapter | rust/crates/rpc | services/contracts | typed ingress and separate service groups | real two-listener RPC, no Admin bypass |
 | CLI/mail | /root | central executable and official SES adapter | services/contracts | explicit composition and foreground/operator commands | preparation/readiness/termination and SDK boundary |
 | Quality/Specs | /root | Cargo/workflow/scripts/docs | integrated code | repeatable validation and reachable behavior Specs | root-owned integrated checks and exact-head CI |
 

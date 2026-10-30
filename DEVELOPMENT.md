@@ -66,10 +66,17 @@ Optional `CHAPCHOO_SESSION_VALIDITY_DAYS` defaults to 180; optional
 Rotation/previous-token overlap default to 10/5 minutes.
 `CHAPCHOO_PASSWORD_WORKERS` bounds active bcrypt jobs (default 4, 1–256).
 
-Email is optional. Configure both `CHAPCHOO_SES_SENDER` and
-`CHAPCHOO_SES_REGION`, with ordinary AWS SDK credential resolution. An optional
-`CHAPCHOO_SES_ENDPOINT` selects an operator-controlled SDK endpoint. Mail-only
-flows fail when it is absent; manual signup/reset grants remain usable.
+Email is optional. Configure `CHAPCHOO_SMTP_SENDER` and `CHAPCHOO_SMTP_HOST`.
+`CHAPCHOO_SMTP_TLS` defaults to `starttls` (required upgrade, port 587); `implicit`
+uses TLS from connection start (port 465). `CHAPCHOO_SMTP_PORT` can explicitly
+select another nonzero port. Both modes verify the server certificate and never
+downgrade. Optional `CHAPCHOO_SMTP_USERNAME` and `CHAPCHOO_SMTP_PASSWORD` must be
+provided together. For an unauthenticated local relay only, explicit
+`loopback-plaintext` permits a numeric loopback IP (default port 25), never a
+remote host or authentication. SMTP credentials are backend-only runtime inputs.
+The former SES variables and AWS credential chain are removed; configure your
+SMTP relay instead, including an SES SMTP endpoint if desired. Mail-only flows
+fail when SMTP is absent; manual signup/reset grants remain usable.
 Email is submitted after commit, without automatic submission retries; failure
 does not compensate state and provider acceptance is not mailbox delivery.
 
@@ -105,7 +112,6 @@ The initial dependency ranges and pinned Next.js version come from the recorded
 upstream snapshot.
 
 ```sh
-cd typescript
 pnpm install --frozen-lockfile
 pnpm run dev --filter=@chapchoo/web
 pnpm run format:check
@@ -115,10 +121,22 @@ pnpm --filter @chapchoo/web test
 pnpm --filter @chapchoo/admin-web test
 pnpm --filter @chapchoo/ui test
 pnpm --filter @chapchoo/web-core test
+pnpm --filter @chapchoo/testenv test
 pnpm run build
 pnpm run build-storybook --filter=@chapchoo/web
 pnpm run build-storybook --filter=@chapchoo/admin-web
+pnpm --filter @chapchoo/e2e exec playwright install chromium
+pnpm --filter @chapchoo/web test:components
+pnpm --filter @chapchoo/admin-web test:components
 ```
+
+The repository root owns the pnpm workspace, lockfile and Turbo task graph.
+It includes `typescript/apps/*`, `typescript/packages/*` and `testenv/chapchoo`.
+Run the commands above from the repository root.
+
+CI's existing `browser-e2e` job consumes the native build's x86-64 archive and runs
+the core journeys once. The reusable native workflow only builds; it has no E2E
+or runtime acceptance steps. Local E2E can still assemble source for development.
 
 Workspace lint/typecheck, dev and Storybook commands build their library
 prerequisites first. Turbo restores emitted `dist`/Next outputs from its cache;
@@ -153,7 +171,7 @@ pnpm run build-storybook --filter=@chapchoo/design-reference
 pnpm run check:design-boundaries
 ```
 
-See its [authoring and promotion guide](typescript/packages/chapchoo-design-reference/README.md).
+See its [authoring and promotion guide](typescript/packages/design-reference/README.md).
 It holds general cross-platform references, local experiments and non-web
 representations, not app functional tests or UI QA. Existing common UI can be
 reused, but the Azents-derived theme is provisional, not an approved Chapchoo
@@ -177,7 +195,7 @@ for renewal and cookie policy; do not copy real credentials into commands/logs.
 
 The three assembled browser journeys and disposable PostgreSQL/process ownership
 are documented in
-[`@chapchoo/e2e`](typescript/packages/chapchoo-e2e/README.md).
+[`@chapchoo/e2e`](typescript/apps/e2e/README.md).
 Sentry upload configuration and Azents product pages were not copied.
 
 ## Installed Linux and deployment validation
@@ -218,6 +236,31 @@ for skill in convention-audit living-spec-audit skill-creator; do
   uv run --locked --project .codex --with 'pytest==9.1.1' python -m pytest ".claude/skills/$skill/scripts" -q
 done
 ```
+
+CI gives each quality check one owner: the Rust job runs the full Rust gate,
+and explicit frontend steps run read-only format/lint/typecheck. Its repository
+hook step omits those duplicate calls only; local commits still run all hooks.
+Separate CI build jobs produce the target's release binary and complete Next
+standalone/static/public outputs. Image and tarball packaging reuse those exact
+same-run outputs. Docker image assembly does not run Next, pnpm or Cargo.
+
+For local Mac/Linux Docker development, one script runs the target builds in
+pinned Linux builder containers, then packages their outputs. Mac node_modules
+never enter Linux images; Apple Silicon defaults to Linux ARM64.
+
+```sh
+bash scripts/build-images.sh
+# Or package outputs produced by a separate native build:
+export WEB_ARTIFACTS=/absolute/build-artifacts/web
+export BINARY_ARTIFACTS=/absolute/build-artifacts/binary
+docker buildx bake --allow "fs.read=$WEB_ARTIFACTS" --allow "fs.read=$BINARY_ARTIFACTS" \
+  -f images/chapchoo/ci-bake.hcl
+python3 -m unittest scripts.tests.test_ci_structure scripts.tests.test_build_artifacts
+```
+
+No images are pushed by this command. Standard CI still verifies both native
+architectures, archive checksums, SQLite/PostgreSQL journeys and runtime images.
+Cold and cache-restored timing are separate measurements, not coverage modes.
 
 Each inherited skill's companion scripts and references are preserved. Service
 examples inside those skills are not runnable unless the referenced package and

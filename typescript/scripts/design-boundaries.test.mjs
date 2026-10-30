@@ -6,17 +6,20 @@ import test from "node:test";
 import { checkDesignBoundaries } from "./design-boundaries.mjs";
 
 function fixture(t) {
-  const root = mkdtempSync(join(tmpdir(), "chapchoo-boundaries-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const directory = mkdtempSync(join(tmpdir(), "chapchoo-boundaries-"));
+  const root = join(directory, "typescript");
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
   const locations = {
-    reference: "packages/chapchoo-design-reference",
-    ui: "packages/chapchoo-ui",
+    reference: "packages/design-reference",
+    ui: "packages/ui",
     app: "apps/web",
+    testenv: "../testenv/chapchoo",
   };
   const names = {
     reference: "@chapchoo/design-reference",
     ui: "@chapchoo/ui",
     app: "@chapchoo/web",
+    testenv: "@chapchoo/testenv",
   };
   function write(owner, file, content) {
     const path = join(root, locations[owner], file);
@@ -29,6 +32,36 @@ function fixture(t) {
   }
   return { root, write, names };
 }
+
+test("testenv is discovered and cannot import an app", (t) => {
+  const { root, write } = fixture(t);
+  write(
+    "testenv",
+    "src/example.ts",
+    'import { example } from "@chapchoo/web/component";',
+  );
+  assert.equal(checkDesignBoundaries(root).length, 1);
+});
+
+test("testenv cannot import reference implementations", (t) => {
+  const { root, write } = fixture(t);
+  write(
+    "testenv",
+    "src/example.ts",
+    'import { example } from "@chapchoo/design-reference/component";',
+  );
+  assert.equal(checkDesignBoundaries(root).length, 1);
+});
+
+test("app-to-testenv imports preserve support dependency direction", (t) => {
+  const { root, write } = fixture(t);
+  write(
+    "app",
+    "src/example.ts",
+    'import { example } from "@chapchoo/testenv/component";',
+  );
+  assert.deepEqual(checkDesignBoundaries(root), []);
+});
 
 test("allows reference-to-UI and app-to-UI reuse", (t) => {
   const { root, write } = fixture(t);
@@ -47,7 +80,7 @@ test("allows reference-to-UI and app-to-UI reuse", (t) => {
 
 for (const statement of [
   'import { example } from "@chapchoo/design-reference/component";',
-  'export { example } from "../../chapchoo-design-reference/src/component";',
+  'export { example } from "../../design-reference/src/component";',
   'const load = () => import("@chapchoo/design-reference/component");',
   'const value = require("@chapchoo/design-reference/component");',
   'type Value = import("@chapchoo/design-reference/component").Value;',
@@ -67,7 +100,7 @@ test("rejects a TypeScript path alias into reference", (t) => {
     JSON.stringify({
       compilerOptions: {
         paths: {
-          "@reference/*": ["../../packages/chapchoo-design-reference/src/*"],
+          "@reference/*": ["../../packages/design-reference/src/*"],
         },
       },
     }),
@@ -118,7 +151,7 @@ test("rejects local-link manifest aliases", (t) => {
     "package.json",
     JSON.stringify({
       name: names.ui,
-      dependencies: { alias: "link:../chapchoo-design-reference" },
+      dependencies: { alias: "link:../design-reference" },
     }),
   );
   assert.equal(checkDesignBoundaries(root).length, 1);
@@ -148,7 +181,7 @@ for (const protocol of ["file:", "link:"]) {
       JSON.stringify({
         name: names.ui,
         dependencies: {
-          alias: `${protocol}${join(root, "packages/chapchoo-design-reference")}`,
+          alias: `${protocol}${join(root, "packages/design-reference")}`,
         },
       }),
     );
@@ -170,12 +203,12 @@ test("rejects reference-to-app manifest dependencies", (t) => {
 });
 
 for (const statement of [
-  '@import "../../chapchoo-design-reference/src/reference.css";',
-  '@IMPORT "../../chapchoo-design-reference/src/reference.css";',
-  '@import url("../../chapchoo-design-reference/src/reference.css");',
-  "@import url(../../chapchoo-design-reference/src/reference.css) screen;",
+  '@import "../../design-reference/src/reference.css";',
+  '@IMPORT "../../design-reference/src/reference.css";',
+  '@import url("../../design-reference/src/reference.css");',
+  "@import url(../../design-reference/src/reference.css) screen;",
   '@import "@chapchoo/design-reference/reference.css" layer(reference);',
-  '.example { composes: example from "../../chapchoo-design-reference/src/reference.module.css"; }',
+  '.example { composes: example from "../../design-reference/src/reference.module.css"; }',
 ]) {
   test(`rejects reverse stylesheet edge: ${statement}`, (t) => {
     const { root, write } = fixture(t);
@@ -196,15 +229,11 @@ test("rejects reference-to-app stylesheet import", (t) => {
 
 test("allows common UI stylesheet reuse and ignores commented imports", (t) => {
   const { root, write } = fixture(t);
-  write(
-    "reference",
-    "src/example.css",
-    '@import "../../chapchoo-ui/src/style.css";',
-  );
+  write("reference", "src/example.css", '@import "../../ui/src/style.css";');
   write(
     "ui",
     "src/example.css",
-    '/* @import "../../chapchoo-design-reference/src/style.css"; */',
+    '/* @import "../../design-reference/src/style.css"; */',
   );
   assert.deepEqual(checkDesignBoundaries(root), []);
 });

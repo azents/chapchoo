@@ -41,10 +41,14 @@
 {{- $proofSecret := default (printf "%s-setup-proof" (include "chapchoo.fullname" .)) .Values.setupProof.existingSecret -}}
 {{- $env = append $env (include "chapchoo.secretEnv" (dict "name" "CHAPCHOO_SETUP_PROOF" "secret" $proofSecret "key" .Values.setupProof.key) | fromJson) -}}
 {{- if .Values.mail.enabled -}}
-{{- $env = append $env (dict "name" "CHAPCHOO_SES_SENDER" "value" .Values.mail.sender) -}}
-{{- $env = append $env (dict "name" "CHAPCHOO_SES_REGION" "value" .Values.mail.region) -}}
-{{- $env = append $env (include "chapchoo.secretEnv" (dict "name" "AWS_ACCESS_KEY_ID" "secret" .Values.mail.existingCredentialsSecret "key" .Values.mail.accessKeyIdKey) | fromJson) -}}
-{{- $env = append $env (include "chapchoo.secretEnv" (dict "name" "AWS_SECRET_ACCESS_KEY" "secret" .Values.mail.existingCredentialsSecret "key" .Values.mail.secretAccessKeyKey) | fromJson) -}}
+{{- $env = append $env (dict "name" "CHAPCHOO_SMTP_SENDER" "value" .Values.mail.sender) -}}
+{{- $env = append $env (dict "name" "CHAPCHOO_SMTP_HOST" "value" .Values.mail.host) -}}
+{{- $env = append $env (dict "name" "CHAPCHOO_SMTP_PORT" "value" (toString .Values.mail.port)) -}}
+{{- $env = append $env (dict "name" "CHAPCHOO_SMTP_TLS" "value" .Values.mail.tls) -}}
+{{- if .Values.mail.existingCredentialsSecret -}}
+{{- $env = append $env (include "chapchoo.secretEnv" (dict "name" "CHAPCHOO_SMTP_USERNAME" "secret" .Values.mail.existingCredentialsSecret "key" .Values.mail.usernameKey) | fromJson) -}}
+{{- $env = append $env (include "chapchoo.secretEnv" (dict "name" "CHAPCHOO_SMTP_PASSWORD" "secret" .Values.mail.existingCredentialsSecret "key" .Values.mail.passwordKey) | fromJson) -}}
+{{- end -}}
 {{- end -}}
 {{- toJson $env -}}
 {{- end -}}
@@ -91,8 +95,7 @@
 {{- end -}}
 {{- if .Values.mail.enabled -}}
 {{- $_ := required "mail.sender is required" .Values.mail.sender -}}
-{{- $_ := required "mail.region is required" .Values.mail.region -}}
-{{- $_ := required "mail.existingCredentialsSecret is required; no AWS provider is provisioned" .Values.mail.existingCredentialsSecret -}}
+{{- $_ := required "mail.host is required" .Values.mail.host -}}
 {{- end -}}
 {{- range $role := list "general" "admin" -}}
 {{- $web := index $.Values $role -}}

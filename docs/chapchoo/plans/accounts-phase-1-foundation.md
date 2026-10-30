@@ -32,8 +32,8 @@ tags: [accounts, implementation, rust, security]
 | Workstream | Owner | Owned paths | Depends on | Output | Validation |
 | --- | --- | --- | --- | --- | --- |
 | Approval/plan | /root | docs/chapchoo/{requirements,adr,design,plans} | requester approval | exact authority baseline | catalog and 18 tests |
-| Domain | /root | rust/crates/chapchoo-domain | approved policy | validated values, roles, typed errors | tests and dependency graph |
-| Crypto | /root | rust/crates/chapchoo-crypto | domain types | common credential and verification primitives | tamper/purpose/input/secret-safe tests |
+| Domain | /root | rust/crates/domain | approved policy | validated values, roles, typed errors | tests and dependency graph |
+| Crypto | /root | rust/crates/crypto | domain types | common credential and verification primitives | tamper/purpose/input/secret-safe tests |
 | Quality wiring | /root | rust/Cargo.*, rust/rust-toolchain.toml, scripts/check-rust.sh, .github/workflows/ci.yaml, DEVELOPMENT.md, .gitignore, .pre-commit-config.yaml | crates | pinned toolchain, locked builds and CI | root-owned fmt/Clippy/tests/hooks |
 
 - Integration order: domain → crypto → quality wiring → frozen diff review → PR.

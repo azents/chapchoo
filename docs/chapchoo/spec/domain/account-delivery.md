@@ -7,12 +7,18 @@ domain: accounts
 code_paths:
   - rust/apps/chapchoo
   - scripts/package-linux.py
+  - scripts/prepare-web-artifacts.py
+  - scripts/build-images.sh
+  - scripts/build-web.sh
+  - scripts/build-binary.sh
   - scripts/test-installed-linux.py
   - scripts/test-container-images.py
   - images/chapchoo
   - infra/charts/chapchoo
   - testenv/chapchoo
   - .github/workflows/linux-package.yaml
+  - .github/workflows/build-web.yaml
+  - .github/workflows/build-binary.yaml
   - .github/workflows/snapshot.yaml
   - scripts/publish-snapshot.py
 last_verified_at: 2026-10-30
@@ -34,8 +40,8 @@ The executable resolves its own installation directory. Archives contain:
 ```text
 chapchoo
 runtime/bin/node
-web/general/apps/chapchoo-web/server.mjs
-web/admin/apps/chapchoo-admin-web/server.mjs
+web/general/typescript/apps/web/server.mjs
+web/admin/typescript/apps/admin-web/server.mjs
 ```
 
 The corresponding app roots contain public/static assets; each traced tree has
@@ -76,14 +82,16 @@ downloads. It validates matching ELF64 architecture, pinned official Node24.22.1
 inventory/hash/bytes, safe links and app selection. Credential/state paths and
 escaping/broken/cyclic links fail. Archive and SHA-256 sidecar are deterministic
 for the input/epoch and are published without overwriting an existing output.
+The standard gzip stream uses fast compression rather than spending CI time on
+the maximum compression level; archive contents and validation are unchanged.
 The distribution includes the project and Node licenses. Linux x86-64 and ARM64
 are the supported targets; the release binary uses the fixed Bookworm builder.
 Deployment hosts need no Node, pnpm, Turbo or build toolchain.
 
 `images/chapchoo/Dockerfile` has independent backend/general-web/admin-web targets
-from digest-pinned multiarchitecture official images. Build stages retain the
-actual Rust/vendored-protoc and Node generation prerequisites; final images do
-not contain build toolchains. Runtime UID/GID is10001. Backend has no Node/web;
+from digest-pinned multiarchitecture official images. Separate build jobs own
+Rust/vendored-protoc and Next compilation. Image assembly only validates and
+copies their outputs; final images do not contain build toolchains. Runtime UID/GID is10001. Backend has no Node/web;
 web has the central executable, matching Node and selected standalone app, and
 receives no backend database/key credentials. Runtime supports a read-only root
 with an explicitly writable temporary directory. Database state is separately
@@ -154,10 +162,40 @@ focused delayed HttpOnly-cookie test; and independent nonroot/read-only images,
 private RPC routing and graceful stop. Lower Rust lifecycle tests include partial
 startup, foreign listener isolation and resistant-descendant cleanup.
 
-Native Linux CI runs the same archive checks and PostgreSQL journeys on actual
-x86-64/ARM64 runners and exercises the independent images before uploading only
-verified archives/checksums. Workflow configuration is not an executed success;
-actual exact-head CI results must be reported separately.
+The reusable native build workflow only builds images and archives on actual
+x86-64/ARM64 runners and exports archives/checksums. General CI owns orchestration:
+its single downstream `browser-e2e` job waits for the native build and consumes
+that same run's x86-64 archive, verifies its checksum, and runs the three core
+PostgreSQL/browser journeys once using only the bundled executable, Node and web
+outputs. It does not rebuild the product or repeat source/per-architecture E2E.
+ARM64 remains a native build/ELF/assembly gate rather than a second product-test
+lane. Snapshot retains publication-specific independent-image acceptance.
+Workflow configuration is not an executed success; actual exact-head CI results
+must be reported separately.
+
+Separate reusable web and binary build jobs produce architecture-matched
+artifacts. The web job builds Next on a native Linux runner and exports validated
+standalone/static/public inputs; the binary job uses the pinned Bookworm Rust
+build environment. Same-run artifact transfer preserves hidden Next files and
+symlinks inside tar files. Image and archive jobs both consume those outputs.
+`images/chapchoo/Dockerfile` is packaging-only: named `binary-artifacts` and
+`web-artifacts` contexts are required and it never runs Cargo, Next or pnpm.
+`ci-bake.hcl` assembles three independent native images using those contexts.
+
+Local `bash scripts/build-images.sh` first runs the same target builds through
+separate Linux builder containers, then packages the outputs. On Apple Silicon
+it defaults to Linux ARM64; Mac node_modules never enter Linux artifacts. Local
+builder cache mounts are target-scoped. CI Cargo, web compiler/Turbo and packaging
+layer caches are separated by their real toolchain/dependency/architecture
+inputs. Cache restoration never replaces Rust SQLite/PostgreSQL tests, the single
+browser gate, archive/checksum checks or Snapshot's image execution checks.
+
+General CI assigns Rust quality to its Rust job and frontend quality to explicit
+read-only checks. The repository-hook step omits only those duplicated calls;
+generated RPC and other contract hooks still execute. Local commit hooks retain
+their original full checks. Cargo, pre-commit environments, Turbo results and
+Next compiler caches are reused with toolchain/dependency-aware keys; source
+verification and actual tests remain required on every full CI execution.
 
 No live Helm/Argo deployment, external TLS/HTTP2 or live product acceptance is
 established yet. Those gates require explicit cluster/namespace, exposure/TLS,

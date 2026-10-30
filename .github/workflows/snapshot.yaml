@@ -19,8 +19,37 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  web-build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            architecture: x86_64
+          - runner: ubuntu-24.04-arm
+            architecture: aarch64
+    uses: ./.github/workflows/build-web.yaml
+    with:
+      runner: ${{ matrix.runner }}
+      architecture: ${{ matrix.architecture }}
+
+  binary-build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            architecture: x86_64
+          - runner: ubuntu-24.04-arm
+            architecture: aarch64
+    uses: ./.github/workflows/build-binary.yaml
+    with:
+      runner: ${{ matrix.runner }}
+      architecture: ${{ matrix.architecture }}
+
   build:
     name: Native snapshot ${{ matrix.architecture }}
+    needs: [web-build, binary-build]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     strategy:
@@ -40,6 +69,23 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: web-build-${{ matrix.machine }}
+          path: ${{ runner.temp }}/web-download
+      - name: Unpack this run's web build output
+        run: |
+          mkdir "$RUNNER_TEMP/web-artifacts"
+          tar -xf "$RUNNER_TEMP/web-download/web-artifacts.tar" -C "$RUNNER_TEMP/web-artifacts"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: binary-build-${{ matrix.machine }}
+          path: ${{ runner.temp }}/binary-download
+      - name: Unpack this run's release binary
+        run: |
+          mkdir "$RUNNER_TEMP/binary-artifacts"
+          tar -xf "$RUNNER_TEMP/binary-download/binary-artifacts.tar" -C "$RUNNER_TEMP/binary-artifacts"
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
       - name: Build native independent images and exercise deployment prefixes
         env:
           ARCHITECTURE: ${{ matrix.architecture }}
@@ -52,12 +98,31 @@ jobs:
             x86_64:x86_64|x86_64:amd64|aarch64:aarch64|aarch64:arm64) ;;
             *) echo 'Snapshot builder must be native'; exit 1 ;;
           esac
-          for component in backend general-web admin-web; do
-            docker build --target "$component" \
-              --label "org.opencontainers.image.source=https://github.com/azents/chapchoo" \
-              --label "org.opencontainers.image.revision=$GITHUB_SHA" \
-              -f images/chapchoo/Dockerfile -t "chapchoo-$component:acceptance" .
-          done
+      - name: Package existing target outputs into native images
+        uses: docker/bake-action@59cb1203cd42bcefd40a1b6d73b589e48c86040e # v7.5.0
+        env:
+          WEB_ARTIFACTS: ${{ runner.temp }}/web-artifacts
+          BINARY_ARTIFACTS: ${{ runner.temp }}/binary-artifacts
+        with:
+          source: .
+          files: images/chapchoo/ci-bake.hcl
+          allow: |
+            fs.read=${{ runner.temp }}/web-artifacts
+            fs.read=${{ runner.temp }}/binary-artifacts
+          set: |
+            backend.tags=chapchoo-backend:acceptance
+            general-web.tags=chapchoo-general-web:acceptance
+            admin-web.tags=chapchoo-admin-web:acceptance
+            *.labels.org.opencontainers.image.source=https://github.com/azents/chapchoo
+            *.labels.org.opencontainers.image.revision=${{ github.sha }}
+            backend.cache-from=type=gha,scope=backend-${{ matrix.machine }}
+            backend.cache-to=type=gha,scope=backend-${{ matrix.machine }},mode=max
+            general-web.cache-from=type=gha,scope=general-${{ matrix.machine }}
+            general-web.cache-to=type=gha,scope=general-${{ matrix.machine }},mode=max
+            admin-web.cache-from=type=gha,scope=admin-${{ matrix.machine }}
+            admin-web.cache-to=type=gha,scope=admin-${{ matrix.machine }},mode=max
+      - name: Exercise independent image deployment prefixes
+        run: |
           python3 scripts/test-container-images.py \
             --backend chapchoo-backend:acceptance \
             --general chapchoo-general-web:acceptance \

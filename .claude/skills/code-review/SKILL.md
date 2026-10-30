@@ -52,7 +52,7 @@ Before reviewing, collect the following:
 
 **b. Existing patterns for consistency checks**
 
-- Identify the app that owns the changed file, for example `python/apps/chapchoo/` or `typescript/apps/chapchoo-web/`.
+- Identify the app that owns the changed file, for example `rust/apps/chapchoo/` or `typescript/apps/web/`.
 - Search that app for existing implementations similar to the change:
   - New API endpoint → existing endpoint patterns
   - New service → existing service class patterns

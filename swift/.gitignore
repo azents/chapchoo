@@ -1,5 +1,0 @@
-.build/
-.tools/
-**/*.xcodeproj/
-**/xcuserdata/
-.DS_Store

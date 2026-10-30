@@ -196,14 +196,14 @@ def validate(backend: str, general: str, admin: str) -> None:
                 raise RuntimeError(
                     "Independent web image did not reach its private RPC backend"
                 )
-            opposite = "chapchoo-admin-web" if app == "general" else "chapchoo-web"
+            opposite = "admin-web" if app == "general" else "web"
             docker(
                 "exec",
                 identifier,
                 "/usr/bin/test",
                 "!",
                 "-e",
-                f"/opt/chapchoo/web/{'admin' if app == 'general' else 'general'}/apps/{opposite}",
+                f"/opt/chapchoo/web/{'admin' if app == 'general' else 'general'}/typescript/apps/{opposite}",
             )
         for identifier in reversed(containers):
             docker("stop", "--time", "30", identifier)

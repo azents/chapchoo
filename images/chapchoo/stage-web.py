@@ -36,7 +36,7 @@ def main() -> None:
         raise package.PackageError(
             "The image staging output must be outside its source tree"
         )
-    app = "chapchoo-web" if args.app == "general" else "chapchoo-admin-web"
+    app = "web" if args.app == "general" else "admin-web"
     source = args.typescript_root / "apps" / app
     args.output.mkdir(parents=True, exist_ok=False)
     shutil.copyfile(args.binary, args.output / "chapchoo")

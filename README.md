@@ -8,12 +8,11 @@ implemented here yet.
 
 ## Quick start
 
-Prerequisites: Node.js 24, pnpm (the version pinned in `typescript/package.json`),
+Prerequisites: Node.js 24, pnpm (the version pinned in `package.json`),
 Python 3.14, and uv.
 
 ```sh
 uvx pre-commit install
-cd typescript
 pnpm install --frozen-lockfile
 pnpm run dev --filter=@chapchoo/web
 ```

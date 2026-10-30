@@ -11,7 +11,7 @@ repos:
         name: Generated RPC contracts and live Node/Rust interoperability
         entry: bash scripts/check-rpc.sh
         language: system
-        files: ^(proto/|rust/|typescript/packages/chapchoo-rpc-client/|scripts/(generate-rpc-clients\.sh|check-rpc\.sh|test-rpc-clients\.py|run-rust-tests\.py))
+        files: ^(proto/|rust/|typescript/packages/rpc-client/|scripts/(generate-rpc-clients\.sh|check-rpc\.sh|test-rpc-clients\.py|run-rust-tests\.py))
         pass_filenames: false
       - id: snapshot-contracts
         name: Validate complete native snapshot publication contracts
@@ -24,6 +24,12 @@ repos:
         entry: python3 -m unittest scripts.tests.test_package_linux
         language: system
         files: ^(scripts/(package-linux\.py|tests/test_package_linux\.py)|images/chapchoo/)
+        pass_filenames: false
+      - id: ci-structure-contracts
+        name: Validate full-CI ownership and single-build artifact contracts
+        entry: python3 -m unittest scripts.tests.test_ci_structure scripts.tests.test_build_artifacts
+        language: system
+        files: ^(\.github/workflows/(ci|linux-package|build-web|build-binary|snapshot)\.yaml|images/chapchoo/|scripts/(build-.*\.sh|prepare-web-artifacts\.py|tests/test_(ci_structure|build_artifacts)\.py))
         pass_filenames: false
       - id: helm-chart-contracts
         name: Render and validate Helm and Argo preparation contracts offline
@@ -84,20 +90,20 @@ repos:
       - id: ts-format
         name: Format TypeScript
         language: system
-        entry: bash -c 'cd typescript && pnpm run format'
-        files: ^typescript/.*\.(ts|tsx|json)$
+        entry: pnpm run format
+        files: ^(typescript/|testenv/chapchoo/).*\.(ts|tsx|json|mjs)$|^(package|turbo)\.json$
         pass_filenames: false
       - id: ts-lint
         name: Lint TypeScript
         language: system
-        entry: bash -c 'cd typescript && pnpm run lint:fix'
-        files: ^typescript/.*\.(ts|tsx)$
+        entry: pnpm run lint:fix
+        files: ^(typescript/|testenv/chapchoo/).*\.(ts|tsx|mjs)$
         pass_filenames: false
       - id: ts-typecheck
         name: TypeScript type check
         language: system
-        entry: bash -c 'cd typescript && pnpm run typecheck'
-        files: ^typescript/.*\.(ts|tsx)$
+        entry: pnpm run typecheck
+        files: ^(typescript/|testenv/chapchoo/).*\.(ts|tsx)$
         pass_filenames: false
 exclude: |
   (?x)^(
@@ -106,6 +112,6 @@ exclude: |
     python/libs/chapchoo-public-client/.*|
     typescript/packages/chapchoo-admin-client/src/generated/.*|
     typescript/packages/chapchoo-public-client/src/generated/.*|
-    typescript/packages/chapchoo-rpc-client/src/generated/.*|
+    typescript/packages/rpc-client/src/generated/.*|
     .*pnpm-lock\.yaml$
   )$

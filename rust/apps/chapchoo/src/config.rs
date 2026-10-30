@@ -237,10 +237,14 @@ impl WebConfig {
             return Err(ConfigError::Variable(app.backend_variable()));
         }
         let (scope, application) = match app {
-            WebApp::General => ("general", "chapchoo-web"),
-            WebApp::Admin => ("admin", "chapchoo-admin-web"),
+            WebApp::General => ("general", "web"),
+            WebApp::Admin => ("admin", "admin-web"),
         };
-        let directory = root.join("web").join(scope).join("apps").join(application);
+        let directory = root
+            .join("web")
+            .join(scope)
+            .join("typescript/apps")
+            .join(application);
         Ok(Self {
             app,
             listen,
@@ -429,8 +433,78 @@ pub struct ApplicationConfig {
 
 pub struct MailConfig {
     pub sender: String,
-    pub region: String,
-    pub endpoint: Option<String>,
+    pub host: String,
+    pub port: u16,
+    pub security: chapchoo_mail::SmtpSecurity,
+    pub credentials: Option<(String, String)>,
+}
+
+impl MailConfig {
+    fn load_with(
+        read: impl Fn(&'static str) -> Result<Option<String>, ConfigError>,
+    ) -> Result<Option<Self>, AppError> {
+        let sender = read("CHAPCHOO_SMTP_SENDER")?;
+        let host = read("CHAPCHOO_SMTP_HOST")?;
+        let port = read("CHAPCHOO_SMTP_PORT")?;
+        let tls = read("CHAPCHOO_SMTP_TLS")?;
+        let username = read("CHAPCHOO_SMTP_USERNAME")?;
+        let password = read("CHAPCHOO_SMTP_PASSWORD")?;
+        if [&sender, &host, &port, &tls, &username, &password]
+            .iter()
+            .all(|value| value.is_none())
+        {
+            return Ok(None);
+        }
+        let sender = sender.ok_or(ConfigError::Variable("CHAPCHOO_SMTP_SENDER"))?;
+        chapchoo_domain::EmailAddress::parse(&sender)
+            .map_err(|_| ConfigError::Variable("CHAPCHOO_SMTP_SENDER"))?;
+        let host = host.ok_or(ConfigError::Variable("CHAPCHOO_SMTP_HOST"))?;
+        let security = match tls.as_deref().unwrap_or("starttls") {
+            "starttls" => chapchoo_mail::SmtpSecurity::StartTls,
+            "implicit" => chapchoo_mail::SmtpSecurity::ImplicitTls,
+            "loopback-plaintext" => chapchoo_mail::SmtpSecurity::LoopbackPlaintext,
+            _ => return Err(ConfigError::Variable("CHAPCHOO_SMTP_TLS").into()),
+        };
+        let port = match port {
+            Some(value) => value
+                .parse::<u16>()
+                .ok()
+                .filter(|port| *port > 0)
+                .ok_or(ConfigError::Variable("CHAPCHOO_SMTP_PORT"))?,
+            None => match security {
+                chapchoo_mail::SmtpSecurity::StartTls => 587,
+                chapchoo_mail::SmtpSecurity::ImplicitTls => 465,
+                chapchoo_mail::SmtpSecurity::LoopbackPlaintext => 25,
+            },
+        };
+        let credentials = match (username, password) {
+            (None, None) => None,
+            (Some(username), Some(password)) if !username.is_empty() && !password.is_empty() => {
+                Some((username, password))
+            }
+            _ => {
+                return Err(ConfigError::Variable(
+                    "CHAPCHOO_SMTP_USERNAME / CHAPCHOO_SMTP_PASSWORD",
+                )
+                .into());
+            }
+        };
+        let config = Self {
+            sender,
+            host,
+            port,
+            security,
+            credentials,
+        };
+        chapchoo_mail::SmtpMailer::new(
+            config.sender.clone(),
+            config.host.clone(),
+            config.port,
+            config.security,
+            config.credentials.clone(),
+        )?;
+        Ok(Some(config))
+    }
 }
 
 impl ApplicationConfig {
@@ -447,37 +521,7 @@ impl ApplicationConfig {
         if !(1..=256).contains(&password_capacity) {
             return Err(ConfigError::Variable("CHAPCHOO_PASSWORD_WORKERS").into());
         }
-        let sender = optional("CHAPCHOO_SES_SENDER")?;
-        let region = optional("CHAPCHOO_SES_REGION")?;
-        let endpoint = optional("CHAPCHOO_SES_ENDPOINT")?;
-        let mail = match (sender, region, endpoint) {
-            (None, None, None) => None,
-            (Some(sender), Some(region), endpoint) => {
-                chapchoo_domain::EmailAddress::parse(&sender)
-                    .map_err(|_| ConfigError::Variable("CHAPCHOO_SES_SENDER"))?;
-                if let Some(endpoint) = &endpoint {
-                    let parsed = url::Url::parse(endpoint)
-                        .map_err(|_| ConfigError::Variable("CHAPCHOO_SES_ENDPOINT"))?;
-                    if !matches!(parsed.scheme(), "http" | "https")
-                        || parsed.host_str().is_none()
-                        || !parsed.username().is_empty()
-                        || parsed.password().is_some()
-                    {
-                        return Err(ConfigError::Variable("CHAPCHOO_SES_ENDPOINT").into());
-                    }
-                }
-                Some(MailConfig {
-                    sender,
-                    region,
-                    endpoint,
-                })
-            }
-            _ => {
-                return Err(
-                    ConfigError::Variable("CHAPCHOO_SES_SENDER / CHAPCHOO_SES_REGION").into(),
-                );
-            }
-        };
+        let mail = MailConfig::load_with(optional)?;
         let validity_ms = duration("CHAPCHOO_SESSION_VALIDITY_DAYS", Some(180))?
             .ok_or(ConfigError::Variable("CHAPCHOO_SESSION_VALIDITY_DAYS"))?;
         Ok(Self {
@@ -514,6 +558,54 @@ mod tests {
     use super::*;
     use std::{collections::HashMap, ffi::OsStr};
 
+    fn smtp(values: &[(&'static str, &str)]) -> Result<Option<MailConfig>, AppError> {
+        MailConfig::load_with(|name| {
+            Ok(values
+                .iter()
+                .find(|(key, _)| *key == name)
+                .map(|(_, value)| (*value).to_owned()))
+        })
+    }
+
+    #[test]
+    fn smtp_is_optional_secure_and_rejects_partial_or_invalid_configuration() -> Result<(), AppError>
+    {
+        assert!(smtp(&[])?.is_none());
+        let base = [
+            ("CHAPCHOO_SMTP_SENDER", "sender@example.invalid"),
+            ("CHAPCHOO_SMTP_HOST", "smtp.example.invalid"),
+        ];
+        let config = smtp(&base)?.ok_or("Expected SMTP config")?;
+        assert_eq!(config.port, 587);
+        assert_eq!(config.security, chapchoo_mail::SmtpSecurity::StartTls);
+        assert!(config.credentials.is_none());
+        for (name, value) in [
+            ("CHAPCHOO_SMTP_PORT", "0"),
+            ("CHAPCHOO_SMTP_PORT", "65536"),
+            ("CHAPCHOO_SMTP_PORT", "-1"),
+            ("CHAPCHOO_SMTP_TLS", "opportunistic"),
+            ("CHAPCHOO_SMTP_TLS", "loopback-plaintext"),
+            ("CHAPCHOO_SMTP_USERNAME", "fixture-user"),
+            ("CHAPCHOO_SMTP_PASSWORD", "fixture-password"),
+        ] {
+            let mut values = base.to_vec();
+            values.push((name, value));
+            assert!(smtp(&values).is_err());
+        }
+        assert!(smtp(&base[..1]).is_err());
+        let mut implicit = base.to_vec();
+        implicit.push(("CHAPCHOO_SMTP_TLS", "implicit"));
+        assert_eq!(smtp(&implicit)?.ok_or("Expected SMTP config")?.port, 465);
+        implicit.extend([
+            ("CHAPCHOO_SMTP_USERNAME", "fixture-user"),
+            ("CHAPCHOO_SMTP_PASSWORD", "fixture-password"),
+        ]);
+        let authenticated = smtp(&implicit)?.ok_or("Expected SMTP config")?;
+        assert!(authenticated.credentials.is_some());
+        assert!(!format!("{authenticated:?}").contains("fixture-password"));
+        Ok(())
+    }
+
     fn web(public: &str, listen: &str, backend: &str) -> Result<WebConfig, AppError> {
         Ok(WebConfig::parse(
             WebApp::General,
@@ -537,7 +629,7 @@ mod tests {
             assert!(
                 config
                     .script
-                    .ends_with("web/general/apps/chapchoo-web/server.mjs")
+                    .ends_with("web/general/typescript/apps/web/server.mjs")
             );
         }
         assert_eq!(
@@ -625,6 +717,7 @@ mod tests {
             ("CHAPCHOO_SECRET_KEY", "key-canary"),
             ("CHAPCHOO_SETUP_PROOF", "proof-canary"),
             ("AWS_SECRET_ACCESS_KEY", "aws-canary"),
+            ("CHAPCHOO_SMTP_PASSWORD", "smtp-canary"),
             ("NODE_OPTIONS", "--require untrusted-preload"),
             ("NODE_TLS_REJECT_UNAUTHORIZED", "0"),
             ("LD_PRELOAD", "untrusted-native-preload"),
@@ -637,6 +730,7 @@ mod tests {
             "CHAPCHOO_SECRET_KEY",
             "CHAPCHOO_SETUP_PROOF",
             "AWS_SECRET_ACCESS_KEY",
+            "CHAPCHOO_SMTP_PASSWORD",
             "NODE_OPTIONS",
             "NODE_TLS_REJECT_UNAUTHORIZED",
             "LD_PRELOAD",

@@ -6,7 +6,7 @@ if [[ -n "$mode" && "$mode" != "--check" ]]; then
   printf 'Usage: %s [--check]\n' "$0" >&2
   exit 2
 fi
-generated="$root/typescript/packages/chapchoo-rpc-client/src/generated"
+generated="$root/typescript/packages/rpc-client/src/generated"
 temporary="$(mktemp -d)"
 trap 'rm -rf "$temporary"' EXIT
 cd "$root/rust"

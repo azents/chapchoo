@@ -13,10 +13,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  native-build:
+    uses: ./.github/workflows/linux-package.yaml
   rust:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
+      # CI needs assertions and diagnostics, not full debugger symbol tables.
+      # Keep local dev/test profiles and production release builds unchanged.
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
       CHAPCHOO_TEST_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/chapchoo_test
     services:
       postgres:
@@ -35,7 +41,19 @@ jobs:
         with:
           toolchain: 1.99.1
           components: clippy,rustfmt
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: rust
+          shared-key: rust-quality
+          cache-workspace-crates: true
       - run: bash scripts/check-rust.sh
+      - name: Preserve per-crate compilation timing
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rust-compilation-timing
+          path: rust/target/cargo-timings/
+          if-no-files-found: ignore
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -70,17 +88,38 @@ jobs:
           components: clippy,rustfmt
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
-          package_json_file: typescript/package.json
+          package_json_file: package.json
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
           cache: pnpm
-          cache-dependency-path: typescript/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-        working-directory: typescript
-      - run: uvx pre-commit run --all-files
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: rust
+          shared-key: contracts
+          cache-workspace-crates: true
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .turbo
+            typescript/apps/*/.next/cache
+          key: frontend-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: frontend-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+      - name: Repository hooks without separately owned quality checks
+        # Rust is owned by the rust job; frontend read-only checks run below.
+        # Local commits still execute every configured hook.
+        env:
+          SKIP: rust-quality,ts-format,ts-lint,ts-typecheck
+        run: uvx pre-commit run --all-files
       - run: uv run --locked --project .codex python -m unittest discover -s .codex/hooks -p '*_test.py'
       - run: python -m unittest scripts.tests.test_docs_catalog
+      - run: python -m unittest scripts.tests.test_ci_structure scripts.tests.test_build_artifacts
       - run: python scripts/docs_catalog.py validate
       - name: Validate inherited skill packages and helper tests
         run: |
@@ -92,44 +131,55 @@ jobs:
             uv run --locked --project .codex --with 'pytest==9.1.1' python -m pytest ".claude/skills/$skill/scripts" -q
           done
       - run: pnpm run format:check && pnpm run lint && pnpm run typecheck
-        working-directory: typescript
-      - name: Account web tests, product builds and component stories
+      - name: Account unit/support tests and component stories
         run: |
           pnpm --filter @chapchoo/ui test
           pnpm --filter @chapchoo/web-core test
           pnpm --filter @chapchoo/web test
           pnpm --filter @chapchoo/admin-web test
+          pnpm --filter @chapchoo/testenv test
           pnpm --filter @chapchoo/e2e test:unit
-          pnpm run build
+          node typescript/scripts/stage-web-fonts.mjs web
+          node typescript/scripts/stage-web-fonts.mjs admin-web
           pnpm run build-storybook --filter=@chapchoo/web --filter=@chapchoo/admin-web --filter=@chapchoo/design-reference
-        working-directory: typescript
-  accounts-browser:
-    runs-on: ubuntu-latest
+      - name: Render app-owned component behavior without backend assembly
+        run: |
+          pnpm --filter @chapchoo/e2e exec playwright install chromium
+          pnpm --filter @chapchoo/web test:components
+          pnpm --filter @chapchoo/admin-web test:components
+  browser-e2e:
+    needs: native-build
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       NEXT_TELEMETRY_DISABLED: "1"
       TURBO_TELEMETRY_DISABLED: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable installer
-        with:
-          toolchain: 1.99.1
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
-          package_json_file: typescript/package.json
+          package_json_file: package.json
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
           cache: pnpm
-          cache-dependency-path: typescript/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
       - name: Expose runner PostgreSQL tools
         run: |
           echo "$(pg_config --bindir)" >> "$GITHUB_PATH"
           test -x "$(pg_config --bindir)/initdb"
           test -x "$(pg_config --bindir)/pg_ctl"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: chapchoo-linux-x86_64
+          path: ${{ runner.temp }}/package
+      - name: Open this run's built package for the single browser gate
+        run: |
+          cd "$RUNNER_TEMP/package"
+          sha256sum --check chapchoo-linux-x86_64.tar.gz.sha256
+          mkdir "$RUNNER_TEMP/installed"
+          tar -xzf chapchoo-linux-x86_64.tar.gz -C "$RUNNER_TEMP/installed"
+          echo "CHAPCHOO_E2E_PACKAGE_ROOT=$RUNNER_TEMP/installed/chapchoo-linux-x86_64" >> "$GITHUB_ENV"
       - run: pnpm install --frozen-lockfile
-        working-directory: typescript
       - run: pnpm --filter @chapchoo/e2e exec playwright install chromium
-        working-directory: typescript
       - run: pnpm --filter @chapchoo/e2e test:e2e
-        working-directory: typescript

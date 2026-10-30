@@ -386,6 +386,27 @@ class ChartContractsTest(unittest.TestCase):
         self.assertEqual(self.kind(explicit, "Role"), [])
         self.assertEqual(len(self.kind(explicit, "Job")), 1)
 
+    def test_smtp_tls_relay_can_be_unauthenticated_and_rejects_unsafe_settings(
+        self,
+    ) -> None:
+        mail = {
+            "enabled": True,
+            "sender": "mail@example.invalid",
+            "host": "smtp.example.invalid",
+            "tls": "implicit",
+            "port": 465,
+        }
+        documents = self.render({"mail": mail})
+        backend = self.component(documents, "backend-both")
+        env = self.environment(backend["spec"]["template"]["spec"]["containers"][0])
+        self.assertEqual(env["CHAPCHOO_SMTP_PORT"]["value"], "465")
+        self.assertNotIn("CHAPCHOO_SMTP_USERNAME", env)
+        self.assertNotIn("CHAPCHOO_SMTP_PASSWORD", env)
+        for invalid in [{"port": 0}, {"port": 65536}, {"tls": "loopback-plaintext"}]:
+            self.assertNotEqual(
+                self.template({"mail": {**mail, **invalid}}).returncode, 0
+            )
+
     def test_mail_credentials_are_backend_only_and_not_preparation_prerequisites(
         self,
     ) -> None:
@@ -394,16 +415,17 @@ class ChartContractsTest(unittest.TestCase):
                 "mail": {
                     "enabled": True,
                     "sender": "mail@example.invalid",
-                    "region": "us-east-1",
+                    "host": "smtp.example.invalid",
                     "existingCredentialsSecret": "fixture-mail",
                 }
             }
         )
         backend = self.component(documents, "backend-both")
         env = self.environment(backend["spec"]["template"]["spec"]["containers"][0])
-        self.assertEqual(env["CHAPCHOO_SES_REGION"]["value"], "us-east-1")
+        self.assertEqual(env["CHAPCHOO_SMTP_HOST"]["value"], "smtp.example.invalid")
+        self.assertEqual(env["CHAPCHOO_SMTP_TLS"]["value"], "starttls")
         self.assertEqual(
-            env["AWS_SECRET_ACCESS_KEY"]["valueFrom"]["secretKeyRef"]["name"],
+            env["CHAPCHOO_SMTP_PASSWORD"]["valueFrom"]["secretKeyRef"]["name"],
             "fixture-mail",
         )
         for deployment in self.kind(documents, "Deployment"):

@@ -5,16 +5,16 @@ tags: [accounts, rust, database]
 spec_type: domain
 domain: accounts
 code_paths:
-  - rust/crates/chapchoo-persistence/src/preparation.rs
-  - rust/crates/chapchoo-persistence/src/store.rs
-  - rust/crates/chapchoo-persistence/src/models.rs
-  - rust/crates/chapchoo-persistence/src/identity.rs
-  - rust/crates/chapchoo-persistence/src/accounts.rs
-  - rust/crates/chapchoo-persistence/src/challenges.rs
-  - rust/crates/chapchoo-persistence/src/sessions.rs
-  - rust/crates/chapchoo-persistence/src/teams.rs
-  - rust/crates/chapchoo-persistence/migrations/sqlite/00000000000001_accounts/up.sql
-  - rust/crates/chapchoo-persistence/migrations/postgres/00000000000001_accounts/up.sql
+  - rust/crates/persistence/src/preparation.rs
+  - rust/crates/persistence/src/store.rs
+  - rust/crates/persistence/src/models.rs
+  - rust/crates/persistence/src/identity.rs
+  - rust/crates/persistence/src/accounts.rs
+  - rust/crates/persistence/src/challenges.rs
+  - rust/crates/persistence/src/sessions.rs
+  - rust/crates/persistence/src/teams.rs
+  - rust/crates/persistence/migrations/sqlite/00000000000001_accounts/up.sql
+  - rust/crates/persistence/migrations/postgres/00000000000001_accounts/up.sql
 last_verified_at: 2026-10-30
 spec_version: 1
 ---

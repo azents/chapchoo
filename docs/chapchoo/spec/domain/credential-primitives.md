@@ -5,14 +5,14 @@ tags: [accounts, rust, security]
 spec_type: domain
 domain: credentials
 code_paths:
-  - rust/crates/chapchoo-domain/src/email.rs
-  - rust/crates/chapchoo-domain/src/password.rs
-  - rust/crates/chapchoo-domain/src/role.rs
-  - rust/crates/chapchoo-crypto/src/lib.rs
-  - rust/crates/chapchoo-crypto/src/root.rs
-  - rust/crates/chapchoo-crypto/src/code.rs
-  - rust/crates/chapchoo-crypto/src/password.rs
-  - rust/crates/chapchoo-crypto/src/token.rs
+  - rust/crates/domain/src/email.rs
+  - rust/crates/domain/src/password.rs
+  - rust/crates/domain/src/role.rs
+  - rust/crates/crypto/src/lib.rs
+  - rust/crates/crypto/src/root.rs
+  - rust/crates/crypto/src/code.rs
+  - rust/crates/crypto/src/password.rs
+  - rust/crates/crypto/src/token.rs
 last_verified_at: 2026-10-29
 spec_version: 1
 ---

@@ -8,7 +8,7 @@ if [[ "$actual" != "$expected" ]]; then
   exit 1
 fi
 cargo fmt --all -- --check
-cargo clippy --locked --workspace --all-targets -- -D warnings
+cargo clippy --locked --workspace --all-targets --timings -- -D warnings
 python3 ../scripts/run-rust-tests.py
 cargo metadata --locked --format-version 1 --no-deps | python3 -c '
 import json, sys
@@ -38,7 +38,7 @@ allowed = {
         "base64", "tempfile", "tokio", "tokio-stream",
     },
     "chapchoo-mail": {
-        "chapchoo-service", "aws-config", "aws-sdk-sesv2", "tokio", "chapchoo-domain",
+        "chapchoo-service", "lettre", "tokio", "chapchoo-domain", "rcgen", "tokio-rustls",
     },
     "chapchoo": {
         "chapchoo-crypto", "chapchoo-domain", "chapchoo-persistence", "chapchoo-service",

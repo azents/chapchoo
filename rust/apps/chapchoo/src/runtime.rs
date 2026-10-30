@@ -193,9 +193,13 @@ async fn start_backends(
     let application = ApplicationConfig::load()?;
     let store = config.connect().await?;
     let mailer: Option<Arc<dyn Mailer>> = match application.mail {
-        Some(mail) => Some(Arc::new(
-            chapchoo_mail::SesMailer::new(mail.sender, mail.region, mail.endpoint).await,
-        )),
+        Some(mail) => Some(Arc::new(chapchoo_mail::SmtpMailer::new(
+            mail.sender,
+            mail.host,
+            mail.port,
+            mail.security,
+            mail.credentials,
+        )?)),
         None => None,
     };
     let service = Arc::new(AccountsService::new(

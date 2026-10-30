@@ -13,7 +13,7 @@ Two apps importing each other couples deploys and creates circular workspace dep
 ## Bad
 
 ```json
-// typescript/apps/chapchoo-admin-web/package.json
+// typescript/apps/admin-web/package.json
 {
   "dependencies": {
     "@chapchoo/web": "workspace:*"
@@ -24,7 +24,7 @@ Two apps importing each other couples deploys and creates circular workspace dep
 ## Good
 
 ```json
-// typescript/apps/chapchoo-admin-web/package.json
+// typescript/apps/admin-web/package.json
 {
   "dependencies": {
     "@chapchoo/admin-client": "workspace:*"
