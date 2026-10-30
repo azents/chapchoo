@@ -181,5 +181,7 @@ and runs the three core journeys from that bundle. Source-mode CI E2E and the tw
 per-architecture product E2E repetitions are replaced by this one gate; no extra
 verification workflow is added. ARM64 remains native build/ELF/assembly evidence,
 not a second product-test execution. Snapshot publication-specific image acceptance
-is unchanged. Runner scope/order changed, so earlier durations are historical and
+is unchanged. Validate also drops its duplicate aggregate product build: native
+web-build owns those builds; library prerequisites and Storybook/component checks
+remain. Runner scope/order changed, so earlier durations are historical and
 must not be labeled final-candidate performance. Exact new-head CI is pending.

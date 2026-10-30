@@ -56,6 +56,7 @@ class CiStructureTests(unittest.TestCase):
         self.assertIn("sha256sum --check chapchoo-linux-x86_64.tar.gz.sha256", browser)
         self.assertIn("CHAPCHOO_E2E_PACKAGE_ROOT=", browser)
         self.assertEqual(ci.count("run: pnpm --filter @chapchoo/e2e test:e2e"), 1)
+        self.assertNotIn("          pnpm run build\n", ci)
         self.assertNotIn("docker build ", workflow)
         self.assertNotIn("turbo run build", workflow)
         self.assertIn('web-artifacts/general/standalone"', workflow)

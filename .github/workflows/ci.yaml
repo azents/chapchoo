@@ -131,7 +131,7 @@ jobs:
             uv run --locked --project .codex --with 'pytest==9.1.1' python -m pytest ".claude/skills/$skill/scripts" -q
           done
       - run: pnpm run format:check && pnpm run lint && pnpm run typecheck
-      - name: Account web tests, product builds and component stories
+      - name: Account unit/support tests and component stories
         run: |
           pnpm --filter @chapchoo/ui test
           pnpm --filter @chapchoo/web-core test
@@ -139,7 +139,8 @@ jobs:
           pnpm --filter @chapchoo/admin-web test
           pnpm --filter @chapchoo/testenv test
           pnpm --filter @chapchoo/e2e test:unit
-          pnpm run build
+          node typescript/scripts/stage-web-fonts.mjs web
+          node typescript/scripts/stage-web-fonts.mjs admin-web
           pnpm run build-storybook --filter=@chapchoo/web --filter=@chapchoo/admin-web --filter=@chapchoo/design-reference
       - name: Render app-owned component behavior without backend assembly
         run: |
