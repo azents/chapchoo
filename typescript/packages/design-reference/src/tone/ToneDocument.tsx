@@ -531,6 +531,7 @@ function Planner({ state, onChange }: DemoProps): ReactElement {
           <Button
             variant="default"
             size="xs"
+            aria-label="이전 주"
             onClick={() => onChange({ notice: "데모: 이전 주" })}
           >
             ←
@@ -538,6 +539,7 @@ function Planner({ state, onChange }: DemoProps): ReactElement {
           <Button
             variant="default"
             size="xs"
+            aria-label="다음 주"
             onClick={() => onChange({ notice: "데모: 다음 주" })}
           >
             →
