@@ -35,19 +35,27 @@ class CiStructureTests(unittest.TestCase):
         self.assertIn('CARGO_PROFILE_DEV_DEBUG: "0"', rust_job)
         self.assertIn('CARGO_PROFILE_TEST_DEBUG: "0"', rust_job)
 
-    def test_native_acceptance_retains_all_assembly_boundaries(self) -> None:
+    def test_native_build_exports_outputs_to_one_downstream_browser_gate(self) -> None:
         workflow = (ROOT / ".github/workflows/linux-package.yaml").read_text()
         for required in [
             "architecture: x86_64",
             "architecture: aarch64",
-            "scripts/test-installed-linux.py",
-            "scripts/test-container-images.py",
-            "pnpm --filter @chapchoo/e2e test:e2e",
-            "sha256sum --check",
             "scripts/package-linux.py",
             'test "$(uname -m)" = "$EXPECTED_ARCH"',
+            "workflow_call:",
         ]:
             self.assertIn(required, workflow)
+        self.assertNotIn("test:e2e", workflow)
+        self.assertNotIn("test-installed-linux.py", workflow)
+        self.assertNotIn("test-container-images.py", workflow)
+        ci = (ROOT / ".github/workflows/ci.yaml").read_text()
+        self.assertIn("uses: ./.github/workflows/linux-package.yaml", ci)
+        browser = ci.split("  browser-e2e:", 1)[1]
+        self.assertIn("needs: native-build", browser)
+        self.assertIn("name: chapchoo-linux-x86_64", browser)
+        self.assertIn("sha256sum --check chapchoo-linux-x86_64.tar.gz.sha256", browser)
+        self.assertIn("CHAPCHOO_E2E_PACKAGE_ROOT=", browser)
+        self.assertEqual(ci.count("run: pnpm --filter @chapchoo/e2e test:e2e"), 1)
         self.assertNotIn("docker build ", workflow)
         self.assertNotIn("turbo run build", workflow)
         self.assertIn('web-artifacts/general/standalone"', workflow)
@@ -67,7 +75,7 @@ class CiStructureTests(unittest.TestCase):
         workspace = (ROOT / "pnpm-workspace.yaml").read_text()
         for path in ["typescript/apps/*", "typescript/packages/*", "testenv/chapchoo"]:
             self.assertIn(path, workspace)
-        for filename in ["ci.yaml", "linux-package.yaml", "build-web.yaml"]:
+        for filename in ["ci.yaml", "build-web.yaml"]:
             workflow = (ROOT / ".github/workflows" / filename).read_text()
             self.assertIn("package_json_file: package.json", workflow)
             self.assertIn("cache-dependency-path: pnpm-lock.yaml", workflow)

@@ -165,3 +165,21 @@ filesystem-wide free space was 59 GiB, which does not establish the previous Pod
 ephemeral-storage allowance or peak use. Do not repeat heavy local Docker builds;
 use existing native CI acceptance gates for the new structure. No global cache
 prune, cluster mutation, publication, deployment or merge was performed.
+
+## Build-only pipeline and single E2E correction
+
+`7faccd6` passed all nine checks (CI 41038659849 and native 41038659888,
+attempt 1). The requester then corrected the validation design: build pipelines
+must only build, and existing E2E must not be duplicated. Attempt 2 of that older
+configuration was canceled rather than measured as the final candidate.
+
+The native workflow is now a reusable build-only pipeline called by CI. It builds
+both architectures' images/archives and uploads outputs without browser, PostgreSQL
+or product-runtime acceptance steps. The existing single `browser-e2e` job depends
+on those builds, downloads the same run's x86-64 archive, verifies its checksum,
+and runs the three core journeys from that bundle. Source-mode CI E2E and the two
+per-architecture product E2E repetitions are replaced by this one gate; no extra
+verification workflow is added. ARM64 remains native build/ELF/assembly evidence,
+not a second product-test execution. Snapshot publication-specific image acceptance
+is unchanged. Runner scope/order changed, so earlier durations are historical and
+must not be labeled final-candidate performance. Exact new-head CI is pending.

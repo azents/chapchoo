@@ -154,6 +154,11 @@ The final image Dockerfile only validates and copies existing target outputs; it
 never recompiles the applications. CI uses native web and Bookworm binary build
 jobs and transfers their matching outputs within the same workflow run.
 
+The native build workflow only builds and exports outputs. The existing
+`browser-e2e` job in CI consumes the x86-64 archive from that same run and verifies
+the three product journeys once, without source rebuilds or per-architecture
+duplicates. ARM64 retains native compilation and artifact/ELF validation.
+
 ```sh
 # Mac/Linux: build Linux outputs first, then package all three images.
 bash scripts/build-images.sh

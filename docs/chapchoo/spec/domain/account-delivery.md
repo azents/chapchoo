@@ -162,10 +162,16 @@ focused delayed HttpOnly-cookie test; and independent nonroot/read-only images,
 private RPC routing and graceful stop. Lower Rust lifecycle tests include partial
 startup, foreign listener isolation and resistant-descendant cleanup.
 
-Native Linux CI runs the same archive checks and PostgreSQL journeys on actual
-x86-64/ARM64 runners and exercises the independent images before uploading only
-verified archives/checksums. Workflow configuration is not an executed success;
-actual exact-head CI results must be reported separately.
+The reusable native build workflow only builds images and archives on actual
+x86-64/ARM64 runners and exports archives/checksums. General CI owns orchestration:
+its single downstream `browser-e2e` job waits for the native build and consumes
+that same run's x86-64 archive, verifies its checksum, and runs the three core
+PostgreSQL/browser journeys once using only the bundled executable, Node and web
+outputs. It does not rebuild the product or repeat source/per-architecture E2E.
+ARM64 remains a native build/ELF/assembly gate rather than a second product-test
+lane. Snapshot retains publication-specific independent-image acceptance.
+Workflow configuration is not an executed success; actual exact-head CI results
+must be reported separately.
 
 Separate reusable web and binary build jobs produce architecture-matched
 artifacts. The web job builds Next on a native Linux runner and exports validated
@@ -181,8 +187,8 @@ separate Linux builder containers, then packages the outputs. On Apple Silicon
 it defaults to Linux ARM64; Mac node_modules never enter Linux artifacts. Local
 builder cache mounts are target-scoped. CI Cargo, web compiler/Turbo and packaging
 layer caches are separated by their real toolchain/dependency/architecture
-inputs. Cache restoration never replaces the retained SQLite/PostgreSQL browser,
-archive/checksum or independent-image execution checks.
+inputs. Cache restoration never replaces Rust SQLite/PostgreSQL tests, the single
+browser gate, archive/checksum checks or Snapshot's image execution checks.
 
 General CI assigns Rust quality to its Rust job and frontend quality to explicit
 read-only checks. The repository-hook step omits only those duplicated calls;

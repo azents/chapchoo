@@ -134,6 +134,10 @@ The repository root owns the pnpm workspace, lockfile and Turbo task graph.
 It includes `typescript/apps/*`, `typescript/packages/*` and `testenv/chapchoo`.
 Run the commands above from the repository root.
 
+CI's existing `browser-e2e` job consumes the native build's x86-64 archive and runs
+the core journeys once. The reusable native workflow only builds; it has no E2E
+or runtime acceptance steps. Local E2E can still assemble source for development.
+
 Workspace lint/typecheck, dev and Storybook commands build their library
 prerequisites first. Turbo restores emitted `dist`/Next outputs from its cache;
 deployment configuration is read only by running listeners. Development passes only
