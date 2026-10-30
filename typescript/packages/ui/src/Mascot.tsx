@@ -18,7 +18,7 @@ export function Mascot({
       h={size}
       radius="lg"
       fit="contain"
-      style={{ mixBlendMode: "multiply", flexShrink: 0 }}
+      style={{ flexShrink: 0 }}
     />
   );
 }

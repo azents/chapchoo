@@ -1,4 +1,10 @@
 {
+  "Appearance": {
+    "label": "화면 모드",
+    "system": "시스템",
+    "light": "라이트",
+    "dark": "다크"
+  },
   "accounts": {
     "login": "로그인",
     "signup": "계정 만들기",

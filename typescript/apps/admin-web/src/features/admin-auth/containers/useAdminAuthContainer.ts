@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { useAppearanceControl } from "@/shared/appearance/useAppearanceControl";
 import { errorKey } from "@/shared/lib/errors";
 import { trpc } from "@/shared/rpc/client";
 import type {
@@ -20,6 +21,7 @@ export function useAdminAuthContainer({
   basePath,
 }: AdminAuthInput): AdminAuthProps {
   const text = useTranslations("AdminAuth");
+  const appearance = useAppearanceControl();
   const errors = useTranslations("Errors");
   const cache = useQueryClient();
   const [method, setMethod] = useState<AuthMethod>("password");
@@ -133,6 +135,7 @@ export function useAdminAuthContainer({
 
   return {
     mode,
+    appearance,
     method,
     state,
     basePath,

@@ -10,6 +10,7 @@
 import { MantineProvider } from "@mantine/core";
 import { ModalsProvider } from "@mantine/modals";
 import { theme, themeCssVariables } from "./theme";
+import type { MantineColorSchemeManager } from "@mantine/core";
 import type { ReactNode } from "react";
 
 type MantineColorScheme = "light" | "dark" | "auto";
@@ -17,13 +18,15 @@ type MantineColorScheme = "light" | "dark" | "auto";
 export interface AppMantineProviderProps {
   children: ReactNode;
   defaultColorScheme?: MantineColorScheme;
-  forceColorScheme?: "light";
+  forceColorScheme?: "light" | "dark";
+  colorSchemeManager?: MantineColorSchemeManager;
 }
 
 export function AppMantineProvider({
   children,
   defaultColorScheme = "light",
-  forceColorScheme = "light",
+  forceColorScheme,
+  colorSchemeManager,
 }: AppMantineProviderProps): ReactNode {
   return (
     <MantineProvider
@@ -31,6 +34,7 @@ export function AppMantineProvider({
       cssVariablesResolver={themeCssVariables}
       defaultColorScheme={defaultColorScheme}
       forceColorScheme={forceColorScheme}
+      colorSchemeManager={colorSchemeManager}
     >
       <ModalsProvider>{children}</ModalsProvider>
     </MantineProvider>

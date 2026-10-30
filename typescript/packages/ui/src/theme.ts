@@ -20,44 +20,50 @@ import {
   Tabs,
   ThemeIcon,
 } from "@mantine/core";
-import { toneColors, platformFonts } from "./designTokens";
+import { toneColors, darkToneColors, platformFonts } from "./designTokens";
 import classes from "./theme.module.css";
 import "./editors.css";
 import type { CSSVariablesResolver } from "@mantine/core";
+
+function modeVariables(colors: typeof toneColors): Record<string, string> {
+  return {
+    ...Object.fromEntries(
+      Object.entries(colors).map(([key, value]) => [
+        `--chapchoo-color-${key}`,
+        value,
+      ]),
+    ),
+    "--chapchoo-color-surface-raised": colors.surfaceWarm,
+    "--chapchoo-color-overlay": colors.overlay,
+    "--chapchoo-color-surface-hover": colors.selected,
+    "--chapchoo-color-border-strong": colors.borderStrong,
+    "--chapchoo-color-error": colors.danger,
+    "--chapchoo-color-subtle": colors.secondary,
+    "--chapchoo-color-inverse": colors.ink,
+    "--chapchoo-color-on-inverse": colors.surface,
+    "--chapchoo-color-inverse-muted": colors.navigation,
+    "--mantine-color-body": colors.canvas,
+    "--mantine-color-text": colors.ink,
+    "--mantine-color-dimmed": colors.secondary,
+    "--mantine-color-default": colors.surfaceWarm,
+    "--mantine-color-default-hover": colors.selected,
+    "--mantine-color-default-border": colors.border,
+    "--mantine-color-placeholder": colors.muted,
+    "--mantine-color-anchor": colors.accentText,
+    "--mantine-color-error": colors.danger,
+  };
+}
 
 export const themeCssVariables: CSSVariablesResolver = () => ({
   variables: {
     "--chapchoo-font-input-mobile": "max(16px, 1rem)",
     "--chapchoo-line-height-control": "1.5",
-    ...Object.fromEntries(
-      Object.entries(toneColors).map(([key, value]) => [
-        `--chapchoo-color-${key}`,
-        value,
-      ]),
-    ),
-    "--chapchoo-color-surface-raised": toneColors.surfaceWarm,
-    "--chapchoo-color-surface-hover": toneColors.selected,
-    "--chapchoo-color-border-strong": toneColors.borderStrong,
-    "--chapchoo-color-error": toneColors.danger,
-    "--chapchoo-color-subtle": toneColors.secondary,
-    "--chapchoo-color-inverse": toneColors.ink,
-    "--chapchoo-color-on-inverse": toneColors.surface,
-    "--chapchoo-color-inverse-muted": toneColors.navigation,
   },
-  light: {
-    "--mantine-color-body": toneColors.canvas,
-    "--mantine-color-text": toneColors.ink,
-    "--mantine-color-dimmed": toneColors.secondary,
-    "--mantine-color-default": toneColors.surfaceWarm,
-    "--mantine-color-default-hover": toneColors.selected,
-    "--mantine-color-default-border": toneColors.border,
-    "--mantine-color-placeholder": toneColors.muted,
-    "--mantine-color-anchor": toneColors.onAccent,
-  },
-  dark: {},
+  light: modeVariables(toneColors),
+  dark: modeVariables(darkToneColors),
 });
 
-/** Selected light web design; DESIGN.md is the visual authority. */
+/** Adaptive web design; DESIGN.md is the visual authority. */
 export const theme = createTheme({
   primaryColor: "butter",
   primaryShade: 6,
@@ -151,12 +157,35 @@ export const theme = createTheme({
   variantColorResolver: (input) => {
     const resolved = defaultVariantColorsResolver(input);
     const color = input.color ?? input.theme.primaryColor;
-    if (color === "butter") {
+    const role =
+      color === "butter"
+        ? "accent"
+        : color === "red"
+          ? "danger"
+          : color === "green"
+            ? "success"
+            : null;
+    if (role) {
+      const foreground = `var(--chapchoo-color-${role === "accent" ? "accentText" : role})`;
       if (input.variant === "filled") {
         return {
           ...resolved,
-          color: toneColors.onAccent,
-          hoverColor: toneColors.onAccent,
+          background:
+            role === "accent"
+              ? "var(--chapchoo-color-accent)"
+              : resolved.background,
+          hover:
+            role === "accent"
+              ? "var(--chapchoo-color-accentHover)"
+              : resolved.hover,
+          color:
+            role === "accent"
+              ? "var(--chapchoo-color-onAccent)"
+              : resolved.color,
+          hoverColor:
+            role === "accent"
+              ? "var(--chapchoo-color-onAccent)"
+              : resolved.hoverColor,
         };
       }
       if (
@@ -164,11 +193,16 @@ export const theme = createTheme({
       ) {
         return {
           ...resolved,
-          color: toneColors.onAccent,
-          hoverColor: toneColors.onAccent,
+          background:
+            input.variant === "light"
+              ? `var(--chapchoo-color-${role}Soft)`
+              : resolved.background,
+          hover: `var(--chapchoo-color-${role}Soft)`,
+          color: foreground,
+          hoverColor: foreground,
           border:
             input.variant === "outline"
-              ? `1px solid ${toneColors.focus}`
+              ? `1px solid ${foreground}`
               : resolved.border,
         };
       }
@@ -200,17 +234,19 @@ export const theme = createTheme({
       defaultProps: { radius: "lg" },
       classNames: { root: classes.paper },
     }),
-    Loader: Loader.extend({ defaultProps: { color: "dark" } }),
+    Loader: Loader.extend({
+      defaultProps: { color: "var(--chapchoo-color-secondary)" },
+    }),
     Modal: Modal.extend({
       defaultProps: { radius: "lg", padding: "xl" },
-      classNames: { content: classes.modal },
+      classNames: { content: classes.modal, header: classes.modalHeader },
     }),
     NavLink: NavLink.extend({
       classNames: { root: classes.navLink, label: classes.navLabel },
     }),
     Menu: Menu.extend({
       defaultProps: { radius: "md", shadow: "xs" },
-      classNames: { item: classes.menuItem },
+      classNames: { item: classes.menuItem, dropdown: classes.menuDropdown },
     }),
     Table: Table.extend({
       classNames: { th: classes.tableHeading, td: classes.tableCell },

@@ -44,6 +44,12 @@ const meta = {
   title: "Accounts/Workspace",
   component: Workspace,
   args: {
+    appearance: {
+      value: "system",
+      label: "Appearance",
+      labels: { system: "System", light: "Light", dark: "Dark" },
+      onChange: (): void => {},
+    },
     basePath: "",
     copy: messages.accounts,
     state: { type: "LOADED", data },

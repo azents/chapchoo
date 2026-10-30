@@ -3,12 +3,14 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useMessages } from "next-intl";
 import { useRef, useState } from "react";
+import { useAppearanceControl } from "@/shared/appearance/useAppearanceControl";
 import { trpc } from "@/shared/rpc/client";
 import { accountError } from "../errors";
 import type { AuthInput, AuthProps, Submission } from "../types";
 
 export function useAuthContainer(input: AuthInput): AuthProps {
   const copy = useMessages().accounts;
+  const appearance = useAppearanceControl();
   const client = useQueryClient();
   const utils = trpc.useUtils();
   const [email, setEmail] = useState("");
@@ -183,6 +185,7 @@ export function useAuthContainer(input: AuthInput): AuthProps {
   }
   return {
     ...input,
+    appearance,
     copy,
     state,
     submission,

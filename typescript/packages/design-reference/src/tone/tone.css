@@ -90,7 +90,6 @@
 .cc-mascot {
   display: block;
   object-fit: contain;
-  mix-blend-mode: multiply;
   border-radius: 1.25rem;
   width: 3rem;
   height: 3rem;

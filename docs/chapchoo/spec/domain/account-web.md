@@ -32,12 +32,14 @@ shared theme/token sources implement the selected DESIGN.md values. Product
 routes and stories replace Hello World; there is no second Admin theme or Refine
 layer. App containers own data/state/navigation; shared presentation receives
 props/callbacks and imports no business RPC, environment, cookie or token store.
-Both web apps force the selected light theme and load locally bundled Pretendard
+Both web apps support System, Light and Dark and load locally bundled Pretendard
 with Geist Mono reserved for code. Pretendard uses the complete official
 unicode-range subset set; the browser fetches only ranges used by rendered text,
 without a whole-font or unused mono preload. The runtime mount is passed into
 font stylesheet, font and decorative mascot URLs. The 72px mascot uses a 216px
-production derivative while design originals remain in common UI assets.
+alpha-preserving production derivative with normal composition. Five transparent
+PNG masters and small WebPs share both appearances; unchanged generated originals
+and extraction provenance remain in common UI assets.
 Narrow editable controls, including compound inner inputs and editable text
 surfaces, use a 16px minimum while preserving larger user text and pinch zoom;
 native selects retain their platform-owned line box. Visual principles remain
@@ -49,6 +51,39 @@ the same navigation above full-width content. Sectioned forms/rows/tables replac
 the former scaffold layout without changing app-owned actions or permissions. General-purpose design work lives in the independent
 [design reference workspace](design-reference.md); app Storybooks retain their
 product-state review role.
+
+## Appearance lifecycle
+
+Both applications expose the same localized three-choice appearance control on
+authentication/setup and shell-header surfaces. An absent or invalid preference
+means System. Explicit Light/Dark overrides device changes; System follows current
+browser media and live changes. Theme changes preserve application identity, query
+state, entered work and focus rather than remounting the subtree.
+
+Host-only cookies `chapchoo-color-mode` and `chapchoo-color-mode-resolved` store the
+preference and last resolution for one year at path `/`, SameSite=Lax, with Secure
+on HTTPS. They contain only presentation enums and are intentionally readable by
+JavaScript. General/Admin share them across same-host runtime mounts and ports;
+different hosts remain independent. They are not session credentials or account
+preferences. Cookies are the only persisted appearance source; no localStorage
+mirror or default Mantine storage manager participates. Cookie denial permits an
+in-page change but cannot guarantee persistence. Already-open independent tabs
+are not actively synchronized through a cross-tab service.
+
+Each root layout validates cookies and emits initial HTML/body mode attributes.
+Explicit preferences win over a cached resolution. System uses the cached hint
+or a light server placeholder until a synchronous head bootstrap resolves current
+browser media before visible paint. A body-start prelude mirrors the result, and
+the app provider maintains attributes and the resolution cookie through hydration
+and live changes. The server cannot independently know a first-visit device
+preference. With JavaScript disabled, explicit cookie modes still render correctly;
+unknown System uses the server placeholder. Adaptive CSS variables use the HTML
+mode as their sole styling authority. Shared presentation remains cookie-free;
+the browser-safe web-core policy and app bridges own persistence/synchronization.
+
+Light and warm olive-charcoal dark maps retain common layout/type metrics and
+use separate filled-accent ink and readable accent-text roles. Menus/dialogs use
+raised surface tones. Storybooks expose both appearances with static fixtures.
 
 Routes remain locale-less. The locale cookie, then Accept-Language, then English
 select en-US, ko-KR, ja-JP or fr-FR. Forms, statuses and failures use aligned

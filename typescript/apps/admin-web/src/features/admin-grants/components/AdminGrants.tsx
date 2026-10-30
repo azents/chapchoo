@@ -1,6 +1,7 @@
 "use client";
 
 import { ApplicationShell } from "@chapchoo/ui/ApplicationShell";
+import { ColorModeSelector } from "@chapchoo/ui/ColorModeSelector";
 import { ConfirmationDialog } from "@chapchoo/ui/ConfirmationDialog";
 import { ContentSection } from "@chapchoo/ui/ContentSection";
 import { EmailField } from "@chapchoo/ui/fields";
@@ -17,6 +18,7 @@ import {
   TextInput,
 } from "@mantine/core";
 import type en from "../../../../messages/en-US.json";
+import type { ColorModeSelectorProps } from "@chapchoo/ui/ColorModeSelector";
 import type { ConfirmationState } from "@chapchoo/ui/ConfirmationDialog";
 import type { ReactElement } from "react";
 
@@ -39,6 +41,7 @@ export type GrantViewState =
       hasNext: boolean;
     };
 export interface AdminGrantsProps {
+  appearance?: ColorModeSelectorProps;
   kind: GrantPageKind;
   basePath: string;
   identityLabel: string | null;
@@ -89,13 +92,18 @@ export function AdminGrants(props: AdminGrantsProps): ReactElement {
         },
       ]}
       actions={
-        <Button
-          variant="subtle"
-          onClick={props.onLogout}
-          disabled={props.pending}
-        >
-          {text("logout")}
-        </Button>
+        <>
+          {props.appearance ? (
+            <ColorModeSelector {...props.appearance} />
+          ) : null}
+          <Button
+            variant="subtle"
+            onClick={props.onLogout}
+            disabled={props.pending}
+          >
+            {text("logout")}
+          </Button>
+        </>
       }
     >
       <ContentSection

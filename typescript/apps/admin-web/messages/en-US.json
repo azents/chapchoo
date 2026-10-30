@@ -1,4 +1,10 @@
 {
+  "Appearance": {
+    "label": "Appearance",
+    "system": "System",
+    "light": "Light",
+    "dark": "Dark"
+  },
   "AdminAuth": {
     "loginTitle": "Sign in to Chapchoo Admin",
     "loginDescription": "Use an account with server administrator access.",

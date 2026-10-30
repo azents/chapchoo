@@ -34,6 +34,7 @@ No design-version scheme or external format tooling is required.
     "canvas": "#fdfcf8",
     "navigation": "#f3f2e9",
     "surface": "#ffffff",
+    "overlay": "#ffffff",
     "surfaceWarm": "#fffefa",
     "selected": "#e9eadf",
     "border": "#e1e3d7",
@@ -44,6 +45,7 @@ No design-version scheme or external format tooling is required.
     "accent": "#edca6e",
     "accentHover": "#e5bd54",
     "onAccent": "#51431e",
+    "accentText": "#51431e",
     "accentSoft": "#fbf2d0",
     "success": "#4f6b3b",
     "successSoft": "#edf3e6",
@@ -52,6 +54,31 @@ No design-version scheme or external format tooling is required.
     "danger": "#a24237",
     "dangerSoft": "#fbece8",
     "focus": "#866716"
+  },
+  "darkColors": {
+    "canvas": "#181c18",
+    "navigation": "#1d221c",
+    "surface": "#222820",
+    "overlay": "#2c3528",
+    "surfaceWarm": "#20261f",
+    "selected": "#333d2d",
+    "border": "#3f4a3b",
+    "borderStrong": "#77856f",
+    "ink": "#e6e9df",
+    "secondary": "#b8c0af",
+    "muted": "#a0ab94",
+    "accent": "#d9bc78",
+    "accentHover": "#e4ca8b",
+    "onAccent": "#272718",
+    "accentText": "#e5c987",
+    "accentSoft": "#393421",
+    "success": "#b4ce98",
+    "successSoft": "#293623",
+    "warning": "#e5c282",
+    "warningSoft": "#3b3222",
+    "danger": "#edb1a5",
+    "dangerSoft": "#402b27",
+    "focus": "#edca6e"
   },
   "typography": {
     "body-web": { "fontFamily": "Pretendard, sans-serif", "fontSize": "1rem", "fontWeight": 400, "lineHeight": 1.7 },
@@ -87,8 +114,13 @@ sample colors through production code.
   or label. Brand yellow alone does not identify a warning. Do not communicate
   status only through color.
 
-Light mode is the selected condition. Dark mode has not been designed; do not
-invert the palette and call that approved.
+Both light and warm olive-charcoal dark appearances are selected for the existing
+general/Admin web surface as of 2026-10-31 KST. Dark mode uses tonal separation
+and brighter raised overlays, subdued butter actions and ivory text. Use
+`accentText` for links/text-like actions and `onAccent` for ink on filled butter.
+Preserve navigation selection with background/text, without decorative markers.
+System is the default; an explicit Light or Dark choice overrides it.
+Theme changes do not change layout, type metrics or business behavior.
 
 ## Typography
 
@@ -222,6 +254,9 @@ small greeting, not as wallpaper. On occupied screens it should not compete with
 information. The selected PNGs in the common UI's `assets/mascots/` are raster
 explorations, not claimed vector masters or a completed expression/motion library.
 Do not infer breed-specific jobs, personalities or automatic multi-agent behavior.
+Use derived transparent masters in `assets/mascots/transparent/` across both
+appearances with normal composition. Small production WebPs preserve alpha;
+original generated PNGs and generation provenance remain unchanged.
 
 ### Accessible operation
 
@@ -270,8 +305,8 @@ Git-managed context and usage guidance, not GitHub's visual style or adoption of
 Primer React. Current product implementation remains accounts/teams, not the
 future channel/agent vision. None of this authorizes invented product flows.
 
-Open: actual product IA/features, native navigation beyond the font choice, dark
-mode, final icon/logo/motion systems and production illustration masters.
+Open: actual product IA/features, native navigation beyond the font choice,
+final icon/logo/motion systems and editable vector/3D illustration masters.
 The existing general/Admin web surface now uses the selected shared theme;
 further feature-specific promotion remains separate from fictional compositions.
 

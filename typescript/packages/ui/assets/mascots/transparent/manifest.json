@@ -1,0 +1,32 @@
+[
+  {
+    "name": "01-bichon",
+    "original_sha256": "fb1b9341059b7e33dc5a450300e256268ecf128f23ee5f1ab3d9e7647767f46e",
+    "transparent_sha256": "e80b559f6abc6cda811df1269160541ddfb5dbcb80f7861c255a233473e8681a",
+    "webp_sha256": "4bbff8ab6f56b294af1a7eb18cf9db8c1886fc573d0d24ed542b7fe5cfa89bc8"
+  },
+  {
+    "name": "02-corgi",
+    "original_sha256": "4f711181aed5c3b8f9c1659af671f0e918170c145a469ad6702af7bf7a8ddc35",
+    "transparent_sha256": "bff4a0481ae9723c36d36df0f005659be23b5976871c66974fbb1e6626e0a955",
+    "webp_sha256": "af44429257e22e0a16aace480c9130562fd63fc9894867b595950d8e609c4d78"
+  },
+  {
+    "name": "03-dachshund",
+    "original_sha256": "4ed7b91771c4ad5b7bf5550b8b023530d854e13a733418806ec8729265c010fd",
+    "transparent_sha256": "7cccbb842953018e56b394cf7a503b663bfdb99eb6f58a418bb171cff6aaf18f",
+    "webp_sha256": "641769ab0d61c3d92bcd27bf57e830acebce4f706a7e5220e29e2599d1dbcc6b"
+  },
+  {
+    "name": "04-husky",
+    "original_sha256": "5d515389f51a0d85f2d3ae47e768eca7b0090aa5dc6b3bcf3ea6c827274ab95d",
+    "transparent_sha256": "4505be0712ee847ab269e477e860d8b054506a8c405c51d7c861bae96256ec9d",
+    "webp_sha256": "cc332a6081f69e6fbe5f5118b3a1415f38d27def6d835e025acd341665be89ca"
+  },
+  {
+    "name": "05-border-collie",
+    "original_sha256": "d2fa486f76d4ec2bca4839eefa0716e7cb4ec8b3054371d9746af4e425ec1c17",
+    "transparent_sha256": "c4605c2aaa1a491c779c3d769db0fd9287ecc1e9e532d40db900378fdde5fd7e",
+    "webp_sha256": "7fb605dcd63d75cd5663da9759072f6fd0bea35b15b81b8b71f49ae2c553f6c9"
+  }
+]

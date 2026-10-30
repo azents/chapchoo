@@ -50,6 +50,12 @@ test("both web distributions stage shared fonts, licenses and identity art", asy
       ),
     );
     const published = await readdir(new URL("design-assets/", root));
-    assert.deepEqual(published, ["02-corgi-216.webp"]);
+    assert.deepEqual(published.sort(), [
+      "01-bichon-216.webp",
+      "02-corgi-216.webp",
+      "03-dachshund-216.webp",
+      "04-husky-216.webp",
+      "05-border-collie-216.webp",
+    ]);
   }
 });

@@ -1,4 +1,10 @@
 {
+  "Appearance": {
+    "label": "화면 모드",
+    "system": "시스템",
+    "light": "라이트",
+    "dark": "다크"
+  },
   "AdminAuth": {
     "loginTitle": "Chapchoo Admin 로그인",
     "loginDescription": "서버 관리자 권한이 있는 계정으로 로그인하세요.",

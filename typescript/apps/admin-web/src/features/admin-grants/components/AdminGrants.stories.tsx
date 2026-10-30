@@ -6,6 +6,12 @@ const meta = {
   title: "Admin/Grant inventory",
   component: AdminGrants,
   args: {
+    appearance: {
+      value: "system",
+      label: "Appearance",
+      labels: { system: "System", light: "Light", dark: "Dark" },
+      onChange: (): void => {},
+    },
     kind: "signup",
     basePath: "",
     identityLabel: "admin@example.invalid",

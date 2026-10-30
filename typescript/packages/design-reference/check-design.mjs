@@ -3,6 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   toneColors,
+  darkToneColors,
   toneMetrics,
   platformFonts,
 } from "../ui/src/designTokens.ts";
@@ -17,6 +18,7 @@ const canonical = JSON.parse(block[1]);
 
 test("reference adapters match the single canonical visual document", () => {
   assert.deepEqual(toneColors, canonical.colors);
+  assert.deepEqual(darkToneColors, canonical.darkColors);
   assert.deepEqual(toneMetrics.type, canonical.typeScale);
   assert.deepEqual(toneMetrics.layout, canonical.layout);
   for (const [key, value] of Object.entries(toneMetrics.space)) {
@@ -44,20 +46,23 @@ function contrast(a, b) {
 }
 
 test("intended small-text foreground/background pairs meet 4.5:1", () => {
-  for (const [fg, bg] of [
-    ["ink", "canvas"],
-    ["secondary", "canvas"],
-    ["muted", "surface"],
-    ["onAccent", "accent"],
-    ["onAccent", "accentHover"],
-    ["success", "successSoft"],
-    ["warning", "warningSoft"],
-    ["danger", "dangerSoft"],
-  ]) {
-    assert.ok(
-      contrast(toneColors[fg], toneColors[bg]) >= 4.5,
-      `${fg} on ${bg}`,
-    );
+  for (const colors of [toneColors, darkToneColors]) {
+    for (const [fg, bg] of [
+      ["ink", "canvas"],
+      ["secondary", "canvas"],
+      ["muted", "surface"],
+      ["onAccent", "accent"],
+      ["onAccent", "accentHover"],
+      ["accentText", "accentSoft"],
+      ["ink", "overlay"],
+      ["muted", "overlay"],
+      ["success", "successSoft"],
+      ["warning", "warningSoft"],
+      ["danger", "dangerSoft"],
+    ]) {
+      assert.ok(contrast(colors[fg], colors[bg]) >= 4.5, `${fg} on ${bg}`);
+    }
+    assert.ok(contrast(colors.focus, colors.surface) >= 3);
+    assert.ok(contrast(colors.muted, colors.surfaceWarm) >= 3);
   }
-  assert.ok(contrast(toneColors.focus, toneColors.surface) >= 3);
 });

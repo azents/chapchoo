@@ -1,4 +1,10 @@
 {
+  "Appearance": {
+    "label": "外観",
+    "system": "システム",
+    "light": "ライト",
+    "dark": "ダーク"
+  },
   "accounts": {
     "login": "ログイン",
     "signup": "アカウント作成",

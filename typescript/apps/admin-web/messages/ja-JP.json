@@ -1,4 +1,10 @@
 {
+  "Appearance": {
+    "label": "外観",
+    "system": "システム",
+    "light": "ライト",
+    "dark": "ダーク"
+  },
   "AdminAuth": {
     "loginTitle": "Chapchoo Admin にログイン",
     "loginDescription": "サーバー管理者権限を持つアカウントでログインしてください。",
