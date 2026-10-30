@@ -34,11 +34,11 @@ export default async function RootLayout({
     <html lang={locale} suppressHydrationWarning>
       <head>
         <FontFaces basePath={publicBasePath} />
-        <ColorSchemeScript defaultColorScheme="auto" />
+        <ColorSchemeScript forceColorScheme="light" />
       </head>
       <body>
         <NextIntlClientProvider locale={locale} messages={messages}>
-          <AppMantineProvider defaultColorScheme="auto">
+          <AppMantineProvider>
             <RpcProvider basePath={publicBasePath}>{children}</RpcProvider>
           </AppMantineProvider>
         </NextIntlClientProvider>

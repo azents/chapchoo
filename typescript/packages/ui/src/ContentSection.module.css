@@ -1,0 +1,18 @@
+.section {
+  padding-top: var(--mantine-spacing-xl);
+  border-top: 1px solid var(--chapchoo-color-border);
+  min-width: 0;
+}
+.heading {
+  margin-bottom: var(--mantine-spacing-lg);
+  display: grid;
+  gap: var(--mantine-spacing-sm);
+}
+.body {
+  min-width: 0;
+  display: grid;
+  gap: var(--mantine-spacing-lg);
+}
+.body > form {
+  max-width: 36rem;
+}

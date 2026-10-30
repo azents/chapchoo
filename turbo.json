@@ -1,5 +1,8 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": [
+    "typescript/scripts/stage-web-fonts.mjs"
+  ],
   "globalPassThroughEnv": [
     "SWC_NATIVE_BINDING_CACHE"
   ],
@@ -34,6 +37,7 @@
       ],
       "outputs": [
         "public/fonts/**",
+        "public/design-assets/**",
         "dist/**",
         ".next/**",
         "!.next/cache/**"

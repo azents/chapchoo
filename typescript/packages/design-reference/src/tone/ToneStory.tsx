@@ -1,7 +1,7 @@
 import { lazy, Suspense } from "react";
 import type { ReactElement } from "react";
 import type { ToneExample } from "./ToneDocument";
-import type { ReferencePlatform } from "./tokens";
+import type { ReferencePlatform } from "@chapchoo/ui/designTokens";
 
 const ToneDocument = lazy(
   (): Promise<typeof import("./ToneDocument")> => import("./ToneDocument"),

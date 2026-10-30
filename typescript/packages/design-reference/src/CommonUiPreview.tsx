@@ -1,4 +1,5 @@
 import { EmptyFeedback } from "@chapchoo/ui/Feedback";
+import { FontFaces } from "@chapchoo/ui/FontFaces";
 import { AppMantineProvider } from "@chapchoo/ui/provider";
 import type { ReactElement } from "react";
 import "@mantine/core/styles.css";
@@ -7,6 +8,7 @@ import "@mantine/core/styles.css";
 export default function CommonUiPreview(): ReactElement {
   return (
     <AppMantineProvider forceColorScheme="light">
+      <FontFaces basePath="" />
       <EmptyFeedback
         title="Shared presentation example"
         message="The implementation is imported from @chapchoo/ui/Feedback. Changes to it belong in common UI."

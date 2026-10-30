@@ -16,11 +16,11 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const ProvisionalReuse: Story = {
+export const SharedReuse: Story = {
   render: (): ReactElement => {
     if (new URLSearchParams(window.location.search).has("common-ui-document")) {
       return (
-        <Suspense fallback={<p>Loading provisional common UI…</p>}>
+        <Suspense fallback={<p>Loading common UI…</p>}>
           <CommonUiPreview />
         </Suspense>
       );
@@ -28,12 +28,12 @@ export const ProvisionalReuse: Story = {
     return (
       <ReferenceFrame
         title="Existing common UI reuse"
-        note="Provisional Azents-derived presentation. This example demonstrates an import boundary, not approved Chapchoo styling."
+        note="The presentation is imported from common UI. Visual principles live in root DESIGN.md."
       >
         <iframe
           className="reference-common-preview"
-          title="Isolated provisional common UI example"
-          src="./iframe.html?id=ownership-examples-common-ui-reuse--provisional-reuse&viewMode=story&common-ui-document"
+          title="Isolated common UI example"
+          src="./iframe.html?id=ownership-examples-common-ui-reuse--shared-reuse&viewMode=story&common-ui-document"
         />
       </ReferenceFrame>
     );

@@ -32,3 +32,23 @@ test("owner workspace component fits a 375-wide viewport", async ({ page }) => {
     ),
   ).toBe(true);
 });
+
+test("selected web typography and control surfaces are applied on narrow auth", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 850 });
+  await page.goto(
+    "/iframe.html?id=accounts-authentication--password-login&viewMode=story",
+  );
+  const email = page.getByRole("textbox", { name: messages.accounts.email });
+  await expect(email).toHaveCSS("background-color", "rgb(255, 254, 250)");
+  await expect(email).toHaveCSS("border-color", "rgb(112, 119, 101)");
+  await expect(email).toHaveCSS("min-height", "44px");
+  await expect(page.locator("body")).toHaveCSS(
+    "font-family",
+    "Pretendard, sans-serif",
+  );
+  await expect(
+    page.getByRole("button", { name: messages.accounts.showPassword }),
+  ).toHaveCSS("min-height", "44px");
+});

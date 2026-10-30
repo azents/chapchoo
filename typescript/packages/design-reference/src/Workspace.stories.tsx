@@ -20,7 +20,7 @@ type Story = StoryObj<typeof meta>;
 export const Purpose: Story = {
   args: {
     title: "Design reference workspace",
-    note: "Design principles live in root DESIGN.md. The Chapchoo catalog represents the selected tone; inherited Azents examples remain provisional.",
+    note: "Design principles live in root DESIGN.md. The Chapchoo catalog and shared web components use the selected tone.",
     children: (
       <>
         <section>

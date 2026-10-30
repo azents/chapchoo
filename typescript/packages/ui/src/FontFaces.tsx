@@ -2,7 +2,7 @@ import type { ReactElement } from "react";
 
 /** Standard CSS font faces use only the caller's safe runtime mount path. */
 export function FontFaces({ basePath }: { basePath: string }): ReactElement {
-  const sans = `${basePath}/fonts/Geist-Variable.woff2`;
+  const sans = `${basePath}/fonts/PretendardVariable.woff2`;
   const mono = `${basePath}/fonts/GeistMono-Variable.woff2`;
   return (
     <>
@@ -22,7 +22,7 @@ export function FontFaces({ basePath }: { basePath: string }): ReactElement {
       />
       <style>{`
         @font-face {
-          font-family: "Geist Sans";
+          font-family: "Pretendard";
           src: url("${sans}") format("woff2");
           font-style: normal;
           font-weight: 100 900;
@@ -36,8 +36,8 @@ export function FontFaces({ basePath }: { basePath: string }): ReactElement {
           font-display: swap;
         }
         :root {
-          --font-geist-sans: "Geist Sans", Arial, sans-serif;
-          --font-geist-mono: "Geist Mono", ui-monospace, monospace;
+          --font-chapchoo-sans: "Pretendard", sans-serif;
+          --font-chapchoo-mono: "Geist Mono", ui-monospace, monospace;
         }
       `}</style>
     </>

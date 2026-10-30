@@ -17,13 +17,13 @@ type MantineColorScheme = "light" | "dark" | "auto";
 export interface AppMantineProviderProps {
   children: ReactNode;
   defaultColorScheme?: MantineColorScheme;
-  forceColorScheme?: "light" | "dark";
+  forceColorScheme?: "light";
 }
 
 export function AppMantineProvider({
   children,
-  defaultColorScheme,
-  forceColorScheme,
+  defaultColorScheme = "light",
+  forceColorScheme = "light",
 }: AppMantineProviderProps): ReactNode {
   return (
     <MantineProvider

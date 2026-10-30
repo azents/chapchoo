@@ -33,21 +33,22 @@ a distinct, more general representation and document their relationship.
 Equivalent-role copies are avoided. Non-web representations stay in reference
 after approval and are not executable native implementations.
 
-Current Azents-derived styling remains provisional. The onboarding, local outline
-and common-UI reuse stories demonstrate boundaries, not approved Chapchoo visual
-identity. The reuse story's nested document loads the Mantine stylesheet
+The onboarding/local-outline stories demonstrate ownership boundaries. The
+common-UI reuse story imports the promoted shared-web implementation. The reuse story's nested document loads the Mantine stylesheet
 and `AppMantineProvider`; its global resets and document-root color scheme stay
 out of the parent canvas when switching stories. The workspace does not adopt
 the inherited theme globally. Local scaffolding CSS is not a token system.
 
 The `Chapchoo/Foundations` and `Chapchoo/Products` stories render the selected
 visual tone from root `DESIGN.md`. New reference stories use their own nested
-document and local Mantine theme, leaving neutral ownership examples unaffected.
+document and the common-UI web theme, leaving neutral ownership examples unaffected.
 The catalog includes token/type samples, basic control and feedback examples,
 mascot assets, fictional library/planner/settings screens, and content/identity
 compositions. Fixtures and small local interactions have no app transport or real
 business effects. Existing email/password fields, feedback and confirmation
-contracts are imported from common UI rather than copied.
+contracts are imported from common UI rather than copied. Tokens, web theme,
+fonts and mascot originals are owned by common UI; the reference-only adapter
+sets iOS typography and local composition aliases without independent values.
 
 Platform selection is a story argument, separate from viewport width. The iOS
 stories reference platform fonts; browser rendering does not establish native

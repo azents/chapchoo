@@ -5,6 +5,9 @@
   "type": "module",
   "exports": {
     "./theme": "./src/theme.ts",
+    "./designTokens": "./src/designTokens.ts",
+    "./Mascot": "./src/Mascot.tsx",
+    "./ContentSection": "./src/ContentSection.tsx",
     "./FontFaces": "./src/FontFaces.tsx",
     "./provider": "./src/provider.tsx",
     "./AuthPanel": "./src/AuthPanel.tsx",
@@ -17,7 +20,7 @@
   "scripts": {
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test 'src/**/*.test.tsx'",
+    "test": "tsx --test 'src/**/*.test.tsx' && node --test ../../scripts/stage-web-fonts.test.mjs",
     "lint": "eslint src --max-warnings 0",
     "lint:fix": "eslint src --max-warnings 0 --fix",
     "format": "prettier --write 'src/**/*.{ts,tsx,mts,css}' '*.mjs' '*.md'",

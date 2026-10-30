@@ -1,6 +1,5 @@
-import { copyFile, mkdir } from "node:fs/promises";
-import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
+import { copyFile, mkdir, readdir, rm } from "node:fs/promises";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const name = process.argv[2];
@@ -8,14 +7,18 @@ if (name !== "web" && name !== "admin-web") {
   throw new Error("Select a Chapchoo web application");
 }
 const app = fileURLToPath(new URL(`../apps/${name}/`, import.meta.url));
-const require = createRequire(join(app, "package.json"));
-const distribution = dirname(require.resolve("geist/font/sans"));
+const shared = fileURLToPath(
+  new URL("../packages/ui/assets/", import.meta.url),
+);
 const output = join(app, "public/fonts");
 await mkdir(output, { recursive: true });
-for (const [source, target] of [
-  ["fonts/geist-sans/Geist-Variable.woff2", "Geist-Variable.woff2"],
-  ["fonts/geist-mono/GeistMono-Variable.woff2", "GeistMono-Variable.woff2"],
-  ["../LICENSE.txt", "LICENSE.txt"],
-]) {
-  await copyFile(join(distribution, source), join(output, target));
+await rm(join(output, "Geist-Variable.woff2"), { force: true });
+await rm(join(output, "LICENSE.txt"), { force: true });
+for (const asset of await readdir(join(shared, "fonts"))) {
+  await copyFile(join(shared, "fonts", asset), join(output, asset));
+}
+const illustrations = join(app, "public/design-assets");
+await mkdir(illustrations, { recursive: true });
+for (const asset of await readdir(join(shared, "mascots"))) {
+  await copyFile(join(shared, "mascots", asset), join(illustrations, asset));
 }

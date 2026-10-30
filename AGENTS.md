@@ -18,8 +18,7 @@ intentionally use other languages.
 - `typescript/packages/`: shared packages, including the generated Node RPC client.
 - `typescript/packages/design-reference/`: independent cross-platform
   design reference Storybook; read its README and scoped Agent instructions for
-  ownership and promotion. Existing Azents-derived styling is provisional, not
-  Chapchoo's approved design system.
+  ownership and promotion.
 - `rust/crates/`: typed domain, crypto, persistence, protocol, services and adapters.
 - `rust/apps/chapchoo/`: foreground backend and operator composition root.
 - `testenv/chapchoo/`: reusable isolated environment, process and fixture support;

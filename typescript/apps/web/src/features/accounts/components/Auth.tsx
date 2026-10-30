@@ -24,6 +24,7 @@ export function Auth(props: AuthProps): ReactNode {
   const proof = props.token.length > 0;
   return (
     <AuthPanel
+      basePath={props.basePath}
       title={title}
       description={c.authDescription}
       footer={

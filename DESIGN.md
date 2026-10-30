@@ -16,11 +16,11 @@ library are fictional compositions for applying the same tone.
 
 This file is the single authority for visual design principles and discussion
 context. It follows the useful section structure of Google Labs' draft DESIGN.md
-format. The exact values below are canonical; the reference adapter is checked
+format. The exact values below are canonical; the common-UI adapter is checked
 against them. It does not replace technical Requirements, ADRs or Design records,
-and does not authorize app implementation or shared-component promotion.
+The requester subsequently authorized applying it to the existing general/Admin UI on 2026-10-30; this promotes the shared web theme and assets, not fictional product features.
 
-### Canonical reference tokens
+### Canonical design tokens
 
 The following JSON flow object is valid YAML. Its structure combines semantic
 colors, spacing, rounded corners and platform typography with a small layout
@@ -67,7 +67,7 @@ No design-version scheme or external format tooling is required.
 These concrete values encode the approved direction; they were extracted and
 refined for usable contrast, not separately approved one by one. Layout numbers
 are reference starting points, not universal product dimensions. Components use
-semantic tokens through the reference Mantine adapter instead of scattering
+semantic tokens through the common-UI Mantine adapter instead of scattering
 sample colors through production code.
 
 ## Colors
@@ -200,7 +200,7 @@ inflated cheeks, hanging jowls, separate chin or shaggy hair outlines.
 
 Use a character as a speaker/companion, near identity, a useful empty state or a
 small greeting, not as wallpaper. On occupied screens it should not compete with
-information. The selected PNGs in the reference's `public/mascots/` are raster
+information. The selected PNGs in the common UI's `assets/mascots/` are raster
 explorations, not claimed vector masters or a completed expression/motion library.
 Do not infer breed-specific jobs, personalities or automatic multi-agent behavior.
 
@@ -252,18 +252,19 @@ Primer React. Current product implementation remains accounts/teams, not the
 future channel/agent vision. None of this authorizes invented product flows.
 
 Open: actual product IA/features, native navigation beyond the font choice, dark
-mode, final icon/logo/motion systems, production illustration masters and common
-component promotion. These do not block making reference compositions.
+mode, final icon/logo/motion systems and production illustration masters.
+The existing general/Admin web surface now uses the selected shared theme;
+further feature-specific promotion remains separate from fictional compositions.
 
 ## References and implementation map
 
 - [Reference library](typescript/packages/design-reference/README.md): runnable
   Storybook, ownership, stories and review conditions; no duplicate principles.
-- [Mascot generation record](typescript/packages/design-reference/public/mascots/GENERATION.md):
+- [Mascot generation record](typescript/packages/ui/assets/mascots/GENERATION.md):
   original prompts, code-verified model identifier, provenance limits and hashes.
-- [Token adapter](typescript/packages/design-reference/src/tone/tokens.ts) and
-  [Mantine adapter](typescript/packages/design-reference/src/tone/theme.ts):
-  reference-only implementation, validated against this document's values.
+- [Token adapter](typescript/packages/ui/src/designTokens.ts) and
+  [Mantine adapter](typescript/packages/ui/src/theme.ts):
+  shared-web implementation and reference import, validated against this document's values.
 - [Google Labs format](https://github.com/google-labs-code/design.md/blob/main/docs/spec.md)
   and [philosophy](https://github.com/google-labs-code/design.md/blob/main/PHILOSOPHY.md):
   specific visual context plus values and rationale. It is a draft, not automatic

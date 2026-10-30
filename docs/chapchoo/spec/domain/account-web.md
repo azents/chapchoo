@@ -28,12 +28,15 @@ administration. Backend operations remain the authority for current permissions.
 
 Both apps use the same workspace UI theme, semantic CSS variables, provider,
 form controls, application shell and confirmation/feedback primitives. The
-extracted theme/token sources preserve the scaffold's definitions. Product
+shared theme/token sources implement the selected DESIGN.md values. Product
 routes and stories replace Hello World; there is no second Admin theme or Refine
 layer. App containers own data/state/navigation; shared presentation receives
 props/callbacks and imports no business RPC, environment, cookie or token store.
-The inherited Azents-derived visual styling remains provisional, not an approved
-Chapchoo design system. General-purpose design work lives in the independent
+Both web apps force the selected light theme and load locally bundled Pretendard
+with Geist Mono reserved for code. The runtime mount is passed into font and
+decorative mascot URLs. Desktop uses a side navigation pane; narrow views wrap
+the same navigation above full-width content. Sectioned forms/rows/tables replace
+the former scaffold layout without changing app-owned actions or permissions. General-purpose design work lives in the independent
 [design reference workspace](design-reference.md); app Storybooks retain their
 product-state review role.
 
@@ -133,8 +136,8 @@ Next builds have no deployment public path. The documented production-server
 configuration phase reads the runtime mount and asset prefix. A public custom
 server accepts only that mount, strips it before Next dispatch, and uses the
 documented webpack configuration extension with automatic chunk public paths.
-Shared Geist font files are build inputs, served as ordinary public assets with
-runtime-prefixed CSS font faces. Browser navigation and server redirects use the
+Shared Pretendard/Geist Mono files and mascot art are staged from common UI
+assets and served with runtime-prefixed URLs. Browser navigation and server redirects use the
 safe runtime path rather than the framework's compiled basePath. Shared assets
 are included through tracing/transpilation configuration.
 GET `/health` under the runtime prefix validates runtime web configuration and

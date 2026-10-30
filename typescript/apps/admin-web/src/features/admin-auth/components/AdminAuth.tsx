@@ -48,6 +48,7 @@ export function AdminAuth(props: AdminAuthProps): ReactElement {
   const setup = mode === "setup";
   return (
     <AuthPanel
+      basePath={props.basePath}
       title={text(setup ? "setupTitle" : "loginTitle")}
       description={text(setup ? "setupDescription" : "loginDescription")}
       footer={

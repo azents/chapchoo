@@ -1,18 +1,107 @@
-.switchInput:checked:not(:disabled):not([data-disabled]) + .switchTrack {
-  --switch-text-color: var(--chapchoo-switch-foreground);
-  --switch-thumb-bg: var(--chapchoo-switch-foreground);
+.focus:focus-visible {
+  outline: 0.125rem solid var(--chapchoo-color-focus);
+  outline-offset: 0.1875rem;
 }
-
-@media (hover: hover) {
-  .chipLabel[data-checked]:not([data-disabled]):hover {
-    color: var(--chapchoo-chip-hover-foreground);
-    --chip-icon-color: var(--chapchoo-chip-hover-foreground);
+.button {
+  font-weight: 500;
+  min-height: 2.5rem;
+  white-space: normal;
+  height: auto;
+  padding-block: var(--mantine-spacing-sm);
+}
+.button:disabled {
+  color: var(--chapchoo-color-muted);
+}
+.touchTarget.touchTarget {
+  min-width: 2rem;
+  min-height: 2rem;
+}
+.anchor {
+  color: var(--mantine-color-anchor);
+  text-underline-offset: 0.2em;
+}
+/* Match both development and production Mantine stylesheet order. */
+.input.input {
+  background: var(--chapchoo-color-surface-raised);
+  border-color: var(--chapchoo-color-muted);
+  min-height: 2.75rem;
+  font-size: var(--mantine-font-size-sm);
+}
+.input.input:focus-within {
+  border-color: var(--chapchoo-color-focus);
+}
+.paper {
+  background: var(--chapchoo-color-surface);
+}
+.modal {
+  background: var(--chapchoo-color-canvas);
+  box-shadow: var(--mantine-shadow-sm);
+}
+.navLink.navLink {
+  border-radius: var(--mantine-radius-md);
+  color: var(--chapchoo-color-secondary);
+  min-height: 2.75rem;
+}
+.navLink.navLink[data-active] {
+  background: var(--chapchoo-color-selected);
+  color: var(--chapchoo-color-ink);
+}
+.navLink.navLink:hover {
+  background: var(--chapchoo-color-selected);
+}
+.navLabel {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: var(--mantine-font-size-sm);
+}
+.menuItem.menuItem {
+  min-height: 2.5rem;
+  font-size: var(--mantine-font-size-sm);
+  white-space: normal;
+}
+.tableHeading.tableHeading {
+  color: var(--chapchoo-color-secondary);
+  font-weight: 500;
+  font-size: var(--mantine-font-size-xs);
+  background: var(--chapchoo-color-navigation);
+}
+.tableCell.tableCell {
+  font-size: var(--mantine-font-size-sm);
+  border-color: var(--chapchoo-color-border);
+}
+.tab {
+  min-height: 2.75rem;
+}
+.tab[data-active] {
+  border-color: var(--chapchoo-color-focus);
+}
+.choice.choice {
+  border-color: var(--chapchoo-color-muted);
+}
+.switchTrack.switchTrack {
+  border-color: var(--chapchoo-color-muted);
+}
+@media (max-width: 48em) {
+  .button {
+    min-height: 2.75rem;
+  }
+  .touchTarget.touchTarget {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .button,
+  .navLink.navLink,
+  .input.input,
+  .modal {
+    transition: none;
   }
 }
 
-@media (hover: none) {
-  .chipLabel[data-checked]:not([data-disabled]):active {
-    color: var(--chapchoo-chip-hover-foreground);
-    --chip-icon-color: var(--chapchoo-chip-hover-foreground);
-  }
+.input.input[data-error] {
+  border-color: var(--chapchoo-color-danger);
+}
+.input.input:disabled {
+  border-color: var(--chapchoo-color-border);
 }

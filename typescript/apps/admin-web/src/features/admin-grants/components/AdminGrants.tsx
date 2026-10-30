@@ -2,6 +2,7 @@
 
 import { ApplicationShell } from "@chapchoo/ui/ApplicationShell";
 import { ConfirmationDialog } from "@chapchoo/ui/ConfirmationDialog";
+import { ContentSection } from "@chapchoo/ui/ContentSection";
 import { EmailField } from "@chapchoo/ui/fields";
 import {
   Alert,
@@ -9,7 +10,7 @@ import {
   Badge,
   Button,
   Group,
-  ScrollArea,
+  rem,
   Stack,
   Table,
   Text,
@@ -69,6 +70,7 @@ export function AdminGrants(props: AdminGrantsProps): ReactElement {
   const disabled = props.pending || state.type !== "LOADED";
   return (
     <ApplicationShell
+      basePath={props.basePath}
       contextLabel={text("context")}
       title={text(props.kind === "signup" ? "signupTitle" : "resetTitle")}
       {...(props.identityLabel ? { identityLabel: props.identityLabel } : {})}
@@ -96,13 +98,12 @@ export function AdminGrants(props: AdminGrantsProps): ReactElement {
         </Button>
       }
     >
-      <Stack gap="sm">
-        <Text fw={600}>{text("issueHeading")}</Text>
-        <Text c="dimmed" size="sm">
-          {text(
-            props.kind === "signup" ? "signupDescription" : "resetDescription",
-          )}
-        </Text>
+      <ContentSection
+        title={text("issueHeading")}
+        description={text(
+          props.kind === "signup" ? "signupDescription" : "resetDescription",
+        )}
+      >
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -123,7 +124,7 @@ export function AdminGrants(props: AdminGrantsProps): ReactElement {
             </Button>
           </Group>
         </form>
-      </Stack>
+      </ContentSection>
       {props.error ? (
         <Alert color="red" role="alert">
           {props.error}
@@ -176,8 +177,8 @@ export function AdminGrants(props: AdminGrantsProps): ReactElement {
               </Text>
             </Stack>
           ) : (
-            <ScrollArea type="auto">
-              <Table striped highlightOnHover withTableBorder>
+            <Table.ScrollContainer minWidth={rem(720)}>
+              <Table highlightOnHover withTableBorder verticalSpacing="md">
                 <Table.Thead>
                   <Table.Tr>
                     <Table.Th>{text("email")}</Table.Th>
@@ -198,7 +199,7 @@ export function AdminGrants(props: AdminGrantsProps): ReactElement {
                       <Table.Td>
                         <Badge
                           variant="light"
-                          color={item.status === "active" ? "blue" : "gray"}
+                          color={item.status === "active" ? "green" : "gray"}
                         >
                           {text(item.status)}
                         </Badge>
@@ -220,7 +221,7 @@ export function AdminGrants(props: AdminGrantsProps): ReactElement {
                   ))}
                 </Table.Tbody>
               </Table>
-            </ScrollArea>
+            </Table.ScrollContainer>
           )}
           <Group justify="space-between" wrap="wrap">
             <Text size="sm" c="dimmed">

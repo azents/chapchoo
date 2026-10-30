@@ -16,8 +16,8 @@ layout in app-owned executable component checks.
 Storybook, not app UI QA. Read its README and scoped AGENTS.md for design work.
 It may import formal components from `@chapchoo/ui`; apps and common UI must
 not import reference. Experiments and non-web representations live in reference.
-Design approval does not imply promotion to common UI. Existing Azents-derived
-styling remains provisional; do not treat it as Chapchoo's approved design system.
+Design approval does not imply promotion to common UI. Read root DESIGN.md
+for current visual design context.
 A general reference representation may coexist with a web-specific common-UI
 implementation; document their distinct roles and reuse common UI for equivalent roles.
 
