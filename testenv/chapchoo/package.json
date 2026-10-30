@@ -1,0 +1,34 @@
+{
+  "name": "@chapchoo/testenv",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./assembly": "./dist/assembly.js",
+    "./processes": "./dist/processes.js",
+    "./safety": "./dist/safety.js",
+    "./config": "./dist/config/index.js",
+    "./seed": "./dist/seed.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "pnpm run build && node --experimental-strip-types --test 'src/**/*.test.ts' && node --test 'test/*.test.mjs'",
+    "lint": "eslint src --max-warnings 0",
+    "lint:fix": "eslint src --max-warnings 0 --fix",
+    "format": "prettier --write 'src/**/*.ts' 'test/*.mjs' '*.mjs' '*.md' 'package.json'",
+    "format:check": "prettier --check 'src/**/*.ts' 'test/*.mjs' '*.mjs' '*.md' 'package.json'"
+  },
+  "dependencies": {
+    "@chapchoo/rpc-client": "workspace:*",
+    "@grpc/grpc-js": "1.14.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "eslint": "^10.8.1",
+    "eslint-plugin-prettier": "^5.5.6",
+    "prettier": "^3.9.6",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.67.0"
+  }
+}

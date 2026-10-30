@@ -121,13 +121,24 @@ export function checkDesignBoundaries(root) {
       }
     }
   }
+  const substrate = resolve(root, "../testenv/chapchoo");
+  if (existsSync(join(substrate, "package.json"))) {
+    workspaces.push({
+      group: "testenv",
+      path: substrate,
+      manifest: JSON.parse(
+        readFileSync(join(substrate, "package.json"), "utf8"),
+      ),
+    });
+  }
   const errors = [];
   function check(owner, target, location) {
     if (
       target &&
       owner !== target &&
       (target.manifest.name === referenceName ||
-        (owner.manifest.name === referenceName && target.group === "apps"))
+        ((owner.manifest.name === referenceName || owner.group === "testenv") &&
+          target.group === "apps"))
     ) {
       errors.push(
         `${location}: ${owner.manifest.name} must not depend on ${target.manifest.name}`,

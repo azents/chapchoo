@@ -69,10 +69,10 @@ class PackageLinuxTest(unittest.TestCase):
         shasums = self.root / "SHASUMS256.txt"
         shasums.write_text(f"{digest}  {archive.name}\n", encoding="ascii")
         web = []
-        for name, app in [("general", "chapchoo-web"), ("admin", "chapchoo-admin-web")]:
+        for name, app in [("general", "web"), ("admin", "admin-web")]:
             source = self.root / "inputs" / name
             standalone = source / "standalone"
-            app_root = standalone / "apps" / app
+            app_root = standalone / "typescript/apps" / app
             (app_root / "node_modules").mkdir(parents=True)
             (app_root / "server.mjs").write_text(
                 "// Synthetic server; never executed\n", encoding="utf-8"
@@ -82,7 +82,7 @@ class PackageLinuxTest(unittest.TestCase):
             (dependency / "package.json").write_text("{}\n", encoding="utf-8")
             (dependency / "addon.node").write_bytes(elf(architecture))
             (app_root / "node_modules/next").symlink_to(
-                "../../../node_modules/next", target_is_directory=True
+                "../../../../node_modules/next", target_is_directory=True
             )
             static = source / "static"
             static.mkdir()
@@ -130,12 +130,12 @@ class PackageLinuxTest(unittest.TestCase):
                         "chapchoo",
                         "runtime/bin/node",
                         "runtime/LICENSE",
-                        "web/general/apps/chapchoo-web/server.mjs",
-                        "web/admin/apps/chapchoo-admin-web/server.mjs",
+                        "web/general/typescript/apps/web/server.mjs",
+                        "web/admin/typescript/apps/admin-web/server.mjs",
                     ]:
                         self.assertIn(f"{prefix}/{name}", names)
                     font = archive.extractfile(
-                        f"{prefix}/web/general/apps/chapchoo-web/.next/static/font.woff2"
+                        f"{prefix}/web/general/typescript/apps/web/.next/static/font.woff2"
                     )
                     self.assertIsNotNone(font)
                     if font is not None:
@@ -143,10 +143,10 @@ class PackageLinuxTest(unittest.TestCase):
                             font.read(), b"wOF2:preserved-real-asset-bytes"
                         )
                     link = archive.getmember(
-                        f"{prefix}/web/general/apps/chapchoo-web/node_modules/next"
+                        f"{prefix}/web/general/typescript/apps/web/node_modules/next"
                     )
                     self.assertTrue(link.issym())
-                    self.assertEqual(link.linkname, "../../../node_modules/next")
+                    self.assertEqual(link.linkname, "../../../../node_modules/next")
                     self.assertFalse(
                         any("inputs" in name or ".env" in name for name in names)
                     )
@@ -252,7 +252,7 @@ class PackageLinuxTest(unittest.TestCase):
         with self.assertRaisesRegex(package.PackageError, "Special files"):
             self.build(inputs, digest)
         fifo.unlink()
-        other = inputs.general.standalone / "apps/chapchoo-admin-web"
+        other = inputs.general.standalone / "typescript/apps/admin-web"
         other.mkdir()
         with self.assertRaisesRegex(package.PackageError, "selected application"):
             self.build(inputs, digest)
@@ -311,7 +311,7 @@ class PackageLinuxTest(unittest.TestCase):
     def test_image_stager_contains_only_the_selected_synthetic_app(self) -> None:
         inputs, _ = self.fixtures()
         typescript = self.root / "typescript"
-        app_root = typescript / "apps/chapchoo-web"
+        app_root = typescript / "apps/web"
         for source, relative in [
             (inputs.general.standalone, ".next/standalone"),
             (inputs.general.static, ".next/static"),
@@ -340,7 +340,9 @@ class PackageLinuxTest(unittest.TestCase):
         subprocess.run(command, check=True, capture_output=True, text=True)
         self.assertTrue((output / "chapchoo").is_file())
         self.assertTrue((output / "runtime/bin/node").is_file())
-        self.assertTrue((output / "web/general/apps/chapchoo-web/server.mjs").is_file())
+        self.assertTrue(
+            (output / "web/general/typescript/apps/web/server.mjs").is_file()
+        )
         self.assertFalse((output / "web/admin").exists())
         recursive = [*command[:-1], str(typescript / "recursive-output")]
         result = subprocess.run(recursive, check=False, capture_output=True, text=True)

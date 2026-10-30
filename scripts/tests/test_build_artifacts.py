@@ -27,9 +27,9 @@ class BuildArtifactTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
         self.source = self.root / "typescript"
-        for app in ["chapchoo-web", "chapchoo-admin-web"]:
+        for app in ["web", "admin-web"]:
             base = self.source / "apps" / app
-            entry = base / ".next/standalone/apps" / app
+            entry = base / ".next/standalone/typescript/apps" / app
             entry.mkdir(parents=True)
             (entry / "server.mjs").write_text("// static fixture\n")
             dependencies = base / ".next/standalone/node_modules"
@@ -51,7 +51,9 @@ class BuildArtifactTests(unittest.TestCase):
         self.assertEqual((destination / "architecture").read_text(), "amd64\n")
         self.assertFalse((destination / "source-only.ts").exists())
         self.assertTrue(
-            (destination / "general/standalone/apps/chapchoo-web/server.mjs").is_file()
+            (
+                destination / "general/standalone/typescript/apps/web/server.mjs"
+            ).is_file()
         )
         self.assertEqual(
             (destination / "admin/public/font.woff2").read_bytes(), b"font fixture"
@@ -64,15 +66,13 @@ class BuildArtifactTests(unittest.TestCase):
         self.assertFalse(destination.exists())
 
     def test_mac_native_module_cannot_be_exported_as_linux(self) -> None:
-        addon = (
-            self.source / "apps/chapchoo-web/.next/standalone/node_modules/fixture.node"
-        )
+        addon = self.source / "apps/web/.next/standalone/node_modules/fixture.node"
         addon.write_bytes(b"\xcf\xfa\xed\xfe" + bytes(60))
         with self.assertRaises(prepare.package.PackageError):
             prepare.prepare(self.source, self.root / "output", "x86_64")
 
     def test_foreign_symlink_and_secret_are_rejected_before_output(self) -> None:
-        public = self.source / "apps/chapchoo-web/public"
+        public = self.source / "apps/web/public"
         (public / "escape").symlink_to(self.root)
         with self.assertRaises(prepare.package.PackageError):
             prepare.prepare(self.source, self.root / "output", "x86_64")

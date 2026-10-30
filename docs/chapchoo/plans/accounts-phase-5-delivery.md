@@ -51,8 +51,8 @@ product or Design authority.
   Existing Node URL/TLS verification remains authoritative; no insecure fallback.
 - Archive root contains `chapchoo`, `runtime/bin/node`, and independent traced
   trees `web/general/` and `web/admin/`. Preserve Next workspace layout:
-  `web/general/apps/chapchoo-web/server.mjs` and
-  `web/admin/apps/chapchoo-admin-web/server.mjs`, with each app's public/static
+  `web/general/typescript/apps/web/server.mjs` and
+  `web/admin/typescript/apps/admin-web/server.mjs`, with each app's public/static
   assets at its corresponding app root. The executable locates its own archive
   root; missing artifacts fail instead of using host Node, pnpm or Turbo.
 - Use an explicit web-child environment allowlist: selected public URL, actual

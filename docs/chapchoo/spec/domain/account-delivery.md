@@ -40,8 +40,8 @@ The executable resolves its own installation directory. Archives contain:
 ```text
 chapchoo
 runtime/bin/node
-web/general/apps/chapchoo-web/server.mjs
-web/admin/apps/chapchoo-admin-web/server.mjs
+web/general/typescript/apps/web/server.mjs
+web/admin/typescript/apps/admin-web/server.mjs
 ```
 
 The corresponding app roots contain public/static assets; each traced tree has

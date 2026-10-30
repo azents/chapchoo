@@ -5,10 +5,10 @@ tags: [design-reference, frontend, developer-tooling]
 spec_type: domain
 domain: design-reference
 code_paths:
-  - typescript/packages/chapchoo-design-reference
+  - typescript/packages/design-reference
   - typescript/scripts/design-boundaries.mjs
   - typescript/scripts/design-boundaries.test.mjs
-  - typescript/package.json
+  - package.json
   - .github/workflows/ci.yaml
 last_verified_at: 2026-10-30
 spec_version: 1
@@ -56,6 +56,6 @@ dependency guard, not a runtime security sandbox.
 
 CI builds all three Storybooks. Authors inspect actual rendered stories at
 relevant dimensions; builds do not establish visual approval or native behavior.
-The [package guide](../../../../typescript/packages/chapchoo-design-reference/README.md)
+The [package guide](../../../../typescript/packages/design-reference/README.md)
 and scoped Agent instructions describe authoring, review, selective promotion
 and coexistence of general references with web-specific implementations.

@@ -36,25 +36,23 @@ jobs:
           cache-workspace-crates: true
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
-          package_json_file: typescript/package.json
+          package_json_file: package.json
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24.22.1"
           cache: pnpm
-          cache-dependency-path: typescript/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            typescript/.turbo
+            .turbo
             typescript/apps/*/.next/cache
-          key: web-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('typescript/pnpm-lock.yaml') }}-${{ github.sha }}
-          restore-keys: web-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('typescript/pnpm-lock.yaml') }}-
+          key: web-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: web-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}-
       - name: Build web once and export traced runtime inputs
         run: |
-          cd typescript
           pnpm install --frozen-lockfile
           pnpm exec turbo run build --filter=@chapchoo/web --filter=@chapchoo/admin-web
-          cd ..
           python3 scripts/prepare-web-artifacts.py --typescript-root typescript \
             --output "$RUNNER_TEMP/web-artifacts" --architecture "${{ inputs.architecture }}"
       - name: Preserve symlinks and hidden Next files in one artifact

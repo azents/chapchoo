@@ -32,10 +32,10 @@ tags: [accounts, implementation, rust, database]
 
 | Workstream | Owner | Owned paths | Depends on | Output | Validation |
 | --- | --- | --- | --- | --- | --- |
-| Schema | /root | rust/crates/chapchoo-persistence/migrations | domain/data inventory | engine-native constraints | actual SQLite and disposable PostgreSQL |
-| Repository authentication/common | /root | rust/crates/chapchoo-persistence/src except teams.rs | schema + domain/crypto | completed auth/session/grant operations and shared transaction boundary | atomicity, authorization, races, cancellation |
-| Repository teams | /root/accounts-team-storage | rust/crates/chapchoo-persistence/src/teams.rs and tests/teams.rs | root-owned Store, operation/authentication macros, migrations | completed team/membership/invitation operations | owner/manager/member rules, personal restrictions and concurrent acceptance |
-| Integration tests | /root | rust/crates/chapchoo-persistence/tests, scripts | repository | deterministic both-engine fixtures | barriers/state, no sleep-based correctness |
+| Schema | /root | rust/crates/persistence/migrations | domain/data inventory | engine-native constraints | actual SQLite and disposable PostgreSQL |
+| Repository authentication/common | /root | rust/crates/persistence/src except teams.rs | schema + domain/crypto | completed auth/session/grant operations and shared transaction boundary | atomicity, authorization, races, cancellation |
+| Repository teams | /root/accounts-team-storage | rust/crates/persistence/src/teams.rs and tests/teams.rs | root-owned Store, operation/authentication macros, migrations | completed team/membership/invitation operations | owner/manager/member rules, personal restrictions and concurrent acceptance |
+| Integration tests | /root | rust/crates/persistence/tests, scripts | repository | deterministic both-engine fixtures | barriers/state, no sleep-based correctness |
 | Quality/Specs | /root | rust/Cargo.*, scripts/check-rust.sh, .github/workflows/ci.yaml, docs/chapchoo/spec | integrated code | CI real PG service and current schema Spec | root-owned checks and review |
 
 - Integration order: schemas → preparation/readiness → repositories → both-engine

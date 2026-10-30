@@ -28,8 +28,8 @@ def prepare(typescript_root: Path, output: Path, architecture: str) -> None:
         raise package.PackageError("Artifact output already exists")
     sources = []
     for component, app in [
-        ("general", "chapchoo-web"),
-        ("admin", "chapchoo-admin-web"),
+        ("general", "web"),
+        ("admin", "admin-web"),
     ]:
         app_root = root / "apps" / app
         artifacts = package.WebArtifacts(
@@ -40,7 +40,9 @@ def prepare(typescript_root: Path, output: Path, architecture: str) -> None:
         )
         for source in [artifacts.standalone, artifacts.static, artifacts.public]:
             package.validate_tree(source, architecture)
-        if not (artifacts.standalone / "apps" / app / "server.mjs").is_file():
+        if not (
+            artifacts.standalone / "typescript/apps" / app / "server.mjs"
+        ).is_file():
             raise package.PackageError("A built standalone entrypoint is missing")
         sources.append((component, artifacts))
     destination.mkdir(parents=True)

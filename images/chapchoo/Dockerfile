@@ -18,9 +18,9 @@ COPY --from=web-artifacts /architecture /inputs/web-architecture
 
 FROM web-stage-base AS general-build
 ARG TARGETARCH
-COPY --from=web-artifacts /general/standalone /src/typescript/apps/chapchoo-web/.next/standalone
-COPY --from=web-artifacts /general/static /src/typescript/apps/chapchoo-web/.next/static
-COPY --from=web-artifacts /general/public /src/typescript/apps/chapchoo-web/public
+COPY --from=web-artifacts /general/standalone /src/typescript/apps/web/.next/standalone
+COPY --from=web-artifacts /general/static /src/typescript/apps/web/.next/static
+COPY --from=web-artifacts /general/public /src/typescript/apps/web/public
 RUN test "$(cat /inputs/web-architecture)" = "$TARGETARCH" \
     && test "$(cat /inputs/binary-architecture)" = "$TARGETARCH" \
     && python3 /src/images/chapchoo/stage-web.py --app general --architecture "$TARGETARCH" \
@@ -29,9 +29,9 @@ RUN test "$(cat /inputs/web-architecture)" = "$TARGETARCH" \
 
 FROM web-stage-base AS admin-build
 ARG TARGETARCH
-COPY --from=web-artifacts /admin/standalone /src/typescript/apps/chapchoo-admin-web/.next/standalone
-COPY --from=web-artifacts /admin/static /src/typescript/apps/chapchoo-admin-web/.next/static
-COPY --from=web-artifacts /admin/public /src/typescript/apps/chapchoo-admin-web/public
+COPY --from=web-artifacts /admin/standalone /src/typescript/apps/admin-web/.next/standalone
+COPY --from=web-artifacts /admin/static /src/typescript/apps/admin-web/.next/static
+COPY --from=web-artifacts /admin/public /src/typescript/apps/admin-web/public
 RUN test "$(cat /inputs/web-architecture)" = "$TARGETARCH" \
     && test "$(cat /inputs/binary-architecture)" = "$TARGETARCH" \
     && python3 /src/images/chapchoo/stage-web.py --app admin --architecture "$TARGETARCH" \

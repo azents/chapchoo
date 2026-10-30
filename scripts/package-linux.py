@@ -250,21 +250,24 @@ def copy_web(artifacts: WebArtifacts, destination: Path, architecture: str) -> N
         if root is not None:
             validate_tree(root, architecture)
     roots = {path.name for path in artifacts.standalone.iterdir()}
-    if not roots.issubset({"apps", "node_modules", "packages", "package.json"}):
+    if not roots.issubset({"typescript", "node_modules", "package.json"}):
         raise PackageError("The standalone input is not a traced Next workspace tree")
-    entry = artifacts.standalone / "apps" / artifacts.app / "server.mjs"
+    workspace = artifacts.standalone / "typescript"
+    if not {path.name for path in workspace.iterdir()}.issubset(
+        {"apps", "packages", "node_modules"}
+    ):
+        raise PackageError("The standalone input contains unrelated workspace files")
+    entry = workspace / "apps" / artifacts.app / "server.mjs"
     if not entry.is_file() or entry.is_symlink():
         raise PackageError("The traced Next entrypoint is missing")
-    if {path.name for path in (artifacts.standalone / "apps").iterdir()} != {
-        artifacts.app
-    }:
+    if {path.name for path in (workspace / "apps").iterdir()} != {artifacts.app}:
         raise PackageError(
             "A standalone tree must contain only its selected application"
         )
     if not any(path.is_file() for path in artifacts.static.rglob("*")):
         raise PackageError("The built static asset tree is empty")
     shutil.copytree(artifacts.standalone, destination, symlinks=True)
-    app_root = destination / "apps" / artifacts.app
+    app_root = destination / "typescript/apps" / artifacts.app
     shutil.copytree(
         artifacts.static, app_root / ".next/static", dirs_exist_ok=True, symlinks=True
     )
@@ -381,13 +384,13 @@ def main() -> None:
                 options.general_standalone,
                 options.general_static,
                 options.general_public,
-                "chapchoo-web",
+                "web",
             ),
             admin=WebArtifacts(
                 options.admin_standalone,
                 options.admin_static,
                 options.admin_public,
-                "chapchoo-admin-web",
+                "admin-web",
             ),
             output=options.output,
             epoch=options.source_date_epoch,

@@ -237,10 +237,14 @@ impl WebConfig {
             return Err(ConfigError::Variable(app.backend_variable()));
         }
         let (scope, application) = match app {
-            WebApp::General => ("general", "chapchoo-web"),
-            WebApp::Admin => ("admin", "chapchoo-admin-web"),
+            WebApp::General => ("general", "web"),
+            WebApp::Admin => ("admin", "admin-web"),
         };
-        let directory = root.join("web").join(scope).join("apps").join(application);
+        let directory = root
+            .join("web")
+            .join(scope)
+            .join("typescript/apps")
+            .join(application);
         Ok(Self {
             app,
             listen,
@@ -625,7 +629,7 @@ mod tests {
             assert!(
                 config
                     .script
-                    .ends_with("web/general/apps/chapchoo-web/server.mjs")
+                    .ends_with("web/general/typescript/apps/web/server.mjs")
             );
         }
         assert_eq!(

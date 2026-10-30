@@ -6,12 +6,12 @@ spec_type: domain
 domain: accounts
 code_paths:
   - proto/chapchoo/accounts.proto
-  - rust/crates/chapchoo-protocol
-  - rust/crates/chapchoo-service
-  - rust/crates/chapchoo-rpc
-  - rust/crates/chapchoo-mail
+  - rust/crates/protocol
+  - rust/crates/service
+  - rust/crates/rpc
+  - rust/crates/mail
   - rust/apps/chapchoo
-  - typescript/packages/chapchoo-rpc-client
+  - typescript/packages/rpc-client
 last_verified_at: 2026-10-30
 spec_version: 1
 ---

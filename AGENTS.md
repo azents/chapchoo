@@ -12,15 +12,18 @@ intentionally use other languages.
 
 ## Structure
 
-- `typescript/apps/chapchoo-web/`: general Next.js account/team application.
-- `typescript/apps/chapchoo-admin-web/`: independent installation Admin application.
+- `typescript/apps/web/`: general Next.js account/team application.
+- `typescript/apps/admin-web/`: independent installation Admin application.
+- `typescript/apps/e2e/`: executable browser acceptance app.
 - `typescript/packages/`: shared packages, including the generated Node RPC client.
-- `typescript/packages/chapchoo-design-reference/`: independent cross-platform
+- `typescript/packages/design-reference/`: independent cross-platform
   design reference Storybook; read its README and scoped Agent instructions for
   ownership and promotion. Existing Azents-derived styling is provisional, not
   Chapchoo's approved design system.
 - `rust/crates/`: typed domain, crypto, persistence, protocol, services and adapters.
 - `rust/apps/chapchoo/`: foreground backend and operator composition root.
+- `testenv/chapchoo/`: reusable isolated environment, process and fixture support;
+  browser scenarios remain in the E2E app.
 - `proto/chapchoo/`: Protobuf service/message authority.
 - `infra/charts/`, `testenv/chapchoo/`, `images/`: deployment, acceptance guidance,
   target-build and packaging support.

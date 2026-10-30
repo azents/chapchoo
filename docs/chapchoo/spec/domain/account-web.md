@@ -5,10 +5,12 @@ tags: [accounts, web, authentication, frontend]
 spec_type: domain
 domain: accounts
 code_paths:
-  - typescript/apps/chapchoo-web
-  - typescript/apps/chapchoo-admin-web
-  - typescript/packages/chapchoo-ui
-  - typescript/packages/chapchoo-web-core
+  - typescript/apps/web
+  - typescript/apps/admin-web
+  - typescript/packages/ui
+  - typescript/packages/web-core
+  - typescript/apps/e2e
+  - testenv/chapchoo
 last_verified_at: 2026-10-30
 spec_version: 1
 ---

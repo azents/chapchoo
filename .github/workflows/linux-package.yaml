@@ -73,19 +73,18 @@ jobs:
           esac
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
-          package_json_file: typescript/package.json
+          package_json_file: package.json
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24.22.1"
           cache: pnpm
-          cache-dependency-path: typescript/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
       - name: Expose required native PostgreSQL tools
         run: |
           echo "$(pg_config --bindir)" >> "$GITHUB_PATH"
           test -x "$(pg_config --bindir)/initdb"
           test -x "$(pg_config --bindir)/pg_ctl"
       - run: pnpm install --frozen-lockfile
-        working-directory: typescript
       - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -149,10 +148,8 @@ jobs:
           ARCHITECTURE: ${{ matrix.architecture }}
         run: python3 scripts/test-installed-linux.py --architecture "$ARCHITECTURE" --root "$CHAPCHOO_E2E_PACKAGE_ROOT"
       - run: pnpm --filter @chapchoo/e2e exec playwright install --with-deps chromium
-        working-directory: typescript
       - name: Exercise the same three PostgreSQL product journeys from the bundle
         run: pnpm --filter @chapchoo/e2e test:e2e
-        working-directory: typescript
       - name: Run the independently built native images
         run: python3 scripts/test-container-images.py --backend chapchoo-package-backend:ci --general chapchoo-package-general:ci --admin chapchoo-package-admin:ci
       - name: Upload only the verified source-free archive and checksum

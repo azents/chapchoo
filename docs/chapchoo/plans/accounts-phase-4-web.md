@@ -71,13 +71,13 @@ tags: [accounts, implementation, frontend, authentication]
 
 | Workstream | Owner | Owned paths | Depends on | Output | Validation |
 | --- | --- | --- | --- | --- | --- |
-| Shared presentation | /root/accounts-protocol-generation | typescript/packages/chapchoo-ui | existing theme and approved screens | theme/providers, shared controls/layout, pure presentation states | package typecheck/lint, static stories/state tests |
-| Web transport/auth | /root/accounts-rpc-adapter | typescript/packages/chapchoo-web-core; both apps src/config, src/shared/server, src/shared/rpc, app/api/trpc | generated Node RPC and cookie contract | reusable primitives plus app-owned routers/client wiring | origin/cookie/error/renewal/per-call isolation tests |
-| General product UI | /root/accounts-team-storage | typescript/apps/chapchoo-web excluding transport/auth-owned paths | shared UI and general app router | login/signup/reset, personal/team/membership/invitation UI and locales/stories | app quality/build, static component states |
-| Admin/integration | /root | typescript/apps/chapchoo-admin-web excluding transport/auth-owned paths; root manifests/lock/tooling/docs/testenv | shared UI, Admin router, backend | Admin setup/login/grant UI, complete assembled verification | both apps/build/storybooks, minimal real-browser journeys |
+| Shared presentation | /root/accounts-protocol-generation | typescript/packages/ui | existing theme and approved screens | theme/providers, shared controls/layout, pure presentation states | package typecheck/lint, static stories/state tests |
+| Web transport/auth | /root/accounts-rpc-adapter | typescript/packages/web-core; both apps src/config, src/shared/server, src/shared/rpc, app/api/trpc | generated Node RPC and cookie contract | reusable primitives plus app-owned routers/client wiring | origin/cookie/error/renewal/per-call isolation tests |
+| General product UI | /root/accounts-team-storage | typescript/apps/web excluding transport/auth-owned paths | shared UI and general app router | login/signup/reset, personal/team/membership/invitation UI and locales/stories | app quality/build, static component states |
+| Admin/integration | /root | typescript/apps/admin-web excluding transport/auth-owned paths; root manifests/lock/tooling/docs/testenv | shared UI, Admin router, backend | Admin setup/login/grant UI, complete assembled verification | both apps/build/storybooks, minimal real-browser journeys |
 
 - After General UI freeze, `/root/accounts-team-storage` owns only the new
-  `typescript/packages/chapchoo-e2e/` acceptance-test implementation. Root owns
+  `typescript/apps/e2e/` acceptance-test implementation. Root owns
   installing browser prerequisites and executing all integrated browser evidence.
 - After shared presentation freeze, `/root/accounts-protocol-generation` owns
   only Admin `messages/{ko-KR,ja-JP,fr-FR}.json` and

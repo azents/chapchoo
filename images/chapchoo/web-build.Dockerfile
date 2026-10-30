@@ -14,13 +14,15 @@ WORKDIR /src
 COPY rust ./rust
 COPY proto ./proto
 COPY typescript ./typescript
+COPY testenv/chapchoo ./testenv/chapchoo
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json ./
 COPY scripts/generate-rpc-clients.sh scripts/prepare-web-artifacts.py scripts/package-linux.py ./scripts/
 ENV NEXT_TELEMETRY_DISABLED=1 TURBO_TELEMETRY_DISABLED=1
-WORKDIR /src/typescript
+WORKDIR /src
 RUN --mount=type=cache,id=chapchoo-web-cargo-${TARGETARCH},target=/src/rust/target \
     --mount=type=cache,id=chapchoo-web-pnpm-${TARGETARCH},target=/pnpm/store \
-    --mount=type=cache,id=chapchoo-general-next-${TARGETARCH},target=/src/typescript/apps/chapchoo-web/.next/cache \
-    --mount=type=cache,id=chapchoo-admin-next-${TARGETARCH},target=/src/typescript/apps/chapchoo-admin-web/.next/cache \
+    --mount=type=cache,id=chapchoo-general-next-${TARGETARCH},target=/src/typescript/apps/web/.next/cache \
+    --mount=type=cache,id=chapchoo-admin-next-${TARGETARCH},target=/src/typescript/apps/admin-web/.next/cache \
     pnpm install --frozen-lockfile --store-dir /pnpm/store \
     && pnpm exec turbo run build --filter=@chapchoo/web --filter=@chapchoo/admin-web \
     && case "$TARGETARCH" in amd64) machine=x86_64 ;; arm64) machine=aarch64 ;; *) exit 1 ;; esac \

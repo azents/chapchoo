@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const name = process.argv[2];
-if (name !== "chapchoo-web" && name !== "chapchoo-admin-web") {
+if (name !== "web" && name !== "admin-web") {
   throw new Error("Select a Chapchoo web application");
 }
 const app = fileURLToPath(new URL(`../apps/${name}/`, import.meta.url));

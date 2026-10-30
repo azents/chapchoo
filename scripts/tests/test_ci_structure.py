@@ -25,6 +25,12 @@ class CiStructureTests(unittest.TestCase):
         self.assertIn("entry: bash scripts/check-rpc.sh", hooks)
         self.assertIn("  browser-e2e:\n", workflow)
         self.assertIn("run: pnpm --filter @chapchoo/e2e test:e2e", workflow)
+        for command in [
+            "pnpm --filter @chapchoo/testenv test",
+            "pnpm --filter @chapchoo/web test:components",
+            "pnpm --filter @chapchoo/admin-web test:components",
+        ]:
+            self.assertIn(command, workflow)
         rust_job = workflow.split("  validate:", 1)[0]
         self.assertIn('CARGO_PROFILE_DEV_DEBUG: "0"', rust_job)
         self.assertIn('CARGO_PROFILE_TEST_DEBUG: "0"', rust_job)
@@ -56,6 +62,23 @@ class CiStructureTests(unittest.TestCase):
             )
             self.assertIn("fs.read=${{ runner.temp }}/web-artifacts", text)
             self.assertIn("fs.read=${{ runner.temp }}/binary-artifacts", text)
+
+    def test_root_workspace_owns_shared_testenv_and_builder_inputs(self) -> None:
+        workspace = (ROOT / "pnpm-workspace.yaml").read_text()
+        for path in ["typescript/apps/*", "typescript/packages/*", "testenv/chapchoo"]:
+            self.assertIn(path, workspace)
+        for filename in ["ci.yaml", "linux-package.yaml", "build-web.yaml"]:
+            workflow = (ROOT / ".github/workflows" / filename).read_text()
+            self.assertIn("package_json_file: package.json", workflow)
+            self.assertIn("cache-dependency-path: pnpm-lock.yaml", workflow)
+        builder = (ROOT / "images/chapchoo/web-build.Dockerfile").read_text()
+        self.assertIn("COPY testenv/chapchoo ./testenv/chapchoo", builder)
+        self.assertIn(
+            "COPY package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json ./",
+            builder,
+        )
+        hooks = (ROOT / ".pre-commit-config.yaml").read_text()
+        self.assertIn("testenv/chapchoo/", hooks)
 
     def test_bake_targets_share_builder_outputs_without_publishing(self) -> None:
         result = subprocess.run(
@@ -121,7 +144,7 @@ class CiStructureTests(unittest.TestCase):
             self.assertIn('--platform "linux/$architecture"', text)
         web = (ROOT / ".github/workflows/build-web.yaml").read_text()
         self.assertIn("runner.arch", web)
-        self.assertIn("hashFiles('typescript/pnpm-lock.yaml')", web)
+        self.assertIn("hashFiles('pnpm-lock.yaml')", web)
         self.assertIn("pnpm exec turbo run build", web)
 
 

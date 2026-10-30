@@ -1,12 +1,12 @@
 [workspace]
 members = [
-    "crates/chapchoo-domain",
-    "crates/chapchoo-crypto",
-    "crates/chapchoo-persistence",
-    "crates/chapchoo-protocol",
-    "crates/chapchoo-service",
-    "crates/chapchoo-rpc",
-    "crates/chapchoo-mail",
+    "crates/domain",
+    "crates/crypto",
+    "crates/persistence",
+    "crates/protocol",
+    "crates/service",
+    "crates/rpc",
+    "crates/mail",
     "apps/chapchoo",
 ]
 resolver = "3"
@@ -30,13 +30,13 @@ sha2 = "0.10.9"
 subtle = "2.6.1"
 thiserror = "2.0.18"
 zeroize = { version = "1.9.0", features = ["derive"] }
-chapchoo-domain = { path = "crates/chapchoo-domain" }
-chapchoo-crypto = { path = "crates/chapchoo-crypto" }
-chapchoo-persistence = { path = "crates/chapchoo-persistence" }
-chapchoo-protocol = { path = "crates/chapchoo-protocol" }
-chapchoo-service = { path = "crates/chapchoo-service" }
-chapchoo-rpc = { path = "crates/chapchoo-rpc" }
-chapchoo-mail = { path = "crates/chapchoo-mail" }
+chapchoo-domain = { path = "crates/domain" }
+chapchoo-crypto = { path = "crates/crypto" }
+chapchoo-persistence = { path = "crates/persistence" }
+chapchoo-protocol = { path = "crates/protocol" }
+chapchoo-service = { path = "crates/service" }
+chapchoo-rpc = { path = "crates/rpc" }
+chapchoo-mail = { path = "crates/mail" }
 diesel = { version = "2.3.14", default-features = false, features = ["sqlite", "postgres_backend"] }
 diesel-async = { version = "0.9.2", features = ["postgres", "sqlite", "bb8", "migrations"] }
 diesel_migrations = { version = "2.3.2", features = ["sqlite", "postgres"] }

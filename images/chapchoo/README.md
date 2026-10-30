@@ -71,7 +71,7 @@ an artifact; the build needs no deployment configuration.
 
 ```sh
 (cd rust && cargo build --locked --release --package chapchoo)
-(cd typescript && pnpm install --frozen-lockfile && pnpm run build)
+pnpm install --frozen-lockfile && pnpm run build
 ```
 
 Download the matching official archive and `SHASUMS256.txt` into a build-artifact
@@ -89,12 +89,12 @@ python3 scripts/package-linux.py \
   --binary rust/target/release/chapchoo \
   --node-archive /build-artifacts/node-v24.22.1-linux-x64.tar.xz \
   --node-shasums /build-artifacts/SHASUMS256.txt \
-  --general-standalone typescript/apps/chapchoo-web/.next/standalone \
-  --general-static typescript/apps/chapchoo-web/.next/static \
-  --general-public typescript/apps/chapchoo-web/public \
-  --admin-standalone typescript/apps/chapchoo-admin-web/.next/standalone \
-  --admin-static typescript/apps/chapchoo-admin-web/.next/static \
-  --admin-public typescript/apps/chapchoo-admin-web/public \
+  --general-standalone typescript/apps/web/.next/standalone \
+  --general-static typescript/apps/web/.next/static \
+  --general-public typescript/apps/web/public \
+  --admin-standalone typescript/apps/admin-web/.next/standalone \
+  --admin-static typescript/apps/admin-web/.next/static \
+  --admin-public typescript/apps/admin-web/public \
   --output /build-artifacts/chapchoo-linux-x86_64.tar.gz
 ```
 
@@ -113,10 +113,10 @@ chapchoo
 LICENSE
 runtime/bin/node
 runtime/LICENSE
-web/general/apps/chapchoo-web/server.mjs
-web/general/apps/chapchoo-web/.next/static/...
-web/admin/apps/chapchoo-admin-web/server.mjs
-web/admin/apps/chapchoo-admin-web/.next/static/...
+web/general/typescript/apps/web/server.mjs
+web/general/typescript/apps/web/.next/static/...
+web/admin/typescript/apps/admin-web/server.mjs
+web/admin/typescript/apps/admin-web/.next/static/...
 ```
 
 The full traced trees, relative symlinks and optional public assets remain under

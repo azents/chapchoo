@@ -133,3 +133,35 @@ compiler-output cache and be measured independently.
   separately; obtain at least two complete successful same-SHA full executions,
   recording every job/step, cache restore/save overhead, runner-time cost and
   cold/warm status. Do not claim the requested time budget from this draft.
+
+## Structural follow-up and Runtime interruption
+
+The requester additionally required removing unused scaffolds/placeholders,
+shortening redundant internal directory prefixes, locating executable E2E under
+`typescript/apps/e2e`, and placing real reusable fixture/process prerequisites
+under `testenv/chapchoo`. npm/Cargo identities and product behavior remain unchanged.
+Turbo rejects workspaces outside its root, so workspace/lock/Turbo authority now
+lives at the repository root. Next traces that root, and bundled app entries are
+`web/{general,admin}/typescript/apps/{web,admin-web}/server.mjs`.
+
+All nine CI checks passed on pre-structure `8d75dac`; this does not establish the
+structural follow-up. Fresh structural Rust quality, SQLite/PostgreSQL live RPC
+(71 checks each), frontend format/lint/typecheck, app/shared unit suites (49),
+boundary checks (32), and documentation/build/package/Snapshot contracts (50)
+passed locally. Exact reset/Admin-denial copy and 375px overflow checks moved to
+app-owned executable component tests (web 2, Admin 1), which passed before their
+removal from E2E. All three core journeys and browser cookie ordering remain.
+
+Independent review discovered that raw TypeScript testenv exports depended on
+Playwright transpilation. The corrected package emits JavaScript/declarations;
+7 support tests and 5 plain-Node public-export smoke tests pass. Independent
+re-review verified the correction without further material findings.
+
+A Runtime restart interrupted assembled-browser and Linux Docker revalidation.
+The requester identified ephemeral-storage exhaustion; temporary logs and Docker
+state were lost while source changes persisted. Interrupted runs are not passes.
+After restart Docker reported zero images, containers, volumes and build cache;
+filesystem-wide free space was 59 GiB, which does not establish the previous Pod's
+ephemeral-storage allowance or peak use. Do not repeat heavy local Docker builds;
+use existing native CI acceptance gates for the new structure. No global cache
+prune, cluster mutation, publication, deployment or merge was performed.

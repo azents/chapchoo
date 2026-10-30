@@ -112,7 +112,6 @@ The initial dependency ranges and pinned Next.js version come from the recorded
 upstream snapshot.
 
 ```sh
-cd typescript
 pnpm install --frozen-lockfile
 pnpm run dev --filter=@chapchoo/web
 pnpm run format:check
@@ -122,10 +121,18 @@ pnpm --filter @chapchoo/web test
 pnpm --filter @chapchoo/admin-web test
 pnpm --filter @chapchoo/ui test
 pnpm --filter @chapchoo/web-core test
+pnpm --filter @chapchoo/testenv test
 pnpm run build
 pnpm run build-storybook --filter=@chapchoo/web
 pnpm run build-storybook --filter=@chapchoo/admin-web
+pnpm --filter @chapchoo/e2e exec playwright install chromium
+pnpm --filter @chapchoo/web test:components
+pnpm --filter @chapchoo/admin-web test:components
 ```
+
+The repository root owns the pnpm workspace, lockfile and Turbo task graph.
+It includes `typescript/apps/*`, `typescript/packages/*` and `testenv/chapchoo`.
+Run the commands above from the repository root.
 
 Workspace lint/typecheck, dev and Storybook commands build their library
 prerequisites first. Turbo restores emitted `dist`/Next outputs from its cache;
@@ -160,7 +167,7 @@ pnpm run build-storybook --filter=@chapchoo/design-reference
 pnpm run check:design-boundaries
 ```
 
-See its [authoring and promotion guide](typescript/packages/chapchoo-design-reference/README.md).
+See its [authoring and promotion guide](typescript/packages/design-reference/README.md).
 It holds general cross-platform references, local experiments and non-web
 representations, not app functional tests or UI QA. Existing common UI can be
 reused, but the Azents-derived theme is provisional, not an approved Chapchoo
@@ -184,7 +191,7 @@ for renewal and cookie policy; do not copy real credentials into commands/logs.
 
 The three assembled browser journeys and disposable PostgreSQL/process ownership
 are documented in
-[`@chapchoo/e2e`](typescript/packages/chapchoo-e2e/README.md).
+[`@chapchoo/e2e`](typescript/apps/e2e/README.md).
 Sentry upload configuration and Azents product pages were not copied.
 
 ## Installed Linux and deployment validation

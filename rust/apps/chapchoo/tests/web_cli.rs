@@ -45,8 +45,8 @@ impl Bundle {
         )?;
         std::fs::set_permissions(&node, std::fs::Permissions::from_mode(0o755))?;
         for app in [
-            "web/general/apps/chapchoo-web",
-            "web/admin/apps/chapchoo-admin-web",
+            "web/general/typescript/apps/web",
+            "web/admin/typescript/apps/admin-web",
         ] {
             let app = root.join(app);
             std::fs::create_dir_all(&app)?;
@@ -240,9 +240,9 @@ async fn first_ready_web_exit_is_supervised_while_other_web_starts() -> Result<(
     for first in ["general", "admin"] {
         let bundle = Bundle::new("wait-for-termination")?;
         let first_app = if first == "general" {
-            "web/general/apps/chapchoo-web/server.mjs"
+            "web/general/typescript/apps/web/server.mjs"
         } else {
-            "web/admin/apps/chapchoo-admin-web/server.mjs"
+            "web/admin/typescript/apps/admin-web/server.mjs"
         };
         std::fs::write(bundle.directory.path().join(first_app), "serve")?;
         let general_port = port()?;
