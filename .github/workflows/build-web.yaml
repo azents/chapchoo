@@ -1,0 +1,67 @@
+name: Build web artifacts
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        required: true
+        type: string
+      architecture:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 15
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      TURBO_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Assert native runtime dependency architecture
+        env:
+          EXPECTED_ARCH: ${{ inputs.architecture }}
+        run: test "$(uname -m)" = "$EXPECTED_ARCH"
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable installer
+        with:
+          toolchain: 1.99.1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: rust
+          shared-key: web-generation
+          cache-workspace-crates: true
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: typescript/package.json
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24.22.1"
+          cache: pnpm
+          cache-dependency-path: typescript/pnpm-lock.yaml
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            typescript/.turbo
+            typescript/apps/*/.next/cache
+          key: web-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('typescript/pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: web-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('typescript/pnpm-lock.yaml') }}-
+      - name: Build web once and export traced runtime inputs
+        run: |
+          cd typescript
+          pnpm install --frozen-lockfile
+          pnpm exec turbo run build --filter=@chapchoo/web --filter=@chapchoo/admin-web
+          cd ..
+          python3 scripts/prepare-web-artifacts.py --typescript-root typescript \
+            --output "$RUNNER_TEMP/web-artifacts" --architecture "${{ inputs.architecture }}"
+      - name: Preserve symlinks and hidden Next files in one artifact
+        run: tar -cf "$RUNNER_TEMP/web-artifacts.tar" -C "$RUNNER_TEMP/web-artifacts" .
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: web-build-${{ inputs.architecture }}
+          path: ${{ runner.temp }}/web-artifacts.tar
+          if-no-files-found: error
+          retention-days: 1

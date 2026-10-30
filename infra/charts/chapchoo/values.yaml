@@ -33,10 +33,12 @@ prepare:
 mail:
   enabled: false
   sender: ""
-  region: ""
+  host: ""
+  port: 587
+  tls: starttls
   existingCredentialsSecret: ""
-  accessKeyIdKey: access-key-id
-  secretAccessKeyKey: secret-access-key
+  usernameKey: username
+  passwordKey: password
 general:
   enabled: true
   replicas: 1

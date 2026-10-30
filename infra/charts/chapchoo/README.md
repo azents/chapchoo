@@ -70,8 +70,13 @@ The backend image does not require Node or web assets.
 
 An enabled backend always needs `general.publicUrl`, even if the chart's general
 web is disabled: issued links still need the intended general web location.
-Optional SES uses backend-only sender/region configuration and an existing
-credential Secret. No mail provider resource is created. The separate setup-proof bootstrap has
+Optional SMTP uses backend-only `mail.sender`, `mail.host`, `mail.port` and
+`mail.tls` (`starttls` or `implicit`, always certificate-verified). For an
+authenticated relay, `mail.existingCredentialsSecret` references the username
+and password through `mail.usernameKey` / `mail.passwordKey`; leave it empty for
+an unauthenticated TLS relay. The chart exposes no plaintext SMTP option and
+creates no mail provider or credential Secret. Former SES fields are removed.
+The separate setup-proof bootstrap has
 its own narrowly authorized service account; ordinary backend/web and schema
 preparation pods still do not mount API tokens.
 

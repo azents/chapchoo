@@ -21,7 +21,7 @@ spec_version: 1
 ## Composition and authority
 
 The `chapchoo` binary composes configuration, one authoritative Store, bounded
-password work, optional official Amazon SES delivery and application services.
+password work, optional SMTP delivery and application services.
 RPC handlers do not depend on the DB implementation. Auth is registered on both
 listeners; General and Admin business services are registered only on their
 corresponding listener. Either role can run independently. Admin business calls
@@ -81,10 +81,16 @@ Sessions default to 180-day validity, 10-minute rotation and 5-minute previous
 token overlap with an optional absolute cap. These windows use server time.
 Reset consumes its grant and revokes all sessions without issuing a replacement.
 
-Mail configuration is checked before mail-only mutation admission. The official
-SES SDK uses ordinary credential resolution, explicit sender/region and optional
-operator endpoint. It submits once with bounded provider timeouts. CI capture
-mailers are injected only into tests. Production has no logged-code fallback.
+Mail configuration is checked before mail-only mutation admission. The maintained
+Lettre SMTP transport uses explicit sender/host, mandatory STARTTLS by default
+(port 587) or implicit certificate-verified TLS (port 465), and an optional paired
+username/password. An explicit nonzero port can override the default.
+Plaintext is restricted to an explicit numeric-loopback unauthenticated relay;
+no remote downgrade or credential transmission over plaintext is supported.
+The former SES SDK, variables and AWS credential chain are removed.
+The adapter submits once with 5-second SMTP command timeouts and a 15-second
+whole-send budget, without a pool/reconnect retry. CI capture mailers are injected
+only into tests. Production has no logged-code fallback.
 Delivery occurs after commit; failure preserves state and reports uncertainty.
 Without mail, invitations remain pending without automatic signup grants.
 
@@ -123,8 +129,9 @@ mail and committed failure, and real two-listener authorization/transport calls.
 The root interoperability gate launches disposable CLI instances for both SQLite
 and PostgreSQL and calls them using generated Node clients. CLI tests cover
 explicit preparation, readiness failure, local recovery, common Auth and owned
-termination/partial-startup cleanup. The SES SDK is tested against a local
-provider fixture, not an external mailbox.
+termination/partial-startup cleanup. SMTP tests exercise a local protocol fixture,
+single-attempt success/failure, required STARTTLS without downgrade, and rejection
+of an untrusted TLS certificate, not an external mailbox.
 
 The backend tests do not establish packaged browser or cluster acceptance.
 Those verification boundaries are recorded in the

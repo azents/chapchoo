@@ -25,6 +25,12 @@ repos:
         language: system
         files: ^(scripts/(package-linux\.py|tests/test_package_linux\.py)|images/chapchoo/)
         pass_filenames: false
+      - id: ci-structure-contracts
+        name: Validate full-CI ownership and single-build artifact contracts
+        entry: python3 -m unittest scripts.tests.test_ci_structure scripts.tests.test_build_artifacts
+        language: system
+        files: ^(\.github/workflows/(ci|linux-package|build-web|build-binary|snapshot)\.yaml|images/chapchoo/|scripts/(build-.*\.sh|prepare-web-artifacts\.py|tests/test_(ci_structure|build_artifacts)\.py))
+        pass_filenames: false
       - id: helm-chart-contracts
         name: Render and validate Helm and Argo preparation contracts offline
         entry: bash -c 'uv run --locked --project .codex python scripts/check-chart.py && python3 -m unittest scripts.tests.test_setup_proof'

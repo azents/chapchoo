@@ -289,7 +289,7 @@ def write_archive(root: Path, archive: Path, epoch: int) -> None:
     with (
         archive.open("xb") as output,
         gzip.GzipFile(
-            filename="", mode="wb", fileobj=output, mtime=epoch
+            filename="", mode="wb", fileobj=output, mtime=epoch, compresslevel=1
         ) as compressed,
         tarfile.open(
             fileobj=compressed, mode="w", format=tarfile.PAX_FORMAT, dereference=False

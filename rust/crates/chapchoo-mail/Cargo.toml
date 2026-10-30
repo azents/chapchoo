@@ -8,12 +8,13 @@ publish.workspace = true
 
 [dependencies]
 chapchoo-service.workspace = true
-aws-config.workspace = true
-aws-sdk-sesv2.workspace = true
+lettre.workspace = true
+tokio.workspace = true
 
 [dev-dependencies]
-tokio.workspace = true
 chapchoo-domain.workspace = true
+rcgen = { version = "0.14.10", default-features = false, features = ["ring"] }
+tokio-rustls = { version = "0.26.4", default-features = false, features = ["ring", "tls12"] }
 
 [lints]
 workspace = true

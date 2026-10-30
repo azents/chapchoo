@@ -149,18 +149,28 @@ starting a web role never creates/migrates a database or supplies those secrets.
 Build from the repository root with the repository `.dockerignore`. It must
 exclude host `node_modules`, `.next`, Rust `target`, `.env*`, keys/credential
 folders, database state, test output and caches before sending the context.
-The source build uses normal locked Cargo/pnpm resolution. OS packages and pnpm
-are installed only inside temporary builder/image layers, not on a deployment
-host or the Agent Runtime.
+Build outputs are produced separately using normal locked Cargo/pnpm resolution.
+The final image Dockerfile only validates and copies existing target outputs; it
+never recompiles the applications. CI uses native web and Bookworm binary build
+jobs and transfers their matching outputs within the same workflow run.
 
 ```sh
-docker buildx build --platform linux/amd64 --target backend \
-  -f images/chapchoo/Dockerfile -t chapchoo-backend:local --load .
-docker buildx build --platform linux/amd64 --target general-web \
-  -f images/chapchoo/Dockerfile -t chapchoo-general-web:local --load .
-docker buildx build --platform linux/arm64 --target admin-web \
-  -f images/chapchoo/Dockerfile -t chapchoo-admin-web:local --load .
+# Mac/Linux: build Linux outputs first, then package all three images.
+bash scripts/build-images.sh
+
+# Reuse outputs from an independent matching-target build:
+export WEB_ARTIFACTS=/absolute/build-artifacts/web
+export BINARY_ARTIFACTS=/absolute/build-artifacts/binary
+docker buildx bake --allow "fs.read=$WEB_ARTIFACTS" --allow "fs.read=$BINARY_ARTIFACTS" \
+  -f images/chapchoo/ci-bake.hcl
 ```
+
+The local wrapper uses separate `web-build.Dockerfile` and
+`binary-build.Dockerfile` Linux build environments before final packaging.
+Apple Silicon defaults to `linux/arm64`; x86-64 defaults to `linux/amd64`.
+Target-specific cache mounts retain pnpm/Cargo/Next build work without importing
+Mac node_modules. This is not evidence of a macOS app build or cross-architecture
+emulation acceptance. Final images use the same named-input contract as CI.
 
 - `backend`: central binary only; no Node or web tree. Default selection is both
   plaintext internal RPC listeners, with distinct ports50051/50052.
@@ -169,7 +179,7 @@ docker buildx build --platform linux/arm64 --target admin-web \
 - `admin-web`: central binary, matching Node and only the Admin traced app;
   default `serve --role none --web admin`, internal listener0.0.0.0:3004.
 - All final targets run as UID/GID **10001**. They contain no runtime DB/root/
-  bootstrap/AWS configuration. Web roles need explicit runtime
+  bootstrap/SMTP credential configuration. Web roles need explicit runtime
   `CHAPCHOO_GENERAL_WEB_URL` / `CHAPCHOO_ADMIN_WEB_URL` with HTTPS when listening
   beyond loopback. Configure backend URLs through the corresponding selected
   role variables. Kubernetes may override CMD with the same foreground args;

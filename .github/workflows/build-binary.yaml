@@ -1,0 +1,59 @@
+name: Build release binary
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        required: true
+        type: string
+      architecture:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  binary:
+    runs-on: ${{ inputs.runner }}
+    container:
+      image: rust:1.99.1-bookworm@sha256:9181b56c2a21ab1d5e73cffe04fc762426d30aa7fac3c91141dd033f49a7fc8b
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Assert native Bookworm builder architecture
+        env:
+          EXPECTED_ARCH: ${{ inputs.architecture }}
+        run: test "$(uname -m)" = "$EXPECTED_ARCH"
+      - name: Prepare native compiler prerequisites
+        run: apt-get update && apt-get install -y --no-install-recommends cmake pkg-config
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: rust
+          shared-key: bookworm-release
+          cache-workspace-crates: true
+      - name: Compile the release binary once
+        working-directory: rust
+        run: cargo build --locked --release --package chapchoo --timings
+      - name: Export binary and target identity
+        env:
+          MACHINE: ${{ inputs.architecture }}
+        run: |
+          mkdir "$RUNNER_TEMP/binary-artifacts"
+          cp rust/target/release/chapchoo "$RUNNER_TEMP/binary-artifacts/"
+          case "$MACHINE" in x86_64) arch=amd64 ;; aarch64) arch=arm64 ;; *) exit 1 ;; esac
+          printf '%s\n' "$arch" > "$RUNNER_TEMP/binary-artifacts/architecture"
+          tar -cf "$RUNNER_TEMP/binary-artifacts.tar" -C "$RUNNER_TEMP/binary-artifacts" .
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: binary-build-${{ inputs.architecture }}
+          path: ${{ runner.temp }}/binary-artifacts.tar
+          if-no-files-found: error
+          retention-days: 1
+      - name: Preserve release compilation timing
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-compilation-timing-${{ inputs.architecture }}
+          path: rust/target/cargo-timings/
+          if-no-files-found: ignore

@@ -1,50 +1,84 @@
-//! Optional Amazon SES delivery through the official provider SDK.
-use aws_sdk_sesv2::{
-    Client,
-    config::{BehaviorVersion, Region, retry::RetryConfig, timeout::TimeoutConfig},
-    types::{Body, Content, Destination, EmailContent, Message},
-};
+//! Optional SMTP delivery with mandatory remote TLS and single-attempt submission.
 use chapchoo_service::{MailFailure, MailFuture, MailMessage, MailPurpose, Mailer};
-use std::{fmt, time::Duration};
+use lettre::{
+    AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor, message::Mailbox,
+    transport::smtp::authentication::Credentials,
+};
+use std::{fmt, net::IpAddr, time::Duration};
 
-pub struct SesMailer {
-    client: Client,
-    sender: String,
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SmtpSecurity {
+    StartTls,
+    ImplicitTls,
+    LoopbackPlaintext,
 }
 
-impl fmt::Debug for SesMailer {
+/// Configuration errors never echo a host, credential or message body.
+#[derive(Debug)]
+pub struct SmtpConfigError;
+
+impl fmt::Display for SmtpConfigError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("SesMailer([REDACTED])")
+        formatter.write_str("Invalid SMTP configuration")
+    }
+}
+impl std::error::Error for SmtpConfigError {}
+
+pub struct SmtpMailer {
+    transport: AsyncSmtpTransport<Tokio1Executor>,
+    sender: Mailbox,
+}
+
+impl fmt::Debug for SmtpMailer {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("SmtpMailer([REDACTED])")
     }
 }
 
-impl SesMailer {
-    /// Uses the SDK's ordinary credential chain. Endpoint override is explicit operator config.
-    pub async fn new(sender: String, region: String, endpoint: Option<String>) -> Self {
-        let shared = aws_config::defaults(BehaviorVersion::latest())
-            .region(Region::new(region))
-            // A provider timeout does not prove that no mail was accepted.
-            .retry_config(RetryConfig::standard().with_max_attempts(1))
-            .timeout_config(
-                TimeoutConfig::builder()
-                    .operation_timeout(Duration::from_secs(15))
-                    .connect_timeout(Duration::from_secs(5))
-                    .build(),
-            )
-            .load()
-            .await;
-        let mut config = aws_sdk_sesv2::config::Builder::from(&shared);
-        if let Some(endpoint) = endpoint {
-            config = config.endpoint_url(endpoint);
+impl SmtpMailer {
+    pub fn new(
+        sender: String,
+        host: String,
+        port: u16,
+        security: SmtpSecurity,
+        credentials: Option<(String, String)>,
+    ) -> Result<Self, SmtpConfigError> {
+        if host.is_empty() || host.contains(['/', '@', '\r', '\n']) || port == 0 {
+            return Err(SmtpConfigError);
         }
-        Self {
-            client: Client::from_conf(config.build()),
+        let sender = sender.parse::<Mailbox>().map_err(|_| SmtpConfigError)?;
+        let builder = match security {
+            SmtpSecurity::StartTls => AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&host)
+                .map_err(|_| SmtpConfigError)?,
+            SmtpSecurity::ImplicitTls => {
+                AsyncSmtpTransport::<Tokio1Executor>::relay(&host).map_err(|_| SmtpConfigError)?
+            }
+            SmtpSecurity::LoopbackPlaintext => {
+                if credentials.is_some()
+                    || !host
+                        .parse::<IpAddr>()
+                        .is_ok_and(|address| address.is_loopback())
+                {
+                    return Err(SmtpConfigError);
+                }
+                AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(host)
+            }
+        };
+        let mut builder = builder.port(port).timeout(Some(Duration::from_secs(5)));
+        if let Some((username, password)) = credentials {
+            if username.is_empty() || password.is_empty() {
+                return Err(SmtpConfigError);
+            }
+            builder = builder.credentials(Credentials::new(username, password));
+        }
+        Ok(Self {
+            transport: builder.build(),
             sender,
-        }
+        })
     }
 }
 
-impl Mailer for SesMailer {
+impl Mailer for SmtpMailer {
     fn send(&self, message: MailMessage) -> MailFuture<'_> {
         Box::pin(async move {
             let subject = match message.purpose {
@@ -52,31 +86,21 @@ impl Mailer for SesMailer {
                 MailPurpose::SignupLink => "Your Chapchoo signup link",
                 MailPurpose::TeamInvitation => "Your Chapchoo team invitation",
             };
-            let subject = Content::builder()
-                .data(subject)
-                .charset("UTF-8")
-                .build()
-                .map_err(MailFailure::new)?;
-            let text = Content::builder()
-                .data(message.expose_body())
-                .charset("UTF-8")
-                .build()
-                .map_err(MailFailure::new)?;
-            let content = Message::builder()
+            let email = Message::builder()
+                .from(self.sender.clone())
+                .to(message
+                    .to
+                    .delivery()
+                    .parse::<Mailbox>()
+                    .map_err(MailFailure::new)?)
                 .subject(subject)
-                .body(Body::builder().text(text).build())
-                .build();
-            self.client
-                .send_email()
-                .from_email_address(&self.sender)
-                .destination(
-                    Destination::builder()
-                        .to_addresses(message.to.delivery())
-                        .build(),
-                )
-                .content(EmailContent::builder().simple(content).build())
-                .send()
+                .body(message.expose_body().to_owned())
+                .map_err(MailFailure::new)?;
+            // No pooling/reconnect feature and no retry loop: a lost final reply
+            // cannot authorize resubmitting a potentially accepted message.
+            tokio::time::timeout(Duration::from_secs(15), self.transport.send(email))
                 .await
+                .map_err(MailFailure::new)?
                 .map_err(MailFailure::new)?;
             Ok(())
         })
@@ -87,91 +111,298 @@ impl Mailer for SesMailer {
 mod tests {
     use super::*;
     use std::error::Error;
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
     type TestError = Box<dyn Error + Send + Sync>;
 
+    fn message() -> Result<MailMessage, TestError> {
+        Ok(MailMessage::new(
+            chapchoo_domain::EmailAddress::parse("recipient@example.invalid")?,
+            MailPurpose::LoginCode,
+            "transient fixture content".to_owned(),
+        ))
+    }
+
     #[tokio::test]
-    async fn official_sdk_serializes_delivery_and_preserves_safe_provider_failure()
-    -> Result<(), TestError> {
-        for success in [true, false] {
+    async fn smtp_envelope_body_failure_and_no_automatic_retry() -> Result<(), TestError> {
+        for reply in [Some(true), Some(false), None] {
+            let success = reply == Some(true);
             let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-            let address = listener.local_addr()?;
+            let port = listener.local_addr()?.port();
             let receiver = tokio::spawn(async move {
-                let (mut stream, _) = listener.accept().await?;
-                let mut input = Vec::new();
-                let mut byte = [0; 1];
-                while !input.ends_with(b"\r\n\r\n") {
-                    stream.read_exact(&mut byte).await?;
-                    input.push(byte[0]);
-                    if input.len() > 32_768 {
-                        return Err::<_, TestError>("SDK header exceeded fixture bound".into());
+                let (stream, _) = listener.accept().await?;
+                let mut stream = BufReader::new(stream);
+                stream.get_mut().write_all(b"220 fixture ESMTP\r\n").await?;
+                let mut commands = Vec::new();
+                let mut line = String::new();
+                loop {
+                    line.clear();
+                    if stream.read_line(&mut line).await? == 0 {
+                        break;
+                    }
+                    commands.push(line.clone());
+                    if line.starts_with("EHLO ") {
+                        stream
+                            .get_mut()
+                            .write_all(b"250-fixture\r\n250 8BITMIME\r\n")
+                            .await?;
+                    } else if line.starts_with("MAIL FROM:") || line.starts_with("RCPT TO:") {
+                        stream.get_mut().write_all(b"250 OK\r\n").await?;
+                    } else if line == "DATA\r\n" {
+                        stream.get_mut().write_all(b"354 Send content\r\n").await?;
+                        let mut body = String::new();
+                        loop {
+                            line.clear();
+                            stream.read_line(&mut line).await?;
+                            if line == ".\r\n" {
+                                break;
+                            }
+                            body.push_str(&line);
+                            if body.len() > 32768 {
+                                return Err::<_, TestError>("Fixture body exceeded bound".into());
+                            }
+                        }
+                        assert!(body.contains("Your Chapchoo sign-in code"));
+                        assert!(body.contains("transient fixture content"));
+                        if let Some(accepted) = reply {
+                            let response = if accepted {
+                                b"250 accepted\r\n".as_slice()
+                            } else {
+                                b"451 fixture provider secret\r\n".as_slice()
+                            };
+                            stream.get_mut().write_all(response).await?;
+                        }
+                        // A dropped final reply is an uncertain acceptance,
+                        // not authorization for a second submission.
+                        if !success {
+                            break;
+                        }
+                    } else if line == "QUIT\r\n" {
+                        stream.get_mut().write_all(b"221 Goodbye\r\n").await?;
+                        break;
+                    } else {
+                        return Err::<_, TestError>("Unexpected SMTP command".into());
                     }
                 }
-                let header = std::str::from_utf8(&input)?.to_ascii_lowercase();
-                assert!(header.starts_with("post /v2/email/outbound-emails "));
-                assert!(header.contains("authorization: aws4-hmac-sha256"));
-                let length = header
-                    .lines()
-                    .find_map(|line| line.strip_prefix("content-length: "))
-                    .ok_or("Missing SDK request length")?
-                    .trim()
-                    .parse::<usize>()?;
-                let mut body = vec![0; length];
-                stream.read_exact(&mut body).await?;
-                let body = std::str::from_utf8(&body)?;
-                assert!(body.contains("Your Chapchoo sign-in code"));
-                assert!(body.contains("transient fixture content"));
-                let (status, response) = if success {
-                    ("200 OK", "{\"MessageId\":\"fixture\"}")
-                } else {
-                    (
-                        "503 Service Unavailable",
-                        "{\"message\":\"provider fixture secret\"}",
-                    )
-                };
-                stream.write_all(format!(
-                    "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{response}",
-                    response.len()
-                ).as_bytes()).await?;
+                assert!(
+                    commands
+                        .iter()
+                        .any(|value| value.contains("sender@example.invalid"))
+                );
+                assert!(
+                    commands
+                        .iter()
+                        .any(|value| value.contains("recipient@example.invalid"))
+                );
                 Ok::<_, TestError>(listener)
             });
-            let config = aws_sdk_sesv2::config::Builder::new()
-                .behavior_version(BehaviorVersion::latest())
-                .region(Region::new("us-east-1"))
-                .credentials_provider(aws_sdk_sesv2::config::Credentials::new(
-                    "fixture", "fixture", None, None, "fixture",
-                ))
-                .endpoint_url(format!("http://{address}"))
-                .retry_config(RetryConfig::standard().with_max_attempts(1))
-                .build();
-            let mailer = SesMailer {
-                client: Client::from_conf(config),
-                sender: "sender@example.invalid".to_owned(),
-            };
-            let result = tokio::time::timeout(
-                Duration::from_secs(10),
-                mailer.send(MailMessage::new(
-                    chapchoo_domain::EmailAddress::parse("recipient@example.invalid")?,
-                    MailPurpose::LoginCode,
-                    "transient fixture content".to_owned(),
-                )),
-            )
-            .await?;
+            let mailer = SmtpMailer::new(
+                "sender@example.invalid".to_owned(),
+                "127.0.0.1".to_owned(),
+                port,
+                SmtpSecurity::LoopbackPlaintext,
+                None,
+            )?;
+            let result = mailer.send(message()?).await;
             let listener = receiver.await??;
             assert!(
                 listener.into_std()?.accept().is_err(),
-                "Email submission must not auto-retry"
+                "SMTP must not retry submission"
             );
             if success {
                 result?;
             } else {
-                let error = result.err().ok_or("Expected provider failure")?;
+                let error = result.err().ok_or("Expected SMTP failure")?;
                 assert!(error.source().is_some());
-                assert!(!error.to_string().contains("fixture secret"));
-                assert!(!format!("{error:?}").contains("fixture secret"));
+                assert!(!error.to_string().contains("provider secret"));
+                assert!(!format!("{error:?}").contains("provider secret"));
             }
+            assert!(!format!("{mailer:?}").contains("sender@example.invalid"));
         }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn required_starttls_never_downgrades_or_sends_credentials() -> Result<(), TestError> {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let port = listener.local_addr()?.port();
+        let receiver = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await?;
+            let mut stream = BufReader::new(stream);
+            stream.get_mut().write_all(b"220 fixture ESMTP\r\n").await?;
+            let mut line = String::new();
+            stream.read_line(&mut line).await?;
+            assert!(line.starts_with("EHLO "));
+            stream
+                .get_mut()
+                .write_all(b"250-fixture\r\n250 AUTH PLAIN LOGIN\r\n")
+                .await?;
+            line.clear();
+            stream.read_line(&mut line).await?;
+            assert!(!line.starts_with("AUTH "));
+            assert!(!line.starts_with("MAIL "));
+            Ok::<_, TestError>(())
+        });
+        let mailer = SmtpMailer::new(
+            "sender@example.invalid".to_owned(),
+            "127.0.0.1".to_owned(),
+            port,
+            SmtpSecurity::StartTls,
+            Some(("fixture-user".to_owned(), "fixture-password".to_owned())),
+        )?;
+        assert!(mailer.send(message()?).await.is_err());
+        receiver.await??;
+        Ok(())
+    }
+
+    #[test]
+    fn plaintext_is_numeric_loopback_only_and_never_authenticated() {
+        for host in ["localhost", "smtp.example.invalid", "192.0.2.1"] {
+            assert!(
+                SmtpMailer::new(
+                    "sender@example.invalid".to_owned(),
+                    host.to_owned(),
+                    25,
+                    SmtpSecurity::LoopbackPlaintext,
+                    None
+                )
+                .is_err()
+            );
+        }
+        assert!(
+            SmtpMailer::new(
+                "sender@example.invalid".to_owned(),
+                "127.0.0.1".to_owned(),
+                25,
+                SmtpSecurity::LoopbackPlaintext,
+                Some(("user".to_owned(), "password".to_owned()))
+            )
+            .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn authenticated_implicit_tls_sends_with_a_trusted_fixture_certificate()
+    -> Result<(), TestError> {
+        use lettre::transport::smtp::client::{Certificate, Tls, TlsParameters};
+        use std::sync::Arc;
+        use tokio_rustls::{
+            TlsAcceptor,
+            rustls::{ServerConfig, pki_types::PrivatePkcs8KeyDer},
+        };
+        let certificate = rcgen::generate_simple_self_signed(vec!["localhost".to_owned()])?;
+        let tls = TlsParameters::builder("localhost".to_owned())
+            .add_root_certificate(Certificate::from_der(certificate.cert.der().to_vec())?)
+            .build()?;
+        let server = ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(
+                vec![certificate.cert.der().clone()],
+                PrivatePkcs8KeyDer::from(certificate.signing_key.serialize_der()).into(),
+            )?;
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let port = listener.local_addr()?.port();
+        let receiver = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await?;
+            let tls_stream = TlsAcceptor::from(Arc::new(server)).accept(stream).await?;
+            let mut stream = BufReader::new(tls_stream);
+            stream.get_mut().write_all(b"220 fixture ESMTP\r\n").await?;
+            let mut line = String::new();
+            let mut authenticated = false;
+            loop {
+                line.clear();
+                if stream.read_line(&mut line).await? == 0 {
+                    break;
+                }
+                if line.starts_with("EHLO ") {
+                    stream
+                        .get_mut()
+                        .write_all(b"250-fixture\r\n250 AUTH PLAIN\r\n")
+                        .await?;
+                } else if line.starts_with("AUTH PLAIN ") {
+                    authenticated = true;
+                    stream.get_mut().write_all(b"235 Authenticated\r\n").await?;
+                } else if line.starts_with("MAIL FROM:") || line.starts_with("RCPT TO:") {
+                    assert!(authenticated);
+                    stream.get_mut().write_all(b"250 OK\r\n").await?;
+                } else if line == "DATA\r\n" {
+                    stream.get_mut().write_all(b"354 Send content\r\n").await?;
+                    let mut body = String::new();
+                    loop {
+                        line.clear();
+                        stream.read_line(&mut line).await?;
+                        if line == ".\r\n" {
+                            break;
+                        }
+                        body.push_str(&line);
+                        if body.len() > 32768 {
+                            return Err::<_, TestError>("Fixture body exceeded bound".into());
+                        }
+                    }
+                    assert!(body.contains("transient fixture content"));
+                    stream.get_mut().write_all(b"250 Accepted\r\n").await?;
+                } else if line == "QUIT\r\n" {
+                    stream.get_mut().write_all(b"221 Goodbye\r\n").await?;
+                    break;
+                } else {
+                    return Err::<_, TestError>("Unexpected TLS SMTP command".into());
+                }
+            }
+            assert!(authenticated);
+            Ok::<_, TestError>(())
+        });
+        // Custom trust is test-only. Production constructors always use the
+        // standard validated roots and expose no certificate-disable setting.
+        let mailer = SmtpMailer {
+            transport: AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous("localhost")
+                .port(port)
+                .tls(Tls::Wrapper(tls))
+                .credentials(Credentials::new(
+                    "fixture-user".to_owned(),
+                    "fixture-password".to_owned(),
+                ))
+                .build(),
+            sender: "sender@example.invalid".parse()?,
+        };
+        mailer.send(message()?).await?;
+        receiver.await??;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn implicit_tls_rejects_an_untrusted_certificate() -> Result<(), TestError> {
+        use std::sync::Arc;
+        use tokio_rustls::{
+            TlsAcceptor,
+            rustls::{ServerConfig, pki_types::PrivatePkcs8KeyDer},
+        };
+        let certificate = rcgen::generate_simple_self_signed(vec!["localhost".to_owned()])?;
+        let server = ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(
+                vec![certificate.cert.der().clone()],
+                PrivatePkcs8KeyDer::from(certificate.signing_key.serialize_der()).into(),
+            )?;
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let port = listener.local_addr()?.port();
+        let receiver = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await?;
+            let result = TlsAcceptor::from(Arc::new(server)).accept(stream).await;
+            assert!(
+                result.is_err(),
+                "Client must reject the self-signed certificate"
+            );
+            Ok::<_, TestError>(())
+        });
+        let mailer = SmtpMailer::new(
+            "sender@example.invalid".to_owned(),
+            "localhost".to_owned(),
+            port,
+            SmtpSecurity::ImplicitTls,
+            Some(("fixture-user".to_owned(), "fixture-password".to_owned())),
+        )?;
+        assert!(mailer.send(message()?).await.is_err());
+        receiver.await??;
         Ok(())
     }
 }
