@@ -8,7 +8,7 @@ const meta = {
     docs: {
       description: {
         component:
-          "An independent workspace for general design references across platforms. These initial stories explain ownership; they do not select Chapchoo's visual identity.",
+          "Independent cross-platform design references. Read root DESIGN.md for visual context and the Chapchoo stories for the selected tone. This page explains workspace ownership.",
       },
     },
   },
@@ -20,7 +20,7 @@ type Story = StoryObj<typeof meta>;
 export const Purpose: Story = {
   args: {
     title: "Design reference workspace",
-    note: "Chapchoo's visual design will be developed from scratch. The current Azents-derived styling is provisional.",
+    note: "Design principles live in root DESIGN.md. The Chapchoo catalog represents the selected tone; inherited Azents examples remain provisional.",
     children: (
       <>
         <section>

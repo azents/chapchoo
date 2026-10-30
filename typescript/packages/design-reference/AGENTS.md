@@ -1,6 +1,7 @@
 # Design reference ownership
 
 Read [README.md](README.md) before authoring references.
+For visual design context, read root [DESIGN.md](../../../DESIGN.md).
 
 This package owns general-purpose cross-platform design references, local
 experiments and web representations of non-web UI. App functional testing and

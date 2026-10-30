@@ -175,8 +175,8 @@ See its [authoring and promotion guide](typescript/packages/design-reference/REA
 It holds general cross-platform references, local experiments and non-web
 representations, not app functional tests or UI QA. Existing common UI can be
 reused, but the Azents-derived theme is provisional, not an approved Chapchoo
-design system. This workspace establishes structure for subsequent design work;
-it does not formalize the existing palette or screens.
+design system. See root [DESIGN.md](DESIGN.md) for visual design context and the
+reference package guide for its current catalog.
 
 Each app reads configuration only through `src/config/index.ts`.
 `CHAPCHOO_PUBLIC_URL` supplies the exact public origin/path (defaults:
