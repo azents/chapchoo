@@ -104,6 +104,23 @@ required/optional policy was independently verified.
 
 ## Verification state
 
+Before the final CI-only debug-symbol adjustment, `367e61e` passed both complete
+workflows twice on the unchanged SHA (CI run 41030029813 and native run
+41030029885, attempts 1 and 2). First successful step times: repository hooks 36 s,
+Rust gate 65 s (8.63 s dev/check + 25.07 s test compilation, plus test bodies),
+web build commands 12–15 s, release compilation 31–36 s, packaging 90–96 s.
+These runs reused compilation caches primed during earlier failed packaging
+attempts; they are not cold-start measurements. Initial failed packaging logs
+showed remote Git-context interpretation of local artifact paths; `source: .`
+corrected it. Explicit filesystem reads document the intended artifact inputs,
+not stronger isolation than the pinned Bake action's existing automatic policy.
+
+The final candidate disables debug symbols only for CI Rust dev/test profiles
+to reduce the remaining codegen/link cost. Test assertions/behavior and local
+profiles remain unchanged; release optimization remains unchanged. Cargo cache
+keys include the profile environment, so this candidate must prime a distinct
+compiler-output cache and be measured independently.
+
 - CI structure, artifact safety/orchestration, package and Snapshot contract
   tests: 31 passed. The orchestration fixture exercises Mac arm64 command flow;
   it is not a claim of execution on a physical Mac.

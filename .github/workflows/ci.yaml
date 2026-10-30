@@ -17,6 +17,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
+      # CI needs assertions and diagnostics, not full debugger symbol tables.
+      # Keep local dev/test profiles and production release builds unchanged.
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
       CHAPCHOO_TEST_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/chapchoo_test
     services:
       postgres:

@@ -23,6 +23,9 @@ class CiStructureTests(unittest.TestCase):
         hooks = (ROOT / ".pre-commit-config.yaml").read_text()
         self.assertIn("entry: bash scripts/check-rust.sh", hooks)
         self.assertIn("entry: bash scripts/check-rpc.sh", hooks)
+        rust_job = workflow.split("  validate:", 1)[0]
+        self.assertIn('CARGO_PROFILE_DEV_DEBUG: "0"', rust_job)
+        self.assertIn('CARGO_PROFILE_TEST_DEBUG: "0"', rust_job)
 
     def test_native_acceptance_retains_all_assembly_boundaries(self) -> None:
         workflow = (ROOT / ".github/workflows/linux-package.yaml").read_text()
