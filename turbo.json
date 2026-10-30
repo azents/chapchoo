@@ -4,6 +4,25 @@
     "SWC_NATIVE_BINDING_CACHE"
   ],
   "tasks": {
+    "@chapchoo/design-reference#build": {
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/DESIGN.md"
+      ],
+      "outputs": []
+    },
+    "@chapchoo/design-reference#typecheck": {
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/DESIGN.md"
+      ]
+    },
     "generate": {
       "cache": false
     },

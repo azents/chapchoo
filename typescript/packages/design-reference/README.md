@@ -3,10 +3,24 @@
 An independent Storybook for general-purpose design references across platforms.
 It is not the product functional-test suite or an app UI QA catalog.
 
-**Chapchoo's visual identity is not selected.** The existing Azents-derived web
-theme and controls are provisional. Initial stories explain structure and
-ownership; they are not an approved palette, typography system or screen design.
-Future design work starts from the product's needs, not from cataloging that theme.
+Visual design context and principles live only in root
+[DESIGN.md](../../../DESIGN.md). The `Chapchoo` stories implement the selected
+tone; the older ownership examples retain their explicitly provisional styling.
+Fictional screen examples are not product feature requirements.
+
+## Catalog
+
+- `Chapchoo/Foundations`: overview, basic controls, feedback, mascots, iOS type.
+- `Chapchoo/Products`: fictional reading shelf, weekly planner, workspace settings,
+  and a content/identity composition; desktop and narrow views share the same stories.
+- `Ownership examples`: existing common-UI reuse and non-web ownership examples.
+
+Story IDs start with `chapchoo-foundations--` and `chapchoo-products--`.
+The selected theme renders in an isolated document to avoid leaking Mantine CSS
+and document-root variables into the neutral ownership stories. Fields, feedback
+and confirmation reuse existing `@chapchoo/ui` contracts; the new theme and
+compositions remain local to reference. Apple typography is a web representation,
+not native execution or proof of installed Apple fonts.
 
 ## Run
 
@@ -16,6 +30,7 @@ From the repository root, after `pnpm install --frozen-lockfile`:
 pnpm run storybook --filter=@chapchoo/design-reference
 pnpm run build-storybook --filter=@chapchoo/design-reference
 pnpm run check:design-boundaries
+pnpm --filter @chapchoo/design-reference check:design
 ```
 
 Development uses port **6008**. To override it, run
@@ -73,7 +88,7 @@ The common-UI reuse example loads its global Mantine stylesheet and provider in
 a nested Storybook document, not the parent reference canvas. This prevents
 stylesheet resets and document-root color-scheme effects from leaking into
 neutral references during story navigation. There is no inherited workspace-wide
-theme provider. Choose a new design deliberately in later work.
+theme provider. Each represented design opts into its own isolated provider.
 
 ## Promote for production-web reuse
 

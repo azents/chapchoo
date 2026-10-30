@@ -51,6 +51,8 @@ Never bypass commit hooks.
 
 ## Documentation
 
+For visual UI work, read [DESIGN.md](DESIGN.md).
+
 Read `docs/chapchoo/AGENTS.md` for the inherited documentation process.
 Read current specs first. Confirm Requirements before material technical design.
 Requirements snapshots become immutable after implementation; ADRs are append-only;
