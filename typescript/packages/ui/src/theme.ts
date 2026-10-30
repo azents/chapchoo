@@ -28,6 +28,7 @@ import type { CSSVariablesResolver } from "@mantine/core";
 export const themeCssVariables: CSSVariablesResolver = () => ({
   variables: {
     "--chapchoo-font-input-mobile": "max(16px, 1rem)",
+    "--chapchoo-line-height-control": "1.5",
     ...Object.fromEntries(
       Object.entries(toneColors).map(([key, value]) => [
         `--chapchoo-color-${key}`,
@@ -177,7 +178,11 @@ export const theme = createTheme({
   components: {
     Button: Button.extend({
       defaultProps: { variant: "filled" },
-      classNames: { root: classes.button },
+      classNames: {
+        root: classes.button,
+        inner: classes.buttonInner,
+        label: classes.buttonLabel,
+      },
     }),
     ActionIcon: ActionIcon.extend({
       defaultProps: { variant: "subtle" },
@@ -186,7 +191,10 @@ export const theme = createTheme({
     Anchor: Anchor.extend({ classNames: { root: classes.anchor } }),
     Badge: Badge.extend({ defaultProps: { variant: "light" } }),
     ThemeIcon: ThemeIcon.extend({ defaultProps: { variant: "light" } }),
-    Chip: Chip.extend({ defaultProps: { variant: "light" } }),
+    Chip: Chip.extend({
+      defaultProps: { variant: "light" },
+      classNames: { label: classes.chipLabel },
+    }),
     Input: Input.extend({ classNames: { input: classes.input } }),
     Paper: Paper.extend({
       defaultProps: { radius: "lg" },

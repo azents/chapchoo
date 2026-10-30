@@ -125,6 +125,12 @@ focus zoom behavior, not a reason to disable pinch zoom or enlarge checkboxes,
 toggles and other non-text controls. The requester selected the input-only
 comparison on 2026-10-30 after reviewing both auth and chat examples.
 
+Textual controls keep a complete line box, including descenders and Korean glyph
+extents. Use a 1.5 line-height for action labels and let controls grow when text
+wraps or enlarges. Do not trim labels to Latin cap/baseline metrics or mask glyphs
+with a fixed-height inner label. Keep intentional data truncation separate from
+action-label typography; do not compensate with screen-specific text offsets.
+
 Write natural, concise labels. Warmth is not baby talk or cheerful filler.
 Explain scope, consequence, unusual behavior and recovery only where useful;
 avoid repeating what the visible control already says. Preserve recognizable

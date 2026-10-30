@@ -29,9 +29,15 @@ export function Auth(props: AuthProps): ReactNode {
       description={c.authDescription}
       footer={
         <Group justify="space-between">
-          <Anchor href={`${props.basePath}/login`}>{c.login}</Anchor>
-          <Anchor href={`${props.basePath}/signup`}>{c.signup}</Anchor>
-          <Anchor href={`${props.basePath}/reset-password`}>{c.reset}</Anchor>
+          {mode !== "LOGIN" ? (
+            <Anchor href={`${props.basePath}/login`}>{c.login}</Anchor>
+          ) : null}
+          {mode !== "SIGNUP" ? (
+            <Anchor href={`${props.basePath}/signup`}>{c.signup}</Anchor>
+          ) : null}
+          {mode !== "RESET" ? (
+            <Anchor href={`${props.basePath}/reset-password`}>{c.reset}</Anchor>
+          ) : null}
         </Group>
       }
     >
