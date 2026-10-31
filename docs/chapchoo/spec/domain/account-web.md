@@ -181,7 +181,10 @@ retain the distinct personal-space label.
 ## Display settings
 
 Both apps expose the same always-visible header entry on public, authentication
-and protected surfaces. The panel applies language, IANA time zone and regional
+and protected surfaces. Its concise title is “Display settings” (“표시 설정” in
+Korean). The common theme gives every Drawer body an `xl` top inset below its
+header; the settings scope paragraph has no page-specific margin correction.
+The panel applies language, IANA time zone and regional
 format independently and immediately. Protected `/profile` routes duplicate
 those controls over the same identity-query User; there is no separate account
 settings store. Changing language updates catalogs and document language without

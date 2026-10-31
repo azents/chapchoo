@@ -535,7 +535,7 @@ test.describe("Assembled account and team acceptance", () => {
     await member.getByLabel(/^Password\s*\*?$/).fill(assembly.member.password);
     await member
       .getByRole("button", {
-        name: "Language and region settings",
+        name: "Display settings",
         exact: true,
       })
       .click();
@@ -588,7 +588,7 @@ test.describe("Assembled account and team acceptance", () => {
     ).toHaveValue("France · Français");
     await member
       .getByRole("button", {
-        name: "Language and region settings",
+        name: "Display settings",
         exact: true,
       })
       .click();
@@ -628,7 +628,7 @@ test.describe("Assembled account and team acceptance", () => {
     await safeScreenshot(member, "display-profile-mobile");
     await member
       .getByRole("button", {
-        name: "Language and region settings",
+        name: "Display settings",
         exact: true,
       })
       .click();

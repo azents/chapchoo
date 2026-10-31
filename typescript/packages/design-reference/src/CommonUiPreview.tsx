@@ -29,7 +29,7 @@ export default function CommonUiPreview(): ReactElement {
     region: "en-US",
   });
   const copy = {
-    title: "Language and region settings",
+    title: "Display settings",
     language: "Language",
     timeZone: "Time zone",
     region: "Regional format",

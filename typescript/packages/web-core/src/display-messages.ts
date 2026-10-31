@@ -1,6 +1,6 @@
 export const displayMessages = {
   en: {
-    title: "Language and region settings",
+    title: "Display settings",
     language: "Language",
     timeZone: "Time zone",
     region: "Regional format",
@@ -31,7 +31,7 @@ export const displayMessages = {
     logout: "Log out",
   },
   ko: {
-    title: "언어 및 지역 설정",
+    title: "표시 설정",
     language: "언어",
     timeZone: "시간대",
     region: "지역 형식",
@@ -62,7 +62,7 @@ export const displayMessages = {
     logout: "로그아웃",
   },
   ja: {
-    title: "言語と地域の設定",
+    title: "表示設定",
     language: "言語",
     timeZone: "タイムゾーン",
     region: "地域の書式",
@@ -93,7 +93,7 @@ export const displayMessages = {
     logout: "ログアウト",
   },
   fr: {
-    title: "Langue et paramètres régionaux",
+    title: "Affichage",
     language: "Langue",
     timeZone: "Fuseau horaire",
     region: "Format régional",
