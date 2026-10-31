@@ -6,14 +6,11 @@ test("validated identity and logout remain visible while business data loads", a
   for (const width of [1280, 390, 320]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto(
-      "/iframe.html?id=accounts-workspace--logout-failed-while-loading&viewMode=story",
+      "/iframe.html?id=accounts-workspace--authenticated-loading&viewMode=story",
     );
     await expect(
       page.getByRole("button", { name: "Log out", exact: true }),
     ).toBeVisible();
-    await expect(page.getByRole("alert")).toContainText(
-      "Logout could not be confirmed",
-    );
     await expect(
       page.getByRole("button", { name: "Appearance", exact: true }),
     ).toBeVisible();

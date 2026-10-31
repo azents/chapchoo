@@ -33,12 +33,7 @@ function fixture(
 }
 
 void test("only protected invalid-session reasons end authentication", () => {
-  for (const path of [
-    "auth.identity",
-    "auth.logout",
-    "teams.list",
-    "invitations.process",
-  ]) {
+  for (const path of ["auth.identity", "teams.list", "invitations.process"]) {
     assert.equal(
       invalidatesSession("DOMAIN_REASON_INVALID_SESSION", path, "general"),
       true,
@@ -153,6 +148,26 @@ void test("authentication completion drops previous account data and returns to 
   navigation.authenticated();
   assert.deepEqual(locations, ["/app/"]);
   assert.equal(cache.getQueryData(["old-data"]), void 0);
+  cache.clear();
+});
+
+void test("logout immediately discards cached identity and submits only one local POST", () => {
+  const locations: string[] = [];
+  const posts: string[] = [];
+  const { queryClient: cache, navigation } = createAuthenticationClient(
+    identityKey,
+    true,
+    "/app",
+    (path) => locations.push(path),
+    "general",
+    (path) => posts.push(path),
+  );
+  cache.setQueryData(identityKey, { id: "user" });
+  navigation.logout();
+  navigation.logout();
+  assert.equal(cache.getQueryData(identityKey), null);
+  assert.deepEqual(posts, ["/app/api/logout"]);
+  assert.deepEqual(locations, []);
   cache.clear();
 });
 

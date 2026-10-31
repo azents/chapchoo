@@ -182,7 +182,7 @@ export function useWorkspaceContainer({
     };
   }
   async function execute(operation: () => Promise<void>): Promise<void> {
-    if (busy.current || auth.logoutPending) {
+    if (busy.current) {
       return;
     }
     busy.current = true;
@@ -237,11 +237,7 @@ export function useWorkspaceContainer({
     appearance,
     copy,
     state,
-    submission: auth.logoutPending
-      ? { type: "PENDING" }
-      : auth.logoutError
-        ? { type: "ERROR", message: accountError(auth.logoutError, copy) }
-        : submission,
+    submission,
     ...(auth.state.type === "AUTHENTICATED"
       ? { identityLabel: auth.state.user.email }
       : {}),

@@ -79,13 +79,4 @@ export const authRouter = router({
       }
     }),
   ),
-  logout: procedure.mutation(({ ctx }) =>
-    attempt(() =>
-      ctx.session.authenticated(async (token) => {
-        await call(ctx.backend.auth.logout.bind(ctx.backend.auth), {}, token);
-        ctx.session.clear();
-        return { completed: true };
-      }),
-    ),
-  ),
 });

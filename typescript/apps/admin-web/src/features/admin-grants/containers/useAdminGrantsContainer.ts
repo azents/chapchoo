@@ -105,8 +105,7 @@ export function useAdminGrantsContainer({
     issueSignup.isPending ||
     issueReset.isPending ||
     revokeSignup.isPending ||
-    revokeReset.isPending ||
-    auth.logoutPending;
+    revokeReset.isPending;
   const issueError = issueSignup.error ?? issueReset.error;
   const revokeError = revokeSignup.error ?? revokeReset.error;
   const query = kind === "signup" ? signup : reset;
@@ -186,9 +185,7 @@ export function useAdminGrantsContainer({
     pending,
     error: issueError
       ? errors(errorKey(issueError.data?.reason ?? null))
-      : auth.logoutError
-        ? errors(errorKey(auth.logoutError))
-        : null,
+      : null,
     issued,
     copied: clipboard.copied,
     revokeId,

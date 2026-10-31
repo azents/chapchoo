@@ -190,8 +190,18 @@ data, cancels outstanding queries and uses that app's configured login mount.
 Authentication success clears previous account data and performs a full
 navigation so server admission runs again. Explicit local clearing after
 password reset preserves its terminal result and no longer treats the SSR
-initial User as an expected current session. Logout failures remain visible
-without assuming an uncertain operation succeeded.
+initial User as an expected current session.
+
+Logout immediately clears client identity and account caches and submits a native
+same-origin POST to the current app's logout route. Exact configured Origin
+admission precedes credential handling. The route deletes only that app's
+HttpOnly cookie and returns a no-store 303 to its configured login mount without
+renewing the session. Backend revocation is best effort, runs through the server's
+post-response lifecycle with a finite RPC deadline, and never blocks cookie
+disposal or preserves a signed-in failure screen. There is no confirmation or
+automatic replay. If the browser cannot reach the same-origin web server, client
+JavaScript cannot physically delete an HttpOnly cookie; local identity clearing
+alone does not claim that offline credential disposal succeeded.
 
 Team/context/inventory business reads remain client-owned; this is authentication
 bootstrap, not full workspace-data SSR. An explicit Admin recovery rechecks
@@ -232,7 +242,12 @@ Cookie outcome is independent of ordinary business success:
 There is no browser-wide monotonic token registry or background renewal job.
 Delayed responses can overwrite/clear newer browser state. The backend's fixed
 previous-token overlap bounds recovery; after overlap or expiry, fresh login can
-be required. A delayed cookie never un-revokes backend state.
+be required. A delayed cookie never un-revokes backend state. In particular,
+another tab's already-dispatched renewal response can restore a cookie after
+local logout deleted it. Successful backend revocation prevents that credential
+from authenticating; failed revocation does not provide browser-wide monotonic
+logout across delayed responses. This refactor does not introduce a durable
+cross-tab logout registry or change the backend credential protocol.
 
 ## Configuration and failure boundaries
 

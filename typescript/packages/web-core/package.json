@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./logout": {
+      "types": "./dist/logout.d.ts",
+      "default": "./dist/logout.js"
+    },
     "./auth-client": {
       "types": "./dist/auth-client.d.ts",
       "default": "./dist/auth-client.js"

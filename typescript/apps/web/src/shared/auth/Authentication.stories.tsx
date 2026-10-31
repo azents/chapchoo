@@ -24,12 +24,9 @@ function Consumer({ label }: { label: string }): ReactNode {
         >
           Recheck {label}
         </Button>
-        <Button onClick={auth.logout} disabled={auth.logoutPending}>
-          Log out {label}
-        </Button>
+        <Button onClick={auth.logout}>Log out {label}</Button>
         <Button onClick={auth.clearIdentity}>Clear {label}</Button>
       </Group>
-      {auth.logoutError ? <Text role="alert">Logout failed</Text> : null}
     </Stack>
   );
 }

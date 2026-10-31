@@ -40,10 +40,12 @@ test("Admin logout uses the shared boundary and its own login mount", async ({
   page,
 }) => {
   let requests = 0;
-  await page.route("**/api/trpc/auth.logout**", async (route) => {
+  await page.route("**/admin-probe/api/logout", async (route) => {
     requests += 1;
+    expect(route.request().method()).toBe("POST");
     await route.fulfill({
-      json: { result: { data: { json: { completed: true } } } },
+      status: 303,
+      headers: { location: "/admin-probe/login" },
     });
   });
   await page.route("**/admin-probe/login", (route) =>

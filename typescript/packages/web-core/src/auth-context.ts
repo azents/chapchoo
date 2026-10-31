@@ -12,8 +12,6 @@ export type IdentityState =
 export interface Authentication {
   state: IdentityState;
   checking: boolean;
-  logoutPending: boolean;
-  logoutError: string | null;
   logout: () => void;
   recheck: () => Promise<void>;
   authenticated: () => void;

@@ -22,11 +22,19 @@ export function invalidatesSession(
   return (
     reason === "DOMAIN_REASON_INVALID_SESSION" &&
     (path === "auth.identity" ||
-      path === "auth.logout" ||
       (app === "general"
         ? path.startsWith("teams.") || path.startsWith("invitations.")
         : path.startsWith("signupGrants.") || path.startsWith("resetGrants.")))
   );
+}
+
+/** Native POST receives HttpOnly cookie deletion without replaying a mutation. */
+export function submitLogout(path: string): void {
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = path;
+  document.body.append(form);
+  form.submit();
 }
 
 export function createAuthenticationClient(
@@ -35,12 +43,14 @@ export function createAuthenticationClient(
   basePath: string,
   navigate: (path: string) => void,
   app: "general" | "admin",
+  post: (path: string) => void = submitLogout,
 ): {
   queryClient: QueryClient;
   navigation: {
     signedOut: () => void;
     authenticated: () => void;
     clearIdentity: () => void;
+    logout: () => void;
   };
 } {
   let leaving = false;
@@ -94,6 +104,12 @@ export function createAuthenticationClient(
       signedOut: () => leave(`${basePath}/login`),
       authenticated: () => leave(`${basePath}/`),
       clearIdentity,
+      logout: () => {
+        if (leaving) return;
+        leaving = true;
+        clearIdentity();
+        post(`${basePath}/api/logout`);
+      },
     },
   };
 }
