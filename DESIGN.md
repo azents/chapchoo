@@ -196,6 +196,10 @@ header height. Preserve modal layering above the header and body typography.
 - Divider-list rows use transparent backgrounds and the same inline content
   baseline as neighboring headings and sections. Do not turn a zero-inset row
   into a filled box; use the common Paper row variant for this treatment.
+- Bounded tables keep their outer edges on the surrounding content grid.
+  Header and body cells share a 16px (`lg`) horizontal inset by default,
+  including the first and last columns. Explicit density choices can override
+  the common spacing; use bounded horizontal scrolling on narrow screens.
 - Desktop may have quiet side navigation and a bounded reading measure. The
   selected sample used about 258px navigation and 790px reading width; other
   workflows may need different measures.

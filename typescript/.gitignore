@@ -1,15 +1,10 @@
-# Dependencies
-node_modules/
-
 # Build outputs
-.next/
-next-env.d.ts
 dist/
 
 # Cache
-.turbo/
 .cache/
 .eslintcache
+.prettiercache
 *.tsbuildinfo
 
 # Environment
