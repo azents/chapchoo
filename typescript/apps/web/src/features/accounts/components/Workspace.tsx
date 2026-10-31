@@ -137,6 +137,7 @@ function WorkspaceContent(props: WorkspaceContentProps): ReactNode {
             : c.deleteTeam;
   return (
     <ApplicationShellContent
+      mascotReplayLabel={c.replayMascot}
       basePath={props.basePath}
       contextLabel={team?.personal ? c.personal : c.team}
       title={team?.name ?? c.contexts}

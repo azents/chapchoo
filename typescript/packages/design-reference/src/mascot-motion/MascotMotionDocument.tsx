@@ -3,8 +3,8 @@ import { AppMantineProvider } from "@chapchoo/ui/provider";
 import { FontFaces } from "@chapchoo/ui/FontFaces";
 import { defaultMascot, mascotIds } from "@chapchoo/ui/designTokens";
 import { Button, Group, Paper, Stack, Text, Title } from "@mantine/core";
-import { AgentMascotMotion } from "./AgentMascotMotion";
-import { MascotArtwork } from "./MascotArtwork";
+import { AgentMascotMotion } from "@chapchoo/ui/AgentMascotMotion";
+import { Mascot as MascotArtwork } from "@chapchoo/ui/Mascot";
 import classes from "./MascotMotionDocument.module.css";
 import type { ReactElement } from "react";
 import "@mantine/core/styles.css";
@@ -61,7 +61,7 @@ export default function MascotMotionDocument({
                   <div className={classes.stage}>
                     <AgentMascotMotion
                       character={defaultMascot}
-                      assetBasePath="./mascots"
+                      basePath=""
                       size={180}
                       playing={playing}
                       replayLabel="Replay retriever gesture"
@@ -81,7 +81,7 @@ export default function MascotMotionDocument({
                   <div className={classes.stage}>
                     <MascotArtwork
                       character={defaultMascot}
-                      assetBasePath="./mascots"
+                      basePath=""
                       size={180}
                     />
                   </div>
@@ -96,7 +96,7 @@ export default function MascotMotionDocument({
                   <div className={classes.stage}>
                     <AgentMascotMotion
                       character={character}
-                      assetBasePath="./mascots"
+                      basePath=""
                       size={140}
                       playing={playing}
                       replayLabel={`Replay ${character} gesture`}
@@ -118,7 +118,7 @@ export default function MascotMotionDocument({
               <AgentMascotMotion
                 key={character}
                 character={character}
-                assetBasePath="./mascots"
+                basePath=""
                 size={64}
                 playing={playing}
                 replayLabel={`Replay small ${character} gesture`}
@@ -128,8 +128,8 @@ export default function MascotMotionDocument({
           </Group>
           <Text size="sm" c="dimmed">
             Reduced motion, hidden documents and offscreen characters stay
-            still. Reference-local React components; existing product pages are
-            unchanged.
+            still. Shared React components are also used in General/Admin
+            authentication panels and desktop sidebar companions.
           </Text>
         </Stack>
       </main>
