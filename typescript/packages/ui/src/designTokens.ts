@@ -73,10 +73,29 @@ export const platformFonts: Record<ReferencePlatform, string> = {
   ios: 'Helvetica, "Apple SD Gothic Neo", sans-serif',
 };
 
-export const mascots = [
-  { key: "bichon", name: "비숑", file: "transparent/01-bichon.png" },
-  { key: "corgi", name: "코기", file: "transparent/02-corgi.png" },
-  { key: "dachshund", name: "닥스훈트", file: "transparent/03-dachshund.png" },
-  { key: "husky", name: "허스키", file: "transparent/04-husky.png" },
-  { key: "collie", name: "보더콜리", file: "transparent/05-border-collie.png" },
-];
+export const mascotIds = [
+  "retriever",
+  "bichon",
+  "corgi",
+  "dachshund",
+  "husky",
+  "collie",
+] as const;
+export type MascotId = (typeof mascotIds)[number];
+
+export const defaultMascot: MascotId = "retriever";
+
+export const mascotAssets = {
+  retriever: { name: "리트리버", asset: "01-retriever" },
+  bichon: { name: "비숑", asset: "02-bichon" },
+  corgi: { name: "코기", asset: "03-corgi" },
+  dachshund: { name: "닥스훈트", asset: "04-dachshund" },
+  husky: { name: "허스키", asset: "05-husky" },
+  collie: { name: "보더콜리", asset: "06-border-collie" },
+} satisfies Record<MascotId, { name: string; asset: string }>;
+
+export const mascots = Object.entries(mascotAssets).map(([key, value]) => ({
+  key,
+  name: value.name,
+  file: `transparent/${value.asset}.png`,
+}));

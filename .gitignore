@@ -44,6 +44,7 @@ __pycache__/
 .next/
 typescript/apps/*/public/fonts/
 typescript/apps/*/public/design-assets/
+typescript/apps/*/public/favicon.ico
 rust/target/
 testenv/chapchoo/dist/
 .eslintcache

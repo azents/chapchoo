@@ -16,9 +16,10 @@ import type {
   AuthMethod,
   AuthState,
 } from "../components/AdminAuth";
+import type { MascotId } from "@chapchoo/ui/designTokens";
 import type { LoginMethods } from "@chapchoo/web-core/browser";
 
-export type AdminAuthInput = { basePath: string } & (
+export type AdminAuthInput = { basePath: string; character?: MascotId } & (
   | { mode: "login"; initial: LoginMethods }
   | { mode: "setup"; initial: { available: boolean } }
 );
@@ -110,6 +111,7 @@ export function useAdminAuthContainer(input: AdminAuthInput): AdminAuthProps {
     method,
     state,
     basePath,
+    character: input.character,
     email,
     password,
     installationProof,

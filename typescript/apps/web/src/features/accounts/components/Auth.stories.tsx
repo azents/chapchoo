@@ -1,8 +1,10 @@
+import { useState } from "react";
 import messages from "../../../../messages/en-US.json";
 import korean from "../../../../messages/ko-KR.json";
 import { Auth } from "./Auth";
 import type { AuthProps } from "../types";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
+import type { ReactElement } from "react";
 
 const ready = {
   type: "LOADED",
@@ -40,6 +42,23 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const PasswordLogin: Story = {};
+function CharacterLoginFixture(props: AuthProps): ReactElement {
+  const [email, setEmail] = useState(props.email);
+  const [password, setPassword] = useState(props.password);
+  return (
+    <Auth
+      {...props}
+      email={email}
+      password={password}
+      onEmail={setEmail}
+      onPassword={setPassword}
+    />
+  );
+}
+export const ServerSelectedCharacter: Story = {
+  args: { character: "husky" },
+  render: (args): ReactElement => <CharacterLoginFixture {...args} />,
+};
 export const EmailCode: Story = { args: { challenge: true } };
 export const CodeOnly: Story = {
   args: { state: { type: "LOADED", data: { ...ready.data, password: false } } },

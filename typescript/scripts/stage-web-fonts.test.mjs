@@ -41,21 +41,69 @@ test("both web distributions stage shared fonts, licenses and identity art", asy
       /SIL OPEN FONT LICENSE/i,
     );
     assert.deepEqual(
-      await readFile(new URL("design-assets/02-corgi-216.webp", root)),
+      await readFile(new URL("design-assets/03-corgi-216.webp", root)),
       await readFile(
         new URL(
-          "../packages/ui/assets/illustrations/02-corgi-216.webp",
+          "../packages/ui/assets/illustrations/03-corgi-216.webp",
           import.meta.url,
         ),
       ),
     );
     const published = await readdir(new URL("design-assets/", root));
     assert.deepEqual(published.sort(), [
-      "01-bichon-216.webp",
-      "02-corgi-216.webp",
-      "03-dachshund-216.webp",
-      "04-husky-216.webp",
-      "05-border-collie-216.webp",
+      "01-retriever-216.webp",
+      "02-bichon-216.webp",
+      "03-corgi-216.webp",
+      "04-dachshund-216.webp",
+      "05-husky-216.webp",
+      "06-border-collie-216.webp",
+      "icons",
     ]);
+    const characters = [
+      "01-retriever",
+      "02-bichon",
+      "03-corgi",
+      "04-dachshund",
+      "05-husky",
+      "06-border-collie",
+    ];
+    assert.deepEqual(
+      (await readdir(new URL("design-assets/icons/", root))).sort(),
+      characters,
+    );
+    for (const character of characters) {
+      for (const [name, size] of [
+        ["favicon-16.png", 16],
+        ["favicon-32.png", 32],
+        ["favicon-48.png", 48],
+        ["apple-touch-icon.png", 180],
+        ["icon-192.png", 192],
+        ["icon-512.png", 512],
+        ["icon-1024.png", 1024],
+        ["icon-maskable-512.png", 512],
+      ]) {
+        const icon = await readFile(
+          new URL(`design-assets/icons/${character}/${name}`, root),
+        );
+        assert.equal(icon.subarray(1, 4).toString(), "PNG");
+        assert.equal(icon.readUInt32BE(16), size);
+        assert.equal(icon.readUInt32BE(20), size);
+        if (name === "apple-touch-icon.png" || name.startsWith("icon-")) {
+          assert.equal(icon[25], 2, "home-screen artwork is opaque RGB");
+        }
+      }
+      const ico = await readFile(
+        new URL(`design-assets/icons/${character}/favicon.ico`, root),
+      );
+      assert.equal(ico.readUInt16LE(2), 1);
+      assert.equal(ico.readUInt16LE(4), 3);
+      assert.deepEqual([ico[6], ico[22], ico[38]], [16, 32, 48]);
+    }
+    assert.deepEqual(
+      await readFile(new URL("favicon.ico", root)),
+      await readFile(
+        new URL("design-assets/icons/01-retriever/favicon.ico", root),
+      ),
+    );
   }
 });

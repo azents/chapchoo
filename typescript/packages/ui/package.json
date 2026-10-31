@@ -11,6 +11,7 @@
     "./theme": "./src/theme.ts",
     "./designTokens": "./src/designTokens.ts",
     "./Mascot": "./src/Mascot.tsx",
+    "./webIdentity": "./src/webIdentity.ts",
     "./ContentSection": "./src/ContentSection.tsx",
     "./FontFaces": "./src/FontFaces.tsx",
     "./provider": "./src/provider.tsx",

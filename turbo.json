@@ -38,6 +38,7 @@
       "outputs": [
         "public/fonts/**",
         "public/design-assets/**",
+        "public/favicon.ico",
         "dist/**",
         ".next/**",
         "!.next/cache/**"
