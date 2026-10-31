@@ -175,7 +175,10 @@ independent rows. Each action changes only its dimension. Language proposals
 include current/target language copy and autonyms. Dismissals are browser-local
 Mantine localStorage data partitioned by account/dimension/detected value; a new
 detected value can be offered again. Storage denial does not crash the page.
-IANA aliases compare semantically. Toasts remain below modal layers.
+IANA aliases compare semantically. A stored server-valid zone absent from local
+Intl data does not crash suggestion comparison. Previews and Admin timestamps
+show a localized unavailable-format message, preserving the stored value without
+substituting UTC or another time zone. Toasts remain below modal layers.
 
 Admin `/settings` edits installation defaults through its own protected query
 and mutation, separate from personal settings. Existing accounts and explicit

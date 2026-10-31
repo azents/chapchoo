@@ -115,12 +115,19 @@ export function sameDisplayValue(
   target: string,
 ): boolean {
   if (key !== "timeZone") return current === target;
-  return (
-    new Intl.DateTimeFormat("en-US", { timeZone: current }).resolvedOptions()
-      .timeZone ===
-    new Intl.DateTimeFormat("en-US", { timeZone: target }).resolvedOptions()
-      .timeZone
-  );
+  if (current === target) return true;
+  try {
+    return (
+      new Intl.DateTimeFormat("en-US", { timeZone: current }).resolvedOptions()
+        .timeZone ===
+      new Intl.DateTimeFormat("en-US", { timeZone: target }).resolvedOptions()
+        .timeZone
+    );
+  } catch (error) {
+    if (!(error instanceof RangeError)) throw error;
+    // The server's bundled database can know zones absent from this browser.
+    return false;
+  }
 }
 export function browserCookie(name: string): string | undefined {
   return document.cookie

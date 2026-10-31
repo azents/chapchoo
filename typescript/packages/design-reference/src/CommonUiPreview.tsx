@@ -24,6 +24,7 @@ export default function CommonUiPreview(): ReactElement {
     region: "Regional format",
     follow: "Follow browser settings",
     preview: "Display preview",
+    unavailable: "This environment cannot display the selected time zone.",
     scope: "Reference-local interaction; no persistence.",
     done: "Done",
     close: "Close settings",

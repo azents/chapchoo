@@ -15,6 +15,7 @@ import {
 } from "@mantine/core";
 import type { ReactElement, ReactNode } from "react";
 import classes from "./DisplaySettings.module.css";
+import { formatDisplayDate } from "./displayFormatting";
 import { ApplicationShell } from "./ApplicationShell";
 import { ContentSection } from "./ContentSection";
 import type { NavigationItem } from "./ApplicationShell";
@@ -33,6 +34,7 @@ export interface DisplayCopy {
   region: string;
   follow: string;
   preview: string;
+  unavailable: string;
   scope: string;
   done: string;
   close: string;
@@ -165,22 +167,20 @@ export function DisplayPreview({
   value,
   label,
   instant,
+  unavailable,
 }: {
   value: DisplayValues;
   label: string;
   instant: number;
+  unavailable: string;
 }): ReactElement {
-  const date = new Intl.DateTimeFormat(value.region, {
-    dateStyle: "long",
-    timeStyle: "short",
-    timeZone: value.timeZone,
-  }).format(instant);
+  const date = formatDisplayDate(instant, value.region, value.timeZone, "long");
   return (
     <Paper p="lg" withBorder radius="md">
       <Text size="xs" c="dimmed" mb="sm">
         {label}
       </Text>
-      <Text fw={600}>{date}</Text>
+      <Text fw={600}>{date ?? unavailable}</Text>
       <Group gap="sm" mt="xs">
         <Text size="sm" c="dimmed">
           {value.timeZone}
@@ -257,6 +257,7 @@ export function DisplayPanel(
         <DisplayPreview
           value={props.value}
           label={props.copy.preview}
+          unavailable={props.copy.unavailable}
           instant={props.instant}
         />
         <DisplaySaveFeedback
@@ -417,6 +418,7 @@ export function DisplaySettingsPage(
           <DisplayPreview
             value={props.value}
             label={props.copy.preview}
+            unavailable={props.copy.unavailable}
             instant={props.instant}
           />
         </Box>

@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./displayFormatting": "./src/displayFormatting.ts",
     "./DisplaySettings": "./src/DisplaySettings.tsx",
     "./PageFailure": "./src/PageFailure.tsx",
     "./ColorModeMenu": "./src/ColorModeMenu.tsx",

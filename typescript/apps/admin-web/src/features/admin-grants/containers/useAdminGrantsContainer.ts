@@ -1,5 +1,7 @@
+import { formatDisplayDate } from "@chapchoo/ui/displayFormatting";
 import { useAuth } from "@chapchoo/web-core/auth-context";
 import { useDisplay } from "@chapchoo/web-core/display-context";
+import { displayText } from "@chapchoo/web-core/display-messages";
 import {
   initialQuery,
   inventoryOffset,
@@ -36,22 +38,20 @@ function project(
   locale: string,
   timeZone: string,
   now: number,
+  unavailable: string,
 ): GrantRow {
   if (!grant.issuedAt || !grant.expiresAt) {
     throw new Error("Invalid grant projection");
   }
   const issued = Number(grant.issuedAt.seconds) * 1000;
   const expires = Number(grant.expiresAt.seconds) * 1000;
-  const formatter = new Intl.DateTimeFormat(locale, {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone,
-  });
   return {
     id: grant.id,
     email: grant.email,
-    issuedAt: formatter.format(issued),
-    expiresAt: formatter.format(expires),
+    issuedAt:
+      formatDisplayDate(issued, locale, timeZone, "medium") ?? unavailable,
+    expiresAt:
+      formatDisplayDate(expires, locale, timeZone, "medium") ?? unavailable,
     status: grant.consumedAt
       ? "used"
       : grant.revokedAt
@@ -169,6 +169,7 @@ export function useAdminGrantsContainer({
               display.region,
               display.timeZone,
               query.dataUpdatedAt,
+              displayText(display.language).unavailable,
             ),
           ),
           range: text("range", {

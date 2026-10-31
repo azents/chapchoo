@@ -92,6 +92,17 @@ test("IANA aliases compare as the same setting while independent dimensions rema
   assert.equal(sameDisplayValue("region", "ko-KR", "en-US"), false);
   assert.equal(displayPart("timeZone", "Not/AZone"), false);
 });
+test("a stored zone absent from local Intl stays comparable without replacing it", (t) => {
+  const Native = Intl.DateTimeFormat;
+  t.mock.method(Intl, "DateTimeFormat", function (locale, options) {
+    if (options?.timeZone === "Asia/Seoul")
+      throw new RangeError("Simulated older timezone database");
+    return new Native(locale, options);
+  });
+  assert.equal(sameDisplayValue("timeZone", "Asia/Seoul", "UTC"), false);
+  assert.equal(sameDisplayValue("timeZone", "UTC", "Asia/Seoul"), false);
+  assert.equal(sameDisplayValue("timeZone", "Asia/Seoul", "Asia/Seoul"), true);
+});
 test("partial transport fields preserve omission, and decoded settings are required", () => {
   assert.deepEqual(displayPatchPayload({ language: "fr" }), {
     language: "fr",

@@ -237,3 +237,35 @@ for (const width of [1280, 390, 320]) {
     await expect(entry).toBeFocused();
   });
 }
+
+test("older browser timezone data cannot crash suggestions, profile or the panel", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const Native = Intl.DateTimeFormat;
+    Intl.DateTimeFormat = new Proxy(Native, {
+      construct(
+        target,
+        args: ConstructorParameters<typeof Intl.DateTimeFormat>,
+      ) {
+        if (args[1]?.timeZone === "Asia/Seoul") {
+          throw new RangeError("Simulated older timezone database");
+        }
+        return new target(...args);
+      },
+    });
+  });
+  await page.goto(story("profile"));
+  const unavailable = "이 환경에서는 선택한 시간대를 표시할 수 없습니다.";
+  await expect(page.getByRole("main").getByText(unavailable)).toBeVisible();
+  await expect(page.locator('[data-proposal="timeZone"]')).toContainText("UTC");
+  await page
+    .getByRole("button", { name: "언어 및 지역 설정", exact: true })
+    .click();
+  await expect(page.getByRole("dialog").getByText(unavailable)).toBeVisible();
+  await expect(
+    page
+      .getByRole("dialog")
+      .getByRole("combobox", { name: "시간대", exact: true }),
+  ).toHaveValue("Asia/Seoul");
+});
