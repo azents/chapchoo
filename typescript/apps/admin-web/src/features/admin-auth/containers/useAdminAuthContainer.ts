@@ -7,18 +7,19 @@ import { trpc } from "@/shared/rpc/client";
 import type {
   AdminAuthProps,
   AuthMethod,
-  AuthMode,
   AuthState,
 } from "../components/AdminAuth";
+import type { InitialRead, LoginMethods } from "@chapchoo/web-core/browser";
 
-export interface AdminAuthInput {
-  mode: AuthMode;
-  basePath: string;
-}
+export type AdminAuthInput = { basePath: string } & (
+  | { mode: "login"; initial: InitialRead<LoginMethods> }
+  | { mode: "setup"; initial: InitialRead<{ available: boolean }> }
+);
 
 export function useAdminAuthContainer({
   mode,
   basePath,
+  initial,
 }: AdminAuthInput): AdminAuthProps {
   const text = useTranslations("AdminAuth");
   const appearance = useAppearanceControl();
@@ -31,10 +32,16 @@ export function useAdminAuthContainer({
   const [code, setCode] = useState("");
   const [binding, setBinding] = useState<string | null>(null);
   const methods = trpc.auth.methods.useQuery(void 0, {
-    enabled: mode === "login",
+    enabled: mode === "login" && initial.type === "LOADED",
+    ...(mode === "login" && initial.type === "LOADED"
+      ? { initialData: initial.data, refetchOnMount: false }
+      : {}),
   });
   const setup = trpc.setup.status.useQuery(void 0, {
-    enabled: mode === "setup",
+    enabled: mode === "setup" && initial.type === "LOADED",
+    ...(mode === "setup" && initial.type === "LOADED"
+      ? { initialData: initial.data, refetchOnMount: false }
+      : {}),
   });
 
   function authenticated(): void {
@@ -62,7 +69,12 @@ export function useAdminAuthContainer({
   const mutationError =
     login.error ?? initialize.error ?? verify.error ?? send.error;
   let state: AuthState;
-  if (mode === "setup") {
+  if (initial.type === "ERROR") {
+    state = {
+      type: "UNAVAILABLE",
+      message: errors(errorKey(initial.reason)),
+    };
+  } else if (mode === "setup") {
     switch (setup.status) {
       case "pending":
         state = { type: "LOADING" };

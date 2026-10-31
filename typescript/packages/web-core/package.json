@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./initial-read": {
+      "types": "./dist/initial-read.d.ts",
+      "default": "./dist/initial-read.js"
+    },
     "./color-mode": {
       "types": "./dist/color-mode.d.ts",
       "default": "./dist/color-mode.js"

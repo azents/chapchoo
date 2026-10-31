@@ -80,7 +80,8 @@ async function verifyInitialCanvas(
     await route.continue();
   });
   try {
-    await page.goto(url, { waitUntil: "commit" });
+    const response = await page.goto(url, { waitUntil: "commit" });
+    if (!response) throw new Error("Initial document response is required");
     await expect(page.locator("html")).toHaveAttribute(
       "data-mantine-color-scheme",
       expected.serverMode,
@@ -100,6 +101,24 @@ async function verifyInitialCanvas(
     expect(canvas.scheme).toBe(scheme);
     expect(canvas.inlineScheme).toBe(scheme);
     expect(canvas.background).toBe(background);
+    const html = await response.text();
+    expect(
+      html.includes("<form"),
+      "The initial HTML must contain the form",
+    ).toBe(true);
+    const meta = html.indexOf(`<meta name="color-scheme" content="${scheme}"`);
+    const bootstrap = html.indexOf("<script>");
+    expect(
+      meta,
+      "The initial document must advertise its scheme",
+    ).toBeGreaterThanOrEqual(0);
+    expect(
+      meta,
+      "Scheme metadata must precede the CSS-dependent bootstrap",
+    ).toBeLessThan(bootstrap);
+    await expect(
+      page.locator('head meta[name="color-scheme"]'),
+    ).toHaveAttribute("content", scheme);
     releaseStyles();
     await page.waitForLoadState("load");
     // External JavaScript is still blocked: SSR CSS must paint the body.
@@ -107,6 +126,8 @@ async function verifyInitialCanvas(
       "background-color",
       background,
     );
+    await expect(page.locator("form")).toBeVisible();
+    await expect(page.locator('input[type="email"]')).toBeVisible();
   } finally {
     releaseStyles();
     await page.close();
@@ -240,6 +261,16 @@ test.describe("Assembled account and team acceptance", () => {
   test("administrator bootstrap and issued signup reach the personal context", async ({
     assembly,
   }) => {
+    const bootstrapRequests: string[] = [];
+    administrator.on("request", (request) => {
+      const operation = new URL(request.url()).pathname.split("/").at(-1);
+      if (
+        operation === "auth.methods" ||
+        operation === "setup.status" ||
+        operation === "auth.identity"
+      )
+        bootstrapRequests.push(operation);
+    });
     await administrator.emulateMedia({ colorScheme: "dark" });
     await verifyInitialCanvas(
       administrator.context(),
@@ -374,12 +405,20 @@ test.describe("Assembled account and team acceptance", () => {
     await administrator
       .getByLabel(/^Password\s*\*?$/)
       .fill(assembly.administrator.password);
+    expect(
+      bootstrapRequests,
+      "Initial hydration must not repeat server readiness reads",
+    ).toEqual([]);
     await administrator
       .getByRole("button", { name: "Create administrator", exact: true })
       .click();
     await expect(
       administrator.getByRole("heading", { name: "Signup links", exact: true }),
     ).toBeVisible();
+    expect(
+      bootstrapRequests.filter((operation) => operation === "auth.identity"),
+      "Protected hydration must not repeat server Identity validation",
+    ).toEqual([]);
     await administrator
       .getByRole("textbox", { name: "Recipient email", exact: true })
       .fill(assembly.member.email);

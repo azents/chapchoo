@@ -12,7 +12,7 @@ export async function loadAdminIdentity(): Promise<InitialAdminIdentity> {
     if (!identity) {
       redirect(getLoginRedirect());
     }
-    return { type: "LOADED", email: identity.email };
+    return { type: "LOADED", user: identity };
   } catch (error) {
     if (error instanceof RpcFailure) {
       return { type: "ERROR", reason: error.reason };

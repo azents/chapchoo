@@ -76,6 +76,9 @@ export function useAdminGrantsContainer({
   );
   const identity = trpc.auth.identity.useQuery(void 0, {
     enabled: initial.type === "LOADED",
+    ...(initial.type === "LOADED"
+      ? { initialData: initial.user, refetchOnMount: false }
+      : {}),
   });
 
   async function refresh(): Promise<void> {
@@ -196,7 +199,7 @@ export function useAdminGrantsContainer({
     identityLabel: identity.isSuccess
       ? identity.data.email
       : initial.type === "LOADED"
-        ? initial.email
+        ? initial.user.email
         : null,
     signInLabel: authText("login"),
     state,

@@ -6,6 +6,7 @@ import {
   preferenceCookie,
   resolvedCookie,
   resolveServerColorMode,
+  toDocumentColorScheme,
 } from "@chapchoo/web-core/color-mode";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
@@ -24,11 +25,19 @@ export const metadata: Metadata = {
   description: "Chapchoo server account administration",
 };
 
-export const viewport: Viewport = {
-  width: "device-width",
-  initialScale: 1,
-  viewportFit: "cover",
-};
+export async function generateViewport(): Promise<Viewport> {
+  const store = await cookies();
+  const initial = resolveServerColorMode(
+    store.get(preferenceCookie)?.value,
+    store.get(resolvedCookie)?.value,
+  );
+  return {
+    width: "device-width",
+    initialScale: 1,
+    viewportFit: "cover",
+    colorScheme: toDocumentColorScheme(initial),
+  };
+}
 
 export default async function RootLayout({
   children,
@@ -49,8 +58,7 @@ export default async function RootLayout({
       data-mantine-color-scheme={initial.mode}
       data-color-mode-preference={initial.preference}
       style={{
-        colorScheme:
-          initial.preference === "system" ? "light dark" : initial.mode,
+        colorScheme: toDocumentColorScheme(initial),
         backgroundColor: documentCanvasBackground,
       }}
       suppressHydrationWarning

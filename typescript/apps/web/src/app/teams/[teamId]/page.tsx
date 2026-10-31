@@ -10,7 +10,8 @@ export default async function Team({
   params: Promise<{ teamId: string }>;
 }): Promise<ReactElement> {
   const { teamId } = await params;
-  if (!(await readIdentity())) {
+  const identity = await readIdentity();
+  if (!identity) {
     redirect(getLoginRedirect());
   }
   return (
@@ -18,6 +19,7 @@ export default async function Team({
       basePath={getPublicConfig().publicBasePath}
       key={teamId}
       teamId={teamId}
+      initialIdentity={identity}
     />
   );
 }

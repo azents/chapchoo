@@ -85,6 +85,11 @@ in-page change but cannot guarantee persistence. Already-open independent tabs
 are not actively synchronized through a cross-tab service.
 
 Each root layout validates cookies and emits initial HTML/body mode attributes.
+Request-time viewport metadata emits `color-scheme` in the initial head before
+the CSS-dependent synchronous bootstrap, available while stylesheets are pending,
+using a concrete explicit mode or `light dark` for System. The bootstrap and
+live appearance bridge keep that metadata aligned with the selected preference;
+it informs the browser's initial UA canvas independently of CSS evaluation.
 The HTML element also carries inline `color-scheme` and a canonical-token
 `light-dark()` canvas background, so the document canvas does not depend on
 external stylesheets, the head bootstrap or hydration. System advertises both
@@ -104,7 +109,8 @@ the browser-safe web-core policy and app bridges own persistence/synchronization
 Browser acceptance checks computed canvas colors while external stylesheets are
 held, then SSR body colors with application scripts blocked, and actual
 content-frame background colors through refresh/hydration. Mode attributes alone
-are not treated as proof of initial paint.
+are not treated as proof of initial paint. These checks do not establish the
+absence of a pre-content white frame on a physical iPhone Safari.
 
 Light and warm olive-charcoal dark maps retain common layout/type metrics and
 use separate filled-accent ink and readable accent-text roles. Menus/dialogs use
@@ -147,7 +153,20 @@ Fresh manual grant issuance intentionally returns the new bearer link; later
 inventory reads omit proof/URL. Signup/reset links are user-presented proof flows,
 not browser login-session storage.
 
-Server Components use Identity only, without renewal or cookie writes. A missing
+Public authentication pages resolve sign-in methods, setup availability and
+proof previews on the server before selecting their form/closed/error state.
+These read-only loaders are request-bound, not build-time backend calls.
+Successful results seed the matching browser queries without an immediate
+mount-time repeat. A server failure renders its safe typed error, with no hidden
+browser retry; a general-auth retry repeats the server read through reload.
+Proofs and session credentials retain their existing authority and disposition.
+
+Protected Server Components validate Identity without renewal or cookie writes.
+They pass the safe User result into the matching browser identity query, which
+does not repeat authentication merely because the page hydrates. Later explicit
+invalidation still refreshes identity. Team/context/inventory business reads
+remain client-owned; this is authentication bootstrap, not full workspace-data SSR.
+A missing
 or invalid session can redirect to login; an authentication infrastructure
 failure remains an error rather than being converted to signed-out identity.
 Admin read-only admission also rejects a currently non-administrator identity.
