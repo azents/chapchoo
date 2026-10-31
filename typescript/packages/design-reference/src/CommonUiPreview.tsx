@@ -12,6 +12,8 @@ import {
   Select,
   Paper,
   Text,
+  Table,
+  rem,
 } from "@mantine/core";
 import type { ReactElement } from "react";
 import "@mantine/core/styles.css";
@@ -60,6 +62,22 @@ export default function CommonUiPreview(): ReactElement {
             A divider row keeps the surrounding content baseline.
           </Text>
         </Paper>
+        <Table.ScrollContainer minWidth={rem(480)}>
+          <Table withTableBorder>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Member</Table.Th>
+                <Table.Th>Role</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              <Table.Tr>
+                <Table.Td>member@example.com</Table.Td>
+                <Table.Td>Owner</Table.Td>
+              </Table.Tr>
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
       </Stack>
     </AppMantineProvider>
   );
