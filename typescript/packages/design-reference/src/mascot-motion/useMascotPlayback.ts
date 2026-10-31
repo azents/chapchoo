@@ -14,6 +14,7 @@ export function useMascotPlayback(
 ): {
   ref: RefCallback<HTMLButtonElement>;
   running: boolean;
+  reducedMotion: boolean;
   replay: () => void;
   finish: () => void;
 } {
@@ -36,5 +37,11 @@ export function useMascotPlayback(
     playback.configure({ enabled, automatic: playing, delayMs });
     return (): void => playback.dispose();
   }, [playback, enabled, playing, delayMs]);
-  return { ref, running, replay: playback.replay, finish: playback.finish };
+  return {
+    ref,
+    running,
+    reducedMotion: reduced === true,
+    replay: playback.replay,
+    finish: playback.finish,
+  };
 }

@@ -16,6 +16,10 @@
   outline-offset: var(--mantine-spacing-xs);
 }
 
+.trigger:disabled {
+  cursor: default;
+}
+
 .motion {
   display: inline-block;
   vertical-align: bottom;

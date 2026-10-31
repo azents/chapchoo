@@ -20,13 +20,17 @@ export function AgentMascotMotion({
   delayMs = 0,
   ...artwork
 }: AgentMascotMotionProps): ReactElement {
-  const { ref, running, replay, finish } = useMascotPlayback(playing, delayMs);
+  const { ref, running, reducedMotion, replay, finish } = useMascotPlayback(
+    playing,
+    delayMs,
+  );
   return (
     <button
       ref={ref}
       type="button"
       className={classes.trigger}
       aria-label={replayLabel}
+      disabled={reducedMotion}
       onClick={replay}
     >
       <span
