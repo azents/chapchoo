@@ -1,6 +1,13 @@
 import { useAuth } from "@chapchoo/web-core/auth-context";
+import {
+  initialQuery,
+  inventoryOffset,
+  navigateSelection,
+  readSelection,
+} from "@chapchoo/web-core/page-state";
 import { useClipboard } from "@mantine/hooks";
 import { useLocale, useTranslations } from "next-intl";
+import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { useAppearanceControl } from "@/shared/appearance/useAppearanceControl";
 import { errorKey } from "@/shared/lib/errors";
@@ -11,15 +18,17 @@ import type {
   GrantRow,
   GrantViewState,
 } from "../components/AdminGrants";
+import type { InitialInventory } from "../initialInventory";
 import type { ConfirmationState } from "@chapchoo/ui/ConfirmationDialog";
 import type { Grant, IssuedGrant } from "@chapchoo/web-core/browser";
 
 export interface AdminGrantsInput {
   kind: GrantPageKind;
   basePath: string;
+  initial: InitialInventory;
 }
 
-function project(grant: Grant, locale: string): GrantRow {
+function project(grant: Grant, locale: string, now: number): GrantRow {
   if (!grant.issuedAt || !grant.expiresAt) {
     throw new Error("Invalid grant projection");
   }
@@ -28,17 +37,18 @@ function project(grant: Grant, locale: string): GrantRow {
   const formatter = new Intl.DateTimeFormat(locale, {
     dateStyle: "medium",
     timeStyle: "short",
+    timeZone: "UTC",
   });
   return {
     id: grant.id,
     email: grant.email,
-    issuedAt: formatter.format(issued),
-    expiresAt: formatter.format(expires),
+    issuedAt: `${formatter.format(issued)} UTC`,
+    expiresAt: `${formatter.format(expires)} UTC`,
     status: grant.consumedAt
       ? "used"
       : grant.revokedAt
         ? "revoked"
-        : expires <= Date.now()
+        : expires <= now
           ? "expired"
           : "active",
   };
@@ -47,6 +57,7 @@ function project(grant: Grant, locale: string): GrantRow {
 export function useAdminGrantsContainer({
   kind,
   basePath,
+  initial,
 }: AdminGrantsInput): AdminGrantsProps {
   const text = useTranslations("AdminGrants");
   const appearance = useAppearanceControl();
@@ -57,18 +68,29 @@ export function useAdminGrantsContainer({
   const utils = trpc.useUtils();
   const clipboard = useClipboard();
   const [email, setEmail] = useState("");
-  const [offset, setOffset] = useState(0n);
+  const params = useSearchParams();
+  const offset = readSelection(params, "offset", inventoryOffset);
+  const seed =
+    offset.toString() === initial.offset
+      ? initialQuery(initial.page, initial.renderedAt)
+      : {};
   const [issued, setIssued] = useState<{ url: string; email: string } | null>(
     null,
   );
   const [revokeId, setRevokeId] = useState<string | null>(null);
   const signup = trpc.signupGrants.list.useQuery(
     { offset: offset.toString(), limit: 25 },
-    { enabled: kind === "signup" && auth.state.type === "AUTHENTICATED" },
+    {
+      ...(kind === "signup" ? seed : {}),
+      enabled: kind === "signup" && auth.state.type === "AUTHENTICATED",
+    },
   );
   const reset = trpc.resetGrants.list.useQuery(
     { offset: offset.toString(), limit: 25 },
-    { enabled: kind === "reset" && auth.state.type === "AUTHENTICATED" },
+    {
+      ...(kind === "reset" ? seed : {}),
+      enabled: kind === "reset" && auth.state.type === "AUTHENTICATED",
+    },
   );
   async function refreshBusiness(): Promise<void> {
     await Promise.all([
@@ -131,7 +153,9 @@ export function useAdminGrantsContainer({
       case "success":
         state = {
           type: "LOADED",
-          items: query.data.items.map((grant) => project(grant, locale)),
+          items: query.data.items.map((grant) =>
+            project(grant, locale, query.dataUpdatedAt),
+          ),
           range: text("range", {
             from: query.data.items.length ? (offset + 1n).toString() : "0",
             to: (offset + BigInt(query.data.items.length)).toString(),
@@ -214,10 +238,15 @@ export function useAdminGrantsContainer({
     },
     onConfirmRevoke: revoke,
     onPrevious: () => {
-      setOffset((value) => (value > 25n ? value - 25n : 0n));
+      navigateSelection(
+        "offset",
+        offset > 25n ? offset - 25n : 0n,
+        inventoryOffset,
+        "push",
+      );
     },
     onNext: () => {
-      setOffset((value) => value + 25n);
+      navigateSelection("offset", offset + 25n, inventoryOffset, "push");
     },
     onRefresh: () => {
       void auth

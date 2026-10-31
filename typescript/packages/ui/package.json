@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./PageFailure": "./src/PageFailure.tsx",
     "./ColorModeMenu": "./src/ColorModeMenu.tsx",
     "./AppHeader": "./src/AppHeader.tsx",
     "./AppFrame": "./src/AppFrame.tsx",

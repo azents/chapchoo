@@ -1,7 +1,7 @@
 "use client";
 
 import { AuthPanel } from "@chapchoo/ui/AuthPanel";
-import { ErrorFeedback, LoadingFeedback } from "@chapchoo/ui/Feedback";
+import { ErrorFeedback } from "@chapchoo/ui/Feedback";
 import { EmailField, PasswordField } from "@chapchoo/ui/fields";
 import {
   Alert,
@@ -51,8 +51,6 @@ export function Auth(props: AuthProps): ReactNode {
           </Alert>
           <Anchor href={`${props.basePath}/login`}>{c.backToLogin}</Anchor>
         </Stack>
-      ) : state.type === "LOADING" ? (
-        <LoadingFeedback message={c.loading} />
       ) : state.type === "ERROR" ? (
         <ErrorFeedback
           title={c.errorTitle}

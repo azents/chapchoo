@@ -4,6 +4,14 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./page-read": {
+      "types": "./dist/page-read.d.ts",
+      "default": "./dist/page-read.js"
+    },
+    "./page-state": {
+      "types": "./dist/page-state.d.ts",
+      "default": "./dist/page-state.js"
+    },
     "./logout": {
       "types": "./dist/logout.d.ts",
       "default": "./dist/logout.js"
@@ -15,10 +23,6 @@
     "./auth-context": {
       "types": "./dist/auth-context.d.ts",
       "default": "./dist/auth-context.js"
-    },
-    "./initial-read": {
-      "types": "./dist/initial-read.d.ts",
-      "default": "./dist/initial-read.js"
     },
     "./color-mode": {
       "types": "./dist/color-mode.d.ts",

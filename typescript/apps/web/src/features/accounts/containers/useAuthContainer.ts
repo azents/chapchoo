@@ -16,7 +16,6 @@ export function useAuthContainer({
   const copy = useMessages().accounts;
   const appearance = useAppearanceControl();
   const auth = useAuth();
-  const utils = trpc.useUtils();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
@@ -26,150 +25,58 @@ export function useAuthContainer({
   } | null>(null);
   const [submission, setSubmission] = useState<Submission>({ type: "READY" });
   const busy = useRef(false);
-  const initialError =
-    initial.type !== "NO_PROOF" && initial.result.type === "ERROR"
-      ? initial.result
-      : null;
-  const methods = trpc.auth.methods.useQuery(void 0, {
-    enabled:
-      initialError === null &&
-      (input.mode === "LOGIN" || (input.mode === "SIGNUP" && !input.token)),
-    retry: false,
-    ...(initial.type === "METHODS" && initial.result.type === "LOADED"
-      ? { initialData: initial.result.data, refetchOnMount: false }
-      : {}),
-  });
-  const signup = trpc.signup.preview.useQuery(
-    { proof: input.token },
-    {
-      enabled:
-        initialError === null &&
-        input.mode === "SIGNUP" &&
-        Boolean(input.token),
-      retry: false,
-      ...(input.mode === "SIGNUP" &&
-      initial.type === "PROOF" &&
-      initial.result.type === "LOADED"
-        ? { initialData: initial.result.data, refetchOnMount: false }
-        : {}),
-    },
-  );
-  const reset = trpc.reset.preview.useQuery(
-    { proof: input.token },
-    {
-      enabled:
-        initialError === null &&
-        input.mode === "RESET" &&
-        Boolean(input.token) &&
-        submission.type !== "DONE",
-      retry: false,
-      ...(input.mode === "RESET" &&
-      initial.type === "PROOF" &&
-      initial.result.type === "LOADED"
-        ? { initialData: initial.result.data, refetchOnMount: false }
-        : {}),
-    },
-  );
+  function fail(reason: string | null): void {
+    setSubmission({ type: "ERROR", message: accountError(reason, copy) });
+  }
   const login = trpc.auth.passwordLogin.useMutation({
     retry: false,
-    onError: (error) => {
-      setSubmission({
-        type: "ERROR",
-        message: accountError(error.data?.reason ?? null, copy),
-      });
-    },
+    onError: (error) => fail(error.data?.reason ?? null),
   });
   const send = trpc.auth.sendCode.useMutation({
     retry: false,
-    onError: (error) => {
-      setSubmission({
-        type: "ERROR",
-        message: accountError(error.data?.reason ?? null, copy),
-      });
-    },
+    onError: (error) => fail(error.data?.reason ?? null),
   });
   const verify = trpc.auth.verifyCode.useMutation({
     retry: false,
-    onError: (error) => {
-      setSubmission({
-        type: "ERROR",
-        message: accountError(error.data?.reason ?? null, copy),
-      });
-    },
+    onError: (error) => fail(error.data?.reason ?? null),
   });
   const redeemSignup = trpc.signup.redeem.useMutation({
     retry: false,
-    onError: (error) => {
-      setSubmission({
-        type: "ERROR",
-        message: accountError(error.data?.reason ?? null, copy),
-      });
-    },
+    onError: (error) => fail(error.data?.reason ?? null),
   });
   const requestSignup = trpc.signup.requestEmail.useMutation({
     retry: false,
-    onError: (error) => {
-      setSubmission({
-        type: "ERROR",
-        message: accountError(error.data?.reason ?? null, copy),
-      });
-    },
+    onError: (error) => fail(error.data?.reason ?? null),
   });
   const redeemReset = trpc.reset.redeem.useMutation({
     retry: false,
-    onError: (error) => {
-      setSubmission({
-        type: "ERROR",
-        message: accountError(error.data?.reason ?? null, copy),
-      });
-    },
+    onError: (error) => fail(error.data?.reason ?? null),
   });
-  const proofQuery = input.mode === "SIGNUP" ? signup : reset;
-  let state: AuthProps["state"];
-  if (initialError) {
-    state = {
-      type: "ERROR",
-      message: accountError(initialError.reason, copy),
-    };
-  } else if (input.mode !== "LOGIN" && input.token) {
-    state = proofQuery.isPending
-      ? { type: "LOADING" }
-      : proofQuery.isError
-        ? {
-            type: "ERROR",
-            message: accountError(proofQuery.error.data?.reason ?? null, copy),
+  const state: AuthProps["state"] =
+    initial.type === "PROOF"
+      ? !initial.data.usable
+        ? { type: "ERROR", message: copy.invalidProof }
+        : {
+            type: "LOADED",
+            data: {
+              password: true,
+              emailCode: false,
+              signupEmail: false,
+              email: initial.data.emailHint ?? "",
+            },
           }
-        : !proofQuery.data.usable
-          ? { type: "ERROR", message: copy.invalidProof }
-          : {
-              type: "LOADED",
-              data: {
-                password: true,
-                emailCode: false,
-                signupEmail: false,
-                email: proofQuery.data.emailHint ?? "",
-              },
-            };
-  } else if (input.mode === "RESET") {
-    state = {
-      type: "LOADED",
-      data: {
-        password: false,
-        emailCode: false,
-        signupEmail: false,
-        email: "",
-      },
-    };
-  } else {
-    state = methods.isPending
-      ? { type: "LOADING" }
-      : methods.isError
-        ? {
-            type: "ERROR",
-            message: accountError(methods.error.data?.reason ?? null, copy),
-          }
-        : { type: "LOADED", data: { ...methods.data, email: "" } };
-  }
+      : {
+          type: "LOADED",
+          data:
+            initial.type === "METHODS"
+              ? { ...initial.data, email: "" }
+              : {
+                  password: false,
+                  emailCode: false,
+                  signupEmail: false,
+                  email: "",
+                },
+        };
   function authenticated(): void {
     setPassword("");
     setCode("");
@@ -211,7 +118,7 @@ export function useAuthContainer({
         setSubmission({ type: "DONE", message: copy.resetDone });
       }
     } catch {
-      // Each mutation's typed onError callback owns the localized feedback.
+      // Typed mutation callbacks own feedback; never replay an uncertain write.
     } finally {
       busy.current = false;
     }
@@ -253,14 +160,6 @@ export function useAuthContainer({
       setCode("");
       setSubmission({ type: "READY" });
     },
-    onRetry: () => {
-      if (initialError) {
-        window.location.reload();
-        return;
-      }
-      void utils.auth.methods.invalidate();
-      void utils.signup.preview.invalidate();
-      void utils.reset.preview.invalidate();
-    },
+    onRetry: () => window.location.reload(),
   };
 }

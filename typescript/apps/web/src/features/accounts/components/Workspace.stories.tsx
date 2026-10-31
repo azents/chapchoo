@@ -174,6 +174,15 @@ export const Error: Story = {
   args: { state: { type: "ERROR", message: messages.accounts.genericError } },
 };
 export const Korean: Story = { args: { copy: korean.accounts } };
+export const SupplementaryUnavailable: Story = {
+  args: {
+    supplementary: {
+      contexts: { type: "LOADED", data: null },
+      received: { type: "ERROR", message: messages.accounts.genericError },
+      invitations: { type: "LOADED", data: null },
+    },
+  },
+};
 export const LongIdentity: Story = {
   args: {
     state: {

@@ -1,5 +1,5 @@
 import "server-only";
-import { loadInitialRead } from "@chapchoo/web-core/initial-read";
+import { requiredPageRead } from "@chapchoo/web-core/page-read";
 import { call } from "@chapchoo/web-core/rpc";
 import { preview } from "@chapchoo/web-core/validation";
 import { connection } from "next/server";
@@ -17,7 +17,7 @@ export async function loadInitialAuth(
   if (mode !== "LOGIN" && token) {
     return {
       type: "PROOF",
-      result: await loadInitialRead(async () =>
+      data: await requiredPageRead(async () =>
         preview(
           await call(
             mode === "SIGNUP"
@@ -34,7 +34,7 @@ export async function loadInitialAuth(
   }
   return {
     type: "METHODS",
-    result: await loadInitialRead(() =>
+    data: await requiredPageRead(() =>
       call(backend.auth.methods.bind(backend.auth), {}),
     ),
   };

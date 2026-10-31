@@ -1,10 +1,6 @@
-import type {
-  InitialRead,
-  LoginMethods,
-  ProofPreview,
-} from "@chapchoo/web-core/browser";
+import type { LoginMethods, ProofPreview } from "@chapchoo/web-core/browser";
 
 export type InitialAuth =
-  | { type: "METHODS"; result: InitialRead<LoginMethods> }
-  | { type: "PROOF"; result: InitialRead<ProofPreview> }
+  | { type: "METHODS"; data: LoginMethods }
+  | { type: "PROOF"; data: ProofPreview }
   | { type: "NO_PROOF" };

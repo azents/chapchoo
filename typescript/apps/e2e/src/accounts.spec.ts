@@ -38,6 +38,33 @@ async function isolatedPage(browser: Browser): Promise<Page> {
   return page;
 }
 
+/** Prove primary content exists without executing application scripts. */
+async function serverContent(
+  context: BrowserContext,
+  url: string,
+  heading: string,
+  text?: string,
+): Promise<void> {
+  const page = await context.newPage();
+  try {
+    await page.route("**/*", (route) =>
+      route.request().resourceType() === "script"
+        ? route.abort()
+        : route.continue(),
+    );
+    await page.goto(url);
+    await expect(
+      page.getByRole("heading", { name: heading, exact: true }),
+    ).toBeVisible();
+    if (text)
+      await expect(
+        page.getByRole("main").getByText(text, { exact: true }).first(),
+      ).toBeVisible();
+  } finally {
+    await page.close();
+  }
+}
+
 async function login(
   page: Page,
   url: string,
@@ -426,6 +453,36 @@ test.describe("Assembled account and team acceptance", () => {
       .getByRole("button", { name: "Create link", exact: true })
       .click();
     const signup = await issuedLink(administrator, assembly, "signup");
+    await serverContent(
+      administrator.context(),
+      `${assembly.adminUrl}/`,
+      "Signup links",
+      assembly.member.email,
+    );
+    await administrator.goto(`${assembly.adminUrl}/?offset=25&offset=50`);
+    await expect(
+      administrator.getByText("No links yet", { exact: true }),
+    ).toBeVisible();
+    await administrator
+      .getByRole("button", { name: "Previous", exact: true })
+      .click();
+    await expect(administrator).toHaveURL(assembly.adminUrl);
+    await expect(
+      administrator.getByRole("row").filter({ hasText: assembly.member.email }),
+    ).toBeVisible();
+    await administrator.reload();
+    await expect(
+      administrator.getByRole("row").filter({ hasText: assembly.member.email }),
+    ).toBeVisible();
+    await administrator.goBack();
+    await expect(administrator).toHaveURL(/offset=25/);
+    await expect(
+      administrator.getByText("No links yet", { exact: true }),
+    ).toBeVisible();
+    await administrator.goForward();
+    await expect(
+      administrator.getByRole("row").filter({ hasText: assembly.member.email }),
+    ).toBeVisible();
     await safeScreenshot(administrator, "admin-signup-inventory-desktop");
     await member.goto(signup);
     await member
@@ -489,6 +546,18 @@ test.describe("Assembled account and team acceptance", () => {
       member.getByRole("heading", { name: assembly.teamName, exact: true }),
     ).toBeVisible();
     const teamUrl = member.url();
+    await serverContent(
+      member.context(),
+      `${assembly.generalUrl}/`,
+      "Your spaces",
+      "Personal space",
+    );
+    await serverContent(
+      member.context(),
+      teamUrl,
+      assembly.teamName,
+      assembly.member.email,
+    );
     await member
       .getByRole("textbox", { name: "Email address", exact: true })
       .fill(assembly.second.email);
