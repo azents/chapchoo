@@ -244,6 +244,13 @@ the study's temporary star/wordmark is not a finalized brand mark.
 
 ## Components
 
+### Drawers
+
+Drawer bodies begin with an `xl` (24px) top inset below the header, including
+when the title wraps on narrow screens. This is shared theme behavior, not a
+margin on the first paragraph; pages retain their own internal content spacing.
+Keep panel titles short and task-level, such as “Display settings”.
+
 ### Actions and inputs
 
 - Keep one clearly dominant next action per local task; secondary controls stay

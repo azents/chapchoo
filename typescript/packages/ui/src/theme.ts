@@ -9,6 +9,7 @@ import {
   Button,
   Checkbox,
   Chip,
+  Drawer,
   Input,
   Loader,
   Menu,
@@ -264,6 +265,9 @@ export const theme = createTheme({
     }),
     Loader: Loader.extend({
       defaultProps: { color: "var(--chapchoo-color-secondary)" },
+    }),
+    Drawer: Drawer.extend({
+      classNames: { body: classes.drawerBody },
     }),
     Modal: Modal.extend({
       defaultProps: { radius: "lg", padding: "xl" },

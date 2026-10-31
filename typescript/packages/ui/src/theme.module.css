@@ -102,6 +102,9 @@
 .modalHeader.modalHeader {
   background: var(--chapchoo-color-overlay);
 }
+.drawerBody.drawerBody {
+  padding-block-start: var(--mantine-spacing-xl);
+}
 .tableHeading.tableHeading {
   color: var(--chapchoo-color-secondary);
   font-weight: 500;
