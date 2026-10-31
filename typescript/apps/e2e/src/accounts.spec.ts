@@ -484,6 +484,11 @@ test.describe("Assembled account and team acceptance", () => {
       administrator.getByRole("row").filter({ hasText: assembly.member.email }),
     ).toBeVisible();
     await safeScreenshot(administrator, "admin-signup-inventory-desktop");
+    await serverContent(
+      member.context(),
+      `${assembly.generalUrl}/reset-password?token=malformed`,
+      "Reset password",
+    );
     await member.goto(signup);
     await member
       .getByRole("textbox", { name: "Email address", exact: true })

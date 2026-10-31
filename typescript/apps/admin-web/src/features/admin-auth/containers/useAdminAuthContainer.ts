@@ -10,6 +10,7 @@ import { useState } from "react";
 import { useAppearanceControl } from "@/shared/appearance/useAppearanceControl";
 import { errorKey } from "@/shared/lib/errors";
 import { trpc } from "@/shared/rpc/client";
+import { activeLoginChallenge } from "../methodState";
 import type {
   AdminAuthProps,
   AuthMethod,
@@ -60,7 +61,12 @@ export function useAdminAuthContainer(input: AdminAuthInput): AdminAuthProps {
     verify.isPending ||
     send.isPending;
   const mutationError =
-    login.error ?? initialize.error ?? verify.error ?? send.error;
+    mode === "setup"
+      ? initialize.error
+      : method === "password"
+        ? login.error
+        : (verify.error ?? send.error);
+  const activeBinding = activeLoginChallenge(method, binding);
   const state: AuthState =
     input.mode === "setup" && !input.initial.available
       ? { type: "CLOSED" }
@@ -79,8 +85,12 @@ export function useAdminAuthContainer(input: AdminAuthInput): AdminAuthProps {
       initialize.mutate({ installationProof, email, password });
     } else if (method === "password") {
       login.mutate({ email, password });
-    } else if (binding && binding.email === email) {
-      verify.mutate({ email: binding.email, binding: binding.value, code });
+    } else if (activeBinding && activeBinding.email === email) {
+      verify.mutate({
+        email: activeBinding.email,
+        binding: activeBinding.value,
+        code,
+      });
     } else {
       send.mutate({ email });
     }
@@ -104,7 +114,7 @@ export function useAdminAuthContainer(input: AdminAuthInput): AdminAuthProps {
     password,
     installationProof,
     code,
-    hasBinding: binding !== null && binding.email === email,
+    hasBinding: activeBinding !== null && activeBinding.email === email,
     emailCodeAvailable,
     text,
     onEmail: (value) => {
