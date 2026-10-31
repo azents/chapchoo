@@ -46,7 +46,15 @@ cargo run --locked -p chapchoo -- grant-admin --email existing@example.invalid
 ```
 
 Preparation explicitly migrates and binds the installation. Normal service startup
-only checks readiness and refuses missing/wrong schema or key. Local listeners
+only checks readiness and refuses missing/wrong schema or key.
+Preparation also initializes display defaults from its machine's IANA time zone
+and supported locale (English/en-US for an unsupported locale), and backfills
+missing existing-user display values atomically. Set the preparation process's
+ordinary environment correctly before its first successful run; subsequent runs
+preserve initialized defaults and user choices. Missing existing-user time zones
+come from that migration machine, not an administrator-edited default.
+Timezone name validation uses bundled data rather than requiring host tzdata.
+Local listeners
 default to `127.0.0.1:50051` (general) and `127.0.0.1:50052` (Admin). Override
 with `--general-listen` / `--admin-listen` or `CHAPCHOO_GENERAL_LISTEN` /
 `CHAPCHOO_ADMIN_LISTEN`. They are plaintext HTTP/2; do not publish them directly.

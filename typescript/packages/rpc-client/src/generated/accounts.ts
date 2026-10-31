@@ -100,6 +100,19 @@ export interface User {
   email: string;
   isAdmin: boolean;
   createdAt: Timestamp | undefined;
+  display: DisplaySettings | undefined;
+}
+
+export interface DisplaySettings {
+  language: string;
+  timeZone: string;
+  region: string;
+}
+
+export interface DisplayPatch {
+  language?: string | undefined;
+  timeZone?: string | undefined;
+  region?: string | undefined;
 }
 
 export interface LoginMethods {
@@ -166,6 +179,7 @@ export interface RedeemSignupRequest {
   proof: string;
   email: string;
   password: string;
+  display: DisplayPatch | undefined;
 }
 
 export interface RedeemPasswordResetRequest {
@@ -181,6 +195,7 @@ export interface InitializeRequest {
   installationProof: string;
   email: string;
   password: string;
+  display: DisplayPatch | undefined;
 }
 
 export interface Team {
@@ -293,7 +308,7 @@ export interface IssuedGrant {
 }
 
 function createBaseUser(): User {
-  return { id: "", email: "", isAdmin: false, createdAt: undefined };
+  return { id: "", email: "", isAdmin: false, createdAt: undefined, display: undefined };
 }
 
 export const User: MessageFns<User> = {
@@ -309,6 +324,9 @@ export const User: MessageFns<User> = {
     }
     if (message.createdAt !== undefined) {
       Timestamp.encode(message.createdAt, writer.uint32(34).fork()).join();
+    }
+    if (message.display !== undefined) {
+      DisplaySettings.encode(message.display, writer.uint32(42).fork()).join();
     }
     return writer;
   },
@@ -358,6 +376,14 @@ export const User: MessageFns<User> = {
             message.createdAt = Timestamp.decode(reader, reader.uint32());
             continue;
           }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.display = DisplaySettings.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -381,6 +407,167 @@ export const User: MessageFns<User> = {
     message.createdAt = (object.createdAt !== undefined && object.createdAt !== null)
       ? Timestamp.fromPartial(object.createdAt)
       : undefined;
+    message.display = (object.display !== undefined && object.display !== null)
+      ? DisplaySettings.fromPartial(object.display)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseDisplaySettings(): DisplaySettings {
+  return { language: "", timeZone: "", region: "" };
+}
+
+export const DisplaySettings: MessageFns<DisplaySettings> = {
+  encode(message: DisplaySettings, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.language !== "") {
+      writer.uint32(10).string(message.language);
+    }
+    if (message.timeZone !== "") {
+      writer.uint32(18).string(message.timeZone);
+    }
+    if (message.region !== "") {
+      writer.uint32(26).string(message.region);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DisplaySettings {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseDisplaySettings();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.language = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.timeZone = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.region = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<DisplaySettings>, I>>(base?: I): DisplaySettings {
+    return DisplaySettings.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<DisplaySettings>, I>>(object: I): DisplaySettings {
+    const message = createBaseDisplaySettings();
+    message.language = object.language ?? "";
+    message.timeZone = object.timeZone ?? "";
+    message.region = object.region ?? "";
+    return message;
+  },
+};
+
+function createBaseDisplayPatch(): DisplayPatch {
+  return { language: undefined, timeZone: undefined, region: undefined };
+}
+
+export const DisplayPatch: MessageFns<DisplayPatch> = {
+  encode(message: DisplayPatch, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.language !== undefined) {
+      writer.uint32(10).string(message.language);
+    }
+    if (message.timeZone !== undefined) {
+      writer.uint32(18).string(message.timeZone);
+    }
+    if (message.region !== undefined) {
+      writer.uint32(26).string(message.region);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DisplayPatch {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseDisplayPatch();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.language = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.timeZone = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.region = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<DisplayPatch>, I>>(base?: I): DisplayPatch {
+    return DisplayPatch.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<DisplayPatch>, I>>(object: I): DisplayPatch {
+    const message = createBaseDisplayPatch();
+    message.language = object.language ?? undefined;
+    message.timeZone = object.timeZone ?? undefined;
+    message.region = object.region ?? undefined;
     return message;
   },
 };
@@ -1145,7 +1332,7 @@ export const ProofPreview: MessageFns<ProofPreview> = {
 };
 
 function createBaseRedeemSignupRequest(): RedeemSignupRequest {
-  return { proof: "", email: "", password: "" };
+  return { proof: "", email: "", password: "", display: undefined };
 }
 
 export const RedeemSignupRequest: MessageFns<RedeemSignupRequest> = {
@@ -1158,6 +1345,9 @@ export const RedeemSignupRequest: MessageFns<RedeemSignupRequest> = {
     }
     if (message.password !== "") {
       writer.uint32(26).string(message.password);
+    }
+    if (message.display !== undefined) {
+      DisplayPatch.encode(message.display, writer.uint32(34).fork()).join();
     }
     return writer;
   },
@@ -1199,6 +1389,14 @@ export const RedeemSignupRequest: MessageFns<RedeemSignupRequest> = {
             message.password = reader.string();
             continue;
           }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.display = DisplayPatch.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1219,6 +1417,9 @@ export const RedeemSignupRequest: MessageFns<RedeemSignupRequest> = {
     message.proof = object.proof ?? "";
     message.email = object.email ?? "";
     message.password = object.password ?? "";
+    message.display = (object.display !== undefined && object.display !== null)
+      ? DisplayPatch.fromPartial(object.display)
+      : undefined;
     return message;
   },
 };
@@ -1346,7 +1547,7 @@ export const SetupStatusResult: MessageFns<SetupStatusResult> = {
 };
 
 function createBaseInitializeRequest(): InitializeRequest {
-  return { installationProof: "", email: "", password: "" };
+  return { installationProof: "", email: "", password: "", display: undefined };
 }
 
 export const InitializeRequest: MessageFns<InitializeRequest> = {
@@ -1359,6 +1560,9 @@ export const InitializeRequest: MessageFns<InitializeRequest> = {
     }
     if (message.password !== "") {
       writer.uint32(26).string(message.password);
+    }
+    if (message.display !== undefined) {
+      DisplayPatch.encode(message.display, writer.uint32(34).fork()).join();
     }
     return writer;
   },
@@ -1400,6 +1604,14 @@ export const InitializeRequest: MessageFns<InitializeRequest> = {
             message.password = reader.string();
             continue;
           }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.display = DisplayPatch.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1420,6 +1632,9 @@ export const InitializeRequest: MessageFns<InitializeRequest> = {
     message.installationProof = object.installationProof ?? "";
     message.email = object.email ?? "";
     message.password = object.password ?? "";
+    message.display = (object.display !== undefined && object.display !== null)
+      ? DisplayPatch.fromPartial(object.display)
+      : undefined;
     return message;
   },
 };
@@ -2951,6 +3166,24 @@ export const AuthService = {
     responseSerialize: (value: User): Buffer => Buffer.from(User.encode(value).finish()),
     responseDeserialize: (value: Buffer): User => User.decode(value),
   },
+  displayDefaults: {
+    path: "/chapchoo.accounts.Auth/DisplayDefaults" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
+    requestDeserialize: (value: Buffer): Empty => Empty.decode(value),
+    responseSerialize: (value: DisplaySettings): Buffer => Buffer.from(DisplaySettings.encode(value).finish()),
+    responseDeserialize: (value: Buffer): DisplaySettings => DisplaySettings.decode(value),
+  },
+  updateDisplay: {
+    path: "/chapchoo.accounts.Auth/UpdateDisplay" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: DisplayPatch): Buffer => Buffer.from(DisplayPatch.encode(value).finish()),
+    requestDeserialize: (value: Buffer): DisplayPatch => DisplayPatch.decode(value),
+    responseSerialize: (value: User): Buffer => Buffer.from(User.encode(value).finish()),
+    responseDeserialize: (value: Buffer): User => User.decode(value),
+  },
   logout: {
     path: "/chapchoo.accounts.Auth/Logout" as const,
     requestStream: false as const,
@@ -2969,6 +3202,8 @@ export interface AuthServer extends UntypedServiceImplementation {
   verifyCode: handleUnaryCall<VerifyCodeRequest, AuthSession>;
   renew: handleUnaryCall<RenewRequest, AuthSession>;
   identity: handleUnaryCall<Empty, User>;
+  displayDefaults: handleUnaryCall<Empty, DisplaySettings>;
+  updateDisplay: handleUnaryCall<DisplayPatch, User>;
   logout: handleUnaryCall<Empty, Empty>;
 }
 
@@ -3050,6 +3285,33 @@ export interface AuthClient extends Client {
   ): ClientUnaryCall;
   identity(
     request: Empty,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: User) => void,
+  ): ClientUnaryCall;
+  displayDefaults(
+    request: Empty,
+    callback: (error: ServiceError | null, response: DisplaySettings) => void,
+  ): ClientUnaryCall;
+  displayDefaults(
+    request: Empty,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: DisplaySettings) => void,
+  ): ClientUnaryCall;
+  displayDefaults(
+    request: Empty,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: DisplaySettings) => void,
+  ): ClientUnaryCall;
+  updateDisplay(request: DisplayPatch, callback: (error: ServiceError | null, response: User) => void): ClientUnaryCall;
+  updateDisplay(
+    request: DisplayPatch,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: User) => void,
+  ): ClientUnaryCall;
+  updateDisplay(
+    request: DisplayPatch,
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: User) => void,
@@ -3563,6 +3825,15 @@ export const AdminService = {
     responseSerialize: (value: SetupStatusResult): Buffer => Buffer.from(SetupStatusResult.encode(value).finish()),
     responseDeserialize: (value: Buffer): SetupStatusResult => SetupStatusResult.decode(value),
   },
+  updateDisplayDefaults: {
+    path: "/chapchoo.accounts.Admin/UpdateDisplayDefaults" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: DisplayPatch): Buffer => Buffer.from(DisplayPatch.encode(value).finish()),
+    requestDeserialize: (value: Buffer): DisplayPatch => DisplayPatch.decode(value),
+    responseSerialize: (value: DisplaySettings): Buffer => Buffer.from(DisplaySettings.encode(value).finish()),
+    responseDeserialize: (value: Buffer): DisplaySettings => DisplaySettings.decode(value),
+  },
   initialize: {
     path: "/chapchoo.accounts.Admin/Initialize" as const,
     requestStream: false as const,
@@ -3630,6 +3901,7 @@ export const AdminService = {
 
 export interface AdminServer extends UntypedServiceImplementation {
   setupStatus: handleUnaryCall<Empty, SetupStatusResult>;
+  updateDisplayDefaults: handleUnaryCall<DisplayPatch, DisplaySettings>;
   initialize: handleUnaryCall<InitializeRequest, AuthSession>;
   issueSignupGrant: handleUnaryCall<IssueGrantRequest, IssuedGrant>;
   listSignupGrants: handleUnaryCall<ListGrantsRequest, Grants>;
@@ -3654,6 +3926,21 @@ export interface AdminClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: SetupStatusResult) => void,
+  ): ClientUnaryCall;
+  updateDisplayDefaults(
+    request: DisplayPatch,
+    callback: (error: ServiceError | null, response: DisplaySettings) => void,
+  ): ClientUnaryCall;
+  updateDisplayDefaults(
+    request: DisplayPatch,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: DisplaySettings) => void,
+  ): ClientUnaryCall;
+  updateDisplayDefaults(
+    request: DisplayPatch,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: DisplaySettings) => void,
   ): ClientUnaryCall;
   initialize(
     request: InitializeRequest,

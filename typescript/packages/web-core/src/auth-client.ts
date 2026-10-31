@@ -15,13 +15,17 @@ export function invalidatesSession(
   if (path === null) return false;
   if (
     app === "admin" &&
-    path === "auth.identity" &&
+    (path === "auth.identity" ||
+      path === "auth.updateDisplay" ||
+      path.startsWith("displayDefaults.")) &&
     reason === "DOMAIN_REASON_PERMISSION_DENIED"
   )
     return true;
   return (
     reason === "DOMAIN_REASON_INVALID_SESSION" &&
     (path === "auth.identity" ||
+      path === "auth.updateDisplay" ||
+      (app === "admin" && path.startsWith("displayDefaults.")) ||
       (app === "general"
         ? path.startsWith("teams.") || path.startsWith("invitations.")
         : path.startsWith("signupGrants.") || path.startsWith("resetGrants.")))

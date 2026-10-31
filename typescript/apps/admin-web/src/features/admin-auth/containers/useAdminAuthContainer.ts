@@ -1,4 +1,5 @@
 import { useAuth } from "@chapchoo/web-core/auth-context";
+import { useDisplay } from "@chapchoo/web-core/display-context";
 import {
   loginMethod,
   navigateSelection,
@@ -30,6 +31,7 @@ export function useAdminAuthContainer(input: AdminAuthInput): AdminAuthProps {
   const appearance = useAppearanceControl();
   const errors = useTranslations("Errors");
   const auth = useAuth();
+  const display = useDisplay();
   const params = useSearchParams();
   const emailCodeAvailable = input.mode === "login" && input.initial.emailCode;
   const method = emailCodeAvailable
@@ -83,7 +85,12 @@ export function useAdminAuthContainer(input: AdminAuthInput): AdminAuthProps {
       return;
     }
     if (mode === "setup") {
-      initialize.mutate({ installationProof, email, password });
+      initialize.mutate({
+        installationProof,
+        email,
+        password,
+        display: display.creationDisplay(),
+      });
     } else if (method === "password") {
       login.mutate({ email, password });
     } else if (activeBinding && activeBinding.email === email) {

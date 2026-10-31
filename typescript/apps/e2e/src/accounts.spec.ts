@@ -258,6 +258,7 @@ async function safeScreenshot(page: Page, name: string): Promise<void> {
     path: `${directory}${name}.png`,
     type: "png",
     fullPage: true,
+    animations: "disabled",
   });
   await writeFile(
     `${directory}${name}.json`,
@@ -465,6 +466,25 @@ test.describe("Assembled account and team acceptance", () => {
       bootstrapRequests.filter((operation) => operation === "auth.identity"),
       "Protected hydration must not repeat server Identity validation",
     ).toEqual([]);
+    await administrator.goto(`${assembly.adminUrl}/settings`);
+    await administrator
+      .getByRole("main")
+      .getByRole("combobox", { name: "Time zone", exact: true })
+      .click();
+    await administrator
+      .getByRole("option", { name: "Europe/London", exact: true })
+      .click();
+    await expect(
+      administrator.getByRole("main").getByText("Applied", { exact: true }),
+    ).toBeVisible();
+    await safeScreenshot(administrator, "display-admin-defaults-desktop");
+    await administrator.goto(`${assembly.adminUrl}/profile`);
+    await expect(
+      administrator
+        .getByRole("main")
+        .getByRole("combobox", { name: "Time zone", exact: true }),
+    ).toHaveValue("Asia/Seoul");
+    await administrator.goto(`${assembly.adminUrl}/`);
     await administrator
       .getByRole("textbox", { name: "Recipient email", exact: true })
       .fill(assembly.member.email);
@@ -514,6 +534,31 @@ test.describe("Assembled account and team acceptance", () => {
       .fill(assembly.member.email);
     await member.getByLabel(/^Password\s*\*?$/).fill(assembly.member.password);
     await member
+      .getByRole("button", {
+        name: "Language and region settings",
+        exact: true,
+      })
+      .click();
+    const guestSettings = member.getByRole("dialog");
+    await guestSettings
+      .getByRole("combobox", { name: "Time zone", exact: true })
+      .click();
+    await member
+      .getByRole("option", { name: "Europe/London", exact: true })
+      .click();
+    await guestSettings
+      .getByRole("combobox", { name: "Regional format", exact: true })
+      .click();
+    await member
+      .getByRole("option", { name: "France · Français", exact: true })
+      .click();
+    await guestSettings
+      .getByRole("button", { name: "Done", exact: true })
+      .click();
+    await expect(
+      member.getByRole("textbox", { name: "Email address", exact: true }),
+    ).toHaveValue(assembly.member.email);
+    await member
       .getByRole("button", { name: "Save password", exact: true })
       .click();
     await expect(
@@ -530,6 +575,70 @@ test.describe("Assembled account and team acceptance", () => {
       member.getByRole("button", { name: "Delete team", exact: true }),
     ).toHaveCount(0);
     await safeScreenshot(member, "personal-context-desktop");
+    await member.goto(`${assembly.generalUrl}/profile`);
+    await expect(
+      member
+        .getByRole("main")
+        .getByRole("combobox", { name: "Time zone", exact: true }),
+    ).toHaveValue("Europe/London");
+    await expect(
+      member
+        .getByRole("main")
+        .getByRole("combobox", { name: "Regional format", exact: true }),
+    ).toHaveValue("France · Français");
+    await member
+      .getByRole("button", {
+        name: "Language and region settings",
+        exact: true,
+      })
+      .click();
+    const accountSettings = member.getByRole("dialog");
+    await accountSettings
+      .getByRole("combobox", { name: "Time zone", exact: true })
+      .click();
+    await member
+      .getByRole("option", { name: "America/New_York", exact: true })
+      .click();
+    await expect(
+      accountSettings.getByText("Applied", { exact: true }),
+    ).toBeVisible();
+    await safeScreenshot(member, "display-panel-desktop");
+    await accountSettings
+      .getByRole("button", { name: "Done", exact: true })
+      .click();
+    await expect(
+      member
+        .getByRole("main")
+        .getByRole("combobox", { name: "Time zone", exact: true }),
+    ).toHaveValue("America/New_York");
+    await serverContent(
+      member.context(),
+      `${assembly.generalUrl}/profile`,
+      "Profile",
+      assembly.member.email,
+    );
+    await member.reload();
+    await expect(
+      member
+        .getByRole("main")
+        .getByRole("combobox", { name: "Time zone", exact: true }),
+    ).toHaveValue("America/New_York");
+    await safeScreenshot(member, "display-profile-desktop");
+    await member.setViewportSize({ width: 390, height: 844 });
+    await safeScreenshot(member, "display-profile-mobile");
+    await member
+      .getByRole("button", {
+        name: "Language and region settings",
+        exact: true,
+      })
+      .click();
+    await expect(member.getByRole("dialog")).toBeVisible();
+    await safeScreenshot(member, "display-panel-mobile");
+    await member
+      .getByRole("dialog")
+      .getByRole("button", { name: "Done", exact: true })
+      .click();
+    await member.setViewportSize({ width: 1280, height: 900 });
     // Inspect attributes only on this test's isolated context; never assert values.
     const cookies = await member.context().cookies(assembly.generalUrl);
     const cookie = cookies.find(

@@ -170,6 +170,7 @@ async fn prepare_readiness_common_auth_recovery_and_owned_shutdown() -> Result<(
             installation_proof: proof.expose().to_owned(),
             email: "operator@example.invalid".to_owned(),
             password: "Aa1!operator".to_owned(),
+            display: None,
         })
         .await?
         .into_inner();
@@ -194,6 +195,7 @@ async fn prepare_readiness_common_auth_recovery_and_owned_shutdown() -> Result<(
             proof,
             email: "recover@example.invalid".to_owned(),
             password: "Aa1!recovery".to_owned(),
+            display: None,
         })
         .await?
         .into_inner();

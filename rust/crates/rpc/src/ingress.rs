@@ -15,6 +15,33 @@ pub(crate) fn now() -> Result<i64, Status> {
     i64::try_from(elapsed.as_millis()).map_err(|e| status(ServiceError::infrastructure(e)))
 }
 
+pub(crate) fn display(
+    value: Option<wire::DisplayPatch>,
+) -> Result<Option<chapchoo_domain::DisplayPatch>, Status> {
+    value
+        .map(|value| {
+            chapchoo_domain::DisplayPatch::parse(value.language, value.time_zone, value.region)
+                .map_err(|_| reject(DomainReason::InvalidInput))
+        })
+        .transpose()
+}
+
+pub(crate) fn display_patch(value: &wire::DisplayPatch) -> Result<(), Status> {
+    if value.language.is_none() && value.time_zone.is_none() && value.region.is_none() {
+        return Err(reject(DomainReason::InvalidInput));
+    }
+    chapchoo_domain::DisplaySettings::parse("en", "UTC", "en-US")
+        .and_then(|base| {
+            base.patch(
+                value.language.as_deref(),
+                value.time_zone.as_deref(),
+                value.region.as_deref(),
+            )
+        })
+        .map_err(|_| reject(DomainReason::InvalidInput))?;
+    Ok(())
+}
+
 pub(crate) fn actor<T>(request: &Request<T>) -> Result<SecretDigest, Status> {
     let mut values = request.metadata().get_all("authorization").iter();
     let value = values

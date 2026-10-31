@@ -14,6 +14,12 @@ import type {
 } from "@chapchoo/rpc-client/accounts";
 import type { Timestamp } from "@chapchoo/rpc-client/timestamp";
 import { invalidResponse } from "./errors.js";
+import { completeDisplay } from "./display.js";
+import type { DisplayValue } from "./display.js";
+
+export function display(value: unknown): DisplayValue {
+  return completeDisplay(value) ?? invalidResponse();
+}
 
 function required(value: string): boolean {
   return value.length > 0;
@@ -40,6 +46,7 @@ export function timestampMilliseconds(value: Timestamp): number {
   );
 }
 export function user(value: User): User {
+  display(value.display);
   if (
     !required(value.id) ||
     !required(value.email) ||

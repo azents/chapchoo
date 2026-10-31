@@ -53,7 +53,7 @@ fn sqlite_preparation_and_read_only_admission() -> Result<(), Box<dyn Error>> {
     connection.batch_execute("PRAGMA foreign_keys=ON")?;
     // The composite owner FK is deferred, but rejects an ownerless commit.
     connection.batch_execute(
-        "INSERT INTO users VALUES('user-a','a@example.invalid','a@example.invalid','synthetic',0,0)",
+        "INSERT INTO users(id,email_key,delivery_email,password_hash,is_admin,created_at,language,time_zone,region) VALUES('user-a','a@example.invalid','a@example.invalid','synthetic',0,0,'en','UTC','en-US')",
     )?;
     assert!(
         connection
@@ -148,7 +148,7 @@ fn postgres_preparation_in_schema(url: &str) -> Result<(), Box<dyn Error>> {
     ));
     let mut connection = AsyncConnectionWrapper::<AsyncPgConnection>::establish(url)?;
     connection.batch_execute(
-        "INSERT INTO users VALUES('user-a','a@example.invalid','a@example.invalid','synthetic',FALSE,0)",
+        "INSERT INTO users(id,email_key,delivery_email,password_hash,is_admin,created_at,language,time_zone,region) VALUES('user-a','a@example.invalid','a@example.invalid','synthetic',FALSE,0,'en','UTC','en-US')",
     )?;
     assert!(
         connection

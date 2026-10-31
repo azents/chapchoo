@@ -2,7 +2,7 @@ use base64::{Engine, engine::general_purpose::URL_SAFE};
 use chapchoo_crypto::{
     BearerSecret, CredentialCipher, EmailCode, PasswordCost, PasswordHasher, RootKey,
 };
-use chapchoo_domain::{EmailAddress, Password};
+use chapchoo_domain::{DisplayPatch, EmailAddress, Password};
 use chapchoo_persistence::{
     EmailLoginOutcome, GrantDraft, GrantKind, NewAccount, NewChallenge, NewSession, SessionPolicy,
     Store, StoreError, prepare_postgres, prepare_sqlite,
@@ -23,6 +23,7 @@ fn account(id: &str, email: &str, password: &str) -> Result<NewAccount, TestErro
         personal_team_id: format!("personal-{id}"),
         personal_handle: format!("personal-{id}"),
         session: new_session(&format!("session-{id}"))?,
+        display: None,
     })
 }
 
@@ -54,6 +55,24 @@ async fn exercise(store: Store) -> Result<(), TestError> {
         .initialize_admin(&setup.digest(), &setup, &admin_draft, NOW, policy)
         .await?;
     assert!(admin.user.is_admin);
+    let original_display = store.display_defaults().await?;
+    assert_eq!(admin.user.display, original_display);
+    store
+        .update_display_defaults(
+            &admin.token.digest(),
+            Some("fr"),
+            Some("Europe/London"),
+            Some("fr-FR"),
+            NOW,
+        )
+        .await?;
+    assert_eq!(
+        store
+            .current_identity(&admin.token.digest(), NOW)
+            .await?
+            .display,
+        original_display
+    );
     assert!(!store.setup_available().await?);
     assert!(
         store
@@ -81,7 +100,12 @@ async fn exercise(store: Store) -> Result<(), TestError> {
             .await?
             .is_some()
     );
-    let member_draft = account("member", "member@example.invalid", "Aa1!member")?;
+    let mut member_draft = account("member", "member@example.invalid", "Aa1!member")?;
+    member_draft.display = Some(DisplayPatch::parse(
+        Some("ko".to_owned()),
+        Some("Asia/Tokyo".to_owned()),
+        None,
+    )?);
     assert!(matches!(
         store
             .revoke_grant(
@@ -104,6 +128,38 @@ async fn exercise(store: Store) -> Result<(), TestError> {
         .redeem_signup(&proof.digest(), &member_draft, NOW, policy)
         .await?;
     assert!(!member.user.is_admin);
+    assert_eq!(member.user.display.language(), "ko");
+    assert_eq!(member.user.display.time_zone(), "Asia/Tokyo");
+    assert_eq!(member.user.display.region(), "fr-FR");
+    let patched = store
+        .update_display(&member.token.digest(), Some("ja"), None, None, NOW)
+        .await?;
+    assert_eq!(patched.display.language(), "ja");
+    assert_eq!(patched.display.time_zone(), "Asia/Tokyo");
+    assert_eq!(patched.display.region(), "fr-FR");
+    let actor = member.token.digest();
+    let (zone, region) = tokio::join!(
+        store.update_display(&actor, None, Some("America/New_York"), None, NOW),
+        store.update_display(&actor, None, None, Some("en-US"), NOW),
+    );
+    zone?;
+    region?;
+    let current = store.current_identity(&actor, NOW).await?.display;
+    assert_eq!(current.language(), "ja");
+    assert_eq!(current.time_zone(), "America/New_York");
+    assert_eq!(current.region(), "en-US");
+    assert!(matches!(
+        store
+            .update_display(&actor, None, Some("Not/AZone"), None, NOW)
+            .await,
+        Err(StoreError::InvalidInput)
+    ));
+    assert!(matches!(
+        store
+            .update_display_defaults(&actor, Some("en"), None, None, NOW)
+            .await,
+        Err(StoreError::Forbidden)
+    ));
     let duplicate = BearerSecret::generate()?;
     store
         .issue_signup_grant(

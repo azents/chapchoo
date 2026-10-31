@@ -35,6 +35,14 @@ Web-only execution does not load database, secret-key or setup configuration.
 Operator `prepare` and `grant-admin` retain their DB/key authority. There is no
 host Node fallback, daemon, instance registry, management IPC or restart loop.
 
+Explicit preparation also atomically initializes display defaults and upgrades
+existing users. The first successful preparation machine supplies initial time
+zone and supported locale; later default edits and repreparation preserve
+established values. Missing existing-user time zones use the migration machine.
+Bundled timezone validation data keeps runtime packages independent of host
+tzdata installation. `serve`/health only verify complete preparation; deploying a
+new image does not authorize startup migrations.
+
 The executable resolves its own installation directory. Archives contain:
 
 ```text
