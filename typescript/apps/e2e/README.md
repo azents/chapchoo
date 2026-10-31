@@ -1,8 +1,7 @@
 # Account and team E2E application
 
 `@chapchoo/e2e` is an executable Playwright app, not a shared package. It owns
-three representative serial Chromium journeys and the focused real-browser
-HttpOnly cookie response-ordering boundary. Fixture preparation comes from
+three representative serial Chromium product journeys. Fixture preparation comes from
 [`@chapchoo/testenv`](../../../testenv/chapchoo/README.md); product app source is
 not imported. No direct DB writes, mutation retries or existing browser state.
 
