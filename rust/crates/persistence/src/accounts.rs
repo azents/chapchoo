@@ -1,5 +1,5 @@
 use chapchoo_crypto::{BearerSecret, PasswordHash, SecretDigest};
-use chapchoo_domain::EmailAddress;
+use chapchoo_domain::{DisplayPatch, EmailAddress};
 use diesel::sql_types::{BigInt, Binary, Bool, Nullable, Text};
 use diesel_async::RunQueryDsl;
 
@@ -18,6 +18,7 @@ pub struct NewAccount {
     pub personal_team_id: String,
     pub personal_handle: String,
     pub session: NewSession,
+    pub display: Option<DisplayPatch>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -135,9 +136,14 @@ macro_rules! new_account {
         {
             return Err(StoreError::Integrity);
         }
+        let defaults = $crate::display::read_defaults!($connection, $dialect);
+        let display = match draft.display.as_ref() {
+            Some(patch) => patch.resolve(&defaults).map_err(|_| StoreError::InvalidInput)?,
+            None => defaults,
+        };
         diesel::sql_query($dialect.query(
-            "INSERT INTO users(id,email_key,delivery_email,password_hash,is_admin,created_at)
-             VALUES(?,?,?,?,?,?)",
+            "INSERT INTO users(id,email_key,delivery_email,password_hash,is_admin,created_at,language,time_zone,region)
+             VALUES(?,?,?,?,?,?,?,?,?)",
         ))
         .bind::<Text, _>(&draft.user_id)
         .bind::<Text, _>(draft.email.lookup_key())
@@ -145,6 +151,9 @@ macro_rules! new_account {
         .bind::<Text, _>(draft.password.encoded())
         .bind::<Bool, _>($admin)
         .bind::<BigInt, _>($now)
+        .bind::<Text, _>(display.language())
+        .bind::<Text, _>(display.time_zone())
+        .bind::<Text, _>(display.region())
         .execute($connection)
         .await
         .map_err(|error| {
@@ -184,6 +193,7 @@ macro_rules! new_account {
             email: draft.email.clone(),
             is_admin: $admin,
             created_at: $now,
+            display: display.clone(),
         }
     }};
 }

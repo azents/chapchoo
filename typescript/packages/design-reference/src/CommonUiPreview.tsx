@@ -1,7 +1,9 @@
 import { EmptyFeedback } from "@chapchoo/ui/Feedback";
 import { FontFaces } from "@chapchoo/ui/FontFaces";
 import { AppMantineProvider } from "@chapchoo/ui/provider";
-import { AppHeader } from "@chapchoo/ui/AppHeader";
+import { AppHeader, HeaderControlsContext } from "@chapchoo/ui/AppHeader";
+import { DisplayEntry, DisplayPanel } from "@chapchoo/ui/DisplaySettings";
+import { useState } from "react";
 import { Mascot } from "@chapchoo/ui/Mascot";
 import {
   Button,
@@ -20,19 +22,71 @@ import "@mantine/core/styles.css";
 
 /** Loaded only by the isolated reuse document, never by neutral story canvases. */
 export default function CommonUiPreview(): ReactElement {
+  const [opened, setOpened] = useState(false);
+  const [value, setValue] = useState({
+    language: "en",
+    timeZone: "UTC",
+    region: "en-US",
+  });
+  const copy = {
+    title: "Language and region settings",
+    language: "Language",
+    timeZone: "Time zone",
+    region: "Regional format",
+    follow: "Follow browser settings",
+    preview: "Display preview",
+    unavailable: "This environment cannot display the selected time zone.",
+    scope: "Reference-local interaction; no persistence.",
+    done: "Done",
+    close: "Close settings",
+    immediate: "Changes apply immediately.",
+    saved: "Applied",
+    error: "Saving could not be confirmed.",
+    storageError: "Storage is unavailable.",
+    retry: "Try again",
+  };
   const mode = new URLSearchParams(window.location.search).has("dark")
     ? "dark"
     : "light";
   return (
     <AppMantineProvider forceColorScheme={mode}>
       <FontFaces basePath="" />
-      <AppHeader
-        appearance={{
-          value: mode,
-          label: "Appearance",
-          labels: { system: "System", light: "Light", dark: "Dark" },
-          onChange: (): void => {},
+      <HeaderControlsContext.Provider
+        value={
+          <DisplayEntry
+            label={copy.title}
+            onOpen={(): void => setOpened(true)}
+          />
+        }
+      >
+        <AppHeader
+          appearance={{
+            value: mode,
+            label: "Appearance",
+            labels: { system: "System", light: "Light", dark: "Dark" },
+            onChange: (): void => {},
+          }}
+        />
+      </HeaderControlsContext.Provider>
+      <DisplayPanel
+        opened={opened}
+        onClose={(): void => setOpened(false)}
+        value={value}
+        selected={{}}
+        automatic={false}
+        disabled={false}
+        zones={["UTC", "Asia/Seoul", "America/New_York"]}
+        copy={copy}
+        onChange={(key, next): void => {
+          if (next) {
+            setValue((previous) => ({ ...previous, [key]: next }));
+          }
         }}
+        changed={false}
+        error={false}
+        storageError={false}
+        onRetry={(): void => {}}
+        instant={1793428200000}
       />
       <Stack p="lg">
         <Mascot size={72} />

@@ -13,9 +13,13 @@ code_paths:
   - rust/crates/persistence/src/challenges.rs
   - rust/crates/persistence/src/sessions.rs
   - rust/crates/persistence/src/teams.rs
+  - rust/crates/persistence/src/display.rs
+  - rust/crates/domain/src/display.rs
   - rust/crates/persistence/migrations/sqlite/00000000000001_accounts/up.sql
   - rust/crates/persistence/migrations/postgres/00000000000001_accounts/up.sql
-last_verified_at: 2026-10-30
+  - rust/crates/persistence/migrations/sqlite/00000000000002_display/up.sql
+  - rust/crates/persistence/migrations/postgres/00000000000002_display/up.sql
+last_verified_at: 2026-10-31
 spec_version: 1
 ---
 
@@ -37,7 +41,8 @@ milliseconds in BIGINT columns, supplied by the application acceptance boundary.
 | Table | Identity and constraints | References and deletion behavior |
 | --- | --- | --- |
 | installation_key_binding | Singleton 1; 32-byte derived key check | No root key stored; persistent across restart/migration |
-| users | Stable text ID; unique canonical email key; protected password hash; boolean server-admin assignment | Retained account identity; no deletion capability implemented |
+| users | Stable text ID; unique canonical email key; protected password hash; boolean server-admin assignment; complete language/time-zone/region | Retained account identity; no deletion capability implemented |
+| display_defaults | Singleton 1; complete language/time-zone/region | Installation fallback and account-creation defaults, distinct from personal settings |
 | teams | Stable ID; unique handle; one owner; unique personal Team per owner | Owner references users; composite same-Team owner membership is deferred NO ACTION |
 | memberships | Composite Team/User primary key; Manager/Member only | Team deletion cascades memberships; User deletion is constrained |
 | personal_contexts | One association per User, unique Team | Composite deferred membership reference; no automatic collaborative deletion of personal context |
@@ -57,20 +62,27 @@ of any arbitrary manual SQL statement.
 - SQLite preparation owns an advisory lock on a non-truncated database file.
   PostgreSQL owns a dedicated session advisory lock throughout all migrations
   and initial binding. Another preparation invocation fails visibly as busy.
-- Existing binding is verified before migrations. The initially empty migration
-  may be followed by a separately committed first binding; an interrupted empty
-  installation can resume through explicit preparation, not normal startup.
+- Existing binding is verified before migrations. Migrations, first key binding,
+  display-default initialization and missing-user backfill commit together under
+  that lock. A failed preparation rolls back that invocation's schema/data
+  changes; explicit preparation can be rerun.
 - A missing binding with populated product tables fails as an integrity error.
   No command in this library replaces a bound key or clears user sessions.
-- One key check is persisted in an owned transaction after initial migration.
-  Preparation runs no network operation inside that transaction and creates no
-  user, personal Team, password or login session.
+- Preparation detects its environment before the transaction and runs no network
+  operation inside it. It creates no user, personal Team, password or login session.
 - SQLite readiness opens the existing file in read-only URI mode; a missing file
   is not created. PostgreSQL uses a read-only transaction. Both validate the fixed
-  key check and the expected migration-history identity without migration-harness
-  helpers that create schema metadata.
-- Default per-migration transactions can preserve an earlier committed migration
-  when a later migration fails. These functions do not promise release rollback.
+  key check, exact expected migration set, complete singleton and absence of
+  incomplete user display markers, without creating schema metadata.
+
+Display defaults initialize once from the first successful preparation machine:
+its IANA time zone and supported environment locale, with English/en-US for an
+unsupported locale. Undetectable/invalid machine time zones fail preparation when
+initial values are needed. Bundled Jiff timezone data validates names without a
+host tzdata prerequisite. Existing users' missing time zones use the current
+preparation machine, not an edited installation default; missing language/region
+use installation defaults. Repreparation preserves established values.
+Invocation atomicity does not promise rollback of earlier deployed releases.
 
 The operator preserves the database and original root together. Runtime
 application startup invokes only readiness, not preparation. A
@@ -93,6 +105,13 @@ locks/revalidates that same stored hash so reset cannot leave an old-password
 session alive. Initial administrator creation and signup create the User,
 password, personal Team/membership/association and initial session together.
 Signup also consumes its grant in that transaction.
+Each creation input can omit display dimensions; current defaults resolve those
+dimensions inside that same transaction. Personal display updates authenticate
+and lock the current User, patch only supplied dimensions and return the committed
+complete User. Concurrent independent patches preserve unrelated fields. Admin
+default updates authenticate current administrator authority and lock the
+singleton; they never update existing users. A public defaults read exposes only
+the three validated presentation values.
 
 Session renewal uses the configured validity, rotation and previous-token
 overlap, rejects expired/revoked state and returns one committed latest value
@@ -147,6 +166,9 @@ leave, invitation/grant rollback and collaborative cleanup. Owned-future
 cancellation tests verify connection replacement through a connection-local
 marker, zero committed cancelled rows and a successful subsequent write.
 
-These are library/integration tests, not public RPC/browser E2E, operator CLI
-verification or Helm/Argo CD execution. Those surfaces remain pending until their
-implementation and tests exist.
+Display upgrade tests on both engines start with populated version-1 data,
+exercise failed migration rollback and successful retry, preserve existing
+account/team/session data, and reject incomplete readiness. Display operation
+tests cover independent patches, permissions and creation-time defaults.
+These library tests are distinct from the public RPC/browser evidence in the
+corresponding Specs and do not establish Helm/Argo CD execution.

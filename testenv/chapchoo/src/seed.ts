@@ -83,6 +83,7 @@ export async function seedRegisteredUser(
       proof: grant.proof,
       email: user.email,
       password: user.password,
+      display: undefined,
     });
     await call(auth.logout.bind(auth), {}, session.token);
   } finally {

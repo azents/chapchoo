@@ -27,6 +27,8 @@ pub mod accounts {
     // policy; the inherited missing_debug_implementations gate enforces it.
     redacted_debug!(
         User,
+        DisplaySettings,
+        DisplayPatch,
         LoginMethods,
         AuthSession,
         PasswordLoginRequest,
@@ -103,6 +105,7 @@ mod tests {
                 proof: credential.into(),
                 email: credential.into(),
                 password: credential.into(),
+                display: None,
             }),
             Box::new(RedeemPasswordResetRequest {
                 proof: credential.into(),
@@ -112,6 +115,7 @@ mod tests {
                 installation_proof: credential.into(),
                 email: credential.into(),
                 password: credential.into(),
+                display: None,
             }),
             Box::new(IssuedGrant {
                 proof: credential.into(),

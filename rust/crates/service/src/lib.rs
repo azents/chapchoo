@@ -6,7 +6,9 @@ mod service;
 mod time;
 
 pub use chapchoo_crypto::{BearerSecret, EmailCode, PasswordCost, SecretDigest};
-pub use chapchoo_domain::{EmailAddress, MembershipRole, Password, TeamKind, TeamRole};
+pub use chapchoo_domain::{
+    DisplaySettings, EmailAddress, MembershipRole, Password, TeamKind, TeamRole,
+};
 pub use chapchoo_persistence::{
     GrantKind, GrantSummary, InvitationStatus, InvitationSummary, MemberSummary, ProofPreview,
     SessionPolicy, SessionResult, TeamPatch, TeamSummary, UserSummary,

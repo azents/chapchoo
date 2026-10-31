@@ -1,5 +1,6 @@
 import "server-only";
 import { attempt } from "@chapchoo/web-core/boundary";
+import { displayPatchPayload } from "@chapchoo/web-core/display";
 import { call } from "@chapchoo/web-core/rpc";
 import {
   invitation,
@@ -11,6 +12,7 @@ import {
 } from "@chapchoo/web-core/validation";
 import { z } from "zod";
 import { authRouter } from "@/shared/server/auth";
+import { displayInput } from "@/shared/server/displayInput";
 import { procedure, router } from "@/shared/server/trpc";
 
 const email = z.string().min(1).max(320);
@@ -40,7 +42,12 @@ export const appRouter = router({
     redeem: procedure
       .input(
         z
-          .object({ proof: z.string().min(1).max(256), email, password })
+          .object({
+            proof: z.string().min(1).max(256),
+            email,
+            password,
+            display: displayInput.partial().optional(),
+          })
           .strict(),
       )
       .mutation(({ ctx, input }) =>
@@ -48,7 +55,12 @@ export const appRouter = router({
           ctx.session.acceptAuthentication(
             await call(
               ctx.backend.general.redeemSignup.bind(ctx.backend.general),
-              input,
+              {
+                ...input,
+                display: input.display
+                  ? displayPatchPayload(input.display)
+                  : void 0,
+              },
             ),
           ),
         ),

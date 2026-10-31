@@ -6,6 +6,7 @@
     "dark": "ダーク"
   },
   "accounts": {
+    "replayMascot": "キャラクターのアニメーションを再生",
     "login": "ログイン",
     "signup": "アカウント作成",
     "reset": "パスワードの再設定",

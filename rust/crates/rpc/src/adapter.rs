@@ -147,6 +147,39 @@ impl Auth for RpcService {
         Ok(Response::new(output::user(result)?))
     }
 
+    #[tracing::instrument(skip_all, fields(rpc = "display_defaults"))]
+    async fn display_defaults(
+        &self,
+        _: Request<()>,
+    ) -> Result<Response<wire::DisplaySettings>, Status> {
+        self.admit()?;
+        Ok(Response::new(output::display(
+            self.service.display_defaults().await.map_err(status)?,
+        )))
+    }
+    #[tracing::instrument(skip_all, fields(rpc = "update_display"))]
+    async fn update_display(
+        &self,
+        request: Request<wire::DisplayPatch>,
+    ) -> Result<Response<wire::User>, Status> {
+        self.admit()?;
+        let actor = input::actor(&request)?;
+        let value = request.into_inner();
+        input::display_patch(&value)?;
+        let result = self
+            .service
+            .update_display(
+                &actor,
+                value.language.as_deref(),
+                value.time_zone.as_deref(),
+                value.region.as_deref(),
+                input::now()?,
+            )
+            .await
+            .map_err(status)?;
+        Ok(Response::new(output::user(result)?))
+    }
+
     #[tracing::instrument(skip_all, fields(rpc = "logout"))]
     async fn logout(&self, request: Request<()>) -> Result<Response<()>, Status> {
         self.admit()?;
@@ -202,7 +235,13 @@ impl General for RpcService {
         let password = input::password(value.password)?;
         let result = self
             .service
-            .redeem_signup(&proof, email, password, AcceptanceTime::System)
+            .redeem_signup(
+                &proof,
+                email,
+                password,
+                AcceptanceTime::System,
+                input::display(value.display)?,
+            )
             .await
             .map_err(status)?;
         Ok(Response::new(output::session(result)?))
@@ -490,6 +529,28 @@ impl General for RpcService {
 
 #[tonic::async_trait]
 impl Admin for RpcService {
+    #[tracing::instrument(skip_all, fields(rpc = "update_display_defaults"))]
+    async fn update_display_defaults(
+        &self,
+        request: Request<wire::DisplayPatch>,
+    ) -> Result<Response<wire::DisplaySettings>, Status> {
+        self.admit()?;
+        let actor = input::actor(&request)?;
+        let value = request.into_inner();
+        input::display_patch(&value)?;
+        let result = self
+            .service
+            .update_display_defaults(
+                &actor,
+                value.language.as_deref(),
+                value.time_zone.as_deref(),
+                value.region.as_deref(),
+                input::now()?,
+            )
+            .await
+            .map_err(status)?;
+        Ok(Response::new(output::display(result)))
+    }
     #[tracing::instrument(skip_all, fields(rpc = "setup_status"))]
     async fn setup_status(
         &self,
@@ -512,7 +573,13 @@ impl Admin for RpcService {
         let password = input::password(value.password)?;
         let result = self
             .service
-            .initialize(&proof, email, password, AcceptanceTime::System)
+            .initialize(
+                &proof,
+                email,
+                password,
+                AcceptanceTime::System,
+                input::display(value.display)?,
+            )
             .await
             .map_err(status)?;
         Ok(Response::new(output::session(result)?))

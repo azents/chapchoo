@@ -37,6 +37,7 @@ const user = {
   email: "user@example.invalid",
   isAdmin: false,
   createdAt: { seconds: 1n, nanos: 0 },
+  display: { language: "en", timeZone: "UTC", region: "en-US" },
 };
 function session(token = B, identity = user) {
   return {

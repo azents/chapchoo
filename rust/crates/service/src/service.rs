@@ -1,5 +1,5 @@
 use chapchoo_crypto::{BearerSecret, EmailCode, PasswordHash, SecretDigest};
-use chapchoo_domain::{EmailAddress, MembershipRole, Password};
+use chapchoo_domain::{DisplayPatch, DisplaySettings, EmailAddress, MembershipRole, Password};
 use chapchoo_persistence::{
     CreateTeam, EmailLoginOutcome, GrantDraft, GrantKind, GrantSummary, InvitationSummary,
     InviteMember, MemberSummary, NewAccount, NewChallenge, NewSession, ProofPreview, SessionPolicy,
@@ -205,7 +205,7 @@ impl AccountsService {
                 StoreError::InvalidProof => ServiceError::domain(DomainReason::InvalidCode),
                 other => other.into(),
             })? {
-            EmailLoginOutcome::Authenticated(session) => Ok(session),
+            EmailLoginOutcome::Authenticated(session) => Ok(*session),
             EmailLoginOutcome::RegistrationRequired => {
                 Err(ServiceError::domain(DomainReason::RegistrationRequired))
             }
@@ -230,6 +230,36 @@ impl AccountsService {
 
     pub async fn logout(&self, actor: &SecretDigest, now: i64) -> Result<(), ServiceError> {
         Ok(self.store.logout_session(actor, now).await?)
+    }
+
+    pub async fn display_defaults(&self) -> Result<DisplaySettings, ServiceError> {
+        Ok(self.store.display_defaults().await?)
+    }
+    pub async fn update_display(
+        &self,
+        actor: &SecretDigest,
+        language: Option<&str>,
+        time_zone: Option<&str>,
+        region: Option<&str>,
+        now: i64,
+    ) -> Result<UserSummary, ServiceError> {
+        Ok(self
+            .store
+            .update_display(actor, language, time_zone, region, now)
+            .await?)
+    }
+    pub async fn update_display_defaults(
+        &self,
+        actor: &SecretDigest,
+        language: Option<&str>,
+        time_zone: Option<&str>,
+        region: Option<&str>,
+        now: i64,
+    ) -> Result<DisplaySettings, ServiceError> {
+        Ok(self
+            .store
+            .update_display_defaults(actor, language, time_zone, region, now)
+            .await?)
     }
 
     pub async fn request_signup_email(
@@ -271,9 +301,10 @@ impl AccountsService {
         email: EmailAddress,
         password: Password,
         clock: AcceptanceTime,
+        display: Option<DisplayPatch>,
     ) -> Result<SessionResult, ServiceError> {
         let hash = self.passwords.hash(password).await?;
-        let draft = account(email, hash)?;
+        let draft = account(email, hash, display)?;
         Ok(self
             .store
             .redeem_signup(&proof.digest(), &draft, clock.now()?, self.sessions)
@@ -317,6 +348,7 @@ impl AccountsService {
         email: EmailAddress,
         password: Password,
         clock: AcceptanceTime,
+        display: Option<DisplayPatch>,
     ) -> Result<SessionResult, ServiceError> {
         let configured = self
             .setup_proof
@@ -326,7 +358,7 @@ impl AccountsService {
             return Err(ServiceError::domain(DomainReason::InvalidProof));
         }
         let hash = self.passwords.hash(password).await?;
-        let draft = account(email, hash)?;
+        let draft = account(email, hash, display)?;
         Ok(self
             .store
             .initialize_admin(
@@ -682,7 +714,11 @@ fn new_session() -> Result<NewSession, ServiceError> {
         token: secret()?,
     })
 }
-fn account(email: EmailAddress, password: PasswordHash) -> Result<NewAccount, ServiceError> {
+fn account(
+    email: EmailAddress,
+    password: PasswordHash,
+    display: Option<DisplayPatch>,
+) -> Result<NewAccount, ServiceError> {
     let personal_team_id = id()?;
     Ok(NewAccount {
         user_id: id()?,
@@ -691,5 +727,6 @@ fn account(email: EmailAddress, password: PasswordHash) -> Result<NewAccount, Se
         personal_handle: format!("personal-{personal_team_id}"),
         personal_team_id,
         session: new_session()?,
+        display,
     })
 }

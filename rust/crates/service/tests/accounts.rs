@@ -94,6 +94,7 @@ fn manual_links_and_password_work_are_composed_without_mail() -> Result<(), Test
                 EmailAddress::parse("Admin@Example.Invalid")?,
                 Password::parse("Aa1!admin".to_owned())?,
                 AcceptanceTime::Fixed(NOW),
+                None,
             )
             .await?;
         assert_eq!(
@@ -128,6 +129,7 @@ fn manual_links_and_password_work_are_composed_without_mail() -> Result<(), Test
                 member_email.clone(),
                 Password::parse("Aa1!member".to_owned())?,
                 AcceptanceTime::Fixed(NOW),
+                None,
             )
             .await?;
         // This verifies service hashing/account construction/verification wiring,
@@ -179,6 +181,7 @@ fn delivery_failure_keeps_committed_invitation_and_signup_grant() -> Result<(), 
                 EmailAddress::parse("admin@example.invalid")?,
                 Password::parse("Aa1!admin".to_owned())?,
                 AcceptanceTime::Fixed(NOW),
+                None,
             )
             .await?;
         let team = app
@@ -251,6 +254,7 @@ fn code_delivery_and_unregistered_verification_do_not_bypass_signup() -> Result<
             email.clone(),
             Password::parse("Aa1!admin".to_owned())?,
             AcceptanceTime::Fixed(NOW),
+            None,
         )
         .await?;
         let challenge = app.send_code(&email, NOW).await?;

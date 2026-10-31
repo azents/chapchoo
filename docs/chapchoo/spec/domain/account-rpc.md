@@ -12,7 +12,7 @@ code_paths:
   - rust/crates/mail
   - rust/apps/chapchoo
   - typescript/packages/rpc-client
-last_verified_at: 2026-10-30
+last_verified_at: 2026-10-31
 spec_version: 1
 ---
 
@@ -57,6 +57,17 @@ result. Identity and domain reads omit bearer secrets. Code issuance returns
 binding/expiry only. Proof previews expose only usability and, when usable,
 masked recipient hint/expiry. Grant inventory omits proof/URL; initial issuance
 returns its new proof and general-web URL.
+
+Every User snapshot includes complete independent display language (`en`, `ko`,
+`ja`, `fr`), IANA time zone and regional format (`en-US`, `ko-KR`, `ja-JP`,
+`fr-FR`). Auth.DisplayDefaults publicly reads only installation presentation
+defaults. Auth.UpdateDisplay authenticates the caller, applies an independent
+partial patch and returns the committed User. Admin.UpdateDisplayDefaults
+rechecks current administrator authority and returns the committed defaults.
+Signup and initialization accept optional partial display values, resolving
+omitted dimensions from current defaults in the creation transaction. Invalid
+values fail with INVALID_ARGUMENT; omission means unchanged for patches and
+current installation fallback for creation. There is no automatic mutation replay.
 
 Canonical generated reason names are carried in the ASCII trailing metadata
 field `chapchoo-domain-reason`. Credential/session/code rejection is

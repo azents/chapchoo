@@ -1,6 +1,7 @@
 .trigger {
-  display: inline-flex;
+  display: flex;
   align-items: flex-end;
+  justify-content: center;
   border: 0;
   padding: 0;
   background: transparent;
@@ -12,7 +13,7 @@
 }
 
 .trigger:focus-visible {
-  outline: 2px solid var(--chapchoo-color-focus);
+  outline: 0.125rem solid var(--chapchoo-color-focus);
   outline-offset: var(--mantine-spacing-xs);
 }
 

@@ -12,6 +12,7 @@ const user = {
   email: "user@example.test",
   isAdmin: false,
   createdAt: { seconds: 1n, nanos: 0 },
+  display: { language: "en", timeZone: "UTC", region: "en-US" },
 };
 
 test("required snapshot reads resolve once and preserve typed failure without replay", async () => {

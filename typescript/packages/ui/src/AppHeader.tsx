@@ -1,9 +1,14 @@
+"use client";
+
 import { Group, Text } from "@mantine/core";
+import { createContext, useContext } from "react";
 import { ColorModeMenu } from "./ColorModeMenu";
 import classes from "./AppHeader.module.css";
 import "./appChrome.css";
 import type { ColorModeMenuProps } from "./ColorModeMenu";
 import type { ReactElement, ReactNode } from "react";
+
+export const HeaderControlsContext = createContext<ReactNode>(null);
 
 export interface AppHeaderProps {
   brand?: string;
@@ -19,6 +24,7 @@ export function AppHeader({
   identityLabel,
   actions,
 }: AppHeaderProps): ReactElement {
+  const controls = useContext(HeaderControlsContext);
   return (
     <header className={classes.header}>
       <Text component="div" fw={750} size="lg" className={classes.brand}>
@@ -33,6 +39,7 @@ export function AppHeader({
           ) : null}
           {actions}
         </Group>
+        {controls}
         {appearance ? <ColorModeMenu {...appearance} /> : null}
       </Group>
     </header>

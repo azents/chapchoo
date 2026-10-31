@@ -1,5 +1,5 @@
 use chapchoo_crypto::{PasswordHash, PasswordHasher};
-use chapchoo_domain::EmailAddress;
+use chapchoo_domain::{DisplaySettings, EmailAddress};
 use diesel::sql_types::{BigInt, Bool, Text};
 use std::fmt;
 
@@ -11,6 +11,7 @@ pub struct UserSummary {
     pub email: EmailAddress,
     pub is_admin: bool,
     pub created_at: i64,
+    pub display: DisplaySettings,
 }
 
 #[derive(Debug)]
@@ -52,6 +53,12 @@ pub(crate) struct UserRow {
     pub is_admin: bool,
     #[diesel(sql_type = BigInt)]
     pub created_at: i64,
+    #[diesel(sql_type = Text)]
+    pub language: String,
+    #[diesel(sql_type = Text)]
+    pub time_zone: String,
+    #[diesel(sql_type = Text)]
+    pub region: String,
 }
 
 impl fmt::Debug for UserRow {
@@ -71,6 +78,8 @@ impl UserRow {
             email,
             is_admin: self.is_admin,
             created_at: self.created_at,
+            display: DisplaySettings::parse(&self.language, &self.time_zone, &self.region)
+                .map_err(|_| StoreError::Integrity)?,
         })
     }
 

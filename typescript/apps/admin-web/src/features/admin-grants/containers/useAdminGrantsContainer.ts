@@ -1,4 +1,7 @@
+import { formatDisplayDate } from "@chapchoo/ui/displayFormatting";
 import { useAuth } from "@chapchoo/web-core/auth-context";
+import { useDisplay } from "@chapchoo/web-core/display-context";
+import { displayText } from "@chapchoo/web-core/display-messages";
 import {
   initialQuery,
   inventoryOffset,
@@ -6,7 +9,7 @@ import {
   readSelection,
 } from "@chapchoo/web-core/page-state";
 import { useClipboard } from "@mantine/hooks";
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { useAppearanceControl } from "@/shared/appearance/useAppearanceControl";
@@ -30,22 +33,25 @@ export interface AdminGrantsInput {
   initial: InitialInventory;
 }
 
-function project(grant: Grant, locale: string, now: number): GrantRow {
+function project(
+  grant: Grant,
+  locale: string,
+  timeZone: string,
+  now: number,
+  unavailable: string,
+): GrantRow {
   if (!grant.issuedAt || !grant.expiresAt) {
     throw new Error("Invalid grant projection");
   }
   const issued = Number(grant.issuedAt.seconds) * 1000;
   const expires = Number(grant.expiresAt.seconds) * 1000;
-  const formatter = new Intl.DateTimeFormat(locale, {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "UTC",
-  });
   return {
     id: grant.id,
     email: grant.email,
-    issuedAt: `${formatter.format(issued)} UTC`,
-    expiresAt: `${formatter.format(expires)} UTC`,
+    issuedAt:
+      formatDisplayDate(issued, locale, timeZone, "medium") ?? unavailable,
+    expiresAt:
+      formatDisplayDate(expires, locale, timeZone, "medium") ?? unavailable,
     status: grant.consumedAt
       ? "used"
       : grant.revokedAt
@@ -65,7 +71,7 @@ export function useAdminGrantsContainer({
   const appearance = useAppearanceControl();
   const authText = useTranslations("AdminAuth");
   const errors = useTranslations("Errors");
-  const locale = useLocale();
+  const { value: display } = useDisplay();
   const auth = useAuth();
   const utils = trpc.useUtils();
   const clipboard = useClipboard();
@@ -158,7 +164,13 @@ export function useAdminGrantsContainer({
         state = {
           type: "LOADED",
           items: query.data.items.map((grant) =>
-            project(grant, locale, query.dataUpdatedAt),
+            project(
+              grant,
+              display.region,
+              display.timeZone,
+              query.dataUpdatedAt,
+              displayText(display.language).unavailable,
+            ),
           ),
           range: text("range", {
             from: query.data.items.length ? (offset + 1n).toString() : "0",

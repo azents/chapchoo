@@ -1,0 +1,16 @@
+.toast {
+  position: fixed;
+  right: var(--mantine-spacing-xl);
+  bottom: var(--mantine-spacing-xl);
+  width: min(27rem, calc(100vw - 2 * var(--mantine-spacing-xl)));
+  /* Application chrome stays below modal admission and confirmation layers. */
+  z-index: 150;
+  background: var(--mantine-color-body);
+}
+@media (max-width: 48em) {
+  .toast {
+    right: var(--mantine-spacing-lg);
+    bottom: var(--mantine-spacing-lg);
+    width: calc(100vw - 2 * var(--mantine-spacing-lg));
+  }
+}

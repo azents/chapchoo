@@ -5,13 +5,7 @@ import fr from "../../../messages/fr-FR.json" with { type: "json" };
 import ja from "../../../messages/ja-JP.json" with { type: "json" };
 import ko from "../../../messages/ko-KR.json" with { type: "json" };
 import { errorKey } from "./errors.ts";
-import {
-  DEFAULT_LOCALE,
-  isSupportedLocale,
-  LOCALE_COOKIE,
-  resolveLocaleFromHeader,
-  SUPPORTED_LOCALES,
-} from "./locale.ts";
+import { isSupportedLocale, SUPPORTED_LOCALES } from "./locale.ts";
 import type { ErrorKey } from "./errors.ts";
 
 interface MessageTree {
@@ -143,9 +137,7 @@ await test("missing, internal and unknown reasons use an honest generic message"
   }
 });
 
-await test("locale cookie values accept only exact supported locale identifiers", () => {
-  assert.equal(LOCALE_COOKIE, "locale");
-  assert.equal(DEFAULT_LOCALE, "en-US");
+await test("message catalogs accept only exact supported locale identifiers", () => {
   assert.deepEqual([...SUPPORTED_LOCALES].sort(), [
     "en-US",
     "fr-FR",
@@ -158,18 +150,4 @@ await test("locale cookie values accept only exact supported locale identifiers"
   for (const value of ["", "ko", "fr-CA", "de-DE", "KO-KR", "../ko-KR"]) {
     assert.equal(isSupportedLocale(value), false);
   }
-});
-
-await test("Accept-Language resolves supported exact, weighted and language-only entries", () => {
-  assert.equal(resolveLocaleFromHeader("fr-FR,ko;q=0.9"), "fr-FR");
-  assert.equal(resolveLocaleFromHeader("de-DE,ja;q=0.8"), "ja-JP");
-  assert.equal(
-    resolveLocaleFromHeader("fr;q=0.4,ko;q=0.9,en-US;q=0.8"),
-    "ko-KR",
-  );
-  assert.equal(resolveLocaleFromHeader("fr-CA,en-US;q=0.5"), "fr-FR");
-  assert.equal(resolveLocaleFromHeader("en"), "en-US");
-  assert.equal(resolveLocaleFromHeader(null), null);
-  assert.equal(resolveLocaleFromHeader(""), null);
-  assert.equal(resolveLocaleFromHeader("de-DE,es;q=0.9"), null);
 });

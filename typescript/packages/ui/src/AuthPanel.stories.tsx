@@ -12,6 +12,7 @@ const meta = {
   parameters: { layout: "fullscreen" },
   args: {
     title: "Sign in",
+    mascotReplayLabel: "Replay character animation",
     description: "Use your account to continue.",
   },
 } satisfies Meta<typeof AuthPanel>;

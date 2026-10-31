@@ -9,13 +9,13 @@ import {
   resolveServerColorMode,
   toDocumentColorScheme,
 } from "@chapchoo/web-core/color-mode";
-import { NextIntlClientProvider } from "next-intl";
-import { getLocale, getMessages } from "next-intl/server";
+import { getLocale } from "next-intl/server";
 import { cookies } from "next/headers";
 import { getPublicConfig } from "@/config/index";
 import { AppearanceProvider } from "@/shared/appearance/AppearanceProvider";
-import { loadIdentity } from "@/shared/auth/server";
+import { DisplayProvider } from "@/shared/preferences/DisplayProvider";
 import { RpcProvider } from "@/shared/rpc/provider";
+import { readDisplay } from "@/shared/server/display";
 import type { Metadata, Viewport } from "next";
 import type { ReactElement, ReactNode } from "react";
 
@@ -50,7 +50,7 @@ export default async function RootLayout({
   children: ReactNode;
 }): Promise<ReactElement> {
   const locale = await getLocale();
-  const messages = await getMessages();
+  const display = await readDisplay();
   const { publicBasePath } = getPublicConfig();
   const store = await cookies();
   const initial = resolveServerColorMode(
@@ -76,16 +76,16 @@ export default async function RootLayout({
       </head>
       <body data-color-mode={initial.mode} suppressHydrationWarning>
         <script dangerouslySetInnerHTML={{ __html: bodyColorModeBootstrap }} />
-        <NextIntlClientProvider locale={locale} messages={messages}>
-          <AppearanceProvider initial={initial}>
-            <RpcProvider
-              basePath={publicBasePath}
-              initialIdentity={await loadIdentity()}
-            >
+        <AppearanceProvider initial={initial}>
+          <RpcProvider
+            basePath={publicBasePath}
+            initialIdentity={display.identity}
+          >
+            <DisplayProvider initial={display} basePath={publicBasePath} admin>
               {children}
-            </RpcProvider>
-          </AppearanceProvider>
-        </NextIntlClientProvider>
+            </DisplayProvider>
+          </RpcProvider>
+        </AppearanceProvider>
       </body>
     </html>
   );

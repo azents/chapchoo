@@ -24,6 +24,7 @@ export function Auth(props: AuthProps): ReactNode {
   const proof = props.token.length > 0;
   return (
     <AuthPanel
+      mascotReplayLabel={c.replayMascot}
       basePath={props.basePath}
       character={props.character}
       title={title}

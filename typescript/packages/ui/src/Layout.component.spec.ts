@@ -69,7 +69,10 @@ test("desktop sidebar and workspace scroll independently, including short window
     "/iframe.html?id=shared-ui-applicationshell--long-content&viewMode=story",
   );
   const sidebar = page.locator("aside");
-  const footer = sidebar.locator("img");
+  // The replay control owns layout; its image moves within that stable box.
+  const footer = sidebar.getByRole("button", {
+    name: "Replay character animation",
+  });
   const workspace = page.getByRole("main").locator("..");
   await expect(footer).toBeVisible();
   const initial = await footer.boundingBox();

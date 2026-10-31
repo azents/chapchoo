@@ -39,7 +39,7 @@ const meta = {
     docs: {
       description: {
         component:
-          "Reviewed motion: 5% extension, 1200ms, 30° clockwise, grounded with one small return bounce. Animate the Agent as interaction subject; accessory art stays static. Reference-local React components, not a rollout to General/Admin pages or a native implementation.",
+          "Reviewed motion: 5% extension, 1200ms, 30° clockwise, grounded with one small return bounce. Animate the Agent as interaction subject; accessory art stays static. Imports shared web React components, selected for General/Admin authentication headings and desktop sidebar companions. Not a native implementation.",
       },
     },
   },

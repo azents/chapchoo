@@ -49,6 +49,7 @@ export function AdminAuth(props: AdminAuthProps): ReactElement {
   const setup = mode === "setup";
   return (
     <AuthPanel
+      mascotReplayLabel={text("replayMascot")}
       appearance={props.appearance}
       basePath={props.basePath}
       character={props.character}

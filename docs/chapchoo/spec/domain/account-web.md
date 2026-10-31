@@ -88,6 +88,25 @@ the former scaffold layout without changing app-owned actions or permissions. Ge
 [design reference workspace](design-reference.md); app Storybooks retain their
 product-state review role.
 
+## Mascot motion
+
+General/Admin authentication headings and desktop sidebar companions use shared
+`AgentMascotMotion` at their existing 72px-square placements. Production keeps the
+small WebP URL, character selection and surrounding geometry; per-character alpha
+contact metadata anchors the transform inside the square canvas. Authentication
+remains visible on narrow screens while sidebar companions retain their 48em
+hiding rule. The static `Mascot` primitive remains available for other artwork.
+
+The approved gesture extends by 5% for 1200ms toward 30 degrees clockwise from
+upward vertical, with a small damped return bounce and six-second automatic rest.
+A native named replay button accepts click/touch/Enter/Space only at rest; input
+during playback is ignored without restart or queuing. Hover does not trigger it.
+Each app supplies the replay action name in its four supported locales.
+Reduced motion disables playback and the replay control. Hidden documents and
+offscreen placements cancel active/pending work, with no catch-up replay.
+Server-selected login artwork remains stable through hydration and edits.
+The independent design reference imports this same common-UI implementation.
+
 ## Appearance lifecycle
 
 Both applications reuse the same sticky global AppHeader through their auth/setup
@@ -152,12 +171,57 @@ Light and warm olive-charcoal dark maps retain common layout/type metrics and
 use separate filled-accent ink and readable accent-text roles. Menus/dialogs use
 raised surface tones. Storybooks expose both appearances with static fixtures.
 
-Routes remain locale-less. The locale cookie, then Accept-Language, then English
-select en-US, ko-KR, ja-JP or fr-FR. Forms, statuses and failures use aligned
-localized messages. Normal UI shows the consequence/next action rather than raw
+Routes remain locale-less. The display language selects the existing en-US,
+ko-KR, ja-JP or fr-FR catalog independently of regional formatting. Forms,
+statuses and failures use aligned localized messages. Normal UI shows the consequence/next action rather than raw
 protocol reasons, stack traces or implementation metadata.
 Collaborative context badges use localized Team terminology; personal contexts
 retain the distinct personal-space label.
+
+## Display settings
+
+Both apps expose the same always-visible header entry on public, authentication
+and protected surfaces. The panel applies language, IANA time zone and regional
+format independently and immediately. Protected `/profile` routes duplicate
+those controls over the same identity-query User; there is no separate account
+settings store. Changing language updates catalogs and document language without
+remounting entered work. A failed account save retains its attempt with an
+explicit retry and never claims success; account/unmount fences reject late
+responses belonging to an old identity.
+
+The request-cached display snapshot uses validated account values for signed-in
+SSR and hydration. Visitors resolve each dimension from explicit
+`chapchoo-display-choice`, then automatic `chapchoo-display-projection`, then
+installation defaults. Both host-only root-path cookies are validated,
+JavaScript-readable presentation data with one-year lifetime, SameSite=Lax and
+Secure on HTTPS. Current post-hydration browser detection updates only automatic
+dimensions and their projection. Explicit choices survive detection; selecting
+Follow browser settings restores automatic behavior. Cookie denial permits an
+in-page change but reports that persistence is unavailable.
+
+Account creation submits only explicit or available detected dimensions; the
+backend resolves absent dimensions from current transaction-time defaults.
+Neither old NEXT_LOCALE nor Accept-Language is an alternative account authority.
+Required defaults/identity infrastructure failure reaches the sanitized render
+boundary rather than fabricating a signed-out state or static defaults.
+
+Signed-in differences produce a titled/icon toast containing only applicable
+independent rows. Each action changes only its dimension. Language proposals
+include current/target language copy and autonyms. Dismissals are browser-local
+Mantine localStorage data partitioned by account/dimension/detected value; a new
+detected value can be offered again. Storage denial does not crash the page.
+IANA aliases compare semantically. A stored server-valid zone absent from local
+Intl data does not crash suggestion comparison. Previews and Admin timestamps
+show a localized unavailable-format message, preserving the stored value without
+substituting UTC or another time zone. Toasts remain below modal layers.
+Backend User/default response decoding checks complete bounded field shapes and
+supported language/region, with Rust/Jiff retaining semantic zone authority;
+older Node ICU data cannot reject a server-approved zone before SSR. Browser
+cookie, detection and editable-input validation still checks local renderability.
+
+Admin `/settings` edits installation defaults through its own protected query
+and mutation, separate from personal settings. Existing accounts and explicit
+visitor choices do not change when defaults change.
 
 ## Node transport and request ownership
 
@@ -264,9 +328,8 @@ Next search-parameter subscribers; direct entry/reload resolves the same selecti
 on the server. Back/Forward restore the selected view. Minor URL state uses
 replace; no current feature needs an invented minor selection.
 
-Admin issuance/expiry values use the selected locale with explicit UTC formatting
-and a visible UTC suffix, independent of server or browser local timezone. A full
-user-timezone preference policy remains outside this implementation.
+Admin issuance/expiry values use the account's independent regional format and
+time zone instead of fixed UTC formatting and its suffix.
 
 Existing selected-team and inventory-kind routes remain pathname-owned. Form
 inputs, authentication challenge bindings, newly issued proof links and destructive
@@ -377,3 +440,15 @@ Independent review precedes the phase PR; exact-head CI follows PR creation.
 The same three journeys also pass from the extracted x86-64 distribution using
 bundled Node, with no host Node/pnpm/Turbo on the product PATH. This is local
 artifact evidence, not a native ARM64 or deployed Helm/Argo acceptance claim.
+
+Display-settings verification extends the existing signup journey with visitor
+time-zone/region choices, account creation, panel/profile synchronization,
+persisted refresh and script-blocked profile SSR. Admin default edits preserve
+the administrator's personal time zone. The same three journeys and cookie
+boundary passed again after the final production build. Focused component tests
+cover independent suggestions, dismissal/value changes, save failure/explicit
+retry, visitor following and 1280/390/320 keyboard/reflow. Native DPR1 product
+screenshots cover profile/panel desktop and 390-wide mobile, plus Admin defaults
+in dark appearance; seeded component renders cover all three suggestion rows.
+All use loaded bundled Pretendard. These are local Chromium checks, not physical
+Safari or deployment validation.

@@ -1,5 +1,5 @@
 import { Box, Text, Title } from "@mantine/core";
-import { Mascot } from "./Mascot";
+import { AgentMascotMotion } from "./AgentMascotMotion";
 import { AppFrame } from "./AppFrame";
 import classes from "./AuthPanel.module.css";
 import type { ColorModeMenuProps } from "./ColorModeMenu";
@@ -7,6 +7,7 @@ import type { MascotId } from "./designTokens";
 import type { ReactNode } from "react";
 
 export interface AuthPanelProps {
+  mascotReplayLabel: string;
   title: string;
   description?: ReactNode;
   children: ReactNode;
@@ -18,6 +19,7 @@ export interface AuthPanelProps {
 
 /** Focused identity and form; the app owns submission, copy and navigation. */
 export function AuthPanel({
+  mascotReplayLabel,
   title,
   description,
   children,
@@ -31,7 +33,13 @@ export function AuthPanel({
       <Box component="main" className={classes.page}>
         <div className={classes.panel}>
           <div className={classes.heading}>
-            <Mascot basePath={basePath} size={72} character={character} />
+            <AgentMascotMotion
+              basePath={basePath}
+              size={72}
+              character={character}
+              playing
+              replayLabel={mascotReplayLabel}
+            />
             <Title order={1} size="h2" style={{ overflowWrap: "anywhere" }}>
               {title}
             </Title>
