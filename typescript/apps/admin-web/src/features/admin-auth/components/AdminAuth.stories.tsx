@@ -1,6 +1,9 @@
+import { useState } from "react";
 import en from "../../../../messages/en-US.json";
 import { AdminAuth } from "./AdminAuth";
+import type { AdminAuthProps } from "./AdminAuth";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
+import type { ReactElement } from "react";
 
 const meta = {
   title: "Admin/Authentication",
@@ -37,6 +40,23 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const PasswordLogin: Story = {};
+function CharacterLoginFixture(props: AdminAuthProps): ReactElement {
+  const [email, setEmail] = useState(props.email);
+  const [password, setPassword] = useState(props.password);
+  return (
+    <AdminAuth
+      {...props}
+      email={email}
+      password={password}
+      onEmail={setEmail}
+      onPassword={setPassword}
+    />
+  );
+}
+export const ServerSelectedCharacter: Story = {
+  args: { character: "collie" },
+  render: (args): ReactElement => <CharacterLoginFixture {...args} />,
+};
 export const Pending: Story = {
   args: { state: { type: "FORM", pending: true, error: null } },
 };

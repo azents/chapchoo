@@ -1,5 +1,6 @@
 import type messages from "../../../messages/en-US.json";
 import type { ColorModeMenuProps } from "@chapchoo/ui/ColorModeMenu";
+import type { MascotId } from "@chapchoo/ui/designTokens";
 
 export type Copy = Record<keyof typeof messages.accounts, string>;
 export type LoadState<T> =
@@ -13,6 +14,7 @@ export type Submission =
   | { type: "DONE"; message: string };
 export interface AuthInput {
   basePath: string;
+  character?: MascotId;
   mode: "LOGIN" | "SIGNUP" | "RESET";
   token: string;
 }

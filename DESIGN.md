@@ -254,8 +254,12 @@ the study's temporary star/wordmark is not a finalized brand mark.
 
 ### Identity and illustration
 
-The selected family is five **abstract dog-like blob creatures**, not literal
-retrievers: bichon, corgi, dachshund, husky and border collie. Use low, wide,
+The selected family is six **abstract dog-like blob creatures**: the original
+golden companion (called the retriever), plus bichon, corgi, dachshund, husky and
+border collie. Chapchoo means golden retriever: the retriever is the primary
+identity, asset `01`, and first in all character catalogs. The requester reaffirmed the original retriever as the default on
+2026-10-31 and supplied its recovered PNG. Preserve that exact character and its
+texture rather than generating a new retriever. Use low, wide,
 plump continuous soft matte volume with little visible texture. Differentiate
 through broad colors/patterns and ear shape. Keep simple cream eye shapes/pupils;
 avoid Ditto-style blank dots and realistic eye detail. No projecting muzzle,
@@ -268,7 +272,16 @@ explorations, not claimed vector masters or a completed expression/motion librar
 Do not infer breed-specific jobs, personalities or automatic multi-agent behavior.
 Use derived transparent masters in `assets/mascots/transparent/` across both
 appearances with normal composition. Small production WebPs preserve alpha;
-original generated PNGs and generation provenance remain unchanged.
+original generated PNGs and generation provenance remain unchanged. General,
+Admin and the reference default to the retriever; login screens are the exception,
+with one of six characters selected on the server for each fresh page request.
+The client retains that serialized choice through hydration and form edits.
+Explicit character props can
+render the other five without introducing a product character picker. Browser
+favicons and home-screen icons derive from the same transparent masters.
+Apple icons use an opaque unrounded cream canvas; maskable icons have a separate
+safe-zone composition. See the common UI's `assets/icons/README.md` for exports
+and reproducible generation.
 
 ### Accessible operation
 
@@ -318,7 +331,7 @@ Primer React. Current product implementation remains accounts/teams, not the
 future channel/agent vision. None of this authorizes invented product flows.
 
 Open: actual product IA/features, native navigation beyond the font choice,
-final icon/logo/motion systems and editable vector/3D illustration masters.
+extended logo/motion systems and editable vector/3D illustration masters.
 The existing general/Admin web surface now uses the selected shared theme;
 further feature-specific promotion remains separate from fictional compositions.
 

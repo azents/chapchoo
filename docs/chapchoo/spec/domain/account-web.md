@@ -37,9 +37,29 @@ with Geist Mono reserved for code. Pretendard uses the complete official
 unicode-range subset set; the browser fetches only ranges used by rendered text,
 without a whole-font or unused mono preload. The runtime mount is passed into
 font stylesheet, font and decorative mascot URLs. The 72px mascot uses a 216px
-alpha-preserving production derivative with normal composition. Five transparent
+alpha-preserving production derivative with normal composition. Six transparent
 PNG masters and small WebPs share both appearances; unchanged generated originals
 and extraction provenance remain in common UI assets.
+The requester-supplied golden retriever is the default. Shared `Mascot` callers
+can select bichon, corgi, dachshund, husky or border collie with a typed character
+prop; this does not add a user-facing character picker.
+General and Admin login entrypoints select one of the six characters on the
+server, after their existing request-bound login-method read has resolved.
+The selected string is serialized as a prop and rendered unchanged on the
+client, including hydration and form-state updates. A fresh page request can
+choose a new character; repeats are allowed. Signup, reset, setup and workspace
+defaults remain the retriever. This follows Next.js's
+[request-time random-value guidance](https://nextjs.org/docs/messages/next-prerender-random)
+and React's [identical hydration output contract](https://react.dev/reference/react-dom/client/hydrateRoot#caveats),
+without client-side random generation, seed storage or an effect-driven swap.
+Both apps emit runtime-prefixed PNG/ICO favicon and 180px Apple Touch Icon links.
+Their request-time manifests distinguish General and Admin names and scope
+start URLs and icon URLs to each runtime mount. They use opaque 192/512px
+regular icons and a separate 512px maskable safe-zone composition. Manifest
+display stays `browser`; this adds home-screen identity artwork, not offline
+support or standalone application behavior. All six characters have equivalent
+icon assets and 1024px exports; the shared staging step also publishes the
+retriever at the conventional mount-relative `/favicon.ico` path.
 Narrow editable controls, including compound inner inputs and editable text
 surfaces, use a 16px minimum while preserving larger user text and pinch zoom;
 native selects retain their platform-owned line box. Visual principles remain

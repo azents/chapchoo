@@ -1,6 +1,10 @@
 import { copyFile, cp, mkdir, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  defaultMascot,
+  mascotAssets,
+} from "../packages/ui/src/designTokens.ts";
 
 const name = process.argv[2];
 if (name !== "web" && name !== "admin-web") {
@@ -24,3 +28,18 @@ for (const asset of await readdir(join(shared, "illustrations"))) {
     );
   }
 }
+const icons = join(illustrations, "icons");
+await mkdir(icons, { recursive: true });
+for (const entry of await readdir(join(shared, "icons"), {
+  withFileTypes: true,
+})) {
+  if (entry.isDirectory()) {
+    await cp(join(shared, "icons", entry.name), join(icons, entry.name), {
+      recursive: true,
+    });
+  }
+}
+await copyFile(
+  join(shared, "icons", mascotAssets[defaultMascot].asset, "favicon.ico"),
+  join(app, "public/favicon.ico"),
+);

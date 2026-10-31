@@ -1,5 +1,6 @@
 import { documentCanvasBackground } from "@chapchoo/ui/designTokens";
 import { FontFaces } from "@chapchoo/ui/FontFaces";
+import { identityMetadata } from "@chapchoo/ui/webIdentity";
 import {
   bodyColorModeBootstrap,
   colorModeBootstrap,
@@ -21,10 +22,13 @@ import type { ReactElement, ReactNode } from "react";
 import "@mantine/core/styles.css";
 import "./globals.css";
 
-export const metadata: Metadata = {
-  title: "Chapchoo Admin",
-  description: "Chapchoo server account administration",
-};
+export function generateMetadata(): Metadata {
+  return {
+    title: "Chapchoo Admin",
+    description: "Chapchoo server account administration",
+    ...identityMetadata(getPublicConfig().publicBasePath),
+  };
+}
 
 export async function generateViewport(): Promise<Viewport> {
   const store = await cookies();

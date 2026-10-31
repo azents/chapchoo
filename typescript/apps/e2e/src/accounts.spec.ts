@@ -65,16 +65,35 @@ async function serverContent(
   }
 }
 
+/** The random server choice must survive hydration and subsequent form edits. */
+async function loginDocument(page: Page, url: string): Promise<string> {
+  const response = await page.goto(`${url}/login`);
+  if (!response) throw new Error("The login document response is required");
+  const html = await response.text();
+  const source = /<img[^>]+src="([^"]*\/design-assets\/[^"]+-216\.webp)"/.exec(
+    html,
+  )?.[1];
+  if (!source)
+    throw new Error("The login document must contain its selected mascot");
+  await expect(
+    page.locator('main img[src*="/design-assets/"]'),
+  ).toHaveAttribute("src", source);
+  return source;
+}
+
 async function login(
   page: Page,
   url: string,
   user: FixtureUser,
 ): Promise<void> {
-  await page.goto(`${url}/login`);
+  const character = await loginDocument(page, url);
   await page
     .getByRole("textbox", { name: "Email address", exact: true })
     .fill(user.email);
   await page.getByLabel(/^Password\s*\*?$/).fill(user.password);
+  await expect(
+    page.locator('main img[src*="/design-assets/"]'),
+  ).toHaveAttribute("src", character);
   await page.getByRole("button", { name: "Log in", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Your spaces", exact: true }),
@@ -692,11 +711,14 @@ test.describe("Assembled account and team acceptance", () => {
       member.getByRole("heading", { name: "Personal space", exact: true }),
     ).toBeVisible();
     // The ordinary team owner retains General access but cannot enter Admin.
-    await second.goto(`${assembly.adminUrl}/login`);
+    const adminCharacter = await loginDocument(second, assembly.adminUrl);
     await second
       .getByRole("textbox", { name: "Email", exact: true })
       .fill(assembly.second.email);
     await second.getByLabel(/^Password\s*\*?$/).fill(assembly.second.password);
+    await expect(
+      second.locator('main img[src*="/design-assets/"]'),
+    ).toHaveAttribute("src", adminCharacter);
     await second.getByRole("button", { name: "Sign in", exact: true }).click();
     // Exclude Next.js's separate route-announcer alert outside the form.
     await expect(second.getByRole("main").getByRole("alert")).toBeVisible();
