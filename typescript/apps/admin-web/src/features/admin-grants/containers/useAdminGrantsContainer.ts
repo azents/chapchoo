@@ -12,6 +12,7 @@ import { useState } from "react";
 import { useAppearanceControl } from "@/shared/appearance/useAppearanceControl";
 import { errorKey } from "@/shared/lib/errors";
 import { trpc } from "@/shared/rpc/client";
+import { currentRevokeId } from "../revokeSelection";
 import type {
   AdminGrantsProps,
   GrantPageKind,
@@ -19,6 +20,7 @@ import type {
   GrantViewState,
 } from "../components/AdminGrants";
 import type { InitialInventory } from "../initialInventory";
+import type { RevokeSelection } from "../revokeSelection";
 import type { ConfirmationState } from "@chapchoo/ui/ConfirmationDialog";
 import type { Grant, IssuedGrant } from "@chapchoo/web-core/browser";
 
@@ -77,7 +79,9 @@ export function useAdminGrantsContainer({
   const [issued, setIssued] = useState<{ url: string; email: string } | null>(
     null,
   );
-  const [revokeId, setRevokeId] = useState<string | null>(null);
+  const [revokeSelection, setRevokeSelection] =
+    useState<RevokeSelection | null>(null);
+  const revokeId = currentRevokeId(revokeSelection, offset);
   const signup = trpc.signupGrants.list.useQuery(
     { offset: offset.toString(), limit: 25 },
     {
@@ -108,7 +112,7 @@ export function useAdminGrantsContainer({
     void refreshBusiness();
   }
   function revoked(): void {
-    setRevokeId(null);
+    setRevokeSelection(null);
     void refreshBusiness();
   }
   const issueSignup = trpc.signupGrants.issue.useMutation({
@@ -229,11 +233,11 @@ export function useAdminGrantsContainer({
     onRevoke: (id) => {
       revokeSignup.reset();
       revokeReset.reset();
-      setRevokeId(id);
+      setRevokeSelection({ id, offset });
     },
     onCancelRevoke: () => {
       if (!pending) {
-        setRevokeId(null);
+        setRevokeSelection(null);
       }
     },
     onConfirmRevoke: revoke,
