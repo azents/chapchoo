@@ -256,7 +256,8 @@ the study's temporary star/wordmark is not a finalized brand mark.
 
 The selected family is six **abstract dog-like blob creatures**: the original
 golden companion (called the retriever), plus bichon, corgi, dachshund, husky and
-border collie. The requester reaffirmed the original retriever as the default on
+border collie. Chapchoo means golden retriever: the retriever is the primary
+identity, asset `01`, and first in all character catalogs. The requester reaffirmed the original retriever as the default on
 2026-10-31 and supplied its recovered PNG. Preserve that exact character and its
 texture rather than generating a new retriever. Use low, wide,
 plump continuous soft matte volume with little visible texture. Differentiate

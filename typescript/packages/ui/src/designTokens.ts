@@ -86,12 +86,12 @@ export type MascotId = (typeof mascotIds)[number];
 export const defaultMascot: MascotId = "retriever";
 
 export const mascotAssets = {
-  bichon: { name: "비숑", asset: "01-bichon" },
-  corgi: { name: "코기", asset: "02-corgi" },
-  dachshund: { name: "닥스훈트", asset: "03-dachshund" },
-  husky: { name: "허스키", asset: "04-husky" },
-  collie: { name: "보더콜리", asset: "05-border-collie" },
-  retriever: { name: "리트리버", asset: "06-retriever" },
+  retriever: { name: "리트리버", asset: "01-retriever" },
+  bichon: { name: "비숑", asset: "02-bichon" },
+  corgi: { name: "코기", asset: "03-corgi" },
+  dachshund: { name: "닥스훈트", asset: "04-dachshund" },
+  husky: { name: "허스키", asset: "05-husky" },
+  collie: { name: "보더콜리", asset: "06-border-collie" },
 } satisfies Record<MascotId, { name: string; asset: string }>;
 
 export const mascots = Object.entries(mascotAssets).map(([key, value]) => ({

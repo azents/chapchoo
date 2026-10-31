@@ -1,6 +1,21 @@
 [
   {
-    "character": "01-bichon",
+    "character": "01-retriever",
+    "source_sha256": "bc6806fd555c8af6b8cbafe9f8affd9feb44b329c3fa029ba98a51db9890e92a",
+    "outputs": {
+      "apple-touch-icon.png": "ce711e8b21483b276a2380bed0633ecc0788658a19d787288ac76d041c5c49f3",
+      "favicon-16.png": "44d42fd167d485d52bb04a471c71ad5ebda3f7f80a042957b01fb199bb47af30",
+      "favicon-32.png": "95e0906f4f229def6cf5e908a4943f4b92ccfdc0f6d151b1df29e52643beffba",
+      "favicon-48.png": "642278d0ccaba5cdd1e027949e0651749c516bf6795940c0e18a1ddc52f99eef",
+      "favicon.ico": "860231049bfacaa8b25ab5b82f44e5c3b29b564821f5c365a803ab7d62227616",
+      "icon-1024.png": "f2ce589df0838f8cf4f85f6c7e1938976142a9853f554e32b1fc0457b51f281e",
+      "icon-192.png": "fc855283b3690c978f070bff2c9437a4aa071e29165e7377587ea8d26d3d28e4",
+      "icon-512.png": "7a210a66d118cc68247097bf7471227deeb73b460699a93523e4a22e9dbe800b",
+      "icon-maskable-512.png": "9b73736297b84d813a48182816b3b353cfdbc9618f46b25b9cb98788ccb3c3e4"
+    }
+  },
+  {
+    "character": "02-bichon",
     "source_sha256": "e80b559f6abc6cda811df1269160541ddfb5dbcb80f7861c255a233473e8681a",
     "outputs": {
       "apple-touch-icon.png": "9bfcaf3214ee94c15b2aa841e90ae4e5436a1119de7833de72fa4c27e4cdf55b",
@@ -15,7 +30,7 @@
     }
   },
   {
-    "character": "02-corgi",
+    "character": "03-corgi",
     "source_sha256": "bff4a0481ae9723c36d36df0f005659be23b5976871c66974fbb1e6626e0a955",
     "outputs": {
       "apple-touch-icon.png": "b4c82978194af162cf7da9c65533897c8cdb87343eebf8c906256661051cf543",
@@ -30,7 +45,7 @@
     }
   },
   {
-    "character": "03-dachshund",
+    "character": "04-dachshund",
     "source_sha256": "7cccbb842953018e56b394cf7a503b663bfdb99eb6f58a418bb171cff6aaf18f",
     "outputs": {
       "apple-touch-icon.png": "78ce369f8714f1cecfaecddf0e7158ef924cab0151293907a8e4a9f69c368927",
@@ -45,7 +60,7 @@
     }
   },
   {
-    "character": "04-husky",
+    "character": "05-husky",
     "source_sha256": "4505be0712ee847ab269e477e860d8b054506a8c405c51d7c861bae96256ec9d",
     "outputs": {
       "apple-touch-icon.png": "80aff83de7afb26762d16955044681dfb98e6e076b4cf3c8eacb21790cc12599",
@@ -60,7 +75,7 @@
     }
   },
   {
-    "character": "05-border-collie",
+    "character": "06-border-collie",
     "source_sha256": "c4605c2aaa1a491c779c3d769db0fd9287ecc1e9e532d40db900378fdde5fd7e",
     "outputs": {
       "apple-touch-icon.png": "5dfff3a10a086b4d20eae0d9f6bf0cc88e489fe4cdf286296af52745c7ab4656",
@@ -72,21 +87,6 @@
       "icon-192.png": "222467b244c76be81482c050511e769e74a159713d37e256f95b3da39e3131f4",
       "icon-512.png": "23d0e84273f1dce298db03e34d3cbe644efaf69d12b2736644b10ba972169d34",
       "icon-maskable-512.png": "61dedb69cd4875028ac2cfa3da05b079dd2b488a850ebf2c7860e3c1baea2293"
-    }
-  },
-  {
-    "character": "06-retriever",
-    "source_sha256": "bc6806fd555c8af6b8cbafe9f8affd9feb44b329c3fa029ba98a51db9890e92a",
-    "outputs": {
-      "apple-touch-icon.png": "ce711e8b21483b276a2380bed0633ecc0788658a19d787288ac76d041c5c49f3",
-      "favicon-16.png": "44d42fd167d485d52bb04a471c71ad5ebda3f7f80a042957b01fb199bb47af30",
-      "favicon-32.png": "95e0906f4f229def6cf5e908a4943f4b92ccfdc0f6d151b1df29e52643beffba",
-      "favicon-48.png": "642278d0ccaba5cdd1e027949e0651749c516bf6795940c0e18a1ddc52f99eef",
-      "favicon.ico": "860231049bfacaa8b25ab5b82f44e5c3b29b564821f5c365a803ab7d62227616",
-      "icon-1024.png": "f2ce589df0838f8cf4f85f6c7e1938976142a9853f554e32b1fc0457b51f281e",
-      "icon-192.png": "fc855283b3690c978f070bff2c9437a4aa071e29165e7377587ea8d26d3d28e4",
-      "icon-512.png": "7a210a66d118cc68247097bf7471227deeb73b460699a93523e4a22e9dbe800b",
-      "icon-maskable-512.png": "9b73736297b84d813a48182816b3b353cfdbc9618f46b25b9cb98788ccb3c3e4"
     }
   }
 ]

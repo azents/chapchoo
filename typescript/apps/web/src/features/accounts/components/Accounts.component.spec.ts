@@ -7,7 +7,7 @@ test("login keeps its server-selected character during form re-renders", async (
   await page.goto(
     "/iframe.html?id=accounts-authentication--server-selected-character&viewMode=story",
   );
-  const image = page.locator('img[src$="/04-husky-216.webp"]');
+  const image = page.locator('img[src$="/05-husky-216.webp"]');
   await expect(image).toBeVisible();
   await page
     .getByRole("textbox", { name: messages.accounts.email })

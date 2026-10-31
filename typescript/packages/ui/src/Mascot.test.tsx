@@ -3,7 +3,12 @@ import test from "node:test";
 import { MantineProvider } from "@mantine/core";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Mascot } from "./Mascot";
-import { mascotAssets } from "./designTokens";
+import {
+  defaultMascot,
+  mascotAssets,
+  mascotIds,
+  mascots,
+} from "./designTokens";
 import type { MascotId } from "./designTokens";
 
 await test("decorative identity art respects root and nested runtime mounts", () => {
@@ -14,10 +19,24 @@ await test("decorative identity art respects root and nested runtime mounts", ()
       </MantineProvider>,
     );
     assert.ok(
-      html.includes(`src="${basePath}/design-assets/06-retriever-216.webp"`),
+      html.includes(`src="${basePath}/design-assets/01-retriever-216.webp"`),
     );
     assert.ok(html.includes('alt=""'));
     assert.ok(html.includes('aria-hidden="true"'));
+  }
+});
+
+await test("the golden retriever leads the asset and display catalogs", () => {
+  assert.equal(defaultMascot, "retriever");
+  assert.equal(mascotIds[0], "retriever");
+  assert.deepEqual(Object.keys(mascotAssets), [...mascotIds]);
+  assert.equal(mascots[0]?.file, "transparent/01-retriever.png");
+  for (const [index, mascot] of mascots.entries()) {
+    assert.ok(
+      mascot.file.startsWith(
+        `transparent/${String(index + 1).padStart(2, "0")}-`,
+      ),
+    );
   }
 });
 

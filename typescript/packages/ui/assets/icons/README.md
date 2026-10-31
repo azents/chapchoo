@@ -1,7 +1,7 @@
 # Browser and home-screen identity
 
 Each of the six characters has the same generated asset set. The default is
-`06-retriever`, derived from the requester-supplied original, not a redesign.
+`01-retriever`, derived from the requester-supplied original, not a redesign.
 Originals, transparent masters and generation/masking provenance live under
 `../mascots/`. These are raster exports; no vector source is claimed.
 

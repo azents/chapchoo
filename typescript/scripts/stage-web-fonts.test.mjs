@@ -41,31 +41,31 @@ test("both web distributions stage shared fonts, licenses and identity art", asy
       /SIL OPEN FONT LICENSE/i,
     );
     assert.deepEqual(
-      await readFile(new URL("design-assets/02-corgi-216.webp", root)),
+      await readFile(new URL("design-assets/03-corgi-216.webp", root)),
       await readFile(
         new URL(
-          "../packages/ui/assets/illustrations/02-corgi-216.webp",
+          "../packages/ui/assets/illustrations/03-corgi-216.webp",
           import.meta.url,
         ),
       ),
     );
     const published = await readdir(new URL("design-assets/", root));
     assert.deepEqual(published.sort(), [
-      "01-bichon-216.webp",
-      "02-corgi-216.webp",
-      "03-dachshund-216.webp",
-      "04-husky-216.webp",
-      "05-border-collie-216.webp",
-      "06-retriever-216.webp",
+      "01-retriever-216.webp",
+      "02-bichon-216.webp",
+      "03-corgi-216.webp",
+      "04-dachshund-216.webp",
+      "05-husky-216.webp",
+      "06-border-collie-216.webp",
       "icons",
     ]);
     const characters = [
-      "01-bichon",
-      "02-corgi",
-      "03-dachshund",
-      "04-husky",
-      "05-border-collie",
-      "06-retriever",
+      "01-retriever",
+      "02-bichon",
+      "03-corgi",
+      "04-dachshund",
+      "05-husky",
+      "06-border-collie",
     ];
     assert.deepEqual(
       (await readdir(new URL("design-assets/icons/", root))).sort(),
@@ -102,7 +102,7 @@ test("both web distributions stage shared fonts, licenses and identity art", asy
     assert.deepEqual(
       await readFile(new URL("favicon.ico", root)),
       await readFile(
-        new URL("design-assets/icons/06-retriever/favicon.ico", root),
+        new URL("design-assets/icons/01-retriever/favicon.ico", root),
       ),
     );
   }

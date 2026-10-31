@@ -2,12 +2,12 @@
 
 The selected golden dog-blob original and its five breed variations:
 
-- 01-bichon.png
-- 02-corgi.png
-- 03-dachshund.png
-- 04-husky.png
-- 05-border-collie.png
-- 06-retriever.png (default; requester-supplied recovered original)
+- 01-retriever.png (default; requester-supplied recovered original)
+- 02-bichon.png
+- 03-corgi.png
+- 04-dachshund.png
+- 05-husky.png
+- 06-border-collie.png
 
 Original generated files are retained without resampling. These are reference
 illustrations, not vector source files or an expression/motion library.

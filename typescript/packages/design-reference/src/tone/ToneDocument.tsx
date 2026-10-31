@@ -41,17 +41,17 @@ export type ToneExample =
   | "mascots";
 
 function Mascot({
-  index = 5,
+  index = 0,
   size = "small",
 }: {
   index?: number;
   size?: "small" | "large";
 }): ReactElement {
-  const pet = mascots[index] ?? mascots[5];
+  const pet = mascots[index] ?? mascots[0];
   return (
     <img
       className={`cc-mascot cc-mascot-${size}`}
-      src={`./mascots/${pet?.file ?? "transparent/06-retriever.png"}`}
+      src={`./mascots/${pet?.file ?? "transparent/01-retriever.png"}`}
       alt={pet?.name ?? "리트리버"}
     />
   );
@@ -353,7 +353,7 @@ function States({ onChange }: DemoProps): ReactElement {
       </Section>
       <Section title="아직 비어 있을 때">
         <div className="cc-empty">
-          <Mascot index={0} />
+          <Mascot index={1} />
           <EmptyFeedback
             title="첫 자료를 담아볼까요?"
             message="다시 보고 싶은 링크나 짧은 메모를 저장해보세요."
@@ -503,7 +503,7 @@ function Library({ onChange }: DemoProps): ReactElement {
         ))}
       </div>
       <div className="cc-helper">
-        <Mascot index={4} />
+        <Mascot index={5} />
         <p>
           다 읽지 않아도 괜찮아요.
           <br />
@@ -602,7 +602,7 @@ function Planner({ state, onChange }: DemoProps): ReactElement {
         </div>
       </div>
       <div className="cc-inline-note">
-        <Mascot index={2} />
+        <Mascot index={3} />
         <p>
           <strong>오늘 할 일 두 개.</strong> 전부 채우는 것보다, 하나씩 가볍게
           시작해봐요.

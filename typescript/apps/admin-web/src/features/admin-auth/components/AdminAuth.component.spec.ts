@@ -7,7 +7,7 @@ test("Admin login keeps its server-selected character during form re-renders", a
   await page.goto(
     "/iframe.html?id=admin-authentication--server-selected-character&viewMode=story",
   );
-  const image = page.locator('img[src$="/05-border-collie-216.webp"]');
+  const image = page.locator('img[src$="/06-border-collie-216.webp"]');
   await expect(image).toBeVisible();
   await page.locator('input[type="email"]').fill("typing@example.invalid");
   await page.locator('input[type="password"]').fill("typing-password");

@@ -9,7 +9,7 @@ await test("browser identity is rooted at the runtime mount for both apps", () =
     assert.equal(metadata.icons.shortcut, `${basePath}/favicon.ico`);
     for (const icon of [...metadata.icons.icon, ...metadata.icons.apple]) {
       assert.ok(
-        icon.url.startsWith(`${basePath}/design-assets/icons/06-retriever/`),
+        icon.url.startsWith(`${basePath}/design-assets/icons/01-retriever/`),
       );
     }
     assert.deepEqual(
@@ -34,7 +34,7 @@ await test("browser identity is rooted at the runtime mount for both apps", () =
       );
       for (const icon of manifest.icons) {
         assert.ok(
-          icon.src.startsWith(`${basePath}/design-assets/icons/06-retriever/`),
+          icon.src.startsWith(`${basePath}/design-assets/icons/01-retriever/`),
         );
       }
     }
@@ -43,5 +43,5 @@ await test("browser identity is rooted at the runtime mount for both apps", () =
 
 await test("a distinct character's prepared home-screen assets can be selected explicitly", () => {
   const manifest = identityManifest("/app", "Chapchoo", "husky");
-  assert.ok(manifest.icons.every((icon) => icon.src.includes("/04-husky/")));
+  assert.ok(manifest.icons.every((icon) => icon.src.includes("/05-husky/")));
 });
