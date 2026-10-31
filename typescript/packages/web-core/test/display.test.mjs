@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  completeDisplay,
   decodeDisplayCookie,
   detectDisplayValues,
   displayChoices,
@@ -10,7 +9,7 @@ import {
   resolveGuestDisplay,
   sameDisplayValue,
 } from "../dist/display.js";
-import { display } from "../dist/validation.js";
+import { display, user } from "../dist/validation.js";
 import { invalidatesSession } from "../dist/auth-client.js";
 import { displayMessages } from "../dist/display-messages.js";
 const defaults = { language: "en", timeZone: "UTC", region: "en-US" };
@@ -77,11 +76,10 @@ test("cookie ingress validates each dimension and ignores unknown or malformed d
   ])
     assert.deepEqual(displayChoices(value), {});
   assert.equal(
-    completeDisplay({ language: "ko", timeZone: "Asia/Seoul", region: "en-US" })
-      ?.region,
+    display({ language: "ko", timeZone: "Asia/Seoul", region: "en-US" }).region,
     "en-US",
   );
-  assert.equal(completeDisplay({ language: "ko" }), null);
+  assert.throws(() => display({ language: "ko" }));
 });
 test("IANA aliases compare as the same setting while independent dimensions remain different", () => {
   assert.equal(sameDisplayValue("timeZone", "UTC", "Etc/UTC"), true);
@@ -111,7 +109,31 @@ test("partial transport fields preserve omission, and decoded settings are requi
   });
   assert.deepEqual(display(defaults), defaults);
   assert.throws(() => display(undefined));
-  assert.throws(() => display({ ...defaults, timeZone: "Not/AZone" }));
+  for (const timeZone of ["", "+09:00", "invalid zone", "A".repeat(129), null])
+    assert.throws(() => display({ ...defaults, timeZone }));
+});
+test("backend response decoding preserves server-approved zones independently of local ICU", (t) => {
+  const serverValue = { ...defaults, timeZone: "Asia/Seoul" };
+  const Native = Intl.DateTimeFormat;
+  t.mock.method(Intl, "DateTimeFormat", function (locale, options) {
+    if (options?.timeZone === "Asia/Seoul")
+      throw new RangeError("Simulated older Node timezone database");
+    return new Native(locale, options);
+  });
+  assert.deepEqual(display(serverValue), serverValue);
+  const identity = {
+    id: "fixture-user",
+    email: "fixture@example.invalid",
+    isAdmin: false,
+    createdAt: { seconds: 0n, nanos: 0 },
+    display: serverValue,
+  };
+  assert.deepEqual(user(identity).display, serverValue);
+  assert.equal(displayPart("timeZone", "Asia/Seoul"), false);
+  assert.deepEqual(
+    decodeDisplayCookie(encodeURIComponent(JSON.stringify(serverValue))),
+    { language: "en", region: "en-US" },
+  );
 });
 test("new protected mutations participate in invalid-session disposal without treating public methods as protected", () => {
   for (const app of ["general", "admin"])

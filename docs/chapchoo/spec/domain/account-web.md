@@ -179,6 +179,10 @@ IANA aliases compare semantically. A stored server-valid zone absent from local
 Intl data does not crash suggestion comparison. Previews and Admin timestamps
 show a localized unavailable-format message, preserving the stored value without
 substituting UTC or another time zone. Toasts remain below modal layers.
+Backend User/default response decoding checks complete bounded field shapes and
+supported language/region, with Rust/Jiff retaining semantic zone authority;
+older Node ICU data cannot reject a server-approved zone before SSR. Browser
+cookie, detection and editable-input validation still checks local renderability.
 
 Admin `/settings` edits installation defaults through its own protected query
 and mutation, separate from personal settings. Existing accounts and explicit

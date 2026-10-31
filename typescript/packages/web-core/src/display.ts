@@ -56,16 +56,6 @@ export function displayChoices(value: unknown): DisplayChoices {
   }
   return result;
 }
-export function completeDisplay(value: unknown): DisplayValue | null {
-  const parsed = displayChoices(value);
-  return parsed.language && parsed.timeZone && parsed.region
-    ? {
-        language: parsed.language,
-        timeZone: parsed.timeZone,
-        region: parsed.region,
-      }
-    : null;
-}
 export function decodeDisplayCookie(value: string | undefined): DisplayChoices {
   if (!value || value.length > 2048) return {};
   try {
