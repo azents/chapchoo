@@ -132,6 +132,29 @@ class HookStateTest(unittest.TestCase):
         self.assertIsNone(state.last_transcript_size)
 
 
+class WebRuleScopeTest(unittest.TestCase):
+    def test_web_scope_follows_product_ownership(self) -> None:
+        project_root = MODULE_PATH.parents[2]
+        web_rule = project_root / ".claude/rules/web-conventions.md"
+        cases = (
+            ("typescript/apps/web/src/app/page.tsx", True),
+            ("typescript/apps/admin-web/src/app/page.tsx", True),
+            ("typescript/apps/e2e/src/accounts.spec.ts", True),
+            ("typescript/packages/ui/src/ApplicationShell.tsx", True),
+            ("typescript/packages/web-core/src/auth-client.ts", True),
+            (".claude/prompts/page-rendering-and-state.md", True),
+            ("typescript/packages/design-reference/src/NonWeb.stories.tsx", False),
+            ("typescript/packages/rpc-client/src/example.ts", False),
+            ("rust/apps/chapchoo/src/main.rs", False),
+        )
+        for target, expected in cases:
+            with self.subTest(target=target):
+                rules = hook._rules_for_targets(project_root, [project_root / target])
+                self.assertEqual(
+                    any(rule.real_path == web_rule for rule in rules), expected
+                )
+
+
 class TargetExtractionTest(unittest.TestCase):
     def test_extracts_typed_file_and_bash_targets(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

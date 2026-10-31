@@ -31,11 +31,15 @@ Current scopes:
 | `global` | Every file in the repo |
 | `python` | `python/**` |
 | `typescript` | `typescript/**` |
+| `web` | General/Admin web apps, shared web packages, and browser verification; see `.claude/rules/web-conventions.md` for current paths |
 | `infra` | `infra/**` |
 | `github-actions` | `.github/workflows/**` |
 | `testenv` | `testenv/**` |
 
 If no scope fits, **stop and ask the user** — adding a scope is a separate change (new entry in `SCOPE_CONFIG`, new index file in `.claude/rules/`, new directory in `.claude/conventions/`). When uncertain between two scopes, prefer the more specific one; when uncertain whether anything fits, prefer `global`.
+
+Use `web` for language-independent rendering, data ownership, and navigation
+contracts; use language scopes for language-specific constructs and tooling.
 
 ## Step 2 — Pick a kebab-case filename
 

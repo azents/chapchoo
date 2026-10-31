@@ -12,7 +12,7 @@ Conventions for TypeScript code under `typescript/`.
 
 | Convention | File |
 | --- | --- |
-| Model UI state as a discriminated-union ADT (`{ type: "LOADING" } \| { type: "ERROR"; message } \| { type: "LOADED"; data }`) — convert query.isLoading/isError/data into this ADT inside the container, then `switch` on `state.type` in the component. | [adt-state-types](../conventions/typescript/adt-state-types.md) |
+| Model genuine multi-state UI with a discriminated-union ADT in the container; resolved SSR renderers require data, not artificial loading states. | [adt-state-types](../conventions/typescript/adt-state-types.md) |
 | A TypeScript app under `typescript/apps/` may depend on `typescript/packages/` workspaces but NEVER on another app — apps are leaves of the dependency graph. | [apps-depend-on-packages-only](../conventions/typescript/apps-depend-on-packages-only.md) |
 | Avoid `as` type assertions — they bypass type checking. Use generic type parameters, type predicates, or proper narrowing instead. | [avoid-type-assertions](../conventions/typescript/avoid-type-assertions.md) |
 | For browser persistence and browser-state hooks available in Mantine, use `@mantine/hooks` (`useLocalStorage`, `useSessionStorage`, `readLocalStorageValue`, `readSessionStorageValue`, `useHash`, `useDocumentVisibility`, `useDocumentTitle`, `useWindowEvent`, `useColorScheme`) instead of hand-written browser API wrappers. | [browser-persistence-hooks](../conventions/typescript/browser-persistence-hooks.md) |

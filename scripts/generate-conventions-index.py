@@ -44,6 +44,7 @@ SCOPE_CONFIG: dict[str, dict[str, str]] = {
     "backend": {"index": "backend-conventions.md"},
     "python": {"index": "python-conventions.md"},
     "typescript": {"index": "typescript-conventions.md"},
+    "web": {"index": "web-conventions.md"},
     "swift": {"index": "swift-conventions.md"},
     "infra": {"index": "infra-conventions.md"},
     "github-actions": {"index": "github-actions-conventions.md"},

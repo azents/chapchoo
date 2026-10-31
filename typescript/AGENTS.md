@@ -3,6 +3,8 @@
 Use the repository-root pnpm workspace, lockfile and Turbo configuration.
 Run installation and workspace commands from the repository root.
 Read `.claude/rules/typescript-conventions.md` and applicable bodies.
+For web applications, shared web packages, and browser verification, also read
+`.claude/rules/web-conventions.md`; web behavior is a separate convention scope.
 
 The current apps are `apps/web` (`@chapchoo/web`) and
 `apps/admin-web` (`@chapchoo/admin-web`). Shared presentation and Node

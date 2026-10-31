@@ -38,6 +38,10 @@ Start with `.claude/rules/conventions.md`. Read the relevant language/path index
 and only the convention bodies that apply. Other language and service rules are
 available for future work, not authorization to implement those services.
 
+For web work, also read `.claude/rules/web-conventions.md`. Web rendering,
+data ownership, and navigation rules are independent of language conventions
+and cover both General and Admin unless explicitly excluded.
+
 Replace a narrowly scoped incorrect unit when its responsibilities, control flow,
 or state model are wrong. Preserve surrounding public contracts unless the task
 changes them. Avoid adding flags or fallback branches to preserve incorrect logic.
