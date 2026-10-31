@@ -9,13 +9,18 @@ import {
   preferenceCookie,
   resolvedCookie,
   createColorSchemeManager,
+  toDocumentColorScheme,
 } from "../dist/color-mode.js";
 
 function browser(dark = false) {
   const attrs = new Map();
   const bodyAttrs = new Map();
+  const metaAttrs = new Map();
   const document = {
     cookie: "",
+    querySelector: () => ({
+      setAttribute: (key, value) => metaAttrs.set(key, value),
+    }),
     documentElement: {
       setAttribute: (key, value) => attrs.set(key, value),
       getAttribute: (key) => attrs.get(key),
@@ -29,6 +34,7 @@ function browser(dark = false) {
     location: { protocol: "https:" },
     attrs,
     bodyAttrs,
+    metaAttrs,
   };
 }
 
@@ -63,6 +69,25 @@ test("appearance cookies are host-only root-scoped, enum-only presentation state
   );
 });
 
+test("early document scheme follows preference instead of a stale System hint", () => {
+  assert.equal(
+    toDocumentColorScheme(resolveServerColorMode("dark", "light")),
+    "dark",
+  );
+  assert.equal(
+    toDocumentColorScheme(resolveServerColorMode("light", "dark")),
+    "light",
+  );
+  assert.equal(
+    toDocumentColorScheme(resolveServerColorMode("system", "dark")),
+    "light dark",
+  );
+  assert.equal(
+    toDocumentColorScheme(resolveServerColorMode("system", "light")),
+    "light dark",
+  );
+});
+
 test("pre-paint bootstrap uses current media, ignores stale hints and safely handles untrusted input", () => {
   for (const dark of [false, true]) {
     for (const preference of [
@@ -87,6 +112,12 @@ test("pre-paint bootstrap uses current media, ignores stale hints and safely han
       assert.equal(env.attrs.get("data-mantine-color-scheme"), expected);
       assert.equal(env.bodyAttrs.get("data-color-mode"), expected);
       assert.equal(env.document.documentElement.style.colorScheme, expected);
+      assert.equal(
+        env.metaAttrs.get("content"),
+        preference === "light" || preference === "dark"
+          ? preference
+          : "light dark",
+      );
       assert.match(
         env.document.cookie,
         /Path=\/; Max-Age=31536000; SameSite=Lax; Secure/,
@@ -109,10 +140,12 @@ test("cookie manager owns preference without consulting localStorage", () => {
     manager.set("light");
     assert.equal(manager.get("dark"), "light");
     assert.equal(env.attrs.get("data-mantine-color-scheme"), "light");
+    assert.equal(env.metaAttrs.get("content"), "light");
     assert.match(env.document.cookie, /chapchoo-color-mode=light/);
     manager.clear();
     assert.equal(manager.get("light"), "auto");
     assert.equal(env.bodyAttrs.get("data-color-mode"), "dark");
+    assert.equal(env.metaAttrs.get("content"), "light dark");
     Object.defineProperty(env.document, "cookie", {
       set() {
         throw new Error("denied");

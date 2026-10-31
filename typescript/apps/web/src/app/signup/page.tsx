@@ -1,5 +1,6 @@
 import { getPublicConfig } from "@/config";
 import { AuthPage } from "@/features/accounts/AuthPage";
+import { loadInitialAuth } from "@/features/accounts/server/loadInitialAuth";
 import type { ReactElement } from "react";
 
 export default async function Signup({
@@ -13,6 +14,7 @@ export default async function Signup({
       basePath={getPublicConfig().publicBasePath}
       mode="SIGNUP"
       token={token}
+      initial={await loadInitialAuth("SIGNUP", token)}
     />
   );
 }

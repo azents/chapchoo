@@ -5,10 +5,15 @@ import { readIdentity } from "@/shared/server/identity";
 import type { ReactElement } from "react";
 
 export default async function Home(): Promise<ReactElement> {
-  if (!(await readIdentity())) {
+  const identity = await readIdentity();
+  if (!identity) {
     redirect(getLoginRedirect());
   }
   return (
-    <WorkspacePage basePath={getPublicConfig().publicBasePath} teamId="" />
+    <WorkspacePage
+      basePath={getPublicConfig().publicBasePath}
+      teamId=""
+      initialIdentity={identity}
+    />
   );
 }

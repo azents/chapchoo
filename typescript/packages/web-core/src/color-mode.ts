@@ -32,6 +32,12 @@ export function toMantineMode(preference: ColorModePreference): MantineMode {
   return preference === "system" ? "auto" : preference;
 }
 
+export function toDocumentColorScheme(
+  snapshot: ColorModeSnapshot,
+): "light" | "dark" | "light dark" {
+  return snapshot.preference === "system" ? "light dark" : snapshot.mode;
+}
+
 export function serializeAppearanceCookie(
   name: typeof preferenceCookie | typeof resolvedCookie,
   value: ColorModePreference,
@@ -71,6 +77,9 @@ export function syncDocumentColorMode(snapshot: ColorModeSnapshot): void {
     preference,
   );
   document.documentElement.style.colorScheme = mode;
+  document
+    .querySelector('meta[name="color-scheme"]')
+    ?.setAttribute("content", toDocumentColorScheme(snapshot));
   document.body?.setAttribute("data-color-mode", mode);
   persist(resolvedCookie, mode);
 }
@@ -104,7 +113,7 @@ export function createColorSchemeManager(initial: ColorModePreference): {
  */
 export function colorModeBootstrap(snapshot: ColorModeSnapshot): string {
   const safe = resolveServerColorMode(snapshot.preference, snapshot.mode);
-  return `(()=>{const p=${JSON.stringify(safe.preference)};const m=p==="system"?(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"):p;const h=document.documentElement;h.setAttribute("data-mantine-color-scheme",m);h.setAttribute("data-color-mode-preference",p);h.style.colorScheme=m;try{document.cookie=${JSON.stringify(`${resolvedCookie}=`)}+m+${JSON.stringify(`; Path=/; Max-Age=${maxAge}; SameSite=Lax`)}+(location.protocol==="https:"?"; Secure":"")}catch{}})();`;
+  return `(()=>{const p=${JSON.stringify(safe.preference)};const m=p==="system"?(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"):p;const h=document.documentElement;h.setAttribute("data-mantine-color-scheme",m);h.setAttribute("data-color-mode-preference",p);h.style.colorScheme=m;document.querySelector('meta[name="color-scheme"]')?.setAttribute("content",p==="system"?"light dark":m);try{document.cookie=${JSON.stringify(`${resolvedCookie}=`)}+m+${JSON.stringify(`; Path=/; Max-Age=${maxAge}; SameSite=Lax`)}+(location.protocol==="https:"?"; Secure":"")}catch{}})();`;
 }
 
 export const bodyColorModeBootstrap =

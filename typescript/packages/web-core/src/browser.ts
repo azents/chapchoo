@@ -24,6 +24,10 @@ export type WireReason = Exclude<
   "UNRECOGNIZED" | "DOMAIN_REASON_UNSPECIFIED"
 >;
 
+/** Safe read-only server bootstrap result; credentials never belong here. */
+export type InitialRead<T> =
+  { type: "LOADED"; data: T } | { type: "ERROR"; reason: WireReason | null };
+
 // Numeric values are checked against the generated enum member types, while
 // emitted browser JavaScript imports no grpc-js module or server configuration.
 export const teamKind: {

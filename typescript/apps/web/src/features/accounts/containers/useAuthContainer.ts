@@ -6,9 +6,13 @@ import { useRef, useState } from "react";
 import { useAppearanceControl } from "@/shared/appearance/useAppearanceControl";
 import { trpc } from "@/shared/rpc/client";
 import { accountError } from "../errors";
+import type { InitialAuth } from "../initialAuth";
 import type { AuthInput, AuthProps, Submission } from "../types";
 
-export function useAuthContainer(input: AuthInput): AuthProps {
+export function useAuthContainer({
+  initial,
+  ...input
+}: AuthInput & { initial: InitialAuth }): AuthProps {
   const copy = useMessages().accounts;
   const appearance = useAppearanceControl();
   const client = useQueryClient();
@@ -22,23 +26,48 @@ export function useAuthContainer(input: AuthInput): AuthProps {
   } | null>(null);
   const [submission, setSubmission] = useState<Submission>({ type: "READY" });
   const busy = useRef(false);
+  const initialError =
+    initial.type !== "NO_PROOF" && initial.result.type === "ERROR"
+      ? initial.result
+      : null;
   const methods = trpc.auth.methods.useQuery(void 0, {
     enabled:
-      input.mode === "LOGIN" || (input.mode === "SIGNUP" && !input.token),
+      initialError === null &&
+      (input.mode === "LOGIN" || (input.mode === "SIGNUP" && !input.token)),
     retry: false,
+    ...(initial.type === "METHODS" && initial.result.type === "LOADED"
+      ? { initialData: initial.result.data, refetchOnMount: false }
+      : {}),
   });
   const signup = trpc.signup.preview.useQuery(
     { proof: input.token },
-    { enabled: input.mode === "SIGNUP" && Boolean(input.token), retry: false },
+    {
+      enabled:
+        initialError === null &&
+        input.mode === "SIGNUP" &&
+        Boolean(input.token),
+      retry: false,
+      ...(input.mode === "SIGNUP" &&
+      initial.type === "PROOF" &&
+      initial.result.type === "LOADED"
+        ? { initialData: initial.result.data, refetchOnMount: false }
+        : {}),
+    },
   );
   const reset = trpc.reset.preview.useQuery(
     { proof: input.token },
     {
       enabled:
+        initialError === null &&
         input.mode === "RESET" &&
         Boolean(input.token) &&
         submission.type !== "DONE",
       retry: false,
+      ...(input.mode === "RESET" &&
+      initial.type === "PROOF" &&
+      initial.result.type === "LOADED"
+        ? { initialData: initial.result.data, refetchOnMount: false }
+        : {}),
     },
   );
   const login = trpc.auth.passwordLogin.useMutation({
@@ -97,7 +126,12 @@ export function useAuthContainer(input: AuthInput): AuthProps {
   });
   const proofQuery = input.mode === "SIGNUP" ? signup : reset;
   let state: AuthProps["state"];
-  if (input.mode !== "LOGIN" && input.token) {
+  if (initialError) {
+    state = {
+      type: "ERROR",
+      message: accountError(initialError.reason, copy),
+    };
+  } else if (input.mode !== "LOGIN" && input.token) {
     state = proofQuery.isPending
       ? { type: "LOADING" }
       : proofQuery.isError
@@ -221,6 +255,10 @@ export function useAuthContainer(input: AuthInput): AuthProps {
       setSubmission({ type: "READY" });
     },
     onRetry: () => {
+      if (initialError) {
+        window.location.reload();
+        return;
+      }
       void utils.auth.methods.invalidate();
       void utils.signup.preview.invalidate();
       void utils.reset.preview.invalidate();

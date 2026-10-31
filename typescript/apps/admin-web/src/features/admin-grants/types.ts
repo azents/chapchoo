@@ -1,5 +1,4 @@
-import type { WireReason } from "@chapchoo/web-core/browser";
+import type { User, WireReason } from "@chapchoo/web-core/browser";
 
 export type InitialAdminIdentity =
-  | { type: "LOADED"; email: string }
-  | { type: "ERROR"; reason: WireReason | null };
+  { type: "LOADED"; user: User } | { type: "ERROR"; reason: WireReason | null };

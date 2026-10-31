@@ -19,7 +19,7 @@ import type {
   TeamAction,
   WorkspaceProps,
 } from "../types";
-import type { Team } from "@chapchoo/web-core/browser";
+import type { Team, User } from "@chapchoo/web-core/browser";
 
 function role(value: Team["callerRole"]): MemberView["role"] {
   return value === teamRole.owner
@@ -32,9 +32,11 @@ function role(value: Team["callerRole"]): MemberView["role"] {
 export function useWorkspaceContainer({
   teamId,
   basePath,
+  initialIdentity,
 }: {
   teamId: string;
   basePath: string;
+  initialIdentity: User;
 }): WorkspaceProps {
   const copy = useMessages().accounts;
   const appearance = useAppearanceControl();
@@ -46,8 +48,12 @@ export function useWorkspaceContainer({
   const [confirmation, setConfirmation] = useState<TeamAction | null>(null);
   const [submission, setSubmission] = useState<Submission>({ type: "READY" });
   const busy = useRef(false);
-  const identity = trpc.auth.identity.useQuery(void 0, { retry: false });
-  const enabled = Boolean(identity.data);
+  const identity = trpc.auth.identity.useQuery(void 0, {
+    retry: false,
+    initialData: initialIdentity,
+    refetchOnMount: false,
+  });
+  const enabled = !identity.isError;
   const contexts = trpc.teams.list.useQuery(void 0, { enabled, retry: false });
   const received = trpc.invitations.received.useQuery(void 0, {
     enabled,
@@ -146,7 +152,6 @@ export function useWorkspaceContainer({
       message: accountError(queryError.data?.reason ?? null, copy),
     };
   } else if (
-    !identity.data ||
     !contexts.data ||
     !received.data ||
     (teamId && !team.data) ||
