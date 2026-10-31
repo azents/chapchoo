@@ -6,7 +6,6 @@ paths:
   - typescript/apps/e2e/**
   - typescript/packages/ui/**
   - typescript/packages/web-core/**
-  - typescript/packages/design-reference/**
   - .claude/prompts/page-rendering-and-state.md
 ---
 
@@ -16,6 +15,7 @@ Web behavior rules apply independently of implementation language, in addition
 to applicable language conventions. The path filters cover the current web
 applications, shared web packages, and their verification surfaces; extend them
 when new web implementation paths are introduced.
+The cross-platform design-reference workspace retains its own fixture-only rules.
 
 Apply to General and Admin unless explicitly excluded. Read the relevant body
 before designing, implementing, or reviewing web rendering and navigation.
