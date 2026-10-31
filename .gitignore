@@ -1,53 +1,37 @@
-### Project ###
+# Repository-wide local environment and tool configuration
 .env
+.env.local
+.env.*.local
+!.env.example
 .chapchoo-dev.env
-**/.env
-**/.env.local
-**/.env.*.local
-!**/.env.example
-.claude/scheduled_tasks.lock
-.claude/worktrees/
-/db-data
-/temporal-db-data
-.turbo/
-.pnpm-store/
-node_modules/
-storybook-static/
-
-### Intellij ###
-.idea/
-
-### macOS ###
-.DS_Store
-.AppleDouble
-.LSOverride
-
-### VisualStudioCode ###
-.vscode/
-*.code-workspace
-!chapchoo.code-workspace
-
-# obsidian
-.vault/
-.obsidian/workspace/
-
 .mcp.json
+
+# Root-owned local configuration and data
 /config.json
 /opencode.json
+/db-data
+/temporal-db-data
+
+# Shared Node workspace dependencies and task caches (root, TypeScript, testenv)
+node_modules/
+.turbo/
+.pnpm-store/
+
+# Python tooling is shared by scripts, images, .codex hooks and .claude skills
 __pycache__/
 *.pyc
 .venv/
 .pytest_cache/
 .ruff_cache/
 .coverage
-*.tsbuildinfo
-.next/
-typescript/apps/*/public/fonts/
-typescript/apps/*/public/design-assets/
-typescript/apps/*/public/favicon.ico
-rust/target/
-testenv/chapchoo/dist/
-.eslintcache
-.prettiercache
-.claude/convention-audit-state.json
-.claude/living-spec-audit-state.json
+
+# Editor and OS metadata throughout the repository
+.idea/
+.DS_Store
+.AppleDouble
+.LSOverride
+.vscode/
+*.code-workspace
+!chapchoo.code-workspace
+.vault/
+.obsidian/workspace/

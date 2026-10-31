@@ -1,2 +1,5 @@
 *.local.*
-worktrees
+/worktrees/
+/scheduled_tasks.lock
+/convention-audit-state.json
+/living-spec-audit-state.json
