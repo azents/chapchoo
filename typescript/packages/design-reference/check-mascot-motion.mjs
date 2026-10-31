@@ -1,0 +1,153 @@
+import assert from "node:assert/strict";
+import { readFileSync, existsSync } from "node:fs";
+import test from "node:test";
+import postcss from "postcss";
+import { mascotArtwork } from "./src/mascot-motion/mascotArtwork.ts";
+import { mascots, mascotIds } from "../ui/src/designTokens.ts";
+import { createMascotPlayback } from "./src/mascot-motion/mascotPlayback.ts";
+
+const css = postcss.parse(
+  readFileSync(
+    new URL(
+      "./src/mascot-motion/AgentMascotMotion.module.css",
+      import.meta.url,
+    ),
+    "utf8",
+  ),
+);
+
+test("all canonical masters have a tight, valid ground-aligned crop in catalog order", () => {
+  assert.deepEqual(Object.keys(mascotArtwork), mascotIds);
+  for (const [key, artwork] of Object.entries(mascotArtwork)) {
+    assert.equal(artwork.file, mascots.find((pet) => pet.key === key)?.file);
+    assert.ok(
+      existsSync(
+        new URL(`../ui/assets/mascots/${artwork.file}`, import.meta.url),
+      ),
+    );
+    const [x, y, width, height] = artwork.viewBox.split(" ").map(Number);
+    assert.equal(width, artwork.width);
+    assert.equal(height, artwork.height);
+    assert.ok(x >= 0 && y >= 0 && x + width <= 1254 && y + height <= 1254);
+  }
+});
+
+test("the gesture has a 5% peak, a small rebound and a fixed 30-degree ground line", () => {
+  const matrices = [];
+  css.walkDecls("transform", (decl) => {
+    const match = /^matrix\(([^)]+)\)$/.exec(decl.value);
+    if (match) {
+      matrices.push(match[1].split(",").map(Number));
+    }
+  });
+  assert.equal(matrices.length, 4);
+  const [identity, peak, undershoot, rebound] = matrices;
+  assert.deepEqual(identity, [1, 0, 0, 1, 0, 0]);
+  assert.equal(peak[3], 1.05);
+  assert.equal(undershoot[3], 0.9925);
+  assert.equal(rebound[3], 1.01);
+  for (const [a, b, c, d, tx, ty] of matrices) {
+    assert.ok(a > 0 && d > 0);
+    assert.equal(b, 0);
+    assert.equal(tx, 0);
+    assert.equal(ty, 0);
+    if (d !== 1) {
+      assert.ok(Math.abs(c / -(d - 1) - Math.tan(Math.PI / 6)) < 0.000001);
+    }
+    for (const x of [-90, 0, 90]) {
+      assert.equal(b * x + d * 0 + ty, 0);
+    }
+  }
+});
+
+test("the 1200ms active clip has six seconds of rest and respects reduced motion", () => {
+  const source = css.toString();
+  assert.match(source, /grounded-stretch 1200ms both/);
+  const reducedRules = [];
+  css.walkAtRules("media", (rule) => {
+    if (rule.params === "(prefers-reduced-motion: reduce)") {
+      rule.walkDecls("animation", (decl) => reducedRules.push(decl.value));
+    }
+  });
+  assert.deepEqual(reducedRules, ["none"]);
+});
+
+function fixture() {
+  const timers = new Set();
+  const transitions = [];
+  const playback = createMascotPlayback({
+    schedule(callback, delayMs) {
+      const timer = { callback, delayMs };
+      timers.add(timer);
+      return () => timers.delete(timer);
+    },
+    onActiveChange(active) {
+      transitions.push(active);
+    },
+  });
+  function fire() {
+    assert.equal(timers.size, 1);
+    const [timer] = timers;
+    timers.delete(timer);
+    timer.callback();
+  }
+  return { playback, timers, transitions, fire };
+}
+
+test("click/touch replay is immediate at rest and ignored throughout a gesture", () => {
+  const { playback, transitions, timers } = fixture();
+  playback.configure({ enabled: true, automatic: false, delayMs: 900 });
+  playback.replay();
+  playback.replay();
+  playback.replay();
+  assert.deepEqual(transitions, [false, true]);
+  assert.equal(timers.size, 0, "no queued replay");
+  playback.finish();
+  assert.deepEqual(transitions, [false, true, false]);
+  assert.equal(timers.size, 0);
+  playback.replay();
+  assert.deepEqual(transitions, [false, true, false, true]);
+});
+
+test("automatic cadence waits six seconds after completion; manual replay replaces pending rest", () => {
+  const { playback, transitions, timers, fire } = fixture();
+  playback.configure({ enabled: true, automatic: true, delayMs: 360 });
+  assert.equal([...timers][0].delayMs, 360);
+  playback.replay();
+  assert.equal(timers.size, 0, "manual input bypasses initial stagger");
+  playback.replay();
+  assert.deepEqual(transitions, [false, true]);
+  playback.finish();
+  assert.equal([...timers][0].delayMs, 6000);
+  playback.replay();
+  assert.equal(
+    timers.size,
+    0,
+    "manual input replaces, rather than duplicates, rest",
+  );
+  playback.finish();
+  fire();
+  assert.deepEqual(transitions, [false, true, false, true, false, true]);
+});
+
+test("visibility/reduced-motion gating cancels active and pending work without catch-up", () => {
+  const { playback, transitions, timers } = fixture();
+  playback.configure({ enabled: true, automatic: true, delayMs: 180 });
+  const [stale] = timers;
+  playback.configure({ enabled: false, automatic: true, delayMs: 180 });
+  playback.replay();
+  stale.callback();
+  assert.deepEqual(transitions, [false, false]);
+  assert.equal(timers.size, 0);
+  playback.configure({ enabled: true, automatic: false, delayMs: 0 });
+  playback.replay();
+  playback.configure({ enabled: false, automatic: false, delayMs: 0 });
+  playback.finish();
+  assert.deepEqual(transitions, [false, false, false, true, false]);
+  assert.equal(timers.size, 0);
+  playback.configure({ enabled: true, automatic: true, delayMs: 180 });
+  playback.dispose();
+  assert.equal(timers.size, 0);
+  playback.replay();
+  assert.equal(transitions.at(-1), false);
+});

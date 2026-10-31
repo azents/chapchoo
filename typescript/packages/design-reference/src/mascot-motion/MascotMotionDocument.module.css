@@ -1,0 +1,33 @@
+.page {
+  min-height: 100dvh;
+  padding: var(--mantine-spacing-xl);
+  background: var(--chapchoo-color-canvas);
+  color: var(--chapchoo-color-ink);
+}
+
+.comparison {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--mantine-spacing-lg);
+}
+
+.family {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: var(--mantine-spacing-lg);
+}
+
+.stage {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  min-height: 11rem;
+  padding-bottom: var(--mantine-spacing-sm);
+  border-bottom: 1px solid var(--chapchoo-color-border);
+}
+
+@media (max-width: 40em) {
+  .comparison {
+    grid-template-columns: 1fr;
+  }
+}

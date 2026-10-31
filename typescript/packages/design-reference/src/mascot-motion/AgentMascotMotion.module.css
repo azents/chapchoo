@@ -1,0 +1,65 @@
+.trigger {
+  display: inline-flex;
+  align-items: flex-end;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+  line-height: 0;
+  border-radius: var(--mantine-radius-sm);
+  touch-action: manipulation;
+}
+
+.trigger:focus-visible {
+  outline: 2px solid var(--chapchoo-color-focus);
+  outline-offset: var(--mantine-spacing-xs);
+}
+
+.trigger:disabled {
+  cursor: default;
+}
+
+.motion {
+  display: inline-block;
+  vertical-align: bottom;
+  line-height: 0;
+  transform-origin: 50% 100%;
+}
+
+.motion[data-playing="true"] {
+  /* Rest scheduling and the input lock are owned by the playback controller. */
+  animation: grounded-stretch 1200ms both;
+}
+
+/*
+ * Extension displacements follow 30deg clockwise from upward vertical:
+ * c = -(d - 1) * tan(30deg). b=0 preserves a level contact line.
+ * Bottom-center anchoring avoids rotating or lifting the character.
+ */
+@keyframes grounded-stretch {
+  0%,
+  100% {
+    transform: matrix(1, 0, 0, 1, 0, 0);
+    animation-timing-function: cubic-bezier(0.42, 0, 0.25, 1);
+  }
+  36%,
+  43% {
+    transform: matrix(0.9775, 0, -0.0288675135, 1.05, 0, 0);
+    animation-timing-function: cubic-bezier(0.42, 0, 0.65, 1);
+  }
+  67% {
+    transform: matrix(1.00375, 0, 0.004330127, 0.9925, 0, 0);
+    animation-timing-function: cubic-bezier(0.2, 0.6, 0.35, 1);
+  }
+  83% {
+    transform: matrix(0.9955, 0, -0.0057735027, 1.01, 0, 0);
+    animation-timing-function: ease-in-out;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .motion[data-playing="true"] {
+    animation: none;
+  }
+}
