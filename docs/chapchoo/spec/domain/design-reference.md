@@ -10,7 +10,7 @@ code_paths:
   - typescript/scripts/design-boundaries.test.mjs
   - package.json
   - .github/workflows/ci.yaml
-last_verified_at: 2026-10-30
+last_verified_at: 2026-10-31
 spec_version: 1
 ---
 
@@ -32,6 +32,19 @@ equivalent design roles. When common UI is web-specific, reference may retain
 a distinct, more general representation and document their relationship.
 Equivalent-role copies are avoided. Non-web representations stay in reference
 after approval and are not executable native implementations.
+
+`Chapchoo/Mascot motion` exposes an actor/accessory comparison and five-character
+family using reference-local React components. `AgentMascotMotion` accepts
+explicit playback, artwork, size and initial stagger inputs; `MascotArtwork`
+provides static artwork of the same normalized bounds. CSS supplies the reviewed
+1200ms grounded gesture with six seconds of rest. Mantine visibility/intersection
+and reduced-motion hooks gate playback; a CSS media query also disables animation
+under reduced motion. Returning from a paused/hidden/offscreen state restarts the
+local cycle instead of replaying missed gestures. Original transparent PNGs stay
+unchanged and SVG view boxes normalize the contact line without new asset copies.
+The stories isolate their theme in a nested document, like the tone references.
+The use criteria and approved motion values live in root `DESIGN.md`.
+Production `Mascot`, authentication panels and application shells are unchanged.
 
 The onboarding/local-outline stories demonstrate ownership boundaries. The
 common-UI reuse story imports the promoted shared-web implementation. The reuse story's nested document loads the Mantine stylesheet
@@ -62,6 +75,8 @@ on port 6008 or `pnpm run build-storybook --filter=@chapchoo/design-reference`.
 Static output is the ignored package-local `storybook-static/`.
 `pnpm --filter @chapchoo/design-reference check:design` verifies that reference
 token adapters match the canonical document and checks intended text-color pairs.
+It also checks mascot asset/crop contracts, the grounded directional transforms,
+small return bounce, active/idle timing and reduced-motion CSS.
 This check is also part of package build/typecheck and is not a full accessibility
 audit.
 

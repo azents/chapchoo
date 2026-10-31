@@ -283,6 +283,24 @@ Apple icons use an opaque unrounded cream canvas; maskable icons have a separate
 safe-zone composition. See the common UI's `assets/icons/README.md` for exports
 and reproducible generation.
 
+Use motion when the character represents **the Agent as the subject of
+interaction**. Use static artwork when the character is an accessory, supporting
+illustration or decoration. Presence of a mascot alone does not opt a screen into
+animation; existing authentication and sidebar placements remain static.
+
+The requester approved the grounded stretch gesture on 2026-10-31: **5% vertical
+extension, 1200ms active motion, extension displacement 30 degrees clockwise from
+upward vertical**, a brief hold and one small damped return bounce. The feet stay
+on a level ground line. The character initiates the gesture rather than jumping
+or appearing externally pulled. The return dips by 0.75% and rebounds by 1%
+before settling; repeated elastic wobbling should not dominate. Reference
+playback rests for six seconds between gestures. Reduced motion, paused playback,
+offscreen artwork and hidden documents show the resting pose.
+
+The reusable React implementation and actor/accessory examples live in the
+independent design reference for now. This approval does not select any existing
+General/Admin page for motion or implement Agent lifecycle behavior.
+
 ### Accessible operation
 
 - Aim for applicable WCAG 2.2 AA: 4.5:1 normal-text contrast, 3:1 qualifying large
@@ -296,7 +314,8 @@ and reproducible generation.
   mandate**. Native points and CSS pixels are distinct; validate actual platforms.
 - Avoid hover-only essentials, drag-only controls without alternatives and
   color-only status. Respect reduced motion. Use short subtle transitions only
-  where they improve feedback; no motion library is approved yet.
+  where they improve feedback; the grounded mascot gesture is approved for its
+  interaction-subject role, without selecting a third-party motion library.
 
 ## Do's and Don'ts
 
