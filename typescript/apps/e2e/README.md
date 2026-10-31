@@ -53,9 +53,9 @@ contracts with `/app` and `/admin` mounts and production web listeners.
    allows the new password, and retains ordinary-user exclusion from Admin while
    General access remains available.
 
-`cookie-order.spec.ts` retains a controlled HTTP server and real isolated browser
-because response arrival order and HttpOnly visibility cannot be proven by a
-cookie-header unit test alone. It does not duplicate a full product journey.
+Web-core owns the focused real-browser logout boundary in
+`test/logout.browser.spec.mjs`. This E2E app owns the three assembled product
+journeys, not browser cookie semantics or dependency component tests.
 
 ## Detail coverage moved to owning components
 

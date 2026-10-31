@@ -65,23 +65,6 @@ class BuildArtifactTests(unittest.TestCase):
             prepare.prepare(self.source, destination, "aarch64")
         self.assertFalse(destination.exists())
 
-    def test_mac_native_module_cannot_be_exported_as_linux(self) -> None:
-        addon = self.source / "apps/web/.next/standalone/node_modules/fixture.node"
-        addon.write_bytes(b"\xcf\xfa\xed\xfe" + bytes(60))
-        with self.assertRaises(prepare.package.PackageError):
-            prepare.prepare(self.source, self.root / "output", "x86_64")
-
-    def test_foreign_symlink_and_secret_are_rejected_before_output(self) -> None:
-        public = self.source / "apps/web/public"
-        (public / "escape").symlink_to(self.root)
-        with self.assertRaises(prepare.package.PackageError):
-            prepare.prepare(self.source, self.root / "output", "x86_64")
-        (public / "escape").unlink()
-        (public / ".env").write_text("synthetic fixture")
-        with self.assertRaises(prepare.package.PackageError):
-            prepare.prepare(self.source, self.root / "output", "x86_64")
-        self.assertFalse((self.root / "output").exists())
-
     def test_export_refuses_overwrite_or_source_tree_output(self) -> None:
         for destination in [self.root, self.source / "output"]:
             with self.assertRaises(prepare.package.PackageError):

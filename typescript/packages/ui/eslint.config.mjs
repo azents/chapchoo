@@ -8,7 +8,11 @@ const root = dirname(fileURLToPath(import.meta.url));
 export default defineConfig([
   tseslint.configs.recommendedTypeChecked,
   {
-    files: ["src/**/*.{ts,tsx,mts}"],
+    files: [
+      "src/**/*.{ts,tsx,mts}",
+      ".storybook/*.{ts,tsx}",
+      "playwright-*.ts",
+    ],
     languageOptions: {
       parserOptions: {
         projectService: true,

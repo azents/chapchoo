@@ -5,8 +5,7 @@ presentation-only components used by general/Admin apps and design-reference.
 Visual principles live only in root [DESIGN.md](../../../DESIGN.md).
 
 Import `@mantine/core/styles.css` in the app layout and wrap presentation in
-`AppMantineProvider`. It forces the selected light design; there is no unreviewed
-dark palette. `FontFaces` loads bundled Pretendard and Geist Mono with the caller's
+`AppMantineProvider`. `FontFaces` loads bundled Pretendard and Geist Mono with the caller's
 runtime mount. Apps keep locale/data/transport ownership.
 
 Pretendard uses the official self-hosted unicode-range subsets, loaded only for
@@ -42,3 +41,12 @@ No RPC, credentials, cookie storage or business routing live here. Reference
 imports these implementations for equivalent roles; fictional compositions and
 iOS typography representation remain reference-local. Colocated static stories
 are included in both apps' own Storybooks and use the same font/provider setup.
+
+## Owned verification
+
+Run `pnpm --filter @chapchoo/ui test` for presentation and canonical adapter checks.
+Build `pnpm run build-storybook --filter=@chapchoo/ui`, then run
+`pnpm --filter @chapchoo/ui test:components`. This package-local fixture Storybook
+has no app, router, localization or backend dependency. It tests the shared
+layout/custom CSS contracts once; app tests own their state and composition,
+not shared component internals or Mantine token resolution.

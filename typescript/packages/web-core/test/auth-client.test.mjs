@@ -3,11 +3,11 @@ import test from "node:test";
 import {
   createAuthenticationClient,
   invalidatesSession,
-} from "@chapchoo/web-core/auth-client";
+} from "../dist/auth-client.js";
 import { TRPCClientError } from "@trpc/client";
 
 const identityKey = [["auth", "identity"], { type: "query" }];
-function failure(path: string, reason: string): TRPCClientError<never> {
+function failure(path, reason) {
   return TRPCClientError.from({
     error: {
       message: "Request failed",
@@ -16,10 +16,8 @@ function failure(path: string, reason: string): TRPCClientError<never> {
     },
   });
 }
-function fixture(
-  authenticated = true,
-): ReturnType<typeof createAuthenticationClient> & { locations: string[] } {
-  const locations: string[] = [];
+function fixture(authenticated = true) {
+  const locations = [];
   return {
     ...createAuthenticationClient(
       identityKey,
@@ -92,7 +90,7 @@ void test("invalid credentials and transport failures retain identity without re
   for (const [path, reason] of [
     ["auth.passwordLogin", "DOMAIN_REASON_INVALID_CREDENTIALS"],
     ["teams.create", "DOMAIN_REASON_PERMISSION_DENIED"],
-  ] as const) {
+  ]) {
     const mutation = cache.getMutationCache().build(cache, {
       mutationFn: () => {
         calls += 1;
@@ -152,8 +150,8 @@ void test("authentication completion drops previous account data and returns to 
 });
 
 void test("logout immediately discards cached identity and submits only one local POST", () => {
-  const locations: string[] = [];
-  const posts: string[] = [];
+  const locations = [];
+  const posts = [];
   const { queryClient: cache, navigation } = createAuthenticationClient(
     identityKey,
     true,
@@ -187,8 +185,8 @@ void test("reset clears user and business caches without navigation or stale SSR
 });
 
 void test("a recovered identity becomes the current lifecycle before subsequent session loss", async () => {
-  for (const app of ["general", "admin"] as const) {
-    const locations: string[] = [];
+  for (const app of ["general", "admin"]) {
+    const locations = [];
     const { queryClient: cache } = createAuthenticationClient(
       identityKey,
       false,
@@ -251,7 +249,7 @@ void test("Admin policy invalidates only its own protected session or lost admin
     ),
     false,
   );
-  const locations: string[] = [];
+  const locations = [];
   const { queryClient: cache } = createAuthenticationClient(
     identityKey,
     true,

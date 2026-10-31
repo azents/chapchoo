@@ -27,6 +27,8 @@ class CiStructureTests(unittest.TestCase):
         self.assertIn("run: pnpm --filter @chapchoo/e2e test:e2e", workflow)
         for command in [
             "pnpm --filter @chapchoo/testenv test",
+            "pnpm --filter @chapchoo/ui test:components",
+            "pnpm --filter @chapchoo/web-core test:browser",
             "pnpm --filter @chapchoo/web test:components",
             "pnpm --filter @chapchoo/admin-web test:components",
         ]:

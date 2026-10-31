@@ -6,7 +6,7 @@ import {
   darkToneColors,
   toneMetrics,
   platformFonts,
-} from "../ui/src/designTokens.ts";
+} from "./src/designTokens.ts";
 
 const document = readFileSync(
   new URL("../../../DESIGN.md", import.meta.url),
@@ -16,7 +16,7 @@ const block = /```yaml\n([\s\S]*?)\n```/.exec(document);
 assert.ok(block, "DESIGN.md canonical token block is present");
 const canonical = JSON.parse(block[1]);
 
-test("reference adapters match the single canonical visual document", () => {
+test("owned web token adapter matches the canonical visual document", () => {
   assert.deepEqual(toneColors, canonical.colors);
   assert.deepEqual(darkToneColors, canonical.darkColors);
   assert.deepEqual(toneMetrics.type, canonical.typeScale);

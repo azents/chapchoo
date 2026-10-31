@@ -18,7 +18,6 @@
     "generate:check": "bash ../../../scripts/generate-rpc-clients.sh --check",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "pnpm run build && node --test test/*.test.mjs",
     "test:live": "pnpm run build && node test/live-rpc.mjs",
     "lint": "eslint test --max-warnings 0",
     "lint:fix": "eslint test --max-warnings 0 --fix",

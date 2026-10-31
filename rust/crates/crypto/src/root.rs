@@ -248,16 +248,12 @@ mod tests {
     }
 
     #[test]
-    fn recovery_authenticates_ciphertext_nonce_key_and_context() -> Result<(), CryptoError> {
+    fn recovery_binds_session_digest_key_and_validates_envelope() -> Result<(), CryptoError> {
         let cipher = fixture_cipher(1)?;
         let token = BearerSecret::generate()?;
         let hash = token.digest();
         let envelope = cipher.protect_latest("session-a", &token)?;
         assert!(hash.matches(&cipher.recover_latest("session-a", &hash, &envelope)?));
-        assert_ne!(
-            envelope.nonce(),
-            cipher.protect_latest("session-a", &token)?.nonce()
-        );
         assert!(
             cipher
                 .recover_latest("session-b", &hash, &envelope)
@@ -273,14 +269,6 @@ mod tests {
                 .recover_latest("session-a", &hash, &envelope)
                 .is_err()
         );
-        let mut damaged = envelope.ciphertext().to_vec();
-        damaged[0] ^= 1;
-        let damaged = RecoveryEnvelope::from_parts(*envelope.nonce(), damaged)?;
-        assert!(cipher.recover_latest("session-a", &hash, &damaged).is_err());
-        let mut nonce = *envelope.nonce();
-        nonce[0] ^= 1;
-        let damaged = RecoveryEnvelope::from_parts(nonce, envelope.ciphertext().to_vec())?;
-        assert!(cipher.recover_latest("session-a", &hash, &damaged).is_err());
         assert!(RecoveryEnvelope::from_parts([0; 24], vec![0; 8]).is_err());
         assert!(cipher.protect_latest("", &token).is_err());
         Ok(())

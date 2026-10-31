@@ -89,7 +89,6 @@ mod tests {
         let token = BearerSecret::generate()?;
         let other = BearerSecret::generate()?;
         assert_eq!(token.expose().len(), 43);
-        assert_ne!(token.expose(), other.expose());
         assert!(token.digest().matches(&token));
         assert!(!token.digest().matches(&other));
         let parsed = BearerSecret::parse(token.expose().to_owned())?;

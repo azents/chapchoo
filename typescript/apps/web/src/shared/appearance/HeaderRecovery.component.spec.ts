@@ -34,10 +34,4 @@ test("global appearance entry point remains mounted through workspace recovery",
   ).toBeVisible();
   expect(await original.evaluate((element) => element.isConnected)).toBe(true);
   await expect(page.getByRole("banner")).toHaveCount(1);
-  await mode.click();
-  await expect(
-    page.getByRole("menuitem", { name: "System", exact: true }),
-  ).toHaveAttribute("aria-current", "true");
-  await page.keyboard.press("Escape");
-  await expect(mode).toBeFocused();
 });

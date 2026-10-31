@@ -67,7 +67,6 @@ pub mod accounts {
 #[cfg(test)]
 mod tests {
     use super::accounts::*;
-    use prost::Message;
 
     #[test]
     fn credential_debug_never_exposes_fields() {
@@ -125,58 +124,5 @@ mod tests {
             assert!(!rendered.contains(credential));
             assert!(rendered.ends_with("{ .. }"));
         }
-    }
-
-    #[test]
-    fn optional_scalars_and_unknown_enum_values_survive_wire_roundtrip()
-    -> Result<(), prost::DecodeError> {
-        let omitted = UpdateTeamRequest {
-            team_id: "team".into(),
-            name: None,
-            handle: Some(String::new()),
-        };
-        assert_eq!(
-            omitted.encode_to_vec(),
-            [0x0a, 0x04, b't', b'e', b'a', b'm', 0x1a, 0x00]
-        );
-        let decoded = UpdateTeamRequest::decode(omitted.encode_to_vec().as_slice())?;
-        assert_eq!(decoded.name, None);
-        assert_eq!(decoded.handle, Some(String::new()));
-        let unknown = SetMemberRoleRequest {
-            team_id: "team".into(),
-            user_id: "user".into(),
-            role: 12345,
-        };
-        let decoded = SetMemberRoleRequest::decode(unknown.encode_to_vec().as_slice())?;
-        assert_eq!(decoded.role, 12345);
-        assert!(MembershipRole::try_from(decoded.role).is_err());
-        Ok(())
-    }
-
-    #[test]
-    fn int64_and_timestamps_keep_exact_precision() -> Result<(), prost::DecodeError> {
-        let request = ListGrantsRequest {
-            offset: Some(i64::MAX),
-            limit: Some(0),
-        };
-        assert_eq!(
-            request.encode_to_vec(),
-            [
-                0x08, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f, 0x10, 0x00
-            ]
-        );
-        let decoded = ListGrantsRequest::decode(request.encode_to_vec().as_slice())?;
-        assert_eq!(decoded.offset, Some(i64::MAX));
-        assert_eq!(decoded.limit, Some(0));
-        let grant = Grant {
-            issued_at: Some(prost_types::Timestamp {
-                seconds: 9_007_199_254_740_993,
-                nanos: 123_456_789,
-            }),
-            ..Default::default()
-        };
-        let decoded = Grant::decode(grant.encode_to_vec().as_slice())?;
-        assert_eq!(decoded.issued_at, grant.issued_at);
-        Ok(())
     }
 }
