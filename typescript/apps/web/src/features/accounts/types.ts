@@ -1,5 +1,5 @@
 import type messages from "../../../messages/en-US.json";
-import type { ColorModeSelectorProps } from "@chapchoo/ui/ColorModeSelector";
+import type { ColorModeMenuProps } from "@chapchoo/ui/ColorModeMenu";
 
 export type Copy = Record<keyof typeof messages.accounts, string>;
 export type LoadState<T> =
@@ -17,7 +17,7 @@ export interface AuthInput {
   token: string;
 }
 export interface AuthProps extends AuthInput {
-  appearance?: ColorModeSelectorProps;
+  appearance?: ColorModeMenuProps;
   copy: Copy;
   state: LoadState<{
     password: boolean;
@@ -76,7 +76,7 @@ export type TeamAction =
   | { type: "LEAVE"; label: string }
   | { type: "DELETE"; label: string };
 export interface WorkspaceProps {
-  appearance?: ColorModeSelectorProps;
+  appearance?: ColorModeMenuProps;
   basePath: string;
   copy: Copy;
   state: LoadState<WorkspaceData>;

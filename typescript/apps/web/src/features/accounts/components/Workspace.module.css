@@ -1,5 +1,23 @@
-.contextRow{border:0;border-bottom:1px solid var(--chapchoo-color-border);border-radius:0;background:transparent;padding:var(--mantine-spacing-lg) 0;}
-.contextRow:first-child{border-top:1px solid var(--chapchoo-color-border);}
-.contextRow a{color:var(--chapchoo-color-ink);}
-.invitation{background:var(--chapchoo-color-surface-raised);border-color:var(--chapchoo-color-border);}
-.memberTable{border:1px solid var(--chapchoo-color-border);border-radius:var(--mantine-radius-md);}
+.contextRow {
+  border: 0;
+  border-bottom: 1px solid var(--chapchoo-color-border);
+  border-radius: 0;
+  background: transparent;
+  padding: var(--mantine-spacing-lg) 0;
+}
+.contextRow:first-child {
+  border-top: 1px solid var(--chapchoo-color-border);
+}
+.contextRow a {
+  color: var(--chapchoo-color-ink);
+}
+.invitation {
+  background: var(--chapchoo-color-surface-raised);
+  border-color: var(--chapchoo-color-border);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.memberTable {
+  border: 1px solid var(--chapchoo-color-border);
+  border-radius: var(--mantine-radius-md);
+}

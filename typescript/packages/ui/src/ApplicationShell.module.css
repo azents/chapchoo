@@ -1,5 +1,6 @@
 .shell {
-  min-height: 100dvh;
+  flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: 16.125rem minmax(0, 1fr);
   background: var(--chapchoo-color-canvas);
@@ -17,8 +18,7 @@
   align-items: center;
   gap: var(--mantine-spacing-sm);
   flex-wrap: wrap;
-  margin: 0 var(--mantine-spacing-sm) var(--mantine-spacing-2xl);
-  letter-spacing: -0.04em;
+  margin: 0 var(--mantine-spacing-sm) var(--mantine-spacing-lg);
 }
 .navigation {
   display: flex;
@@ -36,15 +36,8 @@
 .workspace {
   min-width: 0;
 }
-.header {
-  min-height: 4.75rem;
-  margin: 0 var(--mantine-spacing-2xl);
-  padding: var(--mantine-spacing-md) 0;
-  border-bottom: 1px solid var(--chapchoo-color-border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--mantine-spacing-lg);
+.contextHeader {
+  display: none;
 }
 .identity {
   overflow-wrap: anywhere;
@@ -78,9 +71,6 @@
   .brand {
     margin: 0 0 var(--mantine-spacing-sm);
   }
-  .brand > p {
-    font-size: var(--mantine-font-size-lg);
-  }
   .navigation {
     flex-direction: row;
     flex-wrap: wrap;
@@ -93,9 +83,14 @@
   .companion {
     display: none;
   }
-  .header {
+  .contextHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     min-height: 3.75rem;
     margin: 0 var(--mantine-spacing-lg);
+    padding: var(--mantine-spacing-md) 0;
+    border-bottom: 1px solid var(--chapchoo-color-border);
     gap: var(--mantine-spacing-sm);
     flex-wrap: wrap;
   }

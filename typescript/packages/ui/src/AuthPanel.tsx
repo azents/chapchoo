@@ -1,6 +1,8 @@
 import { Box, Text, Title } from "@mantine/core";
 import { Mascot } from "./Mascot";
+import { AppFrame } from "./AppFrame";
 import classes from "./AuthPanel.module.css";
+import type { ColorModeMenuProps } from "./ColorModeMenu";
 import type { ReactNode } from "react";
 
 export interface AuthPanelProps {
@@ -8,7 +10,7 @@ export interface AuthPanelProps {
   description?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
-  actions?: ReactNode;
+  appearance?: ColorModeMenuProps;
   basePath?: string;
 }
 
@@ -18,28 +20,28 @@ export function AuthPanel({
   description,
   children,
   footer,
-  actions,
+  appearance,
   basePath = "",
 }: AuthPanelProps): ReactNode {
   return (
-    <Box component="main" className={classes.page}>
-      <div className={classes.brand}>chapchoo</div>
-      {actions ? <div className={classes.actions}>{actions}</div> : null}
-      <div className={classes.panel}>
-        <div className={classes.heading}>
-          <Mascot basePath={basePath} size={72} />
-          <Title order={1} size="h2" style={{ overflowWrap: "anywhere" }}>
-            {title}
-          </Title>
-          {description ? (
-            <Text c="dimmed" size="sm">
-              {description}
-            </Text>
-          ) : null}
+    <AppFrame appearance={appearance}>
+      <Box component="main" className={classes.page}>
+        <div className={classes.panel}>
+          <div className={classes.heading}>
+            <Mascot basePath={basePath} size={72} />
+            <Title order={1} size="h2" style={{ overflowWrap: "anywhere" }}>
+              {title}
+            </Title>
+            {description ? (
+              <Text c="dimmed" size="sm">
+                {description}
+              </Text>
+            ) : null}
+          </div>
+          {children}
+          {footer ? <div className={classes.footer}>{footer}</div> : null}
         </div>
-        {children}
-        {footer ? <div className={classes.footer}>{footer}</div> : null}
-      </div>
-    </Box>
+      </Box>
+    </AppFrame>
   );
 }

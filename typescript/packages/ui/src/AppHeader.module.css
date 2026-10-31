@@ -1,0 +1,40 @@
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  min-height: var(--chapchoo-app-header-height);
+  flex-shrink: 0;
+  padding-block: var(--mantine-spacing-md);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mantine-spacing-lg);
+  padding-inline: var(--mantine-spacing-xl);
+  background: var(--chapchoo-color-canvas);
+  border-bottom: 1px solid var(--chapchoo-color-border);
+}
+.brand {
+  flex-shrink: 0;
+  letter-spacing: -0.05em;
+  color: var(--chapchoo-color-ink);
+}
+.tools {
+  min-width: 0;
+}
+.account {
+  min-width: 0;
+}
+.identity {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+@media (max-width: 48em) {
+  .header {
+    padding-block: var(--mantine-spacing-sm);
+    padding-inline: var(--mantine-spacing-lg);
+    gap: var(--mantine-spacing-sm);
+  }
+  .account {
+    display: none;
+  }
+}

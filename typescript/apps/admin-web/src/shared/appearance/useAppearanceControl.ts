@@ -2,9 +2,9 @@
 
 import { useMantineColorScheme } from "@mantine/core";
 import { useTranslations } from "next-intl";
-import type { ColorModeSelectorProps } from "@chapchoo/ui/ColorModeSelector";
+import type { ColorModeMenuProps } from "@chapchoo/ui/ColorModeMenu";
 
-export function useAppearanceControl(): ColorModeSelectorProps {
+export function useAppearanceControl(): ColorModeMenuProps {
   const text = useTranslations("Appearance");
   const { colorScheme, setColorScheme } = useMantineColorScheme();
   return {

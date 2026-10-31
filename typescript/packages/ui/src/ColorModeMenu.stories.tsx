@@ -1,22 +1,23 @@
 import { Stack, TextInput } from "@mantine/core";
 import { useColorScheme } from "@mantine/hooks";
 import { useState } from "react";
-import { ColorModeSelector } from "./ColorModeSelector";
+import { ColorModeMenu } from "./ColorModeMenu";
+import { AppHeader } from "./AppHeader";
 import { AppMantineProvider } from "./provider";
-import type { ColorModeSelectorProps } from "./ColorModeSelector";
+import type { ColorModeMenuProps } from "./ColorModeMenu";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import type { ReactElement } from "react";
 
 const meta = {
   title: "Common UI/Appearance",
-  component: ColorModeSelector,
+  component: ColorModeMenu,
   args: {
     value: "system",
     label: "Appearance",
     labels: { system: "System", light: "Light", dark: "Dark" },
     onChange: (): void => {},
   },
-} satisfies Meta<typeof ColorModeSelector>;
+} satisfies Meta<typeof ColorModeMenu>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const System: Story = {};
@@ -24,18 +25,20 @@ export const Light: Story = { args: { value: "light" } };
 export const Dark: Story = { args: { value: "dark" } };
 
 function InteractiveFixture(): ReactElement {
-  const [value, setValue] = useState<ColorModeSelectorProps["value"]>("system");
+  const [value, setValue] = useState<ColorModeMenuProps["value"]>("system");
   const [draft, setDraft] = useState("");
   const system = useColorScheme("light", { getInitialValueInEffect: false });
   return (
     <AppMantineProvider forceColorScheme={value === "system" ? system : value}>
+      <AppHeader
+        appearance={{
+          value,
+          label: "Appearance",
+          labels: { system: "System", light: "Light", dark: "Dark" },
+          onChange: setValue,
+        }}
+      />
       <Stack p="lg" maw="30rem">
-        <ColorModeSelector
-          value={value}
-          label="Appearance"
-          labels={{ system: "System", light: "Light", dark: "Dark" }}
-          onChange={setValue}
-        />
         <TextInput
           label="Draft"
           value={draft}
