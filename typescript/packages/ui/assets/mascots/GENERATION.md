@@ -10,6 +10,28 @@
 - No reference-image input, seed, sampler settings or model override was supplied through the visible interface. These were separate prompt-based generations, not pixel-preserving image edits.
 - Outputs: PNG, 1254 × 1254 pixels, retained unchanged. A prompt alone does not guarantee the identical output on a future generation.
 
+## 06-retriever.png — recovered original
+
+The requester supplied `retriever-f00e65fbe81e-lossless.zip` on 2026-10-31 KST
+and confirmed this is the original golden dog-blob selected before the five
+breed variations. The archive's `generated-image-f00e65fbe81e.png` was copied
+byte-for-byte, not regenerated, resized or re-encoded.
+
+- Original SHA-256 (independently computed on receipt):
+  `f00e65fbe81ee5004ccb3fe708113630d230a831fe8e7260eb37a43fdf3dc895`
+- Original format/dimensions: RGB PNG, 1254 × 1254; 1,647,500 bytes.
+- The original selection is recorded in the 2026-10-30 conversation. The exact
+  original prompt and per-execution model telemetry were not recovered with the
+  archive. The source-default model statement above is not execution evidence
+  for this recovered file.
+- Transparent derivative: rembg 2.0.86, IS-Net `isnet-general-use`, foreground
+  mask threshold 127, enclosed-hole fill, MinFilter(3), GaussianBlur(0.5).
+  Foreground RGB is retained from the supplied original. The same 216px Lanczos,
+  WebP quality 92 / method 6 treatment supplies production art. Derivative hashes
+  are in `transparent/manifest.json`.
+
+The following sections describe the separate five-variation generation round.
+
 ## 01-bichon.png
 
 SHA-256: `fb1b9341059b7e33dc5a450300e256268ecf128f23ee5f1ab3d9e7647767f46e`

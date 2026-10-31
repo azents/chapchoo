@@ -14,8 +14,8 @@ rendered characters through a runtime-prefixed stylesheet. Font files are not
 globally preloaded. See `assets/fonts/README.md` for provenance and update scope.
 
 `typescript/scripts/stage-web-fonts.mjs` stages common UI fonts/licenses and
-small production illustration derivatives into each app's ignored public directories before dev/build and
-Storybook. Build caches restore both staged directories. Storybook serves these
+small production illustration derivatives and per-character icons into each app's ignored public directories before dev/build and
+Storybook. Build caches restore the staged directories and root favicon. Storybook serves these
 assets at root; actual apps use `basePath` props so root and non-root deployment
 URLs remain correct. The original mascot prompts/model provenance are under
 `assets/mascots/GENERATION.md`; font licensing remains with the files.
@@ -23,10 +23,15 @@ URLs remain correct. The original mascot prompts/model provenance are under
 ## Presentation API
 
 - `AuthPanel`: title, description/footer, app-owned form content and `basePath`.
+  An optional `character` renders the caller's server-selected login identity;
+  the component does not generate randomness or own selection state.
 - `ApplicationShell`: context/title/identity, navigation, actions, content and
   `basePath`. Desktop sidebar and wrapping narrow navigation share the same links.
 - `ContentSection`: semantic section heading/description and grouped content.
-- `Mascot`: decorative identity art using an explicit caller mount path.
+- `Mascot`: decorative identity art using an explicit caller mount path; defaults
+  to the supplied retriever. The typed `character` prop selects any of six characters.
+- `webIdentity`: runtime-prefixed browser metadata and home-screen manifest data,
+  shared by General and Admin. Icon sources/generation are under `assets/icons/`.
 - `Feedback`: controlled loading/error/empty/loaded states and individual feedback.
 - `EmailField` / `PasswordField`: controlled input values and callbacks.
 - `ConfirmationDialog`: app-owned action, labels, pending/error and confirmation.

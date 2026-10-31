@@ -41,18 +41,18 @@ export type ToneExample =
   | "mascots";
 
 function Mascot({
-  index = 1,
+  index = 5,
   size = "small",
 }: {
   index?: number;
   size?: "small" | "large";
 }): ReactElement {
-  const pet = mascots[index] ?? mascots[1];
+  const pet = mascots[index] ?? mascots[5];
   return (
     <img
       className={`cc-mascot cc-mascot-${size}`}
-      src={`./mascots/${pet?.file ?? "02-corgi.png"}`}
-      alt={pet?.name ?? "코기"}
+      src={`./mascots/${pet?.file ?? "transparent/06-retriever.png"}`}
+      alt={pet?.name ?? "리트리버"}
     />
   );
 }

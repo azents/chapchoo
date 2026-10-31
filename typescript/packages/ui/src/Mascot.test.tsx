@@ -3,6 +3,8 @@ import test from "node:test";
 import { MantineProvider } from "@mantine/core";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Mascot } from "./Mascot";
+import { mascotAssets } from "./designTokens";
+import type { MascotId } from "./designTokens";
 
 await test("decorative identity art respects root and nested runtime mounts", () => {
   for (const basePath of ["", "/app", "/another/mount"]) {
@@ -12,9 +14,32 @@ await test("decorative identity art respects root and nested runtime mounts", ()
       </MantineProvider>,
     );
     assert.ok(
-      html.includes(`src="${basePath}/design-assets/02-corgi-216.webp"`),
+      html.includes(`src="${basePath}/design-assets/06-retriever-216.webp"`),
     );
     assert.ok(html.includes('alt=""'));
     assert.ok(html.includes('aria-hidden="true"'));
+  }
+});
+
+await test("every character can be requested without changing the default", () => {
+  const characters: MascotId[] = [
+    "retriever",
+    "bichon",
+    "corgi",
+    "dachshund",
+    "husky",
+    "collie",
+  ];
+  for (const character of characters) {
+    const html = renderToStaticMarkup(
+      <MantineProvider>
+        <Mascot character={character} basePath="/nested/app" />
+      </MantineProvider>,
+    );
+    assert.ok(
+      html.includes(
+        `/nested/app/design-assets/${mascotAssets[character].asset}-216.webp`,
+      ),
+    );
   }
 });

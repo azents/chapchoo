@@ -25,6 +25,7 @@ export function Auth(props: AuthProps): ReactNode {
   return (
     <AuthPanel
       basePath={props.basePath}
+      character={props.character}
       title={title}
       description={c.authDescription}
       appearance={props.appearance}

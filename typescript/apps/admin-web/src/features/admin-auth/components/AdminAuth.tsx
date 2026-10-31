@@ -13,6 +13,7 @@ import {
 } from "@mantine/core";
 import type en from "../../../../messages/en-US.json";
 import type { ColorModeMenuProps } from "@chapchoo/ui/ColorModeMenu";
+import type { MascotId } from "@chapchoo/ui/designTokens";
 import type { ReactElement } from "react";
 
 export type AuthMode = "login" | "setup";
@@ -26,6 +27,7 @@ export interface AdminAuthProps {
   method: AuthMethod;
   state: AuthState;
   basePath: string;
+  character?: MascotId;
   email: string;
   password: string;
   installationProof: string;
@@ -49,6 +51,7 @@ export function AdminAuth(props: AdminAuthProps): ReactElement {
     <AuthPanel
       appearance={props.appearance}
       basePath={props.basePath}
+      character={props.character}
       title={text(setup ? "setupTitle" : "loginTitle")}
       description={text(setup ? "setupDescription" : "loginDescription")}
       footer={

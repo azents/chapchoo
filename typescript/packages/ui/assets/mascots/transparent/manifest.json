@@ -28,5 +28,11 @@
     "original_sha256": "d2fa486f76d4ec2bca4839eefa0716e7cb4ec8b3054371d9746af4e425ec1c17",
     "transparent_sha256": "c4605c2aaa1a491c779c3d769db0fd9287ecc1e9e532d40db900378fdde5fd7e",
     "webp_sha256": "7fb605dcd63d75cd5663da9759072f6fd0bea35b15b81b8b71f49ae2c553f6c9"
+  },
+  {
+    "name": "06-retriever",
+    "original_sha256": "f00e65fbe81ee5004ccb3fe708113630d230a831fe8e7260eb37a43fdf3dc895",
+    "transparent_sha256": "bc6806fd555c8af6b8cbafe9f8affd9feb44b329c3fa029ba98a51db9890e92a",
+    "webp_sha256": "11d89905512bca962aba502dbaa187363b42ca2f0acc24b770060f73ba1d2622"
   }
 ]

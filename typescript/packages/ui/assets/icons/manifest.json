@@ -1,0 +1,92 @@
+[
+  {
+    "character": "01-bichon",
+    "source_sha256": "e80b559f6abc6cda811df1269160541ddfb5dbcb80f7861c255a233473e8681a",
+    "outputs": {
+      "apple-touch-icon.png": "9bfcaf3214ee94c15b2aa841e90ae4e5436a1119de7833de72fa4c27e4cdf55b",
+      "favicon-16.png": "61a1b01e0a7c5c16dadd02268f84afeb95c376c833c079c7dafdb4d9b67e990d",
+      "favicon-32.png": "8bf4e8ba827dbf9e7930f71caf76e927536e9885988ba36f08e6250b6989e255",
+      "favicon-48.png": "064a85fbadeddf72b8f967a98d80878f21371d3e5ef24ab0ea826d27be4265d0",
+      "favicon.ico": "66167345e1df8684bd8b9aa67b4aa27e78fc5abff839e03f90e290534f995674",
+      "icon-1024.png": "72be90bf9133cdc4b0042e17b8944359e8e8111663d8f482b97d79c0e8a2492a",
+      "icon-192.png": "17ff1aa92120dc9e15ac9992cbd95a5082e1af149ba515392eba2e7d15ab9f35",
+      "icon-512.png": "6c4cce0a591e8dabc4be20d5fe81beb44be4546cf0bcb4ac4ee0da0308d7500a",
+      "icon-maskable-512.png": "fcb4f3fb5f1a876b6d488fed89ec8ae50d8720ade584a45007cf73c4c0dee8af"
+    }
+  },
+  {
+    "character": "02-corgi",
+    "source_sha256": "bff4a0481ae9723c36d36df0f005659be23b5976871c66974fbb1e6626e0a955",
+    "outputs": {
+      "apple-touch-icon.png": "b4c82978194af162cf7da9c65533897c8cdb87343eebf8c906256661051cf543",
+      "favicon-16.png": "f031f6cccaa885186857a38dd643e448788f70f0f878a6083feffcc3817a5663",
+      "favicon-32.png": "6768cae8d6a2194c5dbb5f34011b901da5a2d3c5f01d59526c5bb59034b37961",
+      "favicon-48.png": "706f93d16c1a8e4ecd5e7f5eb01305488e38c753367e8d7483e05850fc3f7081",
+      "favicon.ico": "a170b8284d19275caf684e71bfcdc2cd6d2d38f64906f2a1f235130dc5c8e8d6",
+      "icon-1024.png": "2906f364d503b87b5673460b5884c46d371bdffe21f61d75bfb499814fe0d0c5",
+      "icon-192.png": "b0524a1dade75c8595d0e6c11ccc72cde1e7f915da0557d9897c527cc5089588",
+      "icon-512.png": "cc1b4a2644344a17649c144eb3067bfc386b88915e5962efce0509c5de53de1f",
+      "icon-maskable-512.png": "3692330dada8f304feb786c83b115577233a7019fc630511ac371731b190574f"
+    }
+  },
+  {
+    "character": "03-dachshund",
+    "source_sha256": "7cccbb842953018e56b394cf7a503b663bfdb99eb6f58a418bb171cff6aaf18f",
+    "outputs": {
+      "apple-touch-icon.png": "78ce369f8714f1cecfaecddf0e7158ef924cab0151293907a8e4a9f69c368927",
+      "favicon-16.png": "0355e701da4aa0fd5648f1347561f52bced29736c00a287299d57b552ac08d0b",
+      "favicon-32.png": "50f110b19a07fb7e463e16cc0d7bdb157688ae24bf769b56832fa6046b436054",
+      "favicon-48.png": "5983469e3cb8c957081d2292f8d18c83dc05c1680a189ecca1872816e467c3d7",
+      "favicon.ico": "df4600ec0cee082640cf7d11cf61712874c8ca8859fea65957f25bccfce33d69",
+      "icon-1024.png": "6a4c0f3c0682b919f661df4632829a18ea7a649e5fd49f69d2928d0d8ca1934b",
+      "icon-192.png": "beeec4f51b66a393e8a34337516d25495434200ab9b17ea4197f0e1f6cdb0622",
+      "icon-512.png": "946f5aec11ba1d29f33403ba270d42a0e0ecbadda80bf238c05182812fe85dc7",
+      "icon-maskable-512.png": "155b52c6bc398a808be4fa7d0847b218f5be2dc7bd64fbf6a5e256c032e6cdc3"
+    }
+  },
+  {
+    "character": "04-husky",
+    "source_sha256": "4505be0712ee847ab269e477e860d8b054506a8c405c51d7c861bae96256ec9d",
+    "outputs": {
+      "apple-touch-icon.png": "80aff83de7afb26762d16955044681dfb98e6e076b4cf3c8eacb21790cc12599",
+      "favicon-16.png": "65d7a522212b33d63cf65157d4e340294329c42e284189f899fd16402b01d4b7",
+      "favicon-32.png": "defe81a1e680bc59959d453ba20317dcbf2fbb1f2cca2d98da05374b46e64382",
+      "favicon-48.png": "9c89f3f06179f044066240099d67af9df1312a8046a385ee1235b7f04ddc8dfe",
+      "favicon.ico": "ac43d4e72ca5b3c1a1058554b7223a0e8e88e432e3206db62e3a4cc1a4252e06",
+      "icon-1024.png": "e9bf81636c18a6a0737c7bda4c46692e94f050b077faa69a392ed8264b41b769",
+      "icon-192.png": "c0a1c9c925d3f29fcdccdfb45647214b60881e097b895dce5ca05bd613b2b2a0",
+      "icon-512.png": "028adb065d6e1d40f841919f88c9bea2ea873eb51e124aa8c8a530fc72b98ffc",
+      "icon-maskable-512.png": "8ab6e6ddba39eb8fdb5b2b8735718e12b1faceaa8b8bf11453d5d220600d2bf7"
+    }
+  },
+  {
+    "character": "05-border-collie",
+    "source_sha256": "c4605c2aaa1a491c779c3d769db0fd9287ecc1e9e532d40db900378fdde5fd7e",
+    "outputs": {
+      "apple-touch-icon.png": "5dfff3a10a086b4d20eae0d9f6bf0cc88e489fe4cdf286296af52745c7ab4656",
+      "favicon-16.png": "370d48e166ba78a13a293ee7965a95d3bc056bbdff110f0791cec5664fd12950",
+      "favicon-32.png": "bee3f33f388109f582ddfe57f31517557dc6d1e253dd0f08d9e40cbda8ecc023",
+      "favicon-48.png": "d75d32317aab36c3256fffc9c27b0a8bf7ea514e6447466eb2eb3de8e5fe7dca",
+      "favicon.ico": "4f1d6d56a323d109ee1bcd7e161a997608d7c1258941c15fd99fc82afc1903bb",
+      "icon-1024.png": "6c53a8fdd5138deaca904b22e20f7f4ae45d89dcdf497af19c9be856f761ce37",
+      "icon-192.png": "222467b244c76be81482c050511e769e74a159713d37e256f95b3da39e3131f4",
+      "icon-512.png": "23d0e84273f1dce298db03e34d3cbe644efaf69d12b2736644b10ba972169d34",
+      "icon-maskable-512.png": "61dedb69cd4875028ac2cfa3da05b079dd2b488a850ebf2c7860e3c1baea2293"
+    }
+  },
+  {
+    "character": "06-retriever",
+    "source_sha256": "bc6806fd555c8af6b8cbafe9f8affd9feb44b329c3fa029ba98a51db9890e92a",
+    "outputs": {
+      "apple-touch-icon.png": "ce711e8b21483b276a2380bed0633ecc0788658a19d787288ac76d041c5c49f3",
+      "favicon-16.png": "44d42fd167d485d52bb04a471c71ad5ebda3f7f80a042957b01fb199bb47af30",
+      "favicon-32.png": "95e0906f4f229def6cf5e908a4943f4b92ccfdc0f6d151b1df29e52643beffba",
+      "favicon-48.png": "642278d0ccaba5cdd1e027949e0651749c516bf6795940c0e18a1ddc52f99eef",
+      "favicon.ico": "860231049bfacaa8b25ab5b82f44e5c3b29b564821f5c365a803ab7d62227616",
+      "icon-1024.png": "f2ce589df0838f8cf4f85f6c7e1938976142a9853f554e32b1fc0457b51f281e",
+      "icon-192.png": "fc855283b3690c978f070bff2c9437a4aa071e29165e7377587ea8d26d3d28e4",
+      "icon-512.png": "7a210a66d118cc68247097bf7471227deeb73b460699a93523e4a22e9dbe800b",
+      "icon-maskable-512.png": "9b73736297b84d813a48182816b3b353cfdbc9618f46b25b9cb98788ccb3c3e4"
+    }
+  }
+]
