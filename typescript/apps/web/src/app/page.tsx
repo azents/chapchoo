@@ -10,10 +10,6 @@ export default async function Home(): Promise<ReactElement> {
     redirect(getLoginRedirect());
   }
   return (
-    <WorkspacePage
-      basePath={getPublicConfig().publicBasePath}
-      teamId=""
-      initialIdentity={identity}
-    />
+    <WorkspacePage basePath={getPublicConfig().publicBasePath} teamId="" />
   );
 }

@@ -65,7 +65,7 @@ join this header on desktop and remain in a separate context row below navigatio
 on narrow views; only one responsive account-action presentation is visible.
 The shared flex frame accommodates the header's actual height; wrapped or
 enlarged identity text grows the header without clipping or covering the content.
-The common UI is prop-driven, with no extra root-level identity request or state
+The common UI is prop-driven and owns no identity request or authentication
 store. The former page-local native select is replaced, including its exports
 and examples.
 
@@ -161,19 +161,42 @@ mount-time repeat. A server failure renders its safe typed error, with no hidden
 browser retry; a general-auth retry repeats the server read through reload.
 Proofs and session credentials retain their existing authority and disposition.
 
-Protected Server Components validate Identity without renewal or cookie writes.
-They pass the safe User result into the matching browser identity query, which
-does not repeat authentication merely because the page hydrates. Later explicit
-invalidation still refreshes identity. Team/context/inventory business reads
-remain client-owned; this is authentication bootstrap, not full workspace-data SSR.
-A missing
-or invalid session can redirect to login; an authentication infrastructure
-failure remains an error rather than being converted to signed-out identity.
-Admin read-only admission also rejects a currently non-administrator identity.
-An explicit Admin client-error refresh invalidates identity and both grant lists,
-so a transient identity failure can recover instead of leaving its error screen
-pinned. An initial SSR infrastructure error refresh repeats the read-only page
-admission rather than enabling client business queries without that precondition.
+Both roots initialize authentication from validated read-only Identity, shared
+with protected route admission through request-local React caching. Cookie
+presence alone never establishes authentication. Missing/invalid session,
+validated User and infrastructure failure remain distinct. Admin also validates
+current administrator access.
+
+Each app adapts its independent tRPC client to the shared web-core authentication
+Context and query/mutation policy. The Context exposes one identity-query
+projection plus logout, explicit recheck, authentication completion and local
+identity clearing; it does not keep a second mutable User. SSR success seeds that
+query without mount, focus or reconnect rechecks. Explicit recheck can recover an
+initial error and is the only authentication refresh requested by the page-level
+recovery actions. Workspace/inventory containers own their business invalidation,
+not identity queries or session navigation. Header identity can remain visible
+while business data loads or fails.
+
+Both QueryCache and MutationCache handle typed invalid-session errors from their
+app's protected procedures. An identity read returns `null` for invalid/missing
+session while preserving server cookie disposition; a common identity observer
+ends an expected browser session on that result. Admin identity permission loss
+ends only the Admin context. Incorrect credentials/codes, proof rejection,
+ordinary business permission errors and transport failures do not sign out the
+user. No automatic operation replay or refresh timer is introduced.
+
+Session-ending navigation is single-shot, clears identity-bound query/mutation
+data, cancels outstanding queries and uses that app's configured login mount.
+Authentication success clears previous account data and performs a full
+navigation so server admission runs again. Explicit local clearing after
+password reset preserves its terminal result and no longer treats the SSR
+initial User as an expected current session. Logout failures remain visible
+without assuming an uncertain operation succeeded.
+
+Team/context/inventory business reads remain client-owned; this is authentication
+bootstrap, not full workspace-data SSR. An explicit Admin recovery rechecks
+Identity through the common boundary before refreshing inventories, including
+recovery from a safe initial SSR error.
 
 ## Cookie disposition
 

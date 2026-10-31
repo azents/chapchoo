@@ -13,6 +13,7 @@ import { getLocale, getMessages } from "next-intl/server";
 import { cookies } from "next/headers";
 import { getPublicConfig } from "@/config/index";
 import { AppearanceProvider } from "@/shared/appearance/AppearanceProvider";
+import { loadIdentity } from "@/shared/auth/server";
 import { RpcProvider } from "@/shared/rpc/provider";
 import type { Metadata, Viewport } from "next";
 import type { ReactElement, ReactNode } from "react";
@@ -73,7 +74,12 @@ export default async function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: bodyColorModeBootstrap }} />
         <NextIntlClientProvider locale={locale} messages={messages}>
           <AppearanceProvider initial={initial}>
-            <RpcProvider basePath={publicBasePath}>{children}</RpcProvider>
+            <RpcProvider
+              basePath={publicBasePath}
+              initialIdentity={await loadIdentity()}
+            >
+              {children}
+            </RpcProvider>
           </AppearanceProvider>
         </NextIntlClientProvider>
       </body>

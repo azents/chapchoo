@@ -1,6 +1,7 @@
 import "server-only";
 import { attempt } from "@chapchoo/web-core/boundary";
 import { permissionDenied } from "@chapchoo/web-core/errors";
+import { RpcFailure } from "@chapchoo/web-core/errors";
 import { call } from "@chapchoo/web-core/rpc";
 import { challenge, user } from "@chapchoo/web-core/validation";
 import { z } from "zod";
@@ -51,22 +52,32 @@ export const authRouter = router({
       ),
     ),
   identity: procedure.query(({ ctx }) =>
-    attempt(() =>
-      ctx.session.authenticated(async (token) => {
-        const result = user(
-          await call(
-            ctx.backend.auth.identity.bind(ctx.backend.auth),
-            {},
-            token,
-          ),
-        );
-        if (!result.isAdmin) {
-          ctx.session.clear();
-          throw permissionDenied();
+    attempt(async () => {
+      try {
+        return await ctx.session.authenticated(async (token) => {
+          const result = user(
+            await call(
+              ctx.backend.auth.identity.bind(ctx.backend.auth),
+              {},
+              token,
+            ),
+          );
+          if (!result.isAdmin) {
+            ctx.session.clear();
+            throw permissionDenied();
+          }
+          return result;
+        });
+      } catch (error) {
+        if (
+          error instanceof RpcFailure &&
+          error.reason === "DOMAIN_REASON_INVALID_SESSION"
+        ) {
+          return null;
         }
-        return result;
-      }),
-    ),
+        throw error;
+      }
+    }),
   ),
   logout: procedure.mutation(({ ctx }) =>
     attempt(() =>

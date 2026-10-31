@@ -1,25 +1,22 @@
+import { useAuth } from "@chapchoo/web-core/auth-context";
 import { useClipboard } from "@mantine/hooks";
-import { useQueryClient } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { useAppearanceControl } from "@/shared/appearance/useAppearanceControl";
 import { errorKey } from "@/shared/lib/errors";
 import { trpc } from "@/shared/rpc/client";
-import { refreshAdminState } from "../refreshAdminState";
 import type {
   AdminGrantsProps,
   GrantPageKind,
   GrantRow,
   GrantViewState,
 } from "../components/AdminGrants";
-import type { InitialAdminIdentity } from "../types";
 import type { ConfirmationState } from "@chapchoo/ui/ConfirmationDialog";
 import type { Grant, IssuedGrant } from "@chapchoo/web-core/browser";
 
 export interface AdminGrantsInput {
   kind: GrantPageKind;
   basePath: string;
-  initial: InitialAdminIdentity;
 }
 
 function project(grant: Grant, locale: string): GrantRow {
@@ -50,14 +47,13 @@ function project(grant: Grant, locale: string): GrantRow {
 export function useAdminGrantsContainer({
   kind,
   basePath,
-  initial,
 }: AdminGrantsInput): AdminGrantsProps {
   const text = useTranslations("AdminGrants");
   const appearance = useAppearanceControl();
   const authText = useTranslations("AdminAuth");
   const errors = useTranslations("Errors");
   const locale = useLocale();
-  const cache = useQueryClient();
+  const auth = useAuth();
   const utils = trpc.useUtils();
   const clipboard = useClipboard();
   const [email, setEmail] = useState("");
@@ -68,25 +64,17 @@ export function useAdminGrantsContainer({
   const [revokeId, setRevokeId] = useState<string | null>(null);
   const signup = trpc.signupGrants.list.useQuery(
     { offset: offset.toString(), limit: 25 },
-    { enabled: kind === "signup" && initial.type === "LOADED" },
+    { enabled: kind === "signup" && auth.state.type === "AUTHENTICATED" },
   );
   const reset = trpc.resetGrants.list.useQuery(
     { offset: offset.toString(), limit: 25 },
-    { enabled: kind === "reset" && initial.type === "LOADED" },
+    { enabled: kind === "reset" && auth.state.type === "AUTHENTICATED" },
   );
-  const identity = trpc.auth.identity.useQuery(void 0, {
-    enabled: initial.type === "LOADED",
-    ...(initial.type === "LOADED"
-      ? { initialData: initial.user, refetchOnMount: false }
-      : {}),
-  });
-
-  async function refresh(): Promise<void> {
-    if (initial.type === "ERROR") {
-      window.location.reload();
-      return;
-    }
-    await refreshAdminState(utils);
+  async function refreshBusiness(): Promise<void> {
+    await Promise.all([
+      utils.signupGrants.list.invalidate(),
+      utils.resetGrants.list.invalidate(),
+    ]);
   }
 
   function accepted(value: IssuedGrant): void {
@@ -95,11 +83,11 @@ export function useAdminGrantsContainer({
     }
     setIssued({ url: value.url, email: value.grant.email });
     setEmail("");
-    void refresh();
+    void refreshBusiness();
   }
   function revoked(): void {
     setRevokeId(null);
-    void refresh();
+    void refreshBusiness();
   }
   const issueSignup = trpc.signupGrants.issue.useMutation({
     onSuccess: accepted,
@@ -113,29 +101,23 @@ export function useAdminGrantsContainer({
   const revokeReset = trpc.resetGrants.revoke.useMutation({
     onSuccess: revoked,
   });
-  const logout = trpc.auth.logout.useMutation({
-    onSuccess: () => {
-      cache.clear();
-      window.location.replace(`${basePath}/login`);
-    },
-  });
   const pending =
     issueSignup.isPending ||
     issueReset.isPending ||
     revokeSignup.isPending ||
     revokeReset.isPending ||
-    logout.isPending;
-  const issueError = issueSignup.error ?? issueReset.error ?? logout.error;
+    auth.logoutPending;
+  const issueError = issueSignup.error ?? issueReset.error;
   const revokeError = revokeSignup.error ?? revokeReset.error;
   const query = kind === "signup" ? signup : reset;
   let state: GrantViewState;
-  if (initial.type === "ERROR") {
-    state = { type: "ERROR", message: errors(errorKey(initial.reason)) };
-  } else if (identity.isError) {
+  if (auth.state.type === "ERROR") {
     state = {
       type: "ERROR",
-      message: errors(errorKey(identity.error.data?.reason ?? null)),
+      message: errors(errorKey(auth.state.reason)),
     };
+  } else if (auth.state.type === "SIGNED_OUT") {
+    state = { type: "LOADING" };
   } else {
     switch (query.status) {
       case "pending":
@@ -173,7 +155,7 @@ export function useAdminGrantsContainer({
         : { type: "READY" };
 
   function issue(): void {
-    if (pending || initial.type !== "LOADED") {
+    if (pending || auth.state.type !== "AUTHENTICATED") {
       return;
     }
     if (kind === "signup") {
@@ -183,7 +165,7 @@ export function useAdminGrantsContainer({
     }
   }
   function revoke(): void {
-    if (pending || initial.type !== "LOADED" || revokeId === null) {
+    if (pending || auth.state.type !== "AUTHENTICATED" || revokeId === null) {
       return;
     }
     if (kind === "signup") {
@@ -196,18 +178,17 @@ export function useAdminGrantsContainer({
     kind,
     appearance,
     basePath,
-    identityLabel: identity.isSuccess
-      ? identity.data.email
-      : initial.type === "LOADED"
-        ? initial.user.email
-        : null,
+    identityLabel:
+      auth.state.type === "AUTHENTICATED" ? auth.state.user.email : null,
     signInLabel: authText("login"),
     state,
     email,
     pending,
     error: issueError
       ? errors(errorKey(issueError.data?.reason ?? null))
-      : null,
+      : auth.logoutError
+        ? errors(errorKey(auth.logoutError))
+        : null,
     issued,
     copied: clipboard.copied,
     revokeId,
@@ -242,11 +223,16 @@ export function useAdminGrantsContainer({
       setOffset((value) => value + 25n);
     },
     onRefresh: () => {
-      void refresh();
+      void auth
+        .recheck()
+        .then(refreshBusiness)
+        .catch(() => {
+          // The common authentication query owns recheck failure state.
+        });
     },
     onLogout: () => {
       if (!pending) {
-        logout.mutate();
+        auth.logout();
       }
     },
   };

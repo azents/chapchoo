@@ -77,6 +77,7 @@ export type TeamAction =
   | { type: "DELETE"; label: string };
 export interface WorkspaceProps {
   appearance?: ColorModeMenuProps;
+  identityLabel?: string;
   basePath: string;
   copy: Copy;
   state: LoadState<WorkspaceData>;

@@ -167,6 +167,19 @@ export const PermissionChanged: Story = {
   },
 };
 export const Loading: Story = { args: { state: { type: "LOADING" } } };
+export const AuthenticatedLoading: Story = {
+  args: { state: { type: "LOADING" }, identityLabel: "owner@example.com" },
+};
+export const LogoutFailedWhileLoading: Story = {
+  args: {
+    state: { type: "LOADING" },
+    identityLabel: "owner@example.com",
+    submission: {
+      type: "ERROR",
+      message: "Logout could not be confirmed. Try again.",
+    },
+  },
+};
 export const Error: Story = {
   args: { state: { type: "ERROR", message: messages.accounts.genericError } },
 };

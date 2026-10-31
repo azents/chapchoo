@@ -498,6 +498,16 @@ test.describe("Assembled account and team acceptance", () => {
     await expect(
       member.getByText(assembly.second.email, { exact: true }),
     ).toBeVisible();
+    await second.goto(`${assembly.generalUrl}/login`);
+    await second
+      .getByRole("textbox", { name: "Email address", exact: true })
+      .fill(assembly.second.email);
+    await second.getByLabel(/^Password\s*\*?$/).fill("incorrect-password");
+    await second.getByRole("button", { name: "Log in", exact: true }).click();
+    await expect(second.getByRole("main").getByRole("alert")).toBeVisible();
+    await expect(
+      second.getByRole("textbox", { name: "Email address", exact: true }),
+    ).toHaveValue(assembly.second.email);
     await login(second, assembly.generalUrl, assembly.second);
     await second.getByRole("button", { name: "Accept", exact: true }).click();
     const teamLink = second
@@ -630,6 +640,20 @@ test.describe("Assembled account and team acceptance", () => {
     await second.goto(`${assembly.generalUrl}/`);
     await expect(
       second.getByRole("heading", { name: "Your spaces", exact: true }),
+    ).toBeVisible();
+    await second.getByRole("button", { name: "Log out", exact: true }).click();
+    await expect(second).toHaveURL(`${assembly.generalUrl}/login`);
+    await administrator.goto(`${assembly.adminUrl}/`);
+    await expect(
+      administrator.getByRole("heading", { name: "Signup links", exact: true }),
+    ).toBeVisible();
+    await administrator
+      .getByRole("button", { name: "Sign out", exact: true })
+      .click();
+    await expect(administrator).toHaveURL(`${assembly.adminUrl}/login`);
+    await member.goto(`${assembly.generalUrl}/`);
+    await expect(
+      member.getByRole("heading", { name: "Your spaces", exact: true }),
     ).toBeVisible();
   });
 });

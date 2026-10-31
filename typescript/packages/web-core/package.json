@@ -4,6 +4,14 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./auth-client": {
+      "types": "./dist/auth-client.d.ts",
+      "default": "./dist/auth-client.js"
+    },
+    "./auth-context": {
+      "types": "./dist/auth-context.d.ts",
+      "default": "./dist/auth-context.js"
+    },
     "./initial-read": {
       "types": "./dist/initial-read.d.ts",
       "default": "./dist/initial-read.js"
@@ -57,10 +65,14 @@
   "dependencies": {
     "@chapchoo/rpc-client": "workspace:*",
     "@grpc/grpc-js": "1.14.6",
-    "@trpc/server": "11.19.0"
+    "@tanstack/react-query": "^5.105.0",
+    "@trpc/client": "11.19.0",
+    "@trpc/server": "11.19.0",
+    "react": "^19.3.1"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
+    "@types/react": "^19.3.0",
     "eslint": "^10.8.1",
     "typescript": "^6.0.3"
   }
