@@ -1,5 +1,60 @@
 import { expect, test } from "@playwright/test";
 
+test("team table cells have shared insets without shifting the outer content grid", async ({
+  page,
+}) => {
+  for (const width of [1280, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const mode of ["light", "dark"]) {
+      await page.goto(
+        `/iframe.html?id=accounts-workspace--owner&viewMode=story&globals=colorScheme:${mode}`,
+      );
+      const table = page.getByRole("table");
+      await expect(table).toBeVisible();
+      for (const cell of await table.locator("th,td").all()) {
+        await expect(cell).toHaveCSS("padding-left", "16px");
+        await expect(cell).toHaveCSS("padding-right", "16px");
+      }
+      const tableBox = await table.boundingBox();
+      const headingBox = await page
+        .getByRole("heading", { level: 1 })
+        .boundingBox();
+      expect(
+        Math.abs((tableBox?.x ?? 0) - (headingBox?.x ?? 0)),
+      ).toBeLessThanOrEqual(1);
+      expect(
+        await page.evaluate(
+          () =>
+            document.documentElement.scrollWidth <=
+            document.documentElement.clientWidth,
+        ),
+      ).toBe(true);
+    }
+  }
+});
+
+test("table density overrides and cell insets scale with enlarged text", async ({
+  page,
+}) => {
+  for (const [story, spacing] of [
+    ["default", 16],
+    ["compact", 8],
+  ] as const) {
+    await page.goto(`/iframe.html?id=shared-ui-table--${story}&viewMode=story`);
+    const cells = page.getByRole("table").locator("th,td");
+    await expect(cells).toHaveCount(6);
+    for (const scale of [1, 2]) {
+      await page.evaluate((value) => {
+        document.documentElement.style.fontSize = `${value * 100}%`;
+      }, scale);
+      for (const cell of await cells.all()) {
+        await expect(cell).toHaveCSS("padding-left", `${spacing * scale}px`);
+        await expect(cell).toHaveCSS("padding-right", `${spacing * scale}px`);
+      }
+    }
+  }
+});
+
 for (const width of [1280, 390]) {
   test(`shared form sizes align at ${width}px and preserve enlarged text`, async ({
     page,

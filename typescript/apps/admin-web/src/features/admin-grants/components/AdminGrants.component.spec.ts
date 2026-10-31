@@ -1,5 +1,38 @@
 import { expect, test } from "@playwright/test";
 
+test("Admin table cell insets preserve the section edge and bounded narrow scrolling", async ({
+  page,
+}) => {
+  for (const width of [1280, 390, 320]) {
+    await page.setViewportSize({ width, height: 850 });
+    for (const mode of ["light", "dark"]) {
+      await page.goto(
+        `/iframe.html?id=admin-grant-inventory--inventory&viewMode=story&globals=colorScheme:${mode}`,
+      );
+      const table = page.getByRole("table");
+      await expect(table).toBeVisible();
+      for (const cell of await table.locator("th,td").all()) {
+        await expect(cell).toHaveCSS("padding-left", "16px");
+        await expect(cell).toHaveCSS("padding-right", "16px");
+      }
+      const tableBox = await table.boundingBox();
+      const headingBox = await page
+        .getByRole("heading", { level: 1 })
+        .boundingBox();
+      expect(
+        Math.abs((tableBox?.x ?? 0) - (headingBox?.x ?? 0)),
+      ).toBeLessThanOrEqual(1);
+      expect(
+        await page.evaluate(
+          () =>
+            document.documentElement.scrollWidth <=
+            document.documentElement.clientWidth,
+        ),
+      ).toBe(true);
+    }
+  }
+});
+
 test("Admin inline issuance fields and actions share the common frame height", async ({
   page,
 }) => {

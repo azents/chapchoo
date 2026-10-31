@@ -277,6 +277,7 @@ export const theme = createTheme({
       classNames: { item: classes.menuItem, dropdown: classes.menuDropdown },
     }),
     Table: Table.extend({
+      defaultProps: { horizontalSpacing: "lg" },
       classNames: { th: classes.tableHeading, td: classes.tableCell },
     }),
     Tabs: Tabs.extend({ classNames: { tab: classes.tab } }),

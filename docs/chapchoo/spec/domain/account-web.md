@@ -46,6 +46,10 @@ lg 56px and xl 64px; narrow screens retain a 44px minimum. Textareas and
 multi-value fields can grow rather than clipping content. Workspace contexts
 use the shared transparent Paper row variant, aligning their text with adjacent
 sections without an edge-flush filled background.
+Shared tables default to the `lg` (16px) horizontal cell spacing token for both
+headers and body cells, including the outer columns. Explicit table spacing
+props still override this default. The table's outer edge remains aligned with
+the section; narrow views retain the existing bounded horizontal scrolling.
 
 Desktop workspace sidebar and content regions scroll independently within the
 viewport below the variable-height global header. The sidebar footer stays
