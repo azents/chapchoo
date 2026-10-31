@@ -10,7 +10,7 @@ use std::{error::Error, fs::OpenOptions, path::Path};
 
 pub const SQLITE_MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/sqlite");
 pub const POSTGRES_MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/postgres");
-const VERSION: &str = "00000000000001";
+const VERSIONS: [&str; 2] = ["00000000000001", "00000000000002"];
 const PG_LOCK: i64 = 1_960_261_029;
 const PRODUCT_ROWS: &str = "SELECT
     (SELECT count(*) FROM users) +
@@ -38,6 +38,8 @@ pub enum PreparationError {
     Unprepared,
     #[error("Installation key binding is missing or malformed")]
     MissingBinding,
+    #[error("Preparation environment has no valid IANA time zone")]
+    InvalidEnvironment,
 }
 
 impl From<diesel::result::Error> for PreparationError {
@@ -85,7 +87,11 @@ fn verify_key(rows: Vec<KeyRow>, cipher: &CredentialCipher) -> Result<(), Prepar
 }
 
 fn verify_versions(versions: Vec<MigrationVersion>) -> Result<(), PreparationError> {
-    if versions.len() == 1 && versions[0].version == VERSION {
+    if versions
+        .iter()
+        .map(|value| value.version.as_str())
+        .eq(VERSIONS)
+    {
         Ok(())
     } else {
         Err(PreparationError::Unprepared)
@@ -111,7 +117,60 @@ fn sqlite_binding(
     )
 }
 
-/// Synchronous preparation owns the database file lock across migration commits.
+macro_rules! initialize_display {
+    ($connection:expr, $postgres:expr, $environment:expr) => {{
+        let initialized = diesel::sql_query("SELECT count(*) AS n FROM display_defaults")
+            .get_result::<Count>($connection)?.n;
+        let pending = diesel::sql_query("SELECT count(*) AS n FROM users WHERE language='' OR time_zone='' OR region=''")
+            .get_result::<Count>($connection)?.n;
+        if initialized == 0 || pending != 0 {
+            let environment = $environment.as_ref()
+                .map_err(|_| PreparationError::InvalidEnvironment)?;
+            if initialized == 0 {
+                diesel::sql_query(if $postgres {
+                    "INSERT INTO display_defaults(singleton,language,time_zone,region) VALUES(1,$1,$2,$3)"
+                } else {
+                    "INSERT INTO display_defaults(singleton,language,time_zone,region) VALUES(1,?,?,?)"
+                }).bind::<Text,_>(environment.language()).bind::<Text,_>(environment.time_zone())
+                    .bind::<Text,_>(environment.region()).execute($connection)?;
+            }
+            diesel::sql_query(if $postgres {
+                "UPDATE users SET language=CASE WHEN language='' THEN (SELECT language FROM display_defaults WHERE singleton=1) ELSE language END,
+                 time_zone=CASE WHEN time_zone='' THEN $1 ELSE time_zone END,
+                 region=CASE WHEN region='' THEN (SELECT region FROM display_defaults WHERE singleton=1) ELSE region END
+                 WHERE language='' OR time_zone='' OR region=''"
+            } else {
+                "UPDATE users SET language=CASE WHEN language='' THEN (SELECT language FROM display_defaults WHERE singleton=1) ELSE language END,
+                 time_zone=CASE WHEN time_zone='' THEN ? ELSE time_zone END,
+                 region=CASE WHEN region='' THEN (SELECT region FROM display_defaults WHERE singleton=1) ELSE region END
+                 WHERE language='' OR time_zone='' OR region=''"
+            }).bind::<Text,_>(environment.time_zone()).execute($connection)?;
+        }
+    }};
+}
+
+macro_rules! verify_display {
+    ($connection:expr) => {{
+        let rows = diesel::sql_query(
+            "SELECT language,time_zone,region FROM display_defaults WHERE singleton=1",
+        )
+        .load::<crate::display::DisplayRow>($connection)?;
+        let [row] = rows.as_slice() else {
+            return Err(PreparationError::Unprepared);
+        };
+        row.value().map_err(|_| PreparationError::Unprepared)?;
+        if diesel::sql_query(
+            "SELECT count(*) AS n FROM users WHERE language='' OR time_zone='' OR region=''",
+        )
+        .get_result::<Count>($connection)?
+        .n != 0
+        {
+            return Err(PreparationError::Unprepared);
+        }
+    }};
+}
+
+/// Synchronous preparation serializes migration, backfill and binding atomically.
 pub fn prepare_sqlite(path: &Path, cipher: &CredentialCipher) -> Result<(), PreparationError> {
     let file = OpenOptions::new()
         .read(true)
@@ -145,11 +204,12 @@ pub fn prepare_sqlite(path: &Path, cipher: &CredentialCipher) -> Result<(), Prep
     {
         return Err(PreparationError::MissingBinding);
     }
-    connection
-        .run_pending_migrations(SQLITE_MIGRATIONS)
-        .map_err(PreparationError::Migration)?;
-    if !already_bound {
-        connection.immediate_transaction::<_, PreparationError, _>(|connection| {
+    let environment = chapchoo_domain::DisplaySettings::from_environment();
+    connection.immediate_transaction::<_, PreparationError, _>(|connection| {
+        connection
+            .run_pending_migrations(SQLITE_MIGRATIONS)
+            .map_err(PreparationError::Migration)?;
+        if !already_bound {
             if diesel::sql_query(PRODUCT_ROWS)
                 .get_result::<Count>(connection)?
                 .n
@@ -163,10 +223,12 @@ pub fn prepare_sqlite(path: &Path, cipher: &CredentialCipher) -> Result<(), Prep
             )
             .bind::<Binary, _>(check.as_bytes().as_slice())
             .execute(connection)?;
-            Ok(())
-        })?;
-    }
-    sqlite_binding(&mut connection, cipher)?;
+        }
+        initialize_display!(connection, false, environment);
+        verify_display!(connection);
+        sqlite_binding(connection, cipher)?;
+        Ok(())
+    })?;
     drop(connection);
     // Dropping the owned file also releases this advisory lock on every error path.
     drop(file);
@@ -193,7 +255,9 @@ pub fn sqlite_ready(path: &Path, cipher: &CredentialCipher) -> Result<(), Prepar
     verify_versions(
         diesel::sql_query("SELECT version FROM __diesel_schema_migrations ORDER BY version")
             .load(&mut connection)?,
-    )
+    )?;
+    verify_display!(&mut connection);
+    Ok(())
 }
 
 type Pg = AsyncConnectionWrapper<AsyncPgConnection>;
@@ -241,11 +305,12 @@ pub fn prepare_postgres(url: &str, cipher: &CredentialCipher) -> Result<(), Prep
     {
         return Err(PreparationError::MissingBinding);
     }
-    connection
-        .run_pending_migrations(POSTGRES_MIGRATIONS)
-        .map_err(PreparationError::Migration)?;
-    if !already_bound {
-        connection.transaction::<_, PreparationError, _>(|connection| {
+    let environment = chapchoo_domain::DisplaySettings::from_environment();
+    connection.transaction::<_, PreparationError, _>(|connection| {
+        connection
+            .run_pending_migrations(POSTGRES_MIGRATIONS)
+            .map_err(PreparationError::Migration)?;
+        if !already_bound {
             if diesel::sql_query(PRODUCT_ROWS)
                 .get_result::<Count>(connection)?
                 .n
@@ -259,10 +324,12 @@ pub fn prepare_postgres(url: &str, cipher: &CredentialCipher) -> Result<(), Prep
             )
             .bind::<Binary, _>(check.as_bytes().as_slice())
             .execute(connection)?;
-            Ok(())
-        })?;
-    }
-    pg_binding(&mut connection, cipher)?;
+        }
+        initialize_display!(connection, true, environment);
+        verify_display!(connection);
+        pg_binding(connection, cipher)?;
+        Ok(())
+    })?;
     diesel::sql_query("SELECT pg_advisory_unlock($1) AS held")
         .bind::<BigInt, _>(PG_LOCK)
         .get_result::<Locked>(&mut connection)?;
@@ -281,6 +348,7 @@ pub fn postgres_ready(url: &str, cipher: &CredentialCipher) -> Result<(), Prepar
         diesel::sql_query("SELECT version FROM __diesel_schema_migrations ORDER BY version")
             .load(&mut connection)?,
     )?;
+    verify_display!(&mut connection);
     connection.batch_execute("COMMIT")?;
     Ok(())
 }

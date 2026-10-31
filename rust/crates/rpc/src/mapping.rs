@@ -25,7 +25,16 @@ pub(crate) fn user(value: UserSummary) -> Result<wire::User, Status> {
         email: value.email.delivery().to_owned(),
         is_admin: value.is_admin,
         created_at: Some(timestamp(value.created_at)?),
+        display: Some(display(value.display)),
     })
+}
+
+pub(crate) fn display(value: chapchoo_domain::DisplaySettings) -> wire::DisplaySettings {
+    wire::DisplaySettings {
+        language: value.language().to_owned(),
+        time_zone: value.time_zone().to_owned(),
+        region: value.region().to_owned(),
+    }
 }
 
 pub(crate) fn session(value: SessionResult) -> Result<wire::AuthSession, Status> {

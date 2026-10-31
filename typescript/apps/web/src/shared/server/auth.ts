@@ -1,14 +1,31 @@
 import "server-only";
 import { attempt } from "@chapchoo/web-core/boundary";
+import { displayPatchPayload } from "@chapchoo/web-core/display";
 import { RpcFailure } from "@chapchoo/web-core/errors";
 import { call } from "@chapchoo/web-core/rpc";
 import { challenge, user } from "@chapchoo/web-core/validation";
 import { z } from "zod";
+import { displayPatch } from "@/shared/server/displayInput";
 import { procedure, router } from "@/shared/server/trpc";
 
 const email = z.string().min(1).max(320);
 const password = z.string().min(1).max(64);
 export const authRouter = router({
+  updateDisplay: procedure
+    .input(displayPatch)
+    .mutation(({ ctx, input }) =>
+      attempt(() =>
+        ctx.session.authenticated(async (token) =>
+          user(
+            await call(
+              ctx.backend.auth.updateDisplay.bind(ctx.backend.auth),
+              displayPatchPayload(input),
+              token,
+            ),
+          ),
+        ),
+      ),
+    ),
   methods: procedure.query(({ ctx }) =>
     attempt(() => call(ctx.backend.auth.methods.bind(ctx.backend.auth), {})),
   ),

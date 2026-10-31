@@ -52,6 +52,7 @@ export const Authenticated: Story = {
         email: "admin@example.com",
         isAdmin: true,
         createdAt: { seconds: 0n, nanos: 0 },
+        display: { language: "en", timeZone: "UTC", region: "en-US" },
       },
     },
   },

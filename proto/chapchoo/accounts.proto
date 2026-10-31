@@ -14,6 +14,8 @@ service Auth {
   rpc VerifyCode(VerifyCodeRequest) returns (AuthSession);
   rpc Renew(RenewRequest) returns (AuthSession);
   rpc Identity(google.protobuf.Empty) returns (User);
+  rpc DisplayDefaults(google.protobuf.Empty) returns (DisplaySettings);
+  rpc UpdateDisplay(DisplayPatch) returns (User);
   rpc Logout(google.protobuf.Empty) returns (google.protobuf.Empty);
 }
 
@@ -41,6 +43,7 @@ service General {
 
 service Admin {
   rpc SetupStatus(google.protobuf.Empty) returns (SetupStatusResult);
+  rpc UpdateDisplayDefaults(DisplayPatch) returns (DisplaySettings);
   rpc Initialize(InitializeRequest) returns (AuthSession);
   rpc IssueSignupGrant(IssueGrantRequest) returns (IssuedGrant);
   rpc ListSignupGrants(ListGrantsRequest) returns (Grants);
@@ -118,6 +121,19 @@ message User {
   string email = 2;
   bool is_admin = 3;
   google.protobuf.Timestamp created_at = 4;
+  DisplaySettings display = 5;
+}
+
+message DisplaySettings {
+  string language = 1;
+  string time_zone = 2;
+  string region = 3;
+}
+
+message DisplayPatch {
+  optional string language = 1;
+  optional string time_zone = 2;
+  optional string region = 3;
 }
 
 message LoginMethods {
@@ -149,10 +165,10 @@ message ProofPreview {
   optional string email_hint = 2;
   google.protobuf.Timestamp expires_at = 3;
 }
-message RedeemSignupRequest { string proof = 1; string email = 2; string password = 3; }
+message RedeemSignupRequest { string proof = 1; string email = 2; string password = 3; DisplayPatch display = 4; }
 message RedeemPasswordResetRequest { string proof = 1; string password = 2; }
 message SetupStatusResult { bool available = 1; }
-message InitializeRequest { string installation_proof = 1; string email = 2; string password = 3; }
+message InitializeRequest { string installation_proof = 1; string email = 2; string password = 3; DisplayPatch display = 4; }
 
 message Team {
   string id = 1;

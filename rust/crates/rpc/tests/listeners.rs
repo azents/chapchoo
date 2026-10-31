@@ -55,6 +55,7 @@ async fn exercise(
             installation_proof: proof.expose().to_owned(),
             email: "Owner@Example.Invalid".into(),
             password: "Aa1!owner".into(),
+            display: None,
         })
         .await?
         .into_inner();
@@ -132,6 +133,7 @@ async fn exercise(
             proof: grant.proof.clone(),
             email: "MEMBER@example.invalid".into(),
             password: "Aa1!member".into(),
+            display: None,
         })
         .await?
         .into_inner();

@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@chapchoo/web-core/auth-context";
+import { useDisplay } from "@chapchoo/web-core/display-context";
 import { useMessages } from "next-intl";
 import { useRef, useState } from "react";
 import { useAppearanceControl } from "@/shared/appearance/useAppearanceControl";
@@ -16,6 +17,7 @@ export function useAuthContainer({
   const copy = useMessages().accounts;
   const appearance = useAppearanceControl();
   const auth = useAuth();
+  const display = useDisplay();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
@@ -106,7 +108,12 @@ export function useAuthContainer({
         }
         authenticated();
       } else if (input.mode === "SIGNUP" && input.token) {
-        await redeemSignup.mutateAsync({ proof: input.token, email, password });
+        await redeemSignup.mutateAsync({
+          proof: input.token,
+          email,
+          password,
+          display: display.creationDisplay(),
+        });
         authenticated();
       } else if (input.mode === "SIGNUP") {
         await requestSignup.mutateAsync({ email });

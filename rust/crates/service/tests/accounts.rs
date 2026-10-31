@@ -96,6 +96,7 @@ fn manual_onboarding_reset_and_team_flow_without_mail() -> Result<(), TestError>
                 admin_email.clone(),
                 Password::parse("Aa1!admin".to_owned())?,
                 AcceptanceTime::Fixed(NOW),
+                None,
             )
             .await?;
         assert!(admin.user.is_admin);
@@ -136,6 +137,7 @@ fn manual_onboarding_reset_and_team_flow_without_mail() -> Result<(), TestError>
                 member_email.clone(),
                 Password::parse("Aa1!member".to_owned())?,
                 AcceptanceTime::Fixed(NOW),
+                None,
             )
             .await?;
         assert!(!member.user.is_admin);
@@ -265,6 +267,7 @@ fn delivery_failure_keeps_committed_invitation_and_signup_grant() -> Result<(), 
                 EmailAddress::parse("admin@example.invalid")?,
                 Password::parse("Aa1!admin".to_owned())?,
                 AcceptanceTime::Fixed(NOW),
+                None,
             )
             .await?;
         let team = app
@@ -337,6 +340,7 @@ fn code_delivery_and_unregistered_verification_do_not_bypass_signup() -> Result<
             email.clone(),
             Password::parse("Aa1!admin".to_owned())?,
             AcceptanceTime::Fixed(NOW),
+            None,
         )
         .await?;
         let challenge = app.send_code(&email, NOW).await?;

@@ -14,10 +14,12 @@
 //! use tonic::Request;
 //! ```
 
+mod display;
 mod email;
 mod password;
 mod role;
 
+pub use display::{DisplayPatch, DisplaySettings, InvalidDisplaySettings};
 pub use email::{EmailAddress, InvalidEmail};
 pub use password::{Password, PasswordPolicyError};
 pub use role::{MembershipRole, TeamKind, TeamRole};

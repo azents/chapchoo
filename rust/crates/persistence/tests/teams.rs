@@ -41,7 +41,7 @@ fn seed_sql(
             }
         };
         sql.push_str(&format!(
-            "INSERT INTO users VALUES('{user}','user{index}@example.invalid','User{index}@Example.Invalid','synthetic',{},0);
+            "INSERT INTO users(id,email_key,delivery_email,password_hash,is_admin,created_at,language,time_zone,region) VALUES('{user}','user{index}@example.invalid','User{index}@Example.Invalid','synthetic',{},0,'en','UTC','en-US');
              INSERT INTO teams VALUES('{personal}','PERSONAL','Personal','{personal}','{user}',0);
              INSERT INTO memberships VALUES('{personal}','{user}','MEMBER');
              INSERT INTO personal_contexts VALUES('{user}','{personal}');

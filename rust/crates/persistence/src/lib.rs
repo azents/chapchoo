@@ -2,6 +2,7 @@
 
 mod accounts;
 mod challenges;
+mod display;
 mod identity;
 mod models;
 mod preparation;

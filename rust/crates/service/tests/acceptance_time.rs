@@ -39,6 +39,7 @@ fn proofs_use_the_final_acceptance_instant_and_login_uses_that_same_instant()
                 EmailAddress::parse("admin@example.invalid")?,
                 Password::parse("Aa1!admin".to_owned())?,
                 AcceptanceTime::Fixed(issued_at),
+                None,
             )
             .await?;
         assert_eq!(admin.created_at, issued_at);
@@ -52,7 +53,8 @@ fn proofs_use_the_final_acceptance_instant_and_login_uses_that_same_instant()
                 &expired.proof,
                 email.clone(),
                 Password::parse("Aa1!member".to_owned())?,
-                AcceptanceTime::Fixed(acceptance)
+                AcceptanceTime::Fixed(acceptance),
+                None,
             )
             .await
             .err()
@@ -73,6 +75,7 @@ fn proofs_use_the_final_acceptance_instant_and_login_uses_that_same_instant()
                 email.clone(),
                 Password::parse("Aa1!member".to_owned())?,
                 AcceptanceTime::Fixed(acceptance),
+                None,
             )
             .await?;
         assert_eq!(member.created_at, acceptance);

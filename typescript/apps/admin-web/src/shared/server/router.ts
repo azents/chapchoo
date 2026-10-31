@@ -1,10 +1,12 @@
 import "server-only";
 import { attempt } from "@chapchoo/web-core/boundary";
+import { displayPatchPayload } from "@chapchoo/web-core/display";
 import { invalidResponse } from "@chapchoo/web-core/errors";
 import { call } from "@chapchoo/web-core/rpc";
-import { grant, grants } from "@chapchoo/web-core/validation";
+import { display, grant, grants } from "@chapchoo/web-core/validation";
 import { z } from "zod";
 import { authRouter } from "@/shared/server/auth";
+import { displayInput, displayPatch } from "@/shared/server/displayInput";
 import { inventoryInput } from "@/shared/server/inventory";
 import { procedure, router } from "@/shared/server/trpc";
 import type { IssuedGrant } from "@chapchoo/web-core/browser";
@@ -37,6 +39,35 @@ function issued(value: IssuedGrant): IssuedGrant {
 
 export const appRouter = router({
   auth: authRouter,
+  displayDefaults: router({
+    read: procedure.query(({ ctx }) =>
+      attempt(() =>
+        ctx.session.authenticated(async () =>
+          display(
+            await call(
+              ctx.backend.auth.displayDefaults.bind(ctx.backend.auth),
+              {},
+            ),
+          ),
+        ),
+      ),
+    ),
+    update: procedure
+      .input(displayPatch)
+      .mutation(({ ctx, input }) =>
+        attempt(() =>
+          ctx.session.authenticated(async (token) =>
+            display(
+              await call(
+                ctx.backend.admin.updateDisplayDefaults.bind(ctx.backend.admin),
+                displayPatchPayload(input),
+                token,
+              ),
+            ),
+          ),
+        ),
+      ),
+  }),
   setup: router({
     status: procedure.query(({ ctx }) =>
       attempt(() =>
@@ -50,16 +81,19 @@ export const appRouter = router({
             installationProof: z.string().min(1).max(256),
             email: z.string().min(1).max(320),
             password: z.string().min(1).max(64),
+            display: displayInput.partial().optional(),
           })
           .strict(),
       )
       .mutation(({ ctx, input }) =>
         attempt(async () =>
           ctx.session.acceptAuthentication(
-            await call(
-              ctx.backend.admin.initialize.bind(ctx.backend.admin),
-              input,
-            ),
+            await call(ctx.backend.admin.initialize.bind(ctx.backend.admin), {
+              ...input,
+              display: input.display
+                ? displayPatchPayload(input.display)
+                : void 0,
+            }),
           ),
         ),
       ),

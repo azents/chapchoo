@@ -4,6 +4,22 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./display-messages": {
+      "types": "./dist/display-messages.d.ts",
+      "default": "./dist/display-messages.js"
+    },
+    "./display": {
+      "types": "./dist/display.d.ts",
+      "default": "./dist/display.js"
+    },
+    "./display-context": {
+      "types": "./dist/display-context.d.ts",
+      "default": "./dist/display-context.js"
+    },
+    "./display-client": {
+      "types": "./dist/display-client.d.ts",
+      "default": "./dist/display-client.js"
+    },
     "./page-read": {
       "types": "./dist/page-read.d.ts",
       "default": "./dist/page-read.js"
@@ -73,6 +89,7 @@
   "dependencies": {
     "@chapchoo/rpc-client": "workspace:*",
     "@grpc/grpc-js": "1.14.6",
+    "@mantine/hooks": "^9.7.4",
     "@tanstack/react-query": "^5.105.0",
     "@trpc/client": "11.19.0",
     "@trpc/server": "11.19.0",

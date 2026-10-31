@@ -14,6 +14,25 @@ import type {
 } from "@chapchoo/rpc-client/accounts";
 import type { Timestamp } from "@chapchoo/rpc-client/timestamp";
 import { invalidResponse } from "./errors.js";
+import { displayPart } from "./display.js";
+import type { DisplayValue } from "./display.js";
+
+export function display(value: unknown): DisplayValue {
+  if (!value || typeof value !== "object") return invalidResponse();
+  const language: unknown = Reflect.get(value, "language");
+  const timeZone: unknown = Reflect.get(value, "timeZone");
+  const region: unknown = Reflect.get(value, "region");
+  // Rust/Jiff owns zone semantics; Node's older ICU must not reject its response.
+  if (
+    !displayPart("language", language) ||
+    !displayPart("region", region) ||
+    typeof timeZone !== "string" ||
+    timeZone.length > 128 ||
+    !/^[A-Za-z][A-Za-z0-9._+-]*(?:\/[A-Za-z0-9._+-]+)*$/.test(timeZone)
+  )
+    return invalidResponse();
+  return { language, timeZone, region };
+}
 
 function required(value: string): boolean {
   return value.length > 0;
@@ -40,6 +59,7 @@ export function timestampMilliseconds(value: Timestamp): number {
   );
 }
 export function user(value: User): User {
+  display(value.display);
   if (
     !required(value.id) ||
     !required(value.email) ||

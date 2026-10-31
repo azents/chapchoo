@@ -21,7 +21,7 @@ pub struct NewChallenge {
 
 #[derive(Debug)]
 pub enum EmailLoginOutcome {
-    Authenticated(SessionResult),
+    Authenticated(Box<SessionResult>),
     RegistrationRequired,
 }
 
@@ -132,7 +132,7 @@ impl Store {
                 return Ok(EmailLoginOutcome::RegistrationRequired);
             };
             let user = user.summary()?;
-            Ok(EmailLoginOutcome::Authenticated(insert_session!(
+            Ok(EmailLoginOutcome::Authenticated(Box::new(insert_session!(
                 connection,
                 dialect,
                 self.cipher,
@@ -140,7 +140,7 @@ impl Store {
                 new,
                 now,
                 policy
-            )))
+            ))))
         })
     }
 }
