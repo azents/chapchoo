@@ -3,7 +3,7 @@ import { FontFaces } from "@chapchoo/ui/FontFaces";
 import { AppMantineProvider } from "@chapchoo/ui/provider";
 import { AppHeader } from "@chapchoo/ui/AppHeader";
 import { Mascot } from "@chapchoo/ui/Mascot";
-import { Stack } from "@mantine/core";
+import { Button, Chip, Group, Stack } from "@mantine/core";
 import type { ReactElement } from "react";
 import "@mantine/core/styles.css";
 
@@ -29,6 +29,13 @@ export default function CommonUiPreview(): ReactElement {
           title="Shared presentation example"
           message="The implementation is imported from @chapchoo/ui/Feedback. Changes to it belong in common UI."
         />
+        <Group>
+          <Button>Log in</Button>
+          <Button variant="subtle" size="xs">
+            Log out
+          </Button>
+          <Chip defaultChecked>Typography gyp 한글</Chip>
+        </Group>
       </Stack>
     </AppMantineProvider>
   );
