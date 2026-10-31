@@ -5,6 +5,9 @@ to both General and Admin unless the task explicitly excludes one. Follow the
 repository's scoped conventions; this prompt does not authorize unrelated
 page migrations.
 
+The language-independent rules live in `.claude/conventions/web/`, indexed by
+`.claude/rules/web-conventions.md`, separately from language conventions.
+
 ## Terms
 
 - **Primary content:** content whose required data is essential to the page's

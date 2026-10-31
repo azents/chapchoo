@@ -10,8 +10,8 @@ Spreading `isLoading`, `error`, `data` across separate `useState` calls makes im
 - The container converts `isLoading / isError / data` into the ADT
 - The component switches on `state.type`
 - Minimize `useState` — derive from query state where possible
-- Include only reachable states. [Resolved-data SSR renderers](ssr-snapshot-renderers.md) take required data directly; they do not need a loading/error ADT merely for the initial render.
-- [Interactive/live SSR content](ssr-client-state-handoff.md) starts from its server-rendered initial data, not an empty client loading state.
+- Include only reachable states. [Resolved-data SSR renderers](../web/ssr-snapshot-renderers.md) take required data directly; they do not need a loading/error ADT merely for the initial render.
+- [Interactive/live SSR content](../web/ssr-client-state-handoff.md) starts from its server-rendered initial data, not an empty client loading state.
 
 ## Bad
 
