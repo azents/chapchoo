@@ -19,12 +19,15 @@ export interface AuthInput {
 export interface AuthProps extends AuthInput {
   appearance?: ColorModeMenuProps;
   copy: Copy;
-  state: LoadState<{
-    password: boolean;
-    emailCode: boolean;
-    signupEmail: boolean;
-    email: string;
-  }>;
+  state: Exclude<
+    LoadState<{
+      password: boolean;
+      emailCode: boolean;
+      signupEmail: boolean;
+      email: string;
+    }>,
+    { type: "LOADING" }
+  >;
   submission: Submission;
   email: string;
   password: string;
@@ -81,6 +84,11 @@ export interface WorkspaceProps {
   basePath: string;
   copy: Copy;
   state: LoadState<WorkspaceData>;
+  supplementary?: {
+    received: LoadState<null>;
+    invitations: LoadState<null>;
+    contexts: LoadState<null>;
+  };
   submission: Submission;
   name: string;
   handle: string;

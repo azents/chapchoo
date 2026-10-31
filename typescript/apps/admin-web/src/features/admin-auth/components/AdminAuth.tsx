@@ -18,10 +18,7 @@ import type { ReactElement } from "react";
 export type AuthMode = "login" | "setup";
 export type AuthMethod = "password" | "code";
 export type AuthState =
-  | { type: "LOADING" }
-  | { type: "CLOSED" }
-  | { type: "UNAVAILABLE"; message: string }
-  | { type: "FORM"; pending: boolean; error: string | null };
+  { type: "CLOSED" } | { type: "FORM"; pending: boolean; error: string | null };
 
 export interface AdminAuthProps {
   appearance?: ColorModeMenuProps;
@@ -63,15 +60,7 @@ export function AdminAuth(props: AdminAuthProps): ReactElement {
         </Anchor>
       }
     >
-      {state.type === "LOADING" ? (
-        <Text role="status">{text("loading")}</Text>
-      ) : null}
       {state.type === "CLOSED" ? <Alert>{text("closed")}</Alert> : null}
-      {state.type === "UNAVAILABLE" ? (
-        <Alert color="red" role="alert">
-          {state.message}
-        </Alert>
-      ) : null}
       {state.type === "FORM" ? (
         <form
           onSubmit={(event) => {

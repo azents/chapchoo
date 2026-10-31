@@ -157,6 +157,14 @@ function WorkspaceContent(props: WorkspaceContentProps): ReactNode {
       ]}
       actions={props.accountActions}
     >
+      {props.supplementary?.contexts.type === "ERROR" ? (
+        <ErrorFeedback
+          title={c.errorTitle}
+          message={props.supplementary.contexts.message}
+          retryLabel={c.retry}
+          onRetry={props.onRetry}
+        />
+      ) : null}
       {submission.type === "ERROR" && props.confirmation === null ? (
         <Alert color="red" role="alert">
           {submission.message}
@@ -196,7 +204,16 @@ function WorkspaceContent(props: WorkspaceContentProps): ReactNode {
             ))}
           </Stack>
           <ContentSection title={c.receivedInvitations}>
-            {received.length === 0 ? (
+            {props.supplementary?.received.type === "LOADING" ? (
+              <LoadingFeedback message={c.loading} />
+            ) : props.supplementary?.received.type === "ERROR" ? (
+              <ErrorFeedback
+                title={c.errorTitle}
+                message={props.supplementary.received.message}
+                retryLabel={c.retry}
+                onRetry={props.onRetry}
+              />
+            ) : received.length === 0 ? (
               <EmptyFeedback
                 title={c.noInvitations}
                 message={c.invitationDescription}
@@ -436,7 +453,16 @@ function WorkspaceContent(props: WorkspaceContentProps): ReactNode {
                 <Title order={3} size="h5">
                   {c.pendingInvitations}
                 </Title>
-                {team.invitations.length === 0 ? (
+                {props.supplementary?.invitations.type === "LOADING" ? (
+                  <LoadingFeedback message={c.loading} />
+                ) : props.supplementary?.invitations.type === "ERROR" ? (
+                  <ErrorFeedback
+                    title={c.errorTitle}
+                    message={props.supplementary.invitations.message}
+                    retryLabel={c.retry}
+                    onRetry={props.onRetry}
+                  />
+                ) : team.invitations.length === 0 ? (
                   <Text size="sm" c="dimmed">
                     {c.noInvitations}
                   </Text>

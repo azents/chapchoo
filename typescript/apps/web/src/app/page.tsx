@@ -1,15 +1,14 @@
-import { redirect } from "next/navigation";
-import { getLoginRedirect, getPublicConfig } from "@/config";
+import { getPublicConfig } from "@/config";
+import { loadWorkspace } from "@/features/accounts/server/loadWorkspace";
 import { WorkspacePage } from "@/features/accounts/WorkspacePage";
-import { readIdentity } from "@/shared/server/identity";
 import type { ReactElement } from "react";
 
 export default async function Home(): Promise<ReactElement> {
-  const identity = await readIdentity();
-  if (!identity) {
-    redirect(getLoginRedirect());
-  }
   return (
-    <WorkspacePage basePath={getPublicConfig().publicBasePath} teamId="" />
+    <WorkspacePage
+      basePath={getPublicConfig().publicBasePath}
+      teamId=""
+      initial={await loadWorkspace("")}
+    />
   );
 }

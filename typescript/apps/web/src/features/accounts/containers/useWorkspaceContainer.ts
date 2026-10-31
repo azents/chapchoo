@@ -8,11 +8,13 @@ import {
   teamKind,
   teamRole,
 } from "@chapchoo/web-core/browser";
+import { initialQuery } from "@chapchoo/web-core/page-state";
 import { useMessages } from "next-intl";
 import { useRef, useState } from "react";
 import { useAppearanceControl } from "@/shared/appearance/useAppearanceControl";
 import { trpc } from "@/shared/rpc/client";
 import { accountError } from "../errors";
+import type { InitialWorkspace } from "../initialWorkspace";
 import type {
   MemberView,
   Submission,
@@ -32,9 +34,11 @@ function role(value: Team["callerRole"]): MemberView["role"] {
 export function useWorkspaceContainer({
   teamId,
   basePath,
+  initial,
 }: {
   teamId: string;
   basePath: string;
+  initial: InitialWorkspace;
 }): WorkspaceProps {
   const copy = useMessages().accounts;
   const appearance = useAppearanceControl();
@@ -47,20 +51,32 @@ export function useWorkspaceContainer({
   const [submission, setSubmission] = useState<Submission>({ type: "READY" });
   const busy = useRef(false);
   const enabled = auth.state.type === "AUTHENTICATED";
-  const contexts = trpc.teams.list.useQuery(void 0, { enabled, retry: false });
+  const contexts = trpc.teams.list.useQuery(void 0, {
+    ...(initial.type === "HOME" ? initialQuery(initial.contexts) : {}),
+    enabled,
+    retry: false,
+  });
   const received = trpc.invitations.received.useQuery(void 0, {
     enabled,
     retry: false,
   });
   const team = trpc.teams.get.useQuery(
     { teamId },
-    { enabled: enabled && Boolean(teamId), retry: false },
+    {
+      ...(initial.type === "TEAM" ? initialQuery(initial.team) : {}),
+      enabled: enabled && Boolean(teamId),
+      retry: false,
+    },
   );
   const collaborative =
     enabled && Boolean(teamId) && team.data?.kind === teamKind.collaborative;
   const members = trpc.teams.members.useQuery(
     { teamId },
-    { enabled: collaborative, retry: false },
+    {
+      ...(initial.type === "TEAM" ? initialQuery(initial.members) : {}),
+      enabled: collaborative,
+      retry: false,
+    },
   );
   const canManage = collaborative && team.data?.callerRole !== teamRole.member;
   const invitations = trpc.invitations.team.useQuery(
@@ -113,12 +129,7 @@ export function useWorkspaceContainer({
     setSubmission({ type: "ERROR", message: accountError(reason, copy) });
     void invalidate();
   }
-  const queryError =
-    contexts.error ??
-    received.error ??
-    team.error ??
-    members.error ??
-    invitations.error;
+  const queryError = teamId ? (team.error ?? members.error) : contexts.error;
   let state: WorkspaceProps["state"];
   if (auth.state.type === "ERROR") {
     state = { type: "ERROR", message: accountError(auth.state.reason, copy) };
@@ -129,11 +140,9 @@ export function useWorkspaceContainer({
     };
   } else if (
     auth.state.type !== "AUTHENTICATED" ||
-    !contexts.data ||
-    !received.data ||
+    (!teamId && !contexts.data) ||
     (teamId && !team.data) ||
-    (collaborative && !members.data) ||
-    (canManage && !invitations.data)
+    (collaborative && !members.data)
   ) {
     state = { type: "LOADING" };
   } else {
@@ -141,13 +150,13 @@ export function useWorkspaceContainer({
       type: "LOADED",
       data: {
         identity: auth.state.user.email,
-        contexts: contexts.data.items.map((item) => ({
+        contexts: (contexts.data?.items ?? []).map((item) => ({
           id: item.id,
           name: item.name,
           personal: item.kind === teamKind.personal,
           role: role(item.callerRole),
         })),
-        received: received.data.items
+        received: (received.data?.items ?? [])
           .filter((item) => item.status === invitationStatus.pending)
           .map((item) => ({
             id: item.id,
@@ -237,6 +246,32 @@ export function useWorkspaceContainer({
     appearance,
     copy,
     state,
+    supplementary: {
+      received: received.isError
+        ? {
+            type: "ERROR",
+            message: accountError(received.error.data?.reason ?? null, copy),
+          }
+        : received.isPending
+          ? { type: "LOADING" }
+          : { type: "LOADED", data: null },
+      invitations: invitations.isError
+        ? {
+            type: "ERROR",
+            message: accountError(invitations.error.data?.reason ?? null, copy),
+          }
+        : canManage && invitations.isPending
+          ? { type: "LOADING" }
+          : { type: "LOADED", data: null },
+      contexts: contexts.isError
+        ? {
+            type: "ERROR",
+            message: accountError(contexts.error.data?.reason ?? null, copy),
+          }
+        : contexts.isPending
+          ? { type: "LOADING" }
+          : { type: "LOADED", data: null },
+    },
     submission,
     ...(auth.state.type === "AUTHENTICATED"
       ? { identityLabel: auth.state.user.email }

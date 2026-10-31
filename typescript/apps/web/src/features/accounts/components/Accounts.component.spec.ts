@@ -1,6 +1,26 @@
 import { expect, test } from "@playwright/test";
 import messages from "../../../../messages/en-US.json" with { type: "json" };
 
+test("supplementary invitation failure preserves primary contexts and actions", async ({
+  page,
+}) => {
+  await page.goto(
+    "/iframe.html?id=accounts-workspace--supplementary-unavailable&viewMode=story",
+  );
+  await expect(
+    page.getByRole("heading", { name: "Your spaces", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("main")
+      .getByRole("link", { name: "Personal space", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Create team", exact: true }),
+  ).toBeVisible();
+});
+
 test("reset completion component announces the app-owned exact message", async ({
   page,
 }) => {

@@ -91,11 +91,10 @@ export const ResetComplete: Story = {
   args: {
     mode: "RESET",
     token: "story-proof",
-    state: { type: "LOADING" },
+    state: ready,
     submission: { type: "DONE", message: messages.accounts.resetDone },
   },
 };
-export const Loading: Story = { args: { state: { type: "LOADING" } } };
 export const Pending: Story = { args: { submission: { type: "PENDING" } } };
 export const InvalidCredentials: Story = {
   args: {

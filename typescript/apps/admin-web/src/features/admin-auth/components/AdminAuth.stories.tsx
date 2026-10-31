@@ -37,7 +37,6 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const PasswordLogin: Story = {};
-export const Loading: Story = { args: { state: { type: "LOADING" } } };
 export const Pending: Story = {
   args: { state: { type: "FORM", pending: true, error: null } },
 };
@@ -45,9 +44,6 @@ export const Rejected: Story = {
   args: {
     state: { type: "FORM", pending: false, error: en.Errors.permissionDenied },
   },
-};
-export const Unavailable: Story = {
-  args: { state: { type: "UNAVAILABLE", message: en.Errors.generic } },
 };
 export const InitialSetup: Story = {
   args: { mode: "setup", emailCodeAvailable: false },

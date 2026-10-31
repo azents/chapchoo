@@ -156,9 +156,10 @@ not browser login-session storage.
 Public authentication pages resolve sign-in methods, setup availability and
 proof previews on the server before selecting their form/closed/error state.
 These read-only loaders are request-bound, not build-time backend calls.
-Successful results seed the matching browser queries without an immediate
-mount-time repeat. A server failure renders its safe typed error, with no hidden
-browser retry; a general-auth retry repeats the server read through reload.
+Snapshot form renderers consume resolved required data directly, without an
+initial browser query or artificial initial loading state. Infrastructure failures
+reach a sanitized route-level error boundary; invalid/closed proof and setup
+states remain explicit business outcomes. Error recovery reruns the route read.
 Proofs and session credentials retain their existing authority and disposition.
 
 Both roots initialize authentication from validated read-only Identity, shared
@@ -203,10 +204,39 @@ automatic replay. If the browser cannot reach the same-origin web server, client
 JavaScript cannot physically delete an HttpOnly cookie; local identity clearing
 alone does not claim that offline credential disposal succeeded.
 
-Team/context/inventory business reads remain client-owned; this is authentication
-bootstrap, not full workspace-data SSR. An explicit Admin recovery rechecks
-Identity through the common boundary before refreshing inventories, including
-recovery from a safe initial SSR error.
+## Primary content and page state
+
+General home contexts, selected team details/membership, and the selected Admin
+inventory page are loaded and rendered on the server. A request-local read scope
+shares validated Identity and lends the app credential only inside server reads;
+it never renews or writes cookies. Primary-data failures reach safe route-level
+error/not-found handling. Required snapshot values do not gain artificial
+client-only initial loading states.
+
+Interactive queries receive the same initial data and selection for SSR and
+hydration, without mount/reconnect repeats. Later updates and invalidation remain
+client-owned. Received invitations and team management invitations are
+supplementary: their loading/failure stays in the corresponding section, rather
+than replacing otherwise usable primary content. Context navigation is also
+supplementary on a selected-team route. Existing visual hierarchy is preserved.
+
+Admin inventory offset is a canonical decimal URL search value with the existing
+25-row page size and int64 bound. Admin login method is URL-owned and constrained
+by the server-advertised methods. Server and browser use the same first-value
+policy for duplicate keys. Native history push updates primary selections and
+Next search-parameter subscribers; direct entry/reload resolves the same selection
+on the server. Back/Forward restore the selected view. Minor URL state uses
+replace; no current feature needs an invented minor selection.
+
+Admin issuance/expiry values use the selected locale with explicit UTC formatting
+and a visible UTC suffix, independent of server or browser local timezone. A full
+user-timezone preference policy remains outside this implementation.
+
+Existing selected-team and inventory-kind routes remain pathname-owned. Form
+inputs, authentication challenge bindings, newly issued proof links and destructive
+mutation confirmations remain transient and never become URL state. Shared
+read/initial-query/URL-codec patterns are described in the
+[implementation guide](../../notes/web-page-patterns.md).
 
 ## Cookie disposition
 
