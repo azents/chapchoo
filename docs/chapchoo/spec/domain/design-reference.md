@@ -79,14 +79,14 @@ discussion context are maintained in root `DESIGN.md`, not repeated here.
 From the repository root, run `pnpm run storybook --filter=@chapchoo/design-reference`
 on port 6008 or `pnpm run build-storybook --filter=@chapchoo/design-reference`.
 Static output is the ignored package-local `storybook-static/`.
-`pnpm --filter @chapchoo/design-reference check:design` verifies that reference
-token adapters match the canonical document and checks intended text-color pairs.
-Common-UI tests check mascot asset/contact contracts, grounded directional
+`pnpm --filter @chapchoo/ui check:design` verifies that the owned web-token
+adapter matches the canonical document and checks intended text-color pairs.
+`pnpm --filter @chapchoo/ui test` checks mascot asset/contact contracts, grounded directional
 transforms, small return bounce, active/idle timing and reduced-motion CSS.
 Controller fixtures verify input locking, manual/automatic scheduling, cleanup
 and stale-callback rejection without wall-clock sleeps.
-This check is also part of package build/typecheck and is not a full accessibility
-audit.
+These checks run in the UI owner package rather than the reference consumer.
+They are not a full accessibility audit.
 
 Root format/lint/typecheck include the package. Root lint runs
 `check:design-boundaries`, which executes isolated boundary fixtures and checks
