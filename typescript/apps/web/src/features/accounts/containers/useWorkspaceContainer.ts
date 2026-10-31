@@ -1,5 +1,6 @@
 "use client";
 
+import { useAuth } from "@chapchoo/web-core/auth-context";
 import {
   invitationAction,
   invitationStatus,
@@ -7,9 +8,8 @@ import {
   teamKind,
   teamRole,
 } from "@chapchoo/web-core/browser";
-import { useQueryClient } from "@tanstack/react-query";
 import { useMessages } from "next-intl";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useAppearanceControl } from "@/shared/appearance/useAppearanceControl";
 import { trpc } from "@/shared/rpc/client";
 import { accountError } from "../errors";
@@ -19,7 +19,7 @@ import type {
   TeamAction,
   WorkspaceProps,
 } from "../types";
-import type { Team, User } from "@chapchoo/web-core/browser";
+import type { Team } from "@chapchoo/web-core/browser";
 
 function role(value: Team["callerRole"]): MemberView["role"] {
   return value === teamRole.owner
@@ -32,15 +32,13 @@ function role(value: Team["callerRole"]): MemberView["role"] {
 export function useWorkspaceContainer({
   teamId,
   basePath,
-  initialIdentity,
 }: {
   teamId: string;
   basePath: string;
-  initialIdentity: User;
 }): WorkspaceProps {
   const copy = useMessages().accounts;
   const appearance = useAppearanceControl();
-  const client = useQueryClient();
+  const auth = useAuth();
   const utils = trpc.useUtils();
   const [name, setName] = useState("");
   const [handle, setHandle] = useState("");
@@ -48,12 +46,7 @@ export function useWorkspaceContainer({
   const [confirmation, setConfirmation] = useState<TeamAction | null>(null);
   const [submission, setSubmission] = useState<Submission>({ type: "READY" });
   const busy = useRef(false);
-  const identity = trpc.auth.identity.useQuery(void 0, {
-    retry: false,
-    initialData: initialIdentity,
-    refetchOnMount: false,
-  });
-  const enabled = !identity.isError;
+  const enabled = auth.state.type === "AUTHENTICATED";
   const contexts = trpc.teams.list.useQuery(void 0, { enabled, retry: false });
   const received = trpc.invitations.received.useQuery(void 0, {
     enabled,
@@ -76,7 +69,6 @@ export function useWorkspaceContainer({
   );
   async function invalidate(): Promise<void> {
     await Promise.all([
-      utils.auth.identity.invalidate(),
       utils.teams.invalidate(),
       utils.invitations.invalidate(),
     ]);
@@ -117,41 +109,26 @@ export function useWorkspaceContainer({
     retry: false,
     onError: (error) => fail(error.data?.reason ?? null),
   });
-  const logout = trpc.auth.logout.useMutation({
-    retry: false,
-    onError: (error) => fail(error.data?.reason ?? null),
-  });
   function fail(reason: string | null): void {
     setSubmission({ type: "ERROR", message: accountError(reason, copy) });
-    if (reason === "DOMAIN_REASON_INVALID_SESSION") {
-      client.clear();
-      window.location.replace(`${basePath}/login`);
-    } else {
-      void invalidate();
-    }
+    void invalidate();
   }
   const queryError =
-    identity.error ??
     contexts.error ??
     received.error ??
     team.error ??
     members.error ??
     invitations.error;
-  const invalidSession =
-    queryError?.data?.reason === "DOMAIN_REASON_INVALID_SESSION";
-  useEffect(() => {
-    if (invalidSession) {
-      client.clear();
-      window.location.replace(`${basePath}/login`);
-    }
-  }, [invalidSession, client, basePath]);
   let state: WorkspaceProps["state"];
-  if (queryError) {
+  if (auth.state.type === "ERROR") {
+    state = { type: "ERROR", message: accountError(auth.state.reason, copy) };
+  } else if (queryError) {
     state = {
       type: "ERROR",
       message: accountError(queryError.data?.reason ?? null, copy),
     };
   } else if (
+    auth.state.type !== "AUTHENTICATED" ||
     !contexts.data ||
     !received.data ||
     (teamId && !team.data) ||
@@ -163,7 +140,7 @@ export function useWorkspaceContainer({
     state = {
       type: "LOADED",
       data: {
-        identity: identity.data.email,
+        identity: auth.state.user.email,
         contexts: contexts.data.items.map((item) => ({
           id: item.id,
           name: item.name,
@@ -255,28 +232,15 @@ export function useWorkspaceContainer({
       }
     });
   }
-  async function signOut(): Promise<void> {
-    if (busy.current) {
-      return;
-    }
-    busy.current = true;
-    setSubmission({ type: "PENDING" });
-    try {
-      await logout.mutateAsync();
-      client.clear();
-      window.location.replace(`${basePath}/login`);
-    } catch {
-      // The mutation callback preserves the current session on uncertain failure.
-    } finally {
-      busy.current = false;
-    }
-  }
   return {
     basePath,
     appearance,
     copy,
     state,
     submission,
+    ...(auth.state.type === "AUTHENTICATED"
+      ? { identityLabel: auth.state.user.email }
+      : {}),
     name,
     handle,
     inviteEmail,
@@ -336,9 +300,14 @@ export function useWorkspaceContainer({
     },
     onRetry: () => {
       void invalidate();
+      void auth.recheck().catch(() => {
+        // The common identity query owns recheck failure state.
+      });
     },
     onLogout: () => {
-      void signOut();
+      if (!busy.current) {
+        auth.logout();
+      }
     },
   };
 }

@@ -1,4 +1,4 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@chapchoo/web-core/auth-context";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { useAppearanceControl } from "@/shared/appearance/useAppearanceControl";
@@ -24,7 +24,7 @@ export function useAdminAuthContainer({
   const text = useTranslations("AdminAuth");
   const appearance = useAppearanceControl();
   const errors = useTranslations("Errors");
-  const cache = useQueryClient();
+  const auth = useAuth();
   const [method, setMethod] = useState<AuthMethod>("password");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -45,8 +45,7 @@ export function useAdminAuthContainer({
   });
 
   function authenticated(): void {
-    cache.clear();
-    window.location.replace(`${basePath}/`);
+    auth.authenticated();
   }
 
   const login = trpc.auth.passwordLogin.useMutation({

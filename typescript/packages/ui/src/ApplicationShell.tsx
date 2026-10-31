@@ -30,6 +30,26 @@ export type ApplicationShellContentProps = Omit<
   "appearance" | "brand"
 >;
 
+/** Narrow account actions also remain available outside loaded business shells. */
+export function ApplicationAccountActions({
+  identityLabel,
+  actions,
+}: {
+  identityLabel?: string;
+  actions?: ReactNode;
+}): ReactNode {
+  return (
+    <Box className={classes.contextHeader}>
+      <Text size="sm" c="dimmed" className={classes.identity}>
+        {identityLabel}
+      </Text>
+      <Group gap="sm" className={classes.actions}>
+        {actions}
+      </Group>
+    </Box>
+  );
+}
+
 /** Product navigation and orientation without routing or business assumptions. */
 export function ApplicationShell({
   brand,
@@ -100,14 +120,10 @@ export function ApplicationShellContent({
         </div>
       </Box>
       <div className={classes.workspace}>
-        <Box className={classes.contextHeader}>
-          <Text size="sm" c="dimmed" className={classes.identity}>
-            {identityLabel}
-          </Text>
-          <Group gap="sm" className={classes.actions}>
-            {actions}
-          </Group>
-        </Box>
+        <ApplicationAccountActions
+          identityLabel={identityLabel}
+          actions={actions}
+        />
         <Box component="main" className={classes.main}>
           <div className={classes.content}>
             <Title order={1} size="h2" className={classes.title}>

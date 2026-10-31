@@ -1,7 +1,10 @@
 "use client";
 
 import { AppFrame } from "@chapchoo/ui/AppFrame";
-import { ApplicationShellContent } from "@chapchoo/ui/ApplicationShell";
+import {
+  ApplicationAccountActions,
+  ApplicationShellContent,
+} from "@chapchoo/ui/ApplicationShell";
 import { ConfirmationDialog } from "@chapchoo/ui/ConfirmationDialog";
 import { ContentSection } from "@chapchoo/ui/ContentSection";
 import {
@@ -35,7 +38,7 @@ function roleLabel(role: string, c: Copy): string {
 
 export function Workspace(props: WorkspaceProps): ReactNode {
   const actions =
-    props.state.type === "LOADED" ? (
+    props.identityLabel || props.state.type === "LOADED" ? (
       <Button
         variant="subtle"
         size="xs"
@@ -50,7 +53,9 @@ export function Workspace(props: WorkspaceProps): ReactNode {
       appearance={props.appearance}
       {...(props.state.type === "LOADED"
         ? { identityLabel: props.state.data.identity }
-        : {})}
+        : props.identityLabel
+          ? { identityLabel: props.identityLabel }
+          : {})}
       actions={actions}
     >
       <WorkspaceContent {...props} accountActions={actions} />
@@ -62,18 +67,45 @@ interface WorkspaceContentProps extends WorkspaceProps {
   accountActions: ReactNode;
 }
 
+function WorkspaceFeedback({
+  props,
+  children,
+}: {
+  props: WorkspaceContentProps;
+  children: ReactNode;
+}): ReactNode {
+  return (
+    <>
+      {props.identityLabel ? (
+        <ApplicationAccountActions
+          identityLabel={props.identityLabel}
+          actions={props.accountActions}
+        />
+      ) : null}
+      <Stack component="main" p="lg">
+        {props.submission.type === "ERROR" ? (
+          <Alert color="red" role="alert">
+            {props.submission.message}
+          </Alert>
+        ) : null}
+        {children}
+      </Stack>
+    </>
+  );
+}
+
 function WorkspaceContent(props: WorkspaceContentProps): ReactNode {
   const { copy: c, state, submission } = props;
   if (state.type === "LOADING") {
     return (
-      <Stack component="main" p="lg">
+      <WorkspaceFeedback props={props}>
         <LoadingFeedback message={c.loading} />
-      </Stack>
+      </WorkspaceFeedback>
     );
   }
   if (state.type === "ERROR") {
     return (
-      <Stack component="main" p="lg">
+      <WorkspaceFeedback props={props}>
         <ErrorFeedback
           title={c.errorTitle}
           message={state.message}
@@ -84,7 +116,7 @@ function WorkspaceContent(props: WorkspaceContentProps): ReactNode {
           <Anchor href={`${props.basePath}/`}>{c.contexts}</Anchor>
           <Anchor href={`${props.basePath}/login`}>{c.login}</Anchor>
         </Group>
-      </Stack>
+      </WorkspaceFeedback>
     );
   }
   const { identity, contexts, received, team } = state.data;

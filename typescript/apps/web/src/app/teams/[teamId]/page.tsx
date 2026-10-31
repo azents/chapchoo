@@ -19,7 +19,6 @@ export default async function Team({
       basePath={getPublicConfig().publicBasePath}
       key={teamId}
       teamId={teamId}
-      initialIdentity={identity}
     />
   );
 }

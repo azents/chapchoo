@@ -1,6 +1,6 @@
 "use client";
 
-import { useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@chapchoo/web-core/auth-context";
 import { useMessages } from "next-intl";
 import { useRef, useState } from "react";
 import { useAppearanceControl } from "@/shared/appearance/useAppearanceControl";
@@ -15,7 +15,7 @@ export function useAuthContainer({
 }: AuthInput & { initial: InitialAuth }): AuthProps {
   const copy = useMessages().accounts;
   const appearance = useAppearanceControl();
-  const client = useQueryClient();
+  const auth = useAuth();
   const utils = trpc.useUtils();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -171,10 +171,9 @@ export function useAuthContainer({
         : { type: "LOADED", data: { ...methods.data, email: "" } };
   }
   function authenticated(): void {
-    client.clear();
     setPassword("");
     setCode("");
-    window.location.replace(`${input.basePath}/`);
+    auth.authenticated();
   }
   async function submit(sendCode: boolean): Promise<void> {
     if (busy.current) {
@@ -208,7 +207,7 @@ export function useAuthContainer({
       } else if (input.token) {
         await redeemReset.mutateAsync({ proof: input.token, password });
         setPassword("");
-        client.clear();
+        auth.clearIdentity();
         setSubmission({ type: "DONE", message: copy.resetDone });
       }
     } catch {

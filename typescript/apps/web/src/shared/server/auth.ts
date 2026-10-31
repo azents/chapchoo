@@ -1,5 +1,6 @@
 import "server-only";
 import { attempt } from "@chapchoo/web-core/boundary";
+import { RpcFailure } from "@chapchoo/web-core/errors";
 import { call } from "@chapchoo/web-core/rpc";
 import { challenge, user } from "@chapchoo/web-core/validation";
 import { z } from "zod";
@@ -50,27 +51,26 @@ export const authRouter = router({
       ),
     ),
   identity: procedure.query(({ ctx }) =>
-    attempt(() =>
-      ctx.session.authenticated(async (token) => {
-        const result = user(
-          await call(
-            ctx.backend.auth.identity.bind(ctx.backend.auth),
-            {},
-            token,
+    attempt(async () => {
+      try {
+        return await ctx.session.authenticated(async (token) =>
+          user(
+            await call(
+              ctx.backend.auth.identity.bind(ctx.backend.auth),
+              {},
+              token,
+            ),
           ),
         );
-
-        return result;
-      }),
-    ),
-  ),
-  logout: procedure.mutation(({ ctx }) =>
-    attempt(() =>
-      ctx.session.authenticated(async (token) => {
-        await call(ctx.backend.auth.logout.bind(ctx.backend.auth), {}, token);
-        ctx.session.clear();
-        return { completed: true };
-      }),
-    ),
+      } catch (error) {
+        if (
+          error instanceof RpcFailure &&
+          error.reason === "DOMAIN_REASON_INVALID_SESSION"
+        ) {
+          return null;
+        }
+        throw error;
+      }
+    }),
   ),
 });
