@@ -30,6 +30,7 @@ How to add a new convention: use the `add-convention` skill.
 | Keep published images environment-independent: decide all deployment settings at runtime, never compile or bake URLs, paths, endpoints or credentials into build outputs. | [runtime-only-configuration](../conventions/global/runtime-only-configuration.md) |
 | Place directory-owned ignore patterns in that subtree's .gitignore; reserve the root file for repository-wide or root-owned rules. | [scoped-gitignore](../conventions/global/scoped-gitignore.md) |
 | Use `scripts/rebase-stacked-prs.sh` when rebasing stacked PR branches together so the process stops cleanly at the first conflict. | [stacked-pr-rebase-script](../conventions/global/stacked-pr-rebase-script.md) |
+| Test the subject's own behavior and contracts, not dependency internals, library defaults, or token resolution. | [test-owned-contracts](../conventions/global/test-owned-contracts.md) |
 | All log lines, error messages, API response messages, and WebSocket text returned to users or operators must be in English — this is a global service whose users do not read Korean. | [user-facing-text-in-english](../conventions/global/user-facing-text-in-english.md) |
 | In bare-cache worktrees, refresh origin/main with an explicit refspec before rebasing onto main — `git fetch origin main` alone may leave origin/main stale. | [worktree-rebase-origin-main](../conventions/global/worktree-rebase-origin-main.md) |
 
