@@ -3,7 +3,7 @@ import classes from "./AppFrame.module.css";
 import type { AppHeaderProps } from "./AppHeader";
 import type { ReactElement, ReactNode } from "react";
 
-interface AppFrameProps extends AppHeaderProps {
+export interface AppFrameProps extends AppHeaderProps {
   children: ReactNode;
 }
 

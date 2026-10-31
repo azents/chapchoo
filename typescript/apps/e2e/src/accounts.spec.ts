@@ -54,6 +54,65 @@ async function login(
   ).toBeVisible();
 }
 
+async function verifyInitialCanvas(
+  context: BrowserContext,
+  url: string,
+  expected: {
+    serverMode: "light" | "dark";
+    mode: "light" | "dark";
+    media: "light" | "dark";
+  } = { serverMode: "dark", mode: "dark", media: "light" },
+): Promise<void> {
+  const page = await context.newPage();
+  await page.emulateMedia({ colorScheme: expected.media });
+  const background =
+    expected.mode === "dark" ? "rgb(24, 28, 24)" : "rgb(253, 252, 248)";
+  let releaseStyles: () => void = () => {};
+  const stylesReady = new Promise<void>((resolve) => {
+    releaseStyles = resolve;
+  });
+  await page.route("**/*", async (route) => {
+    if (route.request().resourceType() === "script") {
+      await route.abort();
+      return;
+    }
+    if (route.request().resourceType() === "stylesheet") await stylesReady;
+    await route.continue();
+  });
+  try {
+    await page.goto(url, { waitUntil: "commit" });
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-mantine-color-scheme",
+      expected.serverMode,
+    );
+    // Parser-blocking styles keep the head bootstrap from running here.
+    const canvas = await page.evaluate(() => {
+      const root = document.documentElement;
+      return {
+        scheme: getComputedStyle(root).colorScheme,
+        background: getComputedStyle(root).backgroundColor,
+        inlineScheme: root.style.colorScheme,
+        preference: root.dataset.colorModePreference,
+      };
+    });
+    const scheme =
+      canvas.preference === "system" ? "light dark" : expected.mode;
+    expect(canvas.scheme).toBe(scheme);
+    expect(canvas.inlineScheme).toBe(scheme);
+    expect(canvas.background).toBe(background);
+    releaseStyles();
+    await page.waitForLoadState("load");
+    // External JavaScript is still blocked: SSR CSS must paint the body.
+    await expect(page.locator("body")).toHaveCSS(
+      "background-color",
+      background,
+    );
+  } finally {
+    releaseStyles();
+    await page.close();
+  }
+}
+
 async function issuedLink(
   page: Page,
   fixture: Assembly,
@@ -182,15 +241,31 @@ test.describe("Assembled account and team acceptance", () => {
     assembly,
   }) => {
     await administrator.emulateMedia({ colorScheme: "dark" });
+    await verifyInitialCanvas(
+      administrator.context(),
+      `${assembly.generalUrl}/login`,
+      { serverMode: "light", mode: "dark", media: "dark" },
+    );
+    await verifyInitialCanvas(
+      administrator.context(),
+      `${assembly.adminUrl}/setup`,
+      { serverMode: "dark", mode: "light", media: "light" },
+    );
     await administrator.addInitScript(() => {
       function firstContentFrame(): void {
+        if (document.documentElement.dataset.appearanceObservation === "done")
+          return;
         if (!document.querySelector("main")) {
           requestAnimationFrame(firstContentFrame);
           return;
         }
         const root = document.documentElement;
         const mode = root.dataset.mantineColorScheme;
+        const background = getComputedStyle(document.body).backgroundColor;
         root.dataset.firstFrameMode ??= mode;
+        root.dataset.firstFrameBackground ??= background;
+        if (background !== "rgb(24, 28, 24)")
+          root.dataset.unexpectedFrameBackground = background;
         if (
           mode &&
           root.dataset.appearanceModeHistory?.split(",").at(-1) !== mode
@@ -210,6 +285,10 @@ test.describe("Assembled account and team acceptance", () => {
       "data-first-frame-mode",
       "dark",
     );
+    await expect(administrator.locator("html")).toHaveAttribute(
+      "data-first-frame-background",
+      "rgb(24, 28, 24)",
+    );
     const appearance = administrator.getByRole("button", {
       name: "Appearance",
       exact: true,
@@ -226,6 +305,9 @@ test.describe("Assembled account and team acceptance", () => {
     await expect(administrator.locator("html")).toHaveAttribute(
       "data-appearance-mode-history",
       "dark",
+    );
+    await expect(administrator.locator("html")).not.toHaveAttribute(
+      "data-unexpected-frame-background",
     );
     await appearance.focus();
     await appearance.click();
@@ -249,6 +331,28 @@ test.describe("Assembled account and team acceptance", () => {
     expect(await rendered.text()).toMatch(
       /<html[^>]*data-mantine-color-scheme="dark"/,
     );
+    await verifyInitialCanvas(
+      administrator.context(),
+      `${assembly.generalUrl}/login`,
+    );
+    await verifyInitialCanvas(
+      administrator.context(),
+      `${assembly.adminUrl}/setup`,
+    );
+    await administrator.reload();
+    await expect(administrator.locator("html")).toHaveAttribute(
+      "data-first-frame-background",
+      "rgb(24, 28, 24)",
+    );
+    await expect(
+      administrator.getByRole("button", { name: "Appearance", exact: true }),
+    ).toHaveAttribute("data-mode", "dark");
+    await administrator.evaluate(() => {
+      document.documentElement.dataset.appearanceObservation = "done";
+    });
+    await expect(administrator.locator("html")).not.toHaveAttribute(
+      "data-unexpected-frame-background",
+    );
     await administrator.goto(`${assembly.adminUrl}/setup`);
     await expect(
       administrator.getByRole("button", { name: "Appearance", exact: true }),
@@ -256,6 +360,10 @@ test.describe("Assembled account and team acceptance", () => {
     await expect(administrator.locator("html")).toHaveAttribute(
       "data-first-frame-mode",
       "dark",
+    );
+    await expect(administrator.locator("html")).toHaveAttribute(
+      "data-first-frame-background",
+      "rgb(24, 28, 24)",
     );
     await administrator
       .getByRole("textbox", { name: "Email", exact: true })

@@ -56,8 +56,9 @@ product-state review role.
 
 Both applications reuse the same sticky global AppHeader through their auth/setup
 and workspace frames. Its brand is left-aligned and its 44×44 icon-only appearance
-entry point remains at the far right on desktop and narrow views. The entry point
-has a localized accessible name/hover title and a monitor, sun or moon for the
+entry point remains at the far right on desktop and narrow views, including
+workspace loading and recoverable errors. The entry point has a localized
+accessible name/hover title and a monitor, sun or moon for the
 selected preference. It opens a keyboard-operable System/Light/Dark menu with a
 current-selection check and restores focus on close. Account identity/logout
 join this header on desktop and remain in a separate context row below navigation
@@ -84,6 +85,13 @@ in-page change but cannot guarantee persistence. Already-open independent tabs
 are not actively synchronized through a cross-tab service.
 
 Each root layout validates cookies and emits initial HTML/body mode attributes.
+The HTML element also carries inline `color-scheme` and a canonical-token
+`light-dark()` canvas background, so the document canvas does not depend on
+external stylesheets, the head bootstrap or hydration. System advertises both
+schemes so the browser selects the canvas from current media even when the
+cached resolution is absent or stale; explicit modes advertise only that mode.
+The existing bootstrap
+and live bridge update that same color scheme; the canvas follows automatically.
 Explicit preferences win over a cached resolution. System uses the cached hint
 or a light server placeholder until a synchronous head bootstrap resolves current
 browser media before visible paint. A body-start prelude mirrors the result, and
@@ -93,6 +101,10 @@ preference. With JavaScript disabled, explicit cookie modes still render correct
 unknown System uses the server placeholder. Adaptive CSS variables use the HTML
 mode as their sole styling authority. Shared presentation remains cookie-free;
 the browser-safe web-core policy and app bridges own persistence/synchronization.
+Browser acceptance checks computed canvas colors while external stylesheets are
+held, then SSR body colors with application scripts blocked, and actual
+content-frame background colors through refresh/hydration. Mode attributes alone
+are not treated as proof of initial paint.
 
 Light and warm olive-charcoal dark maps retain common layout/type metrics and
 use separate filled-accent ink and readable accent-text roles. Menus/dialogs use

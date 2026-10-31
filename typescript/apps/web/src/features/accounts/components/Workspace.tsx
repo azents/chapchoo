@@ -1,6 +1,7 @@
 "use client";
 
-import { ApplicationShell } from "@chapchoo/ui/ApplicationShell";
+import { AppFrame } from "@chapchoo/ui/AppFrame";
+import { ApplicationShellContent } from "@chapchoo/ui/ApplicationShell";
 import { ConfirmationDialog } from "@chapchoo/ui/ConfirmationDialog";
 import { ContentSection } from "@chapchoo/ui/ContentSection";
 import {
@@ -33,6 +34,35 @@ function roleLabel(role: string, c: Copy): string {
 }
 
 export function Workspace(props: WorkspaceProps): ReactNode {
+  const actions =
+    props.state.type === "LOADED" ? (
+      <Button
+        variant="subtle"
+        size="xs"
+        onClick={props.onLogout}
+        disabled={props.submission.type === "PENDING"}
+      >
+        {props.copy.logout}
+      </Button>
+    ) : null;
+  return (
+    <AppFrame
+      appearance={props.appearance}
+      {...(props.state.type === "LOADED"
+        ? { identityLabel: props.state.data.identity }
+        : {})}
+      actions={actions}
+    >
+      <WorkspaceContent {...props} accountActions={actions} />
+    </AppFrame>
+  );
+}
+
+interface WorkspaceContentProps extends WorkspaceProps {
+  accountActions: ReactNode;
+}
+
+function WorkspaceContent(props: WorkspaceContentProps): ReactNode {
   const { copy: c, state, submission } = props;
   if (state.type === "LOADING") {
     return (
@@ -74,8 +104,7 @@ export function Workspace(props: WorkspaceProps): ReactNode {
             ? c.leaveTeam
             : c.deleteTeam;
   return (
-    <ApplicationShell
-      appearance={props.appearance}
+    <ApplicationShellContent
       basePath={props.basePath}
       contextLabel={team?.personal ? c.personal : c.team}
       title={team?.name ?? c.contexts}
@@ -94,16 +123,7 @@ export function Workspace(props: WorkspaceProps): ReactNode {
           active: item.id === team?.id,
         })),
       ]}
-      actions={
-        <Button
-          variant="subtle"
-          size="xs"
-          onClick={props.onLogout}
-          disabled={pending}
-        >
-          {c.logout}
-        </Button>
-      }
+      actions={props.accountActions}
     >
       {submission.type === "ERROR" && props.confirmation === null ? (
         <Alert color="red" role="alert">
@@ -456,6 +476,6 @@ export function Workspace(props: WorkspaceProps): ReactNode {
               : { type: "READY" }
         }
       />
-    </ApplicationShell>
+    </ApplicationShellContent>
   );
 }
