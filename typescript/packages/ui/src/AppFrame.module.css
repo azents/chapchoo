@@ -4,3 +4,8 @@
   flex-direction: column;
   background: var(--chapchoo-color-canvas);
 }
+@media (min-width: 48.001em) {
+  .frame {
+    height: 100dvh;
+  }
+}

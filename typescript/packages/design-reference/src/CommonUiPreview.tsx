@@ -3,7 +3,16 @@ import { FontFaces } from "@chapchoo/ui/FontFaces";
 import { AppMantineProvider } from "@chapchoo/ui/provider";
 import { AppHeader } from "@chapchoo/ui/AppHeader";
 import { Mascot } from "@chapchoo/ui/Mascot";
-import { Button, Chip, Group, Stack } from "@mantine/core";
+import {
+  Button,
+  Chip,
+  Group,
+  Stack,
+  TextInput,
+  Select,
+  Paper,
+  Text,
+} from "@mantine/core";
 import type { ReactElement } from "react";
 import "@mantine/core/styles.css";
 
@@ -36,6 +45,21 @@ export default function CommonUiPreview(): ReactElement {
           </Button>
           <Chip defaultChecked>Typography gyp 한글</Chip>
         </Group>
+        <Group align="end">
+          <TextInput label="Email" defaultValue="member@example.com" />
+          <Select
+            label="Space"
+            data={["Personal", "Team"]}
+            defaultValue="Personal"
+          />
+          <Button>Save</Button>
+        </Group>
+        <Paper variant="row">
+          <Text fw={600}>Personal space</Text>
+          <Text size="sm" c="dimmed">
+            A divider row keeps the surrounding content baseline.
+          </Text>
+        </Paper>
       </Stack>
     </AppMantineProvider>
   );

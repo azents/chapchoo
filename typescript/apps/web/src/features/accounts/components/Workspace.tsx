@@ -181,7 +181,7 @@ function WorkspaceContent(props: WorkspaceContentProps): ReactNode {
           <Text c="dimmed">{c.contextDescription}</Text>
           <Stack gap="sm">
             {contexts.map((item) => (
-              <Paper key={item.id} className={classes.contextRow}>
+              <Paper key={item.id} variant="row" className={classes.contextRow}>
                 <Group justify="space-between" wrap="wrap">
                   <Stack gap="xs">
                     <Anchor
