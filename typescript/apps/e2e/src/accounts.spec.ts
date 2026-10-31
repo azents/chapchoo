@@ -70,7 +70,7 @@ async function loginDocument(page: Page, url: string): Promise<string> {
   const response = await page.goto(`${url}/login`);
   if (!response) throw new Error("The login document response is required");
   const html = await response.text();
-  const source = /<img[^>]+src="([^"]+\/design-assets\/[^"]+-216\.webp)"/.exec(
+  const source = /<img[^>]+src="([^"]*\/design-assets\/[^"]+-216\.webp)"/.exec(
     html,
   )?.[1];
   if (!source)
