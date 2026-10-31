@@ -77,3 +77,24 @@ export const MobileOverflow: Story = {
       "a-long-address-that-must-wrap-without-hiding-actions@example.com",
   },
 };
+export const LongContent: Story = {
+  args: {
+    children: Array.from({ length: 30 }, (_, index) => (
+      <p key={index}>
+        Workspace paragraph {index + 1}: content scrolls independently of
+        navigation.
+      </p>
+    )),
+  },
+};
+export const LongNavigation: Story = {
+  ...LongContent,
+  args: {
+    ...LongContent.args,
+    navigation: Array.from({ length: 20 }, (_, index) => ({
+      key: String(index),
+      label: `Workspace ${index + 1}`,
+      href: `#workspace-${index + 1}`,
+    })),
+  },
+};

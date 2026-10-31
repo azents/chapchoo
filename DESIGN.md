@@ -149,13 +149,18 @@ identities; actual code can use a code font. These roles are not permission to
 make long-form mobile content tiny.
 
 Mobile editable controls use at least **16 CSS px**, with a default **20px line
-height** (1.25 ratio), without enlarging the surrounding labels, buttons, control
-frames or spacing. This applies to actual text/password/search/email/code inputs,
+height** (1.25 ratio), without enlarging the surrounding labels or spacing.
+Same-size form fields and actions share a common frame-height scale (xs 36px,
+sm/default 44px, md 48px, lg 56px, xl 64px), with a 44px minimum on narrow
+screens. This applies to actual text/password/search/email/code inputs,
 textareas, selects and editable text surfaces, including inner compound controls.
 Preserve larger user text settings. This is the selected treatment for Safari's
 focus zoom behavior, not a reason to disable pinch zoom or enlarge checkboxes,
 toggles and other non-text controls. The requester selected the input-only
 comparison on 2026-10-30 after reviewing both auth and chat examples.
+The requester added shared form-frame alignment on 2026-10-31. Multiline and
+multi-value fields may grow with their content; wrapped action labels retain
+their complete line boxes.
 
 Textual controls keep a complete line box, including descenders and Korean glyph
 extents. Use a 1.5 line-height for action labels and let controls grow when text
@@ -184,6 +189,13 @@ header height. Preserve modal layering above the header and body typography.
 
 - Start with the user's work: content, current context, relevant state and next
   actions. Use stable alignment and proximity to explain relationships.
+- Desktop workspaces give the sidebar and main content independent scroll
+  regions beneath the variable-height global header. Main content length does
+  not move the sidebar footer. Short windows and long navigation scroll the
+  complete sidebar; narrow layouts retain normal document scrolling.
+- Divider-list rows use transparent backgrounds and the same inline content
+  baseline as neighboring headings and sections. Do not turn a zero-inset row
+  into a filled box; use the common Paper row variant for this treatment.
 - Desktop may have quiet side navigation and a bounded reading measure. The
   selected sample used about 258px navigation and 790px reading width; other
   workflows may need different measures.

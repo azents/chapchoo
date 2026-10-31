@@ -40,6 +40,18 @@ font stylesheet, font and decorative mascot URLs. The 72px mascot uses a 216px
 alpha-preserving production derivative with normal composition. Six transparent
 PNG masters and small WebPs share both appearances; unchanged generated originals
 and extraction provenance remain in common UI assets.
+Same-size single-line form fields and buttons share common frame heights through
+the theme's Input and Button variables: xs 36px, default/sm 44px, md 48px,
+lg 56px and xl 64px; narrow screens retain a 44px minimum. Textareas and
+multi-value fields can grow rather than clipping content. Workspace contexts
+use the shared transparent Paper row variant, aligning their text with adjacent
+sections without an edge-flush filled background.
+
+Desktop workspace sidebar and content regions scroll independently within the
+viewport below the variable-height global header. The sidebar footer stays
+independent of main-content length; the entire sidebar can scroll in short
+windows or with long navigation. Narrow layouts use ordinary document scrolling.
+
 The requester-supplied golden retriever is the default. Shared `Mascot` callers
 can select bichon, corgi, dachshund, husky or border collie with a typed character
 prop; this does not add a user-facing character picker.
