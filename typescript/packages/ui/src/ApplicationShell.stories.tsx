@@ -9,6 +9,7 @@ const meta = {
   parameters: { layout: "fullscreen" },
   args: {
     contextLabel: "Administration",
+    mascotReplayLabel: "Replay character animation",
     title: "Signup grants",
     identityLabel: "administrator@example.com",
     navigation: [

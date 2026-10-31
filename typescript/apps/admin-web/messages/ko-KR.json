@@ -6,6 +6,7 @@
     "dark": "다크"
   },
   "AdminAuth": {
+    "replayMascot": "캐릭터 애니메이션 재생",
     "loginTitle": "Chapchoo Admin 로그인",
     "loginDescription": "서버 관리자 권한이 있는 계정으로 로그인하세요.",
     "setupTitle": "첫 번째 관리자 설정",
@@ -31,6 +32,7 @@
     "passwordPolicy": "출력 가능한 ASCII 문자 8~64자로 입력하고, 영문 대문자·소문자·숫자·기호 중 세 종류 이상을 포함하세요."
   },
   "AdminGrants": {
+    "replayMascot": "캐릭터 애니메이션 재생",
     "context": "서버 관리",
     "signupTitle": "가입 링크",
     "resetTitle": "비밀번호 재설정 링크",

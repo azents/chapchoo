@@ -72,6 +72,7 @@ export function AdminGrants(props: AdminGrantsProps): ReactElement {
   const disabled = props.pending || state.type !== "LOADED";
   return (
     <ApplicationShell
+      mascotReplayLabel={text("replayMascot")}
       appearance={props.appearance}
       basePath={props.basePath}
       contextLabel={text("context")}

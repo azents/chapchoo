@@ -2,16 +2,13 @@ import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
 import test from "node:test";
 import postcss from "postcss";
-import { mascotArtwork } from "./src/mascot-motion/mascotArtwork.ts";
-import { mascots, mascotIds } from "../ui/src/designTokens.ts";
-import { createMascotPlayback } from "./src/mascot-motion/mascotPlayback.ts";
+import { mascotArtwork } from "./src/mascotArtwork.ts";
+import { mascots, mascotIds } from "./src/designTokens.ts";
+import { createMascotPlayback } from "./src/mascotPlayback.ts";
 
 const css = postcss.parse(
   readFileSync(
-    new URL(
-      "./src/mascot-motion/AgentMascotMotion.module.css",
-      import.meta.url,
-    ),
+    new URL("./src/AgentMascotMotion.module.css", import.meta.url),
     "utf8",
   ),
 );
@@ -21,13 +18,12 @@ test("all canonical masters have a tight, valid ground-aligned crop in catalog o
   for (const [key, artwork] of Object.entries(mascotArtwork)) {
     assert.equal(artwork.file, mascots.find((pet) => pet.key === key)?.file);
     assert.ok(
-      existsSync(
-        new URL(`../ui/assets/mascots/${artwork.file}`, import.meta.url),
-      ),
+      existsSync(new URL(`./assets/mascots/${artwork.file}`, import.meta.url)),
     );
     const [x, y, width, height] = artwork.viewBox.split(" ").map(Number);
     assert.equal(width, artwork.width);
     assert.equal(height, artwork.height);
+    assert.equal(y + height, artwork.bottom);
     assert.ok(x >= 0 && y >= 0 && x + width <= 1254 && y + height <= 1254);
   }
 });

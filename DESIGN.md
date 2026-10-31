@@ -285,8 +285,10 @@ and reproducible generation.
 
 Use motion when the character represents **the Agent as the subject of
 interaction**. Use static artwork when the character is an accessory, supporting
-illustration or decoration. Presence of a mascot alone does not opt a screen into
-animation; existing authentication and sidebar placements remain static.
+illustration or decoration unless an explicit placement decision selects motion.
+On 2026-10-31, after reviewing desktop/mobile screenshots, the requester selected
+all existing General/Admin authentication-heading and sidebar-companion placements
+for this motion. Sidebar companions retain their existing narrow-screen hiding.
 
 The requester approved the grounded stretch gesture on 2026-10-31: **5% vertical
 extension, 1200ms active motion, extension displacement 30 degrees clockwise from
@@ -301,9 +303,11 @@ without restarting or queuing another gesture. Hover has no playback effect.
 Pausing automatic playback permits explicit one-shot replay; reduced motion,
 offscreen artwork and hidden documents stop all playback.
 
-The reusable React implementation and actor/accessory examples live in the
-independent design reference for now. This approval does not select any existing
-General/Admin page for motion or implement Agent lifecycle behavior.
+The reusable React implementation belongs to common web UI and is imported by
+the independent design reference's actor/accessory examples. Production motion
+retains the static artwork's square box and WebP asset, anchoring at the artwork's
+actual contact line inside that box. Static `Mascot` remains available for other
+accessory placements. This rollout does not implement Agent lifecycle behavior.
 
 ### Accessible operation
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { Badge, Box, Group, NavLink, Stack, Text, Title } from "@mantine/core";
-import { Mascot } from "./Mascot";
+import { AgentMascotMotion } from "./AgentMascotMotion";
 import { AppFrame } from "./AppFrame";
 import classes from "./ApplicationShell.module.css";
 import type { ColorModeMenuProps } from "./ColorModeMenu";
@@ -15,6 +15,7 @@ export interface NavigationItem {
   onSelect?: () => void;
 }
 export interface ApplicationShellProps {
+  mascotReplayLabel: string;
   appearance?: ColorModeMenuProps;
   brand?: string;
   contextLabel: string;
@@ -70,6 +71,7 @@ export function ApplicationShell({
 
 /** Body composition for consumers retaining a shared frame across feedback states. */
 export function ApplicationShellContent({
+  mascotReplayLabel,
   contextLabel,
   title,
   identityLabel,
@@ -116,7 +118,12 @@ export function ApplicationShellContent({
           )}
         </Box>
         <div className={classes.companion}>
-          <Mascot basePath={basePath} size={72} />
+          <AgentMascotMotion
+            basePath={basePath}
+            size={72}
+            playing
+            replayLabel={mascotReplayLabel}
+          />
         </div>
       </Box>
       <div className={classes.workspace}>

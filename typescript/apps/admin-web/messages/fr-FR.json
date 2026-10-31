@@ -6,6 +6,7 @@
     "dark": "Sombre"
   },
   "AdminAuth": {
+    "replayMascot": "Rejouer l’animation du personnage",
     "loginTitle": "Se connecter à Chapchoo Admin",
     "loginDescription": "Utilisez un compte disposant des droits d’administration du serveur.",
     "setupTitle": "Configurer le premier administrateur",
@@ -31,6 +32,7 @@
     "passwordPolicy": "Utilisez 8 à 64 caractères ASCII imprimables et au moins trois catégories parmi : majuscules, minuscules, chiffres et symboles."
   },
   "AdminGrants": {
+    "replayMascot": "Rejouer l’animation du personnage",
     "context": "Administration du serveur",
     "signupTitle": "Liens d’inscription",
     "resetTitle": "Liens de réinitialisation du mot de passe",

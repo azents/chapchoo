@@ -72,6 +72,25 @@ the former scaffold layout without changing app-owned actions or permissions. Ge
 [design reference workspace](design-reference.md); app Storybooks retain their
 product-state review role.
 
+## Mascot motion
+
+General/Admin authentication headings and desktop sidebar companions use shared
+`AgentMascotMotion` at their existing 72px-square placements. Production keeps the
+small WebP URL, character selection and surrounding geometry; per-character alpha
+contact metadata anchors the transform inside the square canvas. Authentication
+remains visible on narrow screens while sidebar companions retain their 48em
+hiding rule. The static `Mascot` primitive remains available for other artwork.
+
+The approved gesture extends by 5% for 1200ms toward 30 degrees clockwise from
+upward vertical, with a small damped return bounce and six-second automatic rest.
+A native named replay button accepts click/touch/Enter/Space only at rest; input
+during playback is ignored without restart or queuing. Hover does not trigger it.
+Each app supplies the replay action name in its four supported locales.
+Reduced motion disables playback and the replay control. Hidden documents and
+offscreen placements cancel active/pending work, with no catch-up replay.
+Server-selected login artwork remains stable through hydration and edits.
+The independent design reference imports this same common-UI implementation.
+
 ## Appearance lifecycle
 
 Both applications reuse the same sticky global AppHeader through their auth/setup
