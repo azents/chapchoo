@@ -1,2 +1,14 @@
 test-results/
 playwright-report/
+
+# Next.js outputs
+/.next/
+/next-env.d.ts
+
+# Staged shared identity assets
+/public/fonts/
+/public/design-assets/
+/public/favicon.ico
+
+# Built component previews
+/storybook-static/
