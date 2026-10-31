@@ -190,6 +190,7 @@ function FormControlSizing({
         Save a long localized action — 긴 작업 저장
       </Button>
       <Button loading>Saving</Button>
+      <Button size="compact-sm">Compact action</Button>
     </Stack>
   );
 }

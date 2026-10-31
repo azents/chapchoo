@@ -222,7 +222,9 @@ export const theme = createTheme({
         root: {
           "--button-height": getSize(
             props.size ?? "sm",
-            "chapchoo-control-height",
+            props.size?.startsWith("compact-")
+              ? "button-height"
+              : "chapchoo-control-height",
           ),
         },
       }),

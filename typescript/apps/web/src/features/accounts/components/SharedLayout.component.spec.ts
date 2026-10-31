@@ -18,6 +18,12 @@ for (const width of [1280, 390]) {
         await page.evaluate((value) => {
           document.documentElement.style.fontSize = value;
         }, scale);
+        await expect(
+          page.getByRole("button", { name: "Compact action" }),
+        ).toHaveCSS(
+          "min-height",
+          `${(width === 390 ? 44 : 26) * (scale === "200%" ? 2 : 1)}px`,
+        );
         for (const pair of await page.locator("[data-control-pair]").all()) {
           const frame = pair.locator(".mantine-Input-input").first();
           const button = pair.locator(".mantine-Button-root");
