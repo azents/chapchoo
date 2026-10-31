@@ -52,6 +52,9 @@ export const darkToneColors: Record<keyof typeof toneColors, string> = {
   focus: "#edca6e",
 };
 
+/** Inline root canvas remains available before external CSS or hydration. */
+export const documentCanvasBackground = `light-dark(${toneColors.canvas}, ${darkToneColors.canvas})`;
+
 export const toneMetrics = {
   space: { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 },
   radius: { control: 12, surface: 18, avatar: 24 },

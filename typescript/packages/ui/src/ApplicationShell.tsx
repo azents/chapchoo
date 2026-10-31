@@ -25,11 +25,31 @@ export interface ApplicationShellProps {
   children: ReactNode;
   basePath?: string;
 }
+export type ApplicationShellContentProps = Omit<
+  ApplicationShellProps,
+  "appearance" | "brand"
+>;
 
 /** Product navigation and orientation without routing or business assumptions. */
 export function ApplicationShell({
-  brand = "chapchoo",
+  brand,
   appearance,
+  ...content
+}: ApplicationShellProps): ReactNode {
+  return (
+    <AppFrame
+      brand={brand}
+      appearance={appearance}
+      identityLabel={content.identityLabel}
+      actions={content.actions}
+    >
+      <ApplicationShellContent {...content} />
+    </AppFrame>
+  );
+}
+
+/** Body composition for consumers retaining a shared frame across feedback states. */
+export function ApplicationShellContent({
   contextLabel,
   title,
   identityLabel,
@@ -37,73 +57,66 @@ export function ApplicationShell({
   actions,
   children,
   basePath = "",
-}: ApplicationShellProps): ReactNode {
+}: ApplicationShellContentProps): ReactNode {
   return (
-    <AppFrame
-      brand={brand}
-      appearance={appearance}
-      identityLabel={identityLabel}
-      actions={actions}
-    >
-      <Box className={classes.shell}>
-        <Box component="aside" className={classes.sidebar}>
-          <div className={classes.brand}>
-            <Badge variant="light" size="sm">
-              {contextLabel}
-            </Badge>
-          </div>
-          <Box
-            component="nav"
-            aria-label={contextLabel}
-            className={classes.navigation}
-          >
-            {navigation.map((item) =>
-              item.href ? (
-                <NavLink
-                  key={item.key}
-                  component="a"
-                  href={item.href}
-                  label={item.label}
-                  active={item.active}
-                  aria-current={item.active ? "page" : undefined}
-                  onClick={item.onSelect}
-                />
-              ) : (
-                <NavLink
-                  key={item.key}
-                  component="button"
-                  type="button"
-                  label={item.label}
-                  active={item.active}
-                  aria-current={item.active ? "page" : undefined}
-                  onClick={item.onSelect}
-                />
-              ),
-            )}
-          </Box>
-          <div className={classes.companion}>
-            <Mascot basePath={basePath} size={72} />
-          </div>
+    <Box className={classes.shell}>
+      <Box component="aside" className={classes.sidebar}>
+        <div className={classes.brand}>
+          <Badge variant="light" size="sm">
+            {contextLabel}
+          </Badge>
+        </div>
+        <Box
+          component="nav"
+          aria-label={contextLabel}
+          className={classes.navigation}
+        >
+          {navigation.map((item) =>
+            item.href ? (
+              <NavLink
+                key={item.key}
+                component="a"
+                href={item.href}
+                label={item.label}
+                active={item.active}
+                aria-current={item.active ? "page" : undefined}
+                onClick={item.onSelect}
+              />
+            ) : (
+              <NavLink
+                key={item.key}
+                component="button"
+                type="button"
+                label={item.label}
+                active={item.active}
+                aria-current={item.active ? "page" : undefined}
+                onClick={item.onSelect}
+              />
+            ),
+          )}
         </Box>
-        <div className={classes.workspace}>
-          <Box className={classes.contextHeader}>
-            <Text size="sm" c="dimmed" className={classes.identity}>
-              {identityLabel}
-            </Text>
-            <Group gap="sm" className={classes.actions}>
-              {actions}
-            </Group>
-          </Box>
-          <Box component="main" className={classes.main}>
-            <div className={classes.content}>
-              <Title order={1} size="h2" className={classes.title}>
-                {title}
-              </Title>
-              <Stack gap="xl">{children}</Stack>
-            </div>
-          </Box>
+        <div className={classes.companion}>
+          <Mascot basePath={basePath} size={72} />
         </div>
       </Box>
-    </AppFrame>
+      <div className={classes.workspace}>
+        <Box className={classes.contextHeader}>
+          <Text size="sm" c="dimmed" className={classes.identity}>
+            {identityLabel}
+          </Text>
+          <Group gap="sm" className={classes.actions}>
+            {actions}
+          </Group>
+        </Box>
+        <Box component="main" className={classes.main}>
+          <div className={classes.content}>
+            <Title order={1} size="h2" className={classes.title}>
+              {title}
+            </Title>
+            <Stack gap="xl">{children}</Stack>
+          </div>
+        </Box>
+      </div>
+    </Box>
   );
 }

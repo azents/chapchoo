@@ -1,3 +1,4 @@
+import { documentCanvasBackground } from "@chapchoo/ui/designTokens";
 import { FontFaces } from "@chapchoo/ui/FontFaces";
 import {
   bodyColorModeBootstrap,
@@ -47,6 +48,11 @@ export default async function RootLayout({
       lang={locale}
       data-mantine-color-scheme={initial.mode}
       data-color-mode-preference={initial.preference}
+      style={{
+        colorScheme:
+          initial.preference === "system" ? "light dark" : initial.mode,
+        backgroundColor: documentCanvasBackground,
+      }}
       suppressHydrationWarning
     >
       <head>

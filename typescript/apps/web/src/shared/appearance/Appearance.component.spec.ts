@@ -84,6 +84,8 @@ test("auth and workspace share the top-right header position at every width", as
     for (const id of [
       "accounts-authentication--password-login",
       "accounts-workspace--owner",
+      "accounts-workspace--loading",
+      "accounts-workspace--error",
       "shared-ui-app-header--long-identity",
     ]) {
       await page.goto(
@@ -110,6 +112,14 @@ test("auth and workspace share the top-right header position at every width", as
       );
       const scrolled = await header.boundingBox();
       expect(scrolled?.y).toBe(0);
+      if (id.endsWith("--loading") || id.endsWith("--error")) {
+        await mode.click();
+        await expect(
+          page.getByRole("menuitem", { name: "System", exact: true }),
+        ).toHaveAttribute("aria-current", "true");
+        await page.keyboard.press("Escape");
+        await expect(mode).toBeFocused();
+      }
     }
   }
 });

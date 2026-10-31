@@ -1,8 +1,10 @@
+import { useState } from "react";
 import messages from "../../../../messages/en-US.json";
 import korean from "../../../../messages/ko-KR.json";
 import { Workspace } from "./Workspace";
-import type { WorkspaceData } from "../types";
+import type { WorkspaceData, WorkspaceProps } from "../types";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
+import type { ReactElement } from "react";
 
 const data: WorkspaceData = {
   identity: "owner@example.com",
@@ -75,6 +77,22 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const ContextsAndInvitation: Story = {};
+function RecoveryFixture(props: WorkspaceProps): ReactElement {
+  const [state, setState] = useState<WorkspaceProps["state"]>({
+    type: "ERROR",
+    message: messages.accounts.genericError,
+  });
+  return (
+    <Workspace
+      {...props}
+      state={state}
+      onRetry={() => setState({ type: "LOADED", data })}
+    />
+  );
+}
+export const RetryToLoaded: Story = {
+  render: (args): ReactElement => <RecoveryFixture {...args} />,
+};
 export const EmptyInvitations: Story = {
   args: { state: { type: "LOADED", data: { ...data, received: [] } } },
 };
