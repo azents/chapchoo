@@ -51,7 +51,7 @@ export default function MascotMotionDocument({
           </Text>
           <Group>
             <Button onClick={() => setPlaying(!playing)} aria-pressed={playing}>
-              {playing ? "Pause motion" : "Play motion"}
+              {playing ? "Pause automatic motion" : "Play automatic motion"}
             </Button>
             <Text size="sm" c="dimmed">
               Motion is reserved for the Agent as the subject of interaction.
@@ -70,10 +70,12 @@ export default function MascotMotionDocument({
                       assetBasePath="./mascots"
                       size={180}
                       playing={playing}
+                      replayLabel="Replay corgi gesture"
                     />
                   </div>
                   <Text size="sm">
-                    A character participating in the interaction.
+                    Click or tap to play while resting. Input during a gesture
+                    is ignored; hovering does not trigger motion.
                   </Text>
                 </Stack>
               </Paper>
@@ -103,6 +105,7 @@ export default function MascotMotionDocument({
                       assetBasePath="./mascots"
                       size={140}
                       playing={playing}
+                      replayLabel={`Replay ${character} gesture`}
                       delayMs={index * 180}
                     />
                   </div>
@@ -124,6 +127,7 @@ export default function MascotMotionDocument({
                 assetBasePath="./mascots"
                 size={64}
                 playing={playing}
+                replayLabel={`Replay small ${character} gesture`}
                 delayMs={index * 180}
               />
             ))}

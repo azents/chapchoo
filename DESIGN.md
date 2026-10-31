@@ -294,8 +294,12 @@ upward vertical**, a brief hold and one small damped return bounce. The feet sta
 on a level ground line. The character initiates the gesture rather than jumping
 or appearing externally pulled. The return dips by 0.75% and rebounds by 1%
 before settling; repeated elastic wobbling should not dominate. Reference
-playback rests for six seconds between gestures. Reduced motion, paused playback,
-offscreen artwork and hidden documents show the resting pose.
+automatic playback rests for six seconds between gestures. Click or touch on a
+resting animated character starts the gesture immediately; Enter/Space provides
+the same replay through a named button. Input during an active gesture is ignored
+without restarting or queuing another gesture. Hover has no playback effect.
+Pausing automatic playback permits explicit one-shot replay; reduced motion,
+offscreen artwork and hidden documents stop all playback.
 
 The reusable React implementation and actor/accessory examples live in the
 independent design reference for now. This approval does not select any existing

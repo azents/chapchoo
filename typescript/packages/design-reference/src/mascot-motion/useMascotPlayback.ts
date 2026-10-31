@@ -3,22 +3,38 @@ import {
   useIntersection,
   useReducedMotion,
 } from "@mantine/hooks";
+import { useEffect, useState } from "react";
+import { createMascotPlayback } from "./mascotPlayback";
 import type { RefCallback } from "react";
 
 /** Restart locally when visible; never catch up missed background cycles. */
-export function useMascotPlayback(playing: boolean): {
-  ref: RefCallback<HTMLSpanElement>;
+export function useMascotPlayback(
+  playing: boolean,
+  delayMs: number,
+): {
+  ref: RefCallback<HTMLButtonElement>;
   running: boolean;
+  replay: () => void;
+  finish: () => void;
 } {
-  const { ref, entry } = useIntersection<HTMLSpanElement>({ threshold: 0.1 });
+  const { ref, entry } = useIntersection<HTMLButtonElement>({ threshold: 0.1 });
   const visibility = useDocumentVisibility();
   const reduced = useReducedMotion();
-  return {
-    ref,
-    running:
-      playing &&
-      visibility === "visible" &&
-      !reduced &&
-      entry?.isIntersecting === true,
-  };
+  const enabled =
+    visibility === "visible" && !reduced && entry?.isIntersecting === true;
+  const [running, setRunning] = useState(false);
+  const [playback] = useState(() =>
+    createMascotPlayback({
+      schedule(callback, delay): () => void {
+        const timer = window.setTimeout(callback, delay);
+        return (): void => window.clearTimeout(timer);
+      },
+      onActiveChange: setRunning,
+    }),
+  );
+  useEffect(() => {
+    playback.configure({ enabled, automatic: playing, delayMs });
+    return (): void => playback.dispose();
+  }, [playback, enabled, playing, delayMs]);
+  return { ref, running, replay: playback.replay, finish: playback.finish };
 }

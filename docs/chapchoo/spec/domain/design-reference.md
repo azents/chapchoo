@@ -35,9 +35,13 @@ after approval and are not executable native implementations.
 
 `Chapchoo/Mascot motion` exposes an actor/accessory comparison and five-character
 family using reference-local React components. `AgentMascotMotion` accepts
-explicit playback, artwork, size and initial stagger inputs; `MascotArtwork`
+explicit automatic playback, replay action label, artwork, size and initial stagger inputs; `MascotArtwork`
 provides static artwork of the same normalized bounds. CSS supplies the reviewed
-1200ms grounded gesture with six seconds of rest. Mantine visibility/intersection
+1200ms grounded gesture. The playback controller schedules six seconds of rest
+after completion. A named native button replays at rest on click/touch or
+Enter/Space, with no hover trigger. Active playback ignores further input without
+restart or queuing. Pausing automatic playback still permits a one-shot replay.
+Mantine visibility/intersection
 and reduced-motion hooks gate playback; a CSS media query also disables animation
 under reduced motion. Returning from a paused/hidden/offscreen state restarts the
 local cycle instead of replaying missed gestures. Original transparent PNGs stay
@@ -77,6 +81,8 @@ Static output is the ignored package-local `storybook-static/`.
 token adapters match the canonical document and checks intended text-color pairs.
 It also checks mascot asset/crop contracts, the grounded directional transforms,
 small return bounce, active/idle timing and reduced-motion CSS.
+Controller fixtures also verify input locking, manual/automatic scheduling,
+cleanup and stale-callback rejection without wall-clock sleeps.
 This check is also part of package build/typecheck and is not a full accessibility
 audit.
 

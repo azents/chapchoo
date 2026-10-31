@@ -4,6 +4,7 @@ import test from "node:test";
 import postcss from "postcss";
 import { mascotArtwork } from "./src/mascot-motion/mascotArtwork.ts";
 import { mascots } from "../ui/src/designTokens.ts";
+import { createMascotPlayback } from "./src/mascot-motion/mascotPlayback.ts";
 
 const css = postcss.parse(
   readFileSync(
@@ -61,9 +62,7 @@ test("the gesture has a 5% peak, a small rebound and a fixed 30-degree ground li
 
 test("the 1200ms active clip has six seconds of rest and respects reduced motion", () => {
   const source = css.toString();
-  assert.match(source, /grounded-stretch 7200ms infinite/);
-  assert.match(source, /16\.666667%/);
-  assert.ok(Math.abs(7200 * 0.16666667 - 1200) < 0.001);
+  assert.match(source, /grounded-stretch 1200ms both/);
   const reducedRules = [];
   css.walkAtRules("media", (rule) => {
     if (rule.params === "(prefers-reduced-motion: reduce)") {
@@ -71,4 +70,84 @@ test("the 1200ms active clip has six seconds of rest and respects reduced motion
     }
   });
   assert.deepEqual(reducedRules, ["none"]);
+});
+
+function fixture() {
+  const timers = new Set();
+  const transitions = [];
+  const playback = createMascotPlayback({
+    schedule(callback, delayMs) {
+      const timer = { callback, delayMs };
+      timers.add(timer);
+      return () => timers.delete(timer);
+    },
+    onActiveChange(active) {
+      transitions.push(active);
+    },
+  });
+  function fire() {
+    assert.equal(timers.size, 1);
+    const [timer] = timers;
+    timers.delete(timer);
+    timer.callback();
+  }
+  return { playback, timers, transitions, fire };
+}
+
+test("click/touch replay is immediate at rest and ignored throughout a gesture", () => {
+  const { playback, transitions, timers } = fixture();
+  playback.configure({ enabled: true, automatic: false, delayMs: 900 });
+  playback.replay();
+  playback.replay();
+  playback.replay();
+  assert.deepEqual(transitions, [false, true]);
+  assert.equal(timers.size, 0, "no queued replay");
+  playback.finish();
+  assert.deepEqual(transitions, [false, true, false]);
+  assert.equal(timers.size, 0);
+  playback.replay();
+  assert.deepEqual(transitions, [false, true, false, true]);
+});
+
+test("automatic cadence waits six seconds after completion; manual replay replaces pending rest", () => {
+  const { playback, transitions, timers, fire } = fixture();
+  playback.configure({ enabled: true, automatic: true, delayMs: 360 });
+  assert.equal([...timers][0].delayMs, 360);
+  playback.replay();
+  assert.equal(timers.size, 0, "manual input bypasses initial stagger");
+  playback.replay();
+  assert.deepEqual(transitions, [false, true]);
+  playback.finish();
+  assert.equal([...timers][0].delayMs, 6000);
+  playback.replay();
+  assert.equal(
+    timers.size,
+    0,
+    "manual input replaces, rather than duplicates, rest",
+  );
+  playback.finish();
+  fire();
+  assert.deepEqual(transitions, [false, true, false, true, false, true]);
+});
+
+test("visibility/reduced-motion gating cancels active and pending work without catch-up", () => {
+  const { playback, transitions, timers } = fixture();
+  playback.configure({ enabled: true, automatic: true, delayMs: 180 });
+  const [stale] = timers;
+  playback.configure({ enabled: false, automatic: true, delayMs: 180 });
+  playback.replay();
+  stale.callback();
+  assert.deepEqual(transitions, [false, false]);
+  assert.equal(timers.size, 0);
+  playback.configure({ enabled: true, automatic: false, delayMs: 0 });
+  playback.replay();
+  playback.configure({ enabled: false, automatic: false, delayMs: 0 });
+  playback.finish();
+  assert.deepEqual(transitions, [false, false, false, true, false]);
+  assert.equal(timers.size, 0);
+  playback.configure({ enabled: true, automatic: true, delayMs: 180 });
+  playback.dispose();
+  assert.equal(timers.size, 0);
+  playback.replay();
+  assert.equal(transitions.at(-1), false);
 });

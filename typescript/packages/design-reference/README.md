@@ -97,13 +97,18 @@ theme provider. Each represented design opts into its own isolated provider.
 ## Promote for production-web reuse
 
 The reviewed `src/mascot-motion/AgentMascotMotion.tsx` remains reference-local
-until a product caller is selected. Its explicit `playing` prop enables a
-1200ms gesture followed by six seconds of rest; it resets to rest when paused,
-offscreen, in a hidden document or under reduced motion. A stable optional
+until a product caller is selected. Its explicit `playing` prop enables automatic
+1200ms gestures followed by six seconds of rest. Click/touch or native button
+keyboard activation starts a gesture immediately while resting, including when
+automatic playback is paused. Input during the active gesture is ignored without
+restart or queuing, and hover has no playback effect. The required `replayLabel`
+names the action accessibly. Offscreen, hidden-document and reduced-motion gating
+stop all playback. A stable optional
 `delayMs` staggers the first cycle. `character`, `assetBasePath` and `size` select
 existing artwork without tying its URL to a deployment mount. Adjacent
-`MascotArtwork.tsx` renders the same normalized image statically. Both are
-decorative: the surrounding interaction owns accessible identity and status.
+`MascotArtwork.tsx` renders the same normalized image statically. Artwork itself
+is decorative; the motion wrapper is a replay button, not an Agent status control.
+The surrounding interaction owns accessible identity and status.
 Use criteria and the approved gesture are defined in root `DESIGN.md`.
 The current production `@chapchoo/ui/Mascot` and its callers remain static.
 When promoting this behavior, move the motion and artwork implementation

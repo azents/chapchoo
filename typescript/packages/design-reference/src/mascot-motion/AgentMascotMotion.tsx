@@ -7,6 +7,8 @@ import type { ReactElement } from "react";
 export interface AgentMascotMotionProps extends MascotArtworkProps {
   /** Explicit opt-in for an Agent acting as the subject of interaction. */
   playing: boolean;
+  /** Localized accessible action name for click, touch and keyboard replay. */
+  replayLabel: string;
   /** Stable initial stagger; does not change the 1200ms motion clip. */
   delayMs?: number;
 }
@@ -14,19 +16,27 @@ export interface AgentMascotMotionProps extends MascotArtworkProps {
 /** Reference-local motion primitive, not wired into any product page. */
 export function AgentMascotMotion({
   playing,
+  replayLabel,
   delayMs = 0,
   ...artwork
 }: AgentMascotMotionProps): ReactElement {
-  const { ref, running } = useMascotPlayback(playing);
+  const { ref, running, replay, finish } = useMascotPlayback(playing, delayMs);
   return (
-    <span
+    <button
       ref={ref}
-      className={classes.motion}
-      data-playing={running}
-      aria-hidden="true"
-      style={{ animationDelay: `${delayMs}ms` }}
+      type="button"
+      className={classes.trigger}
+      aria-label={replayLabel}
+      onClick={replay}
     >
-      <MascotArtwork {...artwork} />
-    </span>
+      <span
+        className={classes.motion}
+        data-playing={running}
+        aria-hidden="true"
+        onAnimationEnd={finish}
+      >
+        <MascotArtwork {...artwork} />
+      </span>
+    </button>
   );
 }
