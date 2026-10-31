@@ -3,7 +3,7 @@ import { readFileSync, existsSync } from "node:fs";
 import test from "node:test";
 import postcss from "postcss";
 import { mascotArtwork } from "./src/mascot-motion/mascotArtwork.ts";
-import { mascots } from "../ui/src/designTokens.ts";
+import { mascots, mascotIds } from "../ui/src/designTokens.ts";
 import { createMascotPlayback } from "./src/mascot-motion/mascotPlayback.ts";
 
 const css = postcss.parse(
@@ -16,8 +16,8 @@ const css = postcss.parse(
   ),
 );
 
-test("all five approved masters have a tight, valid ground-aligned crop", () => {
-  assert.equal(Object.keys(mascotArtwork).length, 5);
+test("all canonical masters have a tight, valid ground-aligned crop in catalog order", () => {
+  assert.deepEqual(Object.keys(mascotArtwork), mascotIds);
   for (const [key, artwork] of Object.entries(mascotArtwork)) {
     assert.equal(artwork.file, mascots.find((pet) => pet.key === key)?.file);
     assert.ok(

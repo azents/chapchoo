@@ -1,21 +1,15 @@
 import { useState } from "react";
 import { AppMantineProvider } from "@chapchoo/ui/provider";
 import { FontFaces } from "@chapchoo/ui/FontFaces";
+import { defaultMascot, mascotIds } from "@chapchoo/ui/designTokens";
 import { Button, Group, Paper, Stack, Text, Title } from "@mantine/core";
 import { AgentMascotMotion } from "./AgentMascotMotion";
 import { MascotArtwork } from "./MascotArtwork";
 import classes from "./MascotMotionDocument.module.css";
-import type { MascotCharacter } from "./mascotArtwork";
 import type { ReactElement } from "react";
 import "@mantine/core/styles.css";
 
-const characters: readonly MascotCharacter[] = [
-  "bichon",
-  "corgi",
-  "dachshund",
-  "husky",
-  "collie",
-];
+const characters = mascotIds;
 
 /** Fixture-only controls; no agent lifecycle or product placement is implied. */
 export default function MascotMotionDocument({
@@ -37,7 +31,7 @@ export default function MascotMotionDocument({
               </Text>
               <Title order={1} size="h2">
                 {mode === "family"
-                  ? "One gesture, five companions"
+                  ? "One gesture, six companions"
                   : "Actor in motion. Accessory at rest."}
               </Title>
             </div>
@@ -66,11 +60,11 @@ export default function MascotMotionDocument({
                   </Title>
                   <div className={classes.stage}>
                     <AgentMascotMotion
-                      character="corgi"
+                      character={defaultMascot}
                       assetBasePath="./mascots"
                       size={180}
                       playing={playing}
-                      replayLabel="Replay corgi gesture"
+                      replayLabel="Replay retriever gesture"
                     />
                   </div>
                   <Text size="sm">
@@ -86,7 +80,7 @@ export default function MascotMotionDocument({
                   </Title>
                   <div className={classes.stage}>
                     <MascotArtwork
-                      character="corgi"
+                      character={defaultMascot}
                       assetBasePath="./mascots"
                       size={180}
                     />

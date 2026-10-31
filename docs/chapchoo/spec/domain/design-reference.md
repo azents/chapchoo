@@ -33,7 +33,7 @@ a distinct, more general representation and document their relationship.
 Equivalent-role copies are avoided. Non-web representations stay in reference
 after approval and are not executable native implementations.
 
-`Chapchoo/Mascot motion` exposes an actor/accessory comparison and five-character
+`Chapchoo/Mascot motion` exposes an actor/accessory comparison and six-character
 family using reference-local React components. `AgentMascotMotion` accepts
 explicit automatic playback, replay action label, artwork, size and initial stagger inputs; `MascotArtwork`
 provides static artwork of the same normalized bounds. CSS supplies the reviewed

@@ -11,7 +11,7 @@ Fictional screen examples are not product feature requirements.
 ## Catalog
 
 - `Chapchoo/Foundations`: overview, basic controls, feedback, mascots, iOS type.
-- `Chapchoo/Mascot motion`: actor/accessory comparison and five-character motion
+- `Chapchoo/Mascot motion`: actor/accessory comparison and six-character motion
   family, including 64px artwork. Reviewed gesture; reference-local React
   components, with no production-page rollout.
 - `Chapchoo/Products`: fictional reading shelf, weekly planner, workspace settings,
