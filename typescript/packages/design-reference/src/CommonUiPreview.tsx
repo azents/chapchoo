@@ -1,7 +1,7 @@
 import { EmptyFeedback } from "@chapchoo/ui/Feedback";
 import { FontFaces } from "@chapchoo/ui/FontFaces";
 import { AppMantineProvider } from "@chapchoo/ui/provider";
-import { ColorModeSelector } from "@chapchoo/ui/ColorModeSelector";
+import { AppHeader } from "@chapchoo/ui/AppHeader";
 import { Mascot } from "@chapchoo/ui/Mascot";
 import { Stack } from "@mantine/core";
 import type { ReactElement } from "react";
@@ -15,13 +15,15 @@ export default function CommonUiPreview(): ReactElement {
   return (
     <AppMantineProvider forceColorScheme={mode}>
       <FontFaces basePath="" />
+      <AppHeader
+        appearance={{
+          value: mode,
+          label: "Appearance",
+          labels: { system: "System", light: "Light", dark: "Dark" },
+          onChange: (): void => {},
+        }}
+      />
       <Stack p="lg">
-        <ColorModeSelector
-          value={mode}
-          label="Appearance"
-          labels={{ system: "System", light: "Light", dark: "Dark" }}
-          onChange={() => {}}
-        />
         <Mascot size={72} />
         <EmptyFeedback
           title="Shared presentation example"

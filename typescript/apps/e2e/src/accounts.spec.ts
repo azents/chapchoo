@@ -210,11 +210,11 @@ test.describe("Assembled account and team acceptance", () => {
       "data-first-frame-mode",
       "dark",
     );
-    const appearance = administrator.getByRole("combobox", {
+    const appearance = administrator.getByRole("button", {
       name: "Appearance",
       exact: true,
     });
-    await expect(appearance).toHaveValue("system");
+    await expect(appearance).toHaveAttribute("data-mode", "system");
     const initialEmail = administrator.getByRole("textbox", {
       name: "Email address",
       exact: true,
@@ -228,11 +228,17 @@ test.describe("Assembled account and team acceptance", () => {
       "dark",
     );
     await appearance.focus();
-    await appearance.selectOption("light");
+    await appearance.click();
+    await administrator
+      .getByRole("menuitem", { name: "Light", exact: true })
+      .click();
     await expect(initialEmail).toHaveValue("draft@example.com");
     await expect(appearance).toBeFocused();
     await administrator.emulateMedia({ colorScheme: "light" });
-    await appearance.selectOption("dark");
+    await appearance.click();
+    await administrator
+      .getByRole("menuitem", { name: "Dark", exact: true })
+      .click();
     await expect(administrator.locator("body")).toHaveAttribute(
       "data-color-mode",
       "dark",
@@ -245,8 +251,8 @@ test.describe("Assembled account and team acceptance", () => {
     );
     await administrator.goto(`${assembly.adminUrl}/setup`);
     await expect(
-      administrator.getByRole("combobox", { name: "Appearance", exact: true }),
-    ).toHaveValue("dark");
+      administrator.getByRole("button", { name: "Appearance", exact: true }),
+    ).toHaveAttribute("data-mode", "dark");
     await expect(administrator.locator("html")).toHaveAttribute(
       "data-first-frame-mode",
       "dark",

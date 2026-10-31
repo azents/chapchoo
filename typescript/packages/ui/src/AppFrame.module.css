@@ -1,0 +1,6 @@
+.frame {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--chapchoo-color-canvas);
+}

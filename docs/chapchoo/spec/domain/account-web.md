@@ -54,8 +54,21 @@ product-state review role.
 
 ## Appearance lifecycle
 
-Both applications expose the same localized three-choice appearance control on
-authentication/setup and shell-header surfaces. An absent or invalid preference
+Both applications reuse the same sticky global AppHeader through their auth/setup
+and workspace frames. Its brand is left-aligned and its 44×44 icon-only appearance
+entry point remains at the far right on desktop and narrow views. The entry point
+has a localized accessible name/hover title and a monitor, sun or moon for the
+selected preference. It opens a keyboard-operable System/Light/Dark menu with a
+current-selection check and restores focus on close. Account identity/logout
+join this header on desktop and remain in a separate context row below navigation
+on narrow views; only one responsive account-action presentation is visible.
+The shared flex frame accommodates the header's actual height; wrapped or
+enlarged identity text grows the header without clipping or covering the content.
+The common UI is prop-driven, with no extra root-level identity request or state
+store. The former page-local native select is replaced, including its exports
+and examples.
+
+An absent or invalid preference
 means System. Explicit Light/Dark overrides device changes; System follows current
 browser media and live changes. Theme changes preserve application identity, query
 state, entered work and focus rather than remounting the subtree.

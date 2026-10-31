@@ -170,6 +170,18 @@ technical terms when appropriate and test long Korean/Latin content.
 
 ## Layout
 
+The existing web apps share a sticky global header across authentication, setup,
+general workspaces and Admin. The brand stays left; an icon-only appearance
+button stays at the far right (24px desktop inset, 16px narrow inset). This is
+application chrome, not a form field or page-specific action. Use one 44×44 hit
+area, a localized accessible name/hover title, monitor/sun/moon preference icons,
+and a menu with System/Light/Dark and a current-selection check. The requester
+selected this composition on 2026-10-31 KST. Account identity/logout sit before
+the icon on desktop; narrow layouts keep them in a separate context row below
+navigation. The header grows for wrapped or enlarged account text, with the
+content frame filling the remaining viewport instead of subtracting a fixed
+header height. Preserve modal layering above the header and body typography.
+
 - Start with the user's work: content, current context, relevant state and next
   actions. Use stable alignment and proximity to explain relationships.
 - Desktop may have quiet side navigation and a bounded reading measure. The

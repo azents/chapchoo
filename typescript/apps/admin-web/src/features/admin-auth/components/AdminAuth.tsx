@@ -1,7 +1,6 @@
 "use client";
 
 import { AuthPanel } from "@chapchoo/ui/AuthPanel";
-import { ColorModeSelector } from "@chapchoo/ui/ColorModeSelector";
 import { EmailField, PasswordField } from "@chapchoo/ui/fields";
 import {
   Alert,
@@ -13,7 +12,7 @@ import {
   TextInput,
 } from "@mantine/core";
 import type en from "../../../../messages/en-US.json";
-import type { ColorModeSelectorProps } from "@chapchoo/ui/ColorModeSelector";
+import type { ColorModeMenuProps } from "@chapchoo/ui/ColorModeMenu";
 import type { ReactElement } from "react";
 
 export type AuthMode = "login" | "setup";
@@ -25,7 +24,7 @@ export type AuthState =
   | { type: "FORM"; pending: boolean; error: string | null };
 
 export interface AdminAuthProps {
-  appearance?: ColorModeSelectorProps;
+  appearance?: ColorModeMenuProps;
   mode: AuthMode;
   method: AuthMethod;
   state: AuthState;
@@ -51,9 +50,7 @@ export function AdminAuth(props: AdminAuthProps): ReactElement {
   const setup = mode === "setup";
   return (
     <AuthPanel
-      actions={
-        props.appearance ? <ColorModeSelector {...props.appearance} /> : null
-      }
+      appearance={props.appearance}
       basePath={props.basePath}
       title={text(setup ? "setupTitle" : "loginTitle")}
       description={text(setup ? "setupDescription" : "loginDescription")}

@@ -1,0 +1,9 @@
+.trigger.trigger {
+  width: 2.75rem;
+  height: 2.75rem;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  color: var(--chapchoo-color-secondary);
+  --ai-hover: var(--chapchoo-color-selected);
+  --ai-hover-color: var(--chapchoo-color-ink);
+}

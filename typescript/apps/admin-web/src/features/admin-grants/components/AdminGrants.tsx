@@ -1,7 +1,6 @@
 "use client";
 
 import { ApplicationShell } from "@chapchoo/ui/ApplicationShell";
-import { ColorModeSelector } from "@chapchoo/ui/ColorModeSelector";
 import { ConfirmationDialog } from "@chapchoo/ui/ConfirmationDialog";
 import { ContentSection } from "@chapchoo/ui/ContentSection";
 import { EmailField } from "@chapchoo/ui/fields";
@@ -18,7 +17,7 @@ import {
   TextInput,
 } from "@mantine/core";
 import type en from "../../../../messages/en-US.json";
-import type { ColorModeSelectorProps } from "@chapchoo/ui/ColorModeSelector";
+import type { ColorModeMenuProps } from "@chapchoo/ui/ColorModeMenu";
 import type { ConfirmationState } from "@chapchoo/ui/ConfirmationDialog";
 import type { ReactElement } from "react";
 
@@ -41,7 +40,7 @@ export type GrantViewState =
       hasNext: boolean;
     };
 export interface AdminGrantsProps {
-  appearance?: ColorModeSelectorProps;
+  appearance?: ColorModeMenuProps;
   kind: GrantPageKind;
   basePath: string;
   identityLabel: string | null;
@@ -73,6 +72,7 @@ export function AdminGrants(props: AdminGrantsProps): ReactElement {
   const disabled = props.pending || state.type !== "LOADED";
   return (
     <ApplicationShell
+      appearance={props.appearance}
       basePath={props.basePath}
       contextLabel={text("context")}
       title={text(props.kind === "signup" ? "signupTitle" : "resetTitle")}
@@ -92,18 +92,13 @@ export function AdminGrants(props: AdminGrantsProps): ReactElement {
         },
       ]}
       actions={
-        <>
-          {props.appearance ? (
-            <ColorModeSelector {...props.appearance} />
-          ) : null}
-          <Button
-            variant="subtle"
-            onClick={props.onLogout}
-            disabled={props.pending}
-          >
-            {text("logout")}
-          </Button>
-        </>
+        <Button
+          variant="subtle"
+          onClick={props.onLogout}
+          disabled={props.pending}
+        >
+          {text("logout")}
+        </Button>
       }
     >
       <ContentSection

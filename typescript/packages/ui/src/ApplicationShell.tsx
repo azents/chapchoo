@@ -2,7 +2,9 @@
 
 import { Badge, Box, Group, NavLink, Stack, Text, Title } from "@mantine/core";
 import { Mascot } from "./Mascot";
+import { AppFrame } from "./AppFrame";
 import classes from "./ApplicationShell.module.css";
+import type { ColorModeMenuProps } from "./ColorModeMenu";
 import type { ReactNode } from "react";
 
 export interface NavigationItem {
@@ -13,6 +15,7 @@ export interface NavigationItem {
   onSelect?: () => void;
 }
 export interface ApplicationShellProps {
+  appearance?: ColorModeMenuProps;
   brand?: string;
   contextLabel: string;
   title: string;
@@ -26,6 +29,7 @@ export interface ApplicationShellProps {
 /** Product navigation and orientation without routing or business assumptions. */
 export function ApplicationShell({
   brand = "chapchoo",
+  appearance,
   contextLabel,
   title,
   identityLabel,
@@ -35,67 +39,71 @@ export function ApplicationShell({
   basePath = "",
 }: ApplicationShellProps): ReactNode {
   return (
-    <Box className={classes.shell}>
-      <Box component="aside" className={classes.sidebar}>
-        <div className={classes.brand}>
-          <Text fw={750} size="xl">
-            {brand}
-          </Text>
-          <Badge variant="light" size="sm">
-            {contextLabel}
-          </Badge>
-        </div>
-        <Box
-          component="nav"
-          aria-label={contextLabel}
-          className={classes.navigation}
-        >
-          {navigation.map((item) =>
-            item.href ? (
-              <NavLink
-                key={item.key}
-                component="a"
-                href={item.href}
-                label={item.label}
-                active={item.active}
-                aria-current={item.active ? "page" : undefined}
-                onClick={item.onSelect}
-              />
-            ) : (
-              <NavLink
-                key={item.key}
-                component="button"
-                type="button"
-                label={item.label}
-                active={item.active}
-                aria-current={item.active ? "page" : undefined}
-                onClick={item.onSelect}
-              />
-            ),
-          )}
-        </Box>
-        <div className={classes.companion}>
-          <Mascot basePath={basePath} size={72} />
-        </div>
-      </Box>
-      <div className={classes.workspace}>
-        <Box component="header" className={classes.header}>
-          <Text size="sm" c="dimmed" className={classes.identity}>
-            {identityLabel}
-          </Text>
-          <Group gap="sm" className={classes.actions}>
-            {actions}
-          </Group>
-        </Box>
-        <Box component="main" className={classes.main}>
-          <div className={classes.content}>
-            <Title order={1} size="h2" className={classes.title}>
-              {title}
-            </Title>
-            <Stack gap="xl">{children}</Stack>
+    <AppFrame
+      brand={brand}
+      appearance={appearance}
+      identityLabel={identityLabel}
+      actions={actions}
+    >
+      <Box className={classes.shell}>
+        <Box component="aside" className={classes.sidebar}>
+          <div className={classes.brand}>
+            <Badge variant="light" size="sm">
+              {contextLabel}
+            </Badge>
+          </div>
+          <Box
+            component="nav"
+            aria-label={contextLabel}
+            className={classes.navigation}
+          >
+            {navigation.map((item) =>
+              item.href ? (
+                <NavLink
+                  key={item.key}
+                  component="a"
+                  href={item.href}
+                  label={item.label}
+                  active={item.active}
+                  aria-current={item.active ? "page" : undefined}
+                  onClick={item.onSelect}
+                />
+              ) : (
+                <NavLink
+                  key={item.key}
+                  component="button"
+                  type="button"
+                  label={item.label}
+                  active={item.active}
+                  aria-current={item.active ? "page" : undefined}
+                  onClick={item.onSelect}
+                />
+              ),
+            )}
+          </Box>
+          <div className={classes.companion}>
+            <Mascot basePath={basePath} size={72} />
           </div>
         </Box>
-      </div>
-    </Box>
+        <div className={classes.workspace}>
+          <Box className={classes.contextHeader}>
+            <Text size="sm" c="dimmed" className={classes.identity}>
+              {identityLabel}
+            </Text>
+            <Group gap="sm" className={classes.actions}>
+              {actions}
+            </Group>
+          </Box>
+          <Box component="main" className={classes.main}>
+            <div className={classes.content}>
+              <Title order={1} size="h2" className={classes.title}>
+                {title}
+              </Title>
+              <Stack gap="xl">{children}</Stack>
+            </div>
+          </Box>
+        </div>
+      </Box>
+    </AppFrame>
   );
 }

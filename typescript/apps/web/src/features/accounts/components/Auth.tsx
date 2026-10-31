@@ -1,7 +1,6 @@
 "use client";
 
 import { AuthPanel } from "@chapchoo/ui/AuthPanel";
-import { ColorModeSelector } from "@chapchoo/ui/ColorModeSelector";
 import { ErrorFeedback, LoadingFeedback } from "@chapchoo/ui/Feedback";
 import { EmailField, PasswordField } from "@chapchoo/ui/fields";
 import {
@@ -28,9 +27,7 @@ export function Auth(props: AuthProps): ReactNode {
       basePath={props.basePath}
       title={title}
       description={c.authDescription}
-      actions={
-        props.appearance ? <ColorModeSelector {...props.appearance} /> : null
-      }
+      appearance={props.appearance}
       footer={
         <Group justify="space-between">
           {mode !== "LOGIN" ? (

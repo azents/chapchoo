@@ -1,0 +1,9 @@
+/* Shared SSR-safe frame geometry; presentation changes only through CSS media. */
+html[data-mantine-color-scheme] {
+  --chapchoo-app-header-height: 4.75rem;
+}
+@media (max-width: 48em) {
+  html[data-mantine-color-scheme] {
+    --chapchoo-app-header-height: 4rem;
+  }
+}
