@@ -4,7 +4,7 @@ use chapchoo_persistence::{Store, prepare_sqlite};
 use chapchoo_service::{
     AcceptanceTime, AccountsConfig, AccountsService, BearerSecret, DomainReason, EmailAddress,
     EmailCode, MailFailure, MailFuture, MailMessage, MailPurpose, Mailer, Password, PasswordCost,
-    PasswordWork, SessionPolicy, TeamRole,
+    PasswordWork, SessionPolicy,
 };
 use std::{
     error::Error,
@@ -79,28 +79,24 @@ fn service(
 }
 
 #[test]
-fn manual_onboarding_reset_and_team_flow_without_mail() -> Result<(), TestError> {
+fn manual_links_and_password_work_are_composed_without_mail() -> Result<(), TestError> {
     let (_directory, path, cipher, bootstrap) = prepare()?;
     tokio::runtime::Runtime::new()?.block_on(async {
         let store = Store::connect_sqlite(path, cipher).await?;
         let app = service(store, &bootstrap, None)?;
-        let admin_email = EmailAddress::parse("Admin@Example.Invalid")?;
         let member_email = EmailAddress::parse("Member@Example.Invalid")?;
-        assert!(app.setup_status().await?);
         assert!(app.methods().password);
         assert!(!app.methods().email_code);
         assert!(!app.methods().signup_email);
         let admin = app
             .initialize(
                 &bootstrap,
-                admin_email.clone(),
+                EmailAddress::parse("Admin@Example.Invalid")?,
                 Password::parse("Aa1!admin".to_owned())?,
                 AcceptanceTime::Fixed(NOW),
                 None,
             )
             .await?;
-        assert!(admin.user.is_admin);
-        assert!(!app.setup_status().await?);
         assert_eq!(
             app.request_signup_email(&member_email, NOW)
                 .await
@@ -115,22 +111,18 @@ fn manual_onboarding_reset_and_team_flow_without_mail() -> Result<(), TestError>
                 .map(|error| error.reason()),
             Some(DomainReason::MailUnavailable)
         );
-        assert_eq!(
-            app.list_signup_grants(&admin.token.digest(), 0, 50, NOW)
-                .await?
-                .total,
-            0
-        );
         let issued = app
             .issue_signup_grant(&admin.token.digest(), &member_email, NOW)
             .await?;
-        assert!(
-            issued
-                .expose_url()
-                .starts_with("http://localhost:3000/product/signup?token=")
+        assert_eq!(
+            issued.expose_url(),
+            format!(
+                "http://localhost:3000/product/signup?token={}",
+                issued.proof.expose()
+            )
         );
+        assert_eq!(issued.grant.expires_at, NOW + 7 * 24 * 60 * 60 * 1000);
         assert!(!format!("{issued:?}").contains(issued.proof.expose()));
-        assert!(app.preview_signup(&issued.proof, NOW).await?.is_some());
         let member = app
             .redeem_signup(
                 &issued.proof,
@@ -140,21 +132,20 @@ fn manual_onboarding_reset_and_team_flow_without_mail() -> Result<(), TestError>
                 None,
             )
             .await?;
-        assert!(!member.user.is_admin);
-        assert!(app.preview_signup(&issued.proof, NOW).await?.is_none());
-        assert_eq!(app.list_teams(&member.token.digest(), NOW).await?.len(), 1);
-        let logged_in = app
+        // This verifies service hashing/account construction/verification wiring,
+        // not store membership, proof consumption or session revocation rules.
+        let login = app
             .password_login(
                 &member_email,
                 Zeroizing::new("Aa1!member".to_owned()),
                 AcceptanceTime::Fixed(NOW),
             )
             .await?;
-        assert_eq!(logged_in.user.id, member.user.id);
+        assert_eq!(login.user.id, member.user.id);
         assert_eq!(
             app.password_login(
                 &member_email,
-                Zeroizing::new("Aa1!member\0Aa1!member".to_owned()),
+                Zeroizing::new("wrong-password".to_owned()),
                 AcceptanceTime::Fixed(NOW)
             )
             .await
@@ -162,94 +153,17 @@ fn manual_onboarding_reset_and_team_flow_without_mail() -> Result<(), TestError>
             .map(|error| error.reason()),
             Some(DomainReason::InvalidCredentials)
         );
-        let team = app
-            .create_team(
-                &member.token.digest(),
-                "Collaboration".to_owned(),
-                "collaboration".to_owned(),
-                NOW,
-            )
-            .await?;
-        assert_eq!(team.caller_role, TeamRole::Owner);
-        let invite = app
-            .invite_member(&member.token.digest(), &team.id, admin_email.clone(), NOW)
-            .await?;
-        assert_eq!(
-            app.received_invitations(&admin.token.digest(), NOW)
-                .await?
-                .len(),
-            1
-        );
-        app.process_invitation(&admin.token.digest(), &invite.id, true, NOW)
-            .await?;
-        assert_eq!(
-            app.list_members(&member.token.digest(), &team.id, NOW)
-                .await?
-                .len(),
-            2
-        );
         let reset = app
             .issue_password_reset(&admin.token.digest(), &member_email, NOW)
             .await?;
-        assert!(
-            reset
-                .expose_url()
-                .contains("/product/reset-password?token=")
-        );
         assert_eq!(
-            app.revoke_signup_grant(&admin.token.digest(), &reset.grant.id, NOW)
-                .await
-                .err()
-                .map(|error| error.reason()),
-            Some(DomainReason::NotFound)
-        );
-        assert!(
-            app.preview_password_reset(&reset.proof, NOW)
-                .await?
-                .is_some()
-        );
-        app.redeem_password_reset(
-            &reset.proof,
-            Password::parse("Bb2!new-password".to_owned())?,
-            AcceptanceTime::Fixed(NOW + 1),
-        )
-        .await?;
-        assert_eq!(
-            app.identity(&member.token.digest(), NOW + 1)
-                .await
-                .err()
-                .map(|error| error.reason()),
-            Some(DomainReason::InvalidSession)
-        );
-        assert_eq!(
-            app.identity(&logged_in.token.digest(), NOW + 1)
-                .await
-                .err()
-                .map(|error| error.reason()),
-            Some(DomainReason::InvalidSession)
-        );
-        assert!(
-            app.password_login(
-                &member_email,
-                Zeroizing::new("Aa1!member".to_owned()),
-                AcceptanceTime::Fixed(NOW + 1)
+            reset.expose_url(),
+            format!(
+                "http://localhost:3000/product/reset-password?token={}",
+                reset.proof.expose()
             )
-            .await
-            .is_err()
         );
-        let fresh = app
-            .password_login(
-                &member_email,
-                Zeroizing::new("Bb2!new-password".to_owned()),
-                AcceptanceTime::Fixed(NOW + 1),
-            )
-            .await?;
-        assert_eq!(
-            app.list_teams(&fresh.token.digest(), NOW + 1).await?.len(),
-            2
-        );
-        app.logout(&fresh.token.digest(), NOW + 1).await?;
-        assert!(app.identity(&fresh.token.digest(), NOW + 1).await.is_err());
+        assert_eq!(reset.grant.expires_at, NOW + 24 * 60 * 60 * 1000);
         Ok::<(), TestError>(())
     })
 }

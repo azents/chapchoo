@@ -165,10 +165,12 @@ explicit; no new nginx controller or public plaintext RPC is introduced.
 Root local x86-64 verification covers safe assembly14 tests; chart lint and11
 contract tests including35 invalid configurations; the extracted official Node;
 SQLite preparation and both bundled apps/static/fonts with SIGINT and closed
-owned listeners; all three PostgreSQL account/team browser journeys plus the
-focused delayed HttpOnly-cookie test; and independent nonroot/read-only images,
+owned listeners; all three PostgreSQL account/team browser journeys; and independent nonroot/read-only images,
 private RPC routing and graceful stop. Lower Rust lifecycle tests include partial
 startup, foreign listener isolation and resistant-descendant cleanup.
+Web-core separately owns the actual logout-response HTTP/browser integration.
+Browser delayed-cookie arrival semantics are dependency behavior and are not a
+product acceptance scenario.
 
 The reusable native build workflow builds images on actual x86-64/ARM64 runners,
 runs the independent-image smoke check on those existing local images, and

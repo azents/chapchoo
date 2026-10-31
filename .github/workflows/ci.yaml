@@ -139,12 +139,15 @@ jobs:
           pnpm --filter @chapchoo/admin-web test
           pnpm --filter @chapchoo/testenv test
           pnpm --filter @chapchoo/e2e test:unit
+          node --test typescript/scripts/stage-web-fonts.test.mjs
           node typescript/scripts/stage-web-fonts.mjs web
           node typescript/scripts/stage-web-fonts.mjs admin-web
-          pnpm run build-storybook --filter=@chapchoo/web --filter=@chapchoo/admin-web --filter=@chapchoo/design-reference
-      - name: Render app-owned component behavior without backend assembly
+          pnpm run build-storybook --filter=@chapchoo/ui --filter=@chapchoo/web --filter=@chapchoo/admin-web --filter=@chapchoo/design-reference
+      - name: Render each owner's component and browser boundary checks
         run: |
           pnpm --filter @chapchoo/e2e exec playwright install chromium
+          pnpm --filter @chapchoo/ui test:components
+          pnpm --filter @chapchoo/web-core test:browser
           pnpm --filter @chapchoo/web test:components
           pnpm --filter @chapchoo/admin-web test:components
   browser-e2e:

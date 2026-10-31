@@ -3,7 +3,6 @@ import test from "node:test";
 import { MantineProvider } from "@mantine/core";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Feedback } from "./Feedback";
-import { EmailField, PasswordField } from "./fields";
 import type { ReactNode } from "react";
 
 function render(children: ReactNode): string {
@@ -52,36 +51,4 @@ await test("empty and loaded feedback use their distinct presentation states", (
   assert.ok(empty.includes("Create fixture"));
   assert.ok(loaded.includes("Fixture contents"));
   assert.ok(!loaded.includes("No fixtures"));
-});
-
-await test("email field preserves its controlled value and semantic input defaults", () => {
-  const html = render(
-    <EmailField
-      label="Fixture email"
-      value="Member@example.com"
-      onValueChange={() => {}}
-      required
-    />,
-  );
-  assert.ok(html.includes('type="email"'));
-  assert.ok(html.includes('autoComplete="email"'));
-  assert.ok(html.includes('value="Member@example.com"'));
-  assert.ok(html.includes("Fixture email"));
-});
-
-await test("password field exposes a localized visibility label and autocomplete override", () => {
-  const html = render(
-    <PasswordField
-      label="Fixture password"
-      value=""
-      onValueChange={() => {}}
-      visibilityToggleLabel="Toggle fixture visibility"
-      autoComplete="new-password"
-      disabled
-    />,
-  );
-  assert.ok(html.includes('type="password"'));
-  assert.ok(html.includes('autoComplete="new-password"'));
-  assert.ok(html.includes('aria-label="Toggle fixture visibility"'));
-  assert.ok(html.includes("disabled"));
 });

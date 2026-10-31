@@ -4,6 +4,7 @@ import { DisplaySettingsPage } from "@chapchoo/ui/DisplaySettings";
 import { useAuth } from "@chapchoo/web-core/auth-context";
 import { useDisplay } from "@chapchoo/web-core/display-context";
 import { displayText } from "@chapchoo/web-core/display-messages";
+import { useTranslations } from "next-intl";
 import { useAppearanceControl } from "@/shared/appearance/useAppearanceControl";
 import type { DisplaySettingsPageProps } from "@chapchoo/ui/DisplaySettings";
 
@@ -13,11 +14,13 @@ function useProfile({
   basePath: string;
 }): DisplaySettingsPageProps {
   const controller = useDisplay();
+  const authText = useTranslations("AdminAuth");
   const auth = useAuth();
   const appearance = useAppearanceControl();
   const text = displayText(controller.value.language);
   return {
     basePath,
+    mascotReplayLabel: authText("replayMascot"),
     contextLabel: "ADMINISTRATION",
     title: text.profile,
     heading: text.title,

@@ -105,7 +105,7 @@ bash scripts/generate-rpc-clients.sh
 bash scripts/check-rpc.sh
 ```
 
-The RPC gate verifies generation, Node codec tests and live Node-to-Rust calls
+The RPC gate verifies generation, strict client compilation and live Node-to-Rust calls
 against both disposable database engines. It requires pnpm/Node and `psql`,
 plus the PostgreSQL prerequisite described above. Missing prerequisites fail.
 The Node package is server-side only: browsers do not speak gRPC or hold backend

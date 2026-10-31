@@ -416,11 +416,14 @@ Focused tests cover Origin/POST admission, cookie attributes/caps/disposition,
 renewal ownership and concurrent context isolation, post-renewal domain failure,
 revocation and authentication infrastructure failure, decoded response validation,
 read-only SSR, safe source preservation and runtime prefix validation.
-A bounded-overlap response-loss/reordering authority model remains lower-layer
-evidence. A separate controlled real-Chromium/HTTP test verifies actual delayed
-cookie overwrite/deletion and HttpOnly JavaScript non-exposure using the product
-cookie functions; it does not claim real-backend time travel or TLS deployment.
-Component stories and SSR tests cover presentation states.
+Backend persistence tests own overlap/rotation semantics. Web-core tests own
+response disposition and its real-Chromium/HTTP logout boundary, including
+independent app cookies and failed revocation. Browser cookie-arrival semantics
+and generated-code round trips are not re-tested. Common UI runs its layout and
+custom typography checks in its own fixture Storybook; app component checks
+cover only app-owned state and composition. Tokens are not asserted as resolved
+pixels in consumer tests. SSR and core product journeys retain their distinct
+integration responsibilities.
 
 Three root-executed product journeys passed against a fresh private PostgreSQL
 installation and both production Next applications at `/app` and `/admin`:

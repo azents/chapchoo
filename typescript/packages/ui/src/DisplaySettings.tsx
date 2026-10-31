@@ -368,6 +368,7 @@ export interface DisplaySettingsPageProps extends DisplayFieldsProps {
   heading: string;
   description?: string;
   identityLabel: string;
+  mascotReplayLabel: string;
   accountHeading?: string;
   emailLabel?: string;
   navigation: readonly NavigationItem[];
@@ -389,6 +390,7 @@ export function DisplaySettingsPage(
       contextLabel={props.contextLabel}
       title={props.title}
       identityLabel={props.identityLabel}
+      mascotReplayLabel={props.mascotReplayLabel}
       navigation={props.navigation}
       appearance={props.appearance}
       actions={

@@ -1,39 +1,27 @@
 import { createServer } from "node:http";
 import { webConfig } from "@chapchoo/web-core/config";
 import { logoutResponse } from "@chapchoo/web-core/logout";
-import {
-  clearSessionCookie,
-  cookiePolicy,
-  sessionCookie,
-} from "@chapchoo/web-core/cookies";
+import { cookiePolicy, sessionCookie } from "@chapchoo/web-core/cookies";
 import { expect, test } from "@playwright/test";
-import { secret } from "@chapchoo/testenv/safety";
-import type { ServerResponse } from "node:http";
+import { randomBytes } from "node:crypto";
 
-function deferred<T>(): {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-} {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((complete) => {
+function deferred() {
+  let resolve;
+  const promise = new Promise((complete) => {
     resolve = complete;
   });
   return { promise, resolve };
 }
 
-// Focused browser-cookie boundary evidence, not another product journey or a
-// substitute for the backend's fixed-overlap/revocation tests.
-test("the browser applies delayed HttpOnly cookie responses in arrival order", async ({
+// Exercise the application logout response over real HTTP, not browser cookie ordering.
+test("logout disposes only its app cookie despite failed backend revocation", async ({
   browser,
 }) => {
-  const older = deferred<ServerResponse>();
-  const delayedClear = deferred<ServerResponse>();
-  const previous = secret();
-  const current = secret();
+  const current = randomBytes(32).toString("base64url");
   let origin = "";
   let logoutAttempts = 0;
-  const revocation = deferred<void>();
-  function respond(response: ServerResponse, cookie: string): void {
+  const revocation = deferred();
+  function respond(response, cookie) {
     response.writeHead(200, {
       "Content-Type": "application/json",
       "Cache-Control": "no-store",
@@ -41,7 +29,7 @@ test("the browser applies delayed HttpOnly cookie responses in arrival order", a
     });
     response.end("{}");
   }
-  function policy(): ReturnType<typeof cookiePolicy> {
+  function policy() {
     return cookiePolicy(
       webConfig("general", {
         publicUrl: origin,
@@ -51,11 +39,7 @@ test("the browser applies delayed HttpOnly cookie responses in arrival order", a
     );
   }
   const server = createServer((request, response) => {
-    if (request.url === "/older") {
-      older.resolve(response);
-    } else if (request.url === "/delayed-clear") {
-      delayedClear.resolve(response);
-    } else if (request.url === "/newer") {
+    if (request.url === "/newer") {
       respond(
         response,
         sessionCookie(policy(), current, Date.now() + 60_000, Date.now()),
@@ -105,7 +89,7 @@ test("the browser applies delayed HttpOnly cookie responses in arrival order", a
   });
   const context = await browser.newContext();
   try {
-    await new Promise<void>((resolve, reject) => {
+    await new Promise((resolve, reject) => {
       server.once("error", reject);
       server.listen(0, "127.0.0.1", resolve);
     });
@@ -116,54 +100,6 @@ test("the browser applies delayed HttpOnly cookie responses in arrival order", a
     origin = `http://127.0.0.1:${address.port}`;
     const page = await context.newPage();
     await page.goto(origin);
-    const heldResponse = page.evaluate(() =>
-      fetch("/older", { method: "POST" }).then((response) => response.ok),
-    );
-    const held = await older.promise;
-    await page.evaluate(() =>
-      fetch("/newer", { method: "POST" }).then(() => undefined),
-    );
-    expect(
-      (await context.cookies(origin)).some(
-        (cookie) => cookie.value === current,
-      ),
-      "The newer cookie must be accepted before the delayed response",
-    ).toBe(true);
-    respond(
-      held,
-      sessionCookie(policy(), previous, Date.now() + 60_000, Date.now()),
-    );
-    expect(await heldResponse).toBe(true);
-    expect(
-      (await context.cookies(origin)).some(
-        (cookie) => cookie.value === previous,
-      ),
-      "A later-arriving old response can overwrite the newer cookie",
-    ).toBe(true);
-    expect(
-      await page.evaluate(() =>
-        document.cookie.includes("chapchoo-general-session"),
-      ),
-      "The HttpOnly credential must remain unavailable to document.cookie",
-    ).toBe(false);
-
-    const clearingResponse = page.evaluate(() =>
-      fetch("/delayed-clear", { method: "POST" }).then(
-        (response) => response.ok,
-      ),
-    );
-    const clearing = await delayedClear.promise;
-    await page.evaluate(() =>
-      fetch("/newer", { method: "POST" }).then(() => undefined),
-    );
-    respond(clearing, clearSessionCookie(policy()));
-    expect(await clearingResponse).toBe(true);
-    expect(
-      (await context.cookies(origin)).some(
-        (cookie) => cookie.name === "chapchoo-general-session",
-      ),
-      "A delayed deletion can clear newer browser state; it does not revoke or restore backend authority",
-    ).toBe(false);
     await page.evaluate(async () => {
       await fetch("/newer", { method: "POST" });
       await fetch("/newer-admin", { method: "POST" });
@@ -191,7 +127,7 @@ test("the browser applies delayed HttpOnly cookie responses in arrival order", a
   } finally {
     await context.close();
     server.closeAllConnections();
-    await new Promise<void>((resolve, reject) => {
+    await new Promise((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve()));
     });
   }

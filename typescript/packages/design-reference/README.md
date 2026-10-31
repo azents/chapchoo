@@ -34,7 +34,8 @@ From the repository root, after `pnpm install --frozen-lockfile`:
 pnpm run storybook --filter=@chapchoo/design-reference
 pnpm run build-storybook --filter=@chapchoo/design-reference
 pnpm run check:design-boundaries
-pnpm --filter @chapchoo/design-reference check:design
+pnpm --filter @chapchoo/ui check:design
+pnpm --filter @chapchoo/ui test
 ```
 
 Development uses port **6008**. To override it, run

@@ -5,11 +5,10 @@
   "type": "module",
   "exports": {},
   "scripts": {
-    "build": "tsc --noEmit && node --test check-design.mjs",
-    "check:design": "node --test check-design.mjs",
+    "build": "tsc --noEmit",
     "storybook": "STORYBOOK_DISABLE_TELEMETRY=1 storybook dev -p 6008",
     "build-storybook": "STORYBOOK_DISABLE_TELEMETRY=1 storybook build",
-    "typecheck": "tsc --noEmit && node --test check-design.mjs",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint src .storybook --max-warnings 0",
     "lint:fix": "eslint src .storybook --max-warnings 0 --fix",
     "format": "prettier --write 'src/**/*.{ts,tsx,css}' '.storybook/**/*.{ts,tsx}' '*.mjs' '*.md'",

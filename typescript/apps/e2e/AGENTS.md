@@ -5,10 +5,11 @@ representative assembled-product journeys and genuine browser/process/network
 boundaries here. Read the repository's `e2e-core-flows-only` convention.
 
 Three serial account/team journeys cover signup/admin setup, team ownership and
-reset/session/Admin isolation. The focused cookie-response test requires a real
-browser and remains here. Exact copy, condition matrices and viewport layout
-belong to the owning web app's executable component checks, not another full
-product journey. Do not remove core auth, revocation or isolation coverage.
+reset/session/Admin isolation. Web-core owns its real-browser logout-response
+integration; browser cookie arrival-order semantics are not our test subject.
+Exact copy and app composition belong to the owning app; shared layout/custom
+CSS belong to common UI's executable component checks, not another full product
+journey. Preserve core auth, revocation and isolation coverage.
 
 Reusable fixture/process/config/prerequisite support comes from
 `@chapchoo/testenv`. This app owns the Playwright wrapper, scenarios, reporter
