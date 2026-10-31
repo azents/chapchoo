@@ -26,7 +26,10 @@ test("Admin uses the independently scrolling shared desktop shell", async ({
   await page.goto(
     "/iframe.html?id=admin-grant-inventory--inventory&viewMode=story",
   );
-  const footer = page.locator("aside img");
+  // The replay control owns layout; its image moves within that stable box.
+  const footer = page.locator("aside").getByRole("button", {
+    name: "Replay character animation",
+  });
   const workspace = page.getByRole("main").locator("..");
   await expect(footer).toBeVisible();
   const initial = await footer.boundingBox();
