@@ -1,6 +1,7 @@
 import {
   createTheme,
   defaultVariantColorsResolver,
+  getSize,
   rem,
   ActionIcon,
   Anchor,
@@ -58,6 +59,11 @@ export const themeCssVariables: CSSVariablesResolver = () => ({
   variables: {
     "--chapchoo-font-input-mobile": "max(16px, 1rem)",
     "--chapchoo-line-height-control": "1.5",
+    "--chapchoo-control-height-xs": rem(36),
+    "--chapchoo-control-height-sm": rem(44),
+    "--chapchoo-control-height-md": rem(48),
+    "--chapchoo-control-height-lg": rem(56),
+    "--chapchoo-control-height-xl": rem(64),
   },
   light: modeVariables(toneColors),
   dark: modeVariables(darkToneColors),
@@ -212,6 +218,14 @@ export const theme = createTheme({
   components: {
     Button: Button.extend({
       defaultProps: { variant: "filled" },
+      vars: (_theme, props) => ({
+        root: {
+          "--button-height": getSize(
+            props.size ?? "sm",
+            "chapchoo-control-height",
+          ),
+        },
+      }),
       classNames: {
         root: classes.button,
         inner: classes.buttonInner,
@@ -229,10 +243,22 @@ export const theme = createTheme({
       defaultProps: { variant: "light" },
       classNames: { label: classes.chipLabel },
     }),
-    Input: Input.extend({ classNames: { input: classes.input } }),
+    Input: Input.extend({
+      classNames: { wrapper: classes.inputWrapper, input: classes.input },
+      vars: (_theme, props) => ({
+        wrapper: {
+          "--input-height": getSize(
+            props.size ?? "sm",
+            "chapchoo-control-height",
+          ),
+        },
+      }),
+    }),
     Paper: Paper.extend({
       defaultProps: { radius: "lg" },
-      classNames: { root: classes.paper },
+      classNames: (_theme, props) => ({
+        root: props.variant === "row" ? classes.contentRow : classes.paper,
+      }),
     }),
     Loader: Loader.extend({
       defaultProps: { color: "var(--chapchoo-color-secondary)" },

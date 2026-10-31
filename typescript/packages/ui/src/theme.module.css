@@ -4,7 +4,7 @@
 }
 .button.button {
   font-weight: 500;
-  min-height: 2.5rem;
+  min-height: var(--button-height);
   white-space: normal;
   height: auto;
   padding-block: var(--mantine-spacing-sm);
@@ -44,14 +44,30 @@
 .input.input {
   background: var(--chapchoo-color-surface-raised);
   border-color: var(--chapchoo-color-muted);
-  min-height: 2.75rem;
-  font-size: var(--mantine-font-size-sm);
+  min-height: var(--input-height);
+  font-size: var(--input-fz);
 }
 .input.input:focus-within {
   border-color: var(--chapchoo-color-focus);
 }
+/* A single pill/editor line fits the same frame; additional lines still grow. */
+.inputWrapper[data-multiline] > .input.input:not(textarea) {
+  line-height: var(--chapchoo-line-height-control);
+  padding-block: max(0rem, calc((var(--input-height) - 1.6em - 0.125rem) / 2));
+}
 .paper.paper {
   background: var(--chapchoo-color-surface);
+}
+/* A divider row shares the surrounding content baseline, without a filled box. */
+.contentRow.contentRow {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--chapchoo-color-border);
+  border-radius: 0;
+  padding: var(--mantine-spacing-lg) 0;
+}
+.contentRow.contentRow:first-child {
+  border-top: 1px solid var(--chapchoo-color-border);
 }
 .modal.modal {
   background: var(--chapchoo-color-overlay);
@@ -113,11 +129,14 @@
   .input.input input,
   .input.input textarea,
   .input.input select {
-    font-size: var(--chapchoo-font-input-mobile);
+    font-size: max(var(--input-fz), var(--chapchoo-font-input-mobile));
     line-height: 1.25;
   }
   .button.button {
-    min-height: 2.75rem;
+    min-height: max(var(--button-height), 2.75rem);
+  }
+  .input.input {
+    min-height: max(var(--input-height), 2.75rem);
   }
   .touchTarget.touchTarget {
     min-width: 2.75rem;

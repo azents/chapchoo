@@ -1,5 +1,11 @@
 import {
+  Button,
+  FileInput,
+  Group,
+  MultiSelect,
+  NativeSelect,
   NumberInput,
+  PasswordInput,
   Select,
   Stack,
   Textarea,
@@ -108,4 +114,90 @@ export const EditableControls: Story = {
       </div>
     </Stack>
   ),
+};
+
+/** Each pair uses identical named sizes without app-specific height overrides. */
+function FormControlSizing({
+  disabled = false,
+  invalid = false,
+}: {
+  disabled?: boolean;
+  invalid?: boolean;
+}): ReactElement {
+  return (
+    <Stack p="lg">
+      {(["xs", "sm", "md", "lg", "xl"] as const).map((size) => (
+        <Stack key={size} data-control-size={size} gap="sm">
+          {[
+            <TextInput key="text" label="Text" defaultValue="Design notes" />,
+            <PasswordInput
+              key="password"
+              label="Password"
+              defaultValue="sample"
+            />,
+            <NumberInput key="number" label="Quantity" defaultValue={3} />,
+            <Select
+              key="select"
+              label="Select"
+              data={["Personal", "Team"]}
+              defaultValue="Personal"
+              searchable
+            />,
+            <NativeSelect
+              key="native"
+              label="Native select"
+              data={["Personal", "Team"]}
+            />,
+            <MultiSelect
+              key="multi"
+              label="Multiple"
+              data={["Personal", "Team"]}
+              defaultValue={["Personal"]}
+              searchable
+            />,
+            <FileInput key="file" label="File" placeholder="File" />,
+          ].map((control) => (
+            <Group
+              key={control.key}
+              align="end"
+              wrap="nowrap"
+              data-control-pair
+            >
+              <control.type
+                {...control.props}
+                size={size}
+                disabled={disabled}
+                error={invalid ? "Check this value." : undefined}
+                style={{ flex: 1, minWidth: 0 }}
+              />
+              <Button size={size} disabled={disabled}>
+                Save
+              </Button>
+            </Group>
+          ))}
+        </Stack>
+      ))}
+      <Group align="start" wrap="nowrap">
+        <Textarea
+          label="Multiline"
+          defaultValue={"First line\nSecond line\nThird line"}
+          rows={3}
+          style={{ flex: 1 }}
+        />
+        <Button>Save</Button>
+      </Group>
+      <Button maw={rem(160)}>
+        Save a long localized action — 긴 작업 저장
+      </Button>
+      <Button loading>Saving</Button>
+    </Stack>
+  );
+}
+
+export const ControlSizes: Story = { render: () => <FormControlSizing /> };
+export const DisabledControlSizes: Story = {
+  render: () => <FormControlSizing disabled />,
+};
+export const InvalidControlSizes: Story = {
+  render: () => <FormControlSizing invalid />,
 };
