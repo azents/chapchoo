@@ -16,7 +16,11 @@ export const readPageScope = cache(async (): Promise<PageReadScope> => {
   return new PageReadScope(
     token,
     (credential) =>
-      call(backend.auth.identity.bind(backend.auth), {}, credential),
+      call(
+        backend.authentication.identity.bind(backend.authentication),
+        {},
+        credential,
+      ),
     config.app === "admin",
   );
 });

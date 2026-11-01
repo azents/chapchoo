@@ -1,7 +1,12 @@
 import {
-  AdminClient,
-  AuthClient,
-  GeneralClient,
+  AuthenticationClient,
+  PersonalPreferencesClient,
+  AccountLifecycleClient,
+  TeamManagementClient,
+  InvitationManagementClient,
+  InstallationClient,
+  AccountGrantsClient,
+  DisplayDefaultsClient,
 } from "@chapchoo/rpc-client/accounts";
 import { Metadata, credentials } from "@grpc/grpc-js";
 import type {
@@ -13,9 +18,14 @@ import type { WebConfig } from "./config.js";
 import { rpcFailure } from "./errors.js";
 
 export interface BackendClients {
-  auth: AuthClient;
-  general: GeneralClient;
-  admin: AdminClient;
+  authentication: AuthenticationClient;
+  personalPreferences: PersonalPreferencesClient;
+  accountLifecycle: AccountLifecycleClient;
+  teams: TeamManagementClient;
+  invitations: InvitationManagementClient;
+  installation: InstallationClient;
+  accountGrants: AccountGrantsClient;
+  displayDefaults: DisplayDefaultsClient;
   close(): void;
 }
 
@@ -29,17 +39,56 @@ export function createBackend(config: WebConfig): BackendClients {
     "grpc.enable_retries": 0,
     "grpc.max_receive_message_length": 4 * 1024 * 1024,
   };
-  const auth = new AuthClient(endpoint.host, security, options);
-  const general = new GeneralClient(endpoint.host, security, options);
-  const admin = new AdminClient(endpoint.host, security, options);
+  const authentication = new AuthenticationClient(
+    endpoint.host,
+    security,
+    options,
+  );
+  const personalPreferences = new PersonalPreferencesClient(
+    endpoint.host,
+    security,
+    options,
+  );
+  const accountLifecycle = new AccountLifecycleClient(
+    endpoint.host,
+    security,
+    options,
+  );
+  const teams = new TeamManagementClient(endpoint.host, security, options);
+  const invitations = new InvitationManagementClient(
+    endpoint.host,
+    security,
+    options,
+  );
+  const installation = new InstallationClient(endpoint.host, security, options);
+  const accountGrants = new AccountGrantsClient(
+    endpoint.host,
+    security,
+    options,
+  );
+  const displayDefaults = new DisplayDefaultsClient(
+    endpoint.host,
+    security,
+    options,
+  );
   return {
-    auth,
-    general,
-    admin,
+    authentication,
+    personalPreferences,
+    accountLifecycle,
+    teams,
+    invitations,
+    installation,
+    accountGrants,
+    displayDefaults,
     close(): void {
-      auth.close();
-      general.close();
-      admin.close();
+      authentication.close();
+      personalPreferences.close();
+      accountLifecycle.close();
+      teams.close();
+      invitations.close();
+      installation.close();
+      accountGrants.close();
+      displayDefaults.close();
     },
   };
 }

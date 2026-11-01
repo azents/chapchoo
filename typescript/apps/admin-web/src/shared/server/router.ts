@@ -45,7 +45,9 @@ export const appRouter = router({
         ctx.session.authenticated(async () =>
           display(
             await call(
-              ctx.backend.auth.displayDefaults.bind(ctx.backend.auth),
+              ctx.backend.personalPreferences.displayDefaults.bind(
+                ctx.backend.personalPreferences,
+              ),
               {},
             ),
           ),
@@ -59,7 +61,9 @@ export const appRouter = router({
           ctx.session.authenticated(async (token) =>
             display(
               await call(
-                ctx.backend.admin.updateDisplayDefaults.bind(ctx.backend.admin),
+                ctx.backend.displayDefaults.updateDisplayDefaults.bind(
+                  ctx.backend.displayDefaults,
+                ),
                 displayPatchPayload(input),
                 token,
               ),
@@ -71,7 +75,10 @@ export const appRouter = router({
   setup: router({
     status: procedure.query(({ ctx }) =>
       attempt(() =>
-        call(ctx.backend.admin.setupStatus.bind(ctx.backend.admin), {}),
+        call(
+          ctx.backend.installation.setupStatus.bind(ctx.backend.installation),
+          {},
+        ),
       ),
     ),
     initialize: procedure
@@ -88,12 +95,17 @@ export const appRouter = router({
       .mutation(({ ctx, input }) =>
         attempt(async () =>
           ctx.session.acceptAuthentication(
-            await call(ctx.backend.admin.initialize.bind(ctx.backend.admin), {
-              ...input,
-              display: input.display
-                ? displayPatchPayload(input.display)
-                : void 0,
-            }),
+            await call(
+              ctx.backend.installation.initialize.bind(
+                ctx.backend.installation,
+              ),
+              {
+                ...input,
+                display: input.display
+                  ? displayPatchPayload(input.display)
+                  : void 0,
+              },
+            ),
           ),
         ),
       ),
@@ -106,7 +118,9 @@ export const appRouter = router({
           ctx.session.authenticated(async (token) =>
             grants(
               await call(
-                ctx.backend.admin.listSignupGrants.bind(ctx.backend.admin),
+                ctx.backend.accountGrants.listSignupGrants.bind(
+                  ctx.backend.accountGrants,
+                ),
                 { offset: input.offset, limit: input.limit },
                 token,
               ),
@@ -121,7 +135,9 @@ export const appRouter = router({
           ctx.session.authenticated(async (token) =>
             issued(
               await call(
-                ctx.backend.admin.issueSignupGrant.bind(ctx.backend.admin),
+                ctx.backend.accountGrants.issueSignupGrant.bind(
+                  ctx.backend.accountGrants,
+                ),
                 input,
                 token,
               ),
@@ -133,7 +149,9 @@ export const appRouter = router({
       attempt(() =>
         ctx.session.authenticated(async (token) => {
           await call(
-            ctx.backend.admin.revokeSignupGrant.bind(ctx.backend.admin),
+            ctx.backend.accountGrants.revokeSignupGrant.bind(
+              ctx.backend.accountGrants,
+            ),
             input,
             token,
           );
@@ -150,7 +168,9 @@ export const appRouter = router({
           ctx.session.authenticated(async (token) =>
             grants(
               await call(
-                ctx.backend.admin.listPasswordResets.bind(ctx.backend.admin),
+                ctx.backend.accountGrants.listPasswordResets.bind(
+                  ctx.backend.accountGrants,
+                ),
                 { offset: input.offset, limit: input.limit },
                 token,
               ),
@@ -165,7 +185,9 @@ export const appRouter = router({
           ctx.session.authenticated(async (token) =>
             issued(
               await call(
-                ctx.backend.admin.issuePasswordReset.bind(ctx.backend.admin),
+                ctx.backend.accountGrants.issuePasswordReset.bind(
+                  ctx.backend.accountGrants,
+                ),
                 input,
                 token,
               ),
@@ -177,7 +199,9 @@ export const appRouter = router({
       attempt(() =>
         ctx.session.authenticated(async (token) => {
           await call(
-            ctx.backend.admin.revokePasswordReset.bind(ctx.backend.admin),
+            ctx.backend.accountGrants.revokePasswordReset.bind(
+              ctx.backend.accountGrants,
+            ),
             input,
             token,
           );

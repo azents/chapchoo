@@ -193,9 +193,9 @@ class ChartContractsTest(unittest.TestCase):
                     )
                     self.assertEqual(
                         container["readinessProbe"]["grpc"]["service"],
-                        "chapchoo.accounts.Admin"
+                        "chapchoo.accounts.Installation"
                         if role == "admin"
-                        else "chapchoo.accounts.General",
+                        else "chapchoo.accounts.TeamManagement",
                     )
                     self.assertGreater(container["readinessProbe"]["timeoutSeconds"], 5)
                     self.assertGreaterEqual(

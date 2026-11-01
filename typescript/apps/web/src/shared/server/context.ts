@@ -17,9 +17,16 @@ export function createContext(
   const policy = cookiePolicy(config);
   const session = new RequestSession(
     {
-      renew: (token) => call(backend.auth.renew.bind(backend.auth), { token }),
+      renew: (token) =>
+        call(backend.authentication.renew.bind(backend.authentication), {
+          token,
+        }),
       identity: (token) =>
-        call(backend.auth.identity.bind(backend.auth), {}, token),
+        call(
+          backend.authentication.identity.bind(backend.authentication),
+          {},
+          token,
+        ),
     },
     readSessionCookie(request.headers.get("cookie"), policy),
     policy,

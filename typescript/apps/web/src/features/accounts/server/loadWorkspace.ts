@@ -21,11 +21,7 @@ export async function loadWorkspace(teamId: string): Promise<InitialWorkspace> {
         type: "HOME",
         contexts: await scope.read(async (token) =>
           teams(
-            await call(
-              backend.general.listTeams.bind(backend.general),
-              {},
-              token,
-            ),
+            await call(backend.teams.listTeams.bind(backend.teams), {}, token),
           ),
         ),
       };
@@ -33,7 +29,7 @@ export async function loadWorkspace(teamId: string): Promise<InitialWorkspace> {
     const selected = await scope.read(async (token) =>
       team(
         await call(
-          backend.general.getTeam.bind(backend.general),
+          backend.teams.getTeam.bind(backend.teams),
           { teamId },
           token,
         ),
@@ -44,7 +40,7 @@ export async function loadWorkspace(teamId: string): Promise<InitialWorkspace> {
         ? await scope.read(async (token) =>
             members(
               await call(
-                backend.general.listMembers.bind(backend.general),
+                backend.teams.listMembers.bind(backend.teams),
                 { teamId },
                 token,
               ),

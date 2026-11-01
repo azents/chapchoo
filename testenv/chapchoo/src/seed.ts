@@ -1,7 +1,7 @@
 import {
-  AdminClient,
-  AuthClient,
-  GeneralClient,
+  AccountGrantsClient,
+  AuthenticationClient,
+  AccountLifecycleClient,
 } from "@chapchoo/rpc-client/accounts";
 import { credentials, Metadata } from "@grpc/grpc-js";
 import type {
@@ -51,17 +51,17 @@ export async function seedRegisteredUser(
   user: FixtureUser,
 ): Promise<void> {
   const options = { "grpc.enable_retries": 0 };
-  const auth = new AuthClient(
+  const auth = new AuthenticationClient(
     adminEndpoint,
     credentials.createInsecure(),
     options,
   );
-  const admin = new AdminClient(
+  const admin = new AccountGrantsClient(
     adminEndpoint,
     credentials.createInsecure(),
     options,
   );
-  const general = new GeneralClient(
+  const general = new AccountLifecycleClient(
     generalEndpoint,
     credentials.createInsecure(),
     options,

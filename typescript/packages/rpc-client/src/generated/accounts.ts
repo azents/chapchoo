@@ -3107,13 +3107,13 @@ export const IssuedGrant: MessageFns<IssuedGrant> = {
 };
 
 /**
- * Shared authentication is registered on both independently runnable listeners.
- * Ordinary protected calls carry their opaque token in authorization metadata.
+ * Domain contracts share message types and business authorization rules.
+ * Authentication and personal preferences are common Client/Admin dependencies.
  */
-export type AuthService = typeof AuthService;
-export const AuthService = {
+export type AuthenticationService = typeof AuthenticationService;
+export const AuthenticationService = {
   methods: {
-    path: "/chapchoo.accounts.Auth/Methods" as const,
+    path: "/chapchoo.accounts.Authentication/Methods" as const,
     requestStream: false as const,
     responseStream: false as const,
     requestSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
@@ -3122,7 +3122,7 @@ export const AuthService = {
     responseDeserialize: (value: Buffer): LoginMethods => LoginMethods.decode(value),
   },
   passwordLogin: {
-    path: "/chapchoo.accounts.Auth/PasswordLogin" as const,
+    path: "/chapchoo.accounts.Authentication/PasswordLogin" as const,
     requestStream: false as const,
     responseStream: false as const,
     requestSerialize: (value: PasswordLoginRequest): Buffer => Buffer.from(PasswordLoginRequest.encode(value).finish()),
@@ -3131,7 +3131,7 @@ export const AuthService = {
     responseDeserialize: (value: Buffer): AuthSession => AuthSession.decode(value),
   },
   sendCode: {
-    path: "/chapchoo.accounts.Auth/SendCode" as const,
+    path: "/chapchoo.accounts.Authentication/SendCode" as const,
     requestStream: false as const,
     responseStream: false as const,
     requestSerialize: (value: SendCodeRequest): Buffer => Buffer.from(SendCodeRequest.encode(value).finish()),
@@ -3140,7 +3140,7 @@ export const AuthService = {
     responseDeserialize: (value: Buffer): CodeChallenge => CodeChallenge.decode(value),
   },
   verifyCode: {
-    path: "/chapchoo.accounts.Auth/VerifyCode" as const,
+    path: "/chapchoo.accounts.Authentication/VerifyCode" as const,
     requestStream: false as const,
     responseStream: false as const,
     requestSerialize: (value: VerifyCodeRequest): Buffer => Buffer.from(VerifyCodeRequest.encode(value).finish()),
@@ -3149,7 +3149,7 @@ export const AuthService = {
     responseDeserialize: (value: Buffer): AuthSession => AuthSession.decode(value),
   },
   renew: {
-    path: "/chapchoo.accounts.Auth/Renew" as const,
+    path: "/chapchoo.accounts.Authentication/Renew" as const,
     requestStream: false as const,
     responseStream: false as const,
     requestSerialize: (value: RenewRequest): Buffer => Buffer.from(RenewRequest.encode(value).finish()),
@@ -3158,34 +3158,16 @@ export const AuthService = {
     responseDeserialize: (value: Buffer): AuthSession => AuthSession.decode(value),
   },
   identity: {
-    path: "/chapchoo.accounts.Auth/Identity" as const,
+    path: "/chapchoo.accounts.Authentication/Identity" as const,
     requestStream: false as const,
     responseStream: false as const,
     requestSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
     requestDeserialize: (value: Buffer): Empty => Empty.decode(value),
-    responseSerialize: (value: User): Buffer => Buffer.from(User.encode(value).finish()),
-    responseDeserialize: (value: Buffer): User => User.decode(value),
-  },
-  displayDefaults: {
-    path: "/chapchoo.accounts.Auth/DisplayDefaults" as const,
-    requestStream: false as const,
-    responseStream: false as const,
-    requestSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
-    requestDeserialize: (value: Buffer): Empty => Empty.decode(value),
-    responseSerialize: (value: DisplaySettings): Buffer => Buffer.from(DisplaySettings.encode(value).finish()),
-    responseDeserialize: (value: Buffer): DisplaySettings => DisplaySettings.decode(value),
-  },
-  updateDisplay: {
-    path: "/chapchoo.accounts.Auth/UpdateDisplay" as const,
-    requestStream: false as const,
-    responseStream: false as const,
-    requestSerialize: (value: DisplayPatch): Buffer => Buffer.from(DisplayPatch.encode(value).finish()),
-    requestDeserialize: (value: Buffer): DisplayPatch => DisplayPatch.decode(value),
     responseSerialize: (value: User): Buffer => Buffer.from(User.encode(value).finish()),
     responseDeserialize: (value: Buffer): User => User.decode(value),
   },
   logout: {
-    path: "/chapchoo.accounts.Auth/Logout" as const,
+    path: "/chapchoo.accounts.Authentication/Logout" as const,
     requestStream: false as const,
     responseStream: false as const,
     requestSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
@@ -3195,19 +3177,17 @@ export const AuthService = {
   },
 } as const;
 
-export interface AuthServer extends UntypedServiceImplementation {
+export interface AuthenticationServer extends UntypedServiceImplementation {
   methods: handleUnaryCall<Empty, LoginMethods>;
   passwordLogin: handleUnaryCall<PasswordLoginRequest, AuthSession>;
   sendCode: handleUnaryCall<SendCodeRequest, CodeChallenge>;
   verifyCode: handleUnaryCall<VerifyCodeRequest, AuthSession>;
   renew: handleUnaryCall<RenewRequest, AuthSession>;
   identity: handleUnaryCall<Empty, User>;
-  displayDefaults: handleUnaryCall<Empty, DisplaySettings>;
-  updateDisplay: handleUnaryCall<DisplayPatch, User>;
   logout: handleUnaryCall<Empty, Empty>;
 }
 
-export interface AuthClient extends Client {
+export interface AuthenticationClient extends Client {
   methods(request: Empty, callback: (error: ServiceError | null, response: LoginMethods) => void): ClientUnaryCall;
   methods(
     request: Empty,
@@ -3289,6 +3269,57 @@ export interface AuthClient extends Client {
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: User) => void,
   ): ClientUnaryCall;
+  logout(request: Empty, callback: (error: ServiceError | null, response: Empty) => void): ClientUnaryCall;
+  logout(
+    request: Empty,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  logout(
+    request: Empty,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+}
+
+export const AuthenticationClient = makeGenericClientConstructor(
+  AuthenticationService,
+  "chapchoo.accounts.Authentication",
+) as unknown as {
+  new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): AuthenticationClient;
+  service: typeof AuthenticationService;
+  serviceName: string;
+};
+
+export type PersonalPreferencesService = typeof PersonalPreferencesService;
+export const PersonalPreferencesService = {
+  displayDefaults: {
+    path: "/chapchoo.accounts.PersonalPreferences/DisplayDefaults" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
+    requestDeserialize: (value: Buffer): Empty => Empty.decode(value),
+    responseSerialize: (value: DisplaySettings): Buffer => Buffer.from(DisplaySettings.encode(value).finish()),
+    responseDeserialize: (value: Buffer): DisplaySettings => DisplaySettings.decode(value),
+  },
+  updateDisplay: {
+    path: "/chapchoo.accounts.PersonalPreferences/UpdateDisplay" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: DisplayPatch): Buffer => Buffer.from(DisplayPatch.encode(value).finish()),
+    requestDeserialize: (value: Buffer): DisplayPatch => DisplayPatch.decode(value),
+    responseSerialize: (value: User): Buffer => Buffer.from(User.encode(value).finish()),
+    responseDeserialize: (value: Buffer): User => User.decode(value),
+  },
+} as const;
+
+export interface PersonalPreferencesServer extends UntypedServiceImplementation {
+  displayDefaults: handleUnaryCall<Empty, DisplaySettings>;
+  updateDisplay: handleUnaryCall<DisplayPatch, User>;
+}
+
+export interface PersonalPreferencesClient extends Client {
   displayDefaults(
     request: Empty,
     callback: (error: ServiceError | null, response: DisplaySettings) => void,
@@ -3316,30 +3347,21 @@ export interface AuthClient extends Client {
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: User) => void,
   ): ClientUnaryCall;
-  logout(request: Empty, callback: (error: ServiceError | null, response: Empty) => void): ClientUnaryCall;
-  logout(
-    request: Empty,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: Empty) => void,
-  ): ClientUnaryCall;
-  logout(
-    request: Empty,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: Empty) => void,
-  ): ClientUnaryCall;
 }
 
-export const AuthClient = makeGenericClientConstructor(AuthService, "chapchoo.accounts.Auth") as unknown as {
-  new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): AuthClient;
-  service: typeof AuthService;
+export const PersonalPreferencesClient = makeGenericClientConstructor(
+  PersonalPreferencesService,
+  "chapchoo.accounts.PersonalPreferences",
+) as unknown as {
+  new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): PersonalPreferencesClient;
+  service: typeof PersonalPreferencesService;
   serviceName: string;
 };
 
-export type GeneralService = typeof GeneralService;
-export const GeneralService = {
+export type AccountLifecycleService = typeof AccountLifecycleService;
+export const AccountLifecycleService = {
   requestSignupEmail: {
-    path: "/chapchoo.accounts.General/RequestSignupEmail" as const,
+    path: "/chapchoo.accounts.AccountLifecycle/RequestSignupEmail" as const,
     requestStream: false as const,
     responseStream: false as const,
     requestSerialize: (value: SignupEmailRequest): Buffer => Buffer.from(SignupEmailRequest.encode(value).finish()),
@@ -3348,7 +3370,7 @@ export const GeneralService = {
     responseDeserialize: (value: Buffer): DeliveryAccepted => DeliveryAccepted.decode(value),
   },
   previewSignup: {
-    path: "/chapchoo.accounts.General/PreviewSignup" as const,
+    path: "/chapchoo.accounts.AccountLifecycle/PreviewSignup" as const,
     requestStream: false as const,
     responseStream: false as const,
     requestSerialize: (value: ProofRequest): Buffer => Buffer.from(ProofRequest.encode(value).finish()),
@@ -3357,7 +3379,7 @@ export const GeneralService = {
     responseDeserialize: (value: Buffer): ProofPreview => ProofPreview.decode(value),
   },
   redeemSignup: {
-    path: "/chapchoo.accounts.General/RedeemSignup" as const,
+    path: "/chapchoo.accounts.AccountLifecycle/RedeemSignup" as const,
     requestStream: false as const,
     responseStream: false as const,
     requestSerialize: (value: RedeemSignupRequest): Buffer => Buffer.from(RedeemSignupRequest.encode(value).finish()),
@@ -3366,7 +3388,7 @@ export const GeneralService = {
     responseDeserialize: (value: Buffer): AuthSession => AuthSession.decode(value),
   },
   previewPasswordReset: {
-    path: "/chapchoo.accounts.General/PreviewPasswordReset" as const,
+    path: "/chapchoo.accounts.AccountLifecycle/PreviewPasswordReset" as const,
     requestStream: false as const,
     responseStream: false as const,
     requestSerialize: (value: ProofRequest): Buffer => Buffer.from(ProofRequest.encode(value).finish()),
@@ -3375,7 +3397,7 @@ export const GeneralService = {
     responseDeserialize: (value: Buffer): ProofPreview => ProofPreview.decode(value),
   },
   redeemPasswordReset: {
-    path: "/chapchoo.accounts.General/RedeemPasswordReset" as const,
+    path: "/chapchoo.accounts.AccountLifecycle/RedeemPasswordReset" as const,
     requestStream: false as const,
     responseStream: false as const,
     requestSerialize: (value: RedeemPasswordResetRequest): Buffer =>
@@ -3384,8 +3406,107 @@ export const GeneralService = {
     responseSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
     responseDeserialize: (value: Buffer): Empty => Empty.decode(value),
   },
+} as const;
+
+export interface AccountLifecycleServer extends UntypedServiceImplementation {
+  requestSignupEmail: handleUnaryCall<SignupEmailRequest, DeliveryAccepted>;
+  previewSignup: handleUnaryCall<ProofRequest, ProofPreview>;
+  redeemSignup: handleUnaryCall<RedeemSignupRequest, AuthSession>;
+  previewPasswordReset: handleUnaryCall<ProofRequest, ProofPreview>;
+  redeemPasswordReset: handleUnaryCall<RedeemPasswordResetRequest, Empty>;
+}
+
+export interface AccountLifecycleClient extends Client {
+  requestSignupEmail(
+    request: SignupEmailRequest,
+    callback: (error: ServiceError | null, response: DeliveryAccepted) => void,
+  ): ClientUnaryCall;
+  requestSignupEmail(
+    request: SignupEmailRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: DeliveryAccepted) => void,
+  ): ClientUnaryCall;
+  requestSignupEmail(
+    request: SignupEmailRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: DeliveryAccepted) => void,
+  ): ClientUnaryCall;
+  previewSignup(
+    request: ProofRequest,
+    callback: (error: ServiceError | null, response: ProofPreview) => void,
+  ): ClientUnaryCall;
+  previewSignup(
+    request: ProofRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ProofPreview) => void,
+  ): ClientUnaryCall;
+  previewSignup(
+    request: ProofRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ProofPreview) => void,
+  ): ClientUnaryCall;
+  redeemSignup(
+    request: RedeemSignupRequest,
+    callback: (error: ServiceError | null, response: AuthSession) => void,
+  ): ClientUnaryCall;
+  redeemSignup(
+    request: RedeemSignupRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: AuthSession) => void,
+  ): ClientUnaryCall;
+  redeemSignup(
+    request: RedeemSignupRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: AuthSession) => void,
+  ): ClientUnaryCall;
+  previewPasswordReset(
+    request: ProofRequest,
+    callback: (error: ServiceError | null, response: ProofPreview) => void,
+  ): ClientUnaryCall;
+  previewPasswordReset(
+    request: ProofRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ProofPreview) => void,
+  ): ClientUnaryCall;
+  previewPasswordReset(
+    request: ProofRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ProofPreview) => void,
+  ): ClientUnaryCall;
+  redeemPasswordReset(
+    request: RedeemPasswordResetRequest,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  redeemPasswordReset(
+    request: RedeemPasswordResetRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  redeemPasswordReset(
+    request: RedeemPasswordResetRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+}
+
+export const AccountLifecycleClient = makeGenericClientConstructor(
+  AccountLifecycleService,
+  "chapchoo.accounts.AccountLifecycle",
+) as unknown as {
+  new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): AccountLifecycleClient;
+  service: typeof AccountLifecycleService;
+  serviceName: string;
+};
+
+export type TeamManagementService = typeof TeamManagementService;
+export const TeamManagementService = {
   listTeams: {
-    path: "/chapchoo.accounts.General/ListTeams" as const,
+    path: "/chapchoo.accounts.TeamManagement/ListTeams" as const,
     requestStream: false as const,
     responseStream: false as const,
     requestSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
@@ -3394,7 +3515,7 @@ export const GeneralService = {
     responseDeserialize: (value: Buffer): Teams => Teams.decode(value),
   },
   getTeam: {
-    path: "/chapchoo.accounts.General/GetTeam" as const,
+    path: "/chapchoo.accounts.TeamManagement/GetTeam" as const,
     requestStream: false as const,
     responseStream: false as const,
     requestSerialize: (value: TeamRequest): Buffer => Buffer.from(TeamRequest.encode(value).finish()),
@@ -3403,7 +3524,7 @@ export const GeneralService = {
     responseDeserialize: (value: Buffer): Team => Team.decode(value),
   },
   createTeam: {
-    path: "/chapchoo.accounts.General/CreateTeam" as const,
+    path: "/chapchoo.accounts.TeamManagement/CreateTeam" as const,
     requestStream: false as const,
     responseStream: false as const,
     requestSerialize: (value: CreateTeamRequest): Buffer => Buffer.from(CreateTeamRequest.encode(value).finish()),
@@ -3412,7 +3533,7 @@ export const GeneralService = {
     responseDeserialize: (value: Buffer): Team => Team.decode(value),
   },
   updateTeam: {
-    path: "/chapchoo.accounts.General/UpdateTeam" as const,
+    path: "/chapchoo.accounts.TeamManagement/UpdateTeam" as const,
     requestStream: false as const,
     responseStream: false as const,
     requestSerialize: (value: UpdateTeamRequest): Buffer => Buffer.from(UpdateTeamRequest.encode(value).finish()),
@@ -3421,7 +3542,7 @@ export const GeneralService = {
     responseDeserialize: (value: Buffer): Team => Team.decode(value),
   },
   listMembers: {
-    path: "/chapchoo.accounts.General/ListMembers" as const,
+    path: "/chapchoo.accounts.TeamManagement/ListMembers" as const,
     requestStream: false as const,
     responseStream: false as const,
     requestSerialize: (value: TeamRequest): Buffer => Buffer.from(TeamRequest.encode(value).finish()),
@@ -3430,7 +3551,7 @@ export const GeneralService = {
     responseDeserialize: (value: Buffer): Members => Members.decode(value),
   },
   setMemberRole: {
-    path: "/chapchoo.accounts.General/SetMemberRole" as const,
+    path: "/chapchoo.accounts.TeamManagement/SetMemberRole" as const,
     requestStream: false as const,
     responseStream: false as const,
     requestSerialize: (value: SetMemberRoleRequest): Buffer => Buffer.from(SetMemberRoleRequest.encode(value).finish()),
@@ -3439,7 +3560,7 @@ export const GeneralService = {
     responseDeserialize: (value: Buffer): Empty => Empty.decode(value),
   },
   removeMember: {
-    path: "/chapchoo.accounts.General/RemoveMember" as const,
+    path: "/chapchoo.accounts.TeamManagement/RemoveMember" as const,
     requestStream: false as const,
     responseStream: false as const,
     requestSerialize: (value: MemberRequest): Buffer => Buffer.from(MemberRequest.encode(value).finish()),
@@ -3448,7 +3569,7 @@ export const GeneralService = {
     responseDeserialize: (value: Buffer): Empty => Empty.decode(value),
   },
   transferOwnership: {
-    path: "/chapchoo.accounts.General/TransferOwnership" as const,
+    path: "/chapchoo.accounts.TeamManagement/TransferOwnership" as const,
     requestStream: false as const,
     responseStream: false as const,
     requestSerialize: (value: MemberRequest): Buffer => Buffer.from(MemberRequest.encode(value).finish()),
@@ -3457,7 +3578,7 @@ export const GeneralService = {
     responseDeserialize: (value: Buffer): Empty => Empty.decode(value),
   },
   leaveTeam: {
-    path: "/chapchoo.accounts.General/LeaveTeam" as const,
+    path: "/chapchoo.accounts.TeamManagement/LeaveTeam" as const,
     requestStream: false as const,
     responseStream: false as const,
     requestSerialize: (value: TeamRequest): Buffer => Buffer.from(TeamRequest.encode(value).finish()),
@@ -3466,59 +3587,17 @@ export const GeneralService = {
     responseDeserialize: (value: Buffer): Empty => Empty.decode(value),
   },
   deleteTeam: {
-    path: "/chapchoo.accounts.General/DeleteTeam" as const,
+    path: "/chapchoo.accounts.TeamManagement/DeleteTeam" as const,
     requestStream: false as const,
     responseStream: false as const,
     requestSerialize: (value: TeamRequest): Buffer => Buffer.from(TeamRequest.encode(value).finish()),
     requestDeserialize: (value: Buffer): TeamRequest => TeamRequest.decode(value),
-    responseSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
-    responseDeserialize: (value: Buffer): Empty => Empty.decode(value),
-  },
-  inviteMember: {
-    path: "/chapchoo.accounts.General/InviteMember" as const,
-    requestStream: false as const,
-    responseStream: false as const,
-    requestSerialize: (value: InviteMemberRequest): Buffer => Buffer.from(InviteMemberRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): InviteMemberRequest => InviteMemberRequest.decode(value),
-    responseSerialize: (value: Invitation): Buffer => Buffer.from(Invitation.encode(value).finish()),
-    responseDeserialize: (value: Buffer): Invitation => Invitation.decode(value),
-  },
-  receivedInvitations: {
-    path: "/chapchoo.accounts.General/ReceivedInvitations" as const,
-    requestStream: false as const,
-    responseStream: false as const,
-    requestSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
-    requestDeserialize: (value: Buffer): Empty => Empty.decode(value),
-    responseSerialize: (value: Invitations): Buffer => Buffer.from(Invitations.encode(value).finish()),
-    responseDeserialize: (value: Buffer): Invitations => Invitations.decode(value),
-  },
-  teamInvitations: {
-    path: "/chapchoo.accounts.General/TeamInvitations" as const,
-    requestStream: false as const,
-    responseStream: false as const,
-    requestSerialize: (value: TeamRequest): Buffer => Buffer.from(TeamRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): TeamRequest => TeamRequest.decode(value),
-    responseSerialize: (value: Invitations): Buffer => Buffer.from(Invitations.encode(value).finish()),
-    responseDeserialize: (value: Buffer): Invitations => Invitations.decode(value),
-  },
-  processInvitation: {
-    path: "/chapchoo.accounts.General/ProcessInvitation" as const,
-    requestStream: false as const,
-    responseStream: false as const,
-    requestSerialize: (value: ProcessInvitationRequest): Buffer =>
-      Buffer.from(ProcessInvitationRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): ProcessInvitationRequest => ProcessInvitationRequest.decode(value),
     responseSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
     responseDeserialize: (value: Buffer): Empty => Empty.decode(value),
   },
 } as const;
 
-export interface GeneralServer extends UntypedServiceImplementation {
-  requestSignupEmail: handleUnaryCall<SignupEmailRequest, DeliveryAccepted>;
-  previewSignup: handleUnaryCall<ProofRequest, ProofPreview>;
-  redeemSignup: handleUnaryCall<RedeemSignupRequest, AuthSession>;
-  previewPasswordReset: handleUnaryCall<ProofRequest, ProofPreview>;
-  redeemPasswordReset: handleUnaryCall<RedeemPasswordResetRequest, Empty>;
+export interface TeamManagementServer extends UntypedServiceImplementation {
   listTeams: handleUnaryCall<Empty, Teams>;
   getTeam: handleUnaryCall<TeamRequest, Team>;
   createTeam: handleUnaryCall<CreateTeamRequest, Team>;
@@ -3529,88 +3608,9 @@ export interface GeneralServer extends UntypedServiceImplementation {
   transferOwnership: handleUnaryCall<MemberRequest, Empty>;
   leaveTeam: handleUnaryCall<TeamRequest, Empty>;
   deleteTeam: handleUnaryCall<TeamRequest, Empty>;
-  inviteMember: handleUnaryCall<InviteMemberRequest, Invitation>;
-  receivedInvitations: handleUnaryCall<Empty, Invitations>;
-  teamInvitations: handleUnaryCall<TeamRequest, Invitations>;
-  processInvitation: handleUnaryCall<ProcessInvitationRequest, Empty>;
 }
 
-export interface GeneralClient extends Client {
-  requestSignupEmail(
-    request: SignupEmailRequest,
-    callback: (error: ServiceError | null, response: DeliveryAccepted) => void,
-  ): ClientUnaryCall;
-  requestSignupEmail(
-    request: SignupEmailRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: DeliveryAccepted) => void,
-  ): ClientUnaryCall;
-  requestSignupEmail(
-    request: SignupEmailRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: DeliveryAccepted) => void,
-  ): ClientUnaryCall;
-  previewSignup(
-    request: ProofRequest,
-    callback: (error: ServiceError | null, response: ProofPreview) => void,
-  ): ClientUnaryCall;
-  previewSignup(
-    request: ProofRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: ProofPreview) => void,
-  ): ClientUnaryCall;
-  previewSignup(
-    request: ProofRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: ProofPreview) => void,
-  ): ClientUnaryCall;
-  redeemSignup(
-    request: RedeemSignupRequest,
-    callback: (error: ServiceError | null, response: AuthSession) => void,
-  ): ClientUnaryCall;
-  redeemSignup(
-    request: RedeemSignupRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: AuthSession) => void,
-  ): ClientUnaryCall;
-  redeemSignup(
-    request: RedeemSignupRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: AuthSession) => void,
-  ): ClientUnaryCall;
-  previewPasswordReset(
-    request: ProofRequest,
-    callback: (error: ServiceError | null, response: ProofPreview) => void,
-  ): ClientUnaryCall;
-  previewPasswordReset(
-    request: ProofRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: ProofPreview) => void,
-  ): ClientUnaryCall;
-  previewPasswordReset(
-    request: ProofRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: ProofPreview) => void,
-  ): ClientUnaryCall;
-  redeemPasswordReset(
-    request: RedeemPasswordResetRequest,
-    callback: (error: ServiceError | null, response: Empty) => void,
-  ): ClientUnaryCall;
-  redeemPasswordReset(
-    request: RedeemPasswordResetRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: Empty) => void,
-  ): ClientUnaryCall;
-  redeemPasswordReset(
-    request: RedeemPasswordResetRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: Empty) => void,
-  ): ClientUnaryCall;
+export interface TeamManagementClient extends Client {
   listTeams(request: Empty, callback: (error: ServiceError | null, response: Teams) => void): ClientUnaryCall;
   listTeams(
     request: Empty,
@@ -3746,6 +3746,66 @@ export interface GeneralClient extends Client {
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: Empty) => void,
   ): ClientUnaryCall;
+}
+
+export const TeamManagementClient = makeGenericClientConstructor(
+  TeamManagementService,
+  "chapchoo.accounts.TeamManagement",
+) as unknown as {
+  new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): TeamManagementClient;
+  service: typeof TeamManagementService;
+  serviceName: string;
+};
+
+export type InvitationManagementService = typeof InvitationManagementService;
+export const InvitationManagementService = {
+  inviteMember: {
+    path: "/chapchoo.accounts.InvitationManagement/InviteMember" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: InviteMemberRequest): Buffer => Buffer.from(InviteMemberRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): InviteMemberRequest => InviteMemberRequest.decode(value),
+    responseSerialize: (value: Invitation): Buffer => Buffer.from(Invitation.encode(value).finish()),
+    responseDeserialize: (value: Buffer): Invitation => Invitation.decode(value),
+  },
+  receivedInvitations: {
+    path: "/chapchoo.accounts.InvitationManagement/ReceivedInvitations" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
+    requestDeserialize: (value: Buffer): Empty => Empty.decode(value),
+    responseSerialize: (value: Invitations): Buffer => Buffer.from(Invitations.encode(value).finish()),
+    responseDeserialize: (value: Buffer): Invitations => Invitations.decode(value),
+  },
+  teamInvitations: {
+    path: "/chapchoo.accounts.InvitationManagement/TeamInvitations" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: TeamRequest): Buffer => Buffer.from(TeamRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): TeamRequest => TeamRequest.decode(value),
+    responseSerialize: (value: Invitations): Buffer => Buffer.from(Invitations.encode(value).finish()),
+    responseDeserialize: (value: Buffer): Invitations => Invitations.decode(value),
+  },
+  processInvitation: {
+    path: "/chapchoo.accounts.InvitationManagement/ProcessInvitation" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ProcessInvitationRequest): Buffer =>
+      Buffer.from(ProcessInvitationRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ProcessInvitationRequest => ProcessInvitationRequest.decode(value),
+    responseSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
+    responseDeserialize: (value: Buffer): Empty => Empty.decode(value),
+  },
+} as const;
+
+export interface InvitationManagementServer extends UntypedServiceImplementation {
+  inviteMember: handleUnaryCall<InviteMemberRequest, Invitation>;
+  receivedInvitations: handleUnaryCall<Empty, Invitations>;
+  teamInvitations: handleUnaryCall<TeamRequest, Invitations>;
+  processInvitation: handleUnaryCall<ProcessInvitationRequest, Empty>;
+}
+
+export interface InvitationManagementClient extends Client {
   inviteMember(
     request: InviteMemberRequest,
     callback: (error: ServiceError | null, response: Invitation) => void,
@@ -3808,16 +3868,19 @@ export interface GeneralClient extends Client {
   ): ClientUnaryCall;
 }
 
-export const GeneralClient = makeGenericClientConstructor(GeneralService, "chapchoo.accounts.General") as unknown as {
-  new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): GeneralClient;
-  service: typeof GeneralService;
+export const InvitationManagementClient = makeGenericClientConstructor(
+  InvitationManagementService,
+  "chapchoo.accounts.InvitationManagement",
+) as unknown as {
+  new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): InvitationManagementClient;
+  service: typeof InvitationManagementService;
   serviceName: string;
 };
 
-export type AdminService = typeof AdminService;
-export const AdminService = {
+export type InstallationService = typeof InstallationService;
+export const InstallationService = {
   setupStatus: {
-    path: "/chapchoo.accounts.Admin/SetupStatus" as const,
+    path: "/chapchoo.accounts.Installation/SetupStatus" as const,
     requestStream: false as const,
     responseStream: false as const,
     requestSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
@@ -3825,17 +3888,8 @@ export const AdminService = {
     responseSerialize: (value: SetupStatusResult): Buffer => Buffer.from(SetupStatusResult.encode(value).finish()),
     responseDeserialize: (value: Buffer): SetupStatusResult => SetupStatusResult.decode(value),
   },
-  updateDisplayDefaults: {
-    path: "/chapchoo.accounts.Admin/UpdateDisplayDefaults" as const,
-    requestStream: false as const,
-    responseStream: false as const,
-    requestSerialize: (value: DisplayPatch): Buffer => Buffer.from(DisplayPatch.encode(value).finish()),
-    requestDeserialize: (value: Buffer): DisplayPatch => DisplayPatch.decode(value),
-    responseSerialize: (value: DisplaySettings): Buffer => Buffer.from(DisplaySettings.encode(value).finish()),
-    responseDeserialize: (value: Buffer): DisplaySettings => DisplaySettings.decode(value),
-  },
   initialize: {
-    path: "/chapchoo.accounts.Admin/Initialize" as const,
+    path: "/chapchoo.accounts.Installation/Initialize" as const,
     requestStream: false as const,
     responseStream: false as const,
     requestSerialize: (value: InitializeRequest): Buffer => Buffer.from(InitializeRequest.encode(value).finish()),
@@ -3843,8 +3897,59 @@ export const AdminService = {
     responseSerialize: (value: AuthSession): Buffer => Buffer.from(AuthSession.encode(value).finish()),
     responseDeserialize: (value: Buffer): AuthSession => AuthSession.decode(value),
   },
+} as const;
+
+export interface InstallationServer extends UntypedServiceImplementation {
+  setupStatus: handleUnaryCall<Empty, SetupStatusResult>;
+  initialize: handleUnaryCall<InitializeRequest, AuthSession>;
+}
+
+export interface InstallationClient extends Client {
+  setupStatus(
+    request: Empty,
+    callback: (error: ServiceError | null, response: SetupStatusResult) => void,
+  ): ClientUnaryCall;
+  setupStatus(
+    request: Empty,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: SetupStatusResult) => void,
+  ): ClientUnaryCall;
+  setupStatus(
+    request: Empty,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: SetupStatusResult) => void,
+  ): ClientUnaryCall;
+  initialize(
+    request: InitializeRequest,
+    callback: (error: ServiceError | null, response: AuthSession) => void,
+  ): ClientUnaryCall;
+  initialize(
+    request: InitializeRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: AuthSession) => void,
+  ): ClientUnaryCall;
+  initialize(
+    request: InitializeRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: AuthSession) => void,
+  ): ClientUnaryCall;
+}
+
+export const InstallationClient = makeGenericClientConstructor(
+  InstallationService,
+  "chapchoo.accounts.Installation",
+) as unknown as {
+  new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): InstallationClient;
+  service: typeof InstallationService;
+  serviceName: string;
+};
+
+export type AccountGrantsService = typeof AccountGrantsService;
+export const AccountGrantsService = {
   issueSignupGrant: {
-    path: "/chapchoo.accounts.Admin/IssueSignupGrant" as const,
+    path: "/chapchoo.accounts.AccountGrants/IssueSignupGrant" as const,
     requestStream: false as const,
     responseStream: false as const,
     requestSerialize: (value: IssueGrantRequest): Buffer => Buffer.from(IssueGrantRequest.encode(value).finish()),
@@ -3853,7 +3958,7 @@ export const AdminService = {
     responseDeserialize: (value: Buffer): IssuedGrant => IssuedGrant.decode(value),
   },
   listSignupGrants: {
-    path: "/chapchoo.accounts.Admin/ListSignupGrants" as const,
+    path: "/chapchoo.accounts.AccountGrants/ListSignupGrants" as const,
     requestStream: false as const,
     responseStream: false as const,
     requestSerialize: (value: ListGrantsRequest): Buffer => Buffer.from(ListGrantsRequest.encode(value).finish()),
@@ -3862,7 +3967,7 @@ export const AdminService = {
     responseDeserialize: (value: Buffer): Grants => Grants.decode(value),
   },
   revokeSignupGrant: {
-    path: "/chapchoo.accounts.Admin/RevokeSignupGrant" as const,
+    path: "/chapchoo.accounts.AccountGrants/RevokeSignupGrant" as const,
     requestStream: false as const,
     responseStream: false as const,
     requestSerialize: (value: GrantRequest): Buffer => Buffer.from(GrantRequest.encode(value).finish()),
@@ -3871,7 +3976,7 @@ export const AdminService = {
     responseDeserialize: (value: Buffer): Empty => Empty.decode(value),
   },
   issuePasswordReset: {
-    path: "/chapchoo.accounts.Admin/IssuePasswordReset" as const,
+    path: "/chapchoo.accounts.AccountGrants/IssuePasswordReset" as const,
     requestStream: false as const,
     responseStream: false as const,
     requestSerialize: (value: IssueGrantRequest): Buffer => Buffer.from(IssueGrantRequest.encode(value).finish()),
@@ -3880,7 +3985,7 @@ export const AdminService = {
     responseDeserialize: (value: Buffer): IssuedGrant => IssuedGrant.decode(value),
   },
   listPasswordResets: {
-    path: "/chapchoo.accounts.Admin/ListPasswordResets" as const,
+    path: "/chapchoo.accounts.AccountGrants/ListPasswordResets" as const,
     requestStream: false as const,
     responseStream: false as const,
     requestSerialize: (value: ListGrantsRequest): Buffer => Buffer.from(ListGrantsRequest.encode(value).finish()),
@@ -3889,7 +3994,7 @@ export const AdminService = {
     responseDeserialize: (value: Buffer): Grants => Grants.decode(value),
   },
   revokePasswordReset: {
-    path: "/chapchoo.accounts.Admin/RevokePasswordReset" as const,
+    path: "/chapchoo.accounts.AccountGrants/RevokePasswordReset" as const,
     requestStream: false as const,
     responseStream: false as const,
     requestSerialize: (value: GrantRequest): Buffer => Buffer.from(GrantRequest.encode(value).finish()),
@@ -3899,10 +4004,7 @@ export const AdminService = {
   },
 } as const;
 
-export interface AdminServer extends UntypedServiceImplementation {
-  setupStatus: handleUnaryCall<Empty, SetupStatusResult>;
-  updateDisplayDefaults: handleUnaryCall<DisplayPatch, DisplaySettings>;
-  initialize: handleUnaryCall<InitializeRequest, AuthSession>;
+export interface AccountGrantsServer extends UntypedServiceImplementation {
   issueSignupGrant: handleUnaryCall<IssueGrantRequest, IssuedGrant>;
   listSignupGrants: handleUnaryCall<ListGrantsRequest, Grants>;
   revokeSignupGrant: handleUnaryCall<GrantRequest, Empty>;
@@ -3911,52 +4013,7 @@ export interface AdminServer extends UntypedServiceImplementation {
   revokePasswordReset: handleUnaryCall<GrantRequest, Empty>;
 }
 
-export interface AdminClient extends Client {
-  setupStatus(
-    request: Empty,
-    callback: (error: ServiceError | null, response: SetupStatusResult) => void,
-  ): ClientUnaryCall;
-  setupStatus(
-    request: Empty,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: SetupStatusResult) => void,
-  ): ClientUnaryCall;
-  setupStatus(
-    request: Empty,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: SetupStatusResult) => void,
-  ): ClientUnaryCall;
-  updateDisplayDefaults(
-    request: DisplayPatch,
-    callback: (error: ServiceError | null, response: DisplaySettings) => void,
-  ): ClientUnaryCall;
-  updateDisplayDefaults(
-    request: DisplayPatch,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: DisplaySettings) => void,
-  ): ClientUnaryCall;
-  updateDisplayDefaults(
-    request: DisplayPatch,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: DisplaySettings) => void,
-  ): ClientUnaryCall;
-  initialize(
-    request: InitializeRequest,
-    callback: (error: ServiceError | null, response: AuthSession) => void,
-  ): ClientUnaryCall;
-  initialize(
-    request: InitializeRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: AuthSession) => void,
-  ): ClientUnaryCall;
-  initialize(
-    request: InitializeRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: AuthSession) => void,
-  ): ClientUnaryCall;
+export interface AccountGrantsClient extends Client {
   issueSignupGrant(
     request: IssueGrantRequest,
     callback: (error: ServiceError | null, response: IssuedGrant) => void,
@@ -4049,9 +4106,56 @@ export interface AdminClient extends Client {
   ): ClientUnaryCall;
 }
 
-export const AdminClient = makeGenericClientConstructor(AdminService, "chapchoo.accounts.Admin") as unknown as {
-  new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): AdminClient;
-  service: typeof AdminService;
+export const AccountGrantsClient = makeGenericClientConstructor(
+  AccountGrantsService,
+  "chapchoo.accounts.AccountGrants",
+) as unknown as {
+  new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): AccountGrantsClient;
+  service: typeof AccountGrantsService;
+  serviceName: string;
+};
+
+export type DisplayDefaultsService = typeof DisplayDefaultsService;
+export const DisplayDefaultsService = {
+  updateDisplayDefaults: {
+    path: "/chapchoo.accounts.DisplayDefaults/UpdateDisplayDefaults" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: DisplayPatch): Buffer => Buffer.from(DisplayPatch.encode(value).finish()),
+    requestDeserialize: (value: Buffer): DisplayPatch => DisplayPatch.decode(value),
+    responseSerialize: (value: DisplaySettings): Buffer => Buffer.from(DisplaySettings.encode(value).finish()),
+    responseDeserialize: (value: Buffer): DisplaySettings => DisplaySettings.decode(value),
+  },
+} as const;
+
+export interface DisplayDefaultsServer extends UntypedServiceImplementation {
+  updateDisplayDefaults: handleUnaryCall<DisplayPatch, DisplaySettings>;
+}
+
+export interface DisplayDefaultsClient extends Client {
+  updateDisplayDefaults(
+    request: DisplayPatch,
+    callback: (error: ServiceError | null, response: DisplaySettings) => void,
+  ): ClientUnaryCall;
+  updateDisplayDefaults(
+    request: DisplayPatch,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: DisplaySettings) => void,
+  ): ClientUnaryCall;
+  updateDisplayDefaults(
+    request: DisplayPatch,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: DisplaySettings) => void,
+  ): ClientUnaryCall;
+}
+
+export const DisplayDefaultsClient = makeGenericClientConstructor(
+  DisplayDefaultsService,
+  "chapchoo.accounts.DisplayDefaults",
+) as unknown as {
+  new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): DisplayDefaultsClient;
+  service: typeof DisplayDefaultsService;
   serviceName: string;
 };
 

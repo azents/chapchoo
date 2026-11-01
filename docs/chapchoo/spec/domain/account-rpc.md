@@ -12,8 +12,8 @@ code_paths:
   - rust/crates/mail
   - rust/apps/chapchoo
   - typescript/packages/rpc-client
-last_verified_at: 2026-10-31
-spec_version: 1
+last_verified_at: 2026-11-02
+spec_version: 2
 ---
 
 # Account RPC and Foreground Backend
@@ -22,14 +22,18 @@ spec_version: 1
 
 The `chapchoo` binary composes configuration, one authoritative Store, bounded
 password work, optional SMTP delivery and application services.
-RPC handlers do not depend on the DB implementation. Auth is registered on both
-listeners; General and Admin business services are registered only on their
-corresponding listener. Either role can run independently. Admin business calls
+RPC handlers do not depend on the DB implementation. `AccountServices` composes
+separate domain adapters over shared account operations and admission, without
+one transport handler implementing unrelated domain traits.
+Authentication and PersonalPreferences are registered on both listeners.
+AccountLifecycle, TeamManagement and InvitationManagement are registered on
+the General listener; Installation, AccountGrants and DisplayDefaults are
+registered on Admin. Either role can run independently. Admin business calls
 recheck current server-administrator authority in the repository operation.
 
 Protected calls carry exactly one `authorization: Bearer <opaque-token>`
 metadata value. Each call parses its own credential. Channels do not hold a
-mutable caller identity, and ordinary accounts can use Auth on the Admin listener
+mutable caller identity, and ordinary accounts can use Authentication on the Admin listener
 without gaining Admin business privileges. Logout and password reset affect the
 shared session authority on both listeners.
 
@@ -60,9 +64,9 @@ returns its new proof and general-web URL.
 
 Every User snapshot includes complete independent display language (`en`, `ko`,
 `ja`, `fr`), IANA time zone and regional format (`en-US`, `ko-KR`, `ja-JP`,
-`fr-FR`). Auth.DisplayDefaults publicly reads only installation presentation
-defaults. Auth.UpdateDisplay authenticates the caller, applies an independent
-partial patch and returns the committed User. Admin.UpdateDisplayDefaults
+`fr-FR`). PersonalPreferences.DisplayDefaults publicly reads only installation presentation
+defaults. PersonalPreferences.UpdateDisplay authenticates the caller, applies an independent
+partial patch and returns the committed User. DisplayDefaults.UpdateDisplayDefaults
 rechecks current administrator authority and returns the committed defaults.
 Signup and initialization accept optional partial display values, resolving
 omitted dimensions from current defaults in the creation transaction. Invalid
@@ -125,7 +129,8 @@ drain. Owned tasks are joined; a component exit or cleanup timeout returns failu
 Defaults are 60 seconds for startup, 20 for graceful shutdown and a further
 5 for forced cleanup. Started blocking work is not assumed abortable.
 
-Unary gRPC health for an empty/selected service rereads read-only database
+Unary gRPC health for an empty service, either common service or any domain
+service actually registered on the listener rereads read-only database
 readiness with bounded probe capacity. `chapchoo.liveness` reports process
 responsiveness independently. Unknown services return NOT_FOUND; Watch is not
 implemented. Optional `--web general|admin|both` starts executable-relative bundled
@@ -139,7 +144,7 @@ Rust unit/integration suites cover credential admission/cancellation, optional
 mail and committed failure, and real two-listener authorization/transport calls.
 The root interoperability gate launches disposable CLI instances for both SQLite
 and PostgreSQL and calls them using generated Node clients. CLI tests cover
-explicit preparation, readiness failure, local recovery, common Auth and owned
+explicit preparation, readiness failure, local recovery, common Authentication and owned
 termination/partial-startup cleanup. SMTP tests exercise a local protocol fixture,
 single-attempt success/failure, required STARTTLS without downgrade, and rejection
 of an untrusted TLS certificate, not an external mailbox.

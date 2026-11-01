@@ -7,9 +7,13 @@ use base64::{Engine, engine::general_purpose::URL_SAFE};
 use chapchoo_crypto::{BearerSecret, CredentialCipher, PasswordCost, RootKey};
 use chapchoo_persistence::{SessionPolicy, Store, prepare_sqlite};
 use chapchoo_protocol::accounts::{
-    self as wire, admin_client::AdminClient, auth_client::AuthClient, general_client::GeneralClient,
+    self as wire, account_grants_client::AccountGrantsClient,
+    account_lifecycle_client::AccountLifecycleClient, authentication_client::AuthenticationClient,
+    display_defaults_client::DisplayDefaultsClient, installation_client::InstallationClient,
+    personal_preferences_client::PersonalPreferencesClient,
+    team_management_client::TeamManagementClient,
 };
-use chapchoo_rpc::{DOMAIN_REASON_METADATA, RpcService};
+use chapchoo_rpc::{AccountServices, DOMAIN_REASON_METADATA};
 use chapchoo_service::{AccountsConfig, AccountsService, PasswordWork};
 use tokio::{net::TcpListener, sync::oneshot};
 use tokio_stream::wrappers::TcpListenerStream;
@@ -45,12 +49,15 @@ async fn exercise(
     proof: &BearerSecret,
     admission: Arc<AtomicBool>,
 ) -> Result<(), TestError> {
-    let mut admin_rpc = AdminClient::new(admin.clone());
-    let mut general_rpc = GeneralClient::new(general.clone());
-    let mut auth_general = AuthClient::new(general.clone());
-    let mut auth_admin = AuthClient::new(admin.clone());
-    assert!(admin_rpc.setup_status(()).await?.into_inner().available);
-    let owner = admin_rpc
+    let mut installation = InstallationClient::new(admin.clone());
+    let mut account_grants = AccountGrantsClient::new(admin.clone());
+    let mut account_lifecycle = AccountLifecycleClient::new(general.clone());
+    let mut teams = TeamManagementClient::new(general.clone());
+
+    let mut auth_general = AuthenticationClient::new(general.clone());
+    let mut auth_admin = AuthenticationClient::new(admin.clone());
+    assert!(installation.setup_status(()).await?.into_inner().available);
+    let owner = installation
         .initialize(wire::InitializeRequest {
             installation_proof: proof.expose().to_owned(),
             email: "Owner@Example.Invalid".into(),
@@ -60,27 +67,61 @@ async fn exercise(
         .await?
         .into_inner();
     let owner_id = owner.user.as_ref().ok_or("Missing owner user")?.id.clone();
-    assert!(!admin_rpc.setup_status(()).await?.into_inner().available);
+    assert!(!installation.setup_status(()).await?.into_inner().available);
     assert!(auth_general.methods(()).await?.into_inner().password);
     assert!(!auth_admin.methods(()).await?.into_inner().email_code);
+    let mut general_preferences = PersonalPreferencesClient::new(general.clone());
+    let mut admin_preferences = PersonalPreferencesClient::new(admin.clone());
+    let mut defaults = DisplayDefaultsClient::new(admin.clone());
+    let initial = general_preferences.display_defaults(()).await?.into_inner();
+    assert_eq!(
+        admin_preferences.display_defaults(()).await?.into_inner(),
+        initial
+    );
+    let changed = defaults
+        .update_display_defaults(authenticated(
+            wire::DisplayPatch {
+                language: Some("ko".into()),
+                time_zone: None,
+                region: None,
+            },
+            &owner.token,
+        )?)
+        .await?
+        .into_inner();
+    assert_eq!(changed.language, "ko");
+    assert_eq!(changed.time_zone, initial.time_zone);
+    assert_eq!(
+        general_preferences.display_defaults(()).await?.into_inner(),
+        changed
+    );
+    assert_eq!(
+        DisplayDefaultsClient::new(general.clone())
+            .update_display_defaults(authenticated(wire::DisplayPatch::default(), &owner.token)?)
+            .await
+            .err()
+            .ok_or("Expected absent privileged display service")?
+            .code(),
+        Code::Unimplemented
+    );
 
-    // Common Auth is available on both listeners. Dedicated business surfaces
+    // Common Authentication is available on both listeners. Dedicated business surfaces
     // stay absent on the opposite listener, including setup/bootstrap methods.
     assert_eq!(
-        AdminClient::new(general.clone())
+        InstallationClient::new(general.clone())
             .setup_status(())
             .await
             .err()
-            .ok_or("Expected absent Admin service")?
+            .ok_or("Expected absent Installation service")?
             .code(),
         Code::Unimplemented
     );
     assert_eq!(
-        GeneralClient::new(admin.clone())
+        TeamManagementClient::new(admin.clone())
             .list_teams(authenticated((), &owner.token)?)
             .await
             .err()
-            .ok_or("Expected absent General service")?
+            .ok_or("Expected absent Teams service")?
             .code(),
         Code::Unimplemented
     );
@@ -110,7 +151,7 @@ async fn exercise(
         "DOMAIN_REASON_INVALID_SESSION",
     );
 
-    let grant = admin_rpc
+    let grant = account_grants
         .issue_signup_grant(authenticated(
             wire::IssueGrantRequest {
                 email: "member@example.invalid".into(),
@@ -119,7 +160,7 @@ async fn exercise(
         )?)
         .await?
         .into_inner();
-    let preview = general_rpc
+    let preview = account_lifecycle
         .preview_signup(wire::ProofRequest {
             proof: grant.proof.clone(),
         })
@@ -128,7 +169,7 @@ async fn exercise(
     assert!(preview.usable);
     assert_eq!(preview.email_hint.as_deref(), Some("m***@example.invalid"));
     assert!(preview.expires_at.is_some());
-    let member = general_rpc
+    let member = account_lifecycle
         .redeem_signup(wire::RedeemSignupRequest {
             proof: grant.proof.clone(),
             email: "MEMBER@example.invalid".into(),
@@ -143,15 +184,15 @@ async fn exercise(
         .ok_or("Missing member user")?
         .id
         .clone();
-    let used = general_rpc
+    let used = account_lifecycle
         .preview_signup(wire::ProofRequest { proof: grant.proof })
         .await?
         .into_inner();
     assert!(!used.usable);
     assert!(used.email_hint.is_none());
     assert!(used.expires_at.is_none());
-    let mut first = AuthClient::new(general.clone());
-    let mut second = AuthClient::new(general.clone());
+    let mut first = AuthenticationClient::new(general.clone());
+    let mut second = AuthenticationClient::new(general.clone());
     let (owner_read, member_read) = tokio::join!(
         first.identity(authenticated((), &owner.token)?),
         second.identity(authenticated((), &member.token)?)
@@ -159,7 +200,7 @@ async fn exercise(
     assert_eq!(owner_read?.into_inner().id, owner_id);
     assert_eq!(member_read?.into_inner().id, member_id);
     assert_reason(
-        &admin_rpc
+        &account_grants
             .list_signup_grants(authenticated(
                 wire::ListGrantsRequest {
                     offset: None,
@@ -174,7 +215,7 @@ async fn exercise(
         "DOMAIN_REASON_PERMISSION_DENIED",
     );
 
-    let team = general_rpc
+    let team = teams
         .create_team(authenticated(
             wire::CreateTeamRequest {
                 name: "Team".into(),
@@ -184,7 +225,7 @@ async fn exercise(
         )?)
         .await?
         .into_inner();
-    let unchanged = general_rpc
+    let unchanged = teams
         .update_team(authenticated(
             wire::UpdateTeamRequest {
                 team_id: team.id.clone(),
@@ -197,7 +238,7 @@ async fn exercise(
         .into_inner();
     assert_eq!(unchanged.name, "Team");
     assert_reason(
-        &general_rpc
+        &teams
             .update_team(authenticated(
                 wire::UpdateTeamRequest {
                     team_id: team.id.clone(),
@@ -214,7 +255,7 @@ async fn exercise(
     );
     for role in [0, -1, 9999] {
         assert_reason(
-            &general_rpc
+            &teams
                 .set_member_role(authenticated(
                     wire::SetMemberRoleRequest {
                         team_id: team.id.clone(),
@@ -231,7 +272,7 @@ async fn exercise(
         );
     }
     assert_reason(
-        &general_rpc
+        &teams
             .leave_team(authenticated(
                 wire::TeamRequest { team_id: team.id },
                 &owner.token,
@@ -277,7 +318,7 @@ async fn exercise(
         Code::Unavailable
     );
     assert_eq!(
-        admin_rpc
+        installation
             .setup_status(())
             .await
             .err()
@@ -309,21 +350,30 @@ async fn two_listeners_enforce_surfaces_credentials_and_typed_ingress() -> Resul
         },
     )?);
     let admission = Arc::new(AtomicBool::new(true));
-    let adapter = RpcService::new(application).with_admission(admission.clone());
+    let adapter = AccountServices::new(application).with_admission(admission.clone());
     let general_listener = TcpListener::bind("127.0.0.1:0").await?;
     let admin_listener = TcpListener::bind("127.0.0.1:0").await?;
     let general_address = general_listener.local_addr()?;
     let admin_address = admin_listener.local_addr()?;
     let (general_stop, general_stopped) = oneshot::channel();
     let (admin_stop, admin_stopped) = oneshot::channel();
-    let general_auth = adapter.auth_server();
-    let general_service = adapter.general_server();
-    let admin_auth = adapter.auth_server();
-    let admin_service = adapter.admin_server();
+    let general_auth = adapter.authentication_server();
+    let lifecycle = adapter.account_lifecycle_server();
+    let teams = adapter.teams_server();
+    let invitations = adapter.invitations_server();
+    let general_preferences = adapter.personal_preferences_server();
+    let admin_auth = adapter.authentication_server();
+    let installation = adapter.installation_server();
+    let grants = adapter.account_grants_server();
+    let defaults = adapter.display_defaults_server();
+    let admin_preferences = adapter.personal_preferences_server();
     let general_task = tokio::spawn(async move {
         Server::builder()
             .add_service(general_auth)
-            .add_service(general_service)
+            .add_service(general_preferences)
+            .add_service(lifecycle)
+            .add_service(teams)
+            .add_service(invitations)
             .serve_with_incoming_shutdown(TcpListenerStream::new(general_listener), async {
                 match general_stopped.await {
                     Ok(()) | Err(_) => {}
@@ -334,7 +384,10 @@ async fn two_listeners_enforce_surfaces_credentials_and_typed_ingress() -> Resul
     let admin_task = tokio::spawn(async move {
         Server::builder()
             .add_service(admin_auth)
-            .add_service(admin_service)
+            .add_service(admin_preferences)
+            .add_service(installation)
+            .add_service(grants)
+            .add_service(defaults)
             .serve_with_incoming_shutdown(TcpListenerStream::new(admin_listener), async {
                 match admin_stopped.await {
                     Ok(()) | Err(_) => {}

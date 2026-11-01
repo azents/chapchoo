@@ -18,7 +18,9 @@ export const authRouter = router({
         ctx.session.authenticated(async (token) =>
           user(
             await call(
-              ctx.backend.auth.updateDisplay.bind(ctx.backend.auth),
+              ctx.backend.personalPreferences.updateDisplay.bind(
+                ctx.backend.personalPreferences,
+              ),
               displayPatchPayload(input),
               token,
             ),
@@ -27,7 +29,12 @@ export const authRouter = router({
       ),
     ),
   methods: procedure.query(({ ctx }) =>
-    attempt(() => call(ctx.backend.auth.methods.bind(ctx.backend.auth), {})),
+    attempt(() =>
+      call(
+        ctx.backend.authentication.methods.bind(ctx.backend.authentication),
+        {},
+      ),
+    ),
   ),
   passwordLogin: procedure
     .input(z.object({ email, password }).strict())
@@ -35,7 +42,9 @@ export const authRouter = router({
       attempt(async () =>
         ctx.session.acceptAuthentication(
           await call(
-            ctx.backend.auth.passwordLogin.bind(ctx.backend.auth),
+            ctx.backend.authentication.passwordLogin.bind(
+              ctx.backend.authentication,
+            ),
             input,
           ),
         ),
@@ -46,7 +55,12 @@ export const authRouter = router({
     .mutation(({ ctx, input }) =>
       attempt(async () =>
         challenge(
-          await call(ctx.backend.auth.sendCode.bind(ctx.backend.auth), input),
+          await call(
+            ctx.backend.authentication.sendCode.bind(
+              ctx.backend.authentication,
+            ),
+            input,
+          ),
         ),
       ),
     ),
@@ -63,7 +77,12 @@ export const authRouter = router({
     .mutation(({ ctx, input }) =>
       attempt(async () =>
         ctx.session.acceptAuthentication(
-          await call(ctx.backend.auth.verifyCode.bind(ctx.backend.auth), input),
+          await call(
+            ctx.backend.authentication.verifyCode.bind(
+              ctx.backend.authentication,
+            ),
+            input,
+          ),
         ),
       ),
     ),
@@ -73,7 +92,9 @@ export const authRouter = router({
         return await ctx.session.authenticated(async (token) =>
           user(
             await call(
-              ctx.backend.auth.identity.bind(ctx.backend.auth),
+              ctx.backend.authentication.identity.bind(
+                ctx.backend.authentication,
+              ),
               {},
               token,
             ),

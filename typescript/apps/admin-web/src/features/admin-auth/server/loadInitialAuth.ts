@@ -10,7 +10,7 @@ export async function loadLoginMethods(): Promise<LoginMethods> {
   await connection();
   const backend = getBackend(getConfig());
   return requiredPageRead(() =>
-    call(backend.auth.methods.bind(backend.auth), {}),
+    call(backend.authentication.methods.bind(backend.authentication), {}),
   );
 }
 
@@ -18,6 +18,6 @@ export async function loadSetupStatus(): Promise<{ available: boolean }> {
   await connection();
   const backend = getBackend(getConfig());
   return requiredPageRead(() =>
-    call(backend.admin.setupStatus.bind(backend.admin), {}),
+    call(backend.installation.setupStatus.bind(backend.installation), {}),
   );
 }
