@@ -68,7 +68,7 @@ def ready(process: subprocess.Popen[str], timeout: float = 30) -> None:
             line = process.stdout.readline()
             if not line:
                 raise RuntimeError("Owned backend exited before readiness")
-            if "Selected backend roles are ready" in line:
+            if "Selected backend service groups are ready" in line:
                 return
     raise RuntimeError("Owned backend readiness timed out")
 
@@ -91,17 +91,16 @@ def run_fixture(database: dict[str, str]) -> None:
         capture_output=True,
         timeout=30,
     )
-    general, admin = fixture_port(), fixture_port()
-    while general == admin:
-        admin = fixture_port()
+    general = fixture_port()
+    admin = general
     process = subprocess.Popen(
         [
             str(binary),
             "serve",
-            "--general-listen",
+            "--groups",
+            "client,admin",
+            "--listen",
             f"127.0.0.1:{general}",
-            "--admin-listen",
-            f"127.0.0.1:{admin}",
         ],
         env=environment,
         stdout=subprocess.PIPE,

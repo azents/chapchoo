@@ -23,6 +23,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         .arg("-I")
         .arg(protoc_bin_vendored::include_path()?)
         .arg(root.join("proto/chapchoo/accounts.proto"))
+        .arg(root.join("proto/chapchoo/control.proto"))
+        .arg(root.join("proto/chapchoo/computers.proto"))
         .status()?;
     if !status.success() {
         return Err(io::Error::other("Node protocol generation failed").into());

@@ -7,6 +7,47 @@
 //! use chapchoo_persistence::Store;
 //! ```
 
+/// Computer domain contracts carry private names and identities; formatting is
+/// field-free just like account and component messages.
+pub mod computers {
+    tonic::include_proto!("chapchoo.computers");
+    macro_rules! redacted_debug {
+        ($($message:ty),+ $(,)?) => {$(
+            impl std::fmt::Debug for $message {
+                fn fmt(&self,f:&mut std::fmt::Formatter<'_>)->std::fmt::Result {
+                    f.debug_struct(stringify!($message)).finish_non_exhaustive()
+                }
+            }
+        )+};
+    }
+    redacted_debug!(
+        Page,
+        AgentRequest,
+        CreateAgentRequest,
+        CreateAgentResult,
+        RemovedCreation,
+        Agent,
+        AgentList,
+        ProviderChoice,
+        ProviderChoices,
+        ActionAvailability,
+        Computer,
+        LifecycleRequest,
+        ForceRemoveRequest,
+        ProviderCapabilities,
+        ProviderSummary,
+        ProviderList,
+        InventoryRequest,
+        InventoryComputer,
+        ComputerInventory,
+        ResourceCursor,
+        ResourcePage,
+        InventoryResource,
+        ResourceInventory,
+        create_agent_result::Outcome,
+    );
+}
+
 /// Generated Protobuf messages and Tonic clients/servers.
 pub mod accounts {
     tonic::include_proto!("chapchoo.accounts");
@@ -66,9 +107,121 @@ pub mod accounts {
     );
 }
 
+/// Computer component and trusted per-call peer contracts.
+pub mod control {
+    tonic::include_proto!("chapchoo.control");
+    macro_rules! redacted_debug {
+        ($($message:path),+ $(,)?) => {
+            $(impl std::fmt::Debug for $message {
+                fn fmt(&self,f:&mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    f.debug_struct(stringify!($message)).finish_non_exhaustive()
+                }
+            })+
+        };
+    }
+    redacted_debug!(
+        ProviderKeyRequest,
+        ProviderConnectionCheck,
+        ConnectorConnectionCheck,
+        ProviderCommandCheck,
+        ProviderReport,
+        ConnectorCommandCheck,
+        ProviderCapabilities,
+        ProviderConfiguration,
+        ComponentKey,
+        ConnectorSessionRequest,
+        ConnectorSession,
+        RevokeConnectorSessionRequest,
+        ConnectorKeyRequest,
+        ProviderHello,
+        ConnectorHello,
+        Connected,
+        Heartbeat,
+        HeartbeatAccepted,
+        CallIdentity,
+        CancelCall,
+        ComputerContext,
+        ManagedResource,
+        OwnedPresent,
+        DefinitivelyAbsent,
+        UnknownResource,
+        ResourceEvidence,
+        resource_evidence::Evidence,
+        ResourceObservation,
+        ExecutionObservation,
+        ConnectorObservation,
+        ObserveResources,
+        PrepareExecution,
+        RetireExecution,
+        CleanupResources,
+        ProviderCommand,
+        provider_command::Operation,
+        ObserveConnector,
+        ConnectorCommand,
+        ProviderResult,
+        ConnectorResult,
+        ProviderFrame,
+        provider_frame::Payload,
+        ConnectorFrame,
+        connector_frame::Payload,
+        ControlFrame,
+        control_frame::Payload,
+        UserAuthority,
+        ReconciliationAuthority,
+        PeerAuthority,
+        peer_authority::Context,
+        ExpectedOwner,
+        ProviderInvocation,
+        ProviderConvergence,
+        ConnectorInvocation,
+        ProviderInvocationResult,
+        ConnectorInvocationResult,
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::accounts::*;
+
+    #[test]
+    fn component_and_peer_oneof_debug_never_exposes_fields() {
+        use super::control as c;
+        let secret = "component-secret-that-must-not-appear";
+        let prepare = c::PrepareExecution {
+            connector_initial_key: secret.into(),
+            ..Default::default()
+        };
+        let command = c::ProviderCommand {
+            operation: Some(c::provider_command::Operation::Prepare(prepare.clone())),
+            ..Default::default()
+        };
+        let values: Vec<Box<dyn std::fmt::Debug>> = vec![
+            Box::new(c::ComponentKey {
+                token: secret.into(),
+                ..Default::default()
+            }),
+            Box::new(c::ConnectorSession {
+                initial_key: secret.into(),
+                ..Default::default()
+            }),
+            Box::new(prepare.clone()),
+            Box::new(c::provider_command::Operation::Prepare(prepare)),
+            Box::new(command.clone()),
+            Box::new(c::control_frame::Payload::Provider(command.clone())),
+            Box::new(c::ControlFrame {
+                payload: Some(c::control_frame::Payload::Provider(command)),
+            }),
+            Box::new(c::peer_authority::Context::User(c::UserAuthority {
+                session_credential_digest: secret.as_bytes().to_vec(),
+            })),
+        ];
+        for value in values {
+            let rendered = format!("{value:?}");
+            assert!(!rendered.contains(secret));
+            assert!(!rendered.contains("session_credential_digest"));
+            assert!(rendered.ends_with("{ .. }"));
+        }
+    }
 
     #[test]
     fn credential_debug_never_exposes_fields() {

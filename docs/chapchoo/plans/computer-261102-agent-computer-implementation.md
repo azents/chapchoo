@@ -16,14 +16,22 @@ tags: [agent, computer, plan]
 
 ## Delivery Stack
 
-| Phase | PR boundary | Mechanisms | Dependencies and integration |
-| --- | --- | --- | --- |
-| 1 | Account domain wire contracts and scoped transport adapters; generated callers migrated atomically | M1/M16/M20 (contract portion) | Existing account operations unchanged; runtime listener groups remain until phase 3 activates replacement |
-| 2 | Computer data, owner/credential authority and lifecycle admission | M7-M10/M12-M15/M17/M19/M22 | Phase 1 contracts; equivalent SQLite/PG migrations, precise authorization and lifecycle fixtures |
-| 3 | Runtime groups, memory/peer routing, current Control/Provider/Connector streams and Kubernetes convergence | M1-M6/M10/M11/M13/M14/M18/M19 | Phase 2 persisted identities; activate group/listener replacement with new component clients |
-| 4 | Owner/admin screens, bounded observation, chart/config integration and end-to-end validation | M15/M16/M18/M20/M21 | Prior phases; minimal core product E2E and separate real-cluster gates |
+| Phase | PR boundary                                                                                                | Mechanisms                    | Dependencies and integration                                                                              |
+| ----- | ---------------------------------------------------------------------------------------------------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------- |
+| 1     | Account domain wire contracts and scoped transport adapters; generated callers migrated atomically         | M1/M16/M20 (contract portion) | Existing account operations unchanged; runtime listener groups remain until phase 3 activates replacement |
+| 2     | Computer data, owner/credential authority and lifecycle admission                                          | M7-M10/M12-M15/M17/M19/M22    | Phase 1 contracts; equivalent SQLite/PG migrations, precise authorization and lifecycle fixtures          |
+| 3     | Runtime groups, memory/peer routing, current Control/Provider/Connector streams and Kubernetes convergence | M1-M6/M10/M11/M13/M14/M18/M19 | Phase 2 persisted identities; activate group/listener replacement with new component clients              |
+| 4     | Owner/admin screens, bounded observation, chart/config integration and end-to-end validation               | M15/M16/M18/M20/M21           | Prior phases; minimal core product E2E and separate real-cluster gates                                    |
 
 Each phase opens its PR before the next phase starts; later branches depend on the preceding branch. Use `Agent Computer [n/4]: <phase>` titles. Do not create documentation-only PRs merely to satisfy the workflow. Formal design documents travel with phase 1.
+
+Requester delivery-order update (2026-11-02 KST): finish and submit the remaining
+PRs 3 and 4 before checking the stack's CI/review results and batch corrections.
+Do not pause forward implementation for repeated PR2 review rounds or request
+additional full automatic reviews during this construction pass. Mandatory
+independent review and exact-head CI remain completion gates after all four PRs
+exist; merge/deployment remain unauthorized. This changes delivery ordering only,
+not Requirements/Design authority or feature scope.
 
 ## Fixed Interfaces and Removal Boundaries
 
@@ -43,7 +51,17 @@ At each stable phase record changed interfaces, removals, tests/review/CI, PR/ba
 
 ## Current Checkpoint
 
-Phase 1 implementation and integrated local validation are complete; independent
-review, PR and exact-head CI are next. Domain contracts changed; group topology,
-Computer schema/lifecycle/components/UI remain subsequent phases. See the phase-1
-checkpoint for commands/evidence. The overall feature is not implemented yet.
+Phase 1 PR #40 is open/unmerged with complete CI and independent/automatic review.
+Phase 2 PR #41 is open/unmerged at `09ba1ad`: equivalent Computer schema, ownership,
+credentials, current lifecycle/resource evidence and application service are
+implemented. Root integrated checks pass (82 Rust tests, clippy/boundaries,
+74 live RPC checks on each DB engine, docs18 and normal commit hooks). Independent
+full review and targeted corrections are complete. Exact-head remote CI/automatic
+review are deferred until the remaining stack is submitted. Phase 3 builds on
+that exact head under `computer-261102-phase-3-control.md`: runtime groups,
+current-owner streams and peer/memory delivery, supported Kubernetes effects,
+component processes, owner-scoped reconciliation and guarded restoration/cleanup
+are implemented. Final root checks pass (107 Rust tests, clippy/boundaries,
+67 live RPC checks on each DB, generated clients and docs18/catalog). PR3
+submission is next; phase4 web/chart/E2E and final stack reviews remain.
+The overall feature is not implemented yet.

@@ -40,8 +40,8 @@ outside the checkout. There is no automatic generation or replacement.
 ```sh
 cd rust
 cargo run --locked -p chapchoo -- prepare
-cargo run --locked -p chapchoo -- serve --role both
-# Independent choices: serve --role general; serve --role admin
+cargo run --locked -p chapchoo -- serve --groups client,admin,control
+# Independent choices: serve --groups client; serve --groups admin; serve --groups control
 cargo run --locked -p chapchoo -- grant-admin --email existing@example.invalid
 ```
 
@@ -54,12 +54,73 @@ ordinary environment correctly before its first successful run; subsequent runs
 preserve initialized defaults and user choices. Missing existing-user time zones
 come from that migration machine, not an administrator-edited default.
 Timezone name validation uses bundled data rather than requiring host tzdata.
-Local listeners
-default to `127.0.0.1:50051` (general) and `127.0.0.1:50052` (Admin). Override
-with `--general-listen` / `--admin-listen` or `CHAPCHOO_GENERAL_LISTEN` /
-`CHAPCHOO_ADMIN_LISTEN`. They are plaintext HTTP/2; do not publish them directly.
+The selected service union uses `127.0.0.1:50051` by default. Override it with
+`--listen` or `CHAPCHOO_LISTEN`. This is plaintext HTTP/2; do not publish it directly.
 Deployments require a trusted internal route and an operator-managed TLS gRPC
 edge for external callers.
+
+Control-only local compositions own a same-handler memory peer server. Distributed
+Control additionally requires paired `--peer-listen`/`--peer-advertise` (or
+`CHAPCHOO_PEER_LISTEN`/`CHAPCHOO_PEER_ADVERTISE`) on a distinct restricted-network
+listener. PeerRelay is never registered on the public component/client listener.
+The operator must enforce network isolation; no peer application credential or
+mandatory peer mTLS is introduced.
+
+To authorize system-owned Computer Provider metadata/key management, configure
+the complete `CHAPCHOO_SYSTEM_OWNER_ID`, comma-separated
+`CHAPCHOO_SYSTEM_OWNER_PROVIDER_IDS`, and `CHAPCHOO_SYSTEM_OWNER_TOKEN` set in
+Control. Generate the bearer as 32 random bytes encoded as unpadded URL-safe
+base64 (for example `python3 -c 'import secrets; print(secrets.token_urlsafe(32))'`).
+Supply it through your runtime secret manager/environment, never a CLI argument
+or tracked file. Provision the same bearer only to the scoped Computer Provider;
+it grants owner-level key management for those IDs. Preserve it until explicit
+operator rotation/revocation, and never publish its value in logs or reports.
+
+Computer components run independently from the backend:
+
+- `chapchoo computer-provider` requires `CHAPCHOO_CONTROL_ENDPOINT`,
+  `CHAPCHOO_PROVIDER_ID`, `CHAPCHOO_PROVIDER_NAME`,
+  `CHAPCHOO_PROVIDER_OWNER_TOKEN`, `CHAPCHOO_KUBERNETES_NAMESPACE`,
+  `CHAPCHOO_COMPUTER_IMAGE`, and `CHAPCHOO_COMPUTER_SERVICE_ACCOUNT`.
+  Select either `--in-cluster` or `--kubeconfig <explicit-file>` (also
+  `CHAPCHOO_KUBECONFIG`); there is no implicit current-cluster selection.
+  The Provider owner token is the scoped bearer provisioned above, not the
+  installation encryption root. Kubernetes credentials must have only the
+  designated namespace's managed Pod/PVC/Secret permissions, with Pod watch for
+  termination evidence. Never provision production credentials for tests.
+- Runtime Computer policy uses `CHAPCHOO_COMPUTER_STORAGE_CLASS`,
+  `CHAPCHOO_COMPUTER_STORAGE_REQUEST` (10Gi),
+  `CHAPCHOO_COMPUTER_SAVED_MOUNT` (/workspace),
+  `CHAPCHOO_COMPUTER_IMAGE_PULL_POLICY` (IfNotPresent), and CPU/memory
+  `CHAPCHOO_COMPUTER_CPU_REQUEST` (100m), `CHAPCHOO_COMPUTER_MEMORY_REQUEST`
+  (128Mi), `CHAPCHOO_COMPUTER_CPU_LIMIT` (1),
+  `CHAPCHOO_COMPUTER_MEMORY_LIMIT` (1Gi). StorageClass omission deliberately
+  uses the operator's default class; no class is provisioned by the process.
+- `chapchoo computer-connector` requires only its explicit Control endpoint,
+  `CHAPCHOO_CONNECTOR_SESSION_ID`, and `CHAPCHOO_CONNECTOR_INITIAL_KEY`,
+  supplied by the execution's immutable bootstrap Secret. It receives neither
+  Provider/owner credentials nor Kubernetes service-account API tokens. The
+  Provider issues this initial key under an exact execution; do not manually
+  reuse another execution's key or copy its Secret. Retire/revoke the session
+  when its execution ends. Raw keys are environment/secret-manager inputs only.
+
+Control runs owned lease and two-second reconciliation workers. The current
+Computer Connector owner reconciles through the current Computer Provider owner;
+the Provider owner handles pre-bootstrap/absent-Connector work. Supported-client
+fixtures exercise automatic create/stop/start/restart/restoration/delete through
+real local streams and peer delivery. These tests are not browser or live
+Kubernetes release-gate evidence. Do not deploy or provision a cluster merely to
+run the offline suites.
+
+Control policy is runtime-configurable: `CHAPCHOO_CONTROL_VALIDITY_MS` and
+`CHAPCHOO_COMPONENT_VALIDITY_MS` default to 60000,
+`CHAPCHOO_CONTROL_HEARTBEAT_MS` to 20000,
+`CHAPCHOO_COMPONENT_KEY_VALIDITY_MS` to 86400000,
+`CHAPCHOO_COMPONENT_KEY_REFRESH_MS` to 43200000,
+`CHAPCHOO_COMPONENT_KEY_OVERLAP_MS` to 300000, and
+`CHAPCHOO_START_DELAYED_MS` to 300000. Invalid timing/overlap combinations fail
+before admission. Schema preparation includes the durable Prepare admission
+fence; it remains distinct from actual first-start dispatch timing.
 
 Set `CHAPCHOO_SETUP_PROOF` to a separately secured 256-bit unpadded URL-safe
 bearer before the first administrator flow. Consumed setup never reopens from
@@ -89,7 +150,7 @@ Email is submitted after commit, without automatic submission retries; failure
 does not compensate state and provider acceptance is not mailbox delivery.
 
 SIGINT/SIGTERM stops admission and drains all selected backend tasks. Combined
-roles form one failure unit. Startup has a 60-second budget; shutdown has
+groups form one failure unit. Startup has a 60-second budget; shutdown has
 20 seconds for graceful drain and a further 5 seconds for forced task cleanup.
 Liveness is the gRPC health service name `chapchoo.liveness`; readiness checks
 the selected business service or empty service and rereads schema/key readiness.
@@ -97,7 +158,7 @@ An unhealthy database can leave liveness serving while readiness is not serving.
 
 ### Generated RPC clients
 
-`proto/chapchoo/accounts.proto` is the Rust/Node contract source. Rust generation
+`proto/chapchoo/*.proto` are the Rust/Node contract sources. Rust generation
 uses vendored protoc at build time; committed Node output is reproduced with:
 
 ```sh
@@ -112,12 +173,14 @@ The Node package is server-side only: browsers do not speak gRPC or hold backend
 credentials in JavaScript storage.
 
 The account wire services are domain-scoped: Authentication and
-PersonalPreferences are common to both listeners; General exposes AccountLifecycle,
+PersonalPreferences are common to Client/Admin; Client exposes AccountLifecycle,
 TeamManagement and InvitationManagement, while Admin exposes Installation,
 AccountGrants and DisplayDefaults. Generated callers must use those contracts;
 the former broad Auth/General/Admin RPC service names are replaced, not aliases.
-Current `serve --role` listener selection is retained during the wider Computer
-feature's phased implementation.
+The service union deduplicates shared registrations. Bundled web selections use
+independent explicit `CHAPCHOO_GENERAL_BACKEND_URL` and
+`CHAPCHOO_ADMIN_BACKEND_URL`, even if both intentionally identify one union.
+`serve --groups --web general` selects web-only execution without DB/key access.
 
 ## Frontend
 

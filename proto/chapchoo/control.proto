@@ -1,0 +1,339 @@
+syntax = "proto3";
+
+package chapchoo.control;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+// Component-facing listeners authenticate bearer metadata independently of peers.
+service ProviderAuthentication {
+  rpc Report(ProviderReport) returns (google.protobuf.Empty);
+  rpc ConfigureSystemProvider(ProviderConfiguration) returns (google.protobuf.Empty);
+  rpc CheckCommand(ProviderCommandCheck) returns (google.protobuf.Empty);
+  rpc CheckConnection(ProviderConnectionCheck) returns (google.protobuf.Empty);
+  rpc RotateKey(ProviderKeyRequest) returns (ComponentKey);
+  rpc RevokeKey(ProviderKeyRequest) returns (google.protobuf.Empty);
+  rpc IssueConnectorSession(ConnectorSessionRequest) returns (ConnectorSession);
+  rpc RevokeConnectorSession(RevokeConnectorSessionRequest) returns (google.protobuf.Empty);
+}
+service ConnectorAuthentication {
+  rpc CheckCommand(ConnectorCommandCheck) returns (google.protobuf.Empty);
+  rpc CheckConnection(ConnectorConnectionCheck) returns (google.protobuf.Empty);
+  rpc Exchange(ConnectorKeyRequest) returns (ComponentKey);
+  rpc Refresh(ConnectorKeyRequest) returns (ComponentKey);
+}
+service ProviderConnection {
+  rpc Open(stream ProviderFrame) returns (stream ControlFrame);
+}
+service ConnectorConnection {
+  rpc Open(stream ConnectorFrame) returns (stream ControlFrame);
+}
+
+// Registered only on the distinct trusted internal peer listener, never the
+// component/client listener. Each call is one generated gRPC invocation.
+service PeerRelay {
+  rpc ConvergeProvider(ProviderConvergence) returns (ProviderInvocationResult);
+  rpc InvokeProvider(ProviderInvocation) returns (ProviderInvocationResult);
+  rpc InvokeConnector(ConnectorInvocation) returns (ConnectorInvocationResult);
+}
+
+enum OwnerAuthority {
+  OWNER_AUTHORITY_UNSPECIFIED = 0;
+  OWNER_AUTHORITY_SYSTEM = 1;
+  OWNER_AUTHORITY_USER = 2;
+}
+message ProviderConnectionCheck {
+  string provider_id = 1;
+  string instance_id = 2;
+  string connection_id = 3;
+}
+message ConnectorConnectionCheck {
+  string session_id = 1;
+  string instance_id = 2;
+  string connection_id = 3;
+}
+message ProviderReport {
+  ProviderConnectionCheck source = 1;
+  ComputerContext computer = 2;
+  repeated ResourceEvidence resources = 3;
+  ExecutionFact execution = 4;
+  bool cleanup_complete = 5;
+}
+message ProviderCommandCheck {
+  ProviderConnectionCheck source = 1;
+  ProviderCommand command = 2;
+}
+message ConnectorCommandCheck {
+  ConnectorConnectionCheck source = 1;
+  ConnectorCommand command = 2;
+}
+message ProviderCapabilities {
+  bool create = 1;
+  bool start = 2;
+  bool stop = 3;
+  bool restart = 4;
+}
+message ProviderConfiguration {
+  string provider_id = 1;
+  string name = 2;
+  ProviderCapabilities capabilities = 3;
+}
+message ProviderKeyRequest {
+  string provider_id = 1;
+  string request_id = 2;
+  OwnerAuthority authority = 3;
+}
+message ComponentKey {
+  string token = 1;
+  google.protobuf.Timestamp issued_at = 2;
+  google.protobuf.Timestamp expires_at = 3;
+  google.protobuf.Timestamp proactive_after = 4;
+}
+message ConnectorSessionRequest {
+  string provider_id = 1;
+  string execution_id = 2;
+  string request_id = 3;
+  string connection_id = 4;
+}
+message ConnectorSession {
+  string session_id = 1;
+  string execution_id = 2;
+  string accepted_request_id = 3;
+  string initial_key = 4;
+}
+message RevokeConnectorSessionRequest {
+  string provider_id = 1;
+  string session_id = 2;
+  string request_id = 3;
+  string connection_id = 4;
+}
+message ConnectorKeyRequest {
+  string session_id = 1;
+  string request_id = 2;
+}
+
+message ProviderHello {
+  string provider_id = 1;
+  // Trusted Provider policy, not user input. Used only by its exact owner.
+  string namespace = 2;
+  string connector_endpoint = 3;
+}
+message ConnectorHello { string session_id = 1; }
+message Connected {
+  string instance_id = 1;
+  string connection_id = 2;
+  uint32 heartbeat_interval_ms = 3;
+  uint32 validity_ms = 4;
+}
+message Heartbeat { string connection_id = 1; }
+message HeartbeatAccepted {
+  string connection_id = 1;
+  google.protobuf.Timestamp expires_at = 2;
+}
+message CallIdentity {
+  string request_id = 1;
+  string call_id = 2;
+  string connection_id = 3;
+}
+message CancelCall { CallIdentity identity = 1; }
+message ComputerContext {
+  string computer_id = 1;
+  string request_id = 2;
+  string execution_id = 3;
+}
+
+enum ResourceKind {
+  RESOURCE_KIND_UNSPECIFIED = 0;
+  RESOURCE_KIND_POD = 1;
+  RESOURCE_KIND_PVC = 2;
+  RESOURCE_KIND_BOOTSTRAP_SECRET = 3;
+}
+message ManagedResource {
+  ResourceKind kind = 1;
+  string namespace = 2;
+  string name = 3;
+  optional string uid = 4;
+  optional string execution_id = 5;
+  // Reconstructed from committed exact-resource absence evidence; never a
+  // caller assertion or proof derived from transport failure.
+  bool absence_confirmed = 6;
+}
+message OwnedPresent { string uid = 1; }
+// Sender must have established substrate retirement/quiescence. A bare GET 404,
+// disconnected node, timeout or cancelled caller cannot produce this evidence.
+message DefinitivelyAbsent { optional string expected_uid = 1; }
+message UnknownResource {}
+message ResourceEvidence {
+  ManagedResource resource = 1;
+  oneof evidence {
+    OwnedPresent present = 2;
+    DefinitivelyAbsent absent = 3;
+    UnknownResource unknown = 4;
+  }
+}
+message ResourceObservation {
+  ComputerContext computer = 1;
+  string connection_id = 2;
+  ResourceEvidence evidence = 3;
+}
+message ExecutionObservation {
+  ComputerContext computer = 1;
+  string connection_id = 2;
+  ExecutionFact fact = 3;
+}
+enum ExecutionFact {
+  EXECUTION_FACT_UNSPECIFIED = 0;
+  EXECUTION_FACT_RUNNING = 1;
+  EXECUTION_FACT_RETIRED = 2;
+  EXECUTION_FACT_UNCERTAIN = 3;
+  EXECUTION_FACT_BLOCKED = 4;
+}
+message ConnectorObservation {
+  string connection_id = 1;
+  string execution_id = 2;
+  // This is execution connectivity evidence, never substrate power-off or PVC
+  // cleanup proof. Content and arbitrary user machine paths are not included.
+  bool ready = 3;
+}
+
+message ObserveResources { repeated ManagedResource resources = 1; }
+message PrepareExecution {
+  bool initial_allocation = 1;
+  ManagedResource saved_pvc = 2;
+  ManagedResource bootstrap_secret = 3;
+  ManagedResource pod = 4;
+  string connector_session_id = 5;
+  string connector_initial_key = 6;
+  string connector_endpoint = 7;
+}
+message RetireExecution {
+  ManagedResource pod = 1;
+  // Running-intent restoration cannot terminate a live/unknown execution.
+  bool require_terminal = 2;
+}
+message CleanupResources {
+  repeated ManagedResource resources = 1;
+  // Only the final bounded batch may request whole-Computer confirmation.
+  bool confirm_complete = 2;
+}
+message ProviderCommand {
+  CallIdentity identity = 1;
+  ComputerContext computer = 2;
+  uint32 remaining_ms = 3;
+  oneof operation {
+    ObserveResources observe = 4;
+    PrepareExecution prepare = 5;
+    RetireExecution retire = 6;
+    CleanupResources cleanup = 7;
+  }
+}
+message ObserveConnector {}
+message ConnectorCommand {
+  CallIdentity identity = 1;
+  ComputerContext computer = 2;
+  uint32 remaining_ms = 3;
+  ObserveConnector observe = 4;
+}
+enum CommandOutcome {
+  COMMAND_OUTCOME_UNSPECIFIED = 0;
+  COMMAND_OUTCOME_COMPLETED = 1;
+  COMMAND_OUTCOME_BLOCKED = 2;
+  COMMAND_OUTCOME_UNCERTAIN = 3;
+}
+message ProviderResult {
+  CallIdentity identity = 1;
+  ComputerContext computer = 2;
+  CommandOutcome outcome = 3;
+  repeated ResourceEvidence resources = 4;
+  ExecutionFact execution = 5;
+  // Fresh exact-call observation, not retirement/absence or a replay permit.
+  bool execution_terminal = 6;
+}
+message ConnectorResult {
+  CallIdentity identity = 1;
+  string execution_id = 2;
+  bool ready = 3;
+}
+message ProviderFrame {
+  oneof payload {
+    ProviderHello hello = 1;
+    Heartbeat heartbeat = 2;
+    ProviderResult result = 3;
+    ResourceObservation resource = 4;
+    ExecutionObservation execution = 5;
+  }
+}
+message ConnectorFrame {
+  oneof payload {
+    ConnectorHello hello = 1;
+    Heartbeat heartbeat = 2;
+    ConnectorResult result = 3;
+    ConnectorObservation observation = 4;
+  }
+}
+message ControlFrame {
+  oneof payload {
+    Connected connected = 1;
+    HeartbeatAccepted heartbeat = 2;
+    ProviderCommand provider = 3;
+    ConnectorCommand connector = 4;
+    CancelCall cancel = 5;
+  }
+}
+
+// The peer boundary admits this context; external clients cannot impersonate it.
+// Components never receive the user session digest or owner credentials.
+message UserAuthority { bytes session_credential_digest = 1; }
+message ReconciliationAuthority {
+  ComputerContext computer = 1;
+  // Exact live Connector owner, or Provider owner only while no Connector is
+  // eligible. This is revalidated against the directory, not a caller identity.
+  ExpectedOwner owner = 2;
+}
+message PeerAuthority {
+  oneof context {
+    UserAuthority user = 1;
+    ReconciliationAuthority reconciliation = 2;
+  }
+}
+message ExpectedOwner {
+  string instance_id = 1;
+  string connection_id = 2;
+}
+message ProviderConvergence {
+  string provider_id = 1;
+  ExpectedOwner owner = 2;
+  PeerAuthority authority = 3;
+  ComputerContext computer = 4;
+  uint32 remaining_ms = 5;
+}
+message ProviderInvocation {
+  string provider_id = 1;
+  ExpectedOwner owner = 2;
+  PeerAuthority authority = 3;
+  ProviderCommand command = 4;
+}
+message ConnectorInvocation {
+  string computer_id = 1;
+  ExpectedOwner owner = 2;
+  PeerAuthority authority = 3;
+  ConnectorCommand command = 4;
+}
+enum ForwardingOutcome {
+  FORWARDING_OUTCOME_UNSPECIFIED = 0;
+  FORWARDING_OUTCOME_COMPLETED = 1;
+  // The only safe automatic re-resolution outcome: exact non-owner rejection
+  // before forwarding. Native transport status is never this proof.
+  FORWARDING_OUTCOME_NOT_OWNER = 2;
+  FORWARDING_OUTCOME_UNAVAILABLE = 3;
+  FORWARDING_OUTCOME_OVERLOADED = 4;
+  FORWARDING_OUTCOME_UNCERTAIN = 5;
+}
+message ProviderInvocationResult {
+  ForwardingOutcome outcome = 1;
+  ProviderResult result = 2;
+}
+message ConnectorInvocationResult {
+  ForwardingOutcome outcome = 1;
+  ConnectorResult result = 2;
+}

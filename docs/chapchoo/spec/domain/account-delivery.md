@@ -21,7 +21,7 @@ code_paths:
   - .github/workflows/build-binary.yaml
   - .github/workflows/snapshot.yaml
   - scripts/publish-snapshot.py
-last_verified_at: 2026-10-31
+last_verified_at: 2026-11-02
 spec_version: 1
 ---
 
@@ -29,11 +29,13 @@ spec_version: 1
 
 ## Foreground execution
 
-`chapchoo serve --role general|admin|both|none` selects backend listeners;
+`chapchoo serve --groups client,admin,control` selects a backend service union;
 optional `--web general|admin|both` selects web children. Selecting nothing fails.
 Web-only execution does not load database, secret-key or setup configuration.
 Operator `prepare` and `grant-admin` retain their DB/key authority. There is no
-host Node fallback, daemon, instance registry, management IPC or restart loop.
+host Node fallback, daemon, web-child management IPC or restart loop. Control's
+product DB directory and separate peer listener are described in
+[Computer Control RPC](computer-control-rpc.md).
 
 Explicit preparation also atomically initializes display defaults and upgrades
 existing users. The first successful preparation machine supplies initial time
@@ -58,8 +60,8 @@ its own dependencies. Web images include only their selected app. Explicit
 default to 127.0.0.1:3003/3004. `CHAPCHOO_GENERAL_WEB_URL` /
 `CHAPCHOO_ADMIN_WEB_URL` configure public origins, including issued general links.
 `CHAPCHOO_GENERAL_BACKEND_URL` / `CHAPCHOO_ADMIN_BACKEND_URL` configure RPC clients.
-A co-selected wildcard backend bind maps to loopback; specific binds keep their
-address. Independently hosted web defaults to local50051/50052. Public HTTP
+Each selected web application requires its explicit backend URL; neither target
+is inferred from a local bind or another web application's target. Public HTTP
 requires actual loopback binding; external origins require HTTPS. Public paths
 are runtime-only. The public Next custom server accepts only its exact mount
 boundary, then dispatches the mount-relative request to Next without editing

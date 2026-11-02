@@ -1,6 +1,6 @@
 use chapchoo_crypto::PasswordCost;
-use chapchoo_rpc::AccountServices;
-use chapchoo_service::{AccountsService, Mailer, PasswordWork};
+use chapchoo_rpc::{AccountServices, ComputerServices, ServiceGroup, ServiceGroups};
+use chapchoo_service::{AccountsService, ComputersService, Mailer, PasswordWork};
 use std::{
     error::Error,
     fmt,
@@ -18,9 +18,8 @@ use tonic_health::pb::health_server::HealthServer;
 
 use crate::{
     AppError,
-    config::{
-        ApplicationConfig, BackendConfig, ConfigError, Role, ServeOptions, WebApp, web_configs,
-    },
+    config::{ApplicationConfig, BackendConfig, ConfigError, ServeOptions, WebApp, web_configs},
+    control_plane::ControlPlane,
     health::HealthService,
     web::{WebChild, prepare_ownership},
 };
@@ -55,11 +54,17 @@ impl Error for FailedCleanup {
 }
 
 pub async fn serve(config: Option<BackendConfig>, options: ServeOptions) -> Result<(), AppError> {
-    if options.role == Role::None && options.web.is_none() {
+    if options.groups.is_empty() && options.web.is_none() {
         return Err(ConfigError::NoComponents.into());
     }
-    if matches!(options.role, Role::Both) && options.general_listen == options.admin_listen {
+    let groups = ServiceGroups::new(options.groups.iter().map(|group| group.domain()));
+    if options.peer_listen == Some(options.listen) {
         return Err(ConfigError::SameListener.into());
+    }
+    if options.peer_listen.is_some() != options.peer_advertise.is_some()
+        || (options.peer_listen.is_some() && !groups.contains(ServiceGroup::Control))
+    {
+        return Err(ConfigError::PeerConfiguration.into());
     }
     let web = web_configs(&options)?;
     if web.len() == 2 && options.general_web_listen == options.admin_web_listen {
@@ -73,10 +78,19 @@ pub async fn serve(config: Option<BackendConfig>, options: ServeOptions) -> Resu
     let mut tasks = JoinSet::new();
     let mut general_web = None;
     let mut admin_web = None;
+    let mut control_plane = None;
     let mut signal = Termination::new()?;
     let startup = async {
         if let Some(config) = &config {
-            start_backends(config, &options, &admission, &stop, &mut tasks).await?;
+            start_backends(
+                config,
+                &options,
+                &admission,
+                &stop,
+                &mut tasks,
+                &mut control_plane,
+            )
+            .await?;
         }
         for config in web {
             let app = config.app;
@@ -132,7 +146,7 @@ pub async fn serve(config: Option<BackendConfig>, options: ServeOptions) -> Resu
         Startup::Ready => {
             admission.store(true, Ordering::Release);
             if config.is_some() {
-                tracing::info!("Selected backend roles are ready");
+                tracing::info!("Selected backend service groups are ready");
             }
             tracing::info!("Selected components are ready");
             tokio::select! {
@@ -172,6 +186,9 @@ pub async fn serve(config: Option<BackendConfig>, options: ServeOptions) -> Resu
     };
     admission.store(false, Ordering::Release);
     stop.cancel();
+    if let Some(control) = control_plane.take() {
+        tasks.spawn(control.shutdown());
+    }
     let cleanup = cleanup(&mut tasks, &mut general_web, &mut admin_web).await;
     match (failure, cleanup) {
         (Some(primary), Err(cleanup)) => Err(Box::new(FailedCleanup { primary, cleanup })),
@@ -189,6 +206,7 @@ async fn start_backends(
     admission: &Arc<AtomicBool>,
     stop: &CancellationToken,
     tasks: &mut BackendTasks,
+    control: &mut Option<ControlPlane>,
 ) -> Result<(), AppError> {
     let application = ApplicationConfig::load()?;
     let store = config.connect().await?;
@@ -203,75 +221,83 @@ async fn start_backends(
         None => None,
     };
     let service = Arc::new(AccountsService::new(
-        store,
+        store.clone(),
         PasswordWork::new(application.password_capacity, PasswordCost::default())?,
         mailer,
         application.accounts,
     )?);
-    // Bind before task creation: a partial bind failure drops every new socket.
-    let general = if matches!(options.role, Role::General | Role::Both) {
-        Some(TcpListener::bind(options.general_listen).await?)
+    // All selected sockets are owned before a Control can publish its endpoint.
+    let listener = TcpListener::bind(options.listen).await?;
+    let peer_listener = if let Some(address) = options.peer_listen {
+        Some(TcpListener::bind(address).await?)
     } else {
         None
     };
-    let admin = if matches!(options.role, Role::Admin | Role::Both) {
-        Some(TcpListener::bind(options.admin_listen).await?)
-    } else {
-        None
-    };
-    for (listener, general_role) in general
-        .into_iter()
-        .map(|socket| (socket, true))
-        .chain(admin.into_iter().map(|socket| (socket, false)))
-    {
-        let rpc = AccountServices::new(service.clone()).with_admission(admission.clone());
-        let health = HealthServer::new(HealthService {
-            config: config.clone(),
-            admission: admission.clone(),
-            business_services: if general_role {
-                &[
-                    "chapchoo.accounts.AccountLifecycle",
-                    "chapchoo.accounts.TeamManagement",
-                    "chapchoo.accounts.InvitationManagement",
-                ]
-            } else {
-                &[
-                    "chapchoo.accounts.Installation",
-                    "chapchoo.accounts.AccountGrants",
-                    "chapchoo.accounts.DisplayDefaults",
-                ]
-            },
-        });
+    let groups = ServiceGroups::new(options.groups.iter().map(|group| group.domain()));
+    let app = Arc::new(
+        ComputersService::new(store, application.system_owner)
+            .with_policy(application.computers)?,
+    );
+    let computers = ComputerServices::new(app.clone()).with_admission(admission.clone());
+    if groups.contains(ServiceGroup::Control) {
+        let (plane, incoming) = ControlPlane::new(
+            app,
+            options
+                .peer_advertise
+                .as_deref()
+                .unwrap_or("http://chapchoo.memory"),
+            admission.clone(),
+        )
+        .await?;
+        *control = Some(plane);
+        let plane = control.as_ref().ok_or(ConfigError::ComponentExit)?;
+        let peer = plane.peer.clone();
         let shutdown = stop.clone();
         tasks.spawn(async move {
-            let server = Server::builder()
-                .add_service(health)
-                .add_service(rpc.authentication_server())
-                .add_service(rpc.personal_preferences_server());
-            if general_role {
-                server
-                    .add_service(rpc.account_lifecycle_server())
-                    .add_service(rpc.teams_server())
-                    .add_service(rpc.invitations_server())
-                    .serve_with_incoming_shutdown(
-                        TcpListenerStream::new(listener),
-                        shutdown.cancelled_owned(),
-                    )
-                    .await?;
-            } else {
-                server
-                    .add_service(rpc.installation_server())
-                    .add_service(rpc.account_grants_server())
-                    .add_service(rpc.display_defaults_server())
-                    .serve_with_incoming_shutdown(
-                        TcpListenerStream::new(listener),
-                        shutdown.cancelled_owned(),
-                    )
-                    .await?;
-            }
+            Server::builder()
+                .add_service(peer.server())
+                .serve_with_incoming_shutdown(incoming, shutdown.cancelled_owned())
+                .await?;
             Ok(())
         });
+        if let Some(listener) = peer_listener {
+            let peer = plane.peer.clone();
+            let shutdown = stop.clone();
+            tasks.spawn(async move {
+                Server::builder()
+                    .add_service(peer.server())
+                    .serve_with_incoming_shutdown(
+                        TcpListenerStream::new(listener),
+                        shutdown.cancelled_owned(),
+                    )
+                    .await?;
+                Ok(())
+            });
+        }
+        tasks.spawn(plane.monitor(admission.clone(), stop.clone()));
+        tasks.spawn(plane.reconciler(admission.clone(), stop.clone()));
     }
+    let rpc = AccountServices::new(service).with_admission(admission.clone());
+    let components = control
+        .as_ref()
+        .map(|plane| (&plane.authentication, &plane.connections));
+    let routes = groups.routes(Some(&rpc), Some(&computers), components)?;
+    let health = HealthServer::new(HealthService {
+        config: config.clone(),
+        admission: admission.clone(),
+        business_services: groups.service_names().into(),
+    });
+    let shutdown = stop.clone();
+    tasks.spawn(async move {
+        Server::builder()
+            .add_routes(routes.add_service(health))
+            .serve_with_incoming_shutdown(
+                TcpListenerStream::new(listener),
+                shutdown.cancelled_owned(),
+            )
+            .await?;
+        Ok(())
+    });
     Ok(())
 }
 
@@ -422,14 +448,14 @@ async fn cleanup(
 }
 
 #[cfg(unix)]
-struct Termination {
+pub(crate) struct Termination {
     interrupt: tokio::signal::unix::Signal,
     terminate: tokio::signal::unix::Signal,
 }
 
 #[cfg(unix)]
 impl Termination {
-    fn new() -> Result<Self, std::io::Error> {
+    pub(crate) fn new() -> Result<Self, std::io::Error> {
         use tokio::signal::unix::{SignalKind, signal};
         Ok(Self {
             interrupt: signal(SignalKind::interrupt())?,
@@ -437,7 +463,7 @@ impl Termination {
         })
     }
 
-    async fn wait(&mut self) -> Result<(), std::io::Error> {
+    pub(crate) async fn wait(&mut self) -> Result<(), std::io::Error> {
         tokio::select! {
             _ = self.interrupt.recv() => {},
             _ = self.terminate.recv() => {},
@@ -447,15 +473,15 @@ impl Termination {
 }
 
 #[cfg(not(unix))]
-struct Termination;
+pub(crate) struct Termination;
 
 #[cfg(not(unix))]
 impl Termination {
-    fn new() -> Result<Self, std::io::Error> {
+    pub(crate) fn new() -> Result<Self, std::io::Error> {
         Ok(Self)
     }
 
-    async fn wait(&mut self) -> Result<(), std::io::Error> {
+    pub(crate) async fn wait(&mut self) -> Result<(), std::io::Error> {
         tokio::signal::ctrl_c().await
     }
 }

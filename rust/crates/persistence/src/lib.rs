@@ -6,6 +6,8 @@ mod component_keys;
 mod computer_executions;
 mod computers;
 mod connector_keys;
+mod delivery;
+mod directory;
 mod display;
 mod identity;
 mod models;
@@ -24,10 +26,17 @@ pub use computer_executions::{
     ManagedResourceKind, ProviderSource, ResourceEvidence, ResourceReport,
 };
 pub use computers::{
-    AgentRemoval, AgentSummary, ComputerSummary, CreateCloudAgent, CreationOutcome,
-    LifecycleRequest, ProviderCapabilities, ProviderChoice,
+    AgentRemoval, AgentSummary, ComputerInventorySummary, ComputerSummary, CreateCloudAgent,
+    CreationOutcome, LifecycleRequest, ProviderCapabilities, ProviderChoice,
+    ProviderInventorySummary, ResourceCursor,
 };
-pub use connector_keys::{ConnectorIdentity, ConnectorSessionDraft, ConnectorSessionResult};
+pub use connector_keys::{
+    ConnectorIdentity, ConnectorSessionDraft, ConnectorSessionResult, ConnectorSource,
+};
+pub use delivery::{DeliveryComputer, DeliveryExecution, DeliverySnapshot};
+pub use directory::{
+    ComponentRoute, ConnectionOwner, ControlRegistration, DirectoryPolicy, ResolvedRoute,
+};
 pub use models::{CredentialSnapshot, UserSummary, VerifiedCredential};
 pub use preparation::{
     POSTGRES_MIGRATIONS, PreparationError, SQLITE_MIGRATIONS, postgres_ready, prepare_postgres,

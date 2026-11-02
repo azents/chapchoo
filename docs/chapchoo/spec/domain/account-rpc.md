@@ -25,10 +25,11 @@ password work, optional SMTP delivery and application services.
 RPC handlers do not depend on the DB implementation. `AccountServices` composes
 separate domain adapters over shared account operations and admission, without
 one transport handler implementing unrelated domain traits.
-Authentication and PersonalPreferences are registered on both listeners.
+Authentication and PersonalPreferences are shared Client/Admin dependencies.
 AccountLifecycle, TeamManagement and InvitationManagement are registered on
-the General listener; Installation, AccountGrants and DisplayDefaults are
-registered on Admin. Either role can run independently. Admin business calls
+the Client group; Installation, AccountGrants and DisplayDefaults are
+registered on Admin. Groups can run independently or as one deduplicated union
+on a single listener. Admin business calls
 recheck current server-administrator authority in the repository operation.
 
 Protected calls carry exactly one `authorization: Bearer <opaque-token>`
@@ -116,12 +117,12 @@ messages rather than SQL, stack traces or submitted secrets.
 
 ## Foreground lifecycle and health
 
-Local default listeners are loopback plaintext HTTP/2 on 50051/50052. Explicit
+The selected group union defaults to loopback plaintext HTTP/2 on port 50051. Explicit
 deployment binds require a trusted internal network and a separate operator TLS
 edge for external access. The executable does not issue certificates or provide
 native gRPC TLS.
 
-Selected backend roles and optional bundled web children are one failure unit.
+Selected backend groups and optional bundled web children are one failure unit.
 Readiness follows configuration, read-only
 DB/schema/key checks, dependency construction and successful binds. Partial bind
 failure drops already acquired sockets. SIGINT/SIGTERM withdraws admission before
@@ -134,14 +135,14 @@ service actually registered on the listener rereads read-only database
 readiness with bounded probe capacity. `chapchoo.liveness` reports process
 responsiveness independently. Unknown services return NOT_FOUND; Watch is not
 implemented. Optional `--web general|admin|both` starts executable-relative bundled
-Node children; `--role none` permits web-only execution without loading DB/key
+Node children; `--groups` without values permits web-only execution without loading DB/key
 configuration. There is no daemon, automatic restart or global process scan.
 See [Linux delivery](account-delivery.md) for child ownership and package layout.
 
 ## Verification boundary
 
 Rust unit/integration suites cover credential admission/cancellation, optional
-mail and committed failure, and real two-listener authorization/transport calls.
+mail and committed failure, and actual selected-union authorization/transport calls.
 The root interoperability gate launches disposable CLI instances for both SQLite
 and PostgreSQL and calls them using generated Node clients. CLI tests cover
 explicit preparation, readiness failure, local recovery, common Authentication and owned

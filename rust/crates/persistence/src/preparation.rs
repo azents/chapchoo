@@ -10,7 +10,12 @@ use std::{error::Error, fs::OpenOptions, path::Path};
 
 pub const SQLITE_MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/sqlite");
 pub const POSTGRES_MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/postgres");
-const VERSIONS: [&str; 3] = ["00000000000001", "00000000000002", "00000000000003"];
+const VERSIONS: [&str; 4] = [
+    "00000000000001",
+    "00000000000002",
+    "00000000000003",
+    "00000000000004",
+];
 const PG_LOCK: i64 = 1_960_261_029;
 const PRODUCT_ROWS: &str = "SELECT
     (SELECT count(*) FROM users) +

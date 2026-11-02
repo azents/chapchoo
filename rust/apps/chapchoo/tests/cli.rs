@@ -34,7 +34,7 @@ async fn ready(child: &mut Child) -> Result<(), TestError> {
     let mut lines = BufReader::new(output).lines();
     tokio::time::timeout(Duration::from_secs(15), async {
         while let Some(line) = lines.next_line().await? {
-            if line.contains("Selected backend roles are ready") {
+            if line.contains("Selected backend service groups are ready") {
                 return Ok::<_, TestError>(());
             }
         }
@@ -81,7 +81,7 @@ async fn prepare_readiness_common_auth_recovery_and_owned_shutdown() -> Result<(
     let path = directory.path().join("cli.sqlite");
     // Ordinary startup does not create a missing schema.
     let failed = command(&path)
-        .args(["serve", "--role", "general"])
+        .args(["serve", "--groups", "client"])
         .output()
         .await?;
     assert!(!failed.status.success());
@@ -89,7 +89,7 @@ async fn prepare_readiness_common_auth_recovery_and_owned_shutdown() -> Result<(
     assert!(prepared.status.success());
     let wrong_key = command(&path)
         .env("CHAPCHOO_SECRET_KEY", URL_SAFE.encode([2; 32]))
-        .args(["serve", "--role", "admin"])
+        .args(["serve", "--groups", "admin"])
         .output()
         .await?;
     assert!(!wrong_key.status.success());
@@ -99,20 +99,13 @@ async fn prepare_readiness_common_auth_recovery_and_owned_shutdown() -> Result<(
         .await?;
     assert!(!unavailable.status.success());
     let general = TcpListener::bind("127.0.0.1:0")?;
-    let admin = TcpListener::bind("127.0.0.1:0")?;
     let general_addr = general.local_addr()?;
-    let admin_addr = admin.local_addr()?;
-    drop((general, admin));
+    let admin_addr = general_addr;
+    drop(general);
     let proof = BearerSecret::generate()?;
     let mut child = command(&path)
         .env("CHAPCHOO_SETUP_PROOF", proof.expose())
-        .args([
-            "serve",
-            "--general-listen",
-            &general_addr.to_string(),
-            "--admin-listen",
-            &admin_addr.to_string(),
-        ])
+        .args(["serve", "--listen", &general_addr.to_string()])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true)
@@ -215,7 +208,6 @@ async fn prepare_readiness_common_auth_recovery_and_owned_shutdown() -> Result<(
     assert!(auth.identity(request).await?.into_inner().is_admin);
     terminate(&mut child).await?;
     assert!(TcpListener::bind(general_addr).is_ok());
-    assert!(TcpListener::bind(admin_addr).is_ok());
     Ok(())
 }
 
@@ -242,10 +234,12 @@ async fn failed_combined_bind_preserves_foreign_listener_and_releases_owned_sock
         command(&path)
             .args([
                 "serve",
-                "--general-listen",
+                "--listen",
                 &general_addr.to_string(),
-                "--admin-listen",
+                "--peer-listen",
                 &foreign_addr.to_string(),
+                "--peer-advertise",
+                &format!("http://{foreign_addr}"),
             ])
             .output(),
     )

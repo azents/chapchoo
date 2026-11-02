@@ -62,6 +62,8 @@ impl Bundle {
             .env("TMPDIR", self.directory.path())
             .env("RUST_LOG", "chapchoo=info")
             .env("NO_COLOR", "1")
+            .env("CHAPCHOO_GENERAL_BACKEND_URL", "http://127.0.0.1:50051")
+            .env("CHAPCHOO_ADMIN_BACKEND_URL", "http://127.0.0.1:50051")
             // Web-only must not parse these or forward them to its child.
             .env("CHAPCHOO_SECRET_KEY", "parent-key-canary")
             .env("CHAPCHOO_POSTGRES_URL", "parent-database-canary")
@@ -140,8 +142,7 @@ async fn web_only_needs_no_database_key_or_host_node_and_stops_its_group() -> Re
             .command()
             .args([
                 "serve",
-                "--role",
-                "none",
+                "--groups",
                 "--web",
                 "general",
                 "--general-web-listen",
@@ -166,8 +167,7 @@ async fn forced_cleanup_reaps_adopted_descendants_and_reports_failure() -> Resul
             .command()
             .args([
                 "serve",
-                "--role",
-                "none",
+                "--groups",
                 "--web",
                 "general",
                 "--general-web-listen",
@@ -209,8 +209,7 @@ async fn occupied_foreign_web_listener_cannot_satisfy_owned_startup() -> Result<
                 .command()
                 .args([
                     "serve",
-                    "--role",
-                    "none",
+                    "--groups",
                     "--web",
                     "general",
                     "--general-web-listen",
@@ -256,8 +255,7 @@ async fn first_ready_web_exit_is_supervised_while_other_web_starts() -> Result<(
                 .env("RUST_LOG", "chapchoo=debug")
                 .args([
                     "serve",
-                    "--role",
-                    "none",
+                    "--groups",
                     "--web",
                     "both",
                     "--general-web-listen",
@@ -357,8 +355,7 @@ async fn pending_health_readiness_survives_the_other_web_becoming_ready() -> Res
             .env("RUST_LOG", "chapchoo=debug")
             .args([
                 "serve",
-                "--role",
-                "none",
+                "--groups",
                 "--web",
                 "both",
                 "--general-web-listen",
@@ -458,11 +455,11 @@ async fn partial_web_failure_releases_only_its_co_selected_backend() -> Result<(
         command
             .args([
                 "serve",
-                "--role",
-                "general",
+                "--groups",
+                "client",
                 "--web",
                 "general",
-                "--general-listen",
+                "--listen",
                 &format!("127.0.0.1:{backend_port}"),
                 "--general-web-listen",
                 &format!("127.0.0.1:{web_port}"),
@@ -483,7 +480,7 @@ async fn partial_web_failure_releases_only_its_co_selected_backend() -> Result<(
 async fn empty_selection_fails_without_reading_database_configuration() -> Result<(), TestError> {
     let output = Command::new(env!("CARGO_BIN_EXE_chapchoo"))
         .env_clear()
-        .args(["serve", "--role", "none"])
+        .args(["serve", "--groups"])
         .output()
         .await?;
     assert!(!output.status.success());

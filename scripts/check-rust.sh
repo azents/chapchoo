@@ -34,17 +34,22 @@ allowed = {
     },
     "chapchoo-rpc": {
         "chapchoo-crypto", "chapchoo-domain", "chapchoo-protocol", "chapchoo-service",
-        "prost-types", "tonic", "tracing", "zeroize", "chapchoo-persistence",
-        "base64", "tempfile", "tokio", "tokio-stream",
+        "prost-types", "prost", "tonic", "tracing", "zeroize", "chapchoo-persistence",
+        "base64", "tempfile", "tokio", "tokio-stream", "tower", "hyper-util", "url",
     },
     "chapchoo-mail": {
         "chapchoo-service", "lettre", "tokio", "chapchoo-domain", "rcgen", "tokio-rustls",
     },
+    "chapchoo-kubernetes": {
+        "chapchoo-protocol", "kube", "k8s-openapi", "thiserror", "tokio", "futures-util",
+        "tower", "http", "http-body-util", "serde_json",
+    },
     "chapchoo": {
         "chapchoo-crypto", "chapchoo-domain", "chapchoo-persistence", "chapchoo-service",
-        "chapchoo-rpc", "chapchoo-mail", "clap", "tokio", "tokio-stream", "tokio-util",
+        "chapchoo-rpc", "chapchoo-mail", "chapchoo-kubernetes", "clap", "tokio", "tokio-stream", "tokio-util",
         "tonic", "tonic-health", "tracing", "tracing-subscriber", "thiserror", "zeroize",
-        "url", "base64", "tempfile", "chapchoo-protocol", "nix",
+        "url", "base64", "tempfile", "chapchoo-protocol", "prost-types", "nix",
+        "kube", "tower", "http", "http-body-util", "serde_json",
     },
 }
 for name, dependencies in allowed.items():

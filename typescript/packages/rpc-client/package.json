@@ -4,6 +4,14 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./computers": {
+      "types": "./dist/generated/computers.d.ts",
+      "default": "./dist/generated/computers.js"
+    },
+    "./control": {
+      "types": "./dist/generated/control.d.ts",
+      "default": "./dist/generated/control.js"
+    },
     "./accounts": {
       "types": "./dist/generated/accounts.d.ts",
       "default": "./dist/generated/accounts.js"

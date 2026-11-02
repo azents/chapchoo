@@ -245,6 +245,15 @@ Reservation recovery returns the same initial-allocation classification. Dispatc
 checks this execution fact even after the initial PVC has been confirmed, so a
 create-capable/start-incapable Provider can finish its initial preparation.
 
+`prepare_admitted_at` is a durable once-only admission fence, separate from
+`initial_start_dispatch_at`, which records actual component dequeue. Its
+Computer-locked CAS revalidates the exact current source, request and execution.
+A reconnect cannot reset an admitted uncertain Prepare. An authorized successor
+reservation clears both fields only after retirement/original-PVC gates; an
+existing candidate retry preserves them. Both engines add this nullable field in
+`00000000000004_prepare_admission`, backfilling known actual-dispatch timestamps.
+The down migration refuses to remove the fence.
+
 Resource reports identify the exact reserved object and execution. Owned-present
 evidence binds the original UID; a different same-name UID is rejected. Unknown
 presence does not clear identity. Definitive absence must match the stored UID,
