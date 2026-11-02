@@ -2,6 +2,10 @@
 
 mod accounts;
 mod challenges;
+mod component_keys;
+mod computer_executions;
+mod computers;
+mod connector_keys;
 mod display;
 mod identity;
 mod models;
@@ -12,6 +16,18 @@ mod teams;
 
 pub use accounts::{GrantDraft, GrantKind, GrantSummary, NewAccount, ProofPreview};
 pub use challenges::{EmailLoginOutcome, NewChallenge};
+pub use component_keys::{
+    ComponentKeyDraft, ComponentKeyPolicy, ComponentKeyResult, ProviderOwner,
+};
+pub use computer_executions::{
+    ComputerRequest, ExecutionDraft, ExecutionReservation, ManagedComputer, ManagedResource,
+    ManagedResourceKind, ProviderSource, ResourceEvidence, ResourceReport,
+};
+pub use computers::{
+    AgentRemoval, AgentSummary, ComputerSummary, CreateCloudAgent, CreationOutcome,
+    LifecycleRequest, ProviderCapabilities, ProviderChoice,
+};
+pub use connector_keys::{ConnectorIdentity, ConnectorSessionDraft, ConnectorSessionResult};
 pub use models::{CredentialSnapshot, UserSummary, VerifiedCredential};
 pub use preparation::{
     POSTGRES_MIGRATIONS, PreparationError, SQLITE_MIGRATIONS, postgres_ready, prepare_postgres,

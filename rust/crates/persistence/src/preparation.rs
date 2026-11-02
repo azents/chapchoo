@@ -10,7 +10,7 @@ use std::{error::Error, fs::OpenOptions, path::Path};
 
 pub const SQLITE_MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/sqlite");
 pub const POSTGRES_MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/postgres");
-const VERSIONS: [&str; 2] = ["00000000000001", "00000000000002"];
+const VERSIONS: [&str; 3] = ["00000000000001", "00000000000002", "00000000000003"];
 const PG_LOCK: i64 = 1_960_261_029;
 const PRODUCT_ROWS: &str = "SELECT
     (SELECT count(*) FROM users) +
@@ -19,6 +19,32 @@ const PRODUCT_ROWS: &str = "SELECT
     (SELECT count(*) FROM grants) +
     (SELECT count(*) FROM invitations) +
     (SELECT count(*) FROM login_challenges) AS n";
+
+// Computer tables exist only after migration. Keep the pre-migration account
+// guard valid for older installations and include every new product table before
+// permitting a first root binding after preparation.
+fn prepared_product_query() -> String {
+    let tables = [
+        "computer_providers",
+        "provider_keys",
+        "provider_key_requests",
+        "computers",
+        "agents",
+        "agent_creation_receipts",
+        "computer_executions",
+        "computer_resources",
+        "connector_sessions",
+        "connector_key_requests",
+        "control_instances",
+        "provider_connections",
+        "connector_connections",
+    ];
+    let additions = tables
+        .iter()
+        .map(|table| format!(" + (SELECT count(*) FROM {table})"))
+        .collect::<String>();
+    format!("SELECT ({PRODUCT_ROWS}){additions} AS n")
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum PreparationError {
@@ -210,7 +236,7 @@ pub fn prepare_sqlite(path: &Path, cipher: &CredentialCipher) -> Result<(), Prep
             .run_pending_migrations(SQLITE_MIGRATIONS)
             .map_err(PreparationError::Migration)?;
         if !already_bound {
-            if diesel::sql_query(PRODUCT_ROWS)
+            if diesel::sql_query(prepared_product_query())
                 .get_result::<Count>(connection)?
                 .n
                 != 0
@@ -311,7 +337,7 @@ pub fn prepare_postgres(url: &str, cipher: &CredentialCipher) -> Result<(), Prep
             .run_pending_migrations(POSTGRES_MIGRATIONS)
             .map_err(PreparationError::Migration)?;
         if !already_bound {
-            if diesel::sql_query(PRODUCT_ROWS)
+            if diesel::sql_query(prepared_product_query())
                 .get_result::<Count>(connection)?
                 .n
                 != 0
