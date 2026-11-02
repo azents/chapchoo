@@ -4,7 +4,9 @@ import {
   createAuthenticationClient,
   invalidatesSession,
 } from "../dist/auth-client.js";
-import { TRPCClientError } from "@trpc/client";
+import { createTRPCProxyClient, httpLink, TRPCClientError } from "@trpc/client";
+import { initTRPC, TRPCError } from "@trpc/server";
+import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 
 const identityKey = [["auth", "identity"], { type: "query" }];
 function failure(path, reason) {
@@ -206,6 +208,95 @@ void test("a recovered identity becomes the current lifecycle before subsequent 
     assert.deepEqual(locations, ["/mount/login"]);
     cache.clear();
   }
+});
+
+void test("actual Computer tRPC failures withdraw identity and scoped caches without replay", async () => {
+  for (const [app, operation, reason, mutation] of [
+    ["general", "get", "DOMAIN_REASON_INVALID_SESSION", false],
+    ["general", "create", "DOMAIN_REASON_INVALID_SESSION", true],
+    ["admin", "resources", "DOMAIN_REASON_INVALID_SESSION", false],
+    ["admin", "providers", "DOMAIN_REASON_PERMISSION_DENIED", false],
+    ["admin", "list", "DOMAIN_REASON_PERMISSION_DENIED", false],
+  ]) {
+    const locations = [];
+    const { queryClient: cache } = createAuthenticationClient(
+      identityKey,
+      true,
+      "/mount",
+      (path) => locations.push(path),
+      app,
+    );
+    const t = initTRPC.create({
+      errorFormatter: ({ shape }) => ({
+        ...shape,
+        data: { ...shape.data, reason },
+      }),
+    });
+    const reject = () => {
+      throw new TRPCError({
+        code:
+          reason === "DOMAIN_REASON_PERMISSION_DENIED"
+            ? "FORBIDDEN"
+            : "UNAUTHORIZED",
+      });
+    };
+    const router = t.router({
+      computers: t.router({
+        [operation]: mutation
+          ? t.procedure.mutation(reject)
+          : t.procedure.query(reject),
+      }),
+    });
+    let requests = 0;
+    const rpc = createTRPCProxyClient({
+      links: [
+        httpLink({
+          url: "http://localhost/api/rpc",
+          fetch: (url, input) => {
+            requests += 1;
+            return fetchRequestHandler({
+              endpoint: "/api/rpc",
+              req: new Request(url, input),
+              router,
+              createContext: () => ({}),
+            });
+          },
+        }),
+      ],
+    });
+    cache.setQueryData(identityKey, { id: "private-owner" });
+    cache.setQueryData(["private-computer"], {
+      name: "Private Agent",
+      resources: ["private-resource"],
+    });
+    if (mutation) {
+      const request = cache
+        .getMutationCache()
+        .build(cache, { mutationFn: () => rpc.computers[operation].mutate() });
+      await assert.rejects(request.execute(void 0));
+    } else {
+      await assert.rejects(
+        cache.fetchQuery({
+          queryKey: ["computer-poll"],
+          queryFn: () => rpc.computers[operation].query(),
+        }),
+      );
+    }
+    assert.equal(requests, 1);
+    assert.deepEqual(locations, ["/mount/login"]);
+    assert.equal(cache.getQueryData(identityKey), null);
+    assert.equal(cache.getQueryData(["private-computer"]), void 0);
+    assert.equal(cache.getQueryCache().getAll().length, 1);
+    cache.clear();
+  }
+  assert.equal(
+    invalidatesSession(
+      "DOMAIN_REASON_PERMISSION_DENIED",
+      "computers.get",
+      "general",
+    ),
+    false,
+  );
 });
 
 void test("Admin policy invalidates only its own protected session or lost administrator identity", async () => {

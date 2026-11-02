@@ -13,6 +13,7 @@ code_paths:
   - typescript/apps/admin-web/src/app/computers
   - typescript/apps/admin-web/src/shared/server/computers.ts
   - typescript/apps/admin-web/src/shared/server/resourceInput.ts
+  - typescript/apps/admin-web/src/shared/server/resourceInput.test.mts
   - typescript/packages/web-core/src/computer.ts
   - typescript/packages/web-core/src/computer-messages.ts
   - typescript/packages/web-core/src/rpc.ts
@@ -54,6 +55,11 @@ identity hides prior Agent, resource and identity content behind generic recover
 instead of resurrecting the SSR snapshot. This feature adds no browser
 stream transport, cross-tab scheduler or persistent offline queue.
 
+Typed invalid-session failures from every protected `computers.*` query/mutation
+enter that identity-withdrawal policy. Admin permission loss on its read-only
+Computer inventory does likewise; ordinary General business denials and transient
+transport failures do not sign out the user.
+
 ## Truthful projections and actions
 
 One backend-derived projection supplies desired intent, current phase, actual
@@ -68,15 +74,23 @@ Creation retains name/Provider selection on rejection or unavailability and
 navigates to the accepted Agent's detail. A pending/lost creation response retains
 its exact Request ID and payload for explicit recovery; unresolved payload edits
 are locked. An existing removed receipt is distinct from a newly created Agent.
+Exact unresolved result recovery remains available even if fresh Provider choices
+are absent or stale, using the original payload/Request ID rather than a new
+eligibility decision. Its action is labeled as checking the creation result.
 Provider choices use bounded pages, with explicit next/first reads rather than
 unbounded background accumulation.
 
-Start submits directly. Stop/restart, normal deletion and force removal use
+Start submits directly. Safe preparation retry, stop/restart, normal deletion and force removal use
 accessible controlled confirmation. The confirmation captures its current
 lifecycle Request ID when opened; polling cannot silently retarget that consent
 to a newer request. Cancel sends no mutation. Every write still revalidates current
 owner/session/expected request on the backend. A lost response is not rollback or
 permission to replay an external effect.
+
+Preparation retry is shown only when the backend's safe-retry projection permits
+it. It calls the dedicated owner RetryPreparation contract with a fresh Request ID
+and captured predecessor, retains the same Agent/Computer/execution/allocated
+saved environment, and never exposes internal execution IDs to ordinary views.
 
 Stop/restart warns that processes are interrupted and only saved files are
 preserved. Normal deletion exposes the deleting intent until managed cleanup is
@@ -97,6 +111,12 @@ use the RPC limit of twenty items. Primary page/selected detail/cursors live in
 the URL; transient form edits and supplementary Provider-choice paging do not
 become another authoritative lifecycle store.
 
+Resource URL cursors normalize only recognized scalar kind/namespace/name fields.
+Complete valid cursors preserve the selected page while unrelated decoration is
+ignored. Partial, repeated or malformed cursor fields select the first page
+instead of throwing before the route's required-data boundary. RPC input remains
+strict independently of this browser URL normalization.
+
 New reads are observations, not automatic retries of a failed mutation. They
 consume persisted projections and do not initiate Kubernetes observation or
 lifecycle effects. A browser read error retains last-known content with a warning;
@@ -107,6 +127,7 @@ invalidation updates related queries without imperative per-hook refetch.
 
 Current installation-admin authority is required at SSR and every subsequent RPC.
 Provider inventory remains independent of live Agent associations. It shows
+the typed read-only creation capability independently from connectivity, and shows
 management/Connector/power separately, terminal intent and unresolved versus
 confirmed cleanup. Resource detail exposes exact reserved namespace/name/UID and
 presence/observation without keys or user files. It provides no adoption, cleanup,

@@ -1,5 +1,5 @@
 /* eslint-disable check-file/no-index -- This defining module is the required environment boundary, not a barrel. */
-import { webConfig } from "@chapchoo/web-core/config";
+import { publicWebConfig, webConfig } from "@chapchoo/web-core/config";
 import type { WebConfig } from "@chapchoo/web-core/config";
 
 // Next configuration executes in plain Node before its server-only aliases exist.
@@ -28,12 +28,17 @@ export function getListener(): { host: string; port: number } {
 
 /** Safe server-to-provider values; private endpoints stay on the Node side. */
 export function getPublicConfig(): { publicBasePath: string } {
-  return { publicBasePath: getConfig().basePath };
+  return {
+    publicBasePath: publicWebConfig({
+      publicUrl: process.env.CHAPCHOO_PUBLIC_URL ?? "http://localhost:3003",
+      bindHost: process.env.CHAPCHOO_WEB_HOST ?? "127.0.0.1",
+    }).basePath,
+  };
 }
 
 /** Development Next owns basePath; the production custom mount owns it itself. */
 export function getLoginRedirect(): string {
   return process.env.NODE_ENV === "development"
     ? "/login"
-    : `${getConfig().basePath}/login`;
+    : `${getPublicConfig().publicBasePath}/login`;
 }

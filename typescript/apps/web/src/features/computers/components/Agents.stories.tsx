@@ -25,6 +25,7 @@ const agent: AgentView = {
     ],
     forceRemoveAvailable: false,
     startDelayed: false,
+    preparationRetryAvailable: false,
   },
 };
 const initial: InitialAgents = {
@@ -172,4 +173,45 @@ export const RetainedCreationForm: Story = {
       items: [{ id: "provider", name: "Community Kubernetes" }],
     },
   },
+};
+export const UnresolvedCreationWithoutProvider: Story = {
+  args: {
+    name: "Research companion",
+    providerId: "provider",
+    creationLocked: true,
+    error: computerCopy("en-US").lostSubmission,
+    providers: {
+      type: "loaded",
+      stale: false,
+      after: null,
+      nextAfter: null,
+      items: [],
+    },
+  },
+};
+export const RetryPreparation: Story = {
+  args: {
+    initial: detail,
+    data: {
+      ...detail,
+      agent: {
+        ...agent,
+        computer: {
+          ...agent.computer,
+          phase: "blocked",
+          power: "unknown",
+          preparationRetryAvailable: true,
+          actions: agent.computer.actions.map((action) =>
+            action.action === "delete"
+              ? action
+              : { ...action, available: false, reason: "conflicting" },
+          ),
+        },
+      },
+    },
+  },
+};
+export const RetryPreparationConfirmation: Story = {
+  ...RetryPreparation,
+  args: { ...RetryPreparation.args, confirmation: "retryPreparation" },
 };

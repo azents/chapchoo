@@ -161,16 +161,17 @@ export function Agents(props: AgentsProps): ReactElement {
                   type="submit"
                   loading={props.pending}
                   disabled={
-                    !props.name.trim() ||
-                    !props.providerId ||
-                    props.providers.type !== "loaded" ||
-                    props.providers.stale ||
-                    !props.providers.items.some(
-                      (item) => item.id === props.providerId,
-                    )
+                    !props.creationLocked &&
+                    (!props.name.trim() ||
+                      !props.providerId ||
+                      props.providers.type !== "loaded" ||
+                      props.providers.stale ||
+                      !props.providers.items.some(
+                        (item) => item.id === props.providerId,
+                      ))
                   }
                 >
-                  {c.create}
+                  {props.creationLocked ? c.recoverCreation : c.create}
                 </Button>
               </Group>
             </Stack>
@@ -254,6 +255,17 @@ export function Agents(props: AgentsProps): ReactElement {
             </Text>
           ) : null}
           <Stack gap="md">
+            {data.agent.computer.preparationRetryAvailable ? (
+              <Group>
+                <Button
+                  variant="light"
+                  disabled={props.pending || props.stale}
+                  onClick={() => props.onAction("retryPreparation")}
+                >
+                  {c.retryPreparation}
+                </Button>
+              </Group>
+            ) : null}
             {data.agent.computer.actions.map((item) => (
               <Group key={item.action}>
                 <Button
@@ -300,7 +312,9 @@ export function Agents(props: AgentsProps): ReactElement {
             ? c.forceWarning
             : props.confirmation === "delete"
               ? c.deleteWarning
-              : c.stopWarning
+              : props.confirmation === "retryPreparation"
+                ? c.retryPreparationWarning
+                : c.stopWarning
         }
         confirmLabel={c.confirm}
         cancelLabel={c.cancel}

@@ -80,7 +80,12 @@ export function Computers(props: ComputersProps): ReactElement {
                   >
                     {item.name}
                   </Anchor>
-                  <Text>{c[item.management]}</Text>
+                  <Group gap="sm">
+                    <Text>{c[item.management]}</Text>
+                    <Badge color={item.canCreate ? "teal" : "gray"}>
+                      {item.canCreate ? c.canCreate : c.cannotCreate}
+                    </Badge>
+                  </Group>
                 </Group>
               </Paper>
             ))

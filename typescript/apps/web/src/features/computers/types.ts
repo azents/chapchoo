@@ -1,7 +1,7 @@
 import type { ColorModeMenuProps } from "@chapchoo/ui/ColorModeMenu";
 import type {
   AgentView,
-  LifecycleAction,
+  OwnerAction,
   Page,
   ProviderChoice,
 } from "@chapchoo/web-core/computer";
@@ -35,12 +35,12 @@ export interface AgentsProps extends AgentsInput {
         after: string | null;
         nextAfter: string | null;
       };
-  confirmation: LifecycleAction | "force" | null;
+  confirmation: OwnerAction | "force" | null;
   onName: (value: string) => void;
   onProvider: (value: string) => void;
   onProviderPage: (after: string | null) => void;
   onCreate: () => void;
-  onAction: (value: LifecycleAction | "force") => void;
+  onAction: (value: OwnerAction | "force") => void;
   onConfirm: () => void;
   onCancel: () => void;
   onRefresh: () => void;

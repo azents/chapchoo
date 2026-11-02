@@ -22,6 +22,29 @@ void test("runtime configuration requires an explicit Client target", () => {
   );
 });
 
+void test("public metadata stays usable without any deployment backend", () => {
+  const source = new URL("./index.ts", import.meta.url).href;
+  const script = `const{getPublicConfig,getLoginRedirect}=await import(${JSON.stringify(source)});console.log(JSON.stringify([getPublicConfig(),getLoginRedirect()]));`;
+  for (const path of ["", "/app"]) {
+    const output = execFileSync(
+      process.execPath,
+      ["--experimental-strip-types", "--input-type=module", "-e", script],
+      {
+        env: {
+          NODE_ENV: "production",
+          CHAPCHOO_PUBLIC_URL: `https://example.invalid${path}`,
+        },
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+    assert.deepEqual(JSON.parse(output.trim()), [
+      { publicBasePath: path },
+      `${path}/login`,
+    ]);
+  }
+});
+
 void test("public paths are read from runtime configuration without compiled constants", () => {
   const source = new URL("./index.ts", import.meta.url).href;
   const script = `const{getConfig}=await import(${JSON.stringify(source)});console.log(getConfig().basePath);`;

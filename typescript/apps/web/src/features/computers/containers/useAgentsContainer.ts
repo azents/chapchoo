@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAppearanceControl } from "@/shared/appearance/useAppearanceControl";
 import { trpc } from "@/shared/rpc/client";
 import type { AgentsInput, AgentsProps, InitialAgents } from "../types";
-import type { AgentView, LifecycleAction } from "@chapchoo/web-core/computer";
+import type { AgentView, OwnerAction } from "@chapchoo/web-core/computer";
 
 function pending(agent: AgentView): boolean {
   return agent.computer.phase !== "completed";
@@ -31,7 +31,7 @@ export function useAgentsContainer({
   const [providerId, setProviderId] = useState("");
   const [providerAfter, setProviderAfter] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<{
-    action: LifecycleAction | "force";
+    action: OwnerAction | "force";
     requestId: string;
   } | null>(null);
   const [submission, setSubmission] = useState<
@@ -140,7 +140,7 @@ export function useAgentsContainer({
     }
   }
   async function submitAction(
-    action: LifecycleAction | "force",
+    action: OwnerAction | "force",
     expectedRequestId: string,
   ): Promise<void> {
     if (busy.current || data.type !== "detail") {
@@ -190,8 +190,7 @@ export function useAgentsContainer({
     stale: initial.type === "list" ? list.isError : detail.isError,
     pending: submission.type === "pending",
     error: submission.type === "error" ? submission.message : null,
-    creationLocked:
-      submission.type === "error" && createRequest.current !== null,
+    creationLocked: createRequest.current !== null,
     name,
     providerId,
     providers: providerChoices.data
