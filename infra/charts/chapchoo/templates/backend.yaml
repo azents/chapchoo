@@ -3,8 +3,8 @@
 {{- if eq .Values.backend.topology "separate" }}{{- $roles = list "general" "admin" }}{{- end }}
 {{- range $role := $roles }}
 {{- $context := dict "root" $ "component" (printf "backend-%s" $role) }}
-{{- $port := 50051 }}{{- $business := "chapchoo.accounts.General" }}
-{{- if eq $role "admin" }}{{- $port = 50052 }}{{- $business = "chapchoo.accounts.Admin" }}{{- end }}
+{{- $port := 50051 }}{{- $business := "chapchoo.accounts.TeamManagement" }}
+{{- if eq $role "admin" }}{{- $port = 50052 }}{{- $business = "chapchoo.accounts.Installation" }}{{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment

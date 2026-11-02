@@ -11,7 +11,11 @@ export function POST(request: Request): Response {
     config,
     async (token) => {
       const backend = getBackend(config);
-      await call(backend.auth.logout.bind(backend.auth), {}, token);
+      await call(
+        backend.authentication.logout.bind(backend.authentication),
+        {},
+        token,
+      );
     },
     after,
   );

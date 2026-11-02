@@ -21,8 +21,12 @@ export async function loadInitialAuth(
         readProofPreview(() =>
           call(
             mode === "SIGNUP"
-              ? backend.general.previewSignup.bind(backend.general)
-              : backend.general.previewPasswordReset.bind(backend.general),
+              ? backend.accountLifecycle.previewSignup.bind(
+                  backend.accountLifecycle,
+                )
+              : backend.accountLifecycle.previewPasswordReset.bind(
+                  backend.accountLifecycle,
+                ),
             { proof: token },
           ),
         ),
@@ -35,7 +39,7 @@ export async function loadInitialAuth(
   return {
     type: "METHODS",
     data: await requiredPageRead(() =>
-      call(backend.auth.methods.bind(backend.auth), {}),
+      call(backend.authentication.methods.bind(backend.authentication), {}),
     ),
   };
 }

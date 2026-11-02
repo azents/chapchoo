@@ -111,6 +111,14 @@ plus the PostgreSQL prerequisite described above. Missing prerequisites fail.
 The Node package is server-side only: browsers do not speak gRPC or hold backend
 credentials in JavaScript storage.
 
+The account wire services are domain-scoped: Authentication and
+PersonalPreferences are common to both listeners; General exposes AccountLifecycle,
+TeamManagement and InvitationManagement, while Admin exposes Installation,
+AccountGrants and DisplayDefaults. Generated callers must use those contracts;
+the former broad Auth/General/Admin RPC service names are replaced, not aliases.
+Current `serve --role` listener selection is retained during the wider Computer
+feature's phased implementation.
+
 ## Frontend
 
 The apps use the same frontend foundation as Azents: Next.js App Router,

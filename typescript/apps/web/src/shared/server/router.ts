@@ -33,7 +33,9 @@ export const appRouter = router({
         attempt(async () =>
           preview(
             await call(
-              ctx.backend.general.previewSignup.bind(ctx.backend.general),
+              ctx.backend.accountLifecycle.previewSignup.bind(
+                ctx.backend.accountLifecycle,
+              ),
               input,
             ),
           ),
@@ -54,7 +56,9 @@ export const appRouter = router({
         attempt(async () =>
           ctx.session.acceptAuthentication(
             await call(
-              ctx.backend.general.redeemSignup.bind(ctx.backend.general),
+              ctx.backend.accountLifecycle.redeemSignup.bind(
+                ctx.backend.accountLifecycle,
+              ),
               {
                 ...input,
                 display: input.display
@@ -70,7 +74,9 @@ export const appRouter = router({
       .mutation(({ ctx, input }) =>
         attempt(() =>
           call(
-            ctx.backend.general.requestSignupEmail.bind(ctx.backend.general),
+            ctx.backend.accountLifecycle.requestSignupEmail.bind(
+              ctx.backend.accountLifecycle,
+            ),
             input,
           ),
         ),
@@ -83,8 +89,8 @@ export const appRouter = router({
         attempt(async () =>
           preview(
             await call(
-              ctx.backend.general.previewPasswordReset.bind(
-                ctx.backend.general,
+              ctx.backend.accountLifecycle.previewPasswordReset.bind(
+                ctx.backend.accountLifecycle,
               ),
               input,
             ),
@@ -96,7 +102,9 @@ export const appRouter = router({
       .mutation(({ ctx, input }) =>
         attempt(async () => {
           await call(
-            ctx.backend.general.redeemPasswordReset.bind(ctx.backend.general),
+            ctx.backend.accountLifecycle.redeemPasswordReset.bind(
+              ctx.backend.accountLifecycle,
+            ),
             input,
           );
           ctx.session.clear();
@@ -110,7 +118,7 @@ export const appRouter = router({
         ctx.session.authenticated(async (token) =>
           teams(
             await call(
-              ctx.backend.general.listTeams.bind(ctx.backend.general),
+              ctx.backend.teams.listTeams.bind(ctx.backend.teams),
               {},
               token,
             ),
@@ -125,7 +133,7 @@ export const appRouter = router({
           ctx.session.authenticated(async (token) =>
             team(
               await call(
-                ctx.backend.general.getTeam.bind(ctx.backend.general),
+                ctx.backend.teams.getTeam.bind(ctx.backend.teams),
                 input,
                 token,
               ),
@@ -140,7 +148,7 @@ export const appRouter = router({
           ctx.session.authenticated(async (token) =>
             team(
               await call(
-                ctx.backend.general.createTeam.bind(ctx.backend.general),
+                ctx.backend.teams.createTeam.bind(ctx.backend.teams),
                 input,
                 token,
               ),
@@ -163,7 +171,7 @@ export const appRouter = router({
           ctx.session.authenticated(async (token) =>
             team(
               await call(
-                ctx.backend.general.updateTeam.bind(ctx.backend.general),
+                ctx.backend.teams.updateTeam.bind(ctx.backend.teams),
                 {
                   teamId: input.teamId,
                   name: input.name,
@@ -182,7 +190,7 @@ export const appRouter = router({
           ctx.session.authenticated(async (token) =>
             members(
               await call(
-                ctx.backend.general.listMembers.bind(ctx.backend.general),
+                ctx.backend.teams.listMembers.bind(ctx.backend.teams),
                 input,
                 token,
               ),
@@ -204,7 +212,7 @@ export const appRouter = router({
         attempt(() =>
           ctx.session.authenticated(async (token) => {
             await call(
-              ctx.backend.general.setMemberRole.bind(ctx.backend.general),
+              ctx.backend.teams.setMemberRole.bind(ctx.backend.teams),
               input,
               token,
             );
@@ -216,7 +224,7 @@ export const appRouter = router({
       attempt(() =>
         ctx.session.authenticated(async (token) => {
           await call(
-            ctx.backend.general.removeMember.bind(ctx.backend.general),
+            ctx.backend.teams.removeMember.bind(ctx.backend.teams),
             input,
             token,
           );
@@ -228,7 +236,7 @@ export const appRouter = router({
       attempt(() =>
         ctx.session.authenticated(async (token) => {
           await call(
-            ctx.backend.general.transferOwnership.bind(ctx.backend.general),
+            ctx.backend.teams.transferOwnership.bind(ctx.backend.teams),
             input,
             token,
           );
@@ -240,7 +248,7 @@ export const appRouter = router({
       attempt(() =>
         ctx.session.authenticated(async (token) => {
           await call(
-            ctx.backend.general.leaveTeam.bind(ctx.backend.general),
+            ctx.backend.teams.leaveTeam.bind(ctx.backend.teams),
             input,
             token,
           );
@@ -252,7 +260,7 @@ export const appRouter = router({
       attempt(() =>
         ctx.session.authenticated(async (token) => {
           await call(
-            ctx.backend.general.deleteTeam.bind(ctx.backend.general),
+            ctx.backend.teams.deleteTeam.bind(ctx.backend.teams),
             input,
             token,
           );
@@ -269,7 +277,9 @@ export const appRouter = router({
           ctx.session.authenticated(async (token) =>
             invitation(
               await call(
-                ctx.backend.general.inviteMember.bind(ctx.backend.general),
+                ctx.backend.invitations.inviteMember.bind(
+                  ctx.backend.invitations,
+                ),
                 input,
                 token,
               ),
@@ -282,7 +292,9 @@ export const appRouter = router({
         ctx.session.authenticated(async (token) =>
           invitations(
             await call(
-              ctx.backend.general.receivedInvitations.bind(ctx.backend.general),
+              ctx.backend.invitations.receivedInvitations.bind(
+                ctx.backend.invitations,
+              ),
               {},
               token,
             ),
@@ -297,7 +309,9 @@ export const appRouter = router({
           ctx.session.authenticated(async (token) =>
             invitations(
               await call(
-                ctx.backend.general.teamInvitations.bind(ctx.backend.general),
+                ctx.backend.invitations.teamInvitations.bind(
+                  ctx.backend.invitations,
+                ),
                 input,
                 token,
               ),
@@ -318,7 +332,9 @@ export const appRouter = router({
         attempt(() =>
           ctx.session.authenticated(async (token) => {
             await call(
-              ctx.backend.general.processInvitation.bind(ctx.backend.general),
+              ctx.backend.invitations.processInvitation.bind(
+                ctx.backend.invitations,
+              ),
               input,
               token,
             );

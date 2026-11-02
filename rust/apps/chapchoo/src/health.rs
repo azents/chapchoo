@@ -18,7 +18,7 @@ use crate::config::BackendConfig;
 pub struct HealthService {
     pub config: BackendConfig,
     pub admission: Arc<AtomicBool>,
-    pub business_service: &'static str,
+    pub business_services: &'static [&'static str],
 }
 
 #[tonic::async_trait]
@@ -34,8 +34,9 @@ impl Health for HealthService {
             }));
         }
         if !service.is_empty()
-            && service != self.business_service
-            && service != "chapchoo.accounts.Auth"
+            && !self.business_services.contains(&service.as_str())
+            && service != "chapchoo.accounts.Authentication"
+            && service != "chapchoo.accounts.PersonalPreferences"
         {
             return Err(Status::not_found("Unknown health service"));
         }

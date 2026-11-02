@@ -3,10 +3,15 @@ import process from "node:process";
 import { credentials, Metadata, status } from "@grpc/grpc-js";
 
 import {
-  AdminClient,
-  AuthClient,
+  AuthenticationClient,
+  PersonalPreferencesClient,
+  AccountLifecycleClient,
+  TeamManagementClient,
+  InvitationManagementClient,
+  InstallationClient,
+  AccountGrantsClient,
+  DisplayDefaultsClient,
   DomainReason,
-  GeneralClient,
   InvitationAction,
   TeamKind,
   TeamRole,
@@ -15,6 +20,7 @@ import {
 const reasonKey = "chapchoo-domain-reason";
 const clients = [];
 let checks = 0;
+let lastMethod = "not-started";
 
 function check(condition) {
   // Never attach an RPC response, credential, or dependency error to failures.
@@ -51,6 +57,7 @@ function metadata(token) {
 }
 
 function call(instance, method, request, token) {
+  lastMethod = method;
   // A new metadata object and a finite deadline belong to every individual call.
   // No client default metadata or mutable current-user context is installed.
   return new Promise((resolve, reject) => {
@@ -104,12 +111,20 @@ async function main() {
   const adminEndpoint = localEndpoint("CHAPCHOO_TEST_ADMIN_ENDPOINT");
   const setupProof = required("CHAPCHOO_TEST_SETUP_PROOF");
   check(generalEndpoint !== adminEndpoint);
-  const authGeneral = client(AuthClient, generalEndpoint);
-  const authAdmin = client(AuthClient, adminEndpoint);
-  const general = client(GeneralClient, generalEndpoint);
-  const admin = client(AdminClient, adminEndpoint);
-  const wrongAdmin = client(AdminClient, generalEndpoint);
-  const wrongGeneral = client(GeneralClient, adminEndpoint);
+  const authGeneral = client(AuthenticationClient, generalEndpoint);
+  const authAdmin = client(AuthenticationClient, adminEndpoint);
+  const wrongAdmin = client(InstallationClient, generalEndpoint);
+  const wrongGeneral = client(TeamManagementClient, adminEndpoint);
+  const personalPreferences = client(
+    PersonalPreferencesClient,
+    generalEndpoint,
+  );
+  const accountLifecycle = client(AccountLifecycleClient, generalEndpoint);
+  const teams = client(TeamManagementClient, generalEndpoint);
+  const invitations = client(InvitationManagementClient, generalEndpoint);
+  const installation = client(InstallationClient, adminEndpoint);
+  const accountGrants = client(AccountGrantsClient, adminEndpoint);
+  const displayDefaults = client(DisplayDefaultsClient, adminEndpoint);
 
   for (const auth of [authGeneral, authAdmin]) {
     const methods = await call(auth, "methods", {});
@@ -117,12 +132,12 @@ async function main() {
     check(methods.emailCode === false);
     check(methods.signupEmail === false);
   }
-  const setup = await call(admin, "setupStatus", {});
+  const setup = await call(installation, "setupStatus", {});
   check(setup.available === true);
   const adminEmail = "live-administrator@example.com";
   const userEmail = "live-member@example.com";
   const password = "Disposable-Fixture1!";
-  const administrator = await call(admin, "initialize", {
+  const administrator = await call(installation, "initialize", {
     installationProof: setupProof,
     email: adminEmail,
     password,
@@ -131,17 +146,39 @@ async function main() {
     typeof administrator.token === "string" && administrator.token.length > 0,
   );
   check(administrator.user?.isAdmin === true);
+  const initialDefaults = await call(
+    personalPreferences,
+    "displayDefaults",
+    {},
+  );
+  const updatedDefaults = await call(
+    displayDefaults,
+    "updateDisplayDefaults",
+    { language: "ko" },
+    administrator.token,
+  );
+  check(updatedDefaults.language === "ko");
+  check(updatedDefaults.timeZone === initialDefaults.timeZone);
+  const preferences = await call(
+    personalPreferences,
+    "updateDisplay",
+    { language: "fr" },
+    administrator.token,
+  );
+  check(preferences.display?.language === "fr");
   const identity = await call(authGeneral, "identity", {}, administrator.token);
   check(identity.id === administrator.user.id && identity.isAdmin === true);
 
   const issued = await call(
-    admin,
+    accountGrants,
     "issueSignupGrant",
     { email: userEmail },
     administrator.token,
   );
   check(typeof issued.proof === "string" && issued.proof.length > 0);
-  const preview = await call(general, "previewSignup", { proof: issued.proof });
+  const preview = await call(accountLifecycle, "previewSignup", {
+    proof: issued.proof,
+  });
   check(preview.usable === true);
   check(
     typeof preview.emailHint === "string" &&
@@ -153,7 +190,7 @@ async function main() {
       preview.expiresAt.seconds > 0n &&
       Number.isInteger(preview.expiresAt.nanos),
   );
-  const member = await call(general, "redeemSignup", {
+  const member = await call(accountLifecycle, "redeemSignup", {
     proof: issued.proof,
     email: userEmail,
     password,
@@ -164,7 +201,7 @@ async function main() {
   await rejected(
     () =>
       call(
-        admin,
+        accountGrants,
         "issueSignupGrant",
         { email: "live-forbidden@example.com" },
         member.token,
@@ -174,17 +211,17 @@ async function main() {
   );
 
   const team = await call(
-    general,
+    teams,
     "createTeam",
     { name: "Live RPC Team", handle: "live-rpc-team" },
     administrator.token,
   );
   check(team.kind === TeamKind.TEAM_KIND_COLLABORATIVE);
   check(team.callerRole === TeamRole.TEAM_ROLE_OWNER);
-  const teams = await call(general, "listTeams", {}, administrator.token);
-  check(teams.items.some((item) => item.id === team.id));
+  const teamList = await call(teams, "listTeams", {}, administrator.token);
+  check(teamList.items.some((item) => item.id === team.id));
   const updated = await call(
-    general,
+    teams,
     "updateTeam",
     { teamId: team.id, name: "Updated Live RPC Team" },
     administrator.token,
@@ -194,7 +231,7 @@ async function main() {
   await rejected(
     () =>
       call(
-        general,
+        teams,
         "updateTeam",
         { teamId: team.id, name: "" },
         administrator.token,
@@ -205,7 +242,7 @@ async function main() {
   await rejected(
     () =>
       call(
-        general,
+        teams,
         "setMemberRole",
         { teamId: team.id, userId: member.user.id, role: 12345 },
         administrator.token,
@@ -215,15 +252,20 @@ async function main() {
   );
 
   const invitation = await call(
-    general,
+    invitations,
     "inviteMember",
     { teamId: team.id, email: userEmail },
     administrator.token,
   );
-  const received = await call(general, "receivedInvitations", {}, member.token);
+  const received = await call(
+    invitations,
+    "receivedInvitations",
+    {},
+    member.token,
+  );
   check(received.items.some((item) => item.id === invitation.id));
   await call(
-    general,
+    invitations,
     "processInvitation",
     {
       invitationId: invitation.id,
@@ -231,7 +273,7 @@ async function main() {
     },
     member.token,
   );
-  const joined = await call(general, "listTeams", {}, member.token);
+  const joined = await call(teams, "listTeams", {}, member.token);
   check(
     joined.items.some(
       (item) =>
@@ -239,7 +281,7 @@ async function main() {
     ),
   );
   await rejected(
-    () => call(general, "leaveTeam", { teamId: team.id }, administrator.token),
+    () => call(teams, "leaveTeam", { teamId: team.id }, administrator.token),
     status.FAILED_PRECONDITION,
     "DOMAIN_REASON_OWNER_TRANSFER_REQUIRED",
   );
@@ -255,7 +297,7 @@ async function main() {
     check(current.id === member.user.id && current.isAdmin === false);
   }
   await rejected(
-    () => call(admin, "listSignupGrants", {}, passwordSession.token),
+    () => call(accountGrants, "listSignupGrants", {}, passwordSession.token),
     status.PERMISSION_DENIED,
     "DOMAIN_REASON_PERMISSION_DENIED",
   );
@@ -306,7 +348,9 @@ try {
   await main();
 } catch {
   // A raw gRPC error can retain request metadata. Never print it or its cause.
-  process.stderr.write("Live RPC verification failed.\n");
+  process.stderr.write(
+    `Live RPC verification failed after ${checks} checks (${lastMethod}).\n`,
+  );
   process.exitCode = 1;
 } finally {
   for (const instance of clients) {

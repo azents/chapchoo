@@ -31,8 +31,10 @@ export async function loadInventory(
     grants(
       await call(
         kind === "signup"
-          ? backend.admin.listSignupGrants.bind(backend.admin)
-          : backend.admin.listPasswordResets.bind(backend.admin),
+          ? backend.accountGrants.listSignupGrants.bind(backend.accountGrants)
+          : backend.accountGrants.listPasswordResets.bind(
+              backend.accountGrants,
+            ),
         { offset, limit: 25n },
         token,
       ),

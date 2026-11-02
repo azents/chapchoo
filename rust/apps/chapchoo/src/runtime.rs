@@ -1,5 +1,5 @@
 use chapchoo_crypto::PasswordCost;
-use chapchoo_rpc::RpcService;
+use chapchoo_rpc::AccountServices;
 use chapchoo_service::{AccountsService, Mailer, PasswordWork};
 use std::{
     error::Error,
@@ -224,24 +224,35 @@ async fn start_backends(
         .map(|socket| (socket, true))
         .chain(admin.into_iter().map(|socket| (socket, false)))
     {
-        let rpc = RpcService::new(service.clone()).with_admission(admission.clone());
+        let rpc = AccountServices::new(service.clone()).with_admission(admission.clone());
         let health = HealthServer::new(HealthService {
             config: config.clone(),
             admission: admission.clone(),
-            business_service: if general_role {
-                "chapchoo.accounts.General"
+            business_services: if general_role {
+                &[
+                    "chapchoo.accounts.AccountLifecycle",
+                    "chapchoo.accounts.TeamManagement",
+                    "chapchoo.accounts.InvitationManagement",
+                ]
             } else {
-                "chapchoo.accounts.Admin"
+                &[
+                    "chapchoo.accounts.Installation",
+                    "chapchoo.accounts.AccountGrants",
+                    "chapchoo.accounts.DisplayDefaults",
+                ]
             },
         });
         let shutdown = stop.clone();
         tasks.spawn(async move {
             let server = Server::builder()
                 .add_service(health)
-                .add_service(rpc.auth_server());
+                .add_service(rpc.authentication_server())
+                .add_service(rpc.personal_preferences_server());
             if general_role {
                 server
-                    .add_service(rpc.general_server())
+                    .add_service(rpc.account_lifecycle_server())
+                    .add_service(rpc.teams_server())
+                    .add_service(rpc.invitations_server())
                     .serve_with_incoming_shutdown(
                         TcpListenerStream::new(listener),
                         shutdown.cancelled_owned(),
@@ -249,7 +260,9 @@ async fn start_backends(
                     .await?;
             } else {
                 server
-                    .add_service(rpc.admin_server())
+                    .add_service(rpc.installation_server())
+                    .add_service(rpc.account_grants_server())
+                    .add_service(rpc.display_defaults_server())
                     .serve_with_incoming_shutdown(
                         TcpListenerStream::new(listener),
                         shutdown.cancelled_owned(),

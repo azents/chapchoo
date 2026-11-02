@@ -5,26 +5,32 @@ package chapchoo.accounts;
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 
-// Shared authentication is registered on both independently runnable listeners.
-// Ordinary protected calls carry their opaque token in authorization metadata.
-service Auth {
+// Domain contracts share message types and business authorization rules.
+// Authentication and personal preferences are common Client/Admin dependencies.
+service Authentication {
   rpc Methods(google.protobuf.Empty) returns (LoginMethods);
   rpc PasswordLogin(PasswordLoginRequest) returns (AuthSession);
   rpc SendCode(SendCodeRequest) returns (CodeChallenge);
   rpc VerifyCode(VerifyCodeRequest) returns (AuthSession);
   rpc Renew(RenewRequest) returns (AuthSession);
   rpc Identity(google.protobuf.Empty) returns (User);
-  rpc DisplayDefaults(google.protobuf.Empty) returns (DisplaySettings);
-  rpc UpdateDisplay(DisplayPatch) returns (User);
   rpc Logout(google.protobuf.Empty) returns (google.protobuf.Empty);
 }
 
-service General {
+service PersonalPreferences {
+  rpc DisplayDefaults(google.protobuf.Empty) returns (DisplaySettings);
+  rpc UpdateDisplay(DisplayPatch) returns (User);
+}
+
+service AccountLifecycle {
   rpc RequestSignupEmail(SignupEmailRequest) returns (DeliveryAccepted);
   rpc PreviewSignup(ProofRequest) returns (ProofPreview);
   rpc RedeemSignup(RedeemSignupRequest) returns (AuthSession);
   rpc PreviewPasswordReset(ProofRequest) returns (ProofPreview);
   rpc RedeemPasswordReset(RedeemPasswordResetRequest) returns (google.protobuf.Empty);
+}
+
+service TeamManagement {
   rpc ListTeams(google.protobuf.Empty) returns (Teams);
   rpc GetTeam(TeamRequest) returns (Team);
   rpc CreateTeam(CreateTeamRequest) returns (Team);
@@ -35,22 +41,31 @@ service General {
   rpc TransferOwnership(MemberRequest) returns (google.protobuf.Empty);
   rpc LeaveTeam(TeamRequest) returns (google.protobuf.Empty);
   rpc DeleteTeam(TeamRequest) returns (google.protobuf.Empty);
+}
+
+service InvitationManagement {
   rpc InviteMember(InviteMemberRequest) returns (Invitation);
   rpc ReceivedInvitations(google.protobuf.Empty) returns (Invitations);
   rpc TeamInvitations(TeamRequest) returns (Invitations);
   rpc ProcessInvitation(ProcessInvitationRequest) returns (google.protobuf.Empty);
 }
 
-service Admin {
+service Installation {
   rpc SetupStatus(google.protobuf.Empty) returns (SetupStatusResult);
-  rpc UpdateDisplayDefaults(DisplayPatch) returns (DisplaySettings);
   rpc Initialize(InitializeRequest) returns (AuthSession);
+}
+
+service AccountGrants {
   rpc IssueSignupGrant(IssueGrantRequest) returns (IssuedGrant);
   rpc ListSignupGrants(ListGrantsRequest) returns (Grants);
   rpc RevokeSignupGrant(GrantRequest) returns (google.protobuf.Empty);
   rpc IssuePasswordReset(IssueGrantRequest) returns (IssuedGrant);
   rpc ListPasswordResets(ListGrantsRequest) returns (Grants);
   rpc RevokePasswordReset(GrantRequest) returns (google.protobuf.Empty);
+}
+
+service DisplayDefaults {
+  rpc UpdateDisplayDefaults(DisplayPatch) returns (DisplaySettings);
 }
 
 enum TeamKind {

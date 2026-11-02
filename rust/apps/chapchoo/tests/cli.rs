@@ -3,8 +3,9 @@
 use base64::{Engine, engine::general_purpose::URL_SAFE};
 use chapchoo_crypto::BearerSecret;
 use chapchoo_protocol::accounts::{
-    InitializeRequest, IssueGrantRequest, RedeemSignupRequest, admin_client::AdminClient,
-    auth_client::AuthClient, general_client::GeneralClient,
+    InitializeRequest, IssueGrantRequest, RedeemSignupRequest,
+    account_grants_client::AccountGrantsClient, account_lifecycle_client::AccountLifecycleClient,
+    authentication_client::AuthenticationClient, installation_client::InstallationClient,
 };
 use std::{error::Error, net::TcpListener, path::Path, process::Stdio, time::Duration};
 use tokio::{
@@ -164,7 +165,8 @@ async fn prepare_readiness_common_auth_recovery_and_owned_shutdown() -> Result<(
         ServingStatus::Serving as i32
     );
     std::fs::rename(&offline, &path)?;
-    let mut admin = AdminClient::connect(format!("http://{admin_addr}")).await?;
+    let mut admin = InstallationClient::connect(format!("http://{admin_addr}")).await?;
+    let mut grants = AccountGrantsClient::connect(format!("http://{admin_addr}")).await?;
     let session = admin
         .initialize(InitializeRequest {
             installation_proof: proof.expose().to_owned(),
@@ -174,7 +176,7 @@ async fn prepare_readiness_common_auth_recovery_and_owned_shutdown() -> Result<(
         })
         .await?
         .into_inner();
-    let mut auth = AuthClient::connect(format!("http://{general_addr}")).await?;
+    let mut auth = AuthenticationClient::connect(format!("http://{general_addr}")).await?;
     let mut request = tonic::Request::new(());
     request.metadata_mut().insert(
         "authorization",
@@ -188,8 +190,8 @@ async fn prepare_readiness_common_auth_recovery_and_owned_shutdown() -> Result<(
         "authorization",
         format!("Bearer {}", session.token).parse()?,
     );
-    let proof = admin.issue_signup_grant(issue).await?.into_inner().proof;
-    let mut general = GeneralClient::connect(format!("http://{general_addr}")).await?;
+    let proof = grants.issue_signup_grant(issue).await?.into_inner().proof;
+    let mut general = AccountLifecycleClient::connect(format!("http://{general_addr}")).await?;
     let account = general
         .redeem_signup(RedeemSignupRequest {
             proof,

@@ -24,7 +24,14 @@ export const readDisplay = cache(async (): Promise<DisplayInitial> => {
   const backend = getBackend(getConfig());
   const identity = await loadIdentity();
   const defaults = await requiredPageRead(async () =>
-    display(await call(backend.auth.displayDefaults.bind(backend.auth), {})),
+    display(
+      await call(
+        backend.personalPreferences.displayDefaults.bind(
+          backend.personalPreferences,
+        ),
+        {},
+      ),
+    ),
   );
   const value =
     identity.type === "LOADED" && identity.data
