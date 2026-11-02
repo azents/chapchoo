@@ -66,7 +66,11 @@ impl SecretDigest {
     }
 
     pub fn matches(&self, token: &BearerSecret) -> bool {
-        constant_time_equal(&self.0, token.digest().as_bytes())
+        self.matches_digest(&token.digest())
+    }
+
+    pub fn matches_digest(&self, presented: &SecretDigest) -> bool {
+        constant_time_equal(&self.0, presented.as_bytes())
     }
 }
 
@@ -91,6 +95,8 @@ mod tests {
         assert_eq!(token.expose().len(), 43);
         assert!(token.digest().matches(&token));
         assert!(!token.digest().matches(&other));
+        assert!(token.digest().matches_digest(&token.digest()));
+        assert!(!token.digest().matches_digest(&other.digest()));
         let parsed = BearerSecret::parse(token.expose().to_owned())?;
         assert!(token.digest().matches(&parsed));
         assert!(!format!("{token:?}").contains(token.expose()));

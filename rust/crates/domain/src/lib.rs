@@ -14,11 +14,18 @@
 //! use tonic::Request;
 //! ```
 
+mod computer;
 mod display;
 mod email;
 mod password;
 mod role;
 
+pub use computer::{
+    ActionAvailability, ActionBlockReason, ComputerActionContext, ComputerKind, ConnectionStatus,
+    DesiredState, InvalidComputerValue, LifecycleAction, LifecyclePhase, LifecycleProgress,
+    ObservedPower, PowerCapabilities, ResourcePresence, RestorationBlockReason,
+    RestorationEvidence, SavedEnvironment,
+};
 pub use display::{DisplayPatch, DisplaySettings, InvalidDisplaySettings};
 pub use email::{EmailAddress, InvalidEmail};
 pub use password::{Password, PasswordPolicyError};
