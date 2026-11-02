@@ -14,7 +14,7 @@ function deferred() {
 }
 
 // Exercise the application logout response over real HTTP, not browser cookie ordering.
-test("logout disposes only its app cookie despite failed backend revocation", async ({
+test("logout disposes the shared host session despite failed backend revocation", async ({
   browser,
 }) => {
   const current = randomBytes(32).toString("base64url");
@@ -39,12 +39,7 @@ test("logout disposes only its app cookie despite failed backend revocation", as
     );
   }
   const server = createServer((request, response) => {
-    if (request.url === "/newer") {
-      respond(
-        response,
-        sessionCookie(policy(), current, Date.now() + 60_000, Date.now()),
-      );
-    } else if (request.url === "/newer-admin") {
+    if (request.url === "/newer-admin") {
       const admin = cookiePolicy(
         webConfig("admin", {
           publicUrl: `${origin}/admin`,
@@ -101,8 +96,15 @@ test("logout disposes only its app cookie despite failed backend revocation", as
     const page = await context.newPage();
     await page.goto(origin);
     await page.evaluate(async () => {
-      await fetch("/newer", { method: "POST" });
       await fetch("/newer-admin", { method: "POST" });
+    });
+    expect(
+      (await context.cookies(origin)).some(
+        (cookie) => cookie.name === policy().name,
+      ),
+      "Admin authentication publishes the shared General host session",
+    ).toBe(true);
+    await page.evaluate(() => {
       const form = document.createElement("form");
       form.action = "/logout-failure";
       form.method = "POST";
@@ -116,10 +118,6 @@ test("logout disposes only its app cookie despite failed backend revocation", as
       remaining.some((cookie) => cookie.name === "chapchoo-general-session"),
       "Backend failure must not retain the locally signed-out cookie",
     ).toBe(false);
-    expect(
-      remaining.some((cookie) => cookie.name === "chapchoo-admin-session"),
-      "General logout must preserve the independent Admin cookie",
-    ).toBe(true);
     expect(
       logoutAttempts,
       "Logout revocation must not be automatically replayed",

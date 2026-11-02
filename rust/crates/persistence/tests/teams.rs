@@ -524,6 +524,84 @@ async fn exercise(store: Store, tokens: &[BearerSecret]) -> Result<(), TestError
     Ok(())
 }
 
+async fn collection_retry(
+    store: &Store,
+    tokens: &[BearerSecret],
+    connection: &mut impl SimpleConnection,
+    postgres: bool,
+) -> Result<(), TestError> {
+    let owner = tokens[0].digest();
+    let stranger = tokens[3].digest();
+    let create = CreateTeam {
+        id: "collection-retry".into(),
+        name: "Collection retry".into(),
+        handle: "collection-retry".into(),
+    };
+    store.create_team(&owner, &create, NOW).await?;
+    let install = if postgres {
+        "CREATE FUNCTION fail_collection() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Synthetic collection failure'; END $$; CREATE TRIGGER fail_collection BEFORE DELETE ON teams FOR EACH ROW WHEN (OLD.id='collection-retry') EXECUTE FUNCTION fail_collection()"
+    } else {
+        "CREATE TRIGGER fail_collection BEFORE DELETE ON teams WHEN OLD.id='collection-retry' BEGIN SELECT RAISE(ABORT, 'Synthetic collection failure'); END"
+    };
+    tokio::task::block_in_place(|| connection.batch_execute(install))?;
+    assert!(matches!(
+        store.delete_team(&owner, &create.id, NOW).await,
+        Err(StoreError::Database(_))
+    ));
+    assert!(matches!(
+        store.team(&owner, &create.id, NOW).await,
+        Err(StoreError::NotFound)
+    ));
+    assert!(
+        store
+            .teams(&owner, NOW)
+            .await?
+            .iter()
+            .all(|team| team.id != create.id)
+    );
+    store
+        .create_team(
+            &owner,
+            &CreateTeam {
+                id: "reused-after-failure".into(),
+                ..create
+            },
+            NOW + 1,
+        )
+        .await?;
+    assert!(matches!(
+        store
+            .delete_team(&stranger, "collection-retry", NOW + 1)
+            .await,
+        Err(StoreError::NotFound)
+    ));
+    tokio::task::block_in_place(|| {
+        connection.batch_execute(if postgres {
+            "DROP TRIGGER fail_collection ON teams; DROP FUNCTION fail_collection()"
+        } else {
+            "DROP TRIGGER fail_collection"
+        })
+    })?;
+    store
+        .delete_team(&owner, "collection-retry", NOW + 2)
+        .await?;
+    assert!(matches!(
+        store.delete_team(&owner, "collection-retry", NOW + 3).await,
+        Err(StoreError::NotFound)
+    ));
+    assert_eq!(
+        store
+            .team(&owner, "reused-after-failure", NOW + 3)
+            .await?
+            .handle,
+        "collection-retry"
+    );
+    store
+        .delete_team(&owner, "reused-after-failure", NOW + 3)
+        .await?;
+    Ok(())
+}
+
 #[test]
 fn team_and_invitation_operations_on_sqlite() -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
@@ -541,7 +619,9 @@ fn team_and_invitation_operations_on_sqlite() -> Result<(), TestError> {
     connection.batch_execute(&seed_sql(&cipher, &tokens, false)?)?;
     let runtime = tokio::runtime::Runtime::new()?;
     runtime.block_on(async {
-        exercise(Store::connect_sqlite(path.clone(), cipher).await?, &tokens).await
+        let store = Store::connect_sqlite(path.clone(), cipher).await?;
+        collection_retry(&store, &tokens, &mut connection, false).await?;
+        exercise(store, &tokens).await
     })?;
     assert_eq!(
         diesel::sql_query("SELECT count(*) AS n FROM grants WHERE id='rolled-back-grant'")
@@ -598,7 +678,9 @@ fn team_and_invitation_operations_on_postgres() -> Result<(), TestError> {
         connection.batch_execute(&seed_sql(&cipher, &tokens, true)?)?;
         let runtime = tokio::runtime::Runtime::new()?;
         runtime.block_on(async {
-            exercise(Store::connect_postgres(url.clone(), cipher).await?, &tokens).await
+            let store = Store::connect_postgres(url.clone(), cipher).await?;
+            collection_retry(&store, &tokens, &mut connection, true).await?;
+            exercise(store, &tokens).await
         })?;
         assert_eq!(
             diesel::sql_query("SELECT count(*) AS n FROM grants WHERE id='rolled-back-grant'")

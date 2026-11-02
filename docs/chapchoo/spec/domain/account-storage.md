@@ -146,7 +146,11 @@ Team ID without transferring any old Agent. After confirmed Computer cleanup rem
 Agent, a separate post-commit collection removes that Team and cascades its
 memberships. Empty Teams are collected immediately. Accounts, personal contexts
 and historical Agent creation receipts survive. These internal rows are not
-selectable archives and cannot be restored.
+selectable archives and cannot be restored. If post-commit collection fails,
+only the current owner may explicitly retry deletion against the retained pending
+Team. That retry preserves the original deletion timestamp and terminal Computer
+intent, then retries collection; other reads and mutations still hide the Team.
+A newly created Team reusing its handle has independent identity and resources.
 
 Invitations bind canonical recipient email and are processed exactly once by
 that recipient. Acceptance creates Member membership; decline does not. An

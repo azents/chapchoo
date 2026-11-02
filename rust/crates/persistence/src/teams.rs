@@ -800,11 +800,24 @@ impl Store {
     ) -> Result<(), StoreError> {
         operation!(self, |connection, dialect| {
             let user = authenticate!(connection, dialect, actor, now);
-            let team = team!(connection, dialect, team_id);
+            // Only deletion can revisit a pending Team. Retained membership and
+            // owner checks still apply before retrying post-commit collection.
+            let query = "SELECT id,CAST(kind AS TEXT) AS kind,name,handle,owner_user_id,created_at FROM teams WHERE id=?";
+            let query = match dialect {
+                Dialect::Postgres => format!("{query} FOR UPDATE"),
+                Dialect::Sqlite => query.to_owned(),
+            };
+            let team = diesel::OptionalExtension::optional(
+                diesel::sql_query(dialect.query(&query))
+                    .bind::<Text, _>(team_id)
+                    .get_result::<TeamRow>(connection)
+                    .await,
+            )?
+            .ok_or(StoreError::NotFound)?;
             require_owner(caller!(connection, dialect, team, &user.id))?;
             team.collaborative()?;
             crate::agent_cleanup::delete_team_agents!(connection, dialect, &team.id, None, now);
-            diesel::sql_query(dialect.query("UPDATE teams SET deletion_requested_at=? WHERE id=?"))
+            diesel::sql_query(dialect.query("UPDATE teams SET deletion_requested_at=COALESCE(deletion_requested_at,?) WHERE id=?"))
                 .bind::<BigInt, _>(now)
                 .bind::<Text, _>(&team.id)
                 .execute(connection)
