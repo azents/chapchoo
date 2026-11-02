@@ -693,6 +693,24 @@ async fn exercise(
             &current_source,
             deleting,
             &completed_resources[0],
+            ResourceEvidence::Unknown
+        )
+        .await,
+        Err(StoreError::Conflict)
+    ));
+    assert!(
+        store
+            .managed_resources(&current_source, deleting)
+            .await?
+            .iter()
+            .all(|r| r.presence == "ABSENT")
+    );
+    assert!(matches!(
+        report(
+            &store,
+            &current_source,
+            deleting,
+            &completed_resources[0],
             ResourceEvidence::OwnedPresent { uid: "resurrected" }
         )
         .await,
@@ -853,6 +871,23 @@ async fn exercise_stop_and_initial(
     let stopped = store.agent(owner, "agent-stopping", now()?).await?;
     assert_eq!(stopped.computer.power, ObservedPower::Stopped);
     assert_eq!(stopped.computer.progress.phase, LifecyclePhase::Completed);
+    for phase in [LifecyclePhase::Blocked, LifecyclePhase::Uncertain] {
+        assert!(matches!(
+            store
+                .report_lifecycle_issue(source, stop, None, phase)
+                .await,
+            Err(StoreError::Conflict)
+        ));
+    }
+    assert_eq!(
+        store
+            .agent(owner, "agent-stopping", now()?)
+            .await?
+            .computer
+            .progress
+            .phase,
+        LifecyclePhase::Completed
+    );
     store
         .request_lifecycle(
             owner,

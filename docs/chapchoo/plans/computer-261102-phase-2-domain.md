@@ -113,5 +113,11 @@ tags: [agent, computer, plan, security, database]
   (74 checks per engine), and docs18/catalog/diff check pass. The exact independent
   reviewer completed targeted re-review: both automatic findings resolved, no new
   material correctness/security/data-loss findings, and Design delta remains None.
-  Correction commit/hooks and new-SHA CI follow. No component runtime or Mac flow
-  is exposed in this phase.
+  Correction commit `9ef8d64` passed all remote CI. Subsequent automatic review
+  found two terminal-report paths: late unknown resource evidence after cleanup,
+  and issue reports after completed stop. Both are rejected under current-Computer
+  locks; both-engine regressions prove preserved cleanup/collection and next-start
+  admission. Full 82-test Rust quality, live RPC74 per engine, docs18 and targeted
+  same-reviewer review pass again with no new material issues. Latest correction
+  commit/hooks and new-SHA CI follow. No component runtime or Mac flow is exposed
+  in this phase.

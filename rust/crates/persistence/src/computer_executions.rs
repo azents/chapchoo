@@ -469,6 +469,9 @@ impl Store {
             let _ = current_source!(connection, dialect, source);
             let current = current_computer!(connection, dialect, source, scope);
             let now = db_now!(connection, dialect);
+            if current.cleanup_completed_at.is_some() {
+                return Err(StoreError::Conflict);
+            }
             let resource = diesel::sql_query(dialect.query("SELECT * FROM computer_resources WHERE computer_id=? AND resource_kind=? AND namespace=? AND name=?"))
                 .bind::<Text,_>(scope.computer_id).bind::<Text,_>(report.kind.as_str()).bind::<Text,_>(report.namespace).bind::<Text,_>(report.name).get_result::<ManagedResource>(connection).await.optional()?.ok_or(StoreError::NotFound)?;
             if resource.execution_id.as_deref() != report.execution_id {
@@ -694,6 +697,7 @@ impl Store {
             let current = current_computer!(connection, dialect, source, scope);
             if current.current_execution_id.as_deref() != execution_id
                 || current.cleanup_completed_at.is_some()
+                || (current.desired_state == "STOPPED" && current.current_execution_id.is_none())
             {
                 return Err(StoreError::Conflict);
             }

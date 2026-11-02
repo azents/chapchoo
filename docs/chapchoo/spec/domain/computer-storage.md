@@ -277,7 +277,13 @@ Terminal Computers accept exact safe cleanup reports without resurrecting an
 Agent. Normal cleanup confirmation requires no current/live execution and
 definitive absence of every reserved resource from the current source; it then
 removes the Agent and records confirmed completion once. Force removal does not
-imply any of those facts. Explicit collection removes only confirmed completed
+imply any of those facts. Completed cleanup inventory rejects every further
+resource report, including unknown/absence evidence, preserving its confirmed
+terminal facts until collection. A completed stop with no current execution also
+rejects lifecycle issue reports; late blocked/uncertain reports cannot reopen that
+operation and strand the next start. Running executions can still report issues
+without claiming definitive power-off.
+Explicit collection removes only confirmed completed
 Computers at least 24 hours after completion, with no live execution or unresolved
 resource. Unresolved cleanup has no TTL. Creation receipts survive collection.
 These are internal lifecycle operations, not public adoption/cleanup controls.
