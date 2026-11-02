@@ -12,7 +12,7 @@ export function getConfig(): WebConfig {
   const config = webConfig("general", {
     publicUrl: process.env.CHAPCHOO_PUBLIC_URL ?? "http://localhost:3003",
     bindHost: process.env.CHAPCHOO_WEB_HOST ?? "127.0.0.1",
-    backendUrl: process.env.CHAPCHOO_BACKEND_URL ?? "http://127.0.0.1:50051",
+    backendUrl: process.env.CHAPCHOO_BACKEND_URL ?? "",
   });
   return config;
 }

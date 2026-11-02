@@ -2,6 +2,7 @@ import {
   AccountGrantsClient,
   AuthenticationClient,
   AccountLifecycleClient,
+  InstallationClient,
 } from "@chapchoo/rpc-client/accounts";
 import { credentials, Metadata } from "@grpc/grpc-js";
 import type {
@@ -41,6 +42,36 @@ function call<I, O>(
       },
     );
   });
+}
+
+/** Computer acceptance owns its prerequisite account through ordinary setup RPC. */
+export async function seedAdministrator(
+  endpoint: string,
+  proof: string,
+  user: FixtureUser,
+): Promise<void> {
+  const installation = new InstallationClient(
+    endpoint,
+    credentials.createInsecure(),
+    { "grpc.enable_retries": 0 },
+  );
+  const auth = new AuthenticationClient(
+    endpoint,
+    credentials.createInsecure(),
+    { "grpc.enable_retries": 0 },
+  );
+  try {
+    const session = await call(installation.initialize.bind(installation), {
+      installationProof: proof,
+      email: user.email,
+      password: user.password,
+      display: undefined,
+    });
+    await call(auth.logout.bind(auth), {}, session.token);
+  } finally {
+    installation.close();
+    auth.close();
+  }
 }
 
 /** Only the registered second user is seeded, after the browser bootstraps Admin. */

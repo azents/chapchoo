@@ -104,7 +104,7 @@ Computer components run independently from the backend:
   reuse another execution's key or copy its Secret. Retire/revoke the session
   when its execution ends. Raw keys are environment/secret-manager inputs only.
 
-Control runs owned lease and two-second reconciliation workers. The current
+Control runs owned lease and 15-second reconciliation workers. The current
 Computer Connector owner reconciles through the current Computer Provider owner;
 the Provider owner handles pre-bootstrap/absent-Connector work. Supported-client
 fixtures exercise automatic create/stop/start/restart/restoration/delete through
@@ -192,7 +192,7 @@ upstream snapshot.
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm run dev --filter=@chapchoo/web
+CHAPCHOO_BACKEND_URL=http://127.0.0.1:50051 pnpm run dev --filter=@chapchoo/web
 pnpm run format:check
 pnpm run lint
 pnpm run typecheck
@@ -270,9 +270,11 @@ request, no automatic retry and distinct HttpOnly cookies. SSR authenticates
 read-only. See [the account web Spec](docs/chapchoo/spec/domain/account-web.md)
 for renewal and cookie policy; do not copy real credentials into commands/logs.
 
-The three assembled browser journeys and disposable PostgreSQL/process ownership
-are documented in
-[`@chapchoo/e2e`](typescript/apps/e2e/README.md).
+The four core assembled browser journeys (three account/team and one Computer)
+and disposable PostgreSQL/process ownership are documented in
+[`@chapchoo/e2e`](typescript/apps/e2e/README.md). Agent/Computer primary content is
+server-rendered, then observed through visible-view bounded unary reads; see
+[Computer web contracts](docs/chapchoo/spec/domain/computer-web.md).
 Sentry upload configuration and Azents product pages were not copied.
 
 ## Installed Linux and deployment validation
@@ -292,7 +294,7 @@ python3 scripts/test-container-images.py --backend local-backend:tag --general l
 ```
 
 Native x86-64/ARM64 CI uses the fixed Bookworm release builder, architecture-matched
-standalone outputs/Node, bundle lifecycle checks and the same three PostgreSQL
+standalone outputs/Node, bundle lifecycle checks and the same four PostgreSQL
 browser journeys. The image check owns only its ephemeral Docker containers and
 network. Neither command authorizes cluster deployment. Live Helm/Argo acceptance
 still requires explicit environment, exposure, data/Secret and full-sync scope.

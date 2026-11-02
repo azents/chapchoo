@@ -1,4 +1,4 @@
-import { access, mkdtemp, mkdir, rm } from "node:fs/promises";
+import { access, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,7 +10,8 @@ import {
 } from "./config/index.js";
 import { ProcessOwner } from "./processes.js";
 import { fixtureUser, secret, safeMessage } from "./safety.js";
-import { seedRegisteredUser } from "./seed.js";
+import { seedRegisteredUser, seedAdministrator } from "./seed.js";
+import { SyntheticKubernetes } from "./kubernetes.js";
 import type { FixtureUser } from "./safety.js";
 import type { OwnedChild } from "./processes.js";
 
@@ -48,6 +49,8 @@ export class Assembly {
   readonly second: FixtureUser = fixtureUser("second");
   readonly resetPassword = `Aa1!${secret()}`;
   readonly setupProof = secret();
+  private readonly providerOwnerToken = secret();
+  private kubernetes: SyntheticKubernetes | null = null;
   readonly teamName = "Acceptance team";
   readonly teamHandle = `acceptance-${secret().slice(0, 12).toLowerCase()}`;
   readonly generalUrl: string;
@@ -229,6 +232,9 @@ export class Assembly {
         CHAPCHOO_ADMIN_WEB_URL: this.adminUrl,
         CHAPCHOO_GENERAL_BACKEND_URL: `http://127.0.0.1:${this.generalPort}`,
         CHAPCHOO_ADMIN_BACKEND_URL: `http://127.0.0.1:${this.generalPort}`,
+        CHAPCHOO_SYSTEM_OWNER_ID: "fixture-owner",
+        CHAPCHOO_SYSTEM_OWNER_PROVIDER_IDS: "fixture-provider",
+        CHAPCHOO_SYSTEM_OWNER_TOKEN: this.providerOwnerToken,
         RUST_LOG: "chapchoo=info",
       },
     );
@@ -277,6 +283,83 @@ export class Assembly {
       await web.ready(/Ready in/, 60_000);
     }
   }
+  async initializeAdministrator(): Promise<void> {
+    await seedAdministrator(
+      `127.0.0.1:${this.generalPort}`,
+      this.setupProof,
+      this.administrator,
+    );
+  }
+  async startComputerProvider(): Promise<void> {
+    if (this.kubernetes) throw new Error("Computer fixture is already active");
+    const binary = this.packageRoot
+      ? join(this.packageRoot, "chapchoo")
+      : join(repository, "rust/target/debug/chapchoo");
+    const env = {
+      ...safeEnvironment(),
+      ...(this.packageRoot
+        ? { PATH: join(this.directory, "no-host-tools") }
+        : {}),
+    };
+    this.kubernetes = await SyntheticKubernetes.create(
+      (session, key, endpoint) =>
+        this.owner.start(
+          "Execution Computer Connector",
+          binary,
+          ["computer-connector"],
+          repository,
+          {
+            ...env,
+            CHAPCHOO_CONTROL_ENDPOINT: endpoint,
+            CHAPCHOO_CONNECTOR_SESSION_ID: session,
+            CHAPCHOO_CONNECTOR_INITIAL_KEY: key,
+          },
+        ),
+    );
+    const kubeconfig = join(this.directory, "fixture-kubeconfig");
+    await writeFile(
+      kubeconfig,
+      JSON.stringify({
+        apiVersion: "v1",
+        kind: "Config",
+        "current-context": "fixture",
+        clusters: [
+          { name: "fixture", cluster: { server: this.kubernetes.endpoint } },
+        ],
+        contexts: [
+          {
+            name: "fixture",
+            context: {
+              cluster: "fixture",
+              user: "fixture",
+              namespace: "fixture",
+            },
+          },
+        ],
+        users: [{ name: "fixture", user: {} }],
+      }),
+      { mode: 0o600 },
+    );
+    this.owner.start(
+      "Computer Provider",
+      binary,
+      ["computer-provider", "--kubeconfig", kubeconfig],
+      repository,
+      {
+        ...env,
+        CHAPCHOO_CONTROL_ENDPOINT: `http://127.0.0.1:${this.generalPort}`,
+        CHAPCHOO_PROVIDER_ID: "fixture-provider",
+        CHAPCHOO_PROVIDER_NAME: "Acceptance Kubernetes",
+        CHAPCHOO_PROVIDER_OWNER_TOKEN: this.providerOwnerToken,
+        CHAPCHOO_KUBERNETES_NAMESPACE: "fixture",
+        CHAPCHOO_COMPUTER_IMAGE: "fixture/connector:acceptance",
+        CHAPCHOO_COMPUTER_SERVICE_ACCOUNT: "fixture",
+      },
+    );
+  }
+  get savedAllocations(): number {
+    return this.kubernetes?.savedAllocations ?? 0;
+  }
   async seedSecondUser(): Promise<void> {
     await seedRegisteredUser(
       `127.0.0.1:${this.generalPort}`,
@@ -296,6 +379,11 @@ export class Assembly {
       if (this.productReady) {
         await this.product?.finished(5_000);
       }
+    } catch {
+      failed = true;
+    }
+    try {
+      await this.kubernetes?.close();
     } catch {
       failed = true;
     }

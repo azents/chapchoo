@@ -143,7 +143,7 @@ class ChartContractsTest(unittest.TestCase):
         documents = self.render()
         self.assertEqual(
             {document["kind"] for document in documents},
-            {"Job", "Deployment", "Service", "Ingress"},
+            {"Job", "Deployment", "Service", "Ingress", "NetworkPolicy"},
         )
         for path in (CHART / "templates").iterdir():
             self.assertNotIn("lookup ", path.read_text(encoding="utf-8"))
@@ -166,15 +166,22 @@ class ChartContractsTest(unittest.TestCase):
         self,
     ) -> None:
         for topology, roles in (
-            ("combined", ["both"]),
-            ("separate", ["general", "admin"]),
+            ("combined", ["combined"]),
+            ("separate", ["client", "admin", "control"]),
         ):
             with self.subTest(topology=topology):
                 documents = self.render({"backend": {"topology": topology}})
                 for role in roles:
                     deployment = self.component(documents, f"backend-{role}")
                     container = deployment["spec"]["template"]["spec"]["containers"][0]
-                    self.assertEqual(container["args"], ["serve", "--role", role])
+                    self.assertEqual(
+                        container["args"],
+                        [
+                            "serve",
+                            "--groups",
+                            "client,admin,control" if role == "combined" else role,
+                        ],
+                    )
                     env = self.environment(container)
                     self.assertEqual(
                         env["CHAPCHOO_POSTGRES_URL"]["valueFrom"]["secretKeyRef"][
@@ -195,6 +202,8 @@ class ChartContractsTest(unittest.TestCase):
                         container["readinessProbe"]["grpc"]["service"],
                         "chapchoo.accounts.Installation"
                         if role == "admin"
+                        else "chapchoo.control.ProviderConnection"
+                        if role == "control"
                         else "chapchoo.accounts.TeamManagement",
                     )
                     self.assertGreater(container["readinessProbe"]["timeoutSeconds"], 5)
@@ -204,7 +213,11 @@ class ChartContractsTest(unittest.TestCase):
                         60,
                     )
                 services = self.kind(documents, "Service")
-                for role, port in (("general", 50051), ("admin", 50052)):
+                for role, port in (
+                    ("general", 50051),
+                    ("admin", 50052),
+                    ("control", 50051),
+                ):
                     service = next(
                         entry
                         for entry in services
@@ -214,7 +227,9 @@ class ChartContractsTest(unittest.TestCase):
                     self.assertEqual(service["spec"]["ports"][0]["port"], port)
                     self.assertEqual(
                         service["spec"]["selector"]["app.kubernetes.io/component"],
-                        "backend-both" if topology == "combined" else f"backend-{role}",
+                        "backend-combined"
+                        if topology == "combined"
+                        else f"backend-{'client' if role == 'general' else role}",
                     )
                 self.assertTrue(
                     all(service["spec"]["type"] == "ClusterIP" for service in services)
@@ -227,9 +242,7 @@ class ChartContractsTest(unittest.TestCase):
         for role, port, prefix in (("general", 3003, ""), ("admin", 3004, "/admin")):
             deployment = self.component(documents, f"{role}-web")
             container = deployment["spec"]["template"]["spec"]["containers"][0]
-            self.assertEqual(
-                container["args"], ["serve", "--role", "none", "--web", role]
-            )
+            self.assertEqual(container["args"], ["serve", "--groups", "--web", role])
             self.assertEqual(
                 set(self.environment(container)),
                 {
@@ -370,7 +383,7 @@ class ChartContractsTest(unittest.TestCase):
             self.assertEqual(
                 item["metadata"]["annotations"]["helm.sh/hook-weight"], "-30"
             )
-        backend = self.component(documents, "backend-both")
+        backend = self.component(documents, "backend-combined")
         backend_env = self.environment(
             backend["spec"]["template"]["spec"]["containers"][0]
         )
@@ -397,7 +410,7 @@ class ChartContractsTest(unittest.TestCase):
             "port": 465,
         }
         documents = self.render({"mail": mail})
-        backend = self.component(documents, "backend-both")
+        backend = self.component(documents, "backend-combined")
         env = self.environment(backend["spec"]["template"]["spec"]["containers"][0])
         self.assertEqual(env["CHAPCHOO_SMTP_PORT"]["value"], "465")
         self.assertNotIn("CHAPCHOO_SMTP_USERNAME", env)
@@ -420,7 +433,7 @@ class ChartContractsTest(unittest.TestCase):
                 }
             }
         )
-        backend = self.component(documents, "backend-both")
+        backend = self.component(documents, "backend-combined")
         env = self.environment(backend["spec"]["template"]["spec"]["containers"][0])
         self.assertEqual(env["CHAPCHOO_SMTP_HOST"]["value"], "smtp.example.invalid")
         self.assertEqual(env["CHAPCHOO_SMTP_TLS"]["value"], "starttls")
@@ -485,7 +498,7 @@ class ChartContractsTest(unittest.TestCase):
         )
         self.assertEqual(len(self.kind(documents, "Job")), 1)
         self.assertEqual(len(self.kind(documents, "Deployment")), 1)
-        self.assertEqual(len(self.kind(documents, "Service")), 2)
+        self.assertEqual(len(self.kind(documents, "Service")), 4)
         self.assertEqual(self.kind(documents, "Ingress"), [])
         for document in self.kind(documents, "Job") + self.kind(
             documents, "Deployment"
@@ -555,6 +568,134 @@ class ChartContractsTest(unittest.TestCase):
                 self.assertNotEqual(
                     result.returncode, 0, "Unsafe settings unexpectedly rendered"
                 )
+
+    def test_peer_listener_is_internal_and_restricted_to_server_workloads(self) -> None:
+        documents = self.render(
+            {
+                "backend": {
+                    "topology": "separate",
+                    "groupReplicas": {"client": 2, "admin": 3, "control": 4},
+                }
+            }
+        )
+        for group, replicas in (("client", 2), ("admin", 3), ("control", 4)):
+            deployment = self.component(documents, f"backend-{group}")
+            self.assertEqual(deployment["spec"]["replicas"], replicas)
+            env = self.environment(
+                deployment["spec"]["template"]["spec"]["containers"][0]
+            )
+            self.assertEqual("CHAPCHOO_PEER_LISTEN" in env, group == "control")
+        control = self.component(documents, "backend-control")
+        env = self.environment(control["spec"]["template"]["spec"]["containers"][0])
+        self.assertEqual(
+            env["CHAPCHOO_PEER_ADVERTISE"]["value"], "http://$(POD_IP):50053"
+        )
+        policy = self.kind(documents, "NetworkPolicy")[0]["spec"]
+        peer_rule = next(
+            rule for rule in policy["ingress"] if rule["ports"][0]["port"] == 50053
+        )
+        allowed = peer_rule["from"][0]["podSelector"]
+        self.assertEqual(
+            allowed["matchLabels"]["app.kubernetes.io/instance"], "contract"
+        )
+        self.assertEqual(
+            allowed["matchExpressions"][0]["values"],
+            ["backend-combined", "backend-client", "backend-admin", "backend-control"],
+        )
+        for ingress in self.kind(documents, "Ingress"):
+            self.assertNotIn("-peer", json.dumps(ingress))
+
+    def test_computer_provider_has_separate_scoped_authority_and_namespace_rbac(
+        self,
+    ) -> None:
+        owner = {
+            "id": "operator",
+            "providerIds": ["managed"],
+            "existingSecret": "fixture-owner",
+        }
+        provider = {
+            "enabled": True,
+            "id": "managed",
+            "name": "Managed Kubernetes",
+            "managedNamespace": "execution",
+            "image": {
+                "repository": "registry.example.invalid/chapchoo/backend",
+                "tag": "offline-contract",
+            },
+            "computerImage": {
+                "repository": "registry.example.invalid/chapchoo/connector",
+                "tag": "offline-contract",
+            },
+        }
+        documents = self.render(
+            {
+                "systemOwner": owner,
+                "computerProvider": provider,
+                "backend": {"topology": "separate"},
+            }
+        )
+        deployment = self.component(documents, "computer-provider")
+        self.assertEqual(deployment["spec"]["replicas"], 1)
+        self.assertEqual(deployment["spec"]["strategy"], {"type": "Recreate"})
+        container = deployment["spec"]["template"]["spec"]["containers"][0]
+        self.assertEqual(container["args"], ["computer-provider", "--in-cluster"])
+        env = self.environment(container)
+        self.assertEqual(env["CHAPCHOO_KUBERNETES_NAMESPACE"]["value"], "execution")
+        self.assertEqual(
+            env["CHAPCHOO_PROVIDER_OWNER_TOKEN"]["valueFrom"]["secretKeyRef"]["name"],
+            "fixture-owner",
+        )
+        self.assertNotIn("CHAPCHOO_SECRET_KEY", env)
+        self.assertNotIn("CHAPCHOO_POSTGRES_URL", env)
+        role = next(
+            item
+            for item in self.kind(documents, "Role")
+            if item["metadata"]["name"].endswith("-provider")
+        )
+        self.assertEqual(role["metadata"]["namespace"], "execution")
+        self.assertEqual(
+            role["rules"],
+            [
+                {
+                    "apiGroups": [""],
+                    "resources": ["pods"],
+                    "verbs": ["get", "list", "watch", "create", "delete"],
+                },
+                {
+                    "apiGroups": [""],
+                    "resources": ["persistentvolumeclaims", "secrets"],
+                    "verbs": ["get", "create", "delete"],
+                },
+            ],
+        )
+        execution = next(
+            item
+            for item in self.kind(documents, "ServiceAccount")
+            if item["metadata"]["name"].endswith("-computer")
+        )
+        self.assertFalse(execution["automountServiceAccountToken"])
+        self.assertEqual(execution["metadata"]["namespace"], "execution")
+        for group in ("client", "admin"):
+            other = self.component(documents, f"backend-{group}")
+            self.assertNotIn("fixture-owner", json.dumps(other))
+        self.assertNotEqual(
+            self.template(
+                {
+                    "systemOwner": owner,
+                    "computerProvider": {**provider, "id": "unscoped"},
+                }
+            ).returncode,
+            0,
+        )
+        self.assertNotEqual(
+            self.template(
+                {
+                    "systemOwner": owner,
+                    "computerProvider": {**provider, "managedNamespace": ""},
+                }
+            ).returncode,
+            0,
+        )
 
     def test_argocd_example_is_a_full_sync_reference_not_a_secret_provider(
         self,

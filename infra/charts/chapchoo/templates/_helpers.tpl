@@ -35,8 +35,6 @@
 
 {{- define "chapchoo.backendEnv" -}}
 {{- $env := include "chapchoo.databaseEnv" . | fromJsonArray -}}
-{{- $env = append $env (dict "name" "CHAPCHOO_GENERAL_LISTEN" "value" "0.0.0.0:50051") -}}
-{{- $env = append $env (dict "name" "CHAPCHOO_ADMIN_LISTEN" "value" "0.0.0.0:50052") -}}
 {{- $env = append $env (dict "name" "CHAPCHOO_GENERAL_WEB_URL" "value" .Values.general.publicUrl) -}}
 {{- $proofSecret := default (printf "%s-setup-proof" (include "chapchoo.fullname" .)) .Values.setupProof.existingSecret -}}
 {{- $env = append $env (include "chapchoo.secretEnv" (dict "name" "CHAPCHOO_SETUP_PROOF" "secret" $proofSecret "key" .Values.setupProof.key) | fromJson) -}}
@@ -76,11 +74,32 @@
 {{- end -}}
 
 {{- define "chapchoo.validate" -}}
+{{- if or .Values.systemOwner.id .Values.systemOwner.providerIds .Values.systemOwner.existingSecret -}}
+{{- $_ := required "systemOwner.id is required for scoped authority" .Values.systemOwner.id -}}
+{{- $_ := required "systemOwner.existingSecret is required" .Values.systemOwner.existingSecret -}}
+{{- if empty .Values.systemOwner.providerIds -}}{{- fail "systemOwner.providerIds must scope the owner credential" -}}{{- end -}}
+{{- if and (not .Values.backend.enabled) (not .Values.computerProvider.enabled) -}}{{- fail "Scoped systemOwner configuration requires a Control or Computer Provider workload" -}}{{- end -}}
+{{- end -}}
+{{- if .Values.computerProvider.enabled -}}
+{{- $_ := required "computerProvider.id is required" .Values.computerProvider.id -}}
+{{- $_ := required "computerProvider.name is required" .Values.computerProvider.name -}}
+{{- if not (has .Values.computerProvider.id .Values.systemOwner.providerIds) -}}{{- fail "Computer Provider must be in the configured systemOwner scope" -}}{{- end -}}
+{{- $_ := required "Computer Provider requires the existing scoped owner Secret" .Values.systemOwner.existingSecret -}}
+{{- if not .Values.backend.enabled -}}
+{{- $_ := required "An external Control requires computerProvider.controlEndpoint" .Values.computerProvider.controlEndpoint -}}
+{{- end -}}
+{{- if .Values.computerProvider.controlEndpoint -}}
+{{- $parsed := urlParse .Values.computerProvider.controlEndpoint -}}
+{{- if or (not (has $parsed.scheme (list "http" "https"))) (empty $parsed.host) (not (empty $parsed.userinfo)) (not (empty $parsed.query)) (not (empty $parsed.fragment)) (not (has $parsed.path (list "" "/"))) -}}
+{{- fail "Computer Provider Control endpoint must be explicit http/https without credentials or path" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
 {{- if not .Values.prerequisitesConfirmed -}}
 {{- fail "Set prerequisitesConfirmed only after external database, fixed-key/TLS/pull Secrets and trusted-network prerequisites already exist" -}}
 {{- end -}}
-{{- if not (or .Values.backend.enabled .Values.general.enabled .Values.admin.enabled) -}}
-{{- fail "Select at least one backend or web component" -}}
+{{- if not (or .Values.backend.enabled .Values.general.enabled .Values.admin.enabled .Values.computerProvider.enabled) -}}
+{{- fail "Select at least one backend, web or Computer Provider component" -}}
 {{- end -}}
 {{- if .Values.backend.enabled -}}
 {{- if and (empty .Values.setupProof.existingSecret) (ne .Values.setupProof.key "setup-proof") -}}

@@ -1,0 +1,127 @@
+---
+title: "Agent Computer Owner and Operator Web Contracts"
+created: 2026-11-02
+tags: [agent, computer, frontend, authorization, inventory]
+spec_type: domain
+domain: computer
+code_paths:
+  - typescript/apps/web/src/features/computers
+  - typescript/apps/web/src/app/agents
+  - typescript/apps/web/src/shared/server/computers.ts
+  - typescript/apps/admin-web/src/features/computers
+  - typescript/apps/admin-web/src/app/computer-providers
+  - typescript/apps/admin-web/src/app/computers
+  - typescript/apps/admin-web/src/shared/server/computers.ts
+  - typescript/apps/admin-web/src/shared/server/resourceInput.ts
+  - typescript/packages/web-core/src/computer.ts
+  - typescript/packages/web-core/src/computer-messages.ts
+  - typescript/packages/web-core/src/rpc.ts
+  - typescript/apps/e2e/src/computers.spec.ts
+last_verified_at: 2026-11-02
+spec_version: 1
+---
+
+# Agent Computer Owner and Operator Web Contracts
+
+The General app exposes personal Agent list/create at `/agents` and Computer
+detail at `/agents/<Agent ID>`. Account/team pages retain their existing routes
+and navigation. Admin exposes read-only Provider inventory at `/computer-providers`,
+Provider Computers under the selected Provider path, and exact resource inventory
+at `/computers/<Computer ID>`. There is no harness, conversation, file-management,
+Team Agent or concrete Mac enrollment UI.
+
+## Server rendering and scoped data
+
+Each route authenticates and resolves primary content on the server through the
+existing request-local account session boundary. The server HTML renders that
+record/list; the same snapshot and query selection seed client continuation.
+Initial read failure belongs to the route boundary, not an empty inventory or a
+fabricated loading state. Provider choices are supplementary to the Agent list;
+their failure preserves primary content and entered work.
+
+Generated Node RPC clients use each app's explicit backend target. A missing
+target fails configuration rather than inferring a local listener or another
+app's target. No browser credential, owner token, endpoint or connection ID is
+serialized into these views. Browser DTOs copy only approved fields and validate
+required identities, enum meanings, timestamps and bounded pages. Timestamps
+become JSON-safe milliseconds. Operator resources deliberately retain non-secret
+namespace/name/original UID/execution identities; Agent names/user content and
+bootstrap data are excluded.
+
+Existing account Origin, POST unary tRPC, cookie/renewal, identity-cache clearing,
+display and error boundaries remain authoritative. Cleared/unverifiable account
+identity hides prior Agent, resource and identity content behind generic recovery
+instead of resurrecting the SSR snapshot. This feature adds no browser
+stream transport, cross-tab scheduler or persistent offline queue.
+
+## Truthful projections and actions
+
+One backend-derived projection supplies desired intent, current phase, actual
+power, last-known power, management connectivity, Computer Connector connectivity,
+saved-environment evidence, observation time and available actions with typed
+blocking reasons. The browser does not infer stopped power from disconnection or
+query failure. Connector connectivity is not harness readiness. Display formatting
+uses the user's region/timezone; English, Korean, Japanese and French copy share
+the same typed key set.
+
+Creation retains name/Provider selection on rejection or unavailability and
+navigates to the accepted Agent's detail. A pending/lost creation response retains
+its exact Request ID and payload for explicit recovery; unresolved payload edits
+are locked. An existing removed receipt is distinct from a newly created Agent.
+Provider choices use bounded pages, with explicit next/first reads rather than
+unbounded background accumulation.
+
+Start submits directly. Stop/restart, normal deletion and force removal use
+accessible controlled confirmation. The confirmation captures its current
+lifecycle Request ID when opened; polling cannot silently retarget that consent
+to a newer request. Cancel sends no mutation. Every write still revalidates current
+owner/session/expected request on the backend. A lost response is not rollback or
+permission to replay an external effect.
+
+Stop/restart warns that processes are interrupted and only saved files are
+preserved. Normal deletion exposes the deleting intent until managed cleanup is
+confirmed. Force removal warns that Computer/data may remain while independent
+cleanup intent persists. Five-minute start delay comes from the backend's actual
+dispatch interval, never a browser timer or reset on refresh. Confirmed normal
+removal eventually yields owner not-found and navigation to the list; a failed
+read alone does not remove an Agent.
+
+## Bounded observation
+
+While the view is visible and authenticated, query refresh is five seconds for
+pending lifecycle projections and fifteen seconds for stable observations.
+Resource detail/Provider choices use fifteen seconds. Hidden views pause interval
+reads, and returning/focusing resumes observation. Query serialization/deduplication
+bounds overlap; one list query replaces per-row browser calls. All page requests
+use the RPC limit of twenty items. Primary page/selected detail/cursors live in
+the URL; transient form edits and supplementary Provider-choice paging do not
+become another authoritative lifecycle store.
+
+New reads are observations, not automatic retries of a failed mutation. They
+consume persisted projections and do not initiate Kubernetes observation or
+lifecycle effects. A browser read error retains last-known content with a warning;
+unsafe detail controls and stale creation choices are disabled. Post-mutation
+invalidation updates related queries without imperative per-hook refetch.
+
+## Read-only operator inventory
+
+Current installation-admin authority is required at SSR and every subsequent RPC.
+Provider inventory remains independent of live Agent associations. It shows
+management/Connector/power separately, terminal intent and unresolved versus
+confirmed cleanup. Resource detail exposes exact reserved namespace/name/UID and
+presence/observation without keys or user files. It provides no adoption, cleanup,
+retry, force removal or other operator mutation control. Confirmed cleanup stays
+visible under the backend's 24-hour retention; unresolved evidence does not expire
+merely because it is old.
+
+## Verification boundary
+
+Web-core owns DTO validation/redaction, action mapping, intent/power separation,
+resource identities and localization parity. App Storybooks and executable
+component checks own meaningful copy/status/failure/mobile states. The minimum
+assembled Computer E2E uses actual Control, Computer Provider and Computer
+Connector processes, PostgreSQL, real web/RPC and synthetic HTTP beneath the
+supported Kubernetes SDK. It verifies SSR, create/stop/start, one original PVC
+identity, independent Connector connectivity, operator resource reads and confirmed
+normal deletion. It does not create a real cluster, persist files on a real PVC,
+prove CNI/TLS or replace live substrate release gates.

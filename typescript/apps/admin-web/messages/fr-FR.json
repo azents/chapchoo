@@ -32,6 +32,7 @@
     "passwordPolicy": "Utilisez 8 à 64 caractères ASCII imprimables et au moins trois catégories parmi : majuscules, minuscules, chiffres et symboles."
   },
   "AdminGrants": {
+    "computerProviders": "Computer Providers",
     "replayMascot": "Rejouer l’animation du personnage",
     "context": "Administration du serveur",
     "signupTitle": "Liens d’inscription",

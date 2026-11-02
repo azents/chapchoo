@@ -155,6 +155,33 @@
             "separate"
           ]
         },
+        "peerAdvertise": {
+          "type": "string",
+          "minLength": 1
+        },
+        "groupReplicas": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "client": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "admin": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "control": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "client",
+            "admin",
+            "control"
+          ]
+        },
         "replicas": {
           "type": "integer",
           "minimum": 1
@@ -172,6 +199,94 @@
         "replicas",
         "image",
         "resources"
+      ]
+    },
+    "systemOwner": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "providerIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "existingSecret": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "id",
+        "providerIds",
+        "existingSecret",
+        "key"
+      ]
+    },
+    "computerProvider": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "managedNamespace": {
+          "type": "string"
+        },
+        "controlEndpoint": {
+          "type": "string"
+        },
+        "image": {
+          "$ref": "#/$defs/image"
+        },
+        "computerImage": {
+          "$ref": "#/$defs/image"
+        },
+        "resources": {
+          "$ref": "#/$defs/resources"
+        },
+        "computerResources": {
+          "$ref": "#/$defs/resources"
+        },
+        "storageClass": {
+          "type": "string"
+        },
+        "storageRequest": {
+          "type": "string",
+          "minLength": 1
+        },
+        "savedMount": {
+          "type": "string",
+          "pattern": "^/"
+        }
+      },
+      "required": [
+        "enabled",
+        "id",
+        "name",
+        "managedNamespace",
+        "controlEndpoint",
+        "image",
+        "computerImage",
+        "resources",
+        "computerResources",
+        "storageClass",
+        "storageRequest",
+        "savedMount"
       ]
     },
     "database": {
