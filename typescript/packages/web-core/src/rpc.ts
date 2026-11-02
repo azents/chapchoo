@@ -7,6 +7,7 @@ import {
   InstallationClient,
   AccountGrantsClient,
   DisplayDefaultsClient,
+  AdminWorkspacesClient,
 } from "@chapchoo/rpc-client/accounts";
 import { Metadata, credentials } from "@grpc/grpc-js";
 import {
@@ -36,6 +37,7 @@ export interface BackendClients {
   installation: InstallationClient;
   accountGrants: AccountGrantsClient;
   displayDefaults: DisplayDefaultsClient;
+  adminWorkspaces: AdminWorkspacesClient;
   close(): void;
 }
 
@@ -77,6 +79,11 @@ export function createBackend(config: WebConfig): BackendClients {
     options,
   );
   const teams = new TeamManagementClient(endpoint.host, security, options);
+  const adminWorkspaces = new AdminWorkspacesClient(
+    endpoint.host,
+    security,
+    options,
+  );
   const invitations = new InvitationManagementClient(
     endpoint.host,
     security,
@@ -102,6 +109,7 @@ export function createBackend(config: WebConfig): BackendClients {
     personalPreferences,
     accountLifecycle,
     teams,
+    adminWorkspaces,
     invitations,
     installation,
     accountGrants,
@@ -115,6 +123,7 @@ export function createBackend(config: WebConfig): BackendClients {
       personalPreferences.close();
       accountLifecycle.close();
       teams.close();
+      adminWorkspaces.close();
       invitations.close();
       installation.close();
       accountGrants.close();

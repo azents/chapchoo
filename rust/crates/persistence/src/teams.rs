@@ -224,8 +224,8 @@ struct IdRow {
     id: String,
 }
 
-const TEAM_COLUMNS: &str = "SELECT id,CAST(kind AS TEXT) AS kind,name,handle,owner_user_id,created_at FROM teams WHERE id=?";
-const INVITATION_COLUMNS: &str = "SELECT i.id,i.team_id,t.name AS team_name,t.handle AS team_handle,i.recipient_delivery_email,i.invited_by,CAST(i.status AS TEXT) AS status,i.created_at,i.processed_at FROM invitations i JOIN teams t ON t.id=i.team_id";
+const TEAM_COLUMNS: &str = "SELECT id,CAST(kind AS TEXT) AS kind,name,handle,owner_user_id,created_at FROM teams WHERE id=? AND deletion_requested_at IS NULL";
+const INVITATION_COLUMNS: &str = "SELECT i.id,i.team_id,t.name AS team_name,t.handle AS team_handle,i.recipient_delivery_email,i.invited_by,CAST(i.status AS TEXT) AS status,i.created_at,i.processed_at FROM invitations i JOIN teams t ON t.id=i.team_id AND t.deletion_requested_at IS NULL";
 
 fn conflict(error: diesel::result::Error) -> StoreError {
     match error {
@@ -308,11 +308,33 @@ impl Store {
         create: &CreateTeam,
         now: i64,
     ) -> Result<TeamSummary, StoreError> {
+        self.create_team_scoped(actor, create, now, false).await
+    }
+
+    pub async fn create_admin_workspace(
+        &self,
+        actor: &SecretDigest,
+        create: &CreateTeam,
+        now: i64,
+    ) -> Result<TeamSummary, StoreError> {
+        self.create_team_scoped(actor, create, now, true).await
+    }
+
+    async fn create_team_scoped(
+        &self,
+        actor: &SecretDigest,
+        create: &CreateTeam,
+        now: i64,
+        admin: bool,
+    ) -> Result<TeamSummary, StoreError> {
         required(&create.id)?;
         required(&create.name)?;
         required(&create.handle)?;
         operation!(self, |connection, dialect| {
             let user = authenticate!(connection, dialect, actor, now);
+            if admin && !user.is_admin {
+                return Err(StoreError::Forbidden);
+            }
             diesel::sql_query(dialect.query("INSERT INTO teams(id,kind,name,handle,owner_user_id,created_at) VALUES(?,'COLLABORATIVE',?,?,?,?)"))
                 .bind::<Text, _>(&create.id)
                 .bind::<Text, _>(&create.name)
@@ -355,9 +377,29 @@ impl Store {
         actor: &SecretDigest,
         now: i64,
     ) -> Result<Vec<TeamSummary>, StoreError> {
+        self.teams_scoped(actor, now, false).await
+    }
+
+    pub async fn admin_workspaces(
+        &self,
+        actor: &SecretDigest,
+        now: i64,
+    ) -> Result<Vec<TeamSummary>, StoreError> {
+        self.teams_scoped(actor, now, true).await
+    }
+
+    async fn teams_scoped(
+        &self,
+        actor: &SecretDigest,
+        now: i64,
+        admin: bool,
+    ) -> Result<Vec<TeamSummary>, StoreError> {
         operation!(self, |connection, dialect| {
             let user = authenticate!(connection, dialect, actor, now);
-            let rows = diesel::sql_query(dialect.query("SELECT t.id,CAST(t.kind AS TEXT) AS kind,t.name,t.handle,t.owner_user_id,t.created_at,CAST(m.role AS TEXT) AS caller_stored_role FROM teams t JOIN memberships m ON m.team_id=t.id WHERE m.user_id=? ORDER BY t.created_at,t.id"))
+            if admin && !user.is_admin {
+                return Err(StoreError::Forbidden);
+            }
+            let rows = diesel::sql_query(dialect.query("SELECT t.id,CAST(t.kind AS TEXT) AS kind,t.name,t.handle,t.owner_user_id,t.created_at,CAST(m.role AS TEXT) AS caller_stored_role FROM teams t JOIN memberships m ON m.team_id=t.id WHERE m.user_id=? AND t.deletion_requested_at IS NULL ORDER BY t.created_at,t.id"))
                 .bind::<Text, _>(&user.id).load::<TeamMembershipRow>(connection).await?;
             rows.into_iter()
                 .map(|row| {
@@ -700,6 +742,13 @@ impl Store {
             if target_user_id == team.owner_user_id || target.role()? != MembershipRole::Member {
                 return Err(StoreError::Forbidden);
             }
+            crate::agent_cleanup::delete_team_agents!(
+                connection,
+                dialect,
+                &team.id,
+                Some(target_user_id),
+                now
+            );
             diesel::sql_query(
                 dialect.query("DELETE FROM memberships WHERE team_id=? AND user_id=?"),
             )
@@ -725,6 +774,13 @@ impl Store {
             if role == TeamRole::Owner {
                 return Err(StoreError::OwnerTransferRequired);
             }
+            crate::agent_cleanup::delete_team_agents!(
+                connection,
+                dialect,
+                &team.id,
+                Some(user.id.as_str()),
+                now
+            );
             diesel::sql_query(
                 dialect.query("DELETE FROM memberships WHERE team_id=? AND user_id=?"),
             )
@@ -747,11 +803,18 @@ impl Store {
             let team = team!(connection, dialect, team_id);
             require_owner(caller!(connection, dialect, team, &user.id))?;
             team.collaborative()?;
-            diesel::sql_query(dialect.query("DELETE FROM teams WHERE id=?"))
+            crate::agent_cleanup::delete_team_agents!(connection, dialect, &team.id, None, now);
+            diesel::sql_query(dialect.query("UPDATE teams SET deletion_requested_at=? WHERE id=?"))
+                .bind::<BigInt, _>(now)
+                .bind::<Text, _>(&team.id)
+                .execute(connection)
+                .await?;
+            diesel::sql_query(dialect.query("DELETE FROM invitations WHERE team_id=?"))
                 .bind::<Text, _>(&team.id)
                 .execute(connection)
                 .await?;
             Ok(())
-        })
+        })?;
+        self.collect_deleted_teams().await
     }
 }

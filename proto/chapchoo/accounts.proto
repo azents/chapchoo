@@ -43,6 +43,12 @@ service TeamManagement {
   rpc DeleteTeam(TeamRequest) returns (google.protobuf.Empty);
 }
 
+// Admin-only current-user workspace selection, not global Team inventory.
+service AdminWorkspaces {
+  rpc ListTeams(google.protobuf.Empty) returns (Teams);
+  rpc CreateTeam(CreateTeamRequest) returns (Team);
+}
+
 service InvitationManagement {
   rpc InviteMember(InviteMemberRequest) returns (Invitation);
   rpc ReceivedInvitations(google.protobuf.Empty) returns (Invitations);

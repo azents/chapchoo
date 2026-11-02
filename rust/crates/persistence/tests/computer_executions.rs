@@ -39,7 +39,7 @@ fn seed(
     let session = cipher.protect_latest("session", owner)?;
     let key = cipher.protect_latest("computer-provider:provider", provider)?;
     Ok(format!(
-        "BEGIN; INSERT INTO users(id,email_key,delivery_email,password_hash,created_at,language,time_zone,region) VALUES('user','fixture@example.invalid','fixture@example.invalid','synthetic',0,'en','UTC','en-US'); INSERT INTO auth_sessions(id,user_id,current_hash,recovery_nonce,recovery_ciphertext,created_at,rotated_at,expires_at) VALUES('session','user',{},{},{},0,0,{expiry}); INSERT INTO computer_providers(id,owner_kind,system_owner_id,name,provider_kind,can_create,can_start,can_stop,can_restart,created_at) VALUES('provider','SYSTEM','owner','Fixture','KUBERNETES',TRUE,TRUE,TRUE,TRUE,0); INSERT INTO provider_keys(provider_id,current_hash,issued_at,expires_at,current_request_id,recovery_nonce,recovery_ciphertext) VALUES('provider',{},0,{expiry},'key-request',{},{}); INSERT INTO control_instances(id,endpoint,renewed_at,expires_at) VALUES('control','http://127.0.0.1:1',0,{expiry}); INSERT INTO provider_connections(provider_id,control_id,connection_id,credential_hash,expires_at) VALUES('provider','control','connection',{}, {expiry}); COMMIT;",
+        "BEGIN; INSERT INTO users(id,email_key,delivery_email,password_hash,created_at,language,time_zone,region) VALUES('user','fixture@example.invalid','fixture@example.invalid','synthetic',0,'en','UTC','en-US'); INSERT INTO teams(id,kind,name,handle,owner_user_id,created_at) VALUES('personal','PERSONAL','Personal','personal','user',0); INSERT INTO memberships VALUES('personal','user','MEMBER'); INSERT INTO personal_contexts VALUES('user','personal'); INSERT INTO auth_sessions(id,user_id,current_hash,recovery_nonce,recovery_ciphertext,created_at,rotated_at,expires_at) VALUES('session','user',{},{},{},0,0,{expiry}); INSERT INTO computer_providers(id,owner_kind,system_owner_id,name,provider_kind,can_create,can_start,can_stop,can_restart,created_at) VALUES('provider','SYSTEM','owner','Fixture','KUBERNETES',TRUE,TRUE,TRUE,TRUE,0); INSERT INTO provider_keys(provider_id,current_hash,issued_at,expires_at,current_request_id,recovery_nonce,recovery_ciphertext) VALUES('provider',{},0,{expiry},'key-request',{},{}); INSERT INTO control_instances(id,endpoint,renewed_at,expires_at) VALUES('control','http://127.0.0.1:1',0,{expiry}); INSERT INTO provider_connections(provider_id,control_id,connection_id,credential_hash,expires_at) VALUES('provider','control','connection',{}, {expiry}); COMMIT;",
         binary(owner.digest().as_bytes()),
         binary(session.nonce()),
         binary(session.ciphertext()),
@@ -52,6 +52,7 @@ fn seed(
 fn creation(id: &str) -> CreateCloudAgent {
     CreateCloudAgent {
         agent_id: format!("agent-{id}"),
+        team_id: "personal".into(),
         computer_id: id.into(),
         request_id: format!("create-{id}"),
         provider_id: "provider".into(),

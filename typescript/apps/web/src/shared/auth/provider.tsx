@@ -1,6 +1,8 @@
 "use client";
 
 import { AuthenticationContext } from "@chapchoo/web-core/auth-context";
+import { useWindowEvent } from "@mantine/hooks";
+import { useEffect } from "react";
 import { trpc } from "@/shared/rpc/client";
 import type {
   IdentityState,
@@ -23,13 +25,28 @@ export function AuthProvider({
   children: ReactNode;
 }): ReactNode {
   const utils = trpc.useUtils();
+  useWindowEvent("focus", () => {
+    if (initial.type === "LOADED") {
+      void utils.auth.identity.invalidate();
+    }
+  });
   const identity = trpc.auth.identity.useQuery(void 0, {
-    enabled: initial.type === "LOADED" && initial.data !== null,
+    enabled: initial.type === "LOADED",
     ...(initial.type === "LOADED" ? { initialData: initial.data } : {}),
     retry: false,
     refetchOnMount: false,
-    refetchOnReconnect: false,
+    refetchOnReconnect: true,
+    refetchOnWindowFocus: true,
   });
+  useEffect(() => {
+    if (
+      initial.type === "LOADED" &&
+      identity.data &&
+      identity.data.id !== initial.data?.id
+    ) {
+      navigation.authenticated();
+    }
+  }, [initial, identity.data, navigation]);
   let state: IdentityState;
   if (identity.isError) {
     state = { type: "ERROR", reason: identity.error.data?.reason ?? null };

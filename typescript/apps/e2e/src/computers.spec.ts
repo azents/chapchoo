@@ -38,7 +38,7 @@ async function login(
     });
   await page.getByRole("button", { name: /^(Log in|Sign in)$/ }).click();
   await expect(
-    page.getByRole("heading", { name: /^(Your spaces|Signup links)$/ }),
+    page.getByRole("heading", { name: /^(Agents|Signup links)$/ }),
   ).toBeVisible();
 }
 async function fact(page: Page, label: string, value: string): Promise<void> {
@@ -74,6 +74,7 @@ test("owner manages one Computer while Admin observes independent cleanup invent
       assembly.administrator.password,
     );
     await owner.goto(`${assembly.generalUrl}/agents`);
+    const listUrl = owner.url();
     await owner
       .getByRole("textbox", { name: "Agent name", exact: true })
       .fill("Acceptance companion")
@@ -154,7 +155,7 @@ test("owner manages one Computer while Admin observes independent cleanup invent
       .getByRole("dialog")
       .getByRole("button", { name: "Confirm", exact: true })
       .click();
-    await expect(owner).toHaveURL(`${assembly.generalUrl}/agents`, {
+    await expect(owner).toHaveURL(listUrl, {
       timeout: 90_000,
     });
     await expect(

@@ -13,14 +13,18 @@ code_paths:
   - rust/crates/persistence/src/component_keys.rs
   - rust/crates/persistence/src/connector_keys.rs
   - rust/crates/persistence/src/computer_executions.rs
+  - rust/crates/persistence/src/agent_cleanup.rs
+  - rust/crates/persistence/src/delivery.rs
   - rust/crates/service/src/computers.rs
   - rust/crates/persistence/src/preparation.rs
   - rust/crates/persistence/migrations
   - rust/crates/persistence/tests/computer_schema.rs
   - rust/crates/persistence/tests/computers.rs
   - rust/crates/persistence/tests/computer_executions.rs
+  - rust/crates/persistence/tests/agent_teams.rs
+  - rust/crates/persistence/tests/agent_team_migration.rs
   - rust/crates/service/tests/computers.rs
-last_verified_at: 2026-11-02
+last_verified_at: 2026-11-03
 spec_version: 1
 ---
 
@@ -46,6 +50,7 @@ local sharing without implementing local Mac enrollment or execution.
 ```mermaid
 erDiagram
   users ||--o{ computers : owns
+  teams ||--o{ agents : contains
   computers ||--o{ agents : supplies
   users ||--o{ agent_creation_receipts : retains
   computer_providers ||--o{ computers : manages
@@ -73,11 +78,16 @@ erDiagram
   identity without a live-directory FK: historical evidence is not authority.
 - `agents`: owner and Computer-kind composite FK must match the Computer. A stored
   generated cloud-only Computer key is unique: cloud dedication is 1:1; LOCAL
-  associations do not acquire that uniqueness restriction. Names are not identity.
+  associations do not acquire that uniqueness restriction. Every Agent also has
+  one non-null `team_id` FK with `NO ACTION` deletion. The `(team_id,owner_user_id,id)`
+  index supports private per-team pagination. Team membership does not grant
+  another member access to this owner's Agent. Names are not identity.
 - `agent_creation_receipts`: `(owner, Request ID)` PK, payload fingerprint and
   a unique assigned Agent ID. Assigned Agent ID deliberately has no live-Agent FK, so
   removal cannot erase deduplication. Owner account deletion cascades the receipt
   under the existing account policy; this adds no account-deletion feature.
+  The required original `team_id` is historical request context, deliberately
+  without a Team FK: cleanup of the original Team cannot erase the receipt.
 - `computer_executions`: ID, Computer FK, immutable initial-allocation
   classification, first confirmed-running time, creation and retirement evidence.
   Classification is fixed when reserving the candidate from lifecycle/history
@@ -119,6 +129,54 @@ Deleting a live Agent cannot cascade its Computer/PVC/session. Confirmed cleanup
 and retention collection must be driven by the owning verified lifecycle path;
 no automatic database-age deletion or operator cleanup endpoint is supplied here.
 
+## Team Scope and Context Deletion
+
+Migration 5 attaches every pre-existing Agent and creation receipt to its owner's
+existing `personal_contexts` Team, preserving Agent/Computer identities, names,
+execution and resource records. A missing mapping fails and rolls back the
+whole migration; rows are never dropped or assigned to an arbitrary Team.
+The down migration rejects erasing this required context.
+
+Team handles remain unique among live Teams, not hidden cleanup rows. Marking a
+Team deleted releases its public handle immediately, preserving prior deletion
+behavior while retaining its exact Team/Agent cleanup identities. Reusing the
+handle creates a new Team ID and cannot adopt old Agents or receipts.
+SQLite rebuilds the closed Team/membership/personal-context/invitation FK group
+inside the same preparation transaction, with foreign keys enabled and every
+existing row copied before replacement. PostgreSQL replaces the global handle
+constraint with the equivalent live-Team partial unique index. Both-engine
+tests verify row preservation and reuse while the deleted Team still has Agents;
+the PostgreSQL catalog verifies the unique-index predicate.
+
+Owner operations lock the selected Team and validate current membership before
+Provider and Computer admission. Detail, retry, lifecycle and force removal
+resolve the owned Agent's actual Team rather than trusting a caller's Team ID.
+Private dispatch revalidation also requires an existing Agent and membership;
+trusted Provider reconciliation remains independent of user membership.
+
+Team leave/kick records deleting intent for only the departing owner's cloud
+Agents, revokes Connector authority and then removes membership in the same
+transaction. Collaborative Team deletion applies that intent to all Agents.
+Context-driven Request IDs derive deterministically from the exact Team, Agent
+and predecessor request; an already-deleting Computer keeps its terminal request.
+All paths use the same never-prepared absence proof and resource cleanup gates
+as direct deletion. There is no automatic move to the personal Team.
+
+`teams.deletion_requested_at` marks an internal pending deletion. Such Teams are
+excluded from Team lookup/list/admission and invitation discovery immediately.
+The row is retained only because Agents still reference it; it is not an archive
+or restore capability. Empty pending Teams are physically deleted immediately.
+Confirmed cleanup, force removal and completed-inventory collection invoke Team
+collection in a separate transaction after Provider/Computer locks are released,
+preserving Team → sorted Providers → Computers lock order. Unresolved external
+resources have no TTL, including after their user's membership ends.
+
+Both-engine tests verify private same-Team isolation, cross-Team admission and
+receipt conflict, leave/kick/delete cleanup, background access after departure,
+concurrent creation versus Team deletion, preserving migration and atomic
+missing-map rollback. The migrated PostgreSQL catalog verifies the required
+`agents.team_id` and its non-cascading Team FK.
+
 ## Operations and Permission Boundary
 
 Every owner read/mutation executes within the existing complete DB operation and
@@ -130,11 +188,12 @@ that proof. Existing Provider ownership cannot be overwritten by another owner.
 This verifier neither generates configuration credentials nor treats the
 installation encryption root as authentication.
 
-Cloud creation locks the current owner, checks its owner-scoped creation receipt,
+Cloud creation locks the current owner and selected Team, checks membership and
+its owner-scoped creation receipt,
 then validates an authorized currently connected creation-capable Provider and
 writes the receipt, Computer/running intent and Agent atomically. Exact replay
 returns its assigned Agent/current state even if Provider connectivity has since
-changed. Reuse with changed canonical name/Provider payload rejects. Replay after
+changed. Reuse with a changed Team or canonical name/Provider payload rejects. Replay after
 Agent removal returns removed, never a fresh allocation. External provisioning is
 outside this transaction.
 
@@ -151,8 +210,8 @@ Debug for owner verifier/proof, private rows, drafts and projections is redacted
 
 ## Current Lifecycle Admission and Provider Credentials
 
-Power requests compare the expected current Request ID under User, Provider and
-Computer locks. An exact current request/fingerprint returns current progress;
+Power requests compare the expected current Request ID under User, Team, Provider
+and Computer locks. An exact current request/fingerprint returns current progress;
 changed payload or a stale predecessor rejects. Running/stopped evidence must
 come from the current eligible Provider connection and match the current execution.
 An older connection's facts remain last-known information but yield unknown

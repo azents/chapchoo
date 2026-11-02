@@ -51,12 +51,8 @@ export function useWorkspaceContainer({
   const [submission, setSubmission] = useState<Submission>({ type: "READY" });
   const busy = useRef(false);
   const enabled = auth.state.type === "AUTHENTICATED";
-  const contexts = trpc.teams.list.useQuery(void 0, {
-    ...(initial.type === "HOME" ? initialQuery(initial.contexts) : {}),
-    enabled,
-    retry: false,
-  });
   const received = trpc.invitations.received.useQuery(void 0, {
+    ...(initial.type === "INVITATIONS" ? initialQuery(initial.received) : {}),
     enabled,
     retry: false,
   });
@@ -89,10 +85,6 @@ export function useWorkspaceContainer({
       utils.invitations.invalidate(),
     ]);
   }
-  const create = trpc.teams.create.useMutation({
-    retry: false,
-    onError: (error) => fail(error.data?.reason ?? null),
-  });
   const update = trpc.teams.update.useMutation({
     retry: false,
     onError: (error) => fail(error.data?.reason ?? null),
@@ -129,7 +121,7 @@ export function useWorkspaceContainer({
     setSubmission({ type: "ERROR", message: accountError(reason, copy) });
     void invalidate();
   }
-  const queryError = teamId ? (team.error ?? members.error) : contexts.error;
+  const queryError = teamId ? (team.error ?? members.error) : received.error;
   let state: WorkspaceProps["state"];
   if (auth.state.type === "ERROR") {
     state = { type: "ERROR", message: accountError(auth.state.reason, copy) };
@@ -140,7 +132,7 @@ export function useWorkspaceContainer({
     };
   } else if (
     auth.state.type !== "AUTHENTICATED" ||
-    (!teamId && !contexts.data) ||
+    (!teamId && !received.data) ||
     (teamId && !team.data) ||
     (collaborative && !members.data)
   ) {
@@ -150,12 +142,6 @@ export function useWorkspaceContainer({
       type: "LOADED",
       data: {
         identity: auth.state.user.email,
-        contexts: (contexts.data?.items ?? []).map((item) => ({
-          id: item.id,
-          name: item.name,
-          personal: item.kind === teamKind.personal,
-          role: role(item.callerRole),
-        })),
         received: (received.data?.items ?? [])
           .filter((item) => item.status === invitationStatus.pending)
           .map((item) => ({
@@ -263,14 +249,6 @@ export function useWorkspaceContainer({
         : canManage && invitations.isPending
           ? { type: "LOADING" }
           : { type: "LOADED", data: null },
-      contexts: contexts.isError
-        ? {
-            type: "ERROR",
-            message: accountError(contexts.error.data?.reason ?? null, copy),
-          }
-        : contexts.isPending
-          ? { type: "LOADING" }
-          : { type: "LOADED", data: null },
     },
     submission,
     ...(auth.state.type === "AUTHENTICATED"
@@ -283,16 +261,6 @@ export function useWorkspaceContainer({
     onName: setName,
     onHandle: setHandle,
     onInviteEmail: setInviteEmail,
-    onCreate: () => {
-      void execute(async () => {
-        const result = await create.mutateAsync({ name, handle });
-        setName("");
-        setHandle("");
-        window.location.assign(
-          `${basePath}/teams/${encodeURIComponent(result.id)}`,
-        );
-      });
-    },
     onRename: () => {
       void execute(async () => {
         await update.mutateAsync({

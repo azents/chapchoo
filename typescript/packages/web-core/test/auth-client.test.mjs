@@ -300,6 +300,15 @@ void test("actual Computer tRPC failures withdraw identity and scoped caches wit
 });
 
 void test("Admin policy invalidates only its own protected session or lost administrator identity", async () => {
+  for (const path of ["workspaces.list", "workspaces.create"]) {
+    for (const reason of [
+      "DOMAIN_REASON_INVALID_SESSION",
+      "DOMAIN_REASON_PERMISSION_DENIED",
+    ]) {
+      assert.equal(invalidatesSession(reason, path, "admin"), true);
+      assert.equal(invalidatesSession(reason, path, "general"), false);
+    }
+  }
   assert.equal(
     invalidatesSession(
       "DOMAIN_REASON_INVALID_SESSION",
@@ -352,7 +361,7 @@ void test("Admin policy invalidates only its own protected session or lost admin
   const mutation = cache.getMutationCache().build(cache, {
     mutationFn: () =>
       Promise.reject(
-        failure("resetGrants.revoke", "DOMAIN_REASON_INVALID_SESSION"),
+        failure("workspaces.create", "DOMAIN_REASON_PERMISSION_DENIED"),
       ),
   });
   await assert.rejects(mutation.execute(void 0));

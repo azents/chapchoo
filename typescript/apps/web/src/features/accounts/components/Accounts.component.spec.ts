@@ -1,6 +1,21 @@
 import { expect, test } from "@playwright/test";
 import messages from "../../../../messages/en-US.json" with { type: "json" };
 
+test("destructive Team confirmations disclose the affected Agents and Computer data", async ({
+  page,
+}) => {
+  for (const [story, warning] of [
+    ["leave-confirmation", messages.accounts.leaveAgentWarning],
+    ["remove-confirmation", messages.accounts.removeAgentWarning],
+    ["delete-pending", messages.accounts.deleteWarning],
+  ] as const) {
+    await page.goto(
+      `/iframe.html?id=accounts-workspace--${story}&viewMode=story`,
+    );
+    await expect(page.getByRole("dialog")).toContainText(warning);
+  }
+});
+
 test("login keeps its server-selected character during form re-renders", async ({
   page,
 }) => {
@@ -20,23 +35,25 @@ test("login keeps its server-selected character during form re-renders", async (
   await expect(page.locator('img[src*="/design-assets/"]')).toHaveCount(1);
 });
 
-test("supplementary invitation failure preserves primary contexts and actions", async ({
+test("the invitations destination presents the received invitations and their actions", async ({
   page,
 }) => {
   await page.goto(
-    "/iframe.html?id=accounts-workspace--supplementary-unavailable&viewMode=story",
+    "/iframe.html?id=accounts-workspace--received-invitations&viewMode=story",
   );
   await expect(
-    page.getByRole("heading", { name: "Your spaces", exact: true }),
-  ).toBeVisible();
-  await expect(
     page
-      .getByRole("main")
-      .getByRole("link", { name: "Personal space", exact: true }),
+      .getByRole("heading", {
+        name: messages.accounts.receivedInvitations,
+        exact: true,
+      })
+      .first(),
   ).toBeVisible();
-  await expect(page.getByRole("alert")).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Create team", exact: true }),
+    page.getByRole("main").getByText("Engineering", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: messages.accounts.accept, exact: true }),
   ).toBeVisible();
 });
 

@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./WorkspaceChrome": "./src/WorkspaceChrome.tsx",
+    "./AppNavigation": "./src/AppNavigation.tsx",
+    "./WorkspaceSelector": "./src/WorkspaceSelector.tsx",
+    "./AccountSettings": "./src/AccountSettings.tsx",
     "./displayFormatting": "./src/displayFormatting.ts",
     "./DisplaySettings": "./src/DisplaySettings.tsx",
     "./PageFailure": "./src/PageFailure.tsx",

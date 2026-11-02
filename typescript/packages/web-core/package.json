@@ -4,6 +4,14 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./workspace": {
+      "types": "./dist/workspace.d.ts",
+      "default": "./dist/workspace.js"
+    },
+    "./shell-messages": {
+      "types": "./dist/shell-messages.d.ts",
+      "default": "./dist/shell-messages.js"
+    },
     "./computer-messages": {
       "types": "./dist/computer-messages.d.ts",
       "default": "./dist/computer-messages.js"

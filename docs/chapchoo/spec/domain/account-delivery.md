@@ -21,7 +21,7 @@ code_paths:
   - .github/workflows/build-binary.yaml
   - .github/workflows/snapshot.yaml
   - scripts/publish-snapshot.py
-last_verified_at: 2026-11-02
+last_verified_at: 2026-11-03
 spec_version: 1
 ---
 
@@ -67,8 +67,11 @@ are runtime-only. The public Next custom server accepts only its exact mount
 boundary, then dispatches the mount-relative request to Next without editing
 generated HTML or JavaScript.
 
-Child environment is an allowlist of runtime/locale/CA settings and the selected
-web URL/listener/backend configuration. It excludes database/root/setup/AWS
+Child environment is an allowlist of runtime/locale/CA settings, the selected
+web URL/listener/backend configuration and explicitly configured peer public web
+URL for navigation. The peer URL is optional, validated and never supplies an API
+destination; an absent peer is not inferred. An Admin child receives no General
+backend target. It excludes database/root/setup/AWS
 credentials, Node preloads and TLS-verification disabling. Each child uses the
 absolute bundled Node path and its own process group. Admission waits for every
 selected backend and each owned web child's Ready banner plus HTTP health.
@@ -87,11 +90,11 @@ it does not assert rollback of already committed work.
 
 ## Assembly and images
 
-The account acceptance Assembly uses the public `serve --groups client,admin,control`
-selection and one explicit loopback RPC listener. General/Admin web listeners
-remain independent and receive their own explicit backend URLs, both intentionally
-pointing to that combined fixture listener. Secondary-user seeding uses the same
-current Client/Admin endpoint. Its private SWC cache is owned by the fixture;
+The account acceptance Assembly uses separate public `serve --groups client,control`
+and `serve --groups admin` processes and loopback RPC listeners. General/Admin web
+listeners receive only their corresponding explicit backend URL, so a missing
+Admin-only contract cannot be hidden by a combined union. Secondary-user seeding
+uses the separate current Client/Admin endpoints. Its private SWC cache is owned by the fixture;
 Next build receives tooling settings, not deployment backend/public configuration.
 
 `scripts/package-linux.py` accepts explicit built inputs; it neither builds nor
@@ -123,7 +126,8 @@ gRPC listener; Control has its own Service. Network peer 50053 is a separate
 internal-only listener/Service, never a public Ingress. One external PostgreSQL
 authority and preexisting Secret references are required.
 The chart does not create database/key Secrets or provision a database. Web
-configuration contains only selected listener/public/backend settings. Public URL
+configuration contains selected listener/public/backend settings and optional
+peer public web navigation metadata. Public URL
 paths directly determine Ingress and health paths; images contain no selected
 deployment path. Artifact execution, not a declaration, verifies portability.
 

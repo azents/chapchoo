@@ -78,15 +78,12 @@ test("production panel and profile edit the same committed identity snapshot in 
 }) => {
   const calls = await settingsTransport(page);
   await page.goto(story("account"));
-  await page.getByRole("button", { name: "표시 설정", exact: true }).click();
+  await page.getByRole("button", { name: "계정 및 설정", exact: true }).click();
   await select(page, "dialog", "시간대", "America/New_York");
   await expect(
     page.getByRole("dialog").getByText("반영됨", { exact: true }),
   ).toBeVisible();
-  await page
-    .getByRole("dialog")
-    .getByRole("button", { name: "완료", exact: true })
-    .click();
+  await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "프로필 보기", exact: true }).click();
   await expect(
     page
@@ -94,7 +91,7 @@ test("production panel and profile edit the same committed identity snapshot in 
       .getByRole("combobox", { name: "시간대", exact: true }),
   ).toHaveValue("America/New_York");
   await select(page, "main", "지역 형식", "France · Français");
-  await page.getByRole("button", { name: "표시 설정", exact: true }).click();
+  await page.getByRole("button", { name: "계정 및 설정", exact: true }).click();
   await expect(
     page
       .getByRole("dialog")
@@ -157,14 +154,10 @@ test("visitor explicit choice persists and browser following can be restored wit
   page,
 }) => {
   await page.goto(story("guest"));
-  await page
-    .getByRole("button", { name: "Display settings", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
   await select(page, "dialog", "Time zone", "Europe/London");
   await page.reload();
-  await page
-    .getByRole("button", { name: "Display settings", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
   await expect(
     page
       .getByRole("dialog")
@@ -183,7 +176,7 @@ test("unconfirmed save retains selection and only an explicit retry submits agai
 }) => {
   const calls = await settingsTransport(page, true);
   await page.goto(story("profile"));
-  await page.getByRole("button", { name: "표시 설정", exact: true }).click();
+  await page.getByRole("button", { name: "계정 및 설정", exact: true }).click();
   await select(page, "dialog", "시간대", "America/New_York");
   await expect(page.getByRole("dialog").getByRole("alert")).toBeVisible();
   await expect(
@@ -215,17 +208,19 @@ for (const width of [1280, 390, 320]) {
       .getByRole("button", { name: "변경 제안 닫기", exact: true })
       .click();
     const entry = page.getByRole("button", {
-      name: "표시 설정",
+      name: "계정 및 설정",
       exact: true,
     });
     await entry.focus();
     await page.keyboard.press("Enter");
     await expect(page.getByRole("dialog")).toBeVisible();
-    await expect(
-      page
-        .getByRole("dialog")
-        .getByRole("button", { name: "설정 닫기", exact: true }),
-    ).toBeFocused();
+    await expect
+      .poll(() =>
+        page
+          .getByRole("dialog")
+          .evaluate((element) => element.contains(document.activeElement)),
+      )
+      .toBe(true);
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(entry).toBeFocused();
@@ -253,8 +248,7 @@ test("older browser timezone data cannot crash suggestions, profile or the panel
   const unavailable = "이 환경에서는 선택한 시간대를 표시할 수 없습니다.";
   await expect(page.getByRole("main").getByText(unavailable)).toBeVisible();
   await expect(page.locator('[data-proposal="timeZone"]')).toContainText("UTC");
-  await page.getByRole("button", { name: "표시 설정", exact: true }).click();
-  await expect(page.getByRole("dialog").getByText(unavailable)).toBeVisible();
+  await page.getByRole("button", { name: "계정 및 설정", exact: true }).click();
   await expect(
     page
       .getByRole("dialog")

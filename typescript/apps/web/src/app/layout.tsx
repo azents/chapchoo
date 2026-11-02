@@ -11,8 +11,10 @@ import {
 } from "@chapchoo/web-core/color-mode";
 import { getLocale } from "next-intl/server";
 import { cookies } from "next/headers";
-import { getPublicConfig } from "@/config";
+import { getNavigationConfig, getPublicConfig } from "@/config";
 import { AppearanceProvider } from "@/shared/appearance/AppearanceProvider";
+import { NavigationProvider } from "@/shared/navigation/NavigationProvider";
+import { readNavigation } from "@/shared/navigation/server";
 import { DisplayProvider } from "@/shared/preferences/DisplayProvider";
 import { RpcProvider } from "@/shared/rpc/provider";
 import { readDisplay } from "@/shared/server/display";
@@ -52,6 +54,10 @@ export default async function RootLayout({
   const { publicBasePath } = getPublicConfig();
   const locale = await getLocale();
   const display = await readDisplay();
+  const navigation =
+    display.identity.type === "LOADED" && display.identity.data
+      ? await readNavigation()
+      : { type: "guest" as const };
   const store = await cookies();
   const initial = resolveServerColorMode(
     store.get(preferenceCookie)?.value,
@@ -82,7 +88,13 @@ export default async function RootLayout({
             initialIdentity={display.identity}
           >
             <DisplayProvider initial={display} basePath={publicBasePath}>
-              {children}
+              <NavigationProvider
+                adminUrl={getNavigationConfig().adminUrl}
+                initial={navigation}
+                basePath={publicBasePath}
+              >
+                {children}
+              </NavigationProvider>
             </DisplayProvider>
           </RpcProvider>
         </AppearanceProvider>

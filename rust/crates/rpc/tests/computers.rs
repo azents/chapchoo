@@ -91,6 +91,14 @@ fn domain_rpc_keeps_private_owner_authority_and_independent_admin_residual_inven
             .token;
         let user = account(&accounts, &admin, "user@example.invalid").await?;
         let foreign = account(&accounts, &admin, "foreign@example.invalid").await?;
+        let foreign_team = accounts
+            .list_teams(&foreign.digest(), AcceptanceTime::System.now()?)
+            .await?
+            .remove(0);
+        let team = accounts
+            .list_teams(&user.digest(), AcceptanceTime::System.now()?)
+            .await?
+            .remove(0);
         let app = Arc::new(ComputersService::new(store, Some(verifier)));
         assert!(
             app.register_control("https://control.example.invalid:50053")
@@ -151,6 +159,7 @@ fn domain_rpc_keeps_private_owner_authority_and_independent_admin_residual_inven
             Code::PermissionDenied
         );
         let creation = wire::CreateAgentRequest {
+            team_id: team.id.clone(),
             request_id: "create".into(),
             provider_id: "provider".into(),
             name: "Private Agent name".into(),
@@ -383,7 +392,13 @@ fn domain_rpc_keeps_private_owner_authority_and_independent_admin_residual_inven
         ));
         assert!(
             agents
-                .list(auth(wire::Page::default(), &foreign)?)
+                .list(auth(
+                    wire::AgentListRequest {
+                        team_id: foreign_team.id,
+                        page: Some(wire::Page::default()),
+                    },
+                    &foreign,
+                )?)
                 .await?
                 .into_inner()
                 .items
@@ -392,9 +407,12 @@ fn domain_rpc_keeps_private_owner_authority_and_independent_admin_residual_inven
         assert_eq!(
             agents
                 .list(auth(
-                    wire::Page {
-                        limit: 21,
-                        after: None
+                    wire::AgentListRequest {
+                        team_id: team.id,
+                        page: Some(wire::Page {
+                            limit: 21,
+                            after: None
+                        }),
                     },
                     &user
                 )?)

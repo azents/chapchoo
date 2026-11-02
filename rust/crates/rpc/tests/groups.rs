@@ -93,6 +93,22 @@ fn selectable_group_unions_deduplicate_shared_services_and_exclude_peers() -> Re
                 client.code() == Code::Unimplemented,
                 !groups.contains(ServiceGroup::Client)
             );
+            let workspace =
+                chapchoo_protocol::accounts::admin_workspaces_client::AdminWorkspacesClient::new(
+                    channel.clone(),
+                )
+                .list_teams(())
+                .await
+                .err()
+                .ok_or("Anonymous workspace request accepted")?;
+            assert_eq!(
+                workspace.code(),
+                if groups.contains(ServiceGroup::Admin) {
+                    Code::Unauthenticated
+                } else {
+                    Code::Unimplemented
+                }
+            );
             let provider = ProviderAuthenticationClient::new(channel.clone())
                 .check_connection(ProviderConnectionCheck::default())
                 .await

@@ -1,4 +1,4 @@
-import type { Member, Team } from "@chapchoo/web-core/browser";
+import type { Invitation, Member, Team } from "@chapchoo/web-core/browser";
 export type InitialWorkspace =
-  | { type: "HOME"; contexts: { items: Team[] } }
+  | { type: "INVITATIONS"; received: { items: Invitation[] } }
   | { type: "TEAM"; team: Team; members: { items: Member[] } };

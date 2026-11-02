@@ -77,6 +77,11 @@ async fn connector_process_exchanges_connects_and_observes_independently_of_prov
     let CreationOutcome::Present(agent) = app
         .create_cloud_agent(
             &user.token.digest(),
+            &accounts
+                .list_teams(&user.token.digest(), AcceptanceTime::System.now()?)
+                .await?
+                .remove(0)
+                .id,
             "create",
             "provider",
             "Fixture",

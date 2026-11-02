@@ -18,7 +18,8 @@ export function invalidatesSession(
     (path === "auth.identity" ||
       path === "auth.updateDisplay" ||
       path.startsWith("computers.") ||
-      path.startsWith("displayDefaults.")) &&
+      path.startsWith("displayDefaults.") ||
+      path.startsWith("workspaces.")) &&
     reason === "DOMAIN_REASON_PERMISSION_DENIED"
   )
     return true;
@@ -27,7 +28,9 @@ export function invalidatesSession(
     (path === "auth.identity" ||
       path === "auth.updateDisplay" ||
       path.startsWith("computers.") ||
-      (app === "admin" && path.startsWith("displayDefaults.")) ||
+      (app === "admin" &&
+        (path.startsWith("displayDefaults.") ||
+          path.startsWith("workspaces."))) ||
       (app === "general"
         ? path.startsWith("teams.") || path.startsWith("invitations.")
         : path.startsWith("signupGrants.") || path.startsWith("resetGrants.")))

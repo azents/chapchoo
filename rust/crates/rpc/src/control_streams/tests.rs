@@ -131,6 +131,11 @@ fn delayed_admission_cannot_displace_a_new_provider_or_connector() -> Result<(),
         let created = service
             .create_cloud_agent(
                 &user.digest(),
+                &accounts
+                    .list_teams(&user.digest(), AcceptanceTime::System.now()?)
+                    .await?
+                    .remove(0)
+                    .id,
                 "create",
                 "provider",
                 "Private fixture",

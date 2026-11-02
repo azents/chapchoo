@@ -13,7 +13,7 @@ code_paths:
   - rust/crates/service/src/computers.rs
   - rust/crates/rpc/tests/computers.rs
   - typescript/packages/rpc-client/src/generated/computers.ts
-last_verified_at: 2026-11-02
+last_verified_at: 2026-11-03
 spec_version: 1
 ---
 
@@ -26,12 +26,18 @@ Every generated message and outcome oneof has field-free Debug output.
 
 ## Owner operations
 
-- Agents.Create accepts a Request ID, Provider ID and name. The atomic creation
+- Agents.Create accepts a required Team ID, Request ID, Provider ID and name. The atomic creation
   receipt returns the original Agent on replay or its removed-creation outcome;
   replay after removal never creates a new Agent/Computer.
 - Agents.List/Get and Computers.Get expose only the authenticated owner's private
   Agent and dedicated Computer projection. Installation administrator status does
   not grant access to another user's private Agent detail.
+- Agents.List requires a Team ID and a nested bounded Page. It returns only the
+  caller's Agents in that current membership, including a personal Team. Agent
+  DTOs include their required Team ID. Detail and lifecycle admission require
+  current membership in the Agent's Team as well as individual ownership;
+  missing or inaccessible scopes return not-found. Creation Request ID reuse
+  across Teams conflicts rather than allocating or returning another context.
 - Computers.RequestLifecycle accepts Agent ID, Request ID, expected current
   Request ID and a typed Start/Stop/Restart/Delete action. Missing, unspecified,
   unknown and Create action values are rejected. This accepts durable desired

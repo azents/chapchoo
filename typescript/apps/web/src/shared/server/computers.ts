@@ -15,14 +15,14 @@ const id = z.string().min(1).max(128);
 const page = z.object({ after: id.optional() }).strict();
 export const computersRouter = router({
   list: procedure
-    .input(page)
+    .input(page.extend({ teamId: id }))
     .query(({ ctx, input }) =>
       attempt(() =>
         ctx.session.authenticated(async (token) =>
           agents(
             await call(
               ctx.backend.agents.list.bind(ctx.backend.agents),
-              { after: input.after, limit: 20 },
+              { teamId: input.teamId, page: { after: input.after, limit: 20 } },
               token,
             ),
           ),
@@ -67,6 +67,7 @@ export const computersRouter = router({
         .object({
           requestId: id,
           providerId: id,
+          teamId: id,
           name: z.string().trim().min(1).max(120),
         })
         .strict(),

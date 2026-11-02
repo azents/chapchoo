@@ -240,6 +240,7 @@ class ChartContractsTest(unittest.TestCase):
     ) -> None:
         documents = self.render()
         for role, port, prefix in (("general", 3003, ""), ("admin", 3004, "/admin")):
+            peer = "admin" if role == "general" else "general"
             deployment = self.component(documents, f"{role}-web")
             container = deployment["spec"]["template"]["spec"]["containers"][0]
             self.assertEqual(container["args"], ["serve", "--groups", "--web", role])
@@ -249,7 +250,11 @@ class ChartContractsTest(unittest.TestCase):
                     f"CHAPCHOO_{role.upper()}_WEB_URL",
                     f"CHAPCHOO_{role.upper()}_WEB_LISTEN",
                     f"CHAPCHOO_{role.upper()}_BACKEND_URL",
+                    f"CHAPCHOO_{peer.upper()}_WEB_URL",
                 },
+            )
+            self.assertNotIn(
+                f"CHAPCHOO_{peer.upper()}_BACKEND_URL", self.environment(container)
             )
             for entry in container["env"]:
                 self.assertNotIn("valueFrom", entry)

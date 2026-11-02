@@ -8,10 +8,6 @@ import type { ReactElement } from "react";
 
 const data: WorkspaceData = {
   identity: "owner@example.com",
-  contexts: [
-    { id: "personal", name: "Personal", personal: true, role: "OWNER" },
-    { id: "design", name: "Design team", personal: false, role: "OWNER" },
-  ],
   received: [
     {
       id: "invite",
@@ -63,7 +59,6 @@ const meta = {
     onName: () => {},
     onHandle: () => {},
     onInviteEmail: () => {},
-    onCreate: () => {},
     onRename: () => {},
     onInvite: () => {},
     onInvitation: () => {},
@@ -76,7 +71,7 @@ const meta = {
 } satisfies Meta<typeof Workspace>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-export const ContextsAndInvitation: Story = {};
+export const ReceivedInvitations: Story = {};
 function RecoveryFixture(props: WorkspaceProps): ReactElement {
   const [state, setState] = useState<WorkspaceProps["state"]>({
     type: "ERROR",
@@ -157,6 +152,25 @@ export const DeletePending: Story = {
     submission: { type: "PENDING" },
   },
 };
+export const LeaveConfirmation: Story = {
+  args: {
+    state: {
+      type: "LOADED",
+      data: { ...data, team: { ...team, role: "MEMBER" } },
+    },
+    confirmation: { type: "LEAVE", label: "Design team" },
+  },
+};
+export const RemoveConfirmation: Story = {
+  args: {
+    state: { type: "LOADED", data: { ...data, team } },
+    confirmation: {
+      type: "REMOVE",
+      userId: "member",
+      label: "member@example.com",
+    },
+  },
+};
 export const PermissionChanged: Story = {
   args: {
     state: {
@@ -177,7 +191,6 @@ export const Korean: Story = { args: { copy: korean.accounts } };
 export const SupplementaryUnavailable: Story = {
   args: {
     supplementary: {
-      contexts: { type: "LOADED", data: null },
       received: { type: "ERROR", message: messages.accounts.genericError },
       invitations: { type: "LOADED", data: null },
     },

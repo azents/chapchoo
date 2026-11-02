@@ -36,20 +36,21 @@ fn exercise_constraints(
     };
     for user in ["a", "b"] {
         connection.batch_execute(&format!("INSERT INTO users(id,email_key,delivery_email,password_hash,created_at,language,time_zone,region) VALUES('user-{user}','{user}@example.invalid','{user}@example.invalid','synthetic',0,'en','UTC','en-US')"))?;
+        connection.batch_execute(&format!("BEGIN; INSERT INTO teams(id,kind,name,handle,owner_user_id,created_at) VALUES('personal-{user}','PERSONAL','Personal','personal-{user}','user-{user}',0); INSERT INTO memberships VALUES('personal-{user}','user-{user}','MEMBER'); INSERT INTO personal_contexts VALUES('user-{user}','personal-{user}'); COMMIT;"))?;
     }
     for (id, kind) in [("cloud", "CLOUD"), ("local", "LOCAL")] {
         connection.batch_execute(&format!("INSERT INTO computers(id,owner_user_id,kind,provider_id,desired_state,current_request_id,current_payload_hash,current_action,current_phase,created_at) VALUES('{id}','user-a','{kind}','provider-a','RUNNING','request-{id}',{hash},'CREATE','ACCEPTED',0)"))?;
     }
-    connection.batch_execute("INSERT INTO agents(id,owner_user_id,name,computer_id,computer_kind,created_at) VALUES('cloud-agent','user-a','Cloud','cloud','CLOUD',0)")?;
-    assert!(connection.batch_execute("INSERT INTO agents(id,owner_user_id,name,computer_id,computer_kind,created_at) VALUES('cloud-duplicate','user-a','Duplicate','cloud','CLOUD',0)").is_err());
+    connection.batch_execute("INSERT INTO agents(id,owner_user_id,team_id,name,computer_id,computer_kind,created_at) VALUES('cloud-agent','user-a','personal-a','Cloud','cloud','CLOUD',0)")?;
+    assert!(connection.batch_execute("INSERT INTO agents(id,owner_user_id,team_id,name,computer_id,computer_kind,created_at) VALUES('cloud-duplicate','user-a','personal-a','Duplicate','cloud','CLOUD',0)").is_err());
     for id in ["local-one", "local-two"] {
-        connection.batch_execute(&format!("INSERT INTO agents(id,owner_user_id,name,computer_id,computer_kind,created_at) VALUES('{id}','user-a','Local','local','LOCAL',0)"))?;
+        connection.batch_execute(&format!("INSERT INTO agents(id,owner_user_id,team_id,name,computer_id,computer_kind,created_at) VALUES('{id}','user-a','personal-a','Local','local','LOCAL',0)"))?;
     }
-    assert!(connection.batch_execute("INSERT INTO agents(id,owner_user_id,name,computer_id,computer_kind,created_at) VALUES('foreign-owner','user-b','Foreign','local','LOCAL',0)").is_err());
-    assert!(connection.batch_execute("INSERT INTO agents(id,owner_user_id,name,computer_id,computer_kind,created_at) VALUES('wrong-kind','user-a','Wrong','cloud','LOCAL',0)").is_err());
-    connection.batch_execute(&format!("INSERT INTO agent_creation_receipts(owner_user_id,request_id,payload_hash,assigned_agent_id) VALUES('user-a','creation',{hash},'cloud-agent'); DELETE FROM agents WHERE id='cloud-agent'"))?;
+    assert!(connection.batch_execute("INSERT INTO agents(id,owner_user_id,team_id,name,computer_id,computer_kind,created_at) VALUES('foreign-owner','user-b','personal-b','Foreign','local','LOCAL',0)").is_err());
+    assert!(connection.batch_execute("INSERT INTO agents(id,owner_user_id,team_id,name,computer_id,computer_kind,created_at) VALUES('wrong-kind','user-a','personal-a','Wrong','cloud','LOCAL',0)").is_err());
+    connection.batch_execute(&format!("INSERT INTO agent_creation_receipts(owner_user_id,team_id,request_id,payload_hash,assigned_agent_id) VALUES('user-a','personal-a','creation',{hash},'cloud-agent'); DELETE FROM agents WHERE id='cloud-agent'"))?;
     // The receipt remains unique after its Agent disappears; it is not a live FK.
-    assert!(connection.batch_execute(&format!("INSERT INTO agent_creation_receipts(owner_user_id,request_id,payload_hash,assigned_agent_id) VALUES('user-a','creation',{hash},'replacement-agent')")).is_err());
+    assert!(connection.batch_execute(&format!("INSERT INTO agent_creation_receipts(owner_user_id,team_id,request_id,payload_hash,assigned_agent_id) VALUES('user-a','personal-a','creation',{hash},'replacement-agent')")).is_err());
     connection.batch_execute("INSERT INTO computer_executions(id,computer_id,initial_allocation,created_at) VALUES('execution-a','cloud',FALSE,0); UPDATE computers SET current_execution_id='execution-a' WHERE id='cloud'")?;
     assert!(connection.batch_execute(&format!("INSERT INTO connector_sessions(id,computer_id,execution_id,initial_request_id,initial_payload_hash,initial_hash,revoked_at,created_at) VALUES('wrong-session','local','execution-a','initial',{hash},{hash},0,0)")).is_err());
     connection.batch_execute(&format!("INSERT INTO connector_sessions(id,computer_id,execution_id,initial_request_id,initial_payload_hash,initial_hash,revoked_at,created_at) VALUES('bound-session','cloud','execution-a','initial',{hash},{hash},0,0)"))?;

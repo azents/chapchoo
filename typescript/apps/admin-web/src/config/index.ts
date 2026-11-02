@@ -1,5 +1,9 @@
 /* eslint-disable check-file/no-index -- This defining module is the required environment boundary, not a barrel. */
-import { publicWebConfig, webConfig } from "@chapchoo/web-core/config";
+import {
+  publicWebConfig,
+  webConfig,
+  webDestination,
+} from "@chapchoo/web-core/config";
 import type { WebConfig } from "@chapchoo/web-core/config";
 
 // Next configuration executes in plain Node before its server-only aliases exist.
@@ -24,6 +28,10 @@ export function getListener(): { host: string; port: number } {
     throw new Error("Invalid web listener port");
   }
   return { host: config.bindHost, port };
+}
+
+export function getNavigationConfig(): { generalUrl: string | null } {
+  return { generalUrl: webDestination(process.env.CHAPCHOO_GENERAL_WEB_URL) };
 }
 
 /** Safe server-to-provider values; private endpoints stay on the Node side. */

@@ -1,0 +1,26 @@
+.trigger,
+.choice {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  padding: var(--mantine-spacing-sm);
+  border-radius: var(--mantine-radius-md);
+}
+.trigger:hover,
+.choice:hover,
+.choice[data-selected] {
+  background: var(--chapchoo-color-selected);
+}
+.label {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.trailing {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+.dropdown {
+  max-height: min(32rem, calc(100dvh - 8rem));
+  overflow-y: auto;
+}

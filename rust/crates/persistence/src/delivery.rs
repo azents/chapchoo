@@ -114,10 +114,28 @@ impl Store {
                 .await
                 .optional()?
                 .ok_or(StoreError::NotFound)?;
-            if let Some(user) = user
-                && (computer.owner_user_id != user.id || computer.agent_removed_at.is_some())
-            {
-                return Err(StoreError::NotFound);
+            if let Some(user) = user {
+                if computer.owner_user_id != user.id || computer.agent_removed_at.is_some() {
+                    return Err(StoreError::NotFound);
+                }
+                #[derive(diesel::QueryableByName)]
+                struct OwnedAgent {
+                    #[diesel(sql_type = Text)]
+                    id: String,
+                }
+                // Scope removal holds the Computer lock before removing access.
+                // This read must not take a Team lock after the Computer lock.
+                let agent = diesel::sql_query(dialect.query(
+                    "SELECT a.id FROM agents a JOIN teams t ON t.id=a.team_id AND t.deletion_requested_at IS NULL JOIN memberships m ON m.team_id=a.team_id AND m.user_id=a.owner_user_id WHERE a.computer_id=? AND a.owner_user_id=?",
+                ))
+                    .bind::<Text, _>(scope.computer_id)
+                    .bind::<Text, _>(&user.id)
+                    .get_result::<OwnedAgent>(connection)
+                    .await
+                    .optional()?;
+                if agent.is_none_or(|agent| agent.id.is_empty()) {
+                    return Err(StoreError::NotFound);
+                }
             }
             if computer.current_request_id != scope.request_id
                 || computer.cleanup_completed_at.is_some()

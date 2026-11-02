@@ -252,6 +252,7 @@ pub struct WebConfig {
     pub listen: SocketAddr,
     pub public_url: url::Url,
     pub backend_url: url::Url,
+    pub peer_web_url: Option<url::Url>,
     pub node: PathBuf,
     pub script: PathBuf,
     pub directory: PathBuf,
@@ -287,6 +288,24 @@ fn endpoint(value: &str, name: &'static str) -> Result<url::Url, ConfigError> {
         || url.password().is_some()
         || url.query().is_some()
         || url.fragment().is_some()
+    {
+        return Err(ConfigError::Variable(name));
+    }
+    Ok(url)
+}
+
+fn navigation_endpoint(value: &str, name: &'static str) -> Result<url::Url, ConfigError> {
+    let url = endpoint(value, name)?;
+    let loopback = match url.host() {
+        Some(url::Host::Domain("localhost")) => true,
+        Some(url::Host::Ipv4(address)) => address.is_loopback(),
+        Some(url::Host::Ipv6(address)) => address.is_loopback(),
+        _ => false,
+    };
+    let path = url.path().strip_suffix('/').unwrap_or(url.path());
+    if (url.scheme() == "http" && !loopback)
+        || path.contains("//")
+        || path.contains([';', '%', '\\'])
     {
         return Err(ConfigError::Variable(name));
     }
@@ -337,6 +356,7 @@ impl WebConfig {
             listen,
             public_url,
             backend_url,
+            peer_web_url: None,
             node: root.join("runtime/bin/node"),
             script: directory.join("server.mjs"),
             directory,
@@ -389,6 +409,17 @@ fn web_environment(
     ] {
         environment.push((OsString::from(name), OsString::from(value)));
     }
+    environment.push((
+        OsString::from(config.app.public_variable()),
+        OsString::from(config.public_url.as_str()),
+    ));
+    if let Some(peer) = &config.peer_web_url {
+        let name = match config.app {
+            WebApp::General => WebApp::Admin.public_variable(),
+            WebApp::Admin => WebApp::General.public_variable(),
+        };
+        environment.push((OsString::from(name), OsString::from(peer.as_str())));
+    }
     environment
 }
 
@@ -420,7 +451,14 @@ pub fn web_configs(options: &ServeOptions) -> Result<Vec<WebConfig>, AppError> {
         }
         let public = optional(app.public_variable())?.unwrap_or_else(|| public_default.to_owned());
         let backend = required(app.backend_variable())?;
-        let config = WebConfig::parse(app, listen, &public, &backend, root)?;
+        let mut config = WebConfig::parse(app, listen, &public, &backend, root)?;
+        let peer_app = match app {
+            WebApp::General => WebApp::Admin,
+            WebApp::Admin => WebApp::General,
+        };
+        config.peer_web_url = optional(peer_app.public_variable())?
+            .map(|value| navigation_endpoint(&value, peer_app.public_variable()))
+            .transpose()?;
         if !config.node.is_file() || !config.script.is_file() {
             return Err(ConfigError::WebArtifacts.into());
         }
@@ -806,11 +844,16 @@ mod tests {
 
     #[test]
     fn web_environment_does_not_inherit_backend_or_preload_authority() -> Result<(), AppError> {
-        let config = web(
+        let mut config = web(
             "http://localhost:3003",
             "127.0.0.1:3003",
             "http://127.0.0.1:50051",
         )?;
+        config.app = WebApp::Admin;
+        config.peer_web_url = Some(navigation_endpoint(
+            "https://example.invalid/app",
+            WebApp::General.public_variable(),
+        )?);
         let parent = [
             ("PATH", "/usr/bin:/bin"),
             ("HOME", "/owned-home"),
@@ -818,6 +861,7 @@ mod tests {
             ("CHAPCHOO_POSTGRES_URL", "database-canary"),
             ("CHAPCHOO_SECRET_KEY", "key-canary"),
             ("CHAPCHOO_SETUP_PROOF", "proof-canary"),
+            ("CHAPCHOO_GENERAL_BACKEND_URL", "http://general-api.invalid"),
             ("AWS_SECRET_ACCESS_KEY", "aws-canary"),
             ("CHAPCHOO_SMTP_PASSWORD", "smtp-canary"),
             ("NODE_OPTIONS", "--require untrusted-preload"),
@@ -831,6 +875,7 @@ mod tests {
             "CHAPCHOO_POSTGRES_URL",
             "CHAPCHOO_SECRET_KEY",
             "CHAPCHOO_SETUP_PROOF",
+            "CHAPCHOO_GENERAL_BACKEND_URL",
             "AWS_SECRET_ACCESS_KEY",
             "CHAPCHOO_SMTP_PASSWORD",
             "NODE_OPTIONS",
@@ -848,6 +893,19 @@ mod tests {
             Some(&OsString::from("3003"))
         );
         assert!(environment.contains_key(OsStr::new("NODE_EXTRA_CA_CERTS")));
+        assert_eq!(
+            environment.get(OsStr::new("CHAPCHOO_GENERAL_WEB_URL")),
+            Some(&OsString::from("https://example.invalid/app"))
+        );
+        for value in [
+            "http://remote.invalid",
+            "https://example.invalid/a//b",
+            "https://example.invalid/%2f",
+            "https://example.invalid/a;b",
+            "https://user:secret@example.invalid",
+        ] {
+            assert!(navigation_endpoint(value, WebApp::General.public_variable()).is_err());
+        }
         Ok(())
     }
 

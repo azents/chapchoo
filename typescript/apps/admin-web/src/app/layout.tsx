@@ -11,8 +11,10 @@ import {
 } from "@chapchoo/web-core/color-mode";
 import { getLocale } from "next-intl/server";
 import { cookies } from "next/headers";
-import { getPublicConfig } from "@/config/index";
+import { getNavigationConfig, getPublicConfig } from "@/config/index";
 import { AppearanceProvider } from "@/shared/appearance/AppearanceProvider";
+import { NavigationProvider } from "@/shared/navigation/NavigationProvider";
+import { readNavigation } from "@/shared/navigation/server";
 import { DisplayProvider } from "@/shared/preferences/DisplayProvider";
 import { RpcProvider } from "@/shared/rpc/provider";
 import { readDisplay } from "@/shared/server/display";
@@ -51,6 +53,10 @@ export default async function RootLayout({
 }): Promise<ReactElement> {
   const locale = await getLocale();
   const display = await readDisplay();
+  const navigation =
+    display.identity.type === "LOADED" && display.identity.data
+      ? await readNavigation()
+      : { type: "guest" as const };
   const { publicBasePath } = getPublicConfig();
   const store = await cookies();
   const initial = resolveServerColorMode(
@@ -81,8 +87,14 @@ export default async function RootLayout({
             basePath={publicBasePath}
             initialIdentity={display.identity}
           >
-            <DisplayProvider initial={display} basePath={publicBasePath} admin>
-              {children}
+            <DisplayProvider initial={display} basePath={publicBasePath}>
+              <NavigationProvider
+                initial={navigation}
+                basePath={publicBasePath}
+                generalUrl={getNavigationConfig().generalUrl}
+              >
+                {children}
+              </NavigationProvider>
             </DisplayProvider>
           </RpcProvider>
         </AppearanceProvider>

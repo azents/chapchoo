@@ -53,9 +53,28 @@ async fn exercise(
     let mut account_grants = AccountGrantsClient::new(admin.clone());
     let mut account_lifecycle = AccountLifecycleClient::new(general.clone());
     let mut teams = TeamManagementClient::new(general.clone());
+    let mut workspaces = wire::admin_workspaces_client::AdminWorkspacesClient::new(admin.clone());
 
     let mut auth_general = AuthenticationClient::new(general.clone());
     let mut auth_admin = AuthenticationClient::new(admin.clone());
+    assert_reason(
+        &workspaces
+            .list_teams(())
+            .await
+            .err()
+            .ok_or("Anonymous workspace read")?,
+        Code::Unauthenticated,
+        "DOMAIN_REASON_INVALID_SESSION",
+    );
+    assert_reason(
+        &workspaces
+            .list_teams(authenticated((), "invalid-session")?)
+            .await
+            .err()
+            .ok_or("Invalid workspace credential")?,
+        Code::Unauthenticated,
+        "DOMAIN_REASON_INVALID_SESSION",
+    );
     assert!(installation.setup_status(()).await?.into_inner().available);
     let owner = installation
         .initialize(wire::InitializeRequest {
@@ -67,6 +86,40 @@ async fn exercise(
         .await?
         .into_inner();
     let owner_id = owner.user.as_ref().ok_or("Missing owner user")?.id.clone();
+    let personal = workspaces
+        .list_teams(authenticated((), &owner.token)?)
+        .await?
+        .into_inner();
+    assert_eq!(personal.items.len(), 1);
+    let created_workspace = workspaces
+        .create_team(authenticated(
+            wire::CreateTeamRequest {
+                name: "Admin-created workspace".into(),
+                handle: "admin-workspace".into(),
+            },
+            &owner.token,
+        )?)
+        .await?
+        .into_inner();
+    assert_eq!(created_workspace.owner_user_id, owner_id);
+    assert!(
+        teams
+            .list_teams(authenticated((), &owner.token)?)
+            .await?
+            .into_inner()
+            .items
+            .iter()
+            .any(|team| team.id == created_workspace.id)
+    );
+    assert_eq!(
+        wire::admin_workspaces_client::AdminWorkspacesClient::new(general.clone())
+            .list_teams(authenticated((), &owner.token)?)
+            .await
+            .err()
+            .ok_or("Admin workspace service exposed on Client")?
+            .code(),
+        Code::Unimplemented
+    );
     assert!(!installation.setup_status(()).await?.into_inner().available);
     assert!(auth_general.methods(()).await?.into_inner().password);
     assert!(!auth_admin.methods(()).await?.into_inner().email_code);
@@ -199,6 +252,30 @@ async fn exercise(
     );
     assert_eq!(owner_read?.into_inner().id, owner_id);
     assert_eq!(member_read?.into_inner().id, member_id);
+    assert_reason(
+        &workspaces
+            .list_teams(authenticated((), &member.token)?)
+            .await
+            .err()
+            .ok_or("Non-admin workspace read")?,
+        Code::PermissionDenied,
+        "DOMAIN_REASON_PERMISSION_DENIED",
+    );
+    assert_reason(
+        &workspaces
+            .create_team(authenticated(
+                wire::CreateTeamRequest {
+                    name: "Forbidden".into(),
+                    handle: "forbidden".into(),
+                },
+                &member.token,
+            )?)
+            .await
+            .err()
+            .ok_or("Non-admin workspace create")?,
+        Code::PermissionDenied,
+        "DOMAIN_REASON_PERMISSION_DENIED",
+    );
     assert_reason(
         &account_grants
             .list_signup_grants(authenticated(
@@ -367,6 +444,7 @@ async fn two_listeners_enforce_surfaces_credentials_and_typed_ingress() -> Resul
     let grants = adapter.account_grants_server();
     let defaults = adapter.display_defaults_server();
     let admin_preferences = adapter.personal_preferences_server();
+    let workspaces = adapter.admin_workspaces_server();
     let general_task = tokio::spawn(async move {
         Server::builder()
             .add_service(general_auth)
@@ -388,6 +466,7 @@ async fn two_listeners_enforce_surfaces_credentials_and_typed_ingress() -> Resul
             .add_service(installation)
             .add_service(grants)
             .add_service(defaults)
+            .add_service(workspaces)
             .serve_with_incoming_shutdown(TcpListenerStream::new(admin_listener), async {
                 match admin_stopped.await {
                     Ok(()) | Err(_) => {}

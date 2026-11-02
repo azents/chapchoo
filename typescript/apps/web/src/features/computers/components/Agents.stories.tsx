@@ -6,6 +6,7 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 
 const agent: AgentView = {
   id: "agent",
+  teamId: "team",
   name: "Research companion",
   computer: {
     intent: "running",
@@ -30,6 +31,7 @@ const agent: AgentView = {
 };
 const initial: InitialAgents = {
   type: "list",
+  teamId: "team",
   page: { items: [agent], nextAfter: null },
   after: "",
   identity: "owner@example.invalid",
@@ -37,6 +39,7 @@ const initial: InitialAgents = {
 };
 const detail: InitialAgents = {
   type: "detail",
+  teamId: agent.teamId,
   agent,
   identity: initial.identity,
   renderedAt: initial.renderedAt,

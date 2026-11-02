@@ -42,7 +42,7 @@ fn seed_sql(
         };
         sql.push_str(&format!(
             "INSERT INTO users(id,email_key,delivery_email,password_hash,is_admin,created_at,language,time_zone,region) VALUES('{user}','user{index}@example.invalid','User{index}@Example.Invalid','synthetic',{},0,'en','UTC','en-US');
-             INSERT INTO teams VALUES('{personal}','PERSONAL','Personal','{personal}','{user}',0);
+             INSERT INTO teams(id,kind,name,handle,owner_user_id,created_at) VALUES('{personal}','PERSONAL','Personal','{personal}','{user}',0);
              INSERT INTO memberships VALUES('{personal}','{user}','MEMBER');
              INSERT INTO personal_contexts VALUES('{user}','{personal}');
              INSERT INTO auth_sessions(id,user_id,current_hash,recovery_nonce,recovery_ciphertext,created_at,rotated_at,expires_at) VALUES('{session}','{user}',{},{},{},0,0,10000000);",
@@ -87,6 +87,30 @@ async fn exercise(store: Store, tokens: &[BearerSecret]) -> Result<(), TestError
     assert_eq!(created.kind, TeamKind::Collaborative);
     assert!(!store.current_identity(&owner, NOW).await?.is_admin);
     assert!(store.current_identity(&stranger, NOW).await?.is_admin);
+    assert_eq!(store.teams(&owner, NOW).await?.len(), 2);
+    let admin_contexts = store.admin_workspaces(&stranger, NOW).await?;
+    assert_eq!(admin_contexts.len(), 1);
+    assert_eq!(admin_contexts[0].id, "personal-3");
+    let admin_create = CreateTeam {
+        id: "admin-created".into(),
+        name: "Administrator's own Team".into(),
+        handle: "admin-created".into(),
+    };
+    assert!(matches!(
+        store.admin_workspaces(&owner, NOW).await,
+        Err(StoreError::Forbidden)
+    ));
+    assert!(matches!(
+        store
+            .create_admin_workspace(&owner, &admin_create, NOW)
+            .await,
+        Err(StoreError::Forbidden)
+    ));
+    let admin_team = store
+        .create_admin_workspace(&stranger, &admin_create, NOW)
+        .await?;
+    assert_eq!(admin_team.owner_user_id, "user-3");
+    assert_eq!(store.admin_workspaces(&stranger, NOW).await?.len(), 2);
     assert_eq!(store.teams(&owner, NOW).await?.len(), 2);
     assert!(matches!(
         store.team(&stranger, "team-a", NOW).await,

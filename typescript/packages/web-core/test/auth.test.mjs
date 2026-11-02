@@ -10,7 +10,7 @@ import {
   attempt,
   reportTransportFailure,
 } from "../dist/boundary.js";
-import { webConfig } from "../dist/config.js";
+import { webConfig, webDestination } from "../dist/config.js";
 import {
   cookiePolicy,
   readSessionCookie,
@@ -178,9 +178,36 @@ test("local HTTP is loopback-only independently of production build mode", () =>
   );
 });
 
-test("cookie attributes, app isolation, actual expiry cap and matching deletion", () => {
+test("peer navigation uses only an explicit safe public web destination", () => {
+  assert.equal(webDestination(undefined), null);
+  assert.equal(webDestination(""), null);
+  assert.equal(
+    webDestination("https://example.invalid/app/"),
+    "https://example.invalid/app",
+  );
+  assert.equal(
+    webDestination("http://127.0.0.1:3003/app"),
+    "http://127.0.0.1:3003/app",
+  );
+  for (const value of [
+    "not-a-url",
+    "/admin",
+    "http://example.invalid",
+    "javascript:alert(1)",
+    "https://user:canary@example.invalid",
+    "https://example.invalid?token=canary",
+    "https://example.invalid#fragment",
+    "https://example.invalid/a//b",
+    "https://example.invalid/%2f",
+    "https://example.invalid/a;b",
+  ]) {
+    assert.throws(() => webDestination(value), /Invalid web/);
+  }
+});
+
+test("same-host apps share one root cookie, expiry cap and matching deletion", () => {
   const admin = cookiePolicy(config("admin", "http://localhost:3004"));
-  assert.notEqual(policy.name, admin.name);
+  assert.deepEqual(policy, admin);
   const local = sessionCookie(policy, A, NOW + 90 * 86_400_000, NOW);
   assert.match(local, /HttpOnly; SameSite=Lax; Max-Age=2592000/);
   assert.doesNotMatch(local, /Secure/);
@@ -191,11 +218,10 @@ test("cookie attributes, app isolation, actual expiry cap and matching deletion"
   const adminSecure = cookiePolicy(
     config("admin", "https://example.com/admin"),
   );
-  assert.equal(adminSecure.path, "/admin");
-  assert.equal(adminSecure.sameSite, "Lax");
+  assert.deepEqual(adminSecure, generalSecure);
   assert.match(
     clearSessionCookie(adminSecure),
-    /Path=\/admin; HttpOnly; SameSite=Lax; Secure; Max-Age=0/,
+    /Path=\/; HttpOnly; SameSite=None; Secure; Max-Age=0/,
   );
   assert.equal(readSessionCookie(`${policy.name}=${A}`, policy), A);
   assert.equal(
@@ -273,6 +299,24 @@ test("committed renewal cookie survives ordinary business rejection", async () =
     { reason: "DOMAIN_REASON_PERMISSION_DENIED" },
   );
   assert.match(context.outgoingCookie(), new RegExp(`=${B};`));
+});
+
+test("Admin denial publishes rotation without dispatching or destroying General authentication", async () => {
+  let dispatches = 0;
+  const admin = requestSession(async () => session(), A, true);
+  await assert.rejects(
+    admin.authenticated(async () => {
+      dispatches += 1;
+    }),
+    { reason: "DOMAIN_REASON_PERMISSION_DENIED" },
+  );
+  assert.equal(dispatches, 0);
+  assert.match(admin.outgoingCookie(), new RegExp(`=${B};`));
+  assert.doesNotMatch(admin.outgoingCookie(), /Max-Age=0/);
+  assert.deepEqual(
+    await readOnlyIdentity({ identity: async () => user }, B, false),
+    user,
+  );
 });
 
 test("post-renewal invalidation overrides the cookie candidate", async () => {

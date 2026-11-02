@@ -3757,6 +3757,73 @@ export const TeamManagementClient = makeGenericClientConstructor(
   serviceName: string;
 };
 
+/** Admin-only current-user workspace selection, not global Team inventory. */
+export type AdminWorkspacesService = typeof AdminWorkspacesService;
+export const AdminWorkspacesService = {
+  listTeams: {
+    path: "/chapchoo.accounts.AdminWorkspaces/ListTeams" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
+    requestDeserialize: (value: Buffer): Empty => Empty.decode(value),
+    responseSerialize: (value: Teams): Buffer => Buffer.from(Teams.encode(value).finish()),
+    responseDeserialize: (value: Buffer): Teams => Teams.decode(value),
+  },
+  createTeam: {
+    path: "/chapchoo.accounts.AdminWorkspaces/CreateTeam" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: CreateTeamRequest): Buffer => Buffer.from(CreateTeamRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): CreateTeamRequest => CreateTeamRequest.decode(value),
+    responseSerialize: (value: Team): Buffer => Buffer.from(Team.encode(value).finish()),
+    responseDeserialize: (value: Buffer): Team => Team.decode(value),
+  },
+} as const;
+
+export interface AdminWorkspacesServer extends UntypedServiceImplementation {
+  listTeams: handleUnaryCall<Empty, Teams>;
+  createTeam: handleUnaryCall<CreateTeamRequest, Team>;
+}
+
+export interface AdminWorkspacesClient extends Client {
+  listTeams(request: Empty, callback: (error: ServiceError | null, response: Teams) => void): ClientUnaryCall;
+  listTeams(
+    request: Empty,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: Teams) => void,
+  ): ClientUnaryCall;
+  listTeams(
+    request: Empty,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: Teams) => void,
+  ): ClientUnaryCall;
+  createTeam(
+    request: CreateTeamRequest,
+    callback: (error: ServiceError | null, response: Team) => void,
+  ): ClientUnaryCall;
+  createTeam(
+    request: CreateTeamRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: Team) => void,
+  ): ClientUnaryCall;
+  createTeam(
+    request: CreateTeamRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: Team) => void,
+  ): ClientUnaryCall;
+}
+
+export const AdminWorkspacesClient = makeGenericClientConstructor(
+  AdminWorkspacesService,
+  "chapchoo.accounts.AdminWorkspaces",
+) as unknown as {
+  new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): AdminWorkspacesClient;
+  service: typeof AdminWorkspacesService;
+  serviceName: string;
+};
+
 export type InvitationManagementService = typeof InvitationManagementService;
 export const InvitationManagementService = {
   inviteMember: {

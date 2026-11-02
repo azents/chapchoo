@@ -14,6 +14,8 @@ mod account_lifecycle;
 use account_lifecycle::AccountLifecycleAdapter;
 mod teams;
 use teams::TeamsAdapter;
+mod admin_workspaces;
+use admin_workspaces::AdminWorkspacesAdapter;
 mod invitations;
 use invitations::InvitationsAdapter;
 mod installation;
@@ -85,6 +87,14 @@ impl AccountServices {
     }
     pub fn teams_server(&self) -> wire::team_management_server::TeamManagementServer<TeamsAdapter> {
         wire::team_management_server::TeamManagementServer::new(TeamsAdapter {
+            context: self.context.clone(),
+        })
+        .max_decoding_message_size(64 * 1024)
+    }
+    pub fn admin_workspaces_server(
+        &self,
+    ) -> wire::admin_workspaces_server::AdminWorkspacesServer<AdminWorkspacesAdapter> {
+        wire::admin_workspaces_server::AdminWorkspacesServer::new(AdminWorkspacesAdapter {
             context: self.context.clone(),
         })
         .max_decoding_message_size(64 * 1024)

@@ -28,7 +28,7 @@ that native compiler requirement; do not relax shared-directory permissions.
 `CHAPCHOO_E2E_PACKAGE_ROOT` selects an absolute extracted source-free bundle.
 Package mode never falls back to source builds or host Node. The test substrate
 prepares a private PostgreSQL database using the official product CLI and launches
-the Client/Admin/Control union and both webs with root mounts. Source mode uses the same public
+separate Client+Control and Admin API processes and both webs with root mounts. Source mode uses the same public
 contracts with `/app` and `/admin` mounts and production web listeners.
 
 ## Ownership and lifecycle
@@ -46,13 +46,17 @@ contracts with `/app` and `/admin` mounts and production web listeners.
 
 ## Retained critical journeys
 
-1. Administrator setup and issued signup reach the member's personal context;
-   inspect session-cookie attributes without exposing credential values.
+1. Administrator setup, Admin workspace creation and General/Administration
+   navigation use separate API listeners; issued signup reaches the member's personal context;
+   inspect the real document/CSS-arrival boundary, server-rendered primary
+   content, shared General/Admin login and session-cookie attributes without
+   exposing credentials. A committed profile preference survives reload.
 2. Team creation, invitation acceptance, ownership transfer and former-owner
    leave preserve membership/authority boundaries.
 3. Password reset does not authenticate its recipient, revokes the old context,
    allows the new password, and retains ordinary-user exclusion from Admin while
-   General access remains available.
+   General access remains available. Admin logout withdraws the same browser's
+   General session without signing out independent browser contexts.
 4. Create one personal Agent, inspect SSR Computer detail and independent Connector
    connectivity, stop/start with one original PVC identity, inspect read-only
    operator resources, then confirm normal removal and retained cleanup evidence.
@@ -90,10 +94,10 @@ pnpm --filter @chapchoo/admin-web test:components
 
 ## Evidence privacy
 
-Intentional screenshots capture credential-free desktop inventory/personal/team
-surfaces under ignored `artifacts/`. They refuse proof-bearing URLs, password
-fields and visible issued links, wait for loaded product fonts and record safe
-render metadata. They are not an exhaustive UI QA matrix.
+These journeys do not automatically capture screenshots. Visual review is a
+separate owning-UI validation using real app components, settled product fonts,
+explicit viewport/theme/locale/DPR metadata and credential-free states. It does
+not add a screenshot/copy matrix to the product journeys.
 
 The reporter drops raw test/child output, stack traces and attachments. Runner
 artifacts remain under a verified owned 0700 parent, with bounded attachment

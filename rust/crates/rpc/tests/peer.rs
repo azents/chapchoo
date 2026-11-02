@@ -154,6 +154,11 @@ fn memory_and_tcp_peer_handlers_revalidate_domain_and_exact_reconciler_authority
         let CreationOutcome::Present(agent) = app
             .create_cloud_agent(
                 &user.token.digest(),
+                &accounts
+                    .list_teams(&user.token.digest(), AcceptanceTime::System.now()?)
+                    .await?
+                    .remove(0)
+                    .id,
                 "create",
                 "provider",
                 "Fixture",

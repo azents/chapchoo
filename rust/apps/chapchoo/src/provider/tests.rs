@@ -51,6 +51,10 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
             None,
         )
         .await?;
+    let team = accounts
+        .list_teams(&user.token.digest(), AcceptanceTime::System.now()?)
+        .await?
+        .remove(0);
     let listener = TcpListener::bind("127.0.0.1:0").await?;
     let endpoint = format!("http://{}", listener.local_addr()?);
     let peer_listener = TcpListener::bind("127.0.0.1:0").await?;
@@ -95,6 +99,7 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
     let deletions = Arc::new(Mutex::new(BTreeMap::<String, usize>::new()));
     let deleted = deletions.clone();
     let current_owner = user.token.digest();
+    let current_team = team.id.clone();
     let service = tower::service_fn(move |request: HttpRequest<Body>| {
         requests.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let objects = objects.clone();
@@ -104,6 +109,7 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
         let finalizer = finalizer.clone();
         let deletions = deletions.clone();
         let actor = current_owner.clone();
+        let team_id = current_team.clone();
         async move {
             let method = request.method().clone();
             let path = request.uri().path().to_owned();
@@ -123,7 +129,7 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
                 let kind = body["kind"].as_str().unwrap_or("").to_owned();
                 if kind == "Secret" || kind == "Pod" {
                     let agents = database
-                        .agents(&actor, None, 20, AcceptanceTime::System)
+                        .agents(&actor, &team_id, None, 20, AcceptanceTime::System)
                         .await;
                     let valid =
                         if let Ok(agents) = agents {
@@ -308,6 +314,7 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
     let CreationOutcome::Present(agent) = app
         .create_cloud_agent(
             &user.token.digest(),
+            &team.id,
             "create",
             "provider",
             "Fixture",
@@ -324,6 +331,7 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
     let CreationOutcome::Present(unstarted) = app
         .create_cloud_agent(
             &user.token.digest(),
+            &team.id,
             "never-started",
             "provider",
             "Unstarted fixture",
