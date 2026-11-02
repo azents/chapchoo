@@ -65,7 +65,7 @@ impl ControlPlane {
         let connections = self.connections.clone();
         let delivery = self.delivery.clone();
         async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(2));
+            let mut interval = tokio::time::interval(Duration::from_secs(15));
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             loop {
                 tokio::select! {

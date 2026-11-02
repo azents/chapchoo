@@ -143,6 +143,7 @@ function WorkspaceContent(props: WorkspaceContentProps): ReactNode {
       title={team?.name ?? c.contexts}
       identityLabel={identity}
       navigation={[
+        { key: "agents", label: c.agents, href: `${props.basePath}/agents` },
         {
           key: "home",
           label: c.contexts,

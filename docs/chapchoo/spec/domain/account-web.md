@@ -11,7 +11,7 @@ code_paths:
   - typescript/packages/web-core
   - typescript/apps/e2e
   - testenv/chapchoo
-last_verified_at: 2026-10-31
+last_verified_at: 2026-11-02
 spec_version: 1
 ---
 
@@ -25,6 +25,12 @@ password reset, personal/team context, membership and invitation operations.
 Admin provides initial setup, administrator login and signup/reset-link
 inventories with issuance/revocation. Team ownership does not grant server-wide
 administration. Backend operations remain the authority for current permissions.
+
+Personal Agent/Computer routes and read-only Admin Provider/resource inventory
+reuse these same presentation/session boundaries. Their server-derived power,
+connectivity, confirmation and bounded observation behavior is specified in
+[Agent Computer web contracts](computer-web.md). Existing account/team routes
+remain intact, with navigation links to the new surfaces.
 
 Both apps use the same workspace UI theme, semantic CSS variables, provider,
 form controls, application shell and confirmation/feedback primitives. The
@@ -347,13 +353,13 @@ access/refresh pair. HttpOnly cookies persist for at most 30 days and never beyo
 the returned backend expiry. Names distinguish the apps because ports do not
 isolate cookies:
 
-| App/transport | Name | Path / SameSite |
-| --- | --- | --- |
-| General local HTTP | chapchoo-general-session | root / Lax |
-| General HTTPS | __Host-Chapchoo-General | root / None |
-| Admin local HTTP | chapchoo-admin-session | configured public base path / Lax |
-| Admin HTTPS at root | __Host-Chapchoo-Admin | root / Lax |
-| Admin HTTPS with prefix | __Secure-Chapchoo-Admin | configured public base path / Lax |
+| App/transport           | Name                     | Path / SameSite                   |
+| ----------------------- | ------------------------ | --------------------------------- |
+| General local HTTP      | chapchoo-general-session | root / Lax                        |
+| General HTTPS           | __Host-Chapchoo-General  | root / None                       |
+| Admin local HTTP        | chapchoo-admin-session   | configured public base path / Lax |
+| Admin HTTPS at root     | __Host-Chapchoo-Admin    | root / Lax                        |
+| Admin HTTPS with prefix | __Secure-Chapchoo-Admin  | configured public base path / Lax |
 
 HTTPS cookies have Secure; permitted local HTTP cookies do not. Both modes are
 host-only and HttpOnly. Deletion uses the same name/path/Secure/SameSite policy.
@@ -384,7 +390,8 @@ cross-tab logout registry or change the backend credential protocol.
 ## Configuration and failure boundaries
 
 Typed app configuration reads the public URL, bind host and backend URL in its
-configuration boundary. Local HTTP requires localhost/parsed loopback public
+configuration boundary. Each app requires an explicit backend URL; it does not
+fall back to a fixed port, local backend or the other application's target. Local HTTP requires localhost/parsed loopback public
 host and loopback listener; supported local start/dev commands explicitly bind
 127.0.0.1. Remote public origins require HTTPS. Host/Forwarded headers do not
 replace configured origin trust. Backend HTTPS uses grpc-js's CA/hostname

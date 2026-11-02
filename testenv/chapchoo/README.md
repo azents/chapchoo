@@ -9,7 +9,7 @@ implementations and does not own product assertions or an E2E command.
   owned cleanup.
 - `processes`: bounded commands, event-driven readiness and owned process groups.
 - `config`: explicit child environment allowlist and installed-package prerequisite.
-- `seed`: secondary registered-user setup through public Auth/Admin/General RPC.
+- `seed`: account prerequisites through generated public domain RPC.
 - `safety`: randomized fixture identities and secret-safe diagnostics.
 
 From the repository root:
@@ -39,3 +39,12 @@ prove deployment-neutral artifacts. Required tools and stale/incomplete package
 inputs fail honestly, not as skipped tests. Finite readiness/cleanup budgets are
 preserved. Support tests remain Docker/server/browser-free; the E2E integrator
 owns assembled execution and its evidence.
+
+Computer acceptance uses the explicit Client/Admin/Control union and independent
+web targets. `startComputerProvider()` adds an actual scoped Computer Provider
+and a private loopback synthetic Kubernetes HTTP service. Standalone Pod
+simulation launches the actual execution-bound Computer Connector, retains
+original UID identities and emits terminal deletion observations only after that
+owned Connector exits. It creates no cluster, PVC filesystem or CNI; those remain
+separate live gates. Setup uses ordinary CLI/RPC, never SQL. Compiler cache is
+private to each fixture; secure temporary ancestors remain a host prerequisite.

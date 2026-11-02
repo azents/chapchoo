@@ -127,7 +127,7 @@ export default class SafeReporter implements Reporter {
     if (this.privacyFailed) {
       process.stderr.write("Failure: private runner artifact cleanup failed\n");
     }
-    process.stdout.write(`Accounts acceptance: ${status}\n`);
+    process.stdout.write(`Chapchoo acceptance: ${status}\n`);
     return { status };
   }
   async onExit(): Promise<void> {

@@ -1,0 +1,171 @@
+import { test as base, expect } from "@playwright/test";
+import { Assembly } from "@chapchoo/testenv/assembly";
+import type { Page } from "@playwright/test";
+
+const test = base.extend<object, { assembly: Assembly }>({
+  assembly: [
+    async ({ playwright }, use) => {
+      void playwright;
+      const assembly = await Assembly.create();
+      try {
+        await use(assembly);
+      } finally {
+        await assembly.close();
+      }
+    },
+    { scope: "worker", timeout: 660_000 },
+  ],
+});
+
+async function login(
+  page: Page,
+  url: string,
+  email: string,
+  password: string,
+): Promise<void> {
+  await page.goto(`${url}/login`);
+  await page
+    .getByRole("textbox", { name: /^(Email address|Email)$/ })
+    .fill(email)
+    .catch(() => {
+      throw new Error("Computer acceptance login email field unavailable");
+    });
+  await page
+    .getByLabel(/^Password\s*\*?$/)
+    .fill(password)
+    .catch(() => {
+      throw new Error("Computer acceptance login password field unavailable");
+    });
+  await page.getByRole("button", { name: /^(Log in|Sign in)$/ }).click();
+  await expect(
+    page.getByRole("heading", { name: /^(Your spaces|Signup links)$/ }),
+  ).toBeVisible();
+}
+async function fact(page: Page, label: string, value: string): Promise<void> {
+  await expect(
+    page
+      .getByText(label, { exact: true })
+      .locator("..")
+      .getByText(value, { exact: true }),
+  ).toBeVisible({ timeout: 90_000 });
+}
+
+test("owner manages one Computer while Admin observes independent cleanup inventory", async ({
+  assembly,
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  await assembly.initializeAdministrator();
+  await assembly.startComputerProvider();
+  const context = await browser.newContext({
+    locale: "en-US",
+    timezoneId: "Asia/Seoul",
+  });
+  const operator = await browser.newContext({
+    locale: "en-US",
+    timezoneId: "Asia/Seoul",
+  });
+  try {
+    const owner = await context.newPage();
+    await login(
+      owner,
+      assembly.generalUrl,
+      assembly.administrator.email,
+      assembly.administrator.password,
+    );
+    await owner.goto(`${assembly.generalUrl}/agents`);
+    await owner
+      .getByRole("textbox", { name: "Agent name", exact: true })
+      .fill("Acceptance companion")
+      .catch(() => {
+        throw new Error("Computer acceptance create form unavailable");
+      });
+    await owner
+      .getByRole("combobox", { name: "Computer Provider", exact: true })
+      .click();
+    await owner
+      .getByRole("option", { name: "Acceptance Kubernetes", exact: true })
+      .click({ timeout: 90_000 });
+    await owner
+      .getByRole("button", { name: "Create Agent", exact: true })
+      .click();
+    await expect(
+      owner.getByRole("heading", { name: "Acceptance companion", exact: true }),
+    ).toBeVisible();
+    await fact(owner, "Computer power", "Running");
+    await fact(owner, "Computer Connector", "Connected");
+    const detailUrl = owner.url();
+    const document = await context.newPage();
+    await document.route("**/*", (route) =>
+      route.request().resourceType() === "script"
+        ? route.abort()
+        : route.continue(),
+    );
+    await document.goto(detailUrl);
+    await expect(
+      document.getByRole("heading", {
+        name: "Acceptance companion",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await document.close();
+
+    await owner.getByRole("button", { name: "Stop", exact: true }).click();
+    await owner
+      .getByRole("dialog")
+      .getByRole("button", { name: "Confirm", exact: true })
+      .click();
+    await fact(owner, "Computer power", "Stopped");
+    await owner.getByRole("button", { name: "Start", exact: true }).click();
+    await fact(owner, "Computer power", "Running");
+    await fact(owner, "Computer Connector", "Connected");
+    expect(assembly.savedAllocations).toBe(1);
+
+    const admin = await operator.newPage();
+    await login(
+      admin,
+      assembly.adminUrl,
+      assembly.administrator.email,
+      assembly.administrator.password,
+    );
+    await admin.goto(`${assembly.adminUrl}/computer-providers`);
+    await admin
+      .getByRole("link", { name: "Acceptance Kubernetes", exact: true })
+      .click();
+    await expect(
+      admin.getByRole("main").getByText("Read-only inventory", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      admin.getByText("Acceptance companion", { exact: true }),
+    ).toHaveCount(0);
+    const inventoryUrl = admin.url();
+    await admin
+      .getByRole("link", { name: "Managed resources", exact: true })
+      .click();
+    await expect(
+      admin.getByRole("heading", { name: "Managed resources", exact: true }),
+    ).toBeVisible();
+    await expect(admin.getByText(/^UID: /).first()).toBeVisible();
+    await admin.goto(inventoryUrl);
+    await owner
+      .getByRole("button", { name: "Delete Agent", exact: true })
+      .click();
+    await owner
+      .getByRole("dialog")
+      .getByRole("button", { name: "Confirm", exact: true })
+      .click();
+    await expect(owner).toHaveURL(`${assembly.generalUrl}/agents`, {
+      timeout: 90_000,
+    });
+    await expect(
+      owner.getByText("No Agents yet.", { exact: true }),
+    ).toBeVisible();
+    await expect(admin.getByText(/Cleanup confirmed/)).toBeVisible({
+      timeout: 90_000,
+    });
+    expect(assembly.savedAllocations).toBe(1);
+  } finally {
+    await context.close();
+    await operator.close();
+  }
+});

@@ -1,0 +1,103 @@
+{{- if .Values.computerProvider.enabled }}
+{{- $provider := .Values.computerProvider }}
+{{- $name := include "chapchoo.fullname" . }}
+{{- $namespace := required "computerProvider.managedNamespace must explicitly select an existing managed namespace" $provider.managedNamespace }}
+{{- $context := dict "root" . "component" "computer-provider" }}
+{{- $endpoint := default (printf "http://%s-control-grpc:50051" $name) $provider.controlEndpoint }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}-provider
+  namespace: {{ .Release.Namespace }}
+automountServiceAccountToken: true
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}-computer
+  namespace: {{ $namespace }}
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}-provider
+  namespace: {{ $namespace }}
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, watch, create, delete]
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims, secrets]
+    verbs: [get, create, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}-provider
+  namespace: {{ $namespace }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}-provider
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $name }}-provider
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}-computer-provider
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "chapchoo.labels" $context | fromJson | toYaml | nindent 4 }}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels:
+      {{- include "chapchoo.selector" $context | fromJson | toYaml | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "chapchoo.selector" $context | fromJson | toYaml | nindent 8 }}
+    spec:
+      serviceAccountName: {{ $name }}-provider
+      automountServiceAccountToken: true
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: computer-provider
+          image: {{ include "chapchoo.image" $provider.image | quote }}
+          imagePullPolicy: {{ $provider.image.pullPolicy }}
+          args: [computer-provider, --in-cluster]
+          env:
+            - {name: CHAPCHOO_CONTROL_ENDPOINT, value: {{ $endpoint | quote }}}
+            - {name: CHAPCHOO_PROVIDER_ID, value: {{ $provider.id | quote }}}
+            - {name: CHAPCHOO_PROVIDER_NAME, value: {{ $provider.name | quote }}}
+            - {name: CHAPCHOO_KUBERNETES_NAMESPACE, value: {{ $namespace | quote }}}
+            - name: CHAPCHOO_PROVIDER_OWNER_TOKEN
+              valueFrom:
+                secretKeyRef: {name: {{ .Values.systemOwner.existingSecret }}, key: {{ .Values.systemOwner.key }}}
+            - {name: CHAPCHOO_COMPUTER_IMAGE, value: {{ include "chapchoo.image" $provider.computerImage | quote }}}
+            - {name: CHAPCHOO_COMPUTER_IMAGE_PULL_POLICY, value: {{ $provider.computerImage.pullPolicy | quote }}}
+            - {name: CHAPCHOO_COMPUTER_SERVICE_ACCOUNT, value: {{ printf "%s-computer" $name | quote }}}
+            {{- if $provider.storageClass }}
+            - {name: CHAPCHOO_COMPUTER_STORAGE_CLASS, value: {{ $provider.storageClass | quote }}}
+            {{- end }}
+            - {name: CHAPCHOO_COMPUTER_STORAGE_REQUEST, value: {{ $provider.storageRequest | quote }}}
+            - {name: CHAPCHOO_COMPUTER_SAVED_MOUNT, value: {{ $provider.savedMount | quote }}}
+            - {name: CHAPCHOO_COMPUTER_CPU_REQUEST, value: {{ required "Computer CPU request is required" $provider.computerResources.requests.cpu | quote }}}
+            - {name: CHAPCHOO_COMPUTER_MEMORY_REQUEST, value: {{ required "Computer memory request is required" $provider.computerResources.requests.memory | quote }}}
+            - {name: CHAPCHOO_COMPUTER_CPU_LIMIT, value: {{ required "Computer CPU limit is required" $provider.computerResources.limits.cpu | quote }}}
+            - {name: CHAPCHOO_COMPUTER_MEMORY_LIMIT, value: {{ required "Computer memory limit is required" $provider.computerResources.limits.memory | quote }}}
+          resources:
+            {{- toYaml $provider.resources | nindent 12 }}
+          securityContext:
+            {{- include "chapchoo.securityContext" . | fromJson | toYaml | nindent 12 }}
+{{- end }}

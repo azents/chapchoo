@@ -4,6 +4,14 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./computer-messages": {
+      "types": "./dist/computer-messages.d.ts",
+      "default": "./dist/computer-messages.js"
+    },
+    "./computer": {
+      "types": "./dist/computer.d.ts",
+      "default": "./dist/computer.js"
+    },
     "./display-messages": {
       "types": "./dist/display-messages.d.ts",
       "default": "./dist/display-messages.js"

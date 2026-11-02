@@ -170,7 +170,7 @@ blocks the request. Heartbeat and exact late-call identity remain independent.
 
 ## Owner-scoped convergence and recovery
 
-Control owns a two-second reconciliation worker independently of lease renewal.
+Control owns a 15-second reconciliation worker independently of lease renewal.
 Current Connector owners are selected first; they invoke the exact current
 Provider owner through typed direct peer delivery. Provider owners handle only
 Computers without an eligible Connector. Per-Provider scans are bounded to 20

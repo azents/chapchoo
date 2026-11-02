@@ -32,6 +32,7 @@
     "passwordPolicy": "表示可能な ASCII 文字を8〜64文字使用し、英大文字・英小文字・数字・記号のうち3種類以上を含めてください。"
   },
   "AdminGrants": {
+    "computerProviders": "Computer Provider",
     "replayMascot": "キャラクターのアニメーションを再生",
     "context": "サーバー管理",
     "signupTitle": "登録リンク",
