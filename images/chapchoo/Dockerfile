@@ -52,8 +52,8 @@ ENTRYPOINT ["/opt/chapchoo/chapchoo"]
 FROM runtime-base AS backend
 COPY --from=binary-artifacts --chown=10001:10001 /chapchoo ./chapchoo
 COPY --from=kubectl-runtime /bin/kubectl /usr/local/bin/kubectl
-EXPOSE 50051 50052
-CMD ["serve", "--role", "both", "--general-listen", "0.0.0.0:50051", "--admin-listen", "0.0.0.0:50052"]
+EXPOSE 50051
+CMD ["serve", "--groups", "client,admin,control", "--listen", "0.0.0.0:50051"]
 
 FROM runtime-base AS web-runtime-base
 USER root
@@ -64,9 +64,9 @@ USER 10001:10001
 FROM web-runtime-base AS general-web
 COPY --from=general-build --chown=10001:10001 /out/general/ ./
 EXPOSE 3003
-CMD ["serve", "--role", "none", "--web", "general", "--general-web-listen", "0.0.0.0:3003"]
+CMD ["serve", "--groups", "--web", "general", "--general-web-listen", "0.0.0.0:3003"]
 
 FROM web-runtime-base AS admin-web
 COPY --from=admin-build --chown=10001:10001 /out/admin/ ./
 EXPOSE 3004
-CMD ["serve", "--role", "none", "--web", "admin", "--admin-web-listen", "0.0.0.0:3004"]
+CMD ["serve", "--groups", "--web", "admin", "--admin-web-listen", "0.0.0.0:3004"]

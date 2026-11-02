@@ -43,6 +43,10 @@ pub(crate) fn display_patch(value: &wire::DisplayPatch) -> Result<(), Status> {
 }
 
 pub(crate) fn actor<T>(request: &Request<T>) -> Result<SecretDigest, Status> {
+    Ok(authorization(request)?.digest())
+}
+
+pub(crate) fn authorization<T>(request: &Request<T>) -> Result<BearerSecret, Status> {
     let mut values = request.metadata().get_all("authorization").iter();
     let value = values
         .next()
@@ -56,7 +60,7 @@ pub(crate) fn actor<T>(request: &Request<T>) -> Result<SecretDigest, Status> {
     let token = raw
         .strip_prefix("Bearer ")
         .ok_or_else(|| reject(DomainReason::InvalidSession))?;
-    Ok(bearer(token.to_owned(), DomainReason::InvalidSession)?.digest())
+    bearer(token.to_owned(), DomainReason::InvalidSession)
 }
 
 pub(crate) fn bearer(value: String, reason: DomainReason) -> Result<BearerSecret, Status> {

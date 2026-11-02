@@ -90,10 +90,37 @@ pub struct ComputerSummary {
     pub management: ConnectionStatus,
     pub power_observed_at: Option<i64>,
     pub saved_environment: SavedEnvironment,
+    pub capabilities: PowerCapabilities,
+    pub saved_environment_current: bool,
+    pub preparation_retry_available: bool,
 }
 impl fmt::Debug for ComputerSummary {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("ComputerSummary([REDACTED])")
+    }
+}
+
+impl ComputerSummary {
+    pub fn action_availability(&self, action: LifecycleAction) -> ActionAvailability {
+        let context = ComputerActionContext {
+            desired: self.desired,
+            power: self.power,
+            management: self.management,
+            capabilities: self.capabilities,
+            lifecycle: Some(self.progress),
+        };
+        let available = context.power_action(action);
+        if available == ActionAvailability::Available
+            && action == LifecycleAction::Start
+            && (self.saved_environment != SavedEnvironment::Verified
+                || !self.saved_environment_current)
+        {
+            ActionAvailability::Blocked(
+                chapchoo_domain::ActionBlockReason::SavedEnvironmentUnverified,
+            )
+        } else {
+            available
+        }
     }
 }
 
@@ -130,6 +157,32 @@ impl fmt::Debug for LifecycleRequest {
 pub enum AgentRemoval {
     Removed,
     AlreadyRemoved,
+}
+
+#[derive(Debug, Clone)]
+pub struct ProviderInventorySummary {
+    pub id: String,
+    pub name: String,
+    pub capabilities: ProviderCapabilities,
+}
+#[derive(Debug)]
+pub struct ComputerInventorySummary {
+    pub computer: ComputerSummary,
+    pub residual: bool,
+    pub cleanup_completed_at: Option<i64>,
+}
+#[derive(Debug, Clone)]
+pub struct ResourceCursor {
+    pub kind: String,
+    pub namespace: String,
+    pub name: String,
+}
+#[derive(diesel::QueryableByName)]
+struct CleanupSummary {
+    #[diesel(sql_type=Nullable<BigInt>)]
+    agent_removed_at: Option<i64>,
+    #[diesel(sql_type=Nullable<BigInt>)]
+    cleanup_completed_at: Option<i64>,
 }
 
 #[derive(diesel::QueryableByName)]
@@ -182,6 +235,12 @@ pub(crate) struct AgentComputerRow {
     current_phase: String,
     #[diesel(sql_type = Nullable<BigInt>)]
     initial_start_dispatch_at: Option<i64>,
+    #[diesel(sql_type = Nullable<BigInt>)]
+    prepare_admitted_at: Option<i64>,
+    #[diesel(sql_type = Nullable<Bool>)]
+    current_initial_allocation: Option<bool>,
+    #[diesel(sql_type = Nullable<Bool>)]
+    can_create: Option<bool>,
     #[diesel(sql_type = Text)]
     observed_power: String,
     #[diesel(sql_type = Nullable<BigInt>)]
@@ -204,9 +263,15 @@ pub(crate) struct AgentComputerRow {
     control_draining: Option<bool>,
     #[diesel(sql_type = Nullable<BigInt>)]
     management_key_valid_until: Option<i64>,
+    #[diesel(sql_type = Nullable<Bool>)]
+    can_start: Option<bool>,
+    #[diesel(sql_type = Nullable<Bool>)]
+    can_stop: Option<bool>,
+    #[diesel(sql_type = Nullable<Bool>)]
+    can_restart: Option<bool>,
 }
 
-const AGENT_QUERY: &str = "SELECT a.id AS agent_id,a.name,c.id,c.owner_user_id,c.kind,c.provider_id,c.desired_state,c.current_request_id,c.current_payload_hash,c.current_execution_id,c.current_action,c.current_phase,c.initial_start_dispatch_at,c.observed_power,c.power_observed_at,c.power_source_connection_id,c.power_source_execution_id,c.environment_source_connection_id,c.saved_environment,pc.connection_id AS provider_connection_id,pc.expires_at AS provider_connection_expires_at,ci.expires_at AS control_expires_at,ci.draining AS control_draining,CASE WHEN pk.revoked_at IS NOT NULL THEN NULL WHEN pc.credential_hash=pk.current_hash THEN pk.expires_at WHEN pc.credential_hash=pk.previous_hash THEN CASE WHEN pk.expires_at<pk.previous_valid_until THEN pk.expires_at ELSE pk.previous_valid_until END ELSE NULL END AS management_key_valid_until FROM agents a JOIN computers c ON c.id=a.computer_id LEFT JOIN provider_connections pc ON pc.provider_id=c.provider_id LEFT JOIN control_instances ci ON ci.id=pc.control_id LEFT JOIN provider_keys pk ON pk.provider_id=c.provider_id";
+const AGENT_QUERY: &str = "SELECT a.id AS agent_id,a.name,c.id,c.owner_user_id,c.kind,c.provider_id,c.desired_state,c.current_request_id,c.current_payload_hash,c.current_execution_id,c.current_action,c.current_phase,c.initial_start_dispatch_at,c.prepare_admitted_at,ce.initial_allocation AS current_initial_allocation,p.can_create,c.observed_power,c.power_observed_at,c.power_source_connection_id,c.power_source_execution_id,c.environment_source_connection_id,c.saved_environment,pc.connection_id AS provider_connection_id,pc.expires_at AS provider_connection_expires_at,ci.expires_at AS control_expires_at,ci.draining AS control_draining,CASE WHEN pk.revoked_at IS NOT NULL THEN NULL WHEN pc.credential_hash=pk.current_hash THEN pk.expires_at WHEN pc.credential_hash=pk.previous_hash THEN CASE WHEN pk.expires_at<pk.previous_valid_until THEN pk.expires_at ELSE pk.previous_valid_until END ELSE NULL END AS management_key_valid_until,p.can_start,p.can_stop,p.can_restart FROM agents a JOIN computers c ON c.id=a.computer_id LEFT JOIN computer_executions ce ON ce.id=c.current_execution_id LEFT JOIN computer_providers p ON p.id=c.provider_id LEFT JOIN provider_connections pc ON pc.provider_id=c.provider_id LEFT JOIN control_instances ci ON ci.id=pc.control_id LEFT JOIN provider_keys pk ON pk.provider_id=c.provider_id";
 
 impl AgentComputerRow {
     fn management_active(&self, now: i64) -> bool {
@@ -260,6 +325,17 @@ impl AgentComputerRow {
             id: self.agent_id,
             name: self.name,
             computer: ComputerSummary {
+                preparation_retry_available: self.kind == "CLOUD"
+                    && self.desired_state == "RUNNING"
+                    && self.current_phase == "BLOCKED"
+                    && self.current_execution_id.is_some()
+                    && self.prepare_admitted_at.is_none()
+                    && (if self.current_initial_allocation == Some(true) {
+                        self.can_create
+                    } else {
+                        self.can_start
+                    }) == Some(true)
+                    && management == ConnectionStatus::Connected,
                 id: self.id,
                 owner_user_id: self.owner_user_id,
                 kind: ComputerKind::from_str(&self.kind).map_err(parsed)?,
@@ -276,6 +352,13 @@ impl AgentComputerRow {
                 management,
                 power_observed_at: self.power_observed_at,
                 saved_environment,
+                capabilities: PowerCapabilities {
+                    start: self.can_start.unwrap_or(false),
+                    stop: self.can_stop.unwrap_or(false),
+                    restart: self.can_restart.unwrap_or(false),
+                },
+                saved_environment_current: self.environment_source_connection_id.is_some()
+                    && self.environment_source_connection_id == self.provider_connection_id,
             },
         })
     }
@@ -309,6 +392,121 @@ macro_rules! available_provider {
 }
 
 impl Store {
+    pub async fn provider_inventory(
+        &self,
+        actor: &SecretDigest,
+        after: Option<&str>,
+        limit: i64,
+        now: i64,
+    ) -> Result<Vec<ProviderInventorySummary>, StoreError> {
+        if !(1..=50).contains(&limit) || after.is_some_and(|id| !valid_id(id)) {
+            return Err(StoreError::InvalidInput);
+        }
+        operation!(self, |connection, dialect| {
+            let user = authenticate!(connection, dialect, actor, now);
+            if !user.is_admin {
+                return Err(StoreError::Forbidden);
+            }
+            let rows = diesel::sql_query(
+                dialect.query("SELECT * FROM computer_providers WHERE id>? ORDER BY id LIMIT ?"),
+            )
+            .bind::<Text, _>(after.unwrap_or(""))
+            .bind::<BigInt, _>(limit)
+            .load::<ProviderRow>(connection)
+            .await?;
+            Ok(rows
+                .into_iter()
+                .map(|row| ProviderInventorySummary {
+                    id: row.id,
+                    name: row.name,
+                    capabilities: ProviderCapabilities {
+                        create: row.can_create,
+                        start: row.can_start,
+                        stop: row.can_stop,
+                        restart: row.can_restart,
+                    },
+                })
+                .collect())
+        })
+    }
+    pub async fn computer_inventory(
+        &self,
+        actor: &SecretDigest,
+        provider: &str,
+        after: Option<&str>,
+        limit: i64,
+        now: i64,
+    ) -> Result<Vec<ComputerInventorySummary>, StoreError> {
+        if !valid_id(provider)
+            || !(1..=50).contains(&limit)
+            || after.is_some_and(|id| !valid_id(id))
+        {
+            return Err(StoreError::InvalidInput);
+        }
+        operation!(self, |connection, dialect| {
+            let user = authenticate!(connection, dialect, actor, now);
+            if !user.is_admin {
+                return Err(StoreError::Forbidden);
+            }
+            // Reuse the evidence projection without private live Agent data.
+            // Residual Computers remain independently discoverable.
+            let query = AGENT_QUERY
+                .replace("a.id AS agent_id,a.name,", "c.id AS agent_id,'' AS name,")
+                .replace(
+                    "FROM agents a JOIN computers c ON c.id=a.computer_id",
+                    "FROM computers c",
+                );
+            let query = format!("{query} WHERE c.provider_id=? AND c.id>? ORDER BY c.id LIMIT ?");
+            let rows = diesel::sql_query(dialect.query(&query))
+                .bind::<Text, _>(provider)
+                .bind::<Text, _>(after.unwrap_or(""))
+                .bind::<BigInt, _>(limit)
+                .load::<AgentComputerRow>(connection)
+                .await?;
+            let mut result = Vec::with_capacity(rows.len());
+            for row in rows {
+                let cleanup = diesel::sql_query(dialect.query(
+                    "SELECT agent_removed_at,cleanup_completed_at FROM computers WHERE id=?",
+                ))
+                .bind::<Text, _>(&row.id)
+                .get_result::<CleanupSummary>(connection)
+                .await?;
+                result.push(ComputerInventorySummary {
+                    computer: row.summary(now)?.computer,
+                    residual: cleanup.agent_removed_at.is_some(),
+                    cleanup_completed_at: cleanup.cleanup_completed_at,
+                });
+            }
+            Ok(result)
+        })
+    }
+    pub async fn resource_inventory(
+        &self,
+        actor: &SecretDigest,
+        computer: &str,
+        after: Option<&ResourceCursor>,
+        limit: i64,
+        now: i64,
+    ) -> Result<Vec<crate::ManagedResource>, StoreError> {
+        if !valid_id(computer)
+            || !(1..=50).contains(&limit)
+            || after
+                .is_some_and(|c| c.kind.len() > 32 || c.namespace.len() > 63 || c.name.len() > 253)
+        {
+            return Err(StoreError::InvalidInput);
+        }
+        operation!(self, |connection, dialect| {
+            let user = authenticate!(connection, dialect, actor, now);
+            if !user.is_admin {
+                return Err(StoreError::Forbidden);
+            }
+            let (kind, namespace, name) = after.map_or(("", "", ""), |c| {
+                (c.kind.as_str(), c.namespace.as_str(), c.name.as_str())
+            });
+            Ok(diesel::sql_query(dialect.query("SELECT * FROM computer_resources WHERE computer_id=? AND (resource_kind>? OR (resource_kind=? AND namespace>?) OR (resource_kind=? AND namespace=? AND name>?)) ORDER BY resource_kind,namespace,name LIMIT ?"))
+                .bind::<Text,_>(computer).bind::<Text,_>(kind).bind::<Text,_>(kind).bind::<Text,_>(namespace).bind::<Text,_>(kind).bind::<Text,_>(namespace).bind::<Text,_>(name).bind::<BigInt,_>(limit).load::<crate::ManagedResource>(connection).await?)
+        })
+    }
     pub async fn configure_system_provider(
         &self,
         proof: &VerifiedSystemOwner,
@@ -458,6 +656,87 @@ impl Store {
         })
     }
 
+    /// Resume a proven-safe preparation on the same Agent and execution. The
+    /// fresh owner Request ID fences repeated/stale retries without exposing
+    /// internal execution or connection identities to the browser.
+    pub async fn retry_preparation(
+        &self,
+        actor: &SecretDigest,
+        agent_id: &str,
+        request_id: &str,
+        expected_request_id: &str,
+        now: i64,
+    ) -> Result<AgentSummary, StoreError> {
+        if ![agent_id, request_id, expected_request_id]
+            .into_iter()
+            .all(valid_id)
+        {
+            return Err(StoreError::InvalidInput);
+        }
+        let fingerprint = payload_fingerprint(
+            "computer-preparation-retry",
+            &[agent_id.as_bytes(), expected_request_id.as_bytes()],
+        );
+        operation!(self, |connection, dialect| {
+            let user = authenticate!(connection, dialect, actor, now);
+            let query = format!("{AGENT_QUERY} WHERE a.id=? AND a.owner_user_id=?");
+            let initial = diesel::sql_query(dialect.query(&query))
+                .bind::<Text, _>(agent_id)
+                .bind::<Text, _>(&user.id)
+                .get_result::<AgentComputerRow>(connection)
+                .await
+                .optional()?
+                .ok_or(StoreError::NotFound)?;
+            let provider_id = initial.provider_id.ok_or(StoreError::InvalidTransition)?;
+            let _provider = diesel::sql_query(dialect.query(provider_lock(dialect)))
+                .bind::<Text, _>(&provider_id)
+                .get_result::<ProviderRow>(connection)
+                .await?;
+            let locked = match dialect {
+                Dialect::Postgres => format!("{query} FOR NO KEY UPDATE OF c"),
+                Dialect::Sqlite => query.clone(),
+            };
+            let current = diesel::sql_query(dialect.query(&locked))
+                .bind::<Text, _>(agent_id)
+                .bind::<Text, _>(&user.id)
+                .get_result::<AgentComputerRow>(connection)
+                .await?;
+            if current.current_request_id == request_id {
+                if current.current_payload_hash != fingerprint {
+                    return Err(StoreError::Conflict);
+                }
+                return current.summary(now);
+            }
+            if current.current_request_id != expected_request_id {
+                return Err(StoreError::Conflict);
+            }
+            if current.kind != "CLOUD"
+                || current.desired_state != "RUNNING"
+                || current.current_phase != "BLOCKED"
+                || current.prepare_admitted_at.is_some()
+                || current.current_execution_id.is_none()
+                || !current.management_active(now)
+                || (if current.current_initial_allocation == Some(true) {
+                    current.can_create
+                } else {
+                    current.can_start
+                }) != Some(true)
+            {
+                return Err(StoreError::InvalidTransition);
+            }
+            diesel::sql_query(dialect.query("UPDATE computers SET current_request_id=?,current_payload_hash=?,current_phase='STARTING',initial_start_dispatch_at=NULL WHERE id=? AND current_request_id=? AND current_execution_id=?"))
+                .bind::<Text,_>(request_id).bind::<Binary,_>(fingerprint.as_slice())
+                .bind::<Text,_>(&current.id).bind::<Text,_>(expected_request_id)
+                .bind::<Text,_>(current.current_execution_id.as_deref().ok_or(StoreError::Integrity)?)
+                .execute(connection).await?;
+            diesel::sql_query(dialect.query(&query))
+                .bind::<Text, _>(agent_id)
+                .bind::<Text, _>(&user.id)
+                .get_result::<AgentComputerRow>(connection)
+                .await?
+                .summary(now)
+        })
+    }
     pub async fn request_lifecycle(
         &self,
         actor: &SecretDigest,
@@ -565,13 +844,27 @@ impl Store {
                 LifecycleAction::Delete => LifecyclePhase::Deleting,
                 _ => LifecyclePhase::Accepted,
             };
-            let changed = diesel::sql_query(dialect.query("UPDATE computers SET desired_state=?,current_request_id=?,current_payload_hash=?,current_action=?,current_phase=?,initial_start_dispatch_at=NULL,expected_old_execution_id=current_execution_id WHERE id=? AND current_request_id=?"))
+            let changed = diesel::sql_query(dialect.query("UPDATE computers SET desired_state=?,current_request_id=?,current_payload_hash=?,current_action=?,current_phase=?,initial_start_dispatch_at=NULL,prepare_admitted_at=NULL,expected_old_execution_id=current_execution_id WHERE id=? AND current_request_id=?"))
                 .bind::<Text,_>(request.action.desired_state().as_str()).bind::<Text,_>(&request.request_id).bind::<Binary,_>(fingerprint.as_slice())
                 .bind::<Text,_>(request.action.as_str()).bind::<Text,_>(phase.as_str()).bind::<Text,_>(&current.id).bind::<Text,_>(&request.expected_request_id).execute(connection).await?;
             if changed != 1 {
                 return Err(StoreError::Conflict);
             }
             if request.action == LifecycleAction::Delete {
+                if current.current_execution_id.is_some()
+                    && current.prepare_admitted_at.is_none()
+                    && (current.initial_start_dispatch_at.is_none()
+                        || current.current_phase == "BLOCKED")
+                {
+                    // The same locked intent had no possible Prepare delivery,
+                    // or an acknowledged safe preparation failure. Terminal
+                    // intent fences future creates before recording only its
+                    // never-allocated candidates as absent. Allocated UIDs are
+                    // never changed by this proof.
+                    diesel::sql_query(dialect.query("UPDATE computer_resources SET presence='ABSENT',observed_at=?,source_connection_id=NULL,absence_confirmed_at=COALESCE(absence_confirmed_at,?) WHERE computer_id=? AND resource_uid IS NULL AND (resource_kind='PVC' OR execution_id=?)"))
+                        .bind::<BigInt,_>(now).bind::<BigInt,_>(now).bind::<Text,_>(&current.id)
+                        .bind::<Nullable<Text>,_>(current.current_execution_id.as_deref()).execute(connection).await?;
+                }
                 diesel::sql_query(dialect.query("UPDATE connector_sessions SET revoked_at=COALESCE(revoked_at,?),initial_nonce=NULL,initial_ciphertext=NULL,current_hash=NULL,previous_hash=NULL,previous_valid_until=NULL,issued_at=NULL,expires_at=NULL,current_request_id=NULL,recovery_nonce=NULL,recovery_ciphertext=NULL WHERE execution_id IN (SELECT id FROM computer_executions WHERE computer_id=?)"))
                     .bind::<BigInt,_>(now).bind::<Text,_>(&current.id).execute(connection).await?;
                 diesel::sql_query(

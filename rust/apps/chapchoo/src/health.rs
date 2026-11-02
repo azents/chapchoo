@@ -18,7 +18,7 @@ use crate::config::BackendConfig;
 pub struct HealthService {
     pub config: BackendConfig,
     pub admission: Arc<AtomicBool>,
-    pub business_services: &'static [&'static str],
+    pub business_services: Arc<[&'static str]>,
 }
 
 #[tonic::async_trait]
@@ -33,11 +33,7 @@ impl Health for HealthService {
                 status: ServingStatus::Serving as i32,
             }));
         }
-        if !service.is_empty()
-            && !self.business_services.contains(&service.as_str())
-            && service != "chapchoo.accounts.Authentication"
-            && service != "chapchoo.accounts.PersonalPreferences"
-        {
+        if !service.is_empty() && !self.business_services.contains(&service.as_str()) {
             return Err(Status::not_found("Unknown health service"));
         }
         let ready = self.admission.load(Ordering::Acquire)

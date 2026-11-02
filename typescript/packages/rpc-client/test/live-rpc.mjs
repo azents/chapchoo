@@ -110,11 +110,8 @@ async function main() {
   const generalEndpoint = localEndpoint("CHAPCHOO_TEST_GENERAL_ENDPOINT");
   const adminEndpoint = localEndpoint("CHAPCHOO_TEST_ADMIN_ENDPOINT");
   const setupProof = required("CHAPCHOO_TEST_SETUP_PROOF");
-  check(generalEndpoint !== adminEndpoint);
   const authGeneral = client(AuthenticationClient, generalEndpoint);
   const authAdmin = client(AuthenticationClient, adminEndpoint);
-  const wrongAdmin = client(InstallationClient, generalEndpoint);
-  const wrongGeneral = client(TeamManagementClient, adminEndpoint);
   const personalPreferences = client(
     PersonalPreferencesClient,
     generalEndpoint,
@@ -324,16 +321,6 @@ async function main() {
     () => call(authGeneral, "identity", {}),
     status.UNAUTHENTICATED,
     "DOMAIN_REASON_INVALID_SESSION",
-  );
-  await rejected(
-    () => call(wrongAdmin, "setupStatus", {}),
-    status.UNIMPLEMENTED,
-    null,
-  );
-  await rejected(
-    () => call(wrongGeneral, "listTeams", {}, administrator.token),
-    status.UNIMPLEMENTED,
-    null,
   );
   // Unknown or missing trailing metadata stays an unclassified transport error.
   // This harness does not invent product error semantics from arbitrary strings.

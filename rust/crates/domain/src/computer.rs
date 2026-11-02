@@ -91,6 +91,9 @@ impl LifecycleProgress {
     }
 
     pub fn start_delayed(self, now_ms: i64) -> bool {
+        self.start_delayed_after(now_ms, 300_000)
+    }
+    pub fn start_delayed_after(self, now_ms: i64, threshold_ms: i64) -> bool {
         matches!(
             self.action,
             LifecycleAction::Create | LifecycleAction::Start | LifecycleAction::Restart
@@ -98,7 +101,7 @@ impl LifecycleProgress {
             && self.initial_start_dispatch_ms.is_some_and(|initial| {
                 now_ms
                     .checked_sub(initial)
-                    .is_some_and(|elapsed| elapsed >= 300_000)
+                    .is_some_and(|elapsed| elapsed >= threshold_ms)
             })
     }
 }
@@ -112,6 +115,7 @@ pub enum ActionBlockReason {
     PowerUnknown,
     RequiresStopped,
     RequiresRunning,
+    SavedEnvironmentUnverified,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

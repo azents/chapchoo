@@ -1,0 +1,82 @@
+syntax = "proto3";
+package chapchoo.computers;
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+service Agents {
+  rpc Create(CreateAgentRequest) returns (CreateAgentResult);
+  rpc List(Page) returns (AgentList);
+  rpc Get(AgentRequest) returns (Agent);
+  rpc ForceRemove(ForceRemoveRequest) returns (google.protobuf.Empty);
+}
+service Computers {
+  rpc Get(AgentRequest) returns (Computer);
+  rpc RequestLifecycle(LifecycleRequest) returns (Agent);
+  rpc RetryPreparation(PreparationRetryRequest) returns (Agent);
+}
+service ProviderCatalog { rpc List(Page) returns (ProviderChoices); }
+// Installation administrator only; independent of live Agent associations.
+service ProviderInventory {
+  rpc ListProviders(Page) returns (ProviderList);
+  rpc ListComputers(InventoryRequest) returns (ComputerInventory);
+  rpc ListResources(ResourcePage) returns (ResourceInventory);
+}
+message Page { optional string after = 1; uint32 limit = 2; }
+message AgentRequest { string agent_id = 1; }
+message CreateAgentRequest { string request_id = 1; string provider_id = 2; string name = 3; }
+message CreateAgentResult {
+  oneof outcome { Agent agent = 1; RemovedCreation removed = 2; }
+}
+message RemovedCreation { string assigned_agent_id = 1; }
+message Agent { string id = 1; string name = 2; Computer computer = 3; }
+message AgentList { repeated Agent items = 1; optional string next_after = 2; }
+message ProviderChoice { string id = 1; string name = 2; }
+message ProviderChoices { repeated ProviderChoice items = 1; optional string next_after = 2; }
+enum ComputerKind { COMPUTER_KIND_UNSPECIFIED = 0; COMPUTER_KIND_CLOUD = 1; COMPUTER_KIND_LOCAL = 2; }
+enum DesiredState { DESIRED_STATE_UNSPECIFIED = 0; DESIRED_STATE_RUNNING = 1; DESIRED_STATE_STOPPED = 2; DESIRED_STATE_DELETING = 3; }
+enum Power { POWER_UNSPECIFIED = 0; POWER_RUNNING = 1; POWER_STOPPED = 2; POWER_UNKNOWN = 3; }
+enum Connectivity { CONNECTIVITY_UNSPECIFIED = 0; CONNECTIVITY_CONNECTED = 1; CONNECTIVITY_DISCONNECTED = 2; CONNECTIVITY_UNKNOWN = 3; }
+enum SavedEnvironment { SAVED_ENVIRONMENT_UNSPECIFIED = 0; SAVED_ENVIRONMENT_VERIFIED = 1; SAVED_ENVIRONMENT_MISSING = 2; SAVED_ENVIRONMENT_UNKNOWN = 3; }
+enum Action { ACTION_UNSPECIFIED = 0; ACTION_CREATE = 1; ACTION_START = 2; ACTION_STOP = 3; ACTION_RESTART = 4; ACTION_DELETE = 5; }
+enum Phase { PHASE_UNSPECIFIED = 0; PHASE_ACCEPTED = 1; PHASE_RETIRING = 2; PHASE_STARTING = 3; PHASE_DELETING = 4; PHASE_COMPLETED = 5; PHASE_BLOCKED = 6; PHASE_UNCERTAIN = 7; }
+enum BlockReason {
+  BLOCK_REASON_UNSPECIFIED = 0; BLOCK_REASON_UNSUPPORTED = 1; BLOCK_REASON_DELETING = 2;
+  BLOCK_REASON_CONFLICTING_LIFECYCLE = 3; BLOCK_REASON_MANAGEMENT_UNAVAILABLE = 4;
+  BLOCK_REASON_POWER_UNKNOWN = 5; BLOCK_REASON_REQUIRES_STOPPED = 6; BLOCK_REASON_REQUIRES_RUNNING = 7;
+  BLOCK_REASON_SAVED_ENVIRONMENT_UNVERIFIED = 8;
+}
+message ActionAvailability { Action action = 1; bool available = 2; optional BlockReason blocked_reason = 3; }
+message Computer {
+  string id = 1; ComputerKind kind = 2; optional string provider_id = 3;
+  DesiredState desired = 4; string request_id = 5; Action action = 6; Phase phase = 7;
+  Power power = 8; Power last_known_power = 9;
+  Connectivity management = 10; Connectivity connector = 11;
+  google.protobuf.Timestamp power_observed_at = 12;
+  SavedEnvironment saved_environment = 13; repeated ActionAvailability actions = 14;
+  bool force_remove_available = 15; bool start_delayed = 16;
+  bool preparation_retry_available = 17;
+}
+message PreparationRetryRequest { string agent_id = 1; string request_id = 2; string expected_request_id = 3; }
+message LifecycleRequest { string agent_id = 1; string request_id = 2; string expected_request_id = 3; Action action = 4; }
+message ForceRemoveRequest { string agent_id = 1; string deletion_request_id = 2; }
+message ProviderCapabilities { bool create = 1; bool start = 2; bool stop = 3; bool restart = 4; }
+message ProviderSummary { string id = 1; string name = 2; ProviderCapabilities capabilities = 3; Connectivity management = 4; }
+message ProviderList { repeated ProviderSummary items = 1; optional string next_after = 2; }
+message InventoryRequest { string provider_id = 1; Page page = 2; }
+// No user identity, Agent name, keys, bootstrap content or user file data.
+message InventoryComputer {
+  string id = 1; ComputerKind kind = 2; optional string provider_id = 3;
+  DesiredState desired = 4; Action action = 5; Phase phase = 6; Power power = 7;
+  Power last_known_power = 8; Connectivity management = 9; Connectivity connector = 10;
+  SavedEnvironment saved_environment = 11; bool residual = 12;
+  google.protobuf.Timestamp cleanup_completed_at = 13;
+  google.protobuf.Timestamp power_observed_at = 14;
+}
+message ComputerInventory { repeated InventoryComputer items = 1; optional string next_after = 2; }
+message ResourceCursor { string kind = 1; string namespace = 2; string name = 3; }
+message ResourcePage { string computer_id = 1; ResourceCursor after = 2; uint32 limit = 3; }
+message InventoryResource {
+  ResourceCursor identity = 1; optional string uid = 2; optional string execution_id = 3;
+  string presence = 4; google.protobuf.Timestamp observed_at = 5;
+}
+message ResourceInventory { repeated InventoryResource items = 1; ResourceCursor next_after = 2; }

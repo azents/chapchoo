@@ -1,11 +1,14 @@
 //! Foreground composition root and local operator commands.
 mod config;
+mod connector;
+mod control_plane;
 mod health;
+mod provider;
 mod runtime;
 mod web;
 
 use clap::Parser;
-use config::{Cli, Command, Role};
+use config::{Cli, Command};
 use std::{backtrace::Backtrace, error::Error, process::ExitCode, time::Duration};
 
 type AppError = Box<dyn Error + Send + Sync>;
@@ -70,12 +73,42 @@ async fn execute(cli: Cli) -> Result<(), AppError> {
             tracing::info!("Administrator assignment completed for the existing account");
         }
         Command::Serve(options) => {
-            let config = if options.role == Role::None {
+            let config = if options.groups.is_empty() {
                 None
             } else {
                 Some(config::BackendConfig::load()?)
             };
             runtime::serve(config, options).await?;
+        }
+        Command::ComputerProvider(options) => {
+            let owner = config::provider_owner_key()?;
+            let stop = tokio_util::sync::CancellationToken::new();
+            let mut signal = runtime::Termination::new()?;
+            let task = provider::run(options, owner, stop.clone());
+            tokio::pin!(task);
+            tokio::select! {
+                result=&mut task=>result?,
+                result=signal.wait()=>{
+                    result?;
+                    stop.cancel();
+                    tokio::time::timeout(Duration::from_secs(120),task).await??;
+                }
+            }
+        }
+        Command::ComputerConnector(options) => {
+            let initial = config::connector_initial_key()?;
+            let stop = tokio_util::sync::CancellationToken::new();
+            let mut signal = runtime::Termination::new()?;
+            let task = connector::run(&options.endpoint, options.session_id, initial, stop.clone());
+            tokio::pin!(task);
+            tokio::select! {
+                result=&mut task=>result?,
+                result=signal.wait()=>{
+                    result?;
+                    stop.cancel();
+                    tokio::time::timeout(Duration::from_secs(15),task).await??;
+                }
+            }
         }
     }
     Ok(())

@@ -4,13 +4,14 @@ use crate::{
     Store, StoreError,
     component_keys::{authenticate_provider, key_matches},
     computers::valid_id,
+    directory::database_now as db_now,
     store::{Dialect, operation},
 };
 use chapchoo_crypto::SecretDigest;
 use chapchoo_domain::LifecyclePhase;
 use diesel::{
     OptionalExtension,
-    sql_types::{BigInt, Binary, Bool, Nullable, Text},
+    sql_types::{BigInt, Bool, Nullable, Text},
 };
 use diesel_async::RunQueryDsl;
 use std::fmt;
@@ -134,29 +135,6 @@ pub struct ManagedComputer {
 }
 
 #[derive(diesel::QueryableByName)]
-struct Clock {
-    #[diesel(sql_type=BigInt)]
-    now: i64,
-}
-#[derive(diesel::QueryableByName)]
-struct Route {
-    #[diesel(sql_type=Text)]
-    control_id: String,
-    #[diesel(sql_type=Text)]
-    connection_id: String,
-    #[diesel(sql_type=Binary)]
-    credential_hash: Vec<u8>,
-    #[diesel(sql_type=BigInt)]
-    expires_at: i64,
-}
-#[derive(diesel::QueryableByName)]
-struct Control {
-    #[diesel(sql_type=Bool)]
-    draining: bool,
-    #[diesel(sql_type=BigInt)]
-    expires_at: i64,
-}
-#[derive(diesel::QueryableByName)]
 struct Execution {
     #[diesel(sql_type=Bool)]
     initial_allocation: bool,
@@ -212,29 +190,12 @@ fn validate_scope(scope: ComputerRequest<'_>) -> Result<(), StoreError> {
     }
 }
 
-macro_rules! db_now {
-    ($connection:expr,$dialect:expr) => {{
-        let query = match $dialect {
-            Dialect::Postgres => {
-                "SELECT floor(extract(epoch FROM clock_timestamp())*1000)::bigint AS now"
-            }
-            Dialect::Sqlite => {
-                "SELECT CAST((julianday('now')-2440587.5)*86400000 AS BIGINT) AS now"
-            }
-        };
-        diesel::sql_query(query)
-            .get_result::<Clock>($connection)
-            .await?
-            .now
-    }};
-}
-
 // Lock order: Provider -> route -> Control (shared) -> Computer. The shared
 // Control lock fences draining/expiry renewal without serializing its Providers.
 macro_rules! current_source {
     ($connection:expr,$dialect:expr,$source:expr) => {{
         let source = $source;
-        let now = db_now!($connection, $dialect);
+        let now = $crate::directory::database_now!($connection, $dialect);
         let _provider = authenticate_provider!(
             $connection,
             $dialect,
@@ -250,7 +211,7 @@ macro_rules! current_source {
         };
         let route = diesel::sql_query($dialect.query(route_query))
             .bind::<Text, _>(source.provider_id)
-            .get_result::<Route>($connection)
+            .get_result::<$crate::ComponentRoute>($connection)
             .await
             .optional()?
             .ok_or(StoreError::Unauthenticated)?;
@@ -266,11 +227,11 @@ macro_rules! current_source {
         };
         let control = diesel::sql_query($dialect.query(control_query))
             .bind::<Text, _>(source.control_id)
-            .get_result::<Control>($connection)
+            .get_result::<$crate::ControlRegistration>($connection)
             .await
             .optional()?
             .ok_or(StoreError::Unauthenticated)?;
-        let now = db_now!($connection, $dialect);
+        let now = $crate::directory::database_now!($connection, $dialect);
         let provider = authenticate_provider!(
             $connection,
             $dialect,
@@ -284,6 +245,7 @@ macro_rules! current_source {
         (provider, now)
     }};
 }
+pub(crate) use current_source;
 macro_rules! current_computer {
     ($connection:expr,$dialect:expr,$source:expr,$scope:expr) => {{
         let row = diesel::sql_query($dialect.query(computer_lock($dialect)))
@@ -317,6 +279,155 @@ macro_rules! revoke_execution {
 }
 
 impl Store {
+    /// One conservative prepare admission per accepted lifecycle request. A
+    /// lost dispatch/ACK does not clear this marker or authorize create replay.
+    pub async fn claim_execution_dispatch(
+        &self,
+        source: &ProviderSource<'_>,
+        scope: ComputerRequest<'_>,
+        execution: &str,
+    ) -> Result<bool, StoreError> {
+        validate_source(source)?;
+        validate_scope(scope)?;
+        operation!(self, |connection, dialect| {
+            let _ = current_source!(connection, dialect, source);
+            let current = current_computer!(connection, dialect, source, scope);
+            if current.desired_state != "RUNNING"
+                || current.current_phase != "STARTING"
+                || current.current_execution_id.as_deref() != Some(execution)
+            {
+                return Err(StoreError::InvalidTransition);
+            }
+            let now = db_now!(connection, dialect);
+            Ok(diesel::sql_query(dialect.query("UPDATE computers SET prepare_admitted_at=? WHERE id=? AND current_request_id=? AND current_execution_id=? AND prepare_admitted_at IS NULL"))
+                .bind::<BigInt,_>(now).bind::<Text,_>(scope.computer_id).bind::<Text,_>(scope.request_id).bind::<Text,_>(execution).execute(connection).await?==1)
+        })
+    }
+    /// Clear only a claim whose call was definitely rejected before enqueue.
+    /// Possible forwarding, cancellation and lost outcomes retain the claim.
+    pub async fn release_undelivered_prepare(
+        &self,
+        source: &ProviderSource<'_>,
+        scope: ComputerRequest<'_>,
+        execution: &str,
+    ) -> Result<(), StoreError> {
+        validate_source(source)?;
+        validate_scope(scope)?;
+        operation!(self, |connection, dialect| {
+            let _ = current_source!(connection, dialect, source);
+            let _ = current_computer!(connection, dialect, source, scope);
+            diesel::sql_query(dialect.query("UPDATE computers SET prepare_admitted_at=NULL WHERE id=? AND current_request_id=? AND current_execution_id=? AND current_phase='STARTING' AND initial_start_dispatch_at IS NULL"))
+                .bind::<Text,_>(scope.computer_id).bind::<Text,_>(scope.request_id).bind::<Text,_>(execution).execute(connection).await?;
+            Ok(())
+        })
+    }
+    /// The exact current Provider has ACKed prior resource allocations and
+    /// confirms that no Pod submission may have been accepted.
+    pub async fn report_preparation_blocked(
+        &self,
+        source: &ProviderSource<'_>,
+        scope: ComputerRequest<'_>,
+        execution: &str,
+    ) -> Result<(), StoreError> {
+        validate_source(source)?;
+        validate_scope(scope)?;
+        operation!(self, |connection, dialect| {
+            let _ = current_source!(connection, dialect, source);
+            let current = current_computer!(connection, dialect, source, scope);
+            if current.desired_state != "RUNNING"
+                || current.current_execution_id.as_deref() != Some(execution)
+                || current.current_phase != "STARTING"
+            {
+                return Err(StoreError::Conflict);
+            }
+            let resources = inventory!(connection, dialect, scope.computer_id);
+            if !resources.iter().any(|r| {
+                r.resource_kind == "POD"
+                    && r.execution_id.as_deref() == Some(execution)
+                    && r.resource_uid.is_none()
+            }) {
+                return Err(StoreError::InvalidTransition);
+            }
+            diesel::sql_query(dialect.query("UPDATE computers SET current_phase='BLOCKED',prepare_admitted_at=NULL WHERE id=? AND current_request_id=? AND current_execution_id=?"))
+                .bind::<Text,_>(scope.computer_id).bind::<Text,_>(scope.request_id).bind::<Text,_>(execution).execute(connection).await?;
+            Ok(())
+        })
+    }
+    pub async fn connector_managed_computer(
+        &self,
+        source: &crate::ConnectorSource<'_>,
+    ) -> Result<ManagedComputer, StoreError> {
+        let identity = self.verify_connector_connection(source).await?;
+        operation!(self, |connection, dialect| {
+            Ok(
+                diesel::sql_query(dialect.query("SELECT * FROM computers WHERE id=?"))
+                    .bind::<Text, _>(&identity.computer_id)
+                    .get_result::<ManagedComputer>(connection)
+                    .await?,
+            )
+        })
+    }
+    /// Component dequeue authority is captured with the exact Provider source and
+    /// Computer request under the same short transaction.
+    pub async fn provider_delivery_snapshot(
+        &self,
+        source: &ProviderSource<'_>,
+        scope: ComputerRequest<'_>,
+        execution_id: Option<&str>,
+    ) -> Result<crate::DeliverySnapshot, StoreError> {
+        validate_source(source)?;
+        validate_scope(scope)?;
+        operation!(self, |connection, dialect| {
+            let _ = current_source!(connection, dialect, source);
+            let current = current_computer!(connection, dialect, source, scope);
+            if execution_id.is_some_and(|id| {
+                current.current_execution_id.as_deref() != Some(id)
+                    && current.expected_old_execution_id.as_deref() != Some(id)
+            }) {
+                return Err(StoreError::Conflict);
+            }
+            let computer = diesel::sql_query(dialect.query("SELECT * FROM computers WHERE id=?"))
+                .bind::<Text, _>(scope.computer_id)
+                .get_result::<crate::DeliveryComputer>(connection)
+                .await?;
+            if computer.cleanup_completed_at.is_some() {
+                return Err(StoreError::Conflict);
+            }
+            let execution =
+                if let Some(id) = execution_id {
+                    Some(
+                        diesel::sql_query(dialect.query(
+                            "SELECT * FROM computer_executions WHERE id=? AND computer_id=?",
+                        ))
+                        .bind::<Text, _>(id)
+                        .bind::<Text, _>(scope.computer_id)
+                        .get_result::<crate::DeliveryExecution>(connection)
+                        .await
+                        .optional()?
+                        .ok_or(StoreError::NotFound)?,
+                    )
+                } else {
+                    None
+                };
+            Ok(crate::DeliverySnapshot {
+                computer,
+                execution,
+                resources: inventory!(connection, dialect, scope.computer_id),
+            })
+        })
+    }
+    /// Admission for a frame or dequeue rechecks authority without renewing the
+    /// heartbeat lease. A previous successful check is never a cached permit.
+    pub async fn verify_provider_connection(
+        &self,
+        source: &ProviderSource<'_>,
+    ) -> Result<(), StoreError> {
+        validate_source(source)?;
+        operation!(self, |connection, dialect| {
+            let _ = current_source!(connection, dialect, source);
+            Ok(())
+        })
+    }
     /// Reserve stable identities before creating a PVC, Secret or Pod. Recovery
     /// returns the original candidate even when a new draft was prepared.
     pub async fn reserve_execution(
@@ -441,7 +552,7 @@ impl Store {
                 diesel::sql_query(dialect.query("INSERT INTO computer_resources(computer_id,provider_id,resource_kind,namespace,name,execution_id,presence) VALUES(?,?,?,?,?,?,'UNKNOWN')"))
                     .bind::<Text,_>(scope.computer_id).bind::<Text,_>(source.provider_id).bind::<Text,_>(kind.as_str()).bind::<Text,_>(&draft.namespace).bind::<Text,_>(name).bind::<Nullable<Text>,_>(execution).execute(connection).await?;
             }
-            diesel::sql_query(dialect.query("UPDATE computers SET current_execution_id=?,current_phase='STARTING',observed_power='UNKNOWN',power_source_connection_id=NULL,power_source_execution_id=NULL WHERE id=?"))
+            diesel::sql_query(dialect.query("UPDATE computers SET current_execution_id=?,current_phase='STARTING',observed_power='UNKNOWN',power_source_connection_id=NULL,power_source_execution_id=NULL,prepare_admitted_at=NULL,initial_start_dispatch_at=NULL WHERE id=?"))
                 .bind::<Text,_>(&draft.id).bind::<Text,_>(scope.computer_id).execute(connection).await?;
             Ok(ExecutionReservation {
                 execution_id: draft.id.clone(),
@@ -684,6 +795,7 @@ impl Store {
             diesel::sql_query(dialect.query("UPDATE computer_executions SET retired_at=COALESCE(retired_at,?) WHERE id=? AND computer_id=?"))
                 .bind::<BigInt,_>(now).bind::<Text,_>(execution_id).bind::<Text,_>(scope.computer_id).execute(connection).await?;
             let phase = match current.desired_state.as_str() {
+                "DELETING" if current.current_phase == "UNCERTAIN" => "UNCERTAIN",
                 "DELETING" => "DELETING",
                 "STOPPED" => "COMPLETED",
                 "RUNNING" => "STARTING",
@@ -723,7 +835,13 @@ impl Store {
                     "UPDATE computers SET current_phase=?,observed_power='UNKNOWN' WHERE id=?",
                 ),
             )
-            .bind::<Text, _>(phase.as_str())
+            .bind::<Text, _>(
+                if current.desired_state == "DELETING" && current.current_phase == "UNCERTAIN" {
+                    "UNCERTAIN"
+                } else {
+                    phase.as_str()
+                },
+            )
             .bind::<Text, _>(scope.computer_id)
             .execute(connection)
             .await?;

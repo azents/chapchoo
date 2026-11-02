@@ -163,7 +163,12 @@ work. Acceptance records intent/phase, not external execution success.
 
 Delete can supersede preparation and persists terminal intent. In the same
 transaction it revokes that Computer's Connector sessions, discards encrypted
-bootstrap/operational recovery material and removes Connector routes. Force
+bootstrap/operational recovery material and removes Connector routes. Before
+replacing the intent it can record non-allocation only for the current candidate
+and UID-less PVC when the captured Prepare fence proves no possible dispatch
+(or an acknowledged safe preparation failure). Older execution resources and
+allocated UIDs are unchanged. These absence facts have no Provider source until
+fresh observation agrees; a possibly forwarded Prepare never grants this proof. Force
 removal requires the current deletion request and removes only the Agent; residual
 Computer/cleanup authority and creation receipt survive. An owned removed Agent
 can be recognized while residual inventory remains, but only with that Computer's
@@ -245,6 +250,26 @@ Reservation recovery returns the same initial-allocation classification. Dispatc
 checks this execution fact even after the initial PVC has been confirmed, so a
 create-capable/start-incapable Provider can finish its initial preparation.
 
+`prepare_admitted_at` is a durable once-only admission fence, separate from
+`initial_start_dispatch_at`, which records actual component dequeue. Its
+Computer-locked CAS revalidates the exact current source, request and execution.
+A reconnect cannot reset an admitted uncertain Prepare. The Control can release
+an exact current claim only when it proves rejection before queue acceptance;
+possible forwarding, cancellation and lost results retain the fence. A current
+Provider can report PreparationBlocked only for the current starting execution
+with an unallocated Pod identity, after explicit native creation rejection or a
+pre-Pod authority failure following acknowledged resource allocation. That report
+sets Blocked and clears the prepare fence, but never resumes effects itself.
+Owner RetryPreparation compares the exact predecessor request under the usual
+User/Provider/Computer locks, requires this safe blocked state and live management,
+and assigns a fresh Request ID while retaining the same execution and resources.
+It resets the dispatch interval for this explicit new request. Exact result retry
+uses the same request/fingerprint and cannot create another attempt. An authorized successor
+reservation clears both fields only after retirement/original-PVC gates; an
+existing candidate retry preserves them. Both engines add this nullable field in
+`00000000000004_prepare_admission`, backfilling known actual-dispatch timestamps.
+The down migration refuses to remove the fence.
+
 Resource reports identify the exact reserved object and execution. Owned-present
 evidence binds the original UID; a different same-name UID is rejected. Unknown
 presence does not clear identity. Definitive absence must match the stored UID,
@@ -259,7 +284,9 @@ Running completion requires a separately reported actual running execution plus
 current-connection present/UID evidence for its Pod/bootstrap Secret and original
 PVC. Pod existence alone is not running. Stop/restart cannot complete while the
 old execution remains current, even if a blocked/uncertain phase obscures the
-retiring display phase. `retire_execution` requires definitive current-source
+retiring display phase. During terminal deletion, an admitted uncertain cleanup
+keeps its uncertainty fence across Pod retirement and later blocked issue reports;
+those facts cannot reset the lifecycle to a fresh deleting admission. `retire_execution` requires definitive current-source
 Pod absence, retires the exact execution, revokes and wipes its Connector session
 authority and withdraws its route before clearing the current pointer.
 If that exact retirement is replayed while no successor exists, fresh definitive

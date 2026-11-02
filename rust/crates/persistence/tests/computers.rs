@@ -34,6 +34,7 @@ fn seed(
         let protected = cipher.protect_latest(&session, token)?;
         sql.push_str(&format!("INSERT INTO users(id,email_key,delivery_email,password_hash,created_at,language,time_zone,region) VALUES('user-{index}','{index}@example.invalid','{index}@example.invalid','synthetic',0,'en','UTC','en-US'); INSERT INTO auth_sessions(id,user_id,current_hash,recovery_nonce,recovery_ciphertext,created_at,rotated_at,expires_at) VALUES('{session}','user-{index}',{},{},{},0,0,10000000);",binary(token.digest().as_bytes()),binary(protected.nonce()),binary(protected.ciphertext())));
     }
+    sql.push_str("UPDATE users SET is_admin=TRUE WHERE id='user-0';");
     let protected = cipher.protect_latest("provider:provider", provider)?;
     sql.push_str(&format!("INSERT INTO computer_providers(id,owner_kind,system_owner_id,name,provider_kind,can_create,can_start,can_stop,can_restart,created_at) VALUES('provider','SYSTEM','system-owner','Fixture','KUBERNETES',TRUE,TRUE,TRUE,TRUE,0); INSERT INTO provider_keys(provider_id,current_hash,issued_at,expires_at,current_request_id,recovery_nonce,recovery_ciphertext) VALUES('provider',{},0,10000000,'key-request',{},{}); INSERT INTO control_instances(id,endpoint,renewed_at,expires_at) VALUES('control','http://127.0.0.1:1',0,10000000); INSERT INTO provider_connections(provider_id,control_id,connection_id,credential_hash,expires_at) VALUES('provider','control','connection',{},10000000);",binary(provider.digest().as_bytes()),binary(protected.nonce()),binary(protected.ciphertext()),binary(provider.digest().as_bytes())));
     for (id, power, source, environment) in [
@@ -82,6 +83,43 @@ fn present(outcome: CreationOutcome) -> Result<chapchoo_persistence::AgentSummar
 async fn exercise(store: Store, users: &[BearerSecret]) -> Result<(), TestError> {
     let owner = users[0].digest();
     let foreign = users[1].digest();
+    assert!(matches!(
+        store.provider_inventory(&foreign, None, 20, NOW).await,
+        Err(StoreError::Forbidden)
+    ));
+    assert!(matches!(
+        store
+            .computer_inventory(&foreign, "provider", None, 20, NOW)
+            .await,
+        Err(StoreError::Forbidden)
+    ));
+    assert!(matches!(
+        store
+            .resource_inventory(&foreign, "running", None, 20, NOW)
+            .await,
+        Err(StoreError::Forbidden)
+    ));
+    assert_eq!(
+        store.provider_inventory(&owner, None, 20, NOW).await?.len(),
+        1
+    );
+    let inventory = store
+        .computer_inventory(&owner, "provider", None, 2, NOW)
+        .await?;
+    assert_eq!(inventory.len(), 2);
+    let later = store
+        .computer_inventory(&owner, "provider", Some(&inventory[1].computer.id), 20, NOW)
+        .await?;
+    assert!(
+        later
+            .iter()
+            .all(|row| row.computer.id > inventory[1].computer.id)
+    );
+    assert!(
+        later
+            .iter()
+            .all(|row| !row.residual && row.cleanup_completed_at.is_none())
+    );
     let config_key = BearerSecret::generate()?;
     let verifier = SystemOwnerVerifier::new(
         "system-owner".into(),
@@ -295,6 +333,16 @@ async fn exercise(store: Store, users: &[BearerSecret]) -> Result<(), TestError>
         store.agent(&owner, "created", NOW).await,
         Err(StoreError::NotFound)
     ));
+    let residual = store
+        .computer_inventory(&owner, "provider", None, 20, NOW)
+        .await?;
+    assert!(
+        residual
+            .iter()
+            .any(|row| row.computer.id == "computer-created"
+                && row.residual
+                && row.computer.desired == DesiredState::Deleting)
+    );
     assert!(
         matches!(store.create_cloud_agent(&owner,&draft("never-recreate","never-recreate-computer","create"),NOW).await?,CreationOutcome::Removed{assigned_agent_id} if assigned_agent_id=="created")
     );

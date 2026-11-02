@@ -158,17 +158,213 @@ async fn exercise(
         connection_id: "connection",
         credential: &provider_digest,
     };
-    for id in ["one", "two", "collision", "pending", "empty"] {
+    for id in ["one", "two", "collision", "pending", "empty", "dispatch"] {
         store
             .create_cloud_agent(&owner_digest, &creation(id), now()?)
             .await?;
     }
+    let dispatch = scope("dispatch", "create-dispatch");
+    store
+        .reserve_execution(&source, dispatch, &draft("dispatch-once"))
+        .await?;
+    assert!(
+        store
+            .claim_execution_dispatch(&source, dispatch, "dispatch-once")
+            .await?
+    );
+    let admitted = store
+        .delivery_snapshot(Some(&owner_digest), dispatch, Some("dispatch-once"))
+        .await?;
+    assert!(admitted.computer.prepare_admitted_at.is_some());
+    assert!(admitted.computer.initial_start_dispatch_at.is_none());
+    store
+        .release_undelivered_prepare(&source, dispatch, "dispatch-once")
+        .await?;
+    assert!(
+        store
+            .claim_execution_dispatch(&source, dispatch, "dispatch-once")
+            .await?
+    );
+    store
+        .mark_start_dispatched(&source, dispatch, "dispatch-once")
+        .await?;
+    store
+        .release_undelivered_prepare(&source, dispatch, "dispatch-once")
+        .await?;
+    assert!(
+        store
+            .delivery_snapshot(Some(&owner_digest), dispatch, Some("dispatch-once"))
+            .await?
+            .computer
+            .prepare_admitted_at
+            .is_some(),
+        "A dequeued call never becomes replayable"
+    );
+    assert!(
+        !store
+            .claim_execution_dispatch(&source, dispatch, "dispatch-once")
+            .await?
+    );
+    mutate_fixture(
+        connection,
+        "UPDATE provider_connections SET connection_id='dispatch-successor' WHERE provider_id='provider'",
+    )?;
+    let successor = ProviderSource {
+        connection_id: "dispatch-successor",
+        ..source
+    };
+    assert!(
+        !store
+            .claim_execution_dispatch(&successor, dispatch, "dispatch-once")
+            .await?
+    );
+    assert!(matches!(
+        store
+            .claim_execution_dispatch(&source, dispatch, "dispatch-once")
+            .await,
+        Err(StoreError::Unauthenticated)
+    ));
+    mutate_fixture(
+        connection,
+        "UPDATE provider_connections SET connection_id='connection' WHERE provider_id='provider'",
+    )?;
+    let dispatch_agent = store.agent(&owner_digest, "agent-dispatch", now()?).await?;
+    assert!(
+        store
+            .retry_preparation(
+                &owner_digest,
+                &dispatch_agent.id,
+                "retry-dispatch",
+                "create-dispatch",
+                now()?
+            )
+            .await
+            .is_err()
+    );
+    store
+        .report_preparation_blocked(&source, dispatch, "dispatch-once")
+        .await?;
+    mutate_fixture(
+        connection,
+        "UPDATE computer_providers SET can_create=FALSE WHERE id='provider'",
+    )?;
+    assert!(
+        !store
+            .agent(&owner_digest, &dispatch_agent.id, now()?)
+            .await?
+            .computer
+            .preparation_retry_available
+    );
+    assert!(
+        store
+            .retry_preparation(
+                &owner_digest,
+                &dispatch_agent.id,
+                "incapable-retry",
+                "create-dispatch",
+                now()?
+            )
+            .await
+            .is_err()
+    );
+    mutate_fixture(
+        connection,
+        "UPDATE computer_providers SET can_create=TRUE WHERE id='provider'",
+    )?;
+    assert!(
+        store
+            .agent(&owner_digest, &dispatch_agent.id, now()?)
+            .await?
+            .computer
+            .preparation_retry_available
+    );
+    let retried = store
+        .retry_preparation(
+            &owner_digest,
+            &dispatch_agent.id,
+            "retry-dispatch",
+            "create-dispatch",
+            now()?,
+        )
+        .await?;
+    assert_eq!(retried.computer.current_request_id, "retry-dispatch");
+    assert_eq!(
+        store
+            .retry_preparation(
+                &owner_digest,
+                &dispatch_agent.id,
+                "retry-dispatch",
+                "create-dispatch",
+                now()?
+            )
+            .await?
+            .id,
+        retried.id
+    );
+    let retry_scope = scope("dispatch", "retry-dispatch");
+    let retry_snapshot = store
+        .delivery_snapshot(Some(&owner_digest), retry_scope, Some("dispatch-once"))
+        .await?;
+    assert_eq!(
+        retry_snapshot.computer.current_execution_id.as_deref(),
+        Some("dispatch-once")
+    );
+    assert!(retry_snapshot.computer.initial_start_dispatch_at.is_none());
+    assert!(
+        store
+            .claim_execution_dispatch(&source, retry_scope, "dispatch-once")
+            .await?
+    );
+    assert!(
+        store
+            .retry_preparation(
+                &owner_digest,
+                &dispatch_agent.id,
+                "stale-retry",
+                "create-dispatch",
+                now()?
+            )
+            .await
+            .is_err()
+    );
     let one = scope("one", "create-one");
     let reserved = store
         .reserve_execution(&source, one, &draft("first"))
         .await?;
     assert_eq!(reserved.execution_id, "first");
     assert_eq!(reserved.resources.len(), 3);
+    let delivery = store
+        .delivery_snapshot(Some(&owner_digest), one, Some("first"))
+        .await?;
+    assert_eq!(delivery.computer.provider_id, "provider");
+    assert_eq!(delivery.resources.len(), 3);
+    assert!(delivery.execution.is_some_and(|e| e.retired_at.is_none()));
+    assert!(matches!(
+        store
+            .delivery_snapshot(
+                Some(&BearerSecret::generate()?.digest()),
+                one,
+                Some("first")
+            )
+            .await,
+        Err(StoreError::Unauthenticated)
+    ));
+    assert!(matches!(
+        store
+            .delivery_snapshot(
+                Some(&owner_digest),
+                scope("one", "stale-request"),
+                Some("first")
+            )
+            .await,
+        Err(StoreError::Conflict)
+    ));
+    assert!(matches!(
+        store
+            .delivery_snapshot(Some(&owner_digest), one, Some("foreign-execution"))
+            .await,
+        Err(StoreError::Conflict)
+    ));
     assert!(
         reserved
             .resources
@@ -632,6 +828,14 @@ async fn exercise(
         .force_remove_agent(&owner_digest, "agent-one", "delete-one", now()?)
         .await?;
     let deleting = scope("one", "delete-one");
+    store
+        .report_lifecycle_issue(
+            &current_source,
+            deleting,
+            Some("restored"),
+            chapchoo_domain::LifecyclePhase::Uncertain,
+        )
+        .await?;
     assert!(matches!(
         store.managed_resources(&current_source, restarting).await,
         Err(StoreError::Conflict)
@@ -657,6 +861,19 @@ async fn exercise(
     store
         .retire_execution(&current_source, deleting, "restored")
         .await?;
+    store
+        .report_lifecycle_issue(
+            &current_source,
+            deleting,
+            None,
+            chapchoo_domain::LifecyclePhase::Blocked,
+        )
+        .await?;
+    let cleanup_state = store.delivery_snapshot(None, deleting, None).await?;
+    assert_eq!(
+        cleanup_state.computer.current_phase, "UNCERTAIN",
+        "Retirement and issue reports cannot reopen an uncertain deletion"
+    );
     store
         .confirm_computer_cleanup(&current_source, deleting)
         .await?;
@@ -731,6 +948,48 @@ async fn exercise(
     store
         .force_remove_agent(&owner_digest, "agent-pending", "delete-pending", now()?)
         .await?;
+    assert!(
+        store
+            .managed_resources(&current_source, scope("pending", "delete-pending"))
+            .await?
+            .iter()
+            .all(|r| r.resource_uid.is_none()
+                && r.absence_confirmed_at.is_some()
+                && r.source_connection_id.is_none())
+    );
+    let uncertain_candidate = scope("collision", "create-collision");
+    store
+        .reserve_execution(
+            &current_source,
+            uncertain_candidate,
+            &draft("possibly-forwarded"),
+        )
+        .await?;
+    assert!(
+        store
+            .claim_execution_dispatch(&current_source, uncertain_candidate, "possibly-forwarded")
+            .await?
+    );
+    store
+        .request_lifecycle(
+            &owner_digest,
+            "agent-collision",
+            &LifecycleRequest {
+                request_id: "delete-uncertain".into(),
+                expected_request_id: "create-collision".into(),
+                action: LifecycleAction::Delete,
+            },
+            now()?,
+        )
+        .await?;
+    assert!(
+        store
+            .managed_resources(&current_source, scope("collision", "delete-uncertain"))
+            .await?
+            .iter()
+            .all(|r| r.absence_confirmed_at.is_none()),
+        "Possible forwarding cannot become non-allocation proof"
+    );
     mutate_fixture(
         connection,
         &format!(
@@ -811,6 +1070,540 @@ async fn exercise(
     ));
     exercise_stop_and_initial(&store, connection, &current_source, &owner_digest).await?;
     exercise_review_regressions(&store, connection, &current_source, &owner_digest).await?;
+    exercise_provider_directory(&store, connection, &provider_digest).await?;
+    Ok(())
+}
+
+async fn exercise_provider_directory(
+    store: &Store,
+    connection: &mut impl SimpleConnection,
+    credential: &chapchoo_crypto::SecretDigest,
+) -> Result<(), TestError> {
+    use chapchoo_persistence::{ConnectionOwner, DirectoryPolicy};
+    let policy = DirectoryPolicy::default();
+    for control in ["control-a", "control-b"] {
+        let registered = store
+            .register_control(control, "http://127.0.0.1:1", policy)
+            .await?;
+        assert!(!registered.draining);
+        store.renew_control(control, policy).await?;
+    }
+    exercise_connector_directory(store, connection, credential).await?;
+    assert!(matches!(
+        store
+            .register_control("control-a", "http://127.0.0.1:2", policy)
+            .await,
+        Err(StoreError::Conflict)
+    ));
+    assert!(matches!(
+        store
+            .withdraw_drained_control_connections("control-a")
+            .await,
+        Err(StoreError::InvalidTransition)
+    ));
+    let expected = store
+        .provider_connection_owner("provider", credential)
+        .await?
+        .ok_or("Missing original route")?;
+    let candidates = [
+        ConnectionOwner {
+            control_id: "control-a".into(),
+            connection_id: "candidate-a".into(),
+        },
+        ConnectionOwner {
+            control_id: "control-b".into(),
+            connection_id: "candidate-b".into(),
+        },
+    ];
+    let barrier = Arc::new(tokio::sync::Barrier::new(2));
+    let mut tasks = Vec::new();
+    for candidate in candidates {
+        let store = store.clone();
+        let key = credential.clone();
+        let expected = expected.clone();
+        let barrier = barrier.clone();
+        tasks.push(tokio::spawn(async move {
+            barrier.wait().await;
+            store
+                .admit_provider_connection("provider", &key, Some(&expected), &candidate, policy)
+                .await
+        }));
+    }
+    let a = tasks.remove(0).await?;
+    let b = tasks.remove(0).await?;
+    let winner = match (a, b) {
+        (Ok(route), Err(StoreError::Conflict)) | (Err(StoreError::Conflict), Ok(route)) => route,
+        _ => return Err("Exactly one concurrent stream admission must succeed".into()),
+    };
+    assert!(
+        !store
+            .close_provider_connection("provider", credential, &expected)
+            .await?
+    );
+    assert!(matches!(
+        store
+            .renew_provider_connection("provider", credential, &expected, policy)
+            .await,
+        Err(StoreError::Conflict)
+    ));
+    let winner_owner = winner.owner();
+    let resolved = store
+        .resolve_provider_route("provider")
+        .await?
+        .ok_or("Missing winning route")?;
+    assert_eq!(resolved.component.owner(), winner_owner);
+    store
+        .renew_provider_connection("provider", credential, &winner_owner, policy)
+        .await?;
+    let next = ConnectionOwner {
+        control_id: if winner_owner.control_id == "control-a" {
+            "control-b"
+        } else {
+            "control-a"
+        }
+        .into(),
+        connection_id: "replacement".into(),
+    };
+    store
+        .admit_provider_connection("provider", credential, Some(&winner_owner), &next, policy)
+        .await?;
+    store.drain_control(&winner_owner.control_id).await?;
+    assert_eq!(
+        store
+            .withdraw_drained_control_connections(&winner_owner.control_id)
+            .await?,
+        0
+    );
+    assert_eq!(
+        store
+            .resolve_provider_route("provider")
+            .await?
+            .ok_or("Other Control route was cleared")?
+            .component
+            .owner(),
+        next
+    );
+    assert!(
+        !store
+            .close_provider_connection("provider", credential, &winner_owner)
+            .await?
+    );
+    mutate_fixture(
+        connection,
+        "UPDATE provider_connections SET expires_at=1 WHERE provider_id='provider'",
+    )?;
+    assert!(store.resolve_provider_route("provider").await?.is_none());
+    assert!(matches!(
+        store
+            .renew_provider_connection("provider", credential, &next, policy)
+            .await,
+        Err(StoreError::InvalidTransition)
+    ));
+    // An expired tuple is still compared exactly, and only a fresh connection wins.
+    let expired = store
+        .provider_connection_owner("provider", credential)
+        .await?
+        .ok_or("Missing expired tuple")?;
+    let fresh = ConnectionOwner {
+        control_id: next.control_id.clone(),
+        connection_id: "fresh-after-expiry".into(),
+    };
+    store
+        .admit_provider_connection("provider", credential, Some(&expired), &fresh, policy)
+        .await?;
+    store.drain_control(&fresh.control_id).await?;
+    assert!(matches!(
+        store.renew_control(&fresh.control_id, policy).await,
+        Err(StoreError::InvalidTransition)
+    ));
+    assert!(store.resolve_provider_route("provider").await?.is_none());
+    assert!(matches!(
+        store
+            .renew_provider_connection("provider", credential, &fresh, policy)
+            .await,
+        Err(StoreError::InvalidTransition)
+    ));
+    assert_eq!(
+        store
+            .withdraw_drained_control_connections(&fresh.control_id)
+            .await?,
+        1
+    );
+    assert!(
+        store
+            .provider_connection_owner("provider", credential)
+            .await?
+            .is_none()
+    );
+    store
+        .register_control("control-expired", "http://127.0.0.1:3", policy)
+        .await?;
+    mutate_fixture(
+        connection,
+        "UPDATE control_instances SET renewed_at=0,expires_at=1 WHERE id='control-expired'",
+    )?;
+    assert!(matches!(
+        store.renew_control("control-expired", policy).await,
+        Err(StoreError::InvalidTransition)
+    ));
+    let invalid = ConnectionOwner {
+        control_id: "control-expired".into(),
+        connection_id: "expired-control-connection".into(),
+    };
+    assert!(matches!(
+        store
+            .admit_provider_connection("provider", credential, None, &invalid, policy)
+            .await,
+        Err(StoreError::InvalidTransition)
+    ));
+    store
+        .register_control("control-new", "http://127.0.0.1:4", policy)
+        .await?;
+    let new_owner = ConnectionOwner {
+        control_id: "control-new".into(),
+        connection_id: "new-active".into(),
+    };
+    store
+        .admit_provider_connection("provider", credential, None, &new_owner, policy)
+        .await?;
+    let wrong = BearerSecret::generate()?.digest();
+    assert!(matches!(
+        store
+            .renew_provider_connection("provider", &wrong, &new_owner, policy)
+            .await,
+        Err(StoreError::Unauthenticated)
+    ));
+    mutate_fixture(
+        connection,
+        "UPDATE provider_keys SET revoked_at=1 WHERE provider_id='provider'",
+    )?;
+    assert!(store.resolve_provider_route("provider").await?.is_none());
+    assert!(matches!(
+        store
+            .renew_provider_connection("provider", credential, &new_owner, policy)
+            .await,
+        Err(StoreError::Unauthenticated)
+    ));
+    // Owned drain still withdraws rows when the component credential expired/revoked.
+    store.drain_control("control-new").await?;
+    assert_eq!(
+        store
+            .withdraw_drained_control_connections("control-new")
+            .await?,
+        1
+    );
+    Ok(())
+}
+
+async fn exercise_connector_directory(
+    store: &Store,
+    connection: &mut impl SimpleConnection,
+    provider: &chapchoo_crypto::SecretDigest,
+) -> Result<(), TestError> {
+    use chapchoo_persistence::{
+        ComponentKeyDraft, ComponentKeyPolicy, ConnectionOwner, ConnectorSessionDraft,
+        DirectoryPolicy,
+    };
+    let route = store
+        .resolve_provider_route("provider")
+        .await?
+        .ok_or("Missing Provider route")?;
+    let source = ProviderSource {
+        provider_id: "provider",
+        control_id: &route.component.control_id,
+        connection_id: &route.component.connection_id,
+        credential: provider,
+    };
+    let draft = ConnectorSessionDraft {
+        id: "directory-session".into(),
+        request_id: "directory-session-create".into(),
+        initial_key: BearerSecret::generate()?,
+    };
+    let stale = ProviderSource {
+        connection_id: "stale-connection",
+        ..source
+    };
+    assert!(matches!(
+        store
+            .issue_connector_session_from_source(&stale, "initial-resumed", &draft, now()?)
+            .await,
+        Err(StoreError::Unauthenticated)
+    ));
+    let session = store
+        .issue_connector_session_from_source(&source, "initial-resumed", &draft, now()?)
+        .await?;
+    assert!(matches!(
+        store
+            .revoke_connector_session_from_source(&stale, &session.id, "stale-revoke", now()?)
+            .await,
+        Err(StoreError::Unauthenticated)
+    ));
+    assert!(matches!(
+        store
+            .connector_connection_owner(&session.id, &session.initial_key.digest())
+            .await,
+        Err(StoreError::Unauthenticated)
+    ));
+    let key = store
+        .exchange_connector_key(
+            &session.id,
+            &session.initial_key.digest(),
+            &ComponentKeyDraft {
+                request_id: "directory-exchange".into(),
+                token: BearerSecret::generate()?,
+            },
+            ComponentKeyPolicy::default(),
+            now()?,
+        )
+        .await?;
+    let barrier = Arc::new(tokio::sync::Barrier::new(2));
+    let mut tasks = Vec::new();
+    for control in ["control-a", "control-b"] {
+        let store = store.clone();
+        let key = key.token.digest();
+        let session_id = session.id.clone();
+        let barrier = barrier.clone();
+        tasks.push(tokio::spawn(async move {
+            barrier.wait().await;
+            store
+                .admit_connector_connection(
+                    &session_id,
+                    &key,
+                    None,
+                    &ConnectionOwner {
+                        control_id: control.into(),
+                        connection_id: format!("connector-{control}"),
+                    },
+                    DirectoryPolicy::default(),
+                )
+                .await
+        }));
+    }
+    let a = tasks.remove(0).await?;
+    let b = tasks.remove(0).await?;
+    let winner = match (a, b) {
+        (Ok(route), Err(StoreError::Conflict)) | (Err(StoreError::Conflict), Ok(route)) => route,
+        _ => return Err("Exactly one empty-tuple Connector admission must succeed".into()),
+    };
+    let first = winner.owner();
+    let identity = store
+        .verify_connector_connection(&chapchoo_persistence::ConnectorSource {
+            session_id: &session.id,
+            control_id: &first.control_id,
+            connection_id: &first.connection_id,
+            credential: &key.token.digest(),
+        })
+        .await?;
+    assert_eq!(identity.computer_id, "unallocated");
+    assert_eq!(
+        store
+            .resolve_connector_route("unallocated")
+            .await?
+            .ok_or("Missing verified Connector")?
+            .component
+            .expires_at,
+        winner.expires_at
+    );
+    store
+        .renew_connector_connection(
+            &session.id,
+            &key.token.digest(),
+            &first,
+            DirectoryPolicy::default(),
+        )
+        .await?;
+    let replacement = ConnectionOwner {
+        control_id: first.control_id.clone(),
+        connection_id: "connector-replaced".into(),
+    };
+    store
+        .admit_connector_connection(
+            &session.id,
+            &key.token.digest(),
+            Some(&first),
+            &replacement,
+            DirectoryPolicy::default(),
+        )
+        .await?;
+    assert!(
+        !store
+            .close_connector_connection(&session.id, &key.token.digest(), &first)
+            .await?
+    );
+    assert!(matches!(
+        store
+            .verify_connector_connection(&chapchoo_persistence::ConnectorSource {
+                session_id: &session.id,
+                control_id: &first.control_id,
+                connection_id: &first.connection_id,
+                credential: &key.token.digest()
+            })
+            .await,
+        Err(StoreError::Conflict)
+    ));
+    assert!(matches!(
+        store
+            .renew_connector_connection(
+                &session.id,
+                &key.token.digest(),
+                &first,
+                DirectoryPolicy::default()
+            )
+            .await,
+        Err(StoreError::Conflict)
+    ));
+    // Provider key/route authority is not a prerequisite for Connector heartbeats.
+    mutate_fixture(
+        connection,
+        "UPDATE provider_keys SET revoked_at=1 WHERE provider_id='provider'",
+    )?;
+    store
+        .renew_connector_connection(
+            &session.id,
+            &key.token.digest(),
+            &replacement,
+            DirectoryPolicy::default(),
+        )
+        .await?;
+    assert_eq!(
+        store
+            .resolve_connector_route("unallocated")
+            .await?
+            .ok_or("Missing independent Connector route")?
+            .component
+            .owner(),
+        replacement
+    );
+    mutate_fixture(
+        connection,
+        "UPDATE provider_keys SET revoked_at=NULL WHERE provider_id='provider'",
+    )?;
+    let refreshed = store
+        .refresh_connector_key(
+            &session.id,
+            &key.token.digest(),
+            &ComponentKeyDraft {
+                request_id: "directory-refresh".into(),
+                token: BearerSecret::generate()?,
+            },
+            ComponentKeyPolicy::default(),
+            now()?,
+        )
+        .await?;
+    store
+        .renew_connector_connection(
+            &session.id,
+            &key.token.digest(),
+            &replacement,
+            DirectoryPolicy::default(),
+        )
+        .await?;
+    mutate_fixture(
+        connection,
+        "UPDATE connector_sessions SET previous_valid_until=1 WHERE id='directory-session'",
+    )?;
+    assert!(
+        store
+            .resolve_connector_route("unallocated")
+            .await?
+            .is_none()
+    );
+    assert!(matches!(
+        store
+            .renew_connector_connection(
+                &session.id,
+                &key.token.digest(),
+                &replacement,
+                DirectoryPolicy::default()
+            )
+            .await,
+        Err(StoreError::Unauthenticated)
+    ));
+    let expected = store
+        .connector_connection_owner(&session.id, &refreshed.token.digest())
+        .await?
+        .ok_or("Missing previous-key route")?;
+    let current = ConnectionOwner {
+        control_id: expected.control_id.clone(),
+        connection_id: "connector-refreshed".into(),
+    };
+    store
+        .admit_connector_connection(
+            &session.id,
+            &refreshed.token.digest(),
+            Some(&expected),
+            &current,
+            DirectoryPolicy::default(),
+        )
+        .await?;
+    let exchanged = store
+        .exchange_connector_key(
+            &session.id,
+            &session.initial_key.digest(),
+            &ComponentKeyDraft {
+                request_id: "directory-reexchange".into(),
+                token: BearerSecret::generate()?,
+            },
+            ComponentKeyPolicy::default(),
+            now()?,
+        )
+        .await?;
+    assert!(
+        store
+            .resolve_connector_route("unallocated")
+            .await?
+            .is_none()
+    );
+    assert!(matches!(
+        store
+            .renew_connector_connection(
+                &session.id,
+                &refreshed.token.digest(),
+                &current,
+                DirectoryPolicy::default()
+            )
+            .await,
+        Err(StoreError::Unauthenticated)
+    ));
+    let latest = ConnectionOwner {
+        control_id: current.control_id.clone(),
+        connection_id: "connector-latest".into(),
+    };
+    store
+        .admit_connector_connection(
+            &session.id,
+            &exchanged.token.digest(),
+            None,
+            &latest,
+            DirectoryPolicy::default(),
+        )
+        .await?;
+    store
+        .revoke_connector_session(
+            "provider",
+            provider,
+            &session.id,
+            "directory-revoke",
+            now()?,
+        )
+        .await?;
+    assert!(
+        store
+            .resolve_connector_route("unallocated")
+            .await?
+            .is_none()
+    );
+    assert!(matches!(
+        store
+            .renew_connector_connection(
+                &session.id,
+                &exchanged.token.digest(),
+                &latest,
+                DirectoryPolicy::default()
+            )
+            .await,
+        Err(StoreError::Unauthenticated)
+    ));
     Ok(())
 }
 

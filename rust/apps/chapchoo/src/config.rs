@@ -7,7 +7,7 @@ use std::{
     env,
     ffi::OsString,
     fmt,
-    net::{IpAddr, SocketAddr},
+    net::SocketAddr,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -36,15 +36,101 @@ pub enum Command {
     },
     /// Run selected backend and bundled web components in the foreground.
     Serve(ServeOptions),
+    /// Run the execution-bound Computer Connector without product DB authority.
+    ComputerConnector(ConnectorOptions),
+    /// Run a scoped Kubernetes Computer Provider without product DB authority.
+    ComputerProvider(ProviderOptions),
+}
+#[derive(Debug, Args)]
+pub struct ProviderOptions {
+    #[arg(long, env = "CHAPCHOO_CONTROL_ENDPOINT")]
+    pub endpoint: String,
+    #[arg(long, env = "CHAPCHOO_PROVIDER_ID")]
+    pub provider_id: String,
+    #[arg(long, env = "CHAPCHOO_PROVIDER_NAME")]
+    pub name: String,
+    #[arg(long, env = "CHAPCHOO_KUBERNETES_NAMESPACE")]
+    pub namespace: String,
+    #[arg(long, env = "CHAPCHOO_COMPUTER_IMAGE")]
+    pub image: String,
+    #[arg(
+        long,
+        env = "CHAPCHOO_COMPUTER_IMAGE_PULL_POLICY",
+        default_value = "IfNotPresent"
+    )]
+    pub image_pull_policy: String,
+    #[arg(long, env = "CHAPCHOO_COMPUTER_STORAGE_CLASS")]
+    pub storage_class: Option<String>,
+    #[arg(
+        long,
+        env = "CHAPCHOO_COMPUTER_STORAGE_REQUEST",
+        default_value = "10Gi"
+    )]
+    pub storage_request: String,
+    #[arg(
+        long,
+        env = "CHAPCHOO_COMPUTER_SAVED_MOUNT",
+        default_value = "/workspace"
+    )]
+    pub saved_mount: String,
+    #[arg(long, env = "CHAPCHOO_COMPUTER_SERVICE_ACCOUNT")]
+    pub service_account: String,
+    #[arg(long, env = "CHAPCHOO_COMPUTER_CPU_REQUEST", default_value = "100m")]
+    pub cpu_request: String,
+    #[arg(
+        long,
+        env = "CHAPCHOO_COMPUTER_MEMORY_REQUEST",
+        default_value = "128Mi"
+    )]
+    pub memory_request: String,
+    #[arg(long, env = "CHAPCHOO_COMPUTER_CPU_LIMIT", default_value = "1")]
+    pub cpu_limit: String,
+    #[arg(long, env = "CHAPCHOO_COMPUTER_MEMORY_LIMIT", default_value = "1Gi")]
+    pub memory_limit: String,
+    #[arg(
+        long,
+        conflicts_with = "kubeconfig",
+        required_unless_present = "kubeconfig"
+    )]
+    pub in_cluster: bool,
+    #[arg(
+        long,
+        env = "CHAPCHOO_KUBECONFIG",
+        conflicts_with = "in_cluster",
+        required_unless_present = "in_cluster"
+    )]
+    pub kubeconfig: Option<PathBuf>,
+}
+pub fn provider_owner_key() -> Result<BearerSecret, ConfigError> {
+    BearerSecret::parse(required("CHAPCHOO_PROVIDER_OWNER_TOKEN")?)
+        .map_err(|_| ConfigError::Variable("CHAPCHOO_PROVIDER_OWNER_TOKEN"))
+}
+#[derive(Debug, Args)]
+pub struct ConnectorOptions {
+    #[arg(long, env = "CHAPCHOO_CONTROL_ENDPOINT")]
+    pub endpoint: String,
+    #[arg(long, env = "CHAPCHOO_CONNECTOR_SESSION_ID")]
+    pub session_id: String,
+}
+pub fn connector_initial_key() -> Result<BearerSecret, ConfigError> {
+    BearerSecret::parse(required("CHAPCHOO_CONNECTOR_INITIAL_KEY")?)
+        .map_err(|_| ConfigError::Variable("CHAPCHOO_CONNECTOR_INITIAL_KEY"))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
-pub enum Role {
-    /// Select only explicitly requested web components, without database authority.
-    None,
-    General,
+pub enum BackendGroup {
+    Client,
     Admin,
-    Both,
+    Control,
+}
+impl BackendGroup {
+    pub fn domain(self) -> chapchoo_rpc::ServiceGroup {
+        match self {
+            Self::Client => chapchoo_rpc::ServiceGroup::Client,
+            Self::Admin => chapchoo_rpc::ServiceGroup::Admin,
+            Self::Control => chapchoo_rpc::ServiceGroup::Control,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -56,16 +142,15 @@ pub enum WebSelection {
 
 #[derive(Debug, Args)]
 pub struct ServeOptions {
-    #[arg(long, value_enum, default_value = "both")]
-    pub role: Role,
-    #[arg(
-        long,
-        env = "CHAPCHOO_GENERAL_LISTEN",
-        default_value = "127.0.0.1:50051"
-    )]
-    pub general_listen: SocketAddr,
-    #[arg(long, env = "CHAPCHOO_ADMIN_LISTEN", default_value = "127.0.0.1:50052")]
-    pub admin_listen: SocketAddr,
+    /// Select a service union; use --groups with no values for web-only operation.
+    #[arg(long, value_enum, value_delimiter=',', num_args=0.., default_values=["client","admin","control"])]
+    pub groups: Vec<BackendGroup>,
+    #[arg(long, env = "CHAPCHOO_LISTEN", default_value = "127.0.0.1:50051")]
+    pub listen: SocketAddr,
+    #[arg(long, env = "CHAPCHOO_PEER_LISTEN")]
+    pub peer_listen: Option<SocketAddr>,
+    #[arg(long, env = "CHAPCHOO_PEER_ADVERTISE")]
+    pub peer_advertise: Option<String>,
     #[arg(long, value_enum)]
     pub web: Option<WebSelection>,
     #[arg(
@@ -88,8 +173,10 @@ pub enum ConfigError {
     Variable(&'static str),
     #[error("Select exactly one of CHAPCHOO_SQLITE_PATH or CHAPCHOO_POSTGRES_URL")]
     DatabaseSelection,
-    #[error("General and Admin must use different listener addresses")]
+    #[error("Co-selected public, peer and web listeners must use different addresses")]
     SameListener,
+    #[error("Network peers require the Control group and both listen and advertised endpoints")]
+    PeerConfiguration,
     #[error("Select at least one backend or bundled web component")]
     NoComponents,
     #[error("The selected bundled Node runtime or web artifacts are unavailable")]
@@ -305,16 +392,6 @@ fn web_environment(
     environment
 }
 
-fn client_address(mut listen: SocketAddr) -> SocketAddr {
-    if listen.ip().is_unspecified() {
-        listen.set_ip(match listen.ip() {
-            IpAddr::V4(_) => IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
-            IpAddr::V6(_) => IpAddr::V6(std::net::Ipv6Addr::LOCALHOST),
-        });
-    }
-    listen
-}
-
 pub fn web_configs(options: &ServeOptions) -> Result<Vec<WebConfig>, AppError> {
     let Some(selection) = options.web else {
         return Ok(Vec::new());
@@ -326,34 +403,23 @@ pub fn web_configs(options: &ServeOptions) -> Result<Vec<WebConfig>, AppError> {
     let root = executable.parent().ok_or(ConfigError::WebArtifacts)?;
     let mut selected = Vec::new();
     for app in [WebApp::General, WebApp::Admin] {
-        let (enabled, listen, public_default, backend_default) = match app {
+        let (enabled, listen, public_default) = match app {
             WebApp::General => (
                 matches!(selection, WebSelection::General | WebSelection::Both),
                 options.general_web_listen,
                 "http://localhost:3003",
-                if matches!(options.role, Role::General | Role::Both) {
-                    client_address(options.general_listen)
-                } else {
-                    "127.0.0.1:50051".parse()?
-                },
             ),
             WebApp::Admin => (
                 matches!(selection, WebSelection::Admin | WebSelection::Both),
                 options.admin_web_listen,
                 "http://localhost:3004",
-                if matches!(options.role, Role::Admin | Role::Both) {
-                    client_address(options.admin_listen)
-                } else {
-                    "127.0.0.1:50052".parse()?
-                },
             ),
         };
         if !enabled {
             continue;
         }
         let public = optional(app.public_variable())?.unwrap_or_else(|| public_default.to_owned());
-        let backend = optional(app.backend_variable())?
-            .unwrap_or_else(|| format!("http://{backend_default}"));
+        let backend = required(app.backend_variable())?;
         let config = WebConfig::parse(app, listen, &public, &backend, root)?;
         if !config.node.is_file() || !config.script.is_file() {
             return Err(ConfigError::WebArtifacts.into());
@@ -429,6 +495,8 @@ pub struct ApplicationConfig {
     pub accounts: chapchoo_service::AccountsConfig,
     pub password_capacity: usize,
     pub mail: Option<MailConfig>,
+    pub system_owner: Option<chapchoo_crypto::SystemOwnerVerifier>,
+    pub computers: chapchoo_service::ComputerPolicy,
 }
 
 pub struct MailConfig {
@@ -507,6 +575,11 @@ impl MailConfig {
     }
 }
 
+fn milliseconds(name: &'static str, default: i64) -> Result<i64, ConfigError> {
+    optional(name)?.map_or(Ok(default), |v| {
+        v.parse().map_err(|_| ConfigError::Variable(name))
+    })
+}
 impl ApplicationConfig {
     pub fn load() -> Result<Self, AppError> {
         let setup_proof: Option<SecretDigest> = optional("CHAPCHOO_SETUP_PROOF")?
@@ -522,6 +595,33 @@ impl ApplicationConfig {
             return Err(ConfigError::Variable("CHAPCHOO_PASSWORD_WORKERS").into());
         }
         let mail = MailConfig::load_with(optional)?;
+        let computers = chapchoo_service::ComputerPolicy {
+            directory: chapchoo_service::DirectoryPolicy {
+                control_validity_ms: milliseconds("CHAPCHOO_CONTROL_VALIDITY_MS", 60_000)?,
+                component_validity_ms: milliseconds("CHAPCHOO_COMPONENT_VALIDITY_MS", 60_000)?,
+            },
+            keys: chapchoo_service::ComponentKeyPolicy {
+                validity_ms: milliseconds("CHAPCHOO_COMPONENT_KEY_VALIDITY_MS", 86_400_000)?,
+                proactive_after_ms: milliseconds("CHAPCHOO_COMPONENT_KEY_REFRESH_MS", 43_200_000)?,
+                overlap_ms: milliseconds("CHAPCHOO_COMPONENT_KEY_OVERLAP_MS", 300_000)?,
+            },
+            heartbeat_ms: u32::try_from(milliseconds("CHAPCHOO_CONTROL_HEARTBEAT_MS", 20_000)?)
+                .map_err(|_| ConfigError::Variable("CHAPCHOO_CONTROL_HEARTBEAT_MS"))?,
+            start_delayed_ms: milliseconds("CHAPCHOO_START_DELAYED_MS", 300_000)?,
+        }
+        .validate()?;
+        let system_owner=match (
+            optional("CHAPCHOO_SYSTEM_OWNER_ID")?,
+            optional("CHAPCHOO_SYSTEM_OWNER_PROVIDER_IDS")?,
+            optional("CHAPCHOO_SYSTEM_OWNER_TOKEN")?,
+        ) {
+            (None,None,None)=>None,
+            (Some(id),Some(providers),Some(token))=>{
+                let token=BearerSecret::parse(token).map_err(|_|ConfigError::Variable("CHAPCHOO_SYSTEM_OWNER_TOKEN"))?;
+                Some(chapchoo_crypto::SystemOwnerVerifier::new(id,providers.split(',').map(|id|id.trim().to_owned()).collect(),token.digest()).map_err(|_|ConfigError::Variable("CHAPCHOO_SYSTEM_OWNER_PROVIDER_IDS"))?)
+            }
+            _=>return Err(ConfigError::Variable("CHAPCHOO_SYSTEM_OWNER_ID / CHAPCHOO_SYSTEM_OWNER_PROVIDER_IDS / CHAPCHOO_SYSTEM_OWNER_TOKEN").into()),
+        };
         let validity_ms = duration("CHAPCHOO_SESSION_VALIDITY_DAYS", Some(180))?
             .ok_or(ConfigError::Variable("CHAPCHOO_SESSION_VALIDITY_DAYS"))?;
         Ok(Self {
@@ -537,6 +637,8 @@ impl ApplicationConfig {
             },
             password_capacity,
             mail,
+            system_owner,
+            computers,
         })
     }
 }
@@ -751,33 +853,15 @@ mod tests {
 
     #[test]
     fn cli_retains_backend_selection_and_explicitly_admits_web_only() -> Result<(), AppError> {
-        let cli = Cli::try_parse_from(["chapchoo", "serve", "--role", "none", "--web", "general"])?;
+        let cli = Cli::try_parse_from(["chapchoo", "serve", "--groups", "--web", "general"])?;
         match cli.command {
             Command::Serve(options) => {
-                assert_eq!(options.role, Role::None);
+                assert!(options.groups.is_empty());
                 assert_eq!(options.web, Some(WebSelection::General));
             }
             _ => return Err("Expected selected component command".into()),
         }
         assert!(Cli::try_parse_from(["chapchoo", "serve", "--web", "unknown"]).is_err());
-        Ok(())
-    }
-
-    #[test]
-    fn wildcard_backend_clients_use_loopback_without_rewriting_specific_binds()
-    -> Result<(), AppError> {
-        assert_eq!(
-            client_address("0.0.0.0:50051".parse()?),
-            "127.0.0.1:50051".parse()?
-        );
-        assert_eq!(
-            client_address("[::]:50051".parse()?),
-            "[::1]:50051".parse()?
-        );
-        assert_eq!(
-            client_address("192.0.2.1:50051".parse()?),
-            "192.0.2.1:50051".parse()?
-        );
         Ok(())
     }
 }

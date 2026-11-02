@@ -48,9 +48,9 @@ def validate(root: Path, architecture: str) -> None:
     ) as temporary:
         cwd = Path(temporary)
         ports: set[int] = set()
-        while len(ports) != 4:
+        while len(ports) != 3:
             ports.add(port())
-        general, admin, general_web, admin_web = ports
+        general, general_web, admin_web = ports
         env = {
             "HOME": temporary,
             "PATH": str(cwd / "no-host-tools"),
@@ -62,6 +62,8 @@ def validate(root: Path, architecture: str) -> None:
             .rstrip("="),
             "CHAPCHOO_GENERAL_WEB_URL": f"http://127.0.0.1:{general_web}",
             "CHAPCHOO_ADMIN_WEB_URL": f"http://127.0.0.1:{admin_web}",
+            "CHAPCHOO_GENERAL_BACKEND_URL": f"http://127.0.0.1:{general}",
+            "CHAPCHOO_ADMIN_BACKEND_URL": f"http://127.0.0.1:{general}",
             "RUST_LOG": "chapchoo=info",
         }
         subprocess.run(
@@ -77,14 +79,12 @@ def validate(root: Path, architecture: str) -> None:
                 [
                     binary,
                     "serve",
-                    "--role",
-                    "both",
+                    "--groups",
+                    "client,admin,control",
                     "--web",
                     "both",
-                    "--general-listen",
+                    "--listen",
                     f"127.0.0.1:{general}",
-                    "--admin-listen",
-                    f"127.0.0.1:{admin}",
                     "--general-web-listen",
                     f"127.0.0.1:{general_web}",
                     "--admin-web-listen",

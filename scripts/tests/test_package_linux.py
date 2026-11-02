@@ -379,8 +379,8 @@ class PackageLinuxTest(unittest.TestCase):
         self.assertNotIn("runtime/bin/node", backend)
         self.assertIn("AS general-web", dockerfile)
         self.assertIn("AS admin-web", dockerfile)
-        self.assertIn('"--role", "none", "--web", "general"', dockerfile)
-        self.assertIn('"--role", "none", "--web", "admin"', dockerfile)
+        self.assertIn('"--groups", "--web", "general"', dockerfile)
+        self.assertIn('"--groups", "--web", "admin"', dockerfile)
         self.assertIn("USER 10001:10001", dockerfile)
         self.assertNotIn("CHAPCHOO_SECRET_KEY=", dockerfile)
 
