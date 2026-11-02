@@ -52,7 +52,7 @@ ENTRYPOINT ["/opt/chapchoo/chapchoo"]
 FROM runtime-base AS backend
 COPY --from=binary-artifacts --chown=10001:10001 /chapchoo ./chapchoo
 COPY --from=kubectl-runtime /bin/kubectl /usr/local/bin/kubectl
-EXPOSE 50051
+EXPOSE 50051 50053
 CMD ["serve", "--groups", "client,admin,control", "--listen", "0.0.0.0:50051"]
 
 FROM runtime-base AS web-runtime-base

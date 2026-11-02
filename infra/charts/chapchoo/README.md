@@ -1,222 +1,199 @@
 # Chapchoo Helm chart
 
-This chart packages the implemented account services and two independent web
-surfaces. It does not provision a database, namespace, server key, certificates,
-secret provider or ingress controller. A dedicated hook and minimal namespace
-RBAC generate only the first-admin setup proof when no existing Secret is selected.
-Rendering is
-not evidence of a deployed application, valid TLS or successful product journeys.
+This chart packages account and Agent/Computer services, two independent web
+surfaces, Control and an optional Computer Provider. It provisions no database,
+namespace, fixed server key, certificates, secret provider or ingress controller.
+A dedicated hook generates only the first-admin setup proof when no existing
+Secret is selected. Rendering is not live application or security evidence.
 
 ## Prerequisites and explicit values
 
-Use Kubernetes 1.27 or later for native gRPC probes and a compatible Helm
-installation. The offline contract suite was exercised with Helm 4.2.4.
+Use Kubernetes 1.27 or later for native gRPC probes and a compatible Helm release.
+The offline suite uses Helm 4.2.4. Before deployment, provide:
 
-Before a deployment, an operator must provide:
+1. External PostgreSQL and an already existing URL Secret selected by
+   `database.existingSecret` / `database.urlKey`. All backend groups and the
+   preparation Job share that product authority.
+2. The original fixed installation key through `secretKey.existingSecret` /
+   `secretKey.key`. Preserve the same bytes across upgrades and rollback. The
+   chart never generates, rotates or rebinds that key.
+3. Immutable architecture-compatible backend/general-web/admin-web images,
+   each with `repository` and `tag` or `digest`. Digest takes precedence.
+4. Explicit HTTPS public URLs. Their paths are runtime configuration, not build
+   variants. Initial setup proof is separate from schema preparation.
+5. Trusted internal routing, suitable CNI enforcement and operator-owned database,
+   component/public traffic and encryption policy. The chart's peer NetworkPolicy
+   is useful only when actually enforced. It installs no mesh or native backend TLS.
+6. Referenced pull, TLS, owner-token and optional mail Secrets before workloads
+   need them. Secret values do not belong in values files or chat.
 
-1. A reachable external PostgreSQL database and an **already existing** Secret
-   containing its connection URL. All backend roles and the prepare Job use
-   `database.existingSecret` / `database.urlKey`.
-2. The installation's original fixed key in an **already existing** Secret,
-   selected by `secretKey.existingSecret` / `secretKey.key`. Preserve
-   this key through upgrades, restarts and image rollback. The chart does not
-   generate, replace, rebind or rotate it.
-3. Immutable, architecture-compatible backend/general-web/admin-web images.
-   Each selected image requires `repository` plus `tag` or a SHA-256 `digest`.
-   A digest takes precedence when both are supplied.
-4. Explicit HTTPS public URLs and matching image path declarations. The first-admin
-   setup proof is generated once by a separate chart hook unless
-   `setupProof.existingSecret` explicitly selects an existing Secret; schema
-   preparation does not initialize the first administrator.
-5. Trusted internal routing and network access for the Job, database, web and
-   backend pods. ClusterIP/private addresses alone do not prove a trusted path.
-   Apply appropriate operator-owned workload/network controls. The chart does not
-   install a NetworkPolicy, mesh or native backend TLS.
-6. Any referenced image-pull Secrets, TLS Secrets and optional mail-credential
-   Secret before the hook executes. Image-pull Secrets are only referenced.
-
-Set `prerequisitesConfirmed: true` after these prerequisites are available.
-This is an operator acknowledgement, **not a cluster lookup or existence check**.
-Missing/incorrect Secrets, connectivity, schema or key bindings still fail at
-runtime. Default values deliberately fail rendering rather than inventing
-credentials, image tags or a public origin.
-
-For Argo CD, an ordinary Secret/ExternalSecret in the same application's Sync
-phase cannot satisfy this chart's PreSync dependencies, even with a smaller wave.
-Provision prerequisites separately before a full Chapchoo application sync.
-No Secret value needs to be placed in chart values or shared in chat.
+`prerequisitesConfirmed: true` is an operator acknowledgement, not a cluster lookup.
+Defaults fail rather than inventing credentials, image tags or public origins.
+For Argo CD, same-application Sync Secrets/ExternalSecrets cannot satisfy PreSync
+prerequisites; provision them independently before full application sync.
 
 ## Units and topology
 
-| Selection | Result |
-| --- | --- |
-| `backend.enabled: true`, `backend.topology: combined` | One `serve --role both` Deployment |
-| `backend.topology: separate` | Separate `serve --role general` and `serve --role admin` Deployments |
-| `general.enabled` | Independent `serve --role none --web general` Deployment |
-| `admin.enabled` | Independent `serve --role none --web admin` Deployment |
-| `backend.enabled: false` | No local backend or schema Job; every selected web requires its explicit `backendUrl` |
+| Selection                    | Result                                                                                                                               |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `backend.topology: combined` | One `serve --groups client,admin,control` Deployment                                                                                 |
+| `backend.topology: separate` | Independent Client, Admin and Control Deployments                                                                                    |
+| `general.enabled`            | Independent `serve --groups --web general` Deployment                                                                                |
+| `admin.enabled`              | Independent `serve --groups --web admin` Deployment                                                                                  |
+| `computerProvider.enabled`   | Independent `computer-provider --in-cluster` Deployment                                                                              |
+| `backend.enabled: false`     | No local backend/preparation Job; selected webs need explicit `backendUrl`, and a selected Provider needs explicit `controlEndpoint` |
 
-Both backend topologies share the same external PostgreSQL and fixed-key Secret.
-No SQLite volume, conversion or replication mechanism is supplied. General and
-Admin have distinct, fixed **ClusterIP-only** protocol Services on 50051 and
-50052. Combined mode selects one pod with both ports; separate mode selects each
-matching role. There are no backend host ports, NodePorts or LoadBalancers.
+Both backend topologies use PostgreSQL and the original fixed key; no SQLite
+replication/conversion is supplied. `backend.replicas` scales combined mode;
+`backend.groupReplicas.client/admin/control` independently scale separate groups.
+General and Admin ClusterIP Services expose 50051 and 50052 respectively, both
+targeting the selected pod's named `grpc` port 50051. A Control ClusterIP Service
+exposes 50051. Combined mode selects the same service union; separate mode selects
+the appropriate group. No backend hostPort, NodePort or LoadBalancer is created.
 
-Web Services use 3003 and 3004. Their commands explicitly bind the corresponding
-listener to `0.0.0.0`; loopback CLI defaults would not be reachable from Services.
-Web pods receive only their selected public URL, listener and backend URL.
-They receive no database, secret-key, setup-proof or mail credentials.
-The backend image does not require Node or web assets.
+Web Services use 3003/3004, explicitly binding `0.0.0.0` rather than loopback CLI
+defaults. Web pods receive only their selected public URL/listener/backend URL;
+no product DB, root/setup/owner token or mail credential. Each web target is
+independent even when operators deliberately choose equal URLs. Backend images
+require no Node or web assets. Enabled backends still need `general.publicUrl`
+for issued links even when the general web is not local.
 
-An enabled backend always needs `general.publicUrl`, even if the chart's general
-web is disabled: issued links still need the intended general web location.
-Optional SMTP uses backend-only `mail.sender`, `mail.host`, `mail.port` and
-`mail.tls` (`starttls` or `implicit`, always certificate-verified). For an
-authenticated relay, `mail.existingCredentialsSecret` references the username
-and password through `mail.usernameKey` / `mail.passwordKey`; leave it empty for
-an unauthenticated TLS relay. The chart exposes no plaintext SMTP option and
-creates no mail provider or credential Secret. Former SES fields are removed.
-The separate setup-proof bootstrap has
-its own narrowly authorized service account; ordinary backend/web and schema
-preparation pods still do not mount API tokens.
+Optional SMTP uses backend-only `mail.sender/host/port/tls`; TLS is `starttls` or
+`implicit`, always certificate-verified. `mail.existingCredentialsSecret` and
+username/password keys optionally select credentials. Empty credentials permit an
+unauthenticated TLS relay, not plaintext SMTP. No mail provider/Secret is created.
+
+## Computer components and peer isolation
+
+Every Control pod binds peer 50053 separately from component/public gRPC. The
+peer Service is internal-only, with no Ingress. The default advertise address is
+`http://$(POD_IP):50053` from the Downward API, not a load-balanced ownership
+address or Kubernetes discovery. IPv6 operators must provide a compatible bind
+configuration and bracketed advertised address. The peer NetworkPolicy permits
+only this release's backend server workloads on that port; public/component 50051
+remains a separate authenticated boundary. An allowed compromised server remains
+inside the explicit trusted-network boundary. Rendering alone does not prove CNI
+enforcement, denied untrusted traffic or end-to-end TLS.
+
+`systemOwner.id`, `providerIds`, `existingSecret` and `key` select deployment-
+provisioned owner authority. Generate 32 random bytes as unpadded URL-safe Base64,
+for example `python3 -c 'import secrets; print(secrets.token_urlsafe(32))'`.
+Privately enter that result in the deployment's secret manager and materialize
+the referenced Secret before startup. Never put the value in arguments, values,
+logs or chat. It grants metadata/key management for exactly the listed Provider
+IDs. Preserve it until explicit operator rotation/revocation. Only Control and
+the designated Computer Provider receive it, not separate Client/Admin pods,
+webs, execution Pods or preparation.
+
+Enable `computerProvider` with explicit logical `id`/`name`, process `image`,
+`computerImage` and scoped owner configuration. The existing backend image can
+run either component command. `managedNamespace` must explicitly select an existing
+namespace. Isolate it from backend/owner credential Secrets: namespaced Secret get
+permission includes every Secret in that namespace, so sharing a credential
+namespace grants that additional visibility. The chart does not infer or create
+a safe namespace. The Provider gets only namespaced Pod
+get/list/watch/create/delete and PVC/Secret get/create/delete. It receives no
+product DB/root key. Its default one replica and Recreate strategy are operational
+policy, not authority or quiescence proof.
+
+Execution Pods use a distinct ServiceAccount with API token automount disabled.
+Image/pull policy, CPU/memory Requests/Limits, storage class/capacity and saved
+mount remain runtime policy. Omitted StorageClass uses the operator's existing
+default; the chart provisions no class or storage. Stop/restart preserve the
+original dedicated PVC; missing/unverified original storage never authorizes
+replacement. Actual Provider bootstrap issues Connector credentials after
+resource UID acknowledgements, rather than rendering secrets in Helm.
+
+For external Control, set `computerProvider.controlEndpoint` and configure the
+same system-owner scope/credential at that Control independently. Component
+TLS/exposure remains operator-owned. A Running Provider pod does not prove an
+authenticated connection, execution readiness, PVC preservation or cleanup.
 
 ## Public origins, prefixes and TLS edges
 
-Every Kubernetes public web URL must use HTTPS. Local HTTP is supported only by
-the separate loopback-bound CLI policy; it is not an insecure Kubernetes fallback.
-The public origin is configured, not inferred from forwarding headers.
+Kubernetes public web URLs require HTTPS. Local HTTP belongs only to the
+loopback-bound CLI policy. The public origin is explicit, not inferred from
+forwarded headers. `general.publicUrl` / `admin.publicUrl` determine Ingress and
+`<prefix>/health` paths. Identical image bytes can serve root or canonical prefixes
+without rebuilding, rewrites or generated-output patching.
 
-`general.publicUrl` / `admin.publicUrl` are the runtime path authority. The chart
-derives each Ingress and `<prefix>/health` probe directly from that URL.
-The same image can serve root, `/admin`, or another canonical mount without
-rebuilding. The edge preserves paths; the app owns its runtime mount through
-Next's public custom server and standard asset configuration. Rendering does not
-prove that an artifact ran; browser/static/font acceptance verifies that boundary.
+`webIngress.enabled` targets an existing ingress-nginx controller with explicit
+class and existing TLS Secret. `grpcIngress.enabled` independently configures
+General/Admin TLS hosts, which must differ. Leave Admin routing disabled to keep
+that edge unexposed. A gRPC catch-all cannot share the same ingress class/host/root
+web path. Distinct web prefixes or controllers remain valid, including General
+`/` and Admin `/admin` on one web host.
 
-`webIngress.enabled` is optional. The supplied edge adapter targets an existing
-**ingress-nginx** controller: explicitly select `className` and an existing TLS
-Secret covering the configured public web hosts. HTTPS redirects are configured;
-paths retain their original prefix.
+The adapter uses plaintext internal HTTP/2 (`backend-protocol: GRPC`) with TLS at
+the external edge. Verify certificates/hostnames, framing, auth metadata,
+trailers/status, cancellation and deadlines in actual acceptance. Another proxy
+requires operator-managed routing; arbitrary ingress classes are not assumed
+compatible with ingress-nginx annotations. Peer methods are never attached to
+these public routes.
 
-`grpcIngress.enabled` is separately optional, with the same explicit supported
-controller/class requirement. Each enabled route requires its own host and
-existing TLS Secret. General and Admin hosts must differ. Leave
-`grpcIngress.admin.enabled: false` to keep Admin routing unexposed.
-The chart rejects an enabled root web route sharing the gRPC catch-all's host
-and ingress class. Web prefixes such as `/app` and `/admin`, or genuinely
-different ingress classes, do not create that duplicate location. General `/`
-and Admin `/admin` on one web host remain supported.
+## Preparation, setup and controller lifecycles
 
-The gRPC adapter configures `backend-protocol: GRPC` for the **plaintext internal
-HTTP/2 hop** and TLS/HTTPS at the edge. It does not pretend to encrypt the backend
-hop. Operator acceptance must verify certificate/hostname validation, HTTP/2
-framing, authorization metadata, trailers/status, cancellation and deadlines.
-The Node client retains TLS validation without an insecure retry fallback.
-If a different proxy/controller is required, supply that operator-managed edge
-outside this chart; an arbitrary ingress class is not assumed compatible with
-the ingress-nginx annotations.
+A local backend gets one fixed-name `<fullname>-prepare` Job using its selected
+image's `prepare` command. Helm pre-install/pre-upgrade weight -10 and Argo PreSync
+wave -10 share that Job. It references only preexisting DB/key Secrets, not later
+ConfigMaps/ServiceAccounts/Sync Secrets. It has a finite deadline, zero retries,
+no pod restart or API token, and before-creation/success cleanup. Failed evidence
+is retained; a deliberate full deployment retry replaces the old hook Job.
 
-## One preparation Job, two controller lifecycles
+Default setup-proof bootstrap is separate: SA/Role/Binding at -30 and a finite
+proof Job at -20 precede preparation at -10. A projected API token authorizes get
+for the named Secret and namespace Secret create, not list/update/patch/delete
+or cluster authority. Kubernetes cannot restrict create by resourceName. The Job
+uses pinned official kubectl 1.35; use a compatible server minor. It generates
+only a missing valid 43-character URL-safe proof, preserves a valid existing or
+concurrently created proof, and never overwrites invalid material. Values are
+not rendered, looked up by Helm or printed. The proof Secret has no hook/release
+owner reference and survives deletion. Explicit `setupProof.existingSecret` skips
+this bootstrap. Operators retrieve it privately and enter it in first Admin
+setup; consumed DB state prevents reopening initialization.
 
-With a local backend, exactly one fixed-name `<release>-chapchoo-prepare` Job runs
-the backend image's `prepare` command. A fullname override/truncation can change
-the release prefix, but the name is stable across install and upgrade.
+`secretKey.existingSecret/key` configure `CHAPCHOO_SECRET_KEY`; preserve the
+original 32-byte Base64 value, including padding. This is neither key replacement
+nor a new migration facility. Backend/web/preparation pods mount no API token;
+Computer Provider and setup bootstrap have their own narrow authority.
 
-| Controller | Ordering | Cleanup |
-| --- | --- | --- |
-| Helm | `pre-install,pre-upgrade`, weight `-10` | `before-hook-creation,hook-succeeded` |
-| Argo CD | `PreSync`, wave `-10` | `BeforeHookCreation,HookSucceeded` |
-
-Argo CD uses its native annotations, not a second controller-specific schema
-implementation. The Job references DB/key Secrets directly and has no dependency
-on later ConfigMaps, ServiceAccounts or application-created Secrets. It has no
-service-account token, no pod restart, zero Job retries and a finite deadline.
-Only this explicit command prepares schema and checks/binds the original key.
-Routine server startup/readiness is read-only.
-
-Successful hook Jobs are deleted; failed Jobs have no failure-delete policy or
-TTL. Preserve their logs/status before a deliberate retry: the next full
-deployment's before-creation cleanup replaces the prior Job. No automatic
-mutation replay or compensating rollback is added.
-
-**Use a full Argo CD application sync. Selective sync skips hooks.** The reference
-`testenv/chapchoo/argocd-example.yaml` deliberately has no automatic sync/prune,
-namespace creation, retry loop or `ApplyOutOfSyncOnly` setting. Replace every
-example destination, revision, image and prerequisite before authorized use.
-Kustomize strategic-merge patches replace `helm.valuesObject` wholesale, so
-preserve the entire prerequisite/image configuration in an overlay.
-
-The hook gates new resource application; it does not stop already running pods.
-This chart promises neither arbitrary zero-downtime schema upgrades nor whole-
-release rollback. A successful earlier migration can remain committed after a
-later failure. **Image rollback is not database rollback.** Migration compatibility
-and any future maintenance window require their own explicit operational plan.
+Use **full Argo CD application sync**: selective sync skips hooks. The reference
+has no automatic sync/prune, namespace creation, retry loop or
+`ApplyOutOfSyncOnly`. Replace every example destination/revision/image before use.
+Kustomize patches replace `helm.valuesObject` wholesale; retain complete explicit
+prerequisites. A hook does not stop old writers. Coordinate contract/schema
+cutover; mixed-old/new compatibility and zero downtime are not promised. A
+committed migration survives later failure, and image rollback is not DB rollback.
 
 ## Health and shutdown
 
-Backend liveness uses `chapchoo.liveness`; readiness uses the selected General or
-Admin business health name and checks schema/key/DB without preparation. The
-combined deployment's admission flag belongs to its complete selected backend.
-Web health checks process/config responsiveness only, not backend auth or an
-assembled product journey.
+Liveness uses `chapchoo.liveness`. Readiness selects Client/Admin/Control business
+health and checks schema/key/DB without preparation. Combined admission belongs
+to the whole selected group union. Web health checks process/config, not backend
+auth or a whole product journey. Provider connectivity is independently projected
+by Control, not inferred from Kubernetes Deployment readiness.
 
-Startup probes allow 90 seconds for the CLI's 60-second startup budget.
-`terminationGracePeriodSeconds` defaults to 30 and cannot be less than 30, exceeding
-the default 20-second graceful plus 5-second forced cleanup/reap budgets. Raising
-application budgets later requires a corresponding orchestration adjustment.
-Containers use UID/GID 10001, drop capabilities, disable privilege escalation and
-do not automount Kubernetes service-account tokens. Writable Node cache/runtime
-requirements still belong to actual image acceptance.
+Startup probes allow 90 seconds for the CLI's 60-second startup budget. Grace is
+at least 30 seconds for default 20-second graceful plus 5-second forced/reap
+budgets. Increasing application budgets requires corresponding orchestration
+changes. Containers use UID/GID 10001, drop capabilities and disable privilege
+escalation. Writable temporary/cache behavior needs actual image acceptance.
 
-## Offline validation
-
-From the repository root:
+## Offline validation and live gates
 
 ```sh
 helm lint --strict infra/charts/chapchoo -f testenv/chapchoo/chart-values.yaml
-helm template contract infra/charts/chapchoo \
-  -f testenv/chapchoo/chart-values.yaml --namespace contract
+helm template contract infra/charts/chapchoo -f testenv/chapchoo/chart-values.yaml --namespace contract
 uv run --locked --project .codex python scripts/check-chart.py
 ```
 
-The existing `.codex` environment supplies PyYAML through its locked
-python-frontmatter dependency; no new production dependency is added.
-The fake fixture contains no actual credentials and is **not deployable input**.
-Tests verify install/upgrade hooks, failure retention, prerequisites, role/service
-separation, web-only credential isolation, health/grace, optional TLS routing and
-unsafe/missing-value rejection. They execute no cluster reads, writes, exec or
-Helm install/upgrade.
+The locked `.codex` environment supplies PyYAML. Offline values contain no actual
+credentials and are not deployable. Tests cover hooks, failure retention,
+prerequisites, group topology, explicit web targets, health/grace, TLS routing,
+peer policy, scoped Provider RBAC and unsafe configuration refusal. They execute
+no cluster reads/writes/exec or Helm install/upgrade.
 
-Real Helm install/upgrade and Argo full-sync acceptance remain separate gates:
-initial preparation, already-current schema, wrong fixed key, migration failure
-gating, application health, product journeys and TLS behavior. They require
-approved cluster/namespace/exposure, existing data/key scope and actual images.
-
-## One-time setup proof and server secret naming
-
-Use `secretKey.existingSecret` / `secretKey.key` for `CHAPCHOO_SECRET_KEY`.
-The former configuration name is removed; preserve the original32-byte value,
-including its Base64 padding. This does not change key derivation, binding,
-storage or introduce a replacement/migration facility.
-
-By default the chart creates a persistent `<fullname>-setup-proof` Secret through
-a separate bootstrap Job. It never puts random data in rendered YAML or performs
-Helm lookup. Existing valid43-character URL-safe32-byte proof is reused; missing
-or invalid fields are not overwritten. A concurrent create is accepted only
-when rereading a valid existing proof. No proof is printed in logs or arguments.
-The Secret has no hook/release owner reference and survives hook/release deletion.
-An explicit existing Secret skips this bootstrap and retains its prior behavior.
-
-Both controllers order bootstrap SA/Role/Binding at-30, proof Job at-20, schema
-prepare at-10. Bootstrap alone mounts its API token. The Role permits get only
-for the named Secret and Secret create within the namespace; Kubernetes RBAC
-cannot constrain create with resourceNames. No list/update/patch/delete or
-cluster-wide permission is granted. A pinned official kubectl binary lives only
-in the backend image for this Job; web images do not carry that API client.
-Use a Kubernetes server compatible with the shipped kubectl1.35 minor version
-for automatic bootstrap; the inspected Home kubelet1.36 is within one minor.
-
-An authorized operator can retrieve the proof privately from that named Secret
-and enter it in initial Admin setup. Do not put it in logs/chat. DB one-time
-consumption remains authoritative; a new proof cannot reopen completed setup.
-The external DB/key/pull prerequisites remain operator-owned and preexisting.
+Live Helm/Argo full-sync, Kubernetes retirement/storage/CNI and external TLS gates
+remain unexecuted without approved disposable cluster/namespace, images,
+exposure/TLS and existing DB/key/data scope. Synthetic SDK/process/browser tests
+must not be reported as those live gates.

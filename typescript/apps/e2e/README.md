@@ -1,7 +1,7 @@
-# Account and team E2E application
+# Chapchoo E2E application
 
 `@chapchoo/e2e` is an executable Playwright app, not a shared package. It owns
-three representative serial Chromium product journeys. Fixture preparation comes from
+three serial account/team journeys and one Computer owner/operator journey. Fixture preparation comes from
 [`@chapchoo/testenv`](../../../testenv/chapchoo/README.md); product app source is
 not imported. No direct DB writes, mutation retries or existing browser state.
 
@@ -20,13 +20,15 @@ pnpm --filter @chapchoo/e2e test:e2e
 
 The runner requires PostgreSQL `initdb`, `pg_ctl`, `postgres`, repository Rust
 and Node 24 toolchains, pnpm, and Chromium runtime libraries. Missing prerequisites
-fail. Select user-owned browser/SWC caches as needed using the existing environment
-variables; cache paths are not hardcoded into the fixture.
+fail. Compiler cache stays inside the private fixture. Its ancestors must be
+securely owned or protected by a trusted sticky directory. Set a suitable
+`TMPDIR` before starting the runner if the host temporary root does not satisfy
+that native compiler requirement; do not relax shared-directory permissions.
 
 `CHAPCHOO_E2E_PACKAGE_ROOT` selects an absolute extracted source-free bundle.
 Package mode never falls back to source builds or host Node. The test substrate
 prepares a private PostgreSQL database using the official product CLI and launches
-both backend/web roles with root mounts. Source mode uses the same public
+the Client/Admin/Control union and both webs with root mounts. Source mode uses the same public
 contracts with `/app` and `/admin` mounts and production web listeners.
 
 ## Ownership and lifecycle
@@ -36,8 +38,8 @@ contracts with `/app` and `/admin` mounts and production web listeners.
   provides public fixture methods; it does not import Playwright or app modules.
 - This app owns the worker-scoped Playwright adapter, canonical-redirect product
   assertions, browser scenarios, safe reporter and private runner output.
-- Secondary registered-user setup uses generated public Auth/Admin/General RPC
-  after Admin bootstrap, never SQL. Required fixture credentials stay in memory.
+- Account prerequisites use generated Authentication/Installation/AccountGrants/
+  AccountLifecycle RPC, never SQL. Required fixture credentials stay in memory.
 - Cleanup reaps only tracked process groups and stops the exact private
   PostgreSQL directory. Cleanup failure fails the run and retains private data.
   Finite startup/shutdown budgets and no-replay behavior are unchanged.
@@ -51,9 +53,15 @@ contracts with `/app` and `/admin` mounts and production web listeners.
 3. Password reset does not authenticate its recipient, revokes the old context,
    allows the new password, and retains ordinary-user exclusion from Admin while
    General access remains available.
+4. Create one personal Agent, inspect SSR Computer detail and independent Connector
+   connectivity, stop/start with one original PVC identity, inspect read-only
+   operator resources, then confirm normal removal and retained cleanup evidence.
+   Actual Control, Computer Provider and Computer Connector processes use isolated
+   synthetic Kubernetes HTTP beneath the supported SDK. This is not live
+   cluster/storage/CNI evidence.
 
 Web-core owns the focused real-browser logout boundary in
-`test/logout.browser.spec.mjs`. This E2E app owns the three assembled product
+`test/logout.browser.spec.mjs`. This E2E app owns the four assembled product
 journeys, not browser cookie semantics or dependency component tests.
 
 ## Detail coverage moved to owning components

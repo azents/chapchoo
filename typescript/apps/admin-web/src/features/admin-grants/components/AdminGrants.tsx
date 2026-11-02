@@ -80,6 +80,11 @@ export function AdminGrants(props: AdminGrantsProps): ReactElement {
       {...(props.identityLabel ? { identityLabel: props.identityLabel } : {})}
       navigation={[
         {
+          key: "computers",
+          label: text("computerProviders"),
+          href: `${props.basePath}/computer-providers`,
+        },
+        {
           key: "signup",
           label: text("signupTitle"),
           href: `${props.basePath}/`,

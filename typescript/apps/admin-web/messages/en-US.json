@@ -32,6 +32,7 @@
     "passwordPolicy": "Use 8–64 printable ASCII characters and at least three of: uppercase, lowercase, numbers, symbols."
   },
   "AdminGrants": {
+    "computerProviders": "Computer Providers",
     "replayMascot": "Replay character animation",
     "context": "Administration",
     "signupTitle": "Signup links",

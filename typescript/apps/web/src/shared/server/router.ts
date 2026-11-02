@@ -12,6 +12,7 @@ import {
 } from "@chapchoo/web-core/validation";
 import { z } from "zod";
 import { authRouter } from "@/shared/server/auth";
+import { computersRouter } from "@/shared/server/computers";
 import { displayInput } from "@/shared/server/displayInput";
 import { procedure, router } from "@/shared/server/trpc";
 
@@ -25,6 +26,7 @@ const name = z.string().min(1).max(120);
 const handle = z.string().min(1).max(80);
 
 export const appRouter = router({
+  computers: computersRouter,
   auth: authRouter,
   signup: router({
     preview: procedure

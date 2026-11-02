@@ -4,6 +4,47 @@ import { resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+void test("runtime configuration requires an explicit Admin target", () => {
+  const source = new URL("./index.ts", import.meta.url).href;
+  const script = `const{getConfig}=await import(${JSON.stringify(source)});getConfig();`;
+  assert.throws(() =>
+    execFileSync(
+      process.execPath,
+      ["--experimental-strip-types", "--input-type=module", "-e", script],
+      {
+        env: {
+          NODE_ENV: "production",
+          CHAPCHOO_PUBLIC_URL: "https://example.invalid",
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    ),
+  );
+});
+
+void test("public metadata stays usable without any deployment backend", () => {
+  const source = new URL("./index.ts", import.meta.url).href;
+  const script = `const{getPublicConfig,getLoginRedirect}=await import(${JSON.stringify(source)});console.log(JSON.stringify([getPublicConfig(),getLoginRedirect()]));`;
+  for (const path of ["", "/admin"]) {
+    const output = execFileSync(
+      process.execPath,
+      ["--experimental-strip-types", "--input-type=module", "-e", script],
+      {
+        env: {
+          NODE_ENV: "production",
+          CHAPCHOO_PUBLIC_URL: `https://example.invalid${path}`,
+        },
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+    assert.deepEqual(JSON.parse(output.trim()), [
+      { publicBasePath: path },
+      `${path}/login`,
+    ]);
+  }
+});
+
 void test("public paths are read from runtime configuration without compiled constants", () => {
   const source = new URL("./index.ts", import.meta.url).href;
   const script = `const{getConfig}=await import(${JSON.stringify(source)});console.log(getConfig().basePath);`;
@@ -14,6 +55,7 @@ void test("public paths are read from runtime configuration without compiled con
       {
         env: {
           NODE_ENV: "production",
+          CHAPCHOO_BACKEND_URL: "https://admin-rpc.example.invalid",
           CHAPCHOO_PUBLIC_URL: `https://example.invalid${path}`,
         },
         encoding: "utf8",
@@ -34,6 +76,7 @@ void test("development serves the configured mount while distributed builds stay
       env: {
         ...process.env,
         NODE_ENV: "development",
+        CHAPCHOO_BACKEND_URL: "https://admin-rpc.example.invalid",
         CHAPCHOO_PUBLIC_URL: "https://example.invalid/admin",
       },
       cwd: new URL("../../", import.meta.url),
@@ -61,6 +104,7 @@ void test("login redirect prefix has exactly one owner in each server mode", () 
       {
         env: {
           NODE_ENV: mode,
+          CHAPCHOO_BACKEND_URL: "https://admin-rpc.example.invalid",
           CHAPCHOO_PUBLIC_URL: "https://example.invalid/admin",
         },
         encoding: "utf8",

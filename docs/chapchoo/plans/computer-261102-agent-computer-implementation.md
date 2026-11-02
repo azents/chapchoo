@@ -57,11 +57,19 @@ credentials, current lifecycle/resource evidence and application service are
 implemented. Root integrated checks pass (82 Rust tests, clippy/boundaries,
 74 live RPC checks on each DB engine, docs18 and normal commit hooks). Independent
 full review and targeted corrections are complete. Exact-head remote CI/automatic
-review are deferred until the remaining stack is submitted. Phase 3 builds on
-that exact head under `computer-261102-phase-3-control.md`: runtime groups,
-current-owner streams and peer/memory delivery, supported Kubernetes effects,
-component processes, owner-scoped reconciliation and guarded restoration/cleanup
-are implemented. Final root checks pass (107 Rust tests, clippy/boundaries,
-67 live RPC checks on each DB, generated clients and docs18/catalog). PR3
-submission is next; phase4 web/chart/E2E and final stack reviews remain.
-The overall feature is not implemented yet.
+review are deferred until the remaining stack is submitted. Phase 3 PR #42 is
+submitted at `5d591684`: runtime groups, current-owner streams and peer/memory
+delivery, supported Kubernetes effects, component processes, owner-scoped
+reconciliation and guarded restoration/cleanup. Root checks pass (107 Rust tests,
+clippy/boundaries, generated clients, RPC67 on each DB and docs18/catalog).
+
+Phase 4 implements owner SSR list/create/detail and confirmed lifecycle actions,
+read-only operator Computer/resource inventory, visible-view observation, explicit
+group/target chart/package/testenv wiring, scoped namespace RBAC/peer policy and
+current Specs. Source E2E passes all four core journeys; focused final-delta checks
+and normal commit hooks precede PR4 submission. No remote stack CI/reviews have
+been checked during construction. The exact independent reviewer and exact-head
+CI remain completion gates after all four PRs exist. Live Kubernetes/CNI/storage/
+TLS gates remain NOT EXECUTED without approved disposable prerequisites; this
+work authorizes neither merge nor deployment. The overall snapshot is not yet
+marked implemented. Design delta remains None.

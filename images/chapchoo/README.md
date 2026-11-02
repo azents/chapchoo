@@ -30,19 +30,19 @@ Verified from first-party public release/registry endpoints on **2026-10-30 KST*
 
 - [Node release inventory](https://nodejs.org/dist/v24.22.1/SHASUMS256.txt):
 
-  | Archive | SHA-256 |
-  | --- | --- |
-  | `node-v24.22.1-linux-x64.tar.xz` | `6c172a9ab6718f7b801fb5a7bd486af2ee5e32758086a04b84fcce2aa77095e6` |
+  | Archive                            | SHA-256                                                            |
+  | ---------------------------------- | ------------------------------------------------------------------ |
+  | `node-v24.22.1-linux-x64.tar.xz`   | `6c172a9ab6718f7b801fb5a7bd486af2ee5e32758086a04b84fcce2aa77095e6` |
   | `node-v24.22.1-linux-arm64.tar.xz` | `dbabf7a1cbf947e6059ffad2c27b80041db97dea1e553b62afdee7f13fca336e` |
 
 - Docker Official Image index digests, queried through
   `https://registry-1.docker.io/v2/library/{node,rust,debian}/manifests/<tag>`:
 
-  | Version tag | Multi-platform index digest |
-  | --- | --- |
+  | Version tag                  | Multi-platform index digest                                               |
+  | ---------------------------- | ------------------------------------------------------------------------- |
   | `node:24.22.1-bookworm-slim` | `sha256:be8204d4bd327363357f532187b752ff62759c31bedf98e9e18fc08c9cbd605c` |
-  | `rust:1.99.1-bookworm` | `sha256:9181b56c2a21ab1d5e73cffe04fc762426d30aa7fac3c91141dd033f49a7fc8b` |
-  | `debian:bookworm-slim` | `sha256:99c0b25c46d0214d5a2091092e7908907dcaecd6a962cde0ac700acee222b6f3` |
+  | `rust:1.99.1-bookworm`       | `sha256:9181b56c2a21ab1d5e73cffe04fc762426d30aa7fac3c91141dd033f49a7fc8b` |
+  | `debian:bookworm-slim`       | `sha256:99c0b25c46d0214d5a2091092e7908907dcaecd6a962cde0ac700acee222b6f3` |
 
   Each index includes `linux/amd64` and `linux/arm64/v8`. Docker selects the
   architecture-specific manifest from this pinned index. A base-image update
@@ -134,8 +134,8 @@ selection needs its app's explicit public URL/backend endpoint and matching
 listener configuration; it does not receive a DB/root/bootstrap/provider secret:
 
 ```sh
-./chapchoo serve --role none --web general
-./chapchoo serve --role none --web admin
+./chapchoo serve --groups --web general
+./chapchoo serve --groups --web admin
 ```
 
 Local HTTP requires an actual loopback listener and loopback public URL. Remote
@@ -177,12 +177,15 @@ Target-specific cache mounts retain pnpm/Cargo/Next build work without importing
 Mac node_modules. This is not evidence of a macOS app build or cross-architecture
 emulation acceptance. Final images use the same named-input contract as CI.
 
-- `backend`: central binary only; no Node or web tree. Default selection is both
-  plaintext internal RPC listeners, with distinct ports50051/50052.
+- `backend`: central binary only; no Node or web tree. Default selection is the
+  Client/Admin/Control service union on internal port50051. Network Control peers
+  require a distinct explicit listen/advertise pair; peer50053 is never public.
+  The same binary-only image can run `computer-provider` or `computer-connector`
+  with their explicit scoped runtime inputs.
 - `general-web`: central binary, matching Node and only the general traced app;
-  default `serve --role none --web general`, internal listener0.0.0.0:3003.
+  default `serve --groups --web general`, internal listener0.0.0.0:3003.
 - `admin-web`: central binary, matching Node and only the Admin traced app;
-  default `serve --role none --web admin`, internal listener0.0.0.0:3004.
+  default `serve --groups --web admin`, internal listener0.0.0.0:3004.
 - All final targets run as UID/GID **10001**. They contain no runtime DB/root/
   bootstrap/SMTP credential configuration. Web roles need explicit runtime
   `CHAPCHOO_GENERAL_WEB_URL` / `CHAPCHOO_ADMIN_WEB_URL` with HTTPS when listening

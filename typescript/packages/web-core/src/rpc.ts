@@ -9,6 +9,12 @@ import {
   DisplayDefaultsClient,
 } from "@chapchoo/rpc-client/accounts";
 import { Metadata, credentials } from "@grpc/grpc-js";
+import {
+  AgentsClient,
+  ComputersClient,
+  ProviderCatalogClient,
+  ProviderInventoryClient,
+} from "@chapchoo/rpc-client/computers";
 import type {
   CallOptions,
   ClientUnaryCall,
@@ -18,6 +24,10 @@ import type { WebConfig } from "./config.js";
 import { rpcFailure } from "./errors.js";
 
 export interface BackendClients {
+  agents: AgentsClient;
+  computers: ComputersClient;
+  providerCatalog: ProviderCatalogClient;
+  providerInventory: ProviderInventoryClient;
   authentication: AuthenticationClient;
   personalPreferences: PersonalPreferencesClient;
   accountLifecycle: AccountLifecycleClient;
@@ -40,6 +50,18 @@ export function createBackend(config: WebConfig): BackendClients {
     "grpc.max_receive_message_length": 4 * 1024 * 1024,
   };
   const authentication = new AuthenticationClient(
+    endpoint.host,
+    security,
+    options,
+  );
+  const agents = new AgentsClient(endpoint.host, security, options);
+  const computers = new ComputersClient(endpoint.host, security, options);
+  const providerCatalog = new ProviderCatalogClient(
+    endpoint.host,
+    security,
+    options,
+  );
+  const providerInventory = new ProviderInventoryClient(
     endpoint.host,
     security,
     options,
@@ -72,6 +94,10 @@ export function createBackend(config: WebConfig): BackendClients {
     options,
   );
   return {
+    agents,
+    computers,
+    providerCatalog,
+    providerInventory,
     authentication,
     personalPreferences,
     accountLifecycle,
@@ -81,6 +107,10 @@ export function createBackend(config: WebConfig): BackendClients {
     accountGrants,
     displayDefaults,
     close(): void {
+      agents.close();
+      computers.close();
+      providerCatalog.close();
+      providerInventory.close();
       authentication.close();
       personalPreferences.close();
       accountLifecycle.close();

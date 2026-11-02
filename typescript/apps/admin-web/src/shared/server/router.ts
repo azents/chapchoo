@@ -6,6 +6,7 @@ import { call } from "@chapchoo/web-core/rpc";
 import { display, grant, grants } from "@chapchoo/web-core/validation";
 import { z } from "zod";
 import { authRouter } from "@/shared/server/auth";
+import { computersRouter } from "@/shared/server/computers";
 import { displayInput, displayPatch } from "@/shared/server/displayInput";
 import { inventoryInput } from "@/shared/server/inventory";
 import { procedure, router } from "@/shared/server/trpc";
@@ -38,6 +39,7 @@ function issued(value: IssuedGrant): IssuedGrant {
 }
 
 export const appRouter = router({
+  computers: computersRouter,
   auth: authRouter,
   displayDefaults: router({
     read: procedure.query(({ ctx }) =>

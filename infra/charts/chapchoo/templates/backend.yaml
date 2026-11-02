@@ -1,20 +1,22 @@
 {{- if .Values.backend.enabled }}
-{{- $roles := list "both" }}
-{{- if eq .Values.backend.topology "separate" }}{{- $roles = list "general" "admin" }}{{- end }}
-{{- range $role := $roles }}
-{{- $context := dict "root" $ "component" (printf "backend-%s" $role) }}
-{{- $port := 50051 }}{{- $business := "chapchoo.accounts.TeamManagement" }}
-{{- if eq $role "admin" }}{{- $port = 50052 }}{{- $business = "chapchoo.accounts.Installation" }}{{- end }}
+{{- $groups := list "combined" }}
+{{- if eq .Values.backend.topology "separate" }}{{- $groups = list "client" "admin" "control" }}{{- end }}
+{{- range $group := $groups }}
+{{- $context := dict "root" $ "component" (printf "backend-%s" $group) }}
+{{- $selection := $group }}{{- if eq $group "combined" }}{{- $selection = "client,admin,control" }}{{- end }}
+{{- $control := has $group (list "combined" "control") }}
+{{- $business := "chapchoo.accounts.TeamManagement" }}
+{{- if eq $group "admin" }}{{- $business = "chapchoo.accounts.Installation" }}{{- else if eq $group "control" }}{{- $business = "chapchoo.control.ProviderConnection" }}{{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "chapchoo.fullname" $ }}-backend-{{ $role }}
+  name: {{ include "chapchoo.fullname" $ }}-backend-{{ $group }}
   namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "chapchoo.labels" $context | fromJson | toYaml | nindent 4 }}
 spec:
-  replicas: {{ $.Values.backend.replicas }}
+  replicas: {{ if eq $group "combined" }}{{ $.Values.backend.replicas }}{{ else }}{{ index $.Values.backend.groupReplicas $group }}{{ end }}
   selector:
     matchLabels:
       {{- include "chapchoo.selector" $context | fromJson | toYaml | nindent 6 }}
@@ -33,30 +35,50 @@ spec:
         - name: backend
           image: {{ include "chapchoo.image" $.Values.backend.image | quote }}
           imagePullPolicy: {{ $.Values.backend.image.pullPolicy }}
-          args: [serve, --role, {{ $role }}]
+          args: [serve, --groups, {{ $selection | quote }}]
           ports:
-            {{- if has $role (list "general" "both") }}
-            - name: general-grpc
+            - name: grpc
               containerPort: 50051
-            {{- end }}
-            {{- if has $role (list "admin" "both") }}
-            - name: admin-grpc
-              containerPort: 50052
+            {{- if $control }}
+            - name: peer
+              containerPort: 50053
             {{- end }}
           env:
             {{- include "chapchoo.backendEnv" $ | fromJsonArray | toYaml | nindent 12 }}
+            - name: CHAPCHOO_LISTEN
+              value: "0.0.0.0:50051"
+            {{- if $control }}
+            - name: POD_IP
+              valueFrom:
+                fieldRef: {fieldPath: status.podIP}
+            - name: CHAPCHOO_PEER_LISTEN
+              value: "0.0.0.0:50053"
+            - name: CHAPCHOO_PEER_ADVERTISE
+              value: {{ $.Values.backend.peerAdvertise | quote }}
+            {{- if $.Values.systemOwner.existingSecret }}
+            - name: CHAPCHOO_SYSTEM_OWNER_ID
+              value: {{ $.Values.systemOwner.id | quote }}
+            - name: CHAPCHOO_SYSTEM_OWNER_PROVIDER_IDS
+              value: {{ join "," $.Values.systemOwner.providerIds | quote }}
+            - name: CHAPCHOO_SYSTEM_OWNER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.systemOwner.existingSecret }}
+                  key: {{ $.Values.systemOwner.key }}
+            {{- end }}
+            {{- end }}
           startupProbe:
-            grpc: {port: {{ $port }}, service: chapchoo.liveness}
+            grpc: {port: 50051, service: chapchoo.liveness}
             periodSeconds: 3
             timeoutSeconds: 3
             failureThreshold: 30
           livenessProbe:
-            grpc: {port: {{ $port }}, service: chapchoo.liveness}
+            grpc: {port: 50051, service: chapchoo.liveness}
             periodSeconds: 10
             timeoutSeconds: 3
             failureThreshold: 3
           readinessProbe:
-            grpc: {port: {{ $port }}, service: {{ $business }}}
+            grpc: {port: 50051, service: {{ $business }}}
             periodSeconds: 5
             timeoutSeconds: 7
             failureThreshold: 2
@@ -65,15 +87,16 @@ spec:
           securityContext:
             {{- include "chapchoo.securityContext" $ | fromJson | toYaml | nindent 12 }}
 {{- end }}
-{{- range $role := list "general" "admin" }}
-{{- $selected := printf "backend-%s" $role }}
-{{- if eq $.Values.backend.topology "combined" }}{{- $selected = "backend-both" }}{{- end }}
-{{- $port := 50051 }}{{- if eq $role "admin" }}{{- $port = 50052 }}{{- end }}
+{{- range $group := list "client" "admin" "control" }}
+{{- $selected := printf "backend-%s" $group }}
+{{- if eq $.Values.backend.topology "combined" }}{{- $selected = "backend-combined" }}{{- end }}
+{{- $service := $group }}{{- if eq $group "client" }}{{- $service = "general" }}{{- end }}
+{{- $port := 50051 }}{{- if eq $group "admin" }}{{- $port = 50052 }}{{- end }}
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "chapchoo.fullname" $ }}-{{ $role }}-grpc
+  name: {{ include "chapchoo.fullname" $ }}-{{ $service }}-grpc
   namespace: {{ $.Release.Namespace }}
 spec:
   type: ClusterIP
@@ -82,8 +105,43 @@ spec:
   ports:
     - name: grpc
       port: {{ $port }}
-      targetPort: {{ $port }}
+      targetPort: grpc
       protocol: TCP
       appProtocol: kubernetes.io/h2c
 {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "chapchoo.fullname" . }}-peer
+  namespace: {{ .Release.Namespace }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- $selected := "backend-control" }}{{- if eq .Values.backend.topology "combined" }}{{- $selected = "backend-combined" }}{{- end }}
+    {{- include "chapchoo.selector" (dict "root" . "component" $selected) | fromJson | toYaml | nindent 4 }}
+  ports: [{name: peer, port: 50053, targetPort: peer, protocol: TCP, appProtocol: kubernetes.io/h2c}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "chapchoo.fullname" . }}-peer
+  namespace: {{ .Release.Namespace }}
+spec:
+  podSelector:
+    matchExpressions:
+      - {key: app.kubernetes.io/instance, operator: In, values: [{{ .Release.Name | quote }}]}
+      - {key: app.kubernetes.io/component, operator: In, values: [backend-combined, backend-control]}
+  policyTypes: [Ingress]
+  ingress:
+    # Component/public gRPC remains separately exposed; only peers are restricted here.
+    - ports: [{port: 50051, protocol: TCP}]
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: chapchoo
+              app.kubernetes.io/instance: {{ .Release.Name }}
+            matchExpressions:
+              - {key: app.kubernetes.io/component, operator: In, values: [backend-combined, backend-client, backend-admin, backend-control]}
+      ports: [{port: 50053, protocol: TCP}]
 {{- end }}

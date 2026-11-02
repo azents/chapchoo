@@ -5,7 +5,9 @@ representative assembled-product journeys and genuine browser/process/network
 boundaries here. Read the repository's `e2e-core-flows-only` convention.
 
 Three serial account/team journeys cover signup/admin setup, team ownership and
-reset/session/Admin isolation. Web-core owns its real-browser logout-response
+reset/session/Admin isolation. One Computer owner/operator journey uses actual
+components against a supported-client HTTP fixture, not live Kubernetes/storage/
+CNI acceptance. Web-core owns its real-browser logout-response
 integration; browser cookie arrival-order semantics are not our test subject.
 Exact copy and app composition belong to the owning app; shared layout/custom
 CSS belong to common UI's executable component checks, not another full product

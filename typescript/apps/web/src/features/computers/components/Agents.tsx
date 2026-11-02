@@ -1,0 +1,336 @@
+"use client";
+import { ApplicationShell } from "@chapchoo/ui/ApplicationShell";
+import { ConfirmationDialog } from "@chapchoo/ui/ConfirmationDialog";
+import { PageFailure } from "@chapchoo/ui/PageFailure";
+import {
+  Alert,
+  Anchor,
+  Button,
+  Group,
+  Paper,
+  rem,
+  Select,
+  SimpleGrid,
+  Stack,
+  Table,
+  Text,
+  TextInput,
+  Title,
+} from "@mantine/core";
+import type { AgentsProps } from "../types";
+import type { ReactElement } from "react";
+
+export function Agents(props: AgentsProps): ReactElement {
+  const { copy: c, data } = props;
+  if (props.access !== "authorized") {
+    return (
+      <PageFailure
+        title={c.agents}
+        message={c.accessUnavailable}
+        appearance={props.appearance}
+        retryLabel={props.access === "signedOut" ? c.signIn : c.retry}
+        onRetry={props.onRefresh}
+      />
+    );
+  }
+  return (
+    <ApplicationShell
+      basePath={props.basePath}
+      appearance={props.appearance}
+      contextLabel={c.agents}
+      title={data.type === "detail" ? data.agent.name : c.agents}
+      identityLabel={data.identity}
+      mascotReplayLabel={c.replay}
+      actions={
+        <Button variant="subtle" onClick={props.onLogout}>
+          {c.logout}
+        </Button>
+      }
+      navigation={[
+        {
+          key: "agents",
+          label: c.agents,
+          active: true,
+          href: `${props.basePath}/agents`,
+        },
+        { key: "accounts", label: c.accounts, href: `${props.basePath}/` },
+      ]}
+    >
+      <Group justify="space-between">
+        {data.type === "detail" ? (
+          <Anchor href={`${props.basePath}/agents`}>{c.back}</Anchor>
+        ) : (
+          <span />
+        )}
+        <Button
+          variant="subtle"
+          onClick={props.onRefresh}
+          disabled={props.pending}
+        >
+          {c.retry}
+        </Button>
+      </Group>
+      {props.stale ? (
+        <Alert color="yellow" role="status">
+          {c.stale}
+        </Alert>
+      ) : null}
+      {props.error && !props.confirmation ? (
+        <Alert color="red" role="alert">
+          {props.error}
+        </Alert>
+      ) : null}
+      {data.type === "list" ? (
+        <>
+          <Paper withBorder p="lg">
+            <Stack
+              component="form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                props.onCreate();
+              }}
+            >
+              <Title order={2} size="h3">
+                {c.create}
+              </Title>
+              <TextInput
+                label={c.name}
+                value={props.name}
+                onChange={(event) => props.onName(event.currentTarget.value)}
+                required
+                maxLength={120}
+                disabled={props.pending || props.creationLocked}
+              />
+              <Select
+                label={c.provider}
+                placeholder={c.chooseProvider}
+                value={props.providerId || null}
+                data={
+                  props.providers.type === "loaded"
+                    ? props.providers.items.map((item) => ({
+                        value: item.id,
+                        label: item.name,
+                      }))
+                    : []
+                }
+                onChange={(value) => props.onProvider(value ?? "")}
+                disabled={
+                  props.pending ||
+                  props.creationLocked ||
+                  props.providers.type !== "loaded"
+                }
+                required
+              />
+              {props.providers.type === "loaded" &&
+              props.providers.items.length === 0 ? (
+                <Text c="dimmed">{c.noProviders}</Text>
+              ) : null}
+              {props.providers.type === "loaded" ? (
+                <Group>
+                  {props.providers.after ? (
+                    <Button
+                      variant="subtle"
+                      disabled={props.pending || props.creationLocked}
+                      type="button"
+                      onClick={() => props.onProviderPage(null)}
+                    >
+                      {c.first}
+                    </Button>
+                  ) : null}
+                  {props.providers.nextAfter ? (
+                    <Button
+                      variant="subtle"
+                      disabled={props.pending || props.creationLocked}
+                      type="button"
+                      onClick={() =>
+                        props.providers.type === "loaded" &&
+                        props.onProviderPage(props.providers.nextAfter)
+                      }
+                    >
+                      {c.next}
+                    </Button>
+                  ) : null}
+                </Group>
+              ) : null}
+              {props.providers.type === "error" ||
+              (props.providers.type === "loaded" && props.providers.stale) ? (
+                <Alert color="yellow">{c.unavailable}</Alert>
+              ) : null}
+              <Group>
+                <Button
+                  type="submit"
+                  loading={props.pending}
+                  disabled={
+                    !props.creationLocked &&
+                    (!props.name.trim() ||
+                      !props.providerId ||
+                      props.providers.type !== "loaded" ||
+                      props.providers.stale ||
+                      !props.providers.items.some(
+                        (item) => item.id === props.providerId,
+                      ))
+                  }
+                >
+                  {props.creationLocked ? c.recoverCreation : c.create}
+                </Button>
+              </Group>
+            </Stack>
+          </Paper>
+          {data.page.items.length === 0 ? (
+            <Text c="dimmed">{c.noAgents}</Text>
+          ) : (
+            <Table.ScrollContainer minWidth={rem(480)}>
+              <Table>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>{c.name}</Table.Th>
+                    <Table.Th>{c.power}</Table.Th>
+                    <Table.Th>{c.phase}</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {data.page.items.map((item) => (
+                    <Table.Tr key={item.id}>
+                      <Table.Td>
+                        <Anchor
+                          href={`${props.basePath}/agents/${encodeURIComponent(item.id)}`}
+                        >
+                          {item.name}
+                        </Anchor>
+                      </Table.Td>
+                      <Table.Td>{c[item.computer.power]}</Table.Td>
+                      <Table.Td>{c[item.computer.phase]}</Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            </Table.ScrollContainer>
+          )}
+          <Group>
+            {data.after ? (
+              <Anchor href={`${props.basePath}/agents`}>{c.first}</Anchor>
+            ) : null}
+            {data.page.nextAfter ? (
+              <Anchor
+                href={`${props.basePath}/agents?after=${encodeURIComponent(data.page.nextAfter)}`}
+              >
+                {c.next}
+              </Anchor>
+            ) : null}
+          </Group>
+        </>
+      ) : (
+        <>
+          {data.agent.computer.startDelayed ? (
+            <Alert color="yellow" role="status">
+              {c.delayed}
+            </Alert>
+          ) : null}
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg">
+            {[
+              { label: c.intent, value: c[data.agent.computer.intent] },
+              { label: c.power, value: c[data.agent.computer.power] },
+              { label: c.phase, value: c[data.agent.computer.phase] },
+              { label: c.management, value: c[data.agent.computer.management] },
+              { label: c.connector, value: c[data.agent.computer.connector] },
+              { label: c.saved, value: c[data.agent.computer.saved] },
+            ].map((item) => (
+              <Stack key={item.label} gap="xs">
+                <Text size="sm" c="dimmed">
+                  {item.label}
+                </Text>
+                <Text fw={600}>{item.value}</Text>
+              </Stack>
+            ))}
+          </SimpleGrid>
+          <Text size="sm" c="dimmed">
+            {data.agent.computer.observedAt === null
+              ? c.neverObserved
+              : `${c.observed}: ${props.formatTime(data.agent.computer.observedAt)}`}
+          </Text>
+          {data.agent.computer.power === "unknown" &&
+          data.agent.computer.lastKnownPower !== "unknown" ? (
+            <Text size="sm">
+              {c.lastKnown}: {c[data.agent.computer.lastKnownPower]}
+            </Text>
+          ) : null}
+          <Stack gap="md">
+            {data.agent.computer.preparationRetryAvailable ? (
+              <Group>
+                <Button
+                  variant="light"
+                  disabled={props.pending || props.stale}
+                  onClick={() => props.onAction("retryPreparation")}
+                >
+                  {c.retryPreparation}
+                </Button>
+              </Group>
+            ) : null}
+            {data.agent.computer.actions.map((item) => (
+              <Group key={item.action}>
+                <Button
+                  variant={item.action === "delete" ? "outline" : "light"}
+                  color={item.action === "delete" ? "red" : void 0}
+                  onClick={() => props.onAction(item.action)}
+                  disabled={props.pending || props.stale || !item.available}
+                >
+                  {c[item.action]}
+                </Button>
+                {!item.available && item.reason ? (
+                  <Text size="sm" c="dimmed">
+                    {c[item.reason]}
+                  </Text>
+                ) : null}
+              </Group>
+            ))}
+          </Stack>
+          {data.agent.computer.forceRemoveAvailable ? (
+            <Group>
+              <Button
+                color="red"
+                variant="subtle"
+                disabled={props.pending || props.stale}
+                onClick={() => props.onAction("force")}
+              >
+                {c.force}
+              </Button>
+            </Group>
+          ) : null}
+        </>
+      )}
+      <ConfirmationDialog
+        opened={props.confirmation !== null}
+        title={
+          props.confirmation === "force"
+            ? c.force
+            : props.confirmation
+              ? c[props.confirmation]
+              : c.confirm
+        }
+        message={
+          props.confirmation === "force"
+            ? c.forceWarning
+            : props.confirmation === "delete"
+              ? c.deleteWarning
+              : props.confirmation === "retryPreparation"
+                ? c.retryPreparationWarning
+                : c.stopWarning
+        }
+        confirmLabel={c.confirm}
+        cancelLabel={c.cancel}
+        onConfirm={props.onConfirm}
+        onCancel={props.onCancel}
+        destructive={
+          props.confirmation === "delete" || props.confirmation === "force"
+        }
+        state={
+          props.pending
+            ? { type: "PENDING" }
+            : props.error
+              ? { type: "ERROR", message: props.error }
+              : { type: "READY" }
+        }
+      />
+    </ApplicationShell>
+  );
+}

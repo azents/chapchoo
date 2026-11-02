@@ -116,9 +116,12 @@ operator-provided, never baked into an image.
 
 ## Chart and controller lifecycle
 
-`infra/charts/chapchoo` configures combined or independent backend deployments,
-independent web deployments and distinct private ClusterIP RPC Services. One
-external PostgreSQL authority and preexisting Secret references are required.
+`infra/charts/chapchoo` configures a combined Client/Admin/Control union or
+independently scalable group deployments, independent webs and private ClusterIP
+RPC Services. General/Admin service ports 50051/50052 target the selected named
+gRPC listener; Control has its own Service. Network peer 50053 is a separate
+internal-only listener/Service, never a public Ingress. One external PostgreSQL
+authority and preexisting Secret references are required.
 The chart does not create database/key Secrets or provision a database. Web
 configuration contains only selected listener/public/backend settings. Public URL
 paths directly determine Ingress and health paths; images contain no selected
@@ -141,6 +144,31 @@ promised. Examples under `testenv/chapchoo` do not authorize a cluster write.
 The chart rejects a gRPC catch-all sharing the same ingress class, host and root
 path with an enabled web route. Different web prefixes remain valid, including
 General `/` and Admin `/admin` on one host.
+
+### Computer component deployment
+
+The peer ingress NetworkPolicy permits only this release's backend server
+workloads on 50053; actual CNI denial/enforcement is a live release gate, not a
+rendering result. Component/public gRPC remains a separate authenticated boundary.
+A scoped existing system-owner Secret is provisioned only to Control and the
+selected Computer Provider, not webs, separate Client/Admin or execution Pods.
+
+The optional Computer Provider is independent of Control replicas, defaults to
+one replica/Recreate, and uses the binary-only image with explicit runtime image,
+resource/storage and namespace policy. Its managed namespace must already exist
+and be explicitly selected. Namespaced Role/Binding grants Pod get/list/watch/
+create/delete and PVC/Secret get/create/delete, with a distinct token-free
+execution ServiceAccount. No product DB/root environment is provisioned to this
+process. Namespace Secret get still grants visibility to all Secrets in that
+namespace; operators must isolate managed resources from backend credentials.
+Default replica count is not quiescence proof. Bootstrap credentials are created
+through the actual Provider's acknowledged resource flow, not Helm templates.
+
+See [Computer Control RPC](computer-control-rpc.md),
+[Kubernetes boundaries](computer-kubernetes.md) and
+[owner/operator web](computer-web.md). Live resource retirement, original PVC
+contents, policy enforcement and component TLS require approved disposable
+prerequisites and are not established by offline/synthetic tests.
 
 ## Snapshot publication and Home handoff
 
@@ -171,12 +199,15 @@ explicit; no new nginx controller or public plaintext RPC is introduced.
 
 ## Verification boundary
 
-Root local x86-64 verification covers safe assembly14 tests; chart lint and11
-contract tests including35 invalid configurations; the extracted official Node;
-SQLite preparation and both bundled apps/static/fonts with SIGINT and closed
-owned listeners; all three PostgreSQL account/team browser journeys; and independent nonroot/read-only images,
-private RPC routing and graceful stop. Lower Rust lifecycle tests include partial
-startup, foreign listener isolation and resistant-descendant cleanup.
+Local source verification covers safe assembly and offline chart contracts,
+SQLite/PostgreSQL domain/RPC checks and four assembled PostgreSQL/browser journeys
+(three account/team and one Computer owner/operator). App Storybooks/component
+checks cover detailed copy/status/mobile behavior. The Computer fixture runs
+actual processes over synthetic supported-client HTTP, not a real Kubernetes
+cluster. New image/native-architecture acceptance belongs to exact-head CI and
+must be reported separately rather than inferred from source checks. Lower Rust
+lifecycle tests include partial startup, foreign listener isolation and
+resistant-descendant cleanup.
 Web-core separately owns the actual logout-response HTTP/browser integration.
 Browser delayed-cookie arrival semantics are dependency behavior and are not a
 product acceptance scenario.
@@ -187,7 +218,7 @@ exports archives/checksums. This checks root/prefixed startup, runtime isolation
 static assets, private RPC and shutdown before PR merge without another build
 or product E2E. General CI owns product-test orchestration:
 its single downstream `browser-e2e` job waits for the native build and consumes
-that same run's x86-64 archive, verifies its checksum, and runs the three core
+that same run's x86-64 archive, verifies its checksum, and runs the four core
 PostgreSQL/browser journeys once using only the bundled executable, Node and web
 outputs. It does not rebuild the product or repeat source/per-architecture E2E.
 ARM64 remains a native build/ELF/assembly/image-smoke gate rather than a second
@@ -238,8 +269,9 @@ prepare remains-10. Bootstrap uses only namespace/name/field and a projected API
 token, never the DB/root key. It gets the one named Secret, creates if absent,
 validates/reuses existing or concurrently created material and never overwrites.
 RBAC grants named get and namespace Secret create, not list/update/patch/delete;
-create cannot be restricted to one resourceName by Kubernetes RBAC. Ordinary
-pods and schema prepare retain no token. Secret values do not appear in rendered
+create cannot be restricted to one resourceName by Kubernetes RBAC. Backend/web
+pods and schema prepare retain no token; the Computer Provider uses its own
+namespaced authority described above. Secret values do not appear in rendered
 manifests/logs and survive hook/release deletion. Explicit existing setup Secret
 configuration skips bootstrap. The backend image includes a pinned official
 kubectl1.35 client; compatible Kubernetes server version is required.

@@ -34,7 +34,7 @@ spec:
         - name: web
           image: {{ include "chapchoo.image" $web.image | quote }}
           imagePullPolicy: {{ $web.image.pullPolicy }}
-          args: [serve, --role, none, --web, {{ $role }}]
+          args: [serve, --groups, --web, {{ $role }}]
           env:
             - name: CHAPCHOO_{{ upper $role }}_WEB_URL
               value: {{ $web.publicUrl | quote }}

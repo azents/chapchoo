@@ -6,6 +6,7 @@
     "dark": "ダーク"
   },
   "accounts": {
+    "agents": "Agent",
     "replayMascot": "キャラクターのアニメーションを再生",
     "login": "ログイン",
     "signup": "アカウント作成",
