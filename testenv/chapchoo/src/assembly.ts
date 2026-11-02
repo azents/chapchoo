@@ -61,7 +61,6 @@ export class Assembly {
   private constructor(
     private readonly directory: string,
     private readonly generalPort: number,
-    private readonly adminPort: number,
     generalWebPort: number,
     adminWebPort: number,
     private readonly packageRoot: string | null,
@@ -76,17 +75,16 @@ export class Assembly {
     const ports = new Set<number>();
     let assembly: Assembly | null = null;
     try {
-      while (ports.size < 4) {
+      while (ports.size < 3) {
         ports.add(await privatePort());
       }
-      const [general, admin, generalWeb, adminWeb] = [...ports];
-      if (!general || !admin || !generalWeb || !adminWeb) {
+      const [general, generalWeb, adminWeb] = [...ports];
+      if (!general || !generalWeb || !adminWeb) {
         throw new Error("Could not allocate isolated fixture ports");
       }
       assembly = new Assembly(
         directory,
         general,
-        admin,
         generalWeb,
         adminWeb,
         packageRoot,
@@ -116,6 +114,7 @@ export class Assembly {
     return {
       ...safeEnvironment(),
       NODE_ENV: "production",
+      SWC_NATIVE_BINDING_CACHE: join(this.directory, "swc-cache"),
       CHAPCHOO_WEB_HOST: "127.0.0.1",
       CHAPCHOO_PUBLIC_URL: url,
       PORT: new URL(url).port,
@@ -129,6 +128,7 @@ export class Assembly {
     ) {
       throw new Error("Private PostgreSQL socket path is unsuitable");
     }
+    await mkdir(join(this.directory, "swc-cache"), { mode: 0o700 });
     const data = join(this.directory, "data");
     const socket = join(this.directory, "socket");
     await mkdir(socket, { mode: 0o700 });
@@ -206,12 +206,10 @@ export class Assembly {
       binary,
       [
         "serve",
-        "--role",
-        "both",
-        "--general-listen",
+        "--groups",
+        "client,admin,control",
+        "--listen",
         `127.0.0.1:${this.generalPort}`,
-        "--admin-listen",
-        `127.0.0.1:${this.adminPort}`,
         ...(this.packageRoot
           ? [
               "--web",
@@ -229,13 +227,15 @@ export class Assembly {
         CHAPCHOO_SETUP_PROOF: this.setupProof,
         CHAPCHOO_GENERAL_WEB_URL: this.generalUrl,
         CHAPCHOO_ADMIN_WEB_URL: this.adminUrl,
+        CHAPCHOO_GENERAL_BACKEND_URL: `http://127.0.0.1:${this.generalPort}`,
+        CHAPCHOO_ADMIN_BACKEND_URL: `http://127.0.0.1:${this.generalPort}`,
         RUST_LOG: "chapchoo=info",
       },
     );
     await this.product.ready(
       this.packageRoot
         ? /Selected components are ready/
-        : /Selected backend roles are ready/,
+        : /Selected backend service groups are ready/,
       60_000,
     );
     this.productReady = true;
@@ -244,7 +244,7 @@ export class Assembly {
     }
     for (const [name, url, backendPort] of [
       ["web", this.generalUrl, this.generalPort],
-      ["admin-web", this.adminUrl, this.adminPort],
+      ["admin-web", this.adminUrl, this.generalPort],
     ] satisfies [string, string, number][]) {
       const cwd = join(typescript, "apps", name);
       const env = this.webEnvironment(url, backendPort);
@@ -261,7 +261,10 @@ export class Assembly {
         join(cwd, "node_modules/.bin/next"),
         ["build", "--webpack"],
         cwd,
-        safeEnvironment(),
+        {
+          ...safeEnvironment(),
+          SWC_NATIVE_BINDING_CACHE: join(this.directory, "swc-cache"),
+        },
         120_000,
       );
       const web = this.owner.start(
@@ -277,7 +280,7 @@ export class Assembly {
   async seedSecondUser(): Promise<void> {
     await seedRegisteredUser(
       `127.0.0.1:${this.generalPort}`,
-      `127.0.0.1:${this.adminPort}`,
+      `127.0.0.1:${this.generalPort}`,
       this.administrator,
       this.second,
     );

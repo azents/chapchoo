@@ -87,6 +87,13 @@ it does not assert rollback of already committed work.
 
 ## Assembly and images
 
+The account acceptance Assembly uses the public `serve --groups client,admin,control`
+selection and one explicit loopback RPC listener. General/Admin web listeners
+remain independent and receive their own explicit backend URLs, both intentionally
+pointing to that combined fixture listener. Secondary-user seeding uses the same
+current Client/Admin endpoint. Its private SWC cache is owned by the fixture;
+Next build receives tooling settings, not deployment backend/public configuration.
+
 `scripts/package-linux.py` accepts explicit built inputs; it neither builds nor
 downloads. It validates matching ELF64 architecture, pinned official Node24.22.1
 inventory/hash/bytes, safe links and app selection. Credential/state paths and
