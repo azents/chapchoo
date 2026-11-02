@@ -44,14 +44,21 @@ Standalone Pod creation verifies the original PVC and bootstrap UID first and
 submits the Pod last. The Pod uses one Computer Connector container, the preserved
 PVC mount and exact Secret-key references. It has an explicit ServiceAccount with
 API token automount disabled, non-root identity, dropped capabilities and
-read-only root. Collision checks verify its supported image, command, mount,
+read-only root and RuntimeDefault seccomp. Collision checks require that Pod
+profile and reject an Unconfined container override. Collision checks verify its supported image, command, mount,
 bootstrap references and security constraints rather than treating AlreadyExists
 as success. CPU/memory and storage settings remain runtime inputs.
 
 Each create/delete is one SDK submission; unknown native outcomes are not retried.
 Deletion requires a known original UID precondition and uses normal graceful
 semantics, not force/grace-zero deletion. A successful delete response means
-submission, never confirmed retirement or cleanup.
+submission, never confirmed retirement or cleanup. For Secret/PVC cleanup the
+same task polls exact-identity observations for up to ninety seconds until
+absence is confirmed, including asynchronous finalizer completion. It never
+resubmits DELETE; timeout, observation failure or replacement UID remains a
+failure rather than cleanup success. The lifecycle permit remains held while
+this observation task runs. Native create rejection is classified only at the
+POST response; a GET/AlreadyExists follow-up error cannot grant preparation retry.
 
 ## Evidence and task lifetime
 

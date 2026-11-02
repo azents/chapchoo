@@ -64,6 +64,10 @@ pub(crate) async fn execution(
     };
     match wire::ExecutionFact::try_from(fact) {
         Ok(wire::ExecutionFact::Unspecified) => Ok(()),
+        Ok(wire::ExecutionFact::PreparationBlocked) => service
+            .report_preparation_blocked(source, scope, &computer.execution_id)
+            .await
+            .map_err(status),
         Ok(wire::ExecutionFact::Running) => {
             let snapshot = service
                 .provider_delivery_snapshot(source, scope, Some(&computer.execution_id))

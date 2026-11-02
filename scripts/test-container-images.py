@@ -16,9 +16,9 @@ import urllib.request
 
 WEB_MOUNTS = (
     ("general", "3003", "50051", ""),
-    ("admin", "3004", "50052", ""),
+    ("admin", "3004", "50051", ""),
     ("general", "3003", "50051", "/app"),
-    ("admin", "3004", "50052", "/admin"),
+    ("admin", "3004", "50051", "/admin"),
 )
 
 
@@ -86,7 +86,7 @@ def validate(backend: str, general: str, admin: str) -> None:
             "/bin/sh",
             backend,
             "-c",
-            "/opt/chapchoo/chapchoo prepare && exec /opt/chapchoo/chapchoo serve --role both --general-listen 0.0.0.0:50051 --admin-listen 0.0.0.0:50052",
+            "/opt/chapchoo/chapchoo prepare && exec /opt/chapchoo/chapchoo serve --groups client,admin,control --listen 0.0.0.0:50051",
             env=env,
         )
         containers.append(backend_id)

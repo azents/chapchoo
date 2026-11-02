@@ -48,6 +48,11 @@ export enum ExecutionFact {
   EXECUTION_FACT_RETIRED = 2,
   EXECUTION_FACT_UNCERTAIN = 3,
   EXECUTION_FACT_BLOCKED = 4,
+  /**
+   * EXECUTION_FACT_PREPARATION_BLOCKED - Exact Provider confirms preparation stopped before any possibly accepted
+   * Pod submission, with prior allocated resource identities ACKed.
+   */
+  EXECUTION_FACT_PREPARATION_BLOCKED = 5,
   UNRECOGNIZED = -1,
 }
 
@@ -56,6 +61,8 @@ export enum CommandOutcome {
   COMMAND_OUTCOME_COMPLETED = 1,
   COMMAND_OUTCOME_BLOCKED = 2,
   COMMAND_OUTCOME_UNCERTAIN = 3,
+  /** COMMAND_OUTCOME_NOT_STARTED - Correlated command was refused before dequeue/effect admission. */
+  COMMAND_OUTCOME_NOT_STARTED = 4,
   UNRECOGNIZED = -1,
 }
 

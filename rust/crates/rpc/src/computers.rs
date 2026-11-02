@@ -114,6 +114,7 @@ impl ComputerServices {
             power_observed_at: value.power_observed_at.map(timestamp).transpose()?,
             saved_environment: saved(value.saved_environment) as i32,
             actions,
+            preparation_retry_available: value.preparation_retry_available,
             force_remove_available: value.desired == domain::DesiredState::Deleting,
             start_delayed: value
                 .progress
@@ -291,6 +292,30 @@ impl wire::computers_server::Computers for ComputersAdapter {
             .await
             .map_err(status)?;
         Ok(Response::new(self.0.computer(agent.computer).await?))
+    }
+    async fn retry_preparation(
+        &self,
+        request: Request<wire::PreparationRetryRequest>,
+    ) -> Result<Response<wire::Agent>, Status> {
+        self.0.admit()?;
+        let actor = input::actor(&request)?;
+        let value = request.into_inner();
+        id(&value.agent_id)?;
+        id(&value.request_id)?;
+        id(&value.expected_request_id)?;
+        let agent = self
+            .0
+            .service
+            .retry_preparation(
+                &actor,
+                &value.agent_id,
+                &value.request_id,
+                &value.expected_request_id,
+                AcceptanceTime::System,
+            )
+            .await
+            .map_err(status)?;
+        Ok(Response::new(self.0.agent(agent).await?))
     }
     async fn request_lifecycle(
         &self,

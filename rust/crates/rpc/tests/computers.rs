@@ -92,6 +92,11 @@ fn domain_rpc_keeps_private_owner_authority_and_independent_admin_residual_inven
         let user = account(&accounts, &admin, "user@example.invalid").await?;
         let foreign = account(&accounts, &admin, "foreign@example.invalid").await?;
         let app = Arc::new(ComputersService::new(store, Some(verifier)));
+        assert!(
+            app.register_control("https://control.example.invalid:50053")
+                .await
+                .is_err()
+        );
         app.configure_system_provider(
             &owner,
             "provider",
@@ -192,6 +197,27 @@ fn domain_rpc_keeps_private_owner_authority_and_independent_admin_residual_inven
                 .ok_or("Foreign Computer")?
                 .code(),
             Code::NotFound
+        );
+        let retry = wire::PreparationRetryRequest {
+            agent_id: created.id.clone(),
+            request_id: "retry".into(),
+            expected_request_id: "create".into(),
+        };
+        assert_eq!(
+            computers
+                .retry_preparation(auth(retry.clone(), &foreign)?)
+                .await
+                .err()
+                .ok_or("Foreign preparation retry")?
+                .code(),
+            Code::NotFound
+        );
+        assert!(
+            computers
+                .retry_preparation(auth(retry, &user)?)
+                .await
+                .is_err(),
+            "Preparation without positive safe evidence must not be retried"
         );
         let computer = created.computer.as_ref().ok_or("Missing Computer")?;
         assert_eq!(computer.power, wire::Power::Unknown as i32);

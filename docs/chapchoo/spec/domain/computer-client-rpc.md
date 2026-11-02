@@ -36,6 +36,13 @@ Every generated message and outcome oneof has field-free Debug output.
   Request ID and a typed Start/Stop/Restart/Delete action. Missing, unspecified,
   unknown and Create action values are rejected. This accepts durable desired
   intent; it does not wait for external Kubernetes convergence.
+- Computers.RetryPreparation requires owner authentication, a fresh Request ID
+  and the expected current lifecycle Request ID. It accepts only an explicitly
+  blocked, proven-safe preparation with no possibly accepted Pod submission.
+  It retains the same Agent, Computer, execution and allocated storage, starts
+  a new preparation observation interval and returns current progress on exact
+  retry. Unknown outcomes and stale contexts reject; no execution identifiers
+  are exposed in the owner DTO. `preparation_retry_available` is server-derived.
 - Agents.ForceRemove requires the exact current deletion Request ID. It removes
   the live Agent immediately while preserving the independent residual Computer,
   resources and terminal cleanup intent. Creation deduplication survives.

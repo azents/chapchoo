@@ -177,6 +177,29 @@ async fn exercise(
         .await?;
     assert!(admitted.computer.prepare_admitted_at.is_some());
     assert!(admitted.computer.initial_start_dispatch_at.is_none());
+    store
+        .release_undelivered_prepare(&source, dispatch, "dispatch-once")
+        .await?;
+    assert!(
+        store
+            .claim_execution_dispatch(&source, dispatch, "dispatch-once")
+            .await?
+    );
+    store
+        .mark_start_dispatched(&source, dispatch, "dispatch-once")
+        .await?;
+    store
+        .release_undelivered_prepare(&source, dispatch, "dispatch-once")
+        .await?;
+    assert!(
+        store
+            .delivery_snapshot(Some(&owner_digest), dispatch, Some("dispatch-once"))
+            .await?
+            .computer
+            .prepare_admitted_at
+            .is_some(),
+        "A dequeued call never becomes replayable"
+    );
     assert!(
         !store
             .claim_execution_dispatch(&source, dispatch, "dispatch-once")
@@ -205,6 +228,105 @@ async fn exercise(
         connection,
         "UPDATE provider_connections SET connection_id='connection' WHERE provider_id='provider'",
     )?;
+    let dispatch_agent = store.agent(&owner_digest, "agent-dispatch", now()?).await?;
+    assert!(
+        store
+            .retry_preparation(
+                &owner_digest,
+                &dispatch_agent.id,
+                "retry-dispatch",
+                "create-dispatch",
+                now()?
+            )
+            .await
+            .is_err()
+    );
+    store
+        .report_preparation_blocked(&source, dispatch, "dispatch-once")
+        .await?;
+    mutate_fixture(
+        connection,
+        "UPDATE computer_providers SET can_create=FALSE WHERE id='provider'",
+    )?;
+    assert!(
+        !store
+            .agent(&owner_digest, &dispatch_agent.id, now()?)
+            .await?
+            .computer
+            .preparation_retry_available
+    );
+    assert!(
+        store
+            .retry_preparation(
+                &owner_digest,
+                &dispatch_agent.id,
+                "incapable-retry",
+                "create-dispatch",
+                now()?
+            )
+            .await
+            .is_err()
+    );
+    mutate_fixture(
+        connection,
+        "UPDATE computer_providers SET can_create=TRUE WHERE id='provider'",
+    )?;
+    assert!(
+        store
+            .agent(&owner_digest, &dispatch_agent.id, now()?)
+            .await?
+            .computer
+            .preparation_retry_available
+    );
+    let retried = store
+        .retry_preparation(
+            &owner_digest,
+            &dispatch_agent.id,
+            "retry-dispatch",
+            "create-dispatch",
+            now()?,
+        )
+        .await?;
+    assert_eq!(retried.computer.current_request_id, "retry-dispatch");
+    assert_eq!(
+        store
+            .retry_preparation(
+                &owner_digest,
+                &dispatch_agent.id,
+                "retry-dispatch",
+                "create-dispatch",
+                now()?
+            )
+            .await?
+            .id,
+        retried.id
+    );
+    let retry_scope = scope("dispatch", "retry-dispatch");
+    let retry_snapshot = store
+        .delivery_snapshot(Some(&owner_digest), retry_scope, Some("dispatch-once"))
+        .await?;
+    assert_eq!(
+        retry_snapshot.computer.current_execution_id.as_deref(),
+        Some("dispatch-once")
+    );
+    assert!(retry_snapshot.computer.initial_start_dispatch_at.is_none());
+    assert!(
+        store
+            .claim_execution_dispatch(&source, retry_scope, "dispatch-once")
+            .await?
+    );
+    assert!(
+        store
+            .retry_preparation(
+                &owner_digest,
+                &dispatch_agent.id,
+                "stale-retry",
+                "create-dispatch",
+                now()?
+            )
+            .await
+            .is_err()
+    );
     let one = scope("one", "create-one");
     let reserved = store
         .reserve_execution(&source, one, &draft("first"))

@@ -12,6 +12,7 @@ service Agents {
 service Computers {
   rpc Get(AgentRequest) returns (Computer);
   rpc RequestLifecycle(LifecycleRequest) returns (Agent);
+  rpc RetryPreparation(PreparationRetryRequest) returns (Agent);
 }
 service ProviderCatalog { rpc List(Page) returns (ProviderChoices); }
 // Installation administrator only; independent of live Agent associations.
@@ -53,7 +54,9 @@ message Computer {
   google.protobuf.Timestamp power_observed_at = 12;
   SavedEnvironment saved_environment = 13; repeated ActionAvailability actions = 14;
   bool force_remove_available = 15; bool start_delayed = 16;
+  bool preparation_retry_available = 17;
 }
+message PreparationRetryRequest { string agent_id = 1; string request_id = 2; string expected_request_id = 3; }
 message LifecycleRequest { string agent_id = 1; string request_id = 2; string expected_request_id = 3; Action action = 4; }
 message ForceRemoveRequest { string agent_id = 1; string deletion_request_id = 2; }
 message ProviderCapabilities { bool create = 1; bool start = 2; bool stop = 3; bool restart = 4; }

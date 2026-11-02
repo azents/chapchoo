@@ -10,6 +10,7 @@ code_paths:
   - rust/crates/rpc/src/component_auth.rs
   - rust/crates/rpc/src/control_calls.rs
   - rust/crates/rpc/src/control_streams.rs
+  - rust/crates/rpc/src/control_streams/tests.rs
   - rust/crates/rpc/src/delivery.rs
   - rust/crates/rpc/src/groups.rs
   - rust/crates/rpc/src/memory.rs
@@ -42,7 +43,8 @@ The old backend Role and separate General/Admin port configuration are removed.
 
 A network Control requires both `--peer-listen` and `--peer-advertise`; these
 settings are rejected when Control is not selected or the public/peer addresses
-are equal. The peer endpoint is published only after selected sockets are bound.
+are equal. Peer advertisement accepts only supported plaintext HTTP; HTTPS is
+rejected rather than advertising a TLS endpoint that this listener cannot serve. The peer endpoint is published only after selected sockets are bound.
 A local-only Control owns a memory peer server without opening a peer socket.
 Control renewal runs every twenty seconds with the existing sixty-second lease.
 A failed renewal/worker health check closes admission and fails the owned runtime.
@@ -92,8 +94,9 @@ Kubernetes effect or a reusable permission to keep acting after authority change
 
 Streams require an authenticated Hello before admission. The service generates
 opaque connection identities and uses conditional captured-owner admission only
-after the bounded local stream is prepared. Replacement closes only the old
-registry entry. Delayed old frames and cleanup cannot remove a successor.
+after the bounded local stream is prepared. Durable admission and local
+activation are serialized, so an admitted but delayed predecessor cannot replace
+or close a later committed winner. Replacement closes only the old registry entry. Delayed old frames and cleanup cannot remove a successor.
 Heartbeats renew exact current authority; ordinary frames and periodic checks do
 not extend TTL. Incoming report processing is separate from heartbeat processing.
 

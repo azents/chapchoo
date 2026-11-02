@@ -303,6 +303,56 @@ impl Store {
                 .bind::<BigInt,_>(now).bind::<Text,_>(scope.computer_id).bind::<Text,_>(scope.request_id).bind::<Text,_>(execution).execute(connection).await?==1)
         })
     }
+    /// Clear only a claim whose call was definitely rejected before enqueue.
+    /// Possible forwarding, cancellation and lost outcomes retain the claim.
+    pub async fn release_undelivered_prepare(
+        &self,
+        source: &ProviderSource<'_>,
+        scope: ComputerRequest<'_>,
+        execution: &str,
+    ) -> Result<(), StoreError> {
+        validate_source(source)?;
+        validate_scope(scope)?;
+        operation!(self, |connection, dialect| {
+            let _ = current_source!(connection, dialect, source);
+            let _ = current_computer!(connection, dialect, source, scope);
+            diesel::sql_query(dialect.query("UPDATE computers SET prepare_admitted_at=NULL WHERE id=? AND current_request_id=? AND current_execution_id=? AND current_phase='STARTING' AND initial_start_dispatch_at IS NULL"))
+                .bind::<Text,_>(scope.computer_id).bind::<Text,_>(scope.request_id).bind::<Text,_>(execution).execute(connection).await?;
+            Ok(())
+        })
+    }
+    /// The exact current Provider has ACKed prior resource allocations and
+    /// confirms that no Pod submission may have been accepted.
+    pub async fn report_preparation_blocked(
+        &self,
+        source: &ProviderSource<'_>,
+        scope: ComputerRequest<'_>,
+        execution: &str,
+    ) -> Result<(), StoreError> {
+        validate_source(source)?;
+        validate_scope(scope)?;
+        operation!(self, |connection, dialect| {
+            let _ = current_source!(connection, dialect, source);
+            let current = current_computer!(connection, dialect, source, scope);
+            if current.desired_state != "RUNNING"
+                || current.current_execution_id.as_deref() != Some(execution)
+                || current.current_phase != "STARTING"
+            {
+                return Err(StoreError::Conflict);
+            }
+            let resources = inventory!(connection, dialect, scope.computer_id);
+            if !resources.iter().any(|r| {
+                r.resource_kind == "POD"
+                    && r.execution_id.as_deref() == Some(execution)
+                    && r.resource_uid.is_none()
+            }) {
+                return Err(StoreError::InvalidTransition);
+            }
+            diesel::sql_query(dialect.query("UPDATE computers SET current_phase='BLOCKED',prepare_admitted_at=NULL WHERE id=? AND current_request_id=? AND current_execution_id=?"))
+                .bind::<Text,_>(scope.computer_id).bind::<Text,_>(scope.request_id).bind::<Text,_>(execution).execute(connection).await?;
+            Ok(())
+        })
+    }
     pub async fn connector_managed_computer(
         &self,
         source: &crate::ConnectorSource<'_>,

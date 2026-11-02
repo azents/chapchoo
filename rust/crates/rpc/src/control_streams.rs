@@ -1,6 +1,8 @@
 //! Component-initiated streams and exact connection-local dispatch. Peer/user
 //! business authorization is separate from these transport ownership checks.
 mod reconciliation;
+#[cfg(test)]
+mod tests;
 use crate::{
     control_calls::{CallFailure, Command, ConnectionCalls, OutboundReceivers, Reply},
     ingress as input,
@@ -30,6 +32,12 @@ use tokio::{
 };
 use tokio_stream::Stream;
 use tonic::{Request, Response, Status, Streaming};
+
+#[cfg(test)]
+type ActivationCheckpoint = (
+    tokio::sync::oneshot::Sender<()>,
+    tokio::sync::oneshot::Receiver<()>,
+);
 
 const STREAM_LIMIT: usize = 64;
 const GLOBAL_PENDING: usize = 256;
@@ -91,6 +99,9 @@ struct Inner {
     streams: Arc<Semaphore>,
     pending: Arc<Semaphore>,
     entries: Mutex<Entries>,
+    activation: tokio::sync::Mutex<()>,
+    #[cfg(test)]
+    activation_checkpoint: Mutex<Option<ActivationCheckpoint>>,
     workers: Mutex<JoinSet<()>>,
     failed: AtomicBool,
 }
@@ -100,6 +111,33 @@ impl fmt::Debug for Inner {
     }
 }
 impl Inner {
+    async fn activate(&self, entry: Arc<Connection>) -> Result<(), Status> {
+        // Serialize durable admission with local activation for both component
+        // kinds. A delayed predecessor cannot evict the committed winner.
+        let _activation = self.activation.lock().await;
+        self.admit()?;
+        self.service
+            .admit_component_connection(&entry.prepared)
+            .await
+            .map_err(status)?;
+        #[cfg(test)]
+        {
+            let checkpoint = self
+                .activation_checkpoint
+                .lock()
+                .map_err(|_| Status::internal("Test checkpoint unavailable"))?
+                .take();
+            if let Some((admitted, resume)) = checkpoint {
+                let _ = admitted.send(());
+                let _ = resume.await;
+            }
+        }
+        entry
+            .calls
+            .priority(connected(self, &entry.prepared))
+            .map_err(call_status)?;
+        self.install(entry)
+    }
     fn admit(&self) -> Result<(), Status> {
         if self.admission.load(Ordering::Acquire) && !self.failed.load(Ordering::Acquire) {
             Ok(())
@@ -422,6 +460,9 @@ impl ComponentConnectionServices {
                 streams: Arc::new(Semaphore::new(STREAM_LIMIT)),
                 pending: Arc::new(Semaphore::new(GLOBAL_PENDING)),
                 entries: Mutex::new(Entries::default()),
+                activation: tokio::sync::Mutex::new(()),
+                #[cfg(test)]
+                activation_checkpoint: Mutex::new(None),
                 workers: Mutex::new(JoinSet::new()),
                 failed: AtomicBool::new(false),
             }),
@@ -774,16 +815,7 @@ impl wire::provider_connection_server::ProviderConnection for ProviderConnection
             calls,
             _permit: permit,
         });
-        self.inner
-            .service
-            .admit_component_connection(&entry.prepared)
-            .await
-            .map_err(status)?;
-        entry
-            .calls
-            .priority(connected(&self.inner, &entry.prepared))
-            .map_err(call_status)?;
-        self.inner.install(entry.clone())?;
+        self.inner.activate(entry.clone()).await?;
         let (reports, mut report_rx) = mpsc::channel(COMMAND_QUEUE);
         let worker = entry.clone();
         let inner = self.inner.clone();
@@ -877,16 +909,7 @@ impl wire::connector_connection_server::ConnectorConnection for ConnectorConnect
             calls,
             _permit: permit,
         });
-        self.inner
-            .service
-            .admit_component_connection(&entry.prepared)
-            .await
-            .map_err(status)?;
-        entry
-            .calls
-            .priority(connected(&self.inner, &entry.prepared))
-            .map_err(call_status)?;
-        self.inner.install(entry.clone())?;
+        self.inner.activate(entry.clone()).await?;
         let (reports, mut report_rx) = mpsc::channel(COMMAND_QUEUE);
         let worker = entry.clone();
         let inner = self.inner.clone();

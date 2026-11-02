@@ -105,7 +105,7 @@ impl ComputersService {
     ) -> Result<ControlRegistration, ServiceError> {
         let parsed =
             Url::parse(endpoint).map_err(|_| ServiceError::domain(DomainReason::InvalidInput))?;
-        if !matches!(parsed.scheme(), "http" | "https")
+        if parsed.scheme() != "http"
             || parsed.host_str().is_none()
             || parsed.username() != ""
             || parsed.password().is_some()
@@ -535,6 +535,25 @@ impl ComputersService {
     ) -> Result<Vec<AgentSummary>, ServiceError> {
         Ok(self.store.agents(actor, after, limit, clock.now()?).await?)
     }
+    pub async fn retry_preparation(
+        &self,
+        actor: &SecretDigest,
+        agent_id: &str,
+        request_id: &str,
+        expected_request_id: &str,
+        clock: AcceptanceTime,
+    ) -> Result<AgentSummary, ServiceError> {
+        Ok(self
+            .store
+            .retry_preparation(
+                actor,
+                agent_id,
+                request_id,
+                expected_request_id,
+                clock.now()?,
+            )
+            .await?)
+    }
     pub async fn request_lifecycle(
         &self,
         actor: &SecretDigest,
@@ -720,6 +739,28 @@ impl ComputersService {
             })
             .await
             .map_err(Into::into)
+    }
+    pub async fn release_undelivered_prepare(
+        &self,
+        source: &ProviderSource<'_>,
+        scope: ComputerRequest<'_>,
+        execution: &str,
+    ) -> Result<(), ServiceError> {
+        Ok(self
+            .store
+            .release_undelivered_prepare(source, scope, execution)
+            .await?)
+    }
+    pub async fn report_preparation_blocked(
+        &self,
+        source: &ProviderSource<'_>,
+        scope: ComputerRequest<'_>,
+        execution: &str,
+    ) -> Result<(), ServiceError> {
+        Ok(self
+            .store
+            .report_preparation_blocked(source, scope, execution)
+            .await?)
     }
     pub async fn connector_managed_computer(
         &self,

@@ -248,7 +248,18 @@ create-capable/start-incapable Provider can finish its initial preparation.
 `prepare_admitted_at` is a durable once-only admission fence, separate from
 `initial_start_dispatch_at`, which records actual component dequeue. Its
 Computer-locked CAS revalidates the exact current source, request and execution.
-A reconnect cannot reset an admitted uncertain Prepare. An authorized successor
+A reconnect cannot reset an admitted uncertain Prepare. The Control can release
+an exact current claim only when it proves rejection before queue acceptance;
+possible forwarding, cancellation and lost results retain the fence. A current
+Provider can report PreparationBlocked only for the current starting execution
+with an unallocated Pod identity, after explicit native creation rejection or a
+pre-Pod authority failure following acknowledged resource allocation. That report
+sets Blocked and clears the prepare fence, but never resumes effects itself.
+Owner RetryPreparation compares the exact predecessor request under the usual
+User/Provider/Computer locks, requires this safe blocked state and live management,
+and assigns a fresh Request ID while retaining the same execution and resources.
+It resets the dispatch interval for this explicit new request. Exact result retry
+uses the same request/fingerprint and cannot create another attempt. An authorized successor
 reservation clears both fields only after retirement/original-PVC gates; an
 existing candidate retry preserves them. Both engines add this nullable field in
 `00000000000004_prepare_admission`, backfilling known actual-dispatch timestamps.

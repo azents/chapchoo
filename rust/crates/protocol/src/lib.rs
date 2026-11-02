@@ -33,6 +33,7 @@ pub mod computers {
         ActionAvailability,
         Computer,
         LifecycleRequest,
+        PreparationRetryRequest,
         ForceRemoveRequest,
         ProviderCapabilities,
         ProviderSummary,

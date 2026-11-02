@@ -167,6 +167,13 @@ export interface Computer {
   actions: ActionAvailability[];
   forceRemoveAvailable: boolean;
   startDelayed: boolean;
+  preparationRetryAvailable: boolean;
+}
+
+export interface PreparationRetryRequest {
+  agentId: string;
+  requestId: string;
+  expectedRequestId: string;
 }
 
 export interface LifecycleRequest {
@@ -957,6 +964,7 @@ function createBaseComputer(): Computer {
     actions: [],
     forceRemoveAvailable: false,
     startDelayed: false,
+    preparationRetryAvailable: false,
   };
 }
 
@@ -1009,6 +1017,9 @@ export const Computer: MessageFns<Computer> = {
     }
     if (message.startDelayed !== false) {
       writer.uint32(128).bool(message.startDelayed);
+    }
+    if (message.preparationRetryAvailable !== false) {
+      writer.uint32(136).bool(message.preparationRetryAvailable);
     }
     return writer;
   },
@@ -1154,6 +1165,14 @@ export const Computer: MessageFns<Computer> = {
             message.startDelayed = reader.bool();
             continue;
           }
+          case 17: {
+            if (tag !== 136) {
+              break;
+            }
+
+            message.preparationRetryAvailable = reader.bool();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1189,6 +1208,86 @@ export const Computer: MessageFns<Computer> = {
     message.actions = object.actions?.map((e) => ActionAvailability.fromPartial(e)) || [];
     message.forceRemoveAvailable = object.forceRemoveAvailable ?? false;
     message.startDelayed = object.startDelayed ?? false;
+    message.preparationRetryAvailable = object.preparationRetryAvailable ?? false;
+    return message;
+  },
+};
+
+function createBasePreparationRetryRequest(): PreparationRetryRequest {
+  return { agentId: "", requestId: "", expectedRequestId: "" };
+}
+
+export const PreparationRetryRequest: MessageFns<PreparationRetryRequest> = {
+  encode(message: PreparationRetryRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.agentId !== "") {
+      writer.uint32(10).string(message.agentId);
+    }
+    if (message.requestId !== "") {
+      writer.uint32(18).string(message.requestId);
+    }
+    if (message.expectedRequestId !== "") {
+      writer.uint32(26).string(message.expectedRequestId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): PreparationRetryRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBasePreparationRetryRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.agentId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.requestId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.expectedRequestId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<PreparationRetryRequest>, I>>(base?: I): PreparationRetryRequest {
+    return PreparationRetryRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<PreparationRetryRequest>, I>>(object: I): PreparationRetryRequest {
+    const message = createBasePreparationRetryRequest();
+    message.agentId = object.agentId ?? "";
+    message.requestId = object.requestId ?? "";
+    message.expectedRequestId = object.expectedRequestId ?? "";
     return message;
   },
 };
@@ -2432,11 +2531,22 @@ export const ComputersService = {
     responseSerialize: (value: Agent): Buffer => Buffer.from(Agent.encode(value).finish()),
     responseDeserialize: (value: Buffer): Agent => Agent.decode(value),
   },
+  retryPreparation: {
+    path: "/chapchoo.computers.Computers/RetryPreparation" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: PreparationRetryRequest): Buffer =>
+      Buffer.from(PreparationRetryRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): PreparationRetryRequest => PreparationRetryRequest.decode(value),
+    responseSerialize: (value: Agent): Buffer => Buffer.from(Agent.encode(value).finish()),
+    responseDeserialize: (value: Buffer): Agent => Agent.decode(value),
+  },
 } as const;
 
 export interface ComputersServer extends UntypedServiceImplementation {
   get: handleUnaryCall<AgentRequest, Computer>;
   requestLifecycle: handleUnaryCall<LifecycleRequest, Agent>;
+  retryPreparation: handleUnaryCall<PreparationRetryRequest, Agent>;
 }
 
 export interface ComputersClient extends Client {
@@ -2463,6 +2573,21 @@ export interface ComputersClient extends Client {
   ): ClientUnaryCall;
   requestLifecycle(
     request: LifecycleRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: Agent) => void,
+  ): ClientUnaryCall;
+  retryPreparation(
+    request: PreparationRetryRequest,
+    callback: (error: ServiceError | null, response: Agent) => void,
+  ): ClientUnaryCall;
+  retryPreparation(
+    request: PreparationRetryRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: Agent) => void,
+  ): ClientUnaryCall;
+  retryPreparation(
+    request: PreparationRetryRequest,
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: Agent) => void,

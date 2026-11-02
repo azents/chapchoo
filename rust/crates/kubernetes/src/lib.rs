@@ -32,16 +32,27 @@ const EXECUTION: &str = "chapchoo.io/execution";
 pub enum Error {
     #[error("Kubernetes operation failed; its external outcome may be uncertain")]
     Client(#[from] kube::Error),
+    #[error("Kubernetes explicitly rejected resource creation")]
+    CreationRejected,
     #[error("Managed resource identity or ownership does not match")]
     Ownership,
     #[error("The original saved environment is missing or unverified")]
     MissingEnvironment,
     #[error("Managed Kubernetes configuration is invalid")]
     Configuration,
+    #[error("Managed resource deletion has not reached confirmed absence")]
+    DeletionUncertain,
 }
 impl fmt::Debug for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("KubernetesError([REDACTED])")
+    }
+}
+impl Error {
+    /// An explicit native POST rejection proves create non-acceptance.
+    /// GET, collision follow-up, transport and server errors remain uncertain.
+    pub fn definitely_rejected(&self) -> bool {
+        matches!(self, Self::CreationRejected)
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -382,6 +393,9 @@ impl Kubernetes {
         let created = match api.create(&PostParams::default(), &pvc).await {
             Ok(created) => created,
             Err(kube::Error::Api(error)) if error.code == 409 => api.get(&resource.name).await?,
+            Err(kube::Error::Api(error)) if matches!(error.code, 400 | 401 | 403 | 422 | 429) => {
+                return Err(Error::CreationRejected);
+            }
             Err(error) => return Err(error.into()),
         };
         self.owned(computer, resource, &created.metadata)
@@ -439,6 +453,11 @@ impl Kubernetes {
                     Ok(created) => created,
                     Err(kube::Error::Api(error)) if error.code == 409 => {
                         api.get(&resource.name).await?
+                    }
+                    Err(kube::Error::Api(error))
+                        if matches!(error.code, 400 | 401 | 403 | 422 | 429) =>
+                    {
+                        return Err(Error::CreationRejected);
                     }
                     Err(error) => return Err(error.into()),
                 }
@@ -562,6 +581,9 @@ impl Kubernetes {
         let created = match api.create(&PostParams::default(), &created).await {
             Ok(created) => created,
             Err(kube::Error::Api(error)) if error.code == 409 => api.get(&pod.name).await?,
+            Err(kube::Error::Api(error)) if matches!(error.code, 400 | 401 | 403 | 422 | 429) => {
+                return Err(Error::CreationRejected);
+            }
             Err(error) => return Err(error.into()),
         };
         self.check_pod(&created, pvc, bootstrap)?;
@@ -588,6 +610,9 @@ impl Kubernetes {
                 s.run_as_non_root == Some(true)
                     && s.run_as_user == Some(10001)
                     && s.fs_group == Some(10001)
+                    && s.seccomp_profile.as_ref().is_some_and(|profile| {
+                        profile.type_ == "RuntimeDefault" && profile.localhost_profile.is_none()
+                    })
             })
         {
             return Err(Error::Ownership);
@@ -601,6 +626,9 @@ impl Kubernetes {
             || !container.security_context.as_ref().is_some_and(|s| {
                 s.allow_privilege_escalation == Some(false)
                     && s.read_only_root_filesystem == Some(true)
+                    && s.seccomp_profile.as_ref().is_none_or(|profile| {
+                        profile.type_ == "RuntimeDefault" && profile.localhost_profile.is_none()
+                    })
                     && s.capabilities.as_ref().is_some_and(|c| {
                         c.drop
                             .as_ref()
@@ -785,6 +813,25 @@ impl Kubernetes {
                 api.delete(&resource.name, &params).await?;
             }
             _ => return Err(Error::Ownership),
+        }
+        if kind != ResourceKind::Pod {
+            // Acknowledgement is only submission. Retain the original task and
+            // permit until exact-identity reads establish absence; finalizers
+            // never authorize another DELETE submission.
+            tokio::time::timeout(std::time::Duration::from_secs(90), async {
+                let mut interval = tokio::time::interval(std::time::Duration::from_millis(250));
+                interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                loop {
+                    interval.tick().await;
+                    match self.observe(computer, resource, None).await?.presence {
+                        Presence::Absent => return Ok(()),
+                        Presence::Present => {}
+                        Presence::Unknown => return Err(Error::DeletionUncertain),
+                    }
+                }
+            })
+            .await
+            .map_err(|_| Error::DeletionUncertain)??;
         }
         Ok(())
     }

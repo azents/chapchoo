@@ -225,7 +225,17 @@ impl ComponentConnectionServices {
             return Ok(outcome(wire::ForwardingOutcome::Completed));
         }
         let mut terminal = false;
-        if !snapshot.resources.is_empty() {
+        if snapshot.computer.current_phase == "BLOCKED"
+            && snapshot.computer.current_execution_id.is_some()
+        {
+            // Explicit owner RetryPreparation, not periodic observation, resumes
+            // a proven-safe failed preparation.
+            return Ok(outcome(wire::ForwardingOutcome::Completed));
+        }
+        let unsubmitted_prepare = snapshot.computer.current_phase == "STARTING"
+            && snapshot.computer.prepare_admitted_at.is_none()
+            && snapshot.computer.initial_start_dispatch_at.is_none();
+        if !snapshot.resources.is_empty() && !unsubmitted_prepare {
             let current = wire::ComputerContext {
                 execution_id: snapshot
                     .computer
@@ -464,13 +474,39 @@ impl ComponentConnectionServices {
             execution_id: reservation.execution_id,
             ..computer.clone()
         };
-        self.dispatch_convergence(
-            &entry,
-            &current,
-            wire::provider_command::Operation::Prepare(command),
-            deadline,
-        )
-        .await
+        let result = self
+            .dispatch_convergence(
+                &entry,
+                &current,
+                wire::provider_command::Operation::Prepare(command),
+                deadline,
+            )
+            .await;
+        // Only pre-enqueue rejection is non-delivery proof. Queue acceptance,
+        // timeout, cancellation or any component result retain the claim.
+        if result
+            .as_ref()
+            .is_err_and(|error| error.code() != tonic::Code::Internal)
+            || result.as_ref().is_ok_and(|result| {
+                result
+                    .result
+                    .as_ref()
+                    .is_some_and(|reply| reply.outcome == wire::CommandOutcome::NotStarted as i32)
+                    || (result.result.is_none()
+                        && matches!(
+                            wire::ForwardingOutcome::try_from(result.outcome),
+                            Ok(wire::ForwardingOutcome::Unavailable
+                                | wire::ForwardingOutcome::Overloaded)
+                        ))
+            })
+        {
+            self.inner
+                .service
+                .release_undelivered_prepare(&source, scope, &current.execution_id)
+                .await
+                .map_err(status)?;
+        }
+        result
     }
     async fn dispatch_convergence(
         &self,

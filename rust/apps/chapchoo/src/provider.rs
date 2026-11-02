@@ -260,8 +260,8 @@ async fn connected(
                     Some(wire::control_frame::Payload::Heartbeat(value)) if value.connection_id==connected.connection_id=>acknowledged=tokio::time::Instant::now(),
                     Some(wire::control_frame::Payload::Provider(command))=>{
                         if command.remaining_ms==0||command.identity.as_ref().is_none_or(|id|id.connection_id!=connected.connection_id){continue;}
-                        let worker=Worker{auth:auth.clone(),source:source.clone(),key:BearerSecret::parse(key.expose().to_owned())?,adapter:adapter.clone(),sender:sender.clone(),execution_terminal:false};
-                        if effects.active(){worker.reply(&command,wire::CommandOutcome::Blocked).await?;continue;}
+                        let worker=Worker{auth:auth.clone(),source:source.clone(),key:BearerSecret::parse(key.expose().to_owned())?,adapter:adapter.clone(),sender:sender.clone(),execution_terminal:false,preparation_retry_safe:false};
+                        if effects.active(){worker.reply(&command,wire::CommandOutcome::NotStarted).await?;continue;}
                         // The task, not this call or stream, owns its permit. Its
                         // original identity makes late replies harmless after reconnect.
                         let _waiter=effects.start(async move {worker.execute(command).await;})?;
@@ -275,6 +275,7 @@ async fn connected(
 }
 struct Worker {
     execution_terminal: bool,
+    preparation_retry_safe: bool,
     auth: ProviderAuthenticationClient<Channel>,
     source: wire::ProviderConnectionCheck,
     key: BearerSecret,
@@ -349,12 +350,19 @@ impl Worker {
                                 | chapchoo_kubernetes::Error::Configuration
                         )
                     });
+                let safe_preparation = self.preparation_retry_safe
+                    && matches!(
+                        command.operation,
+                        Some(wire::provider_command::Operation::Prepare(_))
+                    );
                 if let Some(context) = command.computer.as_ref() {
                     let _ = self
                         .report(
                             context,
                             vec![],
-                            if blocked {
+                            if safe_preparation {
+                                wire::ExecutionFact::PreparationBlocked
+                            } else if blocked {
                                 wire::ExecutionFact::Blocked
                             } else {
                                 wire::ExecutionFact::Uncertain
@@ -363,7 +371,7 @@ impl Worker {
                         )
                         .await;
                 }
-                if blocked {
+                if blocked || safe_preparation {
                     wire::CommandOutcome::Blocked
                 } else {
                     wire::CommandOutcome::Uncertain
@@ -440,11 +448,15 @@ impl Worker {
                 .await?;
             }
             wire::provider_command::Operation::Prepare(mut value) => {
+                self.preparation_retry_safe = false;
                 let pvc = value.saved_pvc.as_ref().ok_or("Saved PVC missing")?;
                 let pvc = self
                     .adapter
                     .ensure_pvc(&context, pvc, value.initial_allocation)
-                    .await?;
+                    .await
+                    .inspect_err(|error| {
+                        self.preparation_retry_safe = error.definitely_rejected()
+                    })?;
                 self.report(
                     &context,
                     vec![present(pvc.clone())],
@@ -452,9 +464,11 @@ impl Worker {
                     false,
                 )
                 .await?;
+                self.preparation_retry_safe = true;
                 value.saved_pvc = Some(pvc.clone());
                 command.operation = Some(wire::provider_command::Operation::Prepare(value.clone()));
                 self.check(command).await?;
+                self.preparation_retry_safe = false;
                 let secret = self
                     .adapter
                     .ensure_bootstrap(
@@ -467,7 +481,10 @@ impl Worker {
                         &value.connector_initial_key,
                         &value.connector_endpoint,
                     )
-                    .await?;
+                    .await
+                    .inspect_err(|error| {
+                        self.preparation_retry_safe = error.definitely_rejected()
+                    })?;
                 self.report(
                     &context,
                     vec![present(secret.clone())],
@@ -475,9 +492,11 @@ impl Worker {
                     false,
                 )
                 .await?;
+                self.preparation_retry_safe = true;
                 value.bootstrap_secret = Some(secret.clone());
                 command.operation = Some(wire::provider_command::Operation::Prepare(value.clone()));
                 self.check(command).await?;
+                self.preparation_retry_safe = false;
                 let pod = self
                     .adapter
                     .ensure_pod(
@@ -486,7 +505,10 @@ impl Worker {
                         &pvc,
                         &secret,
                     )
-                    .await?;
+                    .await
+                    .inspect_err(|error| {
+                        self.preparation_retry_safe = error.definitely_rejected()
+                    })?;
                 self.report(
                     &context,
                     vec![present(pod.clone())],
