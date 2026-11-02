@@ -70,7 +70,9 @@ generated HTML or JavaScript.
 Child environment is an allowlist of runtime/locale/CA settings, the selected
 web URL/listener/backend configuration and explicitly configured peer public web
 URL for navigation. The peer URL is optional, validated and never supplies an API
-destination; an absent peer is not inferred. An Admin child receives no General
+destination. When both webs are selected, each uses the other selected app's
+resolved public URL, including supported local defaults; a standalone app needs
+explicit peer metadata. An Admin child receives no General
 backend target. It excludes database/root/setup/AWS
 credentials, Node preloads and TLS-verification disabling. Each child uses the
 absolute bundled Node path and its own process group. Admission waits for every

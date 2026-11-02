@@ -423,6 +423,27 @@ fn web_environment(
     environment
 }
 
+fn link_selected_webs(selected: &mut [WebConfig]) {
+    // Selected applications already have validated public URLs, including the
+    // supported local defaults. A standalone app still needs an explicit peer.
+    let general = selected
+        .iter()
+        .find(|config| config.app == WebApp::General)
+        .map(|config| config.public_url.clone());
+    let admin = selected
+        .iter()
+        .find(|config| config.app == WebApp::Admin)
+        .map(|config| config.public_url.clone());
+    for config in selected {
+        if config.peer_web_url.is_none() {
+            config.peer_web_url = match config.app {
+                WebApp::General => admin.clone(),
+                WebApp::Admin => general.clone(),
+            };
+        }
+    }
+}
+
 pub fn web_configs(options: &ServeOptions) -> Result<Vec<WebConfig>, AppError> {
     let Some(selection) = options.web else {
         return Ok(Vec::new());
@@ -464,6 +485,7 @@ pub fn web_configs(options: &ServeOptions) -> Result<Vec<WebConfig>, AppError> {
         }
         selected.push(config);
     }
+    link_selected_webs(&mut selected);
     Ok(selected)
 }
 
@@ -840,6 +862,44 @@ mod tests {
         ] {
             assert!(web(public, listen, backend).is_err());
         }
+    }
+
+    #[test]
+    fn bundled_webs_link_resolved_public_urls_without_peer_backend_access() -> Result<(), AppError>
+    {
+        let general = web(
+            "http://localhost:3003",
+            "127.0.0.1:3003",
+            "http://127.0.0.1:50051",
+        )?;
+        let admin = WebConfig::parse(
+            WebApp::Admin,
+            "127.0.0.1:3004"
+                .parse()
+                .map_err(|_| ConfigError::WebArtifacts)?,
+            "http://localhost:3004",
+            "http://127.0.0.1:50052",
+            Path::new("/owned-installation"),
+        )?;
+        let general_url = general.public_url.clone();
+        let admin_url = admin.public_url.clone();
+        let admin_backend = admin.backend_url.clone();
+        let mut standalone = vec![admin];
+        link_selected_webs(&mut standalone);
+        assert!(standalone[0].peer_web_url.is_none());
+        standalone.push(general);
+        link_selected_webs(&mut standalone);
+        assert_eq!(standalone[0].peer_web_url, Some(general_url));
+        assert_eq!(standalone[1].peer_web_url, Some(admin_url));
+        assert_eq!(standalone[0].backend_url, admin_backend);
+        let explicit = Some(navigation_endpoint(
+            "https://separate.example.invalid/app",
+            WebApp::General.public_variable(),
+        )?);
+        standalone[0].peer_web_url = explicit.clone();
+        link_selected_webs(&mut standalone);
+        assert_eq!(standalone[0].peer_web_url, explicit);
+        Ok(())
     }
 
     #[test]
