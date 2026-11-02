@@ -642,6 +642,23 @@ impl Store {
                         .get_result::<Execution>(connection)
                         .await?;
                     if previous.retired_at.is_some() {
+                        if current.cleanup_completed_at.is_some() {
+                            return Ok(());
+                        }
+                        let resources = inventory!(connection, dialect, scope.computer_id);
+                        if !resources.iter().any(|r| {
+                            r.resource_kind == "POD"
+                                && r.execution_id.as_deref() == Some(execution_id)
+                                && r.presence == "ABSENT"
+                                && r.source_connection_id.as_deref() == Some(source.connection_id)
+                        }) {
+                            return Err(StoreError::InvalidTransition);
+                        }
+                        // Reconnect must freshly establish stopped power. This
+                        // replay changes no lifecycle phase or dispatch interval.
+                        diesel::sql_query(dialect.query("UPDATE computers SET observed_power='STOPPED',power_observed_at=?,power_source_connection_id=?,power_source_execution_id=NULL WHERE id=?"))
+                            .bind::<BigInt,_>(now).bind::<Text,_>(source.connection_id)
+                            .bind::<Text,_>(scope.computer_id).execute(connection).await?;
                         return Ok(());
                     }
                 }

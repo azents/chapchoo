@@ -262,6 +262,11 @@ old execution remains current, even if a blocked/uncertain phase obscures the
 retiring display phase. `retire_execution` requires definitive current-source
 Pod absence, retires the exact execution, revokes and wipes its Connector session
 authority and withdraws its route before clearing the current pointer.
+If that exact retirement is replayed while no successor exists, fresh definitive
+Pod absence from the current connection can reconfirm stopped power after
+reconnect. Replay preserves the lifecycle phase and dispatch interval. An older
+connection's absence alone cannot refresh current power; original saved-PVC
+evidence must independently be refreshed before Start admission.
 Restart advances to ordinary start under the same Request ID; late old-execution
 reports cannot stop or complete a successor. Automatic restoration uses the same
 old-absence, intact-storage, current-capability and conflicting-intent gates.

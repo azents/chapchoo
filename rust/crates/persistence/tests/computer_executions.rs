@@ -809,13 +809,14 @@ async fn exercise(
             .await,
         Err(StoreError::Conflict)
     ));
-    exercise_stop_and_initial(&store, &current_source, &owner_digest).await?;
+    exercise_stop_and_initial(&store, connection, &current_source, &owner_digest).await?;
     exercise_review_regressions(&store, connection, &current_source, &owner_digest).await?;
     Ok(())
 }
 
 async fn exercise_stop_and_initial(
     store: &Store,
+    connection: &mut impl SimpleConnection,
     source: &ProviderSource<'_>,
     owner: &chapchoo_crypto::SecretDigest,
 ) -> Result<(), TestError> {
@@ -888,6 +889,78 @@ async fn exercise_stop_and_initial(
             .phase,
         LifecyclePhase::Completed
     );
+    mutate_fixture(
+        connection,
+        "UPDATE provider_connections SET connection_id='stop-reconnected' WHERE provider_id='provider'",
+    )?;
+    let reconnected = ProviderSource {
+        connection_id: "stop-reconnected",
+        ..*source
+    };
+    assert_eq!(
+        store
+            .agent(owner, "agent-stopping", now()?)
+            .await?
+            .computer
+            .power,
+        ObservedPower::Unknown
+    );
+    assert!(matches!(
+        store
+            .retire_execution(&reconnected, stop, "stop-original")
+            .await,
+        Err(StoreError::InvalidTransition)
+    ));
+    assert!(matches!(
+        store
+            .request_lifecycle(
+                owner,
+                "agent-stopping",
+                &LifecycleRequest {
+                    request_id: "premature-start".into(),
+                    expected_request_id: "stop".into(),
+                    action: LifecycleAction::Start
+                },
+                now()?
+            )
+            .await,
+        Err(StoreError::InvalidTransition)
+    ));
+    report(
+        store,
+        &reconnected,
+        stop,
+        &pod,
+        ResourceEvidence::DefinitivelyAbsent {
+            expected_uid: pod.resource_uid.as_deref(),
+        },
+    )
+    .await?;
+    store
+        .retire_execution(&reconnected, stop, "stop-original")
+        .await?;
+    let refreshed = store.agent(owner, "agent-stopping", now()?).await?;
+    assert_eq!(refreshed.computer.power, ObservedPower::Stopped);
+    assert_eq!(refreshed.computer.progress.phase, LifecyclePhase::Completed);
+    let pvc = store
+        .managed_resources(&reconnected, stop)
+        .await?
+        .into_iter()
+        .find(|r| r.resource_kind == "PVC")
+        .ok_or("Missing stopped PVC")?;
+    report(
+        store,
+        &reconnected,
+        stop,
+        &pvc,
+        ResourceEvidence::OwnedPresent {
+            uid: pvc
+                .resource_uid
+                .as_deref()
+                .ok_or("Missing stopped PVC UID")?,
+        },
+    )
+    .await?;
     store
         .request_lifecycle(
             owner,
@@ -901,8 +974,19 @@ async fn exercise_stop_and_initial(
         )
         .await?;
     store
-        .reserve_execution(source, scope("stopping", "start"), &draft("stop-successor"))
+        .reserve_execution(
+            &reconnected,
+            scope("stopping", "start"),
+            &draft("stop-successor"),
+        )
         .await?;
+    mutate_fixture(
+        connection,
+        &format!(
+            "UPDATE provider_connections SET connection_id='{}' WHERE provider_id='provider'",
+            source.connection_id
+        ),
+    )?;
 
     // Quiescent initial allocation without any observed UID may continue, while
     // allocated/missing storage above remains irreplaceable.

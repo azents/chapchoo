@@ -119,5 +119,10 @@ tags: [agent, computer, plan, security, database]
   locks; both-engine regressions prove preserved cleanup/collection and next-start
   admission. Full 82-test Rust quality, live RPC74 per engine, docs18 and targeted
   same-reviewer review pass again with no new material issues. Latest correction
-  commit/hooks and new-SHA CI follow. No component runtime or Mac flow is exposed
-  in this phase.
+  commit `7d7571b` passed all remote CI. A later automatic finding identified
+  stopped power remaining stale after a Provider reconnect. Exact already-retired
+  replay now requires fresh current-source Pod absence and refreshes only stopped
+  evidence, preserving phase/dispatch time and independent PVC/start authority.
+  Both-engine reconnect/next-start regression, full Rust82/live RPC74 per engine,
+  docs18 and targeted same-reviewer review pass. Latest correction hooks/new-SHA
+  CI follow. No component runtime or Mac flow is exposed in this phase.
