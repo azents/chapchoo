@@ -239,8 +239,8 @@ impl Store {
                 });
             }
             let digest = draft.initial_key.digest();
-            diesel::sql_query(dialect.query("INSERT INTO connector_sessions(id,execution_id,initial_request_id,initial_payload_hash,initial_hash,initial_nonce,initial_ciphertext,created_at) VALUES(?,?,?,?,?,?,?,?)"))
-                .bind::<Text,_>(&draft.id).bind::<Text,_>(execution_id).bind::<Text,_>(&draft.request_id).bind::<Binary,_>(fingerprint.as_slice()).bind::<Binary,_>(digest.as_bytes().as_slice())
+            diesel::sql_query(dialect.query("INSERT INTO connector_sessions(id,computer_id,execution_id,initial_request_id,initial_payload_hash,initial_hash,initial_nonce,initial_ciphertext,created_at) VALUES(?,?,?,?,?,?,?,?,?)"))
+                .bind::<Text,_>(&draft.id).bind::<Text,_>(&binding.computer_id).bind::<Text,_>(execution_id).bind::<Text,_>(&draft.request_id).bind::<Binary,_>(fingerprint.as_slice()).bind::<Binary,_>(digest.as_bytes().as_slice())
                 .bind::<Binary,_>(protected.nonce().as_slice()).bind::<Binary,_>(protected.ciphertext()).bind::<BigInt,_>(now).execute(connection).await?;
             Ok(ConnectorSessionResult {
                 id: draft.id.clone(),

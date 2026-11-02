@@ -739,6 +739,12 @@ async fn exercise(
             .await?,
         1
     );
+    assert!(matches!(
+        store
+            .force_remove_agent(&owner_digest, "agent-one", "delete-one", now()?)
+            .await,
+        Err(StoreError::NotFound)
+    ));
     assert!(
         store
             .managed_computers(&current_source, None, 100)
@@ -772,6 +778,18 @@ async fn exercise(
     assert!(matches!(
         store.agent(&owner_digest, "agent-empty", now()?).await,
         Err(StoreError::NotFound)
+    ));
+    assert_eq!(
+        store
+            .force_remove_agent(&owner_digest, "agent-empty", "delete-empty", now()?)
+            .await?,
+        chapchoo_persistence::AgentRemoval::AlreadyRemoved
+    );
+    assert!(matches!(
+        store
+            .force_remove_agent(&owner_digest, "agent-empty", "unaccepted-delete", now()?)
+            .await,
+        Err(StoreError::Conflict)
     ));
     exercise_stop_and_initial(&store, &current_source, &owner_digest).await?;
     exercise_review_regressions(&store, connection, &current_source, &owner_digest).await?;

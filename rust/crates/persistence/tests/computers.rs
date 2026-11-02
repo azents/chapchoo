@@ -52,7 +52,7 @@ fn seed(
     let initial = cipher.protect_latest("bootstrap:session-running", &bootstrap)?;
     let current = cipher.protect_latest("operational:session-running", &operational)?;
     let initial_payload = binary(&[0; 32]);
-    sql.push_str(&format!("INSERT INTO connector_sessions(id,execution_id,initial_request_id,initial_payload_hash,initial_hash,initial_nonce,initial_ciphertext,current_hash,issued_at,expires_at,current_request_id,recovery_nonce,recovery_ciphertext,created_at) VALUES('session-running','execution-running','initial-session-key',{initial_payload},{},{},{},{},0,10000000,'session-key',{},{},0); INSERT INTO connector_connections(computer_id,session_id,control_id,connection_id,credential_hash,expires_at) VALUES('running','session-running','control','connector-connection',{},10000000);",binary(bootstrap.digest().as_bytes()),binary(initial.nonce()),binary(initial.ciphertext()),binary(operational.digest().as_bytes()),binary(current.nonce()),binary(current.ciphertext()),binary(operational.digest().as_bytes())));
+    sql.push_str(&format!("INSERT INTO connector_sessions(id,computer_id,execution_id,initial_request_id,initial_payload_hash,initial_hash,initial_nonce,initial_ciphertext,current_hash,issued_at,expires_at,current_request_id,recovery_nonce,recovery_ciphertext,created_at) VALUES('session-running','running','execution-running','initial-session-key',{initial_payload},{},{},{},{},0,10000000,'session-key',{},{},0); INSERT INTO connector_connections(computer_id,session_id,control_id,connection_id,credential_hash,expires_at) VALUES('running','session-running','control','connector-connection',{},10000000);",binary(bootstrap.digest().as_bytes()),binary(initial.nonce()),binary(initial.ciphertext()),binary(operational.digest().as_bytes()),binary(current.nonce()),binary(current.ciphertext()),binary(operational.digest().as_bytes())));
     sql.push_str("COMMIT;");
     Ok(sql)
 }
@@ -286,6 +286,12 @@ async fn exercise(store: Store, users: &[BearerSecret]) -> Result<(), TestError>
         AgentRemoval::AlreadyRemoved
     );
     assert!(matches!(
+        store
+            .force_remove_agent(&owner, "created", "wrong-delete", NOW)
+            .await,
+        Err(StoreError::Conflict)
+    ));
+    assert!(matches!(
         store.agent(&owner, "created", NOW).await,
         Err(StoreError::NotFound)
     ));
@@ -318,6 +324,46 @@ async fn exercise(store: Store, users: &[BearerSecret]) -> Result<(), TestError>
     let first = present(one.await??)?;
     let second = present(two.await??)?;
     assert_eq!(first.id, second.id);
+    store
+        .create_cloud_agent(
+            &owner,
+            &draft("force-race", "force-race-computer", "force-race-create"),
+            NOW,
+        )
+        .await?;
+    store
+        .request_lifecycle(
+            &owner,
+            "force-race",
+            &mutation(
+                "force-race-delete",
+                "force-race-create",
+                LifecycleAction::Delete,
+            ),
+            NOW,
+        )
+        .await?;
+    let barrier = Arc::new(tokio::sync::Barrier::new(2));
+    let a = store.clone();
+    let da = owner.clone();
+    let ba = barrier.clone();
+    let correct = tokio::spawn(async move {
+        ba.wait().await;
+        a.force_remove_agent(&da, "force-race", "force-race-delete", NOW)
+            .await
+    });
+    let b = store.clone();
+    let db = owner.clone();
+    let wrong = tokio::spawn(async move {
+        barrier.wait().await;
+        b.force_remove_agent(&db, "force-race", "unaccepted-delete", NOW)
+            .await
+    });
+    assert_eq!(correct.await??, AgentRemoval::Removed);
+    assert!(matches!(
+        wrong.await?,
+        Err(StoreError::Conflict | StoreError::InvalidTransition)
+    ));
     exercise_provider_keys(&store, &proof).await?;
     exercise_connector_keys(&store, &proof).await?;
     Ok(())

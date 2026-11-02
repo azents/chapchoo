@@ -101,5 +101,17 @@ tags: [agent, computer, plan, security, database]
   The exact independent reviewer `/root/computer-reviewer` completed targeted
   re-review: both findings resolved, no correction-introduced material issues.
   Scope, authority, storage continuity and retry gates remain intact.
-- Next: commit/hooks and stacked PR2 against PR40, then remote CI/automatic review.
-  No component runtime or Mac flow is exposed in this phase.
+- PR #41 was submitted at `3d0fdd2` against PR #40; all remote CI including
+  browser E2E and native packages passed. Automatic review then identified
+  missing session/Computer route constraints and deletion Request ID checks after
+  Agent removal. Both are corrected with composite ownership FKs, unique session
+  routing, and retained minimal removed-Agent identity on residual Computer
+  inventory. Wrong-ID removal retries/races reject; after inventory collection no
+  deletion request can be proven and removal retry returns not-found. Creation
+  receipts remain minimal and continue returning removed on creation replay.
+- Corrected full Rust quality passes (82 tests/clippy/boundaries), live RPC passes
+  (74 checks per engine), and docs18/catalog/diff check pass. The exact independent
+  reviewer completed targeted re-review: both automatic findings resolved, no new
+  material correctness/security/data-loss findings, and Design delta remains None.
+  Correction commit/hooks and new-SHA CI follow. No component runtime or Mac flow
+  is exposed in this phase.

@@ -780,12 +780,12 @@ impl Store {
             {
                 return Err(StoreError::InvalidTransition);
             }
+            diesel::sql_query(dialect.query("UPDATE computers SET removed_agent_id=COALESCE(removed_agent_id,(SELECT id FROM agents WHERE computer_id=computers.id)),agent_removed_at=COALESCE(agent_removed_at,?),cleanup_completed_at=?,current_phase='COMPLETED' WHERE id=?"))
+                .bind::<BigInt,_>(now).bind::<BigInt,_>(now).bind::<Text,_>(scope.computer_id).execute(connection).await?;
             diesel::sql_query(dialect.query("DELETE FROM agents WHERE computer_id=?"))
                 .bind::<Text, _>(scope.computer_id)
                 .execute(connection)
                 .await?;
-            diesel::sql_query(dialect.query("UPDATE computers SET agent_removed_at=COALESCE(agent_removed_at,?),cleanup_completed_at=?,current_phase='COMPLETED' WHERE id=?"))
-                .bind::<BigInt,_>(now).bind::<BigInt,_>(now).bind::<Text,_>(scope.computer_id).execute(connection).await?;
             Ok(())
         })
     }

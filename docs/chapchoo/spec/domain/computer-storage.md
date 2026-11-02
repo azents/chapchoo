@@ -66,6 +66,9 @@ erDiagram
   to an execution belonging to that same Computer through a deferred composite FK.
   Dispatch time, old execution identity, current power/storage evidence and
   terminal cleanup timestamps are separate facts, not a stored UI state machine.
+  Minimal cloud removal inventory retains a unique removed Agent ID (not a
+  live-Agent FK) until completion collection, to bind removal retries to the
+  residual Computer's current deletion Request ID.
   Power/storage evidence keeps its source connection and applicable execution
   identity without a live-directory FK: historical evidence is not authority.
 - `agents`: owner and Computer-kind composite FK must match the Computer. A stored
@@ -91,7 +94,8 @@ erDiagram
   cascade only with actual Computer removal, not with Agent removal.
 - `provider_keys`: one current key record per Provider, current/previous digest,
   fixed overlap/expiry, revocation and protected current recovery material.
-- `connector_sessions`: unique execution binding, original issuance Request ID
+- `connector_sessions`: unique execution binding with a composite
+  execution/Computer FK, original issuance Request ID
   and immutable binding fingerprint; reusable initial digest and
   protected bootstrap result, current/previous operational digest, expiry,
   revocation and protected current result. Execution removal cascades the session.
@@ -103,7 +107,9 @@ erDiagram
   `provider_connections` and `connector_connections` hold current Control and
   opaque connection identity, credential digest and expiry. Logical component
   FKs cascade on removal; Control FK prevents deleting a referenced registration.
-  Connector route also references its session so session deletion removes it.
+  Connector route has a unique session and composite session/Computer FK, so the
+  route cannot belong to a different Computer or share one session across
+  Computers. Session deletion cascades that route.
 
 Creation and cleanup receipts have intentionally different retention: the former
 survives Agent removal for owner lifetime, while current residual Computer/resource
@@ -160,7 +166,11 @@ transaction it revokes that Computer's Connector sessions, discards encrypted
 bootstrap/operational recovery material and removes Connector routes. Force
 removal requires the current deletion request and removes only the Agent; residual
 Computer/cleanup authority and creation receipt survive. An owned removed Agent
-can be recognized on retry through its receipt, without recreating it.
+can be recognized while residual inventory remains, but only with that Computer's
+exact current deletion Request ID. Wrong IDs reject, including retries racing
+normal or forced removal. After inventory collection, removal retry returns
+not-found rather than treating a creation receipt as proof of a deletion request.
+Creation replay still returns removed without recreating it.
 
 Provider key rotation/issuance requires verified system-owner scope or the current
 owning User session, never the Provider communication key. Each credential mutation
@@ -322,7 +332,11 @@ cross-Computer resource reservation conflicts/rollback, stale route/control/key
 admission, restart retirement gates despite uncertain phase, obsolete-session
 withdrawal, original PVC reuse, current-source restoration, missing-storage
 refusal, force-removal residuals, normal confirmation and completion-based 24h
-retention with creation-receipt preservation. Service tests verify configured
+retention with creation-receipt preservation.
+Connector schema fixtures additionally reject mismatched session/Computer
+execution ownership and route ownership. Removal tests reject wrong deletion IDs
+before/after normal/forced removal and in a concurrent wrong-ID removal race.
+Service tests verify configured
 owner scope, independent communication authority and generated-key recovery.
 These tests do not establish working component streams, external power actions
 or UI/E2E.

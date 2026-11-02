@@ -139,6 +139,20 @@ struct CreationReceiptRow {
     #[diesel(sql_type = Text)]
     assigned_agent_id: String,
 }
+#[derive(diesel::QueryableByName)]
+struct RemovedAgentRow {
+    #[diesel(sql_type=Text)]
+    current_request_id: String,
+}
+macro_rules! removed_agent_retry {
+    ($connection:expr,$dialect:expr,$owner:expr,$agent:expr,$request:expr) => {{
+        let row=diesel::sql_query($dialect.query("SELECT current_request_id FROM computers WHERE owner_user_id=? AND removed_agent_id=? AND desired_state='DELETING' AND agent_removed_at IS NOT NULL"))
+            .bind::<Text,_>($owner).bind::<Text,_>($agent)
+            .get_result::<RemovedAgentRow>($connection).await.optional()?.ok_or(StoreError::NotFound)?;
+        if row.current_request_id!=$request { return Err(StoreError::Conflict); }
+        Ok(AgentRemoval::AlreadyRemoved)
+    }};
+}
 
 #[derive(diesel::QueryableByName)]
 pub(crate) struct AgentComputerRow {
@@ -596,13 +610,13 @@ impl Store {
                 .await
                 .optional()?;
             let Some(initial) = initial else {
-                let prior = diesel::sql_query(dialect.query("SELECT payload_hash,assigned_agent_id FROM agent_creation_receipts WHERE owner_user_id=? AND assigned_agent_id=?"))
-                    .bind::<Text,_>(&user.id).bind::<Text,_>(agent_id).get_result::<CreationReceiptRow>(connection).await.optional()?;
-                return if prior.is_some() {
-                    Ok(AgentRemoval::AlreadyRemoved)
-                } else {
-                    Err(StoreError::NotFound)
-                };
+                return removed_agent_retry!(
+                    connection,
+                    dialect,
+                    &user.id,
+                    agent_id,
+                    expected_deletion_request_id
+                );
             };
             let provider_id = initial.provider_id.ok_or(StoreError::InvalidTransition)?;
             diesel::sql_query(dialect.query(provider_lock(dialect)))
@@ -622,7 +636,13 @@ impl Store {
                 .await
                 .optional()?;
             let Some(current) = current else {
-                return Ok(AgentRemoval::AlreadyRemoved);
+                return removed_agent_retry!(
+                    connection,
+                    dialect,
+                    &user.id,
+                    agent_id,
+                    expected_deletion_request_id
+                );
             };
             if current.kind != "CLOUD"
                 || current.desired_state != "DELETING"
@@ -631,9 +651,10 @@ impl Store {
                 return Err(StoreError::InvalidTransition);
             }
             diesel::sql_query(dialect.query(
-                "UPDATE computers SET agent_removed_at=? WHERE id=? AND desired_state='DELETING'",
+                "UPDATE computers SET agent_removed_at=?,removed_agent_id=? WHERE id=? AND desired_state='DELETING'",
             ))
             .bind::<BigInt, _>(now)
+            .bind::<Text, _>(agent_id)
             .bind::<Text, _>(&current.id)
             .execute(connection)
             .await?;

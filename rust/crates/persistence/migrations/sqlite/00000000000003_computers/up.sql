@@ -61,12 +61,14 @@ CREATE TABLE computers (
     environment_observed_at BIGINT,
     saved_environment TEXT NOT NULL DEFAULT 'UNKNOWN' CHECK (saved_environment IN ('VERIFIED','MISSING','UNKNOWN')),
     agent_removed_at BIGINT,
+    removed_agent_id TEXT UNIQUE,
     cleanup_completed_at BIGINT,
     created_at BIGINT NOT NULL,
     UNIQUE (id,owner_user_id,kind),
     UNIQUE (id,provider_id),
     CHECK (kind<>'CLOUD' OR provider_id IS NOT NULL),
     CHECK (agent_removed_at IS NULL OR desired_state='DELETING'),
+    CHECK (removed_agent_id IS NULL OR (kind='CLOUD' AND desired_state='DELETING' AND agent_removed_at IS NOT NULL)),
     CHECK (cleanup_completed_at IS NULL OR desired_state='DELETING'),
     FOREIGN KEY (current_execution_id,id) REFERENCES computer_executions(id,computer_id)
         DEFERRABLE INITIALLY DEFERRED
@@ -134,7 +136,8 @@ CREATE UNIQUE INDEX one_saved_pvc_per_computer ON computer_resources(computer_id
 
 CREATE TABLE connector_sessions (
     id TEXT PRIMARY KEY NOT NULL,
-    execution_id TEXT NOT NULL UNIQUE REFERENCES computer_executions(id) ON DELETE CASCADE,
+    computer_id TEXT NOT NULL,
+    execution_id TEXT NOT NULL UNIQUE,
     initial_request_id TEXT NOT NULL,
     initial_payload_hash BLOB NOT NULL CHECK (length(initial_payload_hash)=32),
     initial_hash BLOB NOT NULL UNIQUE CHECK (length(initial_hash)=32),
@@ -157,7 +160,9 @@ CREATE TABLE connector_sessions (
     CHECK ((current_hash IS NULL)=(current_request_id IS NULL)),
     CHECK ((recovery_nonce IS NULL)=(recovery_ciphertext IS NULL)),
     CHECK (expires_at IS NULL OR expires_at>issued_at),
-    CHECK (revoked_at IS NOT NULL OR initial_nonce IS NOT NULL)
+    CHECK (revoked_at IS NOT NULL OR initial_nonce IS NOT NULL),
+    UNIQUE (id,computer_id),
+    FOREIGN KEY (execution_id,computer_id) REFERENCES computer_executions(id,computer_id) ON DELETE CASCADE
 );
 
 CREATE TABLE connector_key_requests (
@@ -188,9 +193,10 @@ CREATE TABLE provider_connections (
 );
 CREATE TABLE connector_connections (
     computer_id TEXT PRIMARY KEY NOT NULL REFERENCES computers(id) ON DELETE CASCADE,
-    session_id TEXT NOT NULL REFERENCES connector_sessions(id) ON DELETE CASCADE,
+    session_id TEXT NOT NULL UNIQUE,
     control_id TEXT NOT NULL REFERENCES control_instances(id),
     connection_id TEXT NOT NULL UNIQUE,
     credential_hash BLOB NOT NULL CHECK (length(credential_hash)=32),
-    expires_at BIGINT NOT NULL
+    expires_at BIGINT NOT NULL,
+    FOREIGN KEY (session_id,computer_id) REFERENCES connector_sessions(id,computer_id) ON DELETE CASCADE
 );

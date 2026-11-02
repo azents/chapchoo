@@ -51,6 +51,12 @@ fn exercise_constraints(
     // The receipt remains unique after its Agent disappears; it is not a live FK.
     assert!(connection.batch_execute(&format!("INSERT INTO agent_creation_receipts(owner_user_id,request_id,payload_hash,assigned_agent_id) VALUES('user-a','creation',{hash},'replacement-agent')")).is_err());
     connection.batch_execute("INSERT INTO computer_executions(id,computer_id,initial_allocation,created_at) VALUES('execution-a','cloud',FALSE,0); UPDATE computers SET current_execution_id='execution-a' WHERE id='cloud'")?;
+    assert!(connection.batch_execute(&format!("INSERT INTO connector_sessions(id,computer_id,execution_id,initial_request_id,initial_payload_hash,initial_hash,revoked_at,created_at) VALUES('wrong-session','local','execution-a','initial',{hash},{hash},0,0)")).is_err());
+    connection.batch_execute(&format!("INSERT INTO connector_sessions(id,computer_id,execution_id,initial_request_id,initial_payload_hash,initial_hash,revoked_at,created_at) VALUES('bound-session','cloud','execution-a','initial',{hash},{hash},0,0)"))?;
+    connection.batch_execute("INSERT INTO control_instances(id,endpoint,renewed_at,expires_at) VALUES('control','http://127.0.0.1:1',0,1000)")?;
+    assert!(connection.batch_execute(&format!("INSERT INTO connector_connections(computer_id,session_id,control_id,connection_id,credential_hash,expires_at) VALUES('local','bound-session','control','foreign-route',{hash},1000)")).is_err());
+    connection.batch_execute(&format!("INSERT INTO connector_connections(computer_id,session_id,control_id,connection_id,credential_hash,expires_at) VALUES('cloud','bound-session','control','owned-route',{hash},1000)"))?;
+    assert!(connection.batch_execute("UPDATE connector_connections SET computer_id='local' WHERE session_id='bound-session'").is_err());
     assert!(
         connection
             .batch_execute(
