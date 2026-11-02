@@ -270,6 +270,45 @@ async fn delete_is_one_uid_preconditioned_submission_never_absence_proof() -> Re
     Ok(())
 }
 #[tokio::test]
+async fn terminal_non_allocation_proof_requires_fresh_absence_and_never_deletes()
+-> Result<(), TestError> {
+    for kind in [
+        ResourceKind::Pod,
+        ResourceKind::Pvc,
+        ResourceKind::BootstrapSecret,
+    ] {
+        let suffix = match kind {
+            ResourceKind::Pod => "/pods/pod",
+            ResourceKind::Pvc => "/persistentvolumeclaims/pvc",
+            _ => "/secrets/bootstrap",
+        };
+        let mut candidate = resource(kind, None);
+        candidate.absence_confirmed = true;
+        let (api, calls) = fixture(vec![reply(Method::GET, suffix, 404, missing())])?;
+        let observation = if kind == ResourceKind::Pod {
+            api.retire_pod(&context(), &candidate).await?
+        } else {
+            api.observe(&context(), &candidate, None).await?
+        };
+        assert_eq!(observation.presence, Presence::Absent);
+        assert_eq!(calls.lock().map_err(|_| "calls")?.len(), 1);
+        let object = match kind {
+            ResourceKind::Pod => pod("unexpected", "Running"),
+            ResourceKind::Pvc => pvc("unexpected"),
+            _ => {
+                json!({"apiVersion":"v1","kind":"Secret","metadata":metadata("bootstrap","unexpected",true)})
+            }
+        };
+        let (api, _) = fixture(vec![reply(Method::GET, suffix, 200, object)])?;
+        assert!(matches!(
+            api.observe(&context(), &candidate, None).await,
+            Err(Error::Ownership)
+        ));
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn asynchronous_cleanup_waits_for_absence_without_resubmitting_delete()
 -> Result<(), TestError> {
     for replaced in [false, true] {

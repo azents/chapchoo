@@ -70,6 +70,13 @@ struct Connection {
     policy: Option<ProviderPolicy>,
     convergence: Arc<Semaphore>,
     cursor: Mutex<Option<String>>,
+    cleanup: Mutex<HashMap<String, CleanupProgress>>,
+}
+#[derive(Clone)]
+struct CleanupProgress {
+    computer: wire::ComputerContext,
+    batch: Vec<wire::ManagedResource>,
+    not_started: bool,
 }
 #[derive(Debug, Clone)]
 struct ProviderPolicy {
@@ -810,6 +817,7 @@ impl wire::provider_connection_server::ProviderConnection for ProviderConnection
             }),
             convergence: Arc::new(Semaphore::new(1)),
             cursor: Mutex::new(None),
+            cleanup: Mutex::new(HashMap::new()),
             prepared,
             credential,
             calls,
@@ -904,6 +912,7 @@ impl wire::connector_connection_server::ConnectorConnection for ConnectorConnect
             policy: None,
             convergence: Arc::new(Semaphore::new(1)),
             cursor: Mutex::new(None),
+            cleanup: Mutex::new(HashMap::new()),
             prepared,
             credential,
             calls,

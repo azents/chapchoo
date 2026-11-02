@@ -348,9 +348,14 @@ impl Kubernetes {
             _ => return Err(Error::Ownership),
         };
         if let Some(metadata) = metadata {
+            if resource.uid.is_none() && resource.absence_confirmed {
+                return Err(Error::Ownership);
+            }
             observation.resource.uid = Some(self.validate(computer, resource, &metadata)?);
             observation.presence = Presence::Present;
-        } else if kind != ResourceKind::Pod && resource.uid.is_some() {
+        } else if kind != ResourceKind::Pod
+            && (resource.uid.is_some() || resource.absence_confirmed)
+        {
             observation.presence = Presence::Absent;
         }
         Ok(observation)
@@ -692,6 +697,12 @@ impl Kubernetes {
     ) -> Result<Observation, Error> {
         if self.target(computer, resource)? != ResourceKind::Pod {
             return Err(Error::Ownership);
+        }
+        if resource.uid.is_none() && resource.absence_confirmed {
+            // Current terminal-intent authority can carry committed proof that
+            // this candidate was never allocated. A fresh GET must agree; no
+            // native deletion or terminal inference is needed for a non-object.
+            return self.observe(computer, resource, None).await;
         }
         let expected = resource.uid.as_ref().ok_or(Error::Ownership)?;
         let api: Api<Pod> = Api::namespaced(self.client.clone(), &resource.namespace);

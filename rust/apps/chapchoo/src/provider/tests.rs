@@ -90,6 +90,10 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
     let calls = created.clone();
     let violations = failures.clone();
     let database = app.clone();
+    let finalizer = Arc::new(Mutex::new(None::<(String, Option<tokio::time::Instant>)>));
+    let delayed_finalizer = finalizer.clone();
+    let deletions = Arc::new(Mutex::new(BTreeMap::<String, usize>::new()));
+    let deleted = deletions.clone();
     let current_owner = user.token.digest();
     let service = tower::service_fn(move |request: HttpRequest<Body>| {
         requests.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -97,6 +101,8 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
         let calls = calls.clone();
         let violations = violations.clone();
         let database = database.clone();
+        let finalizer = finalizer.clone();
+        let deletions = deletions.clone();
         let actor = current_owner.clone();
         async move {
             let method = request.method().clone();
@@ -186,11 +192,33 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
                     json!({"type":"ERROR","object":{"apiVersion":"v1","kind":"Status","code":410,"reason":"Expired"}})
                 }
             } else if method == Method::DELETE {
-                if let Ok(mut objects) = objects.lock() {
+                if let Ok(mut calls) = deletions.lock() {
+                    *calls.entry(path.clone()).or_default() += 1;
+                }
+                let delayed = if let Ok(mut finalizer) = finalizer.lock()
+                    && let Some((target, started)) = finalizer.as_mut()
+                    && target == &path
+                {
+                    started.get_or_insert_with(tokio::time::Instant::now);
+                    true
+                } else {
+                    false
+                };
+                if !delayed && let Ok(mut objects) = objects.lock() {
                     objects.remove(&path);
                 }
                 json!({"apiVersion":"v1","kind":"Status","status":"Success"})
             } else {
+                let finalized = if let Ok(finalizer) = finalizer.lock()
+                    && let Some((target, Some(started))) = finalizer.as_ref()
+                {
+                    target == &path && started.elapsed() >= Duration::from_secs(11)
+                } else {
+                    false
+                };
+                if finalized && let Ok(mut objects) = objects.lock() {
+                    objects.remove(&path);
+                }
                 match objects
                     .lock()
                     .ok()
@@ -291,7 +319,52 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
     };
     assert_eq!(route.component.control_id, control.id);
     let delivery = chapchoo_rpc::PeerDelivery::new(app.clone());
+    // Deleting a reserved but never-admitted preparation consumes existing
+    // definitive non-allocation evidence, without any create/delete submission.
+    let CreationOutcome::Present(unstarted) = app
+        .create_cloud_agent(
+            &user.token.digest(),
+            "never-started",
+            "provider",
+            "Unstarted fixture",
+            AcceptanceTime::System,
+        )
+        .await?
+    else {
+        return Err("Unstarted Agent missing".into());
+    };
+    let unstarted_source = chapchoo_service::ProviderSource {
+        provider_id: "provider",
+        control_id: &route.component.control_id,
+        connection_id: &route.component.connection_id,
+        credential: &provider_credential,
+    };
+    app.reserve_execution(
+        &unstarted_source,
+        ComputerRequest {
+            computer_id: &unstarted.computer.id,
+            request_id: "never-started",
+        },
+        "fixture",
+    )
+    .await?;
+    app.request_lifecycle(
+        &user.token.digest(),
+        &unstarted.id,
+        &chapchoo_service::LifecycleRequest {
+            request_id: "delete-never-started".into(),
+            expected_request_id: "never-started".into(),
+            action: chapchoo_domain::LifecycleAction::Delete,
+        },
+        AcceptanceTime::System,
+    )
+    .await?;
     connections.reconcile_once(&delivery).await?;
+    assert!(
+        app.agent(&user.token.digest(), &unstarted.id, AcceptanceTime::System)
+            .await
+            .is_err_and(|error| error.reason() == chapchoo_service::DomainReason::NotFound)
+    );
     let observed = app
         .agent(&user.token.digest(), &agent.id, AcceptanceTime::System)
         .await?;
@@ -589,6 +662,18 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
         accumulated.resources.len() > 32,
         "Cleanup must span bounded frames"
     );
+    let delayed_secret = accumulated
+        .resources
+        .iter()
+        .find(|r| r.resource_kind == "BOOTSTRAP_SECRET")
+        .ok_or("Historical Secret missing")?;
+    *delayed_finalizer.lock().map_err(|_| "Finalizer lock")? = Some((
+        format!(
+            "/api/v1/namespaces/{}/secrets/{}",
+            delayed_secret.namespace, delayed_secret.name
+        ),
+        None,
+    ));
     app.request_lifecycle(
         &user.token.digest(),
         &agent.id,
@@ -601,6 +686,37 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
     )
     .await?;
     connections.reconcile_once(&delivery).await?;
+    let pending = app
+        .agent(&user.token.digest(), &agent.id, AcceptanceTime::System)
+        .await?;
+    assert_eq!(
+        pending.computer.progress.phase,
+        chapchoo_domain::LifecyclePhase::Uncertain
+    );
+    // The first accepted batch outlives its 10s response waiter. The elapsed
+    // finalizer contract is 11s; fresh convergence observes that exact batch and
+    // advances only the never-submitted remainder, without another DELETE.
+    tokio::time::timeout(Duration::from_secs(20), async {
+        loop {
+            connections.reconcile_once(&delivery).await?;
+            if app
+                .agent(&user.token.digest(), &agent.id, AcceptanceTime::System)
+                .await
+                .is_err_and(|error| error.reason() == chapchoo_service::DomainReason::NotFound)
+            {
+                return Ok::<(), AppError>(());
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    })
+    .await??;
+    assert!(
+        deleted
+            .lock()
+            .map_err(|_| "Deletion calls lock")?
+            .values()
+            .all(|count| *count == 1)
+    );
     assert_eq!(
         app.agent(&user.token.digest(), &agent.id, AcceptanceTime::System)
             .await

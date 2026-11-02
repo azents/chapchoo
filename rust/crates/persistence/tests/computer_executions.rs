@@ -828,6 +828,14 @@ async fn exercise(
         .force_remove_agent(&owner_digest, "agent-one", "delete-one", now()?)
         .await?;
     let deleting = scope("one", "delete-one");
+    store
+        .report_lifecycle_issue(
+            &current_source,
+            deleting,
+            Some("restored"),
+            chapchoo_domain::LifecyclePhase::Uncertain,
+        )
+        .await?;
     assert!(matches!(
         store.managed_resources(&current_source, restarting).await,
         Err(StoreError::Conflict)
@@ -853,6 +861,19 @@ async fn exercise(
     store
         .retire_execution(&current_source, deleting, "restored")
         .await?;
+    store
+        .report_lifecycle_issue(
+            &current_source,
+            deleting,
+            None,
+            chapchoo_domain::LifecyclePhase::Blocked,
+        )
+        .await?;
+    let cleanup_state = store.delivery_snapshot(None, deleting, None).await?;
+    assert_eq!(
+        cleanup_state.computer.current_phase, "UNCERTAIN",
+        "Retirement and issue reports cannot reopen an uncertain deletion"
+    );
     store
         .confirm_computer_cleanup(&current_source, deleting)
         .await?;
@@ -927,6 +948,48 @@ async fn exercise(
     store
         .force_remove_agent(&owner_digest, "agent-pending", "delete-pending", now()?)
         .await?;
+    assert!(
+        store
+            .managed_resources(&current_source, scope("pending", "delete-pending"))
+            .await?
+            .iter()
+            .all(|r| r.resource_uid.is_none()
+                && r.absence_confirmed_at.is_some()
+                && r.source_connection_id.is_none())
+    );
+    let uncertain_candidate = scope("collision", "create-collision");
+    store
+        .reserve_execution(
+            &current_source,
+            uncertain_candidate,
+            &draft("possibly-forwarded"),
+        )
+        .await?;
+    assert!(
+        store
+            .claim_execution_dispatch(&current_source, uncertain_candidate, "possibly-forwarded")
+            .await?
+    );
+    store
+        .request_lifecycle(
+            &owner_digest,
+            "agent-collision",
+            &LifecycleRequest {
+                request_id: "delete-uncertain".into(),
+                expected_request_id: "create-collision".into(),
+                action: LifecycleAction::Delete,
+            },
+            now()?,
+        )
+        .await?;
+    assert!(
+        store
+            .managed_resources(&current_source, scope("collision", "delete-uncertain"))
+            .await?
+            .iter()
+            .all(|r| r.absence_confirmed_at.is_none()),
+        "Possible forwarding cannot become non-allocation proof"
+    );
     mutate_fixture(
         connection,
         &format!(

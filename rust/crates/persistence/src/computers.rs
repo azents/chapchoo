@@ -851,6 +851,20 @@ impl Store {
                 return Err(StoreError::Conflict);
             }
             if request.action == LifecycleAction::Delete {
+                if current.current_execution_id.is_some()
+                    && current.prepare_admitted_at.is_none()
+                    && (current.initial_start_dispatch_at.is_none()
+                        || current.current_phase == "BLOCKED")
+                {
+                    // The same locked intent had no possible Prepare delivery,
+                    // or an acknowledged safe preparation failure. Terminal
+                    // intent fences future creates before recording only its
+                    // never-allocated candidates as absent. Allocated UIDs are
+                    // never changed by this proof.
+                    diesel::sql_query(dialect.query("UPDATE computer_resources SET presence='ABSENT',observed_at=?,source_connection_id=NULL,absence_confirmed_at=COALESCE(absence_confirmed_at,?) WHERE computer_id=? AND resource_uid IS NULL AND (resource_kind='PVC' OR execution_id=?)"))
+                        .bind::<BigInt,_>(now).bind::<BigInt,_>(now).bind::<Text,_>(&current.id)
+                        .bind::<Nullable<Text>,_>(current.current_execution_id.as_deref()).execute(connection).await?;
+                }
                 diesel::sql_query(dialect.query("UPDATE connector_sessions SET revoked_at=COALESCE(revoked_at,?),initial_nonce=NULL,initial_ciphertext=NULL,current_hash=NULL,previous_hash=NULL,previous_valid_until=NULL,issued_at=NULL,expires_at=NULL,current_request_id=NULL,recovery_nonce=NULL,recovery_ciphertext=NULL WHERE execution_id IN (SELECT id FROM computer_executions WHERE computer_id=?)"))
                     .bind::<BigInt,_>(now).bind::<Text,_>(&current.id).execute(connection).await?;
                 diesel::sql_query(

@@ -1,4 +1,5 @@
 //! Connection-scoped convergence reconstructs current intent, not old commands.
+mod cleanup;
 use super::*;
 use crate::PeerDelivery;
 use chapchoo_service::{ComputerRequest, ManagedComputer, ManagedResource};
@@ -33,6 +34,23 @@ fn outcome(outcome: wire::ForwardingOutcome) -> wire::ProviderInvocationResult {
         outcome: outcome as i32,
         result: None,
     }
+}
+fn not_started(result: &Result<wire::ProviderInvocationResult, Status>) -> bool {
+    result
+        .as_ref()
+        .is_err_and(|error| error.code() != tonic::Code::Internal)
+        || result.as_ref().is_ok_and(|result| {
+            result
+                .result
+                .as_ref()
+                .is_some_and(|reply| reply.outcome == wire::CommandOutcome::NotStarted as i32)
+                || (result.result.is_none()
+                    && matches!(
+                        wire::ForwardingOutcome::try_from(result.outcome),
+                        Ok(wire::ForwardingOutcome::Unavailable
+                            | wire::ForwardingOutcome::Overloaded)
+                    ))
+        })
 }
 fn call_id() -> Result<String, Status> {
     Ok(chapchoo_crypto::BearerSecret::generate()
@@ -168,6 +186,7 @@ impl ComponentConnectionServices {
                     .converge_provider(id, &owner, &context(&row), Instant::now() + RESPONSE_BUDGET)
                     .await;
             }
+            self.prune_cleanup(&entry, &source).await?;
             let _ = self
                 .inner
                 .service
@@ -225,7 +244,8 @@ impl ComponentConnectionServices {
             return Ok(outcome(wire::ForwardingOutcome::Completed));
         }
         let mut terminal = false;
-        if snapshot.computer.current_phase == "BLOCKED"
+        if snapshot.computer.desired_state == "RUNNING"
+            && snapshot.computer.current_phase == "BLOCKED"
             && snapshot.computer.current_execution_id.is_some()
         {
             // Explicit owner RetryPreparation, not periodic observation, resumes
@@ -321,68 +341,7 @@ impl ComponentConnectionServices {
                 .await;
         }
         if state.desired_state == "DELETING" {
-            if snapshot.resources.is_empty() {
-                self.inner
-                    .service
-                    .confirm_computer_cleanup(&source, scope)
-                    .await
-                    .map_err(status)?;
-                return Ok(outcome(wire::ForwardingOutcome::Completed));
-            }
-            if snapshot.resources.iter().all(|r| {
-                r.presence == "ABSENT"
-                    && r.source_connection_id.as_deref() == Some(source.connection_id)
-            }) {
-                self.inner
-                    .service
-                    .confirm_computer_cleanup(&source, scope)
-                    .await
-                    .map_err(status)?;
-                return Ok(outcome(wire::ForwardingOutcome::Completed));
-            }
-            if state.current_phase == "UNCERTAIN" {
-                return Ok(outcome(wire::ForwardingOutcome::Uncertain));
-            }
-            self.inner
-                .service
-                .report_lifecycle_issue(
-                    &source,
-                    scope,
-                    state.current_execution_id.as_deref(),
-                    chapchoo_domain::LifecyclePhase::Uncertain,
-                )
-                .await
-                .map_err(status)?;
-            let mut resources = snapshot.resources.iter().collect::<Vec<_>>();
-            resources.sort_by_key(|r| match r.resource_kind.as_str() {
-                "POD" => 0,
-                "BOOTSTRAP_SECRET" => 1,
-                _ => 2,
-            });
-            let batches = resources.chunks(RESOURCE_BATCH);
-            let count = batches.len();
-            for (index, batch) in batches.enumerate() {
-                let result = self
-                    .dispatch_convergence(
-                        &entry,
-                        &current,
-                        wire::provider_command::Operation::Cleanup(wire::CleanupResources {
-                            resources: batch.iter().map(|r| resource(r)).collect(),
-                            confirm_complete: index + 1 == count,
-                        }),
-                        deadline,
-                    )
-                    .await?;
-                if result.outcome != wire::ForwardingOutcome::Completed as i32
-                    || result
-                        .result
-                        .as_ref()
-                        .is_none_or(|r| r.outcome != wire::CommandOutcome::Completed as i32)
-                {
-                    return Ok(result);
-                }
-            }
-            return Ok(outcome(wire::ForwardingOutcome::Completed));
+            return self.cleanup_provider(&entry, &current, deadline).await;
         }
         if state.current_phase == "RETIRING" {
             let pod = snapshot
@@ -484,22 +443,7 @@ impl ComponentConnectionServices {
             .await;
         // Only pre-enqueue rejection is non-delivery proof. Queue acceptance,
         // timeout, cancellation or any component result retain the claim.
-        if result
-            .as_ref()
-            .is_err_and(|error| error.code() != tonic::Code::Internal)
-            || result.as_ref().is_ok_and(|result| {
-                result
-                    .result
-                    .as_ref()
-                    .is_some_and(|reply| reply.outcome == wire::CommandOutcome::NotStarted as i32)
-                    || (result.result.is_none()
-                        && matches!(
-                            wire::ForwardingOutcome::try_from(result.outcome),
-                            Ok(wire::ForwardingOutcome::Unavailable
-                                | wire::ForwardingOutcome::Overloaded)
-                        ))
-            })
-        {
+        if not_started(&result) {
             self.inner
                 .service
                 .release_undelivered_prepare(&source, scope, &current.execution_id)

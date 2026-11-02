@@ -63,8 +63,12 @@ POST response; a GET/AlreadyExists follow-up error cannot grant preparation retr
 ## Evidence and task lifetime
 
 GET absence of a known original PVC or Secret can describe that object's absence.
-An unallocated candidate's 404 remains unknown. Pod 404 always remains unknown
-without a matching terminal witness. A witness requires the same immutable
+An unallocated candidate's 404 remains unknown unless current terminal-intent
+command authority carries committed proof that it was never allocated. That
+proof must agree with a fresh GET; a surprising present object is rejected, not
+adopted or deleted. A confirmed never-allocated Pod needs no DELETE or native
+terminal inference. Other Pod 404 remains unknown without a matching terminal
+witness. A witness requires the same immutable
 Computer/execution/namespace/name/UID and terminal phase plus complete current
 terminated container states, actual container identities and finish timestamps.
 Unknown/container-status-loss reasons or missing status entries do not prove

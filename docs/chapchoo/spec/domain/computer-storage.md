@@ -163,7 +163,12 @@ work. Acceptance records intent/phase, not external execution success.
 
 Delete can supersede preparation and persists terminal intent. In the same
 transaction it revokes that Computer's Connector sessions, discards encrypted
-bootstrap/operational recovery material and removes Connector routes. Force
+bootstrap/operational recovery material and removes Connector routes. Before
+replacing the intent it can record non-allocation only for the current candidate
+and UID-less PVC when the captured Prepare fence proves no possible dispatch
+(or an acknowledged safe preparation failure). Older execution resources and
+allocated UIDs are unchanged. These absence facts have no Provider source until
+fresh observation agrees; a possibly forwarded Prepare never grants this proof. Force
 removal requires the current deletion request and removes only the Agent; residual
 Computer/cleanup authority and creation receipt survive. An owned removed Agent
 can be recognized while residual inventory remains, but only with that Computer's
@@ -279,7 +284,9 @@ Running completion requires a separately reported actual running execution plus
 current-connection present/UID evidence for its Pod/bootstrap Secret and original
 PVC. Pod existence alone is not running. Stop/restart cannot complete while the
 old execution remains current, even if a blocked/uncertain phase obscures the
-retiring display phase. `retire_execution` requires definitive current-source
+retiring display phase. During terminal deletion, an admitted uncertain cleanup
+keeps its uncertainty fence across Pod retirement and later blocked issue reports;
+those facts cannot reset the lifecycle to a fresh deleting admission. `retire_execution` requires definitive current-source
 Pod absence, retires the exact execution, revokes and wipes its Connector session
 authority and withdraws its route before clearing the current pointer.
 If that exact retirement is replayed while no successor exists, fresh definitive

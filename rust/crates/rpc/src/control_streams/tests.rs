@@ -54,6 +54,7 @@ async fn entry(
             policy: None,
             convergence: Arc::new(Semaphore::new(1)),
             cursor: Mutex::new(None),
+            cleanup: Mutex::new(HashMap::new()),
         }),
         receivers,
     ))

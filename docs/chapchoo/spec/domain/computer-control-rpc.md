@@ -11,6 +11,9 @@ code_paths:
   - rust/crates/rpc/src/control_calls.rs
   - rust/crates/rpc/src/control_streams.rs
   - rust/crates/rpc/src/control_streams/tests.rs
+  - rust/crates/rpc/src/control_streams/reconciliation.rs
+  - rust/crates/rpc/src/control_streams/reconciliation/cleanup.rs
+  - rust/apps/chapchoo/src/provider/tests.rs
   - rust/crates/rpc/src/delivery.rs
   - rust/crates/rpc/src/groups.rs
   - rust/crates/rpc/src/memory.rs
@@ -111,6 +114,19 @@ connections in the Control. Current defaults are 64 streams, 256 total pending
 calls, 32 pending calls per connection, eight queued commands and four priority
 frames. Frames are limited to 64 KiB; resource batches are limited to 32.
 
+Cleanup retains at most 32 connection-local correlations, each describing only
+one potentially accepted batch of at most 32 exact resource identities. A timed-out
+response does not discard that manifest or enqueue the batch again. A fresh sweep
+observes every resource in the exact batch, including historical bootstrap
+Secrets, and requires committed current-source absence for the complete ordered
+prefix before dispatching only its never-submitted remainder. A correlated
+NotStarted or proven pre-queue refusal can retry an unsent batch. Completed or
+superseded correlations are pruned before retained cleanup inventory is collected.
+This is bounded transient call correlation, not a durable command ledger. Losing
+it on connection/process replacement never authorizes reconstructing/replaying
+possibly accepted deletes; complete durable absence can finish cleanup, while
+unknown earlier work stays uncertain.
+
 A call matches Request/Call/Connection/Computer/execution identity. Queue time
 consumes its original deadline, capped at ten seconds. Expired queued work is not
 dispatched. Timeout or connection loss after acceptance is uncertain. Cancellation
@@ -187,8 +203,10 @@ of a lost final response.
 
 Real local Control streams and supported-client synthetic HTTP exercise automatic
 create/stop/start/restart, missing-Pod uncertainty, terminal restoration with one
-original PVC, and deletion across more than 32 historical resources. A separate
-Connector Control takes precedence and uses network peer forwarding while the
+original PVC, and deletion across more than 32 historical resources, including
+an eleven-second nonfinal Secret finalizer that outlives the ten-second caller.
+Fresh convergence completes only the never-submitted remainder and the fixture
+asserts exactly one DELETE per object. A separate Connector Control takes precedence and uses network peer forwarding while the
 Provider-only fallback remains inactive. These fixtures are not live Kubernetes
 or browser product-flow release-gate evidence.
 

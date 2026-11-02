@@ -795,6 +795,7 @@ impl Store {
             diesel::sql_query(dialect.query("UPDATE computer_executions SET retired_at=COALESCE(retired_at,?) WHERE id=? AND computer_id=?"))
                 .bind::<BigInt,_>(now).bind::<Text,_>(execution_id).bind::<Text,_>(scope.computer_id).execute(connection).await?;
             let phase = match current.desired_state.as_str() {
+                "DELETING" if current.current_phase == "UNCERTAIN" => "UNCERTAIN",
                 "DELETING" => "DELETING",
                 "STOPPED" => "COMPLETED",
                 "RUNNING" => "STARTING",
@@ -834,7 +835,13 @@ impl Store {
                     "UPDATE computers SET current_phase=?,observed_power='UNKNOWN' WHERE id=?",
                 ),
             )
-            .bind::<Text, _>(phase.as_str())
+            .bind::<Text, _>(
+                if current.desired_state == "DELETING" && current.current_phase == "UNCERTAIN" {
+                    "UNCERTAIN"
+                } else {
+                    phase.as_str()
+                },
+            )
             .bind::<Text, _>(scope.computer_id)
             .execute(connection)
             .await?;
