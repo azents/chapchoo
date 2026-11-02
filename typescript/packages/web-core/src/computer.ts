@@ -14,6 +14,7 @@ export type Phase =
   | "blocked"
   | "uncertain";
 export type LifecycleAction = "start" | "stop" | "restart" | "delete";
+export type OwnerAction = LifecycleAction | "retryPreparation";
 export type BlockReason =
   | "unsupported"
   | "deleting"
@@ -91,6 +92,7 @@ export interface ComputerView extends ComputerStatus {
   }[];
   forceRemoveAvailable: boolean;
   startDelayed: boolean;
+  preparationRetryAvailable: boolean;
 }
 export interface AgentView {
   id: string;
@@ -103,6 +105,7 @@ export interface ProviderChoice {
 }
 export interface ProviderView extends ProviderChoice {
   management: Connection;
+  canCreate: boolean;
 }
 export interface InventoryView extends ComputerStatus {
   id: string;
@@ -212,6 +215,7 @@ export function agent(value: Wire.Agent): AgentView {
       })),
       forceRemoveAvailable: computer.forceRemoveAvailable,
       startDelayed: computer.startDelayed,
+      preparationRetryAvailable: computer.preparationRetryAvailable,
     },
   };
 }
@@ -230,15 +234,19 @@ export function choices(value: Wire.ProviderChoices): Page<ProviderChoice> {
 }
 export function providers(value: Wire.ProviderList): Page<ProviderView> {
   return page(
-    value.items.map((item) => ({
-      id: text(item.id),
-      name: text(item.name),
-      management: label<Connection>(item.management, [
-        "connected",
-        "disconnected",
-        "unknown",
-      ]),
-    })),
+    value.items.map((item) => {
+      if (!item.capabilities) return invalidResponse();
+      return {
+        id: text(item.id),
+        name: text(item.name),
+        canCreate: item.capabilities.create,
+        management: label<Connection>(item.management, [
+          "connected",
+          "disconnected",
+          "unknown",
+        ]),
+      };
+    }),
     value.nextAfter,
   );
 }

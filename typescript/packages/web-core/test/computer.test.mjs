@@ -30,6 +30,7 @@ const computer = {
   ],
   forceRemoveAvailable: false,
   startDelayed: false,
+  preparationRetryAvailable: false,
 };
 const wire = { id: "agent", name: "Companion", computer };
 
@@ -100,10 +101,61 @@ test("Inventory remains independent, redacted and retains cleanup visibility", (
   assert.equal(JSON.stringify(result).includes("private-name"), false);
   assert.equal(result.nextAfter, "cursor");
   assert.equal(
-    providers({ items: [{ id: "provider", name: "Community", management: 2 }] })
-      .items[0].management,
+    providers({
+      items: [
+        {
+          id: "provider",
+          name: "Community",
+          management: 2,
+          capabilities: {
+            create: true,
+            start: true,
+            stop: true,
+            restart: true,
+          },
+        },
+      ],
+    }).items[0].management,
     "disconnected",
   );
+});
+test("Provider capability and safe preparation retry are explicit redacted projections", () => {
+  for (const canCreate of [true, false]) {
+    const result = providers({
+      items: [
+        {
+          id: "provider",
+          name: "Community",
+          management: 1,
+          capabilities: {
+            create: canCreate,
+            start: true,
+            stop: true,
+            restart: true,
+          },
+          ownerUserId: "private-owner",
+        },
+      ],
+    });
+    assert.equal(result.items[0].canCreate, canCreate);
+    assert.equal(result.items[0].management, "connected");
+    assert.equal(JSON.stringify(result).includes("private-owner"), false);
+  }
+  assert.throws(() =>
+    providers({
+      items: [{ id: "provider", name: "Community", management: 1 }],
+    }),
+  );
+  const result = agent({
+    ...wire,
+    computer: {
+      ...computer,
+      preparationRetryAvailable: true,
+      executionId: "private-execution",
+    },
+  });
+  assert.equal(result.computer.preparationRetryAvailable, true);
+  assert.equal(JSON.stringify(result).includes("private-execution"), false);
 });
 test("List limits and action mapping enforce the browser boundary", () => {
   assert.throws(() =>

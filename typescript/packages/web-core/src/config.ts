@@ -1,18 +1,21 @@
 import { isIP } from "node:net";
 
-export interface WebConfig {
-  app: "general" | "admin";
+export interface PublicWebConfig {
   publicUrl: string;
   origin: string;
   basePath: string;
   bindHost: string;
-  backendUrl: string;
   secure: boolean;
 }
-
-export interface WebEnvironment {
+export interface WebConfig extends PublicWebConfig {
+  app: "general" | "admin";
+  backendUrl: string;
+}
+export interface PublicWebEnvironment {
   publicUrl: string;
   bindHost: string;
+}
+export interface WebEnvironment extends PublicWebEnvironment {
   backendUrl: string;
 }
 
@@ -23,55 +26,61 @@ export function isLoopback(host: string): boolean {
   }
   return isIP(normalized) === 4 && normalized.split(".")[0] === "127";
 }
-
-export function webConfig(
-  app: WebConfig["app"],
-  input: WebEnvironment,
-): WebConfig {
-  const fail = (): never => {
-    throw new Error("Invalid web listener or endpoint configuration");
-  };
-  let publicUrl: URL;
-  let backend: URL;
+function invalidConfiguration(): never {
+  throw new Error("Invalid web listener or endpoint configuration");
+}
+function endpoint(value: string): URL {
+  let url: URL;
   try {
-    publicUrl = new URL(input.publicUrl);
-    backend = new URL(input.backendUrl);
+    url = new URL(value);
   } catch {
-    return fail();
+    return invalidConfiguration();
   }
-  for (const url of [publicUrl, backend]) {
-    if (
-      !["http:", "https:"].includes(url.protocol) ||
-      url.username ||
-      url.password ||
-      url.search ||
-      url.hash
-    ) {
-      return fail();
-    }
+  if (
+    !["http:", "https:"].includes(url.protocol) ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash
+  ) {
+    return invalidConfiguration();
   }
+  return url;
+}
+
+/** Public metadata/build consumers do not require a deployment backend target. */
+export function publicWebConfig(input: PublicWebEnvironment): PublicWebConfig {
+  const publicUrl = endpoint(input.publicUrl);
   const secure = publicUrl.protocol === "https:";
   if (
     !input.bindHost ||
     (!secure &&
       (!isLoopback(publicUrl.hostname) || !isLoopback(input.bindHost)))
   ) {
-    return fail();
-  }
-  if (backend.pathname !== "/") {
-    return fail();
+    return invalidConfiguration();
   }
   const basePath = publicUrl.pathname.replace(/\/$/, "");
   if (basePath.includes("//") || /[;%\\]/.test(basePath)) {
-    return fail();
+    return invalidConfiguration();
   }
   return {
-    app,
     publicUrl: publicUrl.toString(),
     origin: publicUrl.origin,
     basePath,
     bindHost: input.bindHost,
-    backendUrl: backend.toString(),
     secure,
   };
+}
+
+/** Runtime backend consumers require their own explicit validated endpoint. */
+export function webConfig(
+  app: WebConfig["app"],
+  input: WebEnvironment,
+): WebConfig {
+  const publicConfig = publicWebConfig(input);
+  const backend = endpoint(input.backendUrl);
+  if (backend.pathname !== "/") {
+    return invalidConfiguration();
+  }
+  return { ...publicConfig, app, backendUrl: backend.toString() };
 }

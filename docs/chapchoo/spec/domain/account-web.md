@@ -295,6 +295,11 @@ ends only the Admin context. Incorrect credentials/codes, proof rejection,
 ordinary business permission errors and transport failures do not sign out the
 user. No automatic operation replay or refresh timer is introduced.
 
+Protected Computer query/mutation invalid-session errors also withdraw their
+app's identity and scoped caches. Current-Admin permission loss on Computer
+inventory ends only the Admin context; ordinary owner business denials retain
+General authentication.
+
 Session-ending navigation is single-shot, clears identity-bound query/mutation
 data, cancels outstanding queries and uses that app's configured login mount.
 Authentication success clears previous account data and performs a full
@@ -398,7 +403,11 @@ replace configured origin trust. Backend HTTPS uses grpc-js's CA/hostname
 verification without plaintext fallback; internal plaintext requires the
 operator's trusted network boundary.
 
-Next builds have no deployment public path. The documented production-server
+Next builds have no deployment public path or backend target. Public metadata
+and redirect-path consumers validate only public listener/origin/path settings;
+full runtime listener/backend consumers still reject a missing explicit target.
+Build metadata never requires a fake deployment endpoint to compile an artifact.
+The documented production-server
 configuration phase reads the runtime mount and asset prefix. A public custom
 server accepts only that mount, strips it before Next dispatch, and uses the
 documented webpack configuration extension with automatic chunk public paths.

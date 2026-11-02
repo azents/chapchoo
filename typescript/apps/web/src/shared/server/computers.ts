@@ -91,7 +91,13 @@ export const computersRouter = router({
           agentId: id,
           requestId: id,
           expectedRequestId: id,
-          action: z.enum(["start", "stop", "restart", "delete"]),
+          action: z.enum([
+            "start",
+            "stop",
+            "restart",
+            "delete",
+            "retryPreparation",
+          ]),
         })
         .strict(),
     )
@@ -99,13 +105,25 @@ export const computersRouter = router({
       attempt(() =>
         ctx.session.authenticated(async (token) =>
           agent(
-            await call(
-              ctx.backend.computers.requestLifecycle.bind(
-                ctx.backend.computers,
-              ),
-              { ...input, action: actionNumber(input.action) },
-              token,
-            ),
+            input.action === "retryPreparation"
+              ? await call(
+                  ctx.backend.computers.retryPreparation.bind(
+                    ctx.backend.computers,
+                  ),
+                  {
+                    agentId: input.agentId,
+                    requestId: input.requestId,
+                    expectedRequestId: input.expectedRequestId,
+                  },
+                  token,
+                )
+              : await call(
+                  ctx.backend.computers.requestLifecycle.bind(
+                    ctx.backend.computers,
+                  ),
+                  { ...input, action: actionNumber(input.action) },
+                  token,
+                ),
           ),
         ),
       ),

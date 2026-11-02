@@ -1,6 +1,21 @@
 import { computerCopy } from "@chapchoo/web-core/computer-messages";
 import { expect, test } from "@playwright/test";
 const copy = computerCopy("en-US");
+test("Connected Providers expose independent read-only creation capabilities", async ({
+  page,
+}) => {
+  await page.goto(
+    "/iframe.html?id=computers-operatorinventory--providers&viewMode=story",
+  );
+  await expect(page.getByText(copy.connected, { exact: true })).toHaveCount(2);
+  await expect(page.getByText(copy.canCreate, { exact: true })).toBeVisible();
+  await expect(
+    page.getByText(copy.cannotCreate, { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: copy.create, exact: true }),
+  ).toHaveCount(0);
+});
 test("Signed-out resource inventory hides prior resource identities", async ({
   page,
 }) => {

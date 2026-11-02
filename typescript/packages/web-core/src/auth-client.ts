@@ -17,6 +17,7 @@ export function invalidatesSession(
     app === "admin" &&
     (path === "auth.identity" ||
       path === "auth.updateDisplay" ||
+      path.startsWith("computers.") ||
       path.startsWith("displayDefaults.")) &&
     reason === "DOMAIN_REASON_PERMISSION_DENIED"
   )
@@ -25,6 +26,7 @@ export function invalidatesSession(
     reason === "DOMAIN_REASON_INVALID_SESSION" &&
     (path === "auth.identity" ||
       path === "auth.updateDisplay" ||
+      path.startsWith("computers.") ||
       (app === "admin" && path.startsWith("displayDefaults.")) ||
       (app === "general"
         ? path.startsWith("teams.") || path.startsWith("invitations.")

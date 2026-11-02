@@ -6,7 +6,18 @@ const initial: InitialComputers = {
   type: "providers",
   page: {
     items: [
-      { id: "provider", name: "Community Kubernetes", management: "connected" },
+      {
+        id: "provider",
+        name: "Community Kubernetes",
+        management: "connected",
+        canCreate: true,
+      },
+      {
+        id: "incapable",
+        name: "Existing Computers only",
+        management: "connected",
+        canCreate: false,
+      },
     ],
     nextAfter: null,
   },
