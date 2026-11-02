@@ -1,5 +1,31 @@
 import { expect, test } from "@playwright/test";
 
+test("application-provided account controls own the header and narrow account entry", async ({
+  page,
+}) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(
+      "/iframe.html?id=shared-ui-app-header--unified-controls&viewMode=story",
+    );
+    await expect(
+      page.getByRole("button", { name: "Unified account", exact: true }),
+    ).toHaveCount(1);
+    await expect(
+      page.getByRole("button", { name: "Unified account", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("context@example.invalid", { exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Context logout", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Log out", exact: true }),
+    ).toHaveCount(0);
+  }
+});
+
 test("the shared header keeps its appearance action rightmost and remains sticky", async ({
   page,
 }) => {

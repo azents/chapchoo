@@ -61,6 +61,7 @@ impl ServiceGroups {
                 "chapchoo.accounts.Installation",
                 "chapchoo.accounts.AccountGrants",
                 "chapchoo.accounts.DisplayDefaults",
+                "chapchoo.accounts.AdminWorkspaces",
                 "chapchoo.computers.ProviderInventory",
             ]);
         }
@@ -114,6 +115,7 @@ impl ServiceGroups {
                     .add_service(accounts.installation_server())
                     .add_service(accounts.account_grants_server())
                     .add_service(accounts.display_defaults_server());
+                routes.add_service(accounts.admin_workspaces_server());
                 routes.add_service(computers.inventory_server());
             }
         }

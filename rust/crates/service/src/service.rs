@@ -406,6 +406,33 @@ impl AccountsService {
             )
             .await?)
     }
+    pub async fn list_admin_workspaces(
+        &self,
+        actor: &SecretDigest,
+        now: i64,
+    ) -> Result<Vec<TeamSummary>, ServiceError> {
+        Ok(self.store.admin_workspaces(actor, now).await?)
+    }
+    pub async fn create_admin_workspace(
+        &self,
+        actor: &SecretDigest,
+        name: String,
+        handle: String,
+        now: i64,
+    ) -> Result<TeamSummary, ServiceError> {
+        Ok(self
+            .store
+            .create_admin_workspace(
+                actor,
+                &CreateTeam {
+                    id: id()?,
+                    name,
+                    handle,
+                },
+                now,
+            )
+            .await?)
+    }
     pub async fn update_team(
         &self,
         actor: &SecretDigest,

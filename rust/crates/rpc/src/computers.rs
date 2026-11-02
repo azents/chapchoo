@@ -124,6 +124,7 @@ impl ComputerServices {
     async fn agent(&self, value: AgentSummary) -> Result<wire::Agent, Status> {
         Ok(wire::Agent {
             id: value.id,
+            team_id: value.team_id,
             name: value.name,
             computer: Some(self.computer(value.computer).await?),
         })
@@ -182,11 +183,13 @@ impl wire::agents_server::Agents for AgentsAdapter {
         let value = request.into_inner();
         id(&value.request_id)?;
         id(&value.provider_id)?;
+        id(&value.team_id)?;
         let outcome = match self
             .0
             .service
             .create_cloud_agent(
                 &actor,
+                &value.team_id,
                 &value.request_id,
                 &value.provider_id,
                 &value.name,
@@ -210,18 +213,23 @@ impl wire::agents_server::Agents for AgentsAdapter {
     }
     async fn list(
         &self,
-        request: Request<wire::Page>,
+        request: Request<wire::AgentListRequest>,
     ) -> Result<Response<wire::AgentList>, Status> {
         self.0.admit()?;
         let actor = input::actor(&request)?;
         let value = request.into_inner();
-        let limit = page(&value)?;
+        id(&value.team_id)?;
+        let pagination = value
+            .page
+            .ok_or_else(|| Status::invalid_argument("Agent page is required"))?;
+        let limit = page(&pagination)?;
         let items = self
             .0
             .service
             .agents(
                 &actor,
-                value.after.as_deref(),
+                &value.team_id,
+                pagination.after.as_deref(),
                 limit,
                 AcceptanceTime::System,
             )

@@ -42,7 +42,7 @@ fn seed_sql(
         };
         sql.push_str(&format!(
             "INSERT INTO users(id,email_key,delivery_email,password_hash,is_admin,created_at,language,time_zone,region) VALUES('{user}','user{index}@example.invalid','User{index}@Example.Invalid','synthetic',{},0,'en','UTC','en-US');
-             INSERT INTO teams VALUES('{personal}','PERSONAL','Personal','{personal}','{user}',0);
+             INSERT INTO teams(id,kind,name,handle,owner_user_id,created_at) VALUES('{personal}','PERSONAL','Personal','{personal}','{user}',0);
              INSERT INTO memberships VALUES('{personal}','{user}','MEMBER');
              INSERT INTO personal_contexts VALUES('{user}','{personal}');
              INSERT INTO auth_sessions(id,user_id,current_hash,recovery_nonce,recovery_ciphertext,created_at,rotated_at,expires_at) VALUES('{session}','{user}',{},{},{},0,0,10000000);",
@@ -87,6 +87,30 @@ async fn exercise(store: Store, tokens: &[BearerSecret]) -> Result<(), TestError
     assert_eq!(created.kind, TeamKind::Collaborative);
     assert!(!store.current_identity(&owner, NOW).await?.is_admin);
     assert!(store.current_identity(&stranger, NOW).await?.is_admin);
+    assert_eq!(store.teams(&owner, NOW).await?.len(), 2);
+    let admin_contexts = store.admin_workspaces(&stranger, NOW).await?;
+    assert_eq!(admin_contexts.len(), 1);
+    assert_eq!(admin_contexts[0].id, "personal-3");
+    let admin_create = CreateTeam {
+        id: "admin-created".into(),
+        name: "Administrator's own Team".into(),
+        handle: "admin-created".into(),
+    };
+    assert!(matches!(
+        store.admin_workspaces(&owner, NOW).await,
+        Err(StoreError::Forbidden)
+    ));
+    assert!(matches!(
+        store
+            .create_admin_workspace(&owner, &admin_create, NOW)
+            .await,
+        Err(StoreError::Forbidden)
+    ));
+    let admin_team = store
+        .create_admin_workspace(&stranger, &admin_create, NOW)
+        .await?;
+    assert_eq!(admin_team.owner_user_id, "user-3");
+    assert_eq!(store.admin_workspaces(&stranger, NOW).await?.len(), 2);
     assert_eq!(store.teams(&owner, NOW).await?.len(), 2);
     assert!(matches!(
         store.team(&stranger, "team-a", NOW).await,
@@ -500,6 +524,84 @@ async fn exercise(store: Store, tokens: &[BearerSecret]) -> Result<(), TestError
     Ok(())
 }
 
+async fn collection_retry(
+    store: &Store,
+    tokens: &[BearerSecret],
+    connection: &mut impl SimpleConnection,
+    postgres: bool,
+) -> Result<(), TestError> {
+    let owner = tokens[0].digest();
+    let stranger = tokens[3].digest();
+    let create = CreateTeam {
+        id: "collection-retry".into(),
+        name: "Collection retry".into(),
+        handle: "collection-retry".into(),
+    };
+    store.create_team(&owner, &create, NOW).await?;
+    let install = if postgres {
+        "CREATE FUNCTION fail_collection() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Synthetic collection failure'; END $$; CREATE TRIGGER fail_collection BEFORE DELETE ON teams FOR EACH ROW WHEN (OLD.id='collection-retry') EXECUTE FUNCTION fail_collection()"
+    } else {
+        "CREATE TRIGGER fail_collection BEFORE DELETE ON teams WHEN OLD.id='collection-retry' BEGIN SELECT RAISE(ABORT, 'Synthetic collection failure'); END"
+    };
+    tokio::task::block_in_place(|| connection.batch_execute(install))?;
+    assert!(matches!(
+        store.delete_team(&owner, &create.id, NOW).await,
+        Err(StoreError::Database(_))
+    ));
+    assert!(matches!(
+        store.team(&owner, &create.id, NOW).await,
+        Err(StoreError::NotFound)
+    ));
+    assert!(
+        store
+            .teams(&owner, NOW)
+            .await?
+            .iter()
+            .all(|team| team.id != create.id)
+    );
+    store
+        .create_team(
+            &owner,
+            &CreateTeam {
+                id: "reused-after-failure".into(),
+                ..create
+            },
+            NOW + 1,
+        )
+        .await?;
+    assert!(matches!(
+        store
+            .delete_team(&stranger, "collection-retry", NOW + 1)
+            .await,
+        Err(StoreError::NotFound)
+    ));
+    tokio::task::block_in_place(|| {
+        connection.batch_execute(if postgres {
+            "DROP TRIGGER fail_collection ON teams; DROP FUNCTION fail_collection()"
+        } else {
+            "DROP TRIGGER fail_collection"
+        })
+    })?;
+    store
+        .delete_team(&owner, "collection-retry", NOW + 2)
+        .await?;
+    assert!(matches!(
+        store.delete_team(&owner, "collection-retry", NOW + 3).await,
+        Err(StoreError::NotFound)
+    ));
+    assert_eq!(
+        store
+            .team(&owner, "reused-after-failure", NOW + 3)
+            .await?
+            .handle,
+        "collection-retry"
+    );
+    store
+        .delete_team(&owner, "reused-after-failure", NOW + 3)
+        .await?;
+    Ok(())
+}
+
 #[test]
 fn team_and_invitation_operations_on_sqlite() -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
@@ -517,7 +619,9 @@ fn team_and_invitation_operations_on_sqlite() -> Result<(), TestError> {
     connection.batch_execute(&seed_sql(&cipher, &tokens, false)?)?;
     let runtime = tokio::runtime::Runtime::new()?;
     runtime.block_on(async {
-        exercise(Store::connect_sqlite(path.clone(), cipher).await?, &tokens).await
+        let store = Store::connect_sqlite(path.clone(), cipher).await?;
+        collection_retry(&store, &tokens, &mut connection, false).await?;
+        exercise(store, &tokens).await
     })?;
     assert_eq!(
         diesel::sql_query("SELECT count(*) AS n FROM grants WHERE id='rolled-back-grant'")
@@ -574,7 +678,9 @@ fn team_and_invitation_operations_on_postgres() -> Result<(), TestError> {
         connection.batch_execute(&seed_sql(&cipher, &tokens, true)?)?;
         let runtime = tokio::runtime::Runtime::new()?;
         runtime.block_on(async {
-            exercise(Store::connect_postgres(url.clone(), cipher).await?, &tokens).await
+            let store = Store::connect_postgres(url.clone(), cipher).await?;
+            collection_retry(&store, &tokens, &mut connection, true).await?;
+            exercise(store, &tokens).await
         })?;
         assert_eq!(
             diesel::sql_query("SELECT count(*) AS n FROM grants WHERE id='rolled-back-grant'")

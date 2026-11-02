@@ -3,7 +3,13 @@ import { attempt } from "@chapchoo/web-core/boundary";
 import { displayPatchPayload } from "@chapchoo/web-core/display";
 import { invalidResponse } from "@chapchoo/web-core/errors";
 import { call } from "@chapchoo/web-core/rpc";
-import { display, grant, grants } from "@chapchoo/web-core/validation";
+import {
+  display,
+  grant,
+  grants,
+  team,
+  teams,
+} from "@chapchoo/web-core/validation";
 import { z } from "zod";
 import { authRouter } from "@/shared/server/auth";
 import { computersRouter } from "@/shared/server/computers";
@@ -39,6 +45,47 @@ function issued(value: IssuedGrant): IssuedGrant {
 }
 
 export const appRouter = router({
+  workspaces: router({
+    list: procedure.query(({ ctx }) =>
+      attempt(() =>
+        ctx.session.authenticated(async (token) =>
+          teams(
+            await call(
+              ctx.backend.adminWorkspaces.listTeams.bind(
+                ctx.backend.adminWorkspaces,
+              ),
+              {},
+              token,
+            ),
+          ),
+        ),
+      ),
+    ),
+    create: procedure
+      .input(
+        z
+          .object({
+            name: z.string().trim().min(1).max(120),
+            handle: z.string().trim().min(1).max(80),
+          })
+          .strict(),
+      )
+      .mutation(({ ctx, input }) =>
+        attempt(() =>
+          ctx.session.authenticated(async (token) =>
+            team(
+              await call(
+                ctx.backend.adminWorkspaces.createTeam.bind(
+                  ctx.backend.adminWorkspaces,
+                ),
+                input,
+                token,
+              ),
+            ),
+          ),
+        ),
+      ),
+  }),
   computers: computersRouter,
   auth: authRouter,
   displayDefaults: router({

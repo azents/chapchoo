@@ -104,6 +104,11 @@ export interface Page {
   limit: number;
 }
 
+export interface AgentListRequest {
+  teamId: string;
+  page: Page | undefined;
+}
+
 export interface AgentRequest {
   agentId: string;
 }
@@ -112,6 +117,7 @@ export interface CreateAgentRequest {
   requestId: string;
   providerId: string;
   name: string;
+  teamId: string;
 }
 
 export interface CreateAgentResult {
@@ -127,6 +133,7 @@ export interface Agent {
   id: string;
   name: string;
   computer: Computer | undefined;
+  teamId: string;
 }
 
 export interface AgentList {
@@ -327,6 +334,73 @@ export const Page: MessageFns<Page> = {
   },
 };
 
+function createBaseAgentListRequest(): AgentListRequest {
+  return { teamId: "", page: undefined };
+}
+
+export const AgentListRequest: MessageFns<AgentListRequest> = {
+  encode(message: AgentListRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.teamId !== "") {
+      writer.uint32(10).string(message.teamId);
+    }
+    if (message.page !== undefined) {
+      Page.encode(message.page, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AgentListRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseAgentListRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.teamId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.page = Page.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<AgentListRequest>, I>>(base?: I): AgentListRequest {
+    return AgentListRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AgentListRequest>, I>>(object: I): AgentListRequest {
+    const message = createBaseAgentListRequest();
+    message.teamId = object.teamId ?? "";
+    message.page = (object.page !== undefined && object.page !== null) ? Page.fromPartial(object.page) : undefined;
+    return message;
+  },
+};
+
 function createBaseAgentRequest(): AgentRequest {
   return { agentId: "" };
 }
@@ -383,7 +457,7 @@ export const AgentRequest: MessageFns<AgentRequest> = {
 };
 
 function createBaseCreateAgentRequest(): CreateAgentRequest {
-  return { requestId: "", providerId: "", name: "" };
+  return { requestId: "", providerId: "", name: "", teamId: "" };
 }
 
 export const CreateAgentRequest: MessageFns<CreateAgentRequest> = {
@@ -396,6 +470,9 @@ export const CreateAgentRequest: MessageFns<CreateAgentRequest> = {
     }
     if (message.name !== "") {
       writer.uint32(26).string(message.name);
+    }
+    if (message.teamId !== "") {
+      writer.uint32(34).string(message.teamId);
     }
     return writer;
   },
@@ -437,6 +514,14 @@ export const CreateAgentRequest: MessageFns<CreateAgentRequest> = {
             message.name = reader.string();
             continue;
           }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.teamId = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -457,6 +542,7 @@ export const CreateAgentRequest: MessageFns<CreateAgentRequest> = {
     message.requestId = object.requestId ?? "";
     message.providerId = object.providerId ?? "";
     message.name = object.name ?? "";
+    message.teamId = object.teamId ?? "";
     return message;
   },
 };
@@ -586,7 +672,7 @@ export const RemovedCreation: MessageFns<RemovedCreation> = {
 };
 
 function createBaseAgent(): Agent {
-  return { id: "", name: "", computer: undefined };
+  return { id: "", name: "", computer: undefined, teamId: "" };
 }
 
 export const Agent: MessageFns<Agent> = {
@@ -599,6 +685,9 @@ export const Agent: MessageFns<Agent> = {
     }
     if (message.computer !== undefined) {
       Computer.encode(message.computer, writer.uint32(26).fork()).join();
+    }
+    if (message.teamId !== "") {
+      writer.uint32(34).string(message.teamId);
     }
     return writer;
   },
@@ -640,6 +729,14 @@ export const Agent: MessageFns<Agent> = {
             message.computer = Computer.decode(reader, reader.uint32());
             continue;
           }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.teamId = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -662,6 +759,7 @@ export const Agent: MessageFns<Agent> = {
     message.computer = (object.computer !== undefined && object.computer !== null)
       ? Computer.fromPartial(object.computer)
       : undefined;
+    message.teamId = object.teamId ?? "";
     return message;
   },
 };
@@ -2416,8 +2514,8 @@ export const AgentsService = {
     path: "/chapchoo.computers.Agents/List" as const,
     requestStream: false as const,
     responseStream: false as const,
-    requestSerialize: (value: Page): Buffer => Buffer.from(Page.encode(value).finish()),
-    requestDeserialize: (value: Buffer): Page => Page.decode(value),
+    requestSerialize: (value: AgentListRequest): Buffer => Buffer.from(AgentListRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): AgentListRequest => AgentListRequest.decode(value),
     responseSerialize: (value: AgentList): Buffer => Buffer.from(AgentList.encode(value).finish()),
     responseDeserialize: (value: Buffer): AgentList => AgentList.decode(value),
   },
@@ -2443,7 +2541,7 @@ export const AgentsService = {
 
 export interface AgentsServer extends UntypedServiceImplementation {
   create: handleUnaryCall<CreateAgentRequest, CreateAgentResult>;
-  list: handleUnaryCall<Page, AgentList>;
+  list: handleUnaryCall<AgentListRequest, AgentList>;
   get: handleUnaryCall<AgentRequest, Agent>;
   forceRemove: handleUnaryCall<ForceRemoveRequest, Empty>;
 }
@@ -2464,14 +2562,14 @@ export interface AgentsClient extends Client {
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: CreateAgentResult) => void,
   ): ClientUnaryCall;
-  list(request: Page, callback: (error: ServiceError | null, response: AgentList) => void): ClientUnaryCall;
+  list(request: AgentListRequest, callback: (error: ServiceError | null, response: AgentList) => void): ClientUnaryCall;
   list(
-    request: Page,
+    request: AgentListRequest,
     metadata: Metadata,
     callback: (error: ServiceError | null, response: AgentList) => void,
   ): ClientUnaryCall;
   list(
-    request: Page,
+    request: AgentListRequest,
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: AgentList) => void,

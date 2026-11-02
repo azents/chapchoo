@@ -175,7 +175,8 @@ credentials in JavaScript storage.
 The account wire services are domain-scoped: Authentication and
 PersonalPreferences are common to Client/Admin; Client exposes AccountLifecycle,
 TeamManagement and InvitationManagement, while Admin exposes Installation,
-AccountGrants and DisplayDefaults. Generated callers must use those contracts;
+AccountGrants, DisplayDefaults and the narrow current-administrator
+AdminWorkspaces Team listing/creation contract. Generated callers must use those contracts;
 the former broad Auth/General/Admin RPC service names are replaced, not aliases.
 The service union deduplicates shared registrations. Bundled web selections use
 independent explicit `CHAPCHOO_GENERAL_BACKEND_URL` and

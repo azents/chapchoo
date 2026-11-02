@@ -195,6 +195,11 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
         let created = app
             .create_cloud_agent(
                 &user.token.digest(),
+                &accounts
+                    .list_teams(&user.token.digest(), AcceptanceTime::System.now()?)
+                    .await?
+                    .remove(0)
+                    .id,
                 "create",
                 "provider",
                 "Fixture",

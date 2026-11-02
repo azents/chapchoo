@@ -33,6 +33,7 @@ fn seed(
         let session = format!("session-{index}");
         let protected = cipher.protect_latest(&session, token)?;
         sql.push_str(&format!("INSERT INTO users(id,email_key,delivery_email,password_hash,created_at,language,time_zone,region) VALUES('user-{index}','{index}@example.invalid','{index}@example.invalid','synthetic',0,'en','UTC','en-US'); INSERT INTO auth_sessions(id,user_id,current_hash,recovery_nonce,recovery_ciphertext,created_at,rotated_at,expires_at) VALUES('{session}','user-{index}',{},{},{},0,0,10000000);",binary(token.digest().as_bytes()),binary(protected.nonce()),binary(protected.ciphertext())));
+        sql.push_str(&format!("INSERT INTO teams(id,kind,name,handle,owner_user_id,created_at) VALUES('personal-{index}','PERSONAL','Personal','personal-{index}','user-{index}',0); INSERT INTO memberships VALUES('personal-{index}','user-{index}','MEMBER'); INSERT INTO personal_contexts VALUES('user-{index}','personal-{index}');"));
     }
     sql.push_str("UPDATE users SET is_admin=TRUE WHERE id='user-0';");
     let protected = cipher.protect_latest("provider:provider", provider)?;
@@ -43,7 +44,7 @@ fn seed(
         ("stopped", "STOPPED", "connection", "VERIFIED"),
         ("missing", "STOPPED", "connection", "MISSING"),
     ] {
-        sql.push_str(&format!("INSERT INTO computers(id,owner_user_id,kind,provider_id,desired_state,current_request_id,current_payload_hash,current_action,current_phase,observed_power,power_observed_at,power_source_connection_id,environment_source_connection_id,saved_environment,created_at) VALUES('{id}','user-0','CLOUD','provider','RUNNING','prior-{id}',{},'START','COMPLETED','{power}',0,'{source}','connection','{environment}',0); INSERT INTO agents(id,owner_user_id,name,computer_id,computer_kind,created_at) VALUES('agent-{id}','user-0','Fixture','{id}','CLOUD',0);",binary(&[0;32])));
+        sql.push_str(&format!("INSERT INTO computers(id,owner_user_id,kind,provider_id,desired_state,current_request_id,current_payload_hash,current_action,current_phase,observed_power,power_observed_at,power_source_connection_id,environment_source_connection_id,saved_environment,created_at) VALUES('{id}','user-0','CLOUD','provider','RUNNING','prior-{id}',{},'START','COMPLETED','{power}',0,'{source}','connection','{environment}',0); INSERT INTO agents(id,owner_user_id,team_id,name,computer_id,computer_kind,created_at) VALUES('agent-{id}','user-0','personal-0','Fixture','{id}','CLOUD',0);",binary(&[0;32])));
         if power == "RUNNING" {
             sql.push_str(&format!("INSERT INTO computer_executions(id,computer_id,initial_allocation,running_confirmed_at,created_at) VALUES('execution-{id}','{id}',FALSE,0,0); UPDATE computers SET current_execution_id='execution-{id}',power_source_execution_id='execution-{id}' WHERE id='{id}';"));
         }
@@ -60,6 +61,7 @@ fn seed(
 fn draft(agent: &str, computer: &str, request: &str) -> CreateCloudAgent {
     CreateCloudAgent {
         agent_id: agent.into(),
+        team_id: "personal-0".into(),
         computer_id: computer.into(),
         request_id: request.into(),
         provider_id: "provider".into(),

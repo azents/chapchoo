@@ -65,6 +65,7 @@ impl fmt::Debug for ProviderChoice {
 
 pub struct CreateCloudAgent {
     pub agent_id: String,
+    pub team_id: String,
     pub computer_id: String,
     pub request_id: String,
     pub provider_id: String,
@@ -127,6 +128,7 @@ impl ComputerSummary {
 #[derive(Clone)]
 pub struct AgentSummary {
     pub id: String,
+    pub team_id: String,
     pub name: String,
     pub computer: ComputerSummary,
 }
@@ -186,12 +188,63 @@ struct CleanupSummary {
 }
 
 #[derive(diesel::QueryableByName)]
+struct AgentTeamRow {
+    #[diesel(sql_type = Text)]
+    team_id: String,
+}
+
+// Team mutations acquire this same Team lock. Read membership only after the
+// lock is held so removal cannot race a private Agent admission.
+macro_rules! admit_agent_team {
+    ($connection:expr, $dialect:expr, $team:expr, $owner:expr) => {{
+        let sql = match $dialect {
+            Dialect::Postgres => "SELECT id AS team_id FROM teams WHERE id=? AND deletion_requested_at IS NULL FOR UPDATE",
+            Dialect::Sqlite => "SELECT id AS team_id FROM teams WHERE id=? AND deletion_requested_at IS NULL",
+        };
+        let team = diesel::sql_query($dialect.query(sql))
+            .bind::<Text, _>($team)
+            .get_result::<AgentTeamRow>($connection)
+            .await
+            .optional()?
+            .ok_or(StoreError::NotFound)?;
+        diesel::sql_query($dialect.query(
+            "SELECT team_id FROM memberships WHERE team_id=? AND user_id=?",
+        ))
+        .bind::<Text, _>(&team.team_id)
+        .bind::<Text, _>($owner)
+        .get_result::<AgentTeamRow>($connection)
+        .await
+        .optional()?
+        .ok_or(StoreError::NotFound)?;
+    }};
+}
+
+#[derive(diesel::QueryableByName)]
 struct CreationReceiptRow {
+    #[diesel(sql_type = Text)]
+    team_id: String,
     #[diesel(sql_type = Binary)]
     payload_hash: Vec<u8>,
     #[diesel(sql_type = Text)]
     assigned_agent_id: String,
 }
+
+macro_rules! lock_owned_agent_team {
+    ($connection:expr, $dialect:expr, $agent:expr, $owner:expr) => {{
+        let context = diesel::sql_query(
+            $dialect.query("SELECT team_id FROM agents WHERE id=? AND owner_user_id=?"),
+        )
+        .bind::<Text, _>($agent)
+        .bind::<Text, _>($owner)
+        .get_result::<AgentTeamRow>($connection)
+        .await
+        .optional()?;
+        if let Some(context) = context {
+            admit_agent_team!($connection, $dialect, &context.team_id, $owner);
+        }
+    }};
+}
+
 #[derive(diesel::QueryableByName)]
 struct RemovedAgentRow {
     #[diesel(sql_type=Text)]
@@ -211,6 +264,8 @@ macro_rules! removed_agent_retry {
 pub(crate) struct AgentComputerRow {
     #[diesel(sql_type = Text)]
     agent_id: String,
+    #[diesel(sql_type = Text)]
+    team_id: String,
     #[diesel(sql_type = Text)]
     name: String,
     #[diesel(sql_type = Text)]
@@ -271,7 +326,13 @@ pub(crate) struct AgentComputerRow {
     can_restart: Option<bool>,
 }
 
-const AGENT_QUERY: &str = "SELECT a.id AS agent_id,a.name,c.id,c.owner_user_id,c.kind,c.provider_id,c.desired_state,c.current_request_id,c.current_payload_hash,c.current_execution_id,c.current_action,c.current_phase,c.initial_start_dispatch_at,c.prepare_admitted_at,ce.initial_allocation AS current_initial_allocation,p.can_create,c.observed_power,c.power_observed_at,c.power_source_connection_id,c.power_source_execution_id,c.environment_source_connection_id,c.saved_environment,pc.connection_id AS provider_connection_id,pc.expires_at AS provider_connection_expires_at,ci.expires_at AS control_expires_at,ci.draining AS control_draining,CASE WHEN pk.revoked_at IS NOT NULL THEN NULL WHEN pc.credential_hash=pk.current_hash THEN pk.expires_at WHEN pc.credential_hash=pk.previous_hash THEN CASE WHEN pk.expires_at<pk.previous_valid_until THEN pk.expires_at ELSE pk.previous_valid_until END ELSE NULL END AS management_key_valid_until,p.can_start,p.can_stop,p.can_restart FROM agents a JOIN computers c ON c.id=a.computer_id LEFT JOIN computer_executions ce ON ce.id=c.current_execution_id LEFT JOIN computer_providers p ON p.id=c.provider_id LEFT JOIN provider_connections pc ON pc.provider_id=c.provider_id LEFT JOIN control_instances ci ON ci.id=pc.control_id LEFT JOIN provider_keys pk ON pk.provider_id=c.provider_id";
+const COMPUTER_PROJECTION: &str = "c.id,c.owner_user_id,c.kind,c.provider_id,c.desired_state,c.current_request_id,c.current_payload_hash,c.current_execution_id,c.current_action,c.current_phase,c.initial_start_dispatch_at,c.prepare_admitted_at,ce.initial_allocation AS current_initial_allocation,p.can_create,c.observed_power,c.power_observed_at,c.power_source_connection_id,c.power_source_execution_id,c.environment_source_connection_id,c.saved_environment,pc.connection_id AS provider_connection_id,pc.expires_at AS provider_connection_expires_at,ci.expires_at AS control_expires_at,ci.draining AS control_draining,CASE WHEN pk.revoked_at IS NOT NULL THEN NULL WHEN pc.credential_hash=pk.current_hash THEN pk.expires_at WHEN pc.credential_hash=pk.previous_hash THEN CASE WHEN pk.expires_at<pk.previous_valid_until THEN pk.expires_at ELSE pk.previous_valid_until END ELSE NULL END AS management_key_valid_until,p.can_start,p.can_stop,p.can_restart FROM computers c LEFT JOIN computer_executions ce ON ce.id=c.current_execution_id LEFT JOIN computer_providers p ON p.id=c.provider_id LEFT JOIN provider_connections pc ON pc.provider_id=c.provider_id LEFT JOIN control_instances ci ON ci.id=pc.control_id LEFT JOIN provider_keys pk ON pk.provider_id=c.provider_id";
+
+fn agent_query() -> String {
+    format!(
+        "SELECT a.id AS agent_id,a.team_id,a.name,{COMPUTER_PROJECTION} JOIN agents a ON a.computer_id=c.id JOIN memberships am ON am.team_id=a.team_id AND am.user_id=a.owner_user_id"
+    )
+}
 
 impl AgentComputerRow {
     fn management_active(&self, now: i64) -> bool {
@@ -323,6 +384,7 @@ impl AgentComputerRow {
         let power = self.current_power(now)?;
         Ok(AgentSummary {
             id: self.agent_id,
+            team_id: self.team_id,
             name: self.name,
             computer: ComputerSummary {
                 preparation_retry_available: self.kind == "CLOUD"
@@ -450,12 +512,8 @@ impl Store {
             }
             // Reuse the evidence projection without private live Agent data.
             // Residual Computers remain independently discoverable.
-            let query = AGENT_QUERY
-                .replace("a.id AS agent_id,a.name,", "c.id AS agent_id,'' AS name,")
-                .replace(
-                    "FROM agents a JOIN computers c ON c.id=a.computer_id",
-                    "FROM computers c",
-                );
+            let query =
+                format!("SELECT c.id AS agent_id,'' AS team_id,'' AS name,{COMPUTER_PROJECTION}");
             let query = format!("{query} WHERE c.provider_id=? AND c.id>? ORDER BY c.id LIMIT ?");
             let rows = diesel::sql_query(dialect.query(&query))
                 .bind::<Text, _>(provider)
@@ -581,6 +639,7 @@ impl Store {
     ) -> Result<CreationOutcome, StoreError> {
         if ![
             draft.agent_id.as_str(),
+            draft.team_id.as_str(),
             draft.computer_id.as_str(),
             draft.request_id.as_str(),
             draft.provider_id.as_str(),
@@ -597,10 +656,11 @@ impl Store {
         );
         operation!(self, |connection, dialect| {
             let user = authenticate!(connection, dialect, actor, now);
-            if let Some(receipt) = diesel::sql_query(dialect.query("SELECT payload_hash,assigned_agent_id FROM agent_creation_receipts WHERE owner_user_id=? AND request_id=?"))
+            admit_agent_team!(connection, dialect, &draft.team_id, &user.id);
+            if let Some(receipt) = diesel::sql_query(dialect.query("SELECT team_id,payload_hash,assigned_agent_id FROM agent_creation_receipts WHERE owner_user_id=? AND request_id=?"))
                 .bind::<Text,_>(&user.id).bind::<Text,_>(&draft.request_id).get_result::<CreationReceiptRow>(connection).await.optional()? {
-                if receipt.payload_hash != fingerprint { return Err(StoreError::Conflict); }
-                let query = format!("{AGENT_QUERY} WHERE a.id=? AND a.owner_user_id=?");
+                if receipt.team_id != draft.team_id || receipt.payload_hash != fingerprint { return Err(StoreError::Conflict); }
+                let query = format!("{} WHERE a.id=? AND a.owner_user_id=?", agent_query());
                 let current = diesel::sql_query(dialect.query(&query)).bind::<Text,_>(&receipt.assigned_agent_id).bind::<Text,_>(&user.id).get_result::<AgentComputerRow>(connection).await.optional()?;
                 return match current {
                     Some(current) => Ok(CreationOutcome::Present(current.summary(now)?)),
@@ -622,11 +682,11 @@ impl Store {
             let _eligible = available_provider!(connection, dialect, &provider.id, &user.id, now);
             diesel::sql_query(dialect.query("INSERT INTO computers(id,owner_user_id,kind,provider_id,desired_state,current_request_id,current_payload_hash,current_action,current_phase,created_at) VALUES(?,?,'CLOUD',?,'RUNNING',?,?,'CREATE','ACCEPTED',?)"))
                 .bind::<Text,_>(&draft.computer_id).bind::<Text,_>(&user.id).bind::<Text,_>(&draft.provider_id).bind::<Text,_>(&draft.request_id).bind::<Binary,_>(fingerprint.as_slice()).bind::<BigInt,_>(now).execute(connection).await?;
-            diesel::sql_query(dialect.query("INSERT INTO agents(id,owner_user_id,name,computer_id,computer_kind,created_at) VALUES(?,?,?,?,'CLOUD',?)"))
-                .bind::<Text,_>(&draft.agent_id).bind::<Text,_>(&user.id).bind::<Text,_>(&draft.name).bind::<Text,_>(&draft.computer_id).bind::<BigInt,_>(now).execute(connection).await?;
-            diesel::sql_query(dialect.query("INSERT INTO agent_creation_receipts(owner_user_id,request_id,payload_hash,assigned_agent_id) VALUES(?,?,?,?)"))
-                .bind::<Text,_>(&user.id).bind::<Text,_>(&draft.request_id).bind::<Binary,_>(fingerprint.as_slice()).bind::<Text,_>(&draft.agent_id).execute(connection).await?;
-            let query = format!("{AGENT_QUERY} WHERE a.id=? AND a.owner_user_id=?");
+            diesel::sql_query(dialect.query("INSERT INTO agents(id,owner_user_id,team_id,name,computer_id,computer_kind,created_at) VALUES(?,?,?,?,?,'CLOUD',?)"))
+                .bind::<Text,_>(&draft.agent_id).bind::<Text,_>(&user.id).bind::<Text,_>(&draft.team_id).bind::<Text,_>(&draft.name).bind::<Text,_>(&draft.computer_id).bind::<BigInt,_>(now).execute(connection).await?;
+            diesel::sql_query(dialect.query("INSERT INTO agent_creation_receipts(owner_user_id,team_id,request_id,payload_hash,assigned_agent_id) VALUES(?,?,?,?,?)"))
+                .bind::<Text,_>(&user.id).bind::<Text,_>(&draft.team_id).bind::<Text,_>(&draft.request_id).bind::<Binary,_>(fingerprint.as_slice()).bind::<Text,_>(&draft.agent_id).execute(connection).await?;
+            let query = format!("{} WHERE a.id=? AND a.owner_user_id=?", agent_query());
             let row = diesel::sql_query(dialect.query(&query))
                 .bind::<Text, _>(&draft.agent_id)
                 .bind::<Text, _>(&user.id)
@@ -644,7 +704,8 @@ impl Store {
     ) -> Result<AgentSummary, StoreError> {
         operation!(self, |connection, dialect| {
             let user = authenticate!(connection, dialect, actor, now);
-            let query = format!("{AGENT_QUERY} WHERE a.id=? AND a.owner_user_id=?");
+            lock_owned_agent_team!(connection, dialect, agent_id, &user.id);
+            let query = format!("{} WHERE a.id=? AND a.owner_user_id=?", agent_query());
             diesel::sql_query(dialect.query(&query))
                 .bind::<Text, _>(agent_id)
                 .bind::<Text, _>(&user.id)
@@ -679,7 +740,8 @@ impl Store {
         );
         operation!(self, |connection, dialect| {
             let user = authenticate!(connection, dialect, actor, now);
-            let query = format!("{AGENT_QUERY} WHERE a.id=? AND a.owner_user_id=?");
+            lock_owned_agent_team!(connection, dialect, agent_id, &user.id);
+            let query = format!("{} WHERE a.id=? AND a.owner_user_id=?", agent_query());
             let initial = diesel::sql_query(dialect.query(&query))
                 .bind::<Text, _>(agent_id)
                 .bind::<Text, _>(&user.id)
@@ -761,7 +823,8 @@ impl Store {
         );
         operation!(self, |connection, dialect| {
             let user = authenticate!(connection, dialect, actor, now);
-            let query = format!("{AGENT_QUERY} WHERE a.id=? AND a.owner_user_id=?");
+            lock_owned_agent_team!(connection, dialect, agent_id, &user.id);
+            let query = format!("{} WHERE a.id=? AND a.owner_user_id=?", agent_query());
             let initial = diesel::sql_query(dialect.query(&query))
                 .bind::<Text, _>(agent_id)
                 .bind::<Text, _>(&user.id)
@@ -851,28 +914,18 @@ impl Store {
                 return Err(StoreError::Conflict);
             }
             if request.action == LifecycleAction::Delete {
-                if current.current_execution_id.is_some()
+                let never_prepared = current.current_execution_id.is_some()
                     && current.prepare_admitted_at.is_none()
                     && (current.initial_start_dispatch_at.is_none()
-                        || current.current_phase == "BLOCKED")
-                {
-                    // The same locked intent had no possible Prepare delivery,
-                    // or an acknowledged safe preparation failure. Terminal
-                    // intent fences future creates before recording only its
-                    // never-allocated candidates as absent. Allocated UIDs are
-                    // never changed by this proof.
-                    diesel::sql_query(dialect.query("UPDATE computer_resources SET presence='ABSENT',observed_at=?,source_connection_id=NULL,absence_confirmed_at=COALESCE(absence_confirmed_at,?) WHERE computer_id=? AND resource_uid IS NULL AND (resource_kind='PVC' OR execution_id=?)"))
-                        .bind::<BigInt,_>(now).bind::<BigInt,_>(now).bind::<Text,_>(&current.id)
-                        .bind::<Nullable<Text>,_>(current.current_execution_id.as_deref()).execute(connection).await?;
-                }
-                diesel::sql_query(dialect.query("UPDATE connector_sessions SET revoked_at=COALESCE(revoked_at,?),initial_nonce=NULL,initial_ciphertext=NULL,current_hash=NULL,previous_hash=NULL,previous_valid_until=NULL,issued_at=NULL,expires_at=NULL,current_request_id=NULL,recovery_nonce=NULL,recovery_ciphertext=NULL WHERE execution_id IN (SELECT id FROM computer_executions WHERE computer_id=?)"))
-                    .bind::<BigInt,_>(now).bind::<Text,_>(&current.id).execute(connection).await?;
-                diesel::sql_query(
-                    dialect.query("DELETE FROM connector_connections WHERE computer_id=?"),
-                )
-                .bind::<Text, _>(&current.id)
-                .execute(connection)
-                .await?;
+                        || current.current_phase == "BLOCKED");
+                crate::agent_cleanup::revoke_deleted_computer!(
+                    connection,
+                    dialect,
+                    &current.id,
+                    current.current_execution_id.as_deref(),
+                    never_prepared,
+                    now
+                );
             }
             diesel::sql_query(dialect.query(&query))
                 .bind::<Text, _>(agent_id)
@@ -893,9 +946,10 @@ impl Store {
         if !valid_id(agent_id) || !valid_id(expected_deletion_request_id) {
             return Err(StoreError::InvalidInput);
         }
-        operation!(self, |connection, dialect| {
+        let removed = operation!(self, |connection, dialect| {
             let user = authenticate!(connection, dialect, actor, now);
-            let query = format!("{AGENT_QUERY} WHERE a.id=? AND a.owner_user_id=?");
+            lock_owned_agent_team!(connection, dialect, agent_id, &user.id);
+            let query = format!("{} WHERE a.id=? AND a.owner_user_id=?", agent_query());
             let initial = diesel::sql_query(dialect.query(&query))
                 .bind::<Text, _>(agent_id)
                 .bind::<Text, _>(&user.id)
@@ -957,25 +1011,35 @@ impl Store {
                 .execute(connection)
                 .await?;
             Ok(AgentRemoval::Removed)
-        })
+        })?;
+        self.collect_deleted_teams().await?;
+        Ok(removed)
     }
 
     pub async fn agents(
         &self,
         actor: &SecretDigest,
+        team_id: &str,
         after: Option<&str>,
         limit: i64,
         now: i64,
     ) -> Result<Vec<AgentSummary>, StoreError> {
-        if !(1..=100).contains(&limit) || after.is_some_and(|id| !valid_id(id)) {
+        if !valid_id(team_id)
+            || !(1..=100).contains(&limit)
+            || after.is_some_and(|id| !valid_id(id))
+        {
             return Err(StoreError::InvalidInput);
         }
         operation!(self, |connection, dialect| {
             let user = authenticate!(connection, dialect, actor, now);
-            let query =
-                format!("{AGENT_QUERY} WHERE a.owner_user_id=? AND a.id>? ORDER BY a.id LIMIT ?");
+            admit_agent_team!(connection, dialect, team_id, &user.id);
+            let query = format!(
+                "{} WHERE a.owner_user_id=? AND a.team_id=? AND a.id>? ORDER BY a.id LIMIT ?",
+                agent_query()
+            );
             let rows = diesel::sql_query(dialect.query(&query))
                 .bind::<Text, _>(&user.id)
+                .bind::<Text, _>(team_id)
                 .bind::<Text, _>(after.unwrap_or(""))
                 .bind::<BigInt, _>(limit)
                 .load::<AgentComputerRow>(connection)

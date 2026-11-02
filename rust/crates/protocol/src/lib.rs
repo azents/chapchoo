@@ -23,6 +23,7 @@ pub mod computers {
     redacted_debug!(
         Page,
         AgentRequest,
+        AgentListRequest,
         CreateAgentRequest,
         CreateAgentResult,
         RemovedCreation,

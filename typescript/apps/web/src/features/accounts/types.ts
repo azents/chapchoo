@@ -43,12 +43,6 @@ export interface AuthProps extends AuthInput {
   onUsePassword: () => void;
   onRetry: () => void;
 }
-export interface ContextView {
-  id: string;
-  name: string;
-  personal: boolean;
-  role: string;
-}
 export interface InvitationView {
   id: string;
   teamId: string;
@@ -62,7 +56,6 @@ export interface MemberView {
 }
 export interface WorkspaceData {
   identity: string;
-  contexts: ContextView[];
   received: InvitationView[];
   team: null | {
     id: string;
@@ -89,7 +82,6 @@ export interface WorkspaceProps {
   supplementary?: {
     received: LoadState<null>;
     invitations: LoadState<null>;
-    contexts: LoadState<null>;
   };
   submission: Submission;
   name: string;
@@ -99,7 +91,6 @@ export interface WorkspaceProps {
   onName: (value: string) => void;
   onHandle: (value: string) => void;
   onInviteEmail: (value: string) => void;
-  onCreate: () => void;
   onRename: () => void;
   onInvite: () => void;
   onInvitation: (id: string, accept: boolean) => void;

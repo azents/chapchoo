@@ -1,6 +1,3 @@
-.contextRow a {
-  color: var(--chapchoo-color-ink);
-}
 .invitation {
   background: var(--chapchoo-color-surface-raised);
   border-color: var(--chapchoo-color-border);

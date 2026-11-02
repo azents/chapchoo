@@ -501,6 +501,7 @@ impl ComputersService {
     pub async fn create_cloud_agent(
         &self,
         actor: &SecretDigest,
+        team_id: &str,
         request_id: &str,
         provider_id: &str,
         name: &str,
@@ -508,6 +509,7 @@ impl ComputersService {
     ) -> Result<CreationOutcome, ServiceError> {
         let draft = CreateCloudAgent {
             agent_id: opaque_id()?,
+            team_id: team_id.into(),
             computer_id: opaque_id()?,
             request_id: request_id.into(),
             provider_id: provider_id.into(),
@@ -529,11 +531,15 @@ impl ComputersService {
     pub async fn agents(
         &self,
         actor: &SecretDigest,
+        team_id: &str,
         after: Option<&str>,
         limit: i64,
         clock: AcceptanceTime,
     ) -> Result<Vec<AgentSummary>, ServiceError> {
-        Ok(self.store.agents(actor, after, limit, clock.now()?).await?)
+        Ok(self
+            .store
+            .agents(actor, team_id, after, limit, clock.now()?)
+            .await?)
     }
     pub async fn retry_preparation(
         &self,

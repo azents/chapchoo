@@ -12,7 +12,7 @@ code_paths:
   - rust/crates/mail
   - rust/apps/chapchoo
   - typescript/packages/rpc-client
-last_verified_at: 2026-11-02
+last_verified_at: 2026-11-03
 spec_version: 2
 ---
 
@@ -27,10 +27,17 @@ separate domain adapters over shared account operations and admission, without
 one transport handler implementing unrelated domain traits.
 Authentication and PersonalPreferences are shared Client/Admin dependencies.
 AccountLifecycle, TeamManagement and InvitationManagement are registered on
-the Client group; Installation, AccountGrants and DisplayDefaults are
+the Client group; Installation, AccountGrants, DisplayDefaults and AdminWorkspaces are
 registered on Admin. Groups can run independently or as one deduplicated union
 on a single listener. Admin business calls
 recheck current server-administrator authority in the repository operation.
+
+AdminWorkspaces exposes only ListTeams and CreateTeam using the ordinary Team
+messages. It lists the current administrator's accessible live Teams, not all
+installation Teams; creation grants the caller ordinary owner membership. The
+same storage transaction authenticates and checks current administrator status
+before the read or write. It grants no member management or private-Agent access.
+TeamManagement remains Client-only. Admin web uses its Admin backend exclusively.
 
 Protected calls carry exactly one `authorization: Bearer <opaque-token>`
 metadata value. Each call parses its own credential. Channels do not hold a

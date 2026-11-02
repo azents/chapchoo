@@ -52,11 +52,10 @@ export class RequestSession {
       const value = validateSession(
         await this.transport.renew(this.#presented),
       );
+      this.#publish(value);
       if (this.admin && !value.user.isAdmin) {
-        this.clear();
         throw permissionDenied();
       }
-      this.#publish(value);
       return { token: value.token, user: value.user };
     } catch (error) {
       const failure = rpcFailure(error);

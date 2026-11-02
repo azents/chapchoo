@@ -926,7 +926,8 @@ impl Store {
                 .execute(connection)
                 .await?;
             Ok(())
-        })
+        })?;
+        self.collect_deleted_teams().await
     }
 
     /// Only confirmed completed inventory ages out; unresolved cleanup has no TTL.
@@ -939,7 +940,7 @@ impl Store {
         if !(1..=100).contains(&limit) {
             return Err(StoreError::InvalidInput);
         }
-        operation!(self, |connection, dialect| {
+        let collected = operation!(self, |connection, dialect| {
             let (_, now) = current_source!(connection, dialect, source);
             let threshold = now.checked_sub(86_400_000).ok_or(StoreError::Integrity)?;
             let candidates = diesel::sql_query(dialect.query("SELECT * FROM computers WHERE provider_id=? AND desired_state='DELETING' AND agent_removed_at IS NOT NULL AND cleanup_completed_at<=? AND current_execution_id IS NULL AND NOT EXISTS(SELECT 1 FROM computer_resources r WHERE r.computer_id=computers.id AND r.presence<>'ABSENT') AND NOT EXISTS(SELECT 1 FROM computer_executions e WHERE e.computer_id=computers.id AND e.retired_at IS NULL) ORDER BY id LIMIT ?"))
@@ -955,6 +956,8 @@ impl Store {
                 .await?;
             }
             Ok(count)
-        })
+        })?;
+        self.collect_deleted_teams().await?;
+        Ok(collected)
     }
 }

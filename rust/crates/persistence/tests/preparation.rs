@@ -59,14 +59,14 @@ fn sqlite_preparation_and_read_only_admission() -> Result<(), Box<dyn Error>> {
         connection
             .transaction::<_, diesel::result::Error, _>(|connection| {
                 connection.batch_execute(
-                    "INSERT INTO teams VALUES('team-a','COLLABORATIVE','Team','team-a','user-a',0)",
+                    "INSERT INTO teams(id,kind,name,handle,owner_user_id,created_at) VALUES('team-a','COLLABORATIVE','Team','team-a','user-a',0)",
                 )
             })
             .is_err()
     );
     connection.transaction::<_, diesel::result::Error, _>(|connection| {
         connection.batch_execute(
-            "INSERT INTO teams VALUES('team-a','COLLABORATIVE','Team','team-a','user-a',0);
+            "INSERT INTO teams(id,kind,name,handle,owner_user_id,created_at) VALUES('team-a','COLLABORATIVE','Team','team-a','user-a',0);
              INSERT INTO memberships VALUES('team-a','user-a','MEMBER')",
         )
     })?;
@@ -154,14 +154,14 @@ fn postgres_preparation_in_schema(url: &str) -> Result<(), Box<dyn Error>> {
         connection
             .transaction::<_, diesel::result::Error, _>(|connection| {
                 connection.batch_execute(
-                    "INSERT INTO teams VALUES('team-a','COLLABORATIVE','Team','team-a','user-a',0)",
+                    "INSERT INTO teams(id,kind,name,handle,owner_user_id,created_at) VALUES('team-a','COLLABORATIVE','Team','team-a','user-a',0)",
                 )
             })
             .is_err()
     );
     connection.transaction::<_, diesel::result::Error, _>(|connection| {
         connection.batch_execute(
-            "INSERT INTO teams VALUES('team-a','COLLABORATIVE','Team','team-a','user-a',0);
+            "INSERT INTO teams(id,kind,name,handle,owner_user_id,created_at) VALUES('team-a','COLLABORATIVE','Team','team-a','user-a',0);
              INSERT INTO memberships VALUES('team-a','user-a','MEMBER')",
         )
     })?;

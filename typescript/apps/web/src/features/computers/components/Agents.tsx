@@ -22,6 +22,7 @@ import type { ReactElement } from "react";
 
 export function Agents(props: AgentsProps): ReactElement {
   const { copy: c, data } = props;
+  const listHref = `${props.basePath}/agents?team=${encodeURIComponent(data.teamId)}`;
   if (props.access !== "authorized") {
     return (
       <PageFailure
@@ -51,14 +52,14 @@ export function Agents(props: AgentsProps): ReactElement {
           key: "agents",
           label: c.agents,
           active: true,
-          href: `${props.basePath}/agents`,
+          href: listHref,
         },
         { key: "accounts", label: c.accounts, href: `${props.basePath}/` },
       ]}
     >
       <Group justify="space-between">
         {data.type === "detail" ? (
-          <Anchor href={`${props.basePath}/agents`}>{c.back}</Anchor>
+          <Anchor href={listHref}>{c.back}</Anchor>
         ) : (
           <span />
         )}
@@ -193,7 +194,7 @@ export function Agents(props: AgentsProps): ReactElement {
                     <Table.Tr key={item.id}>
                       <Table.Td>
                         <Anchor
-                          href={`${props.basePath}/agents/${encodeURIComponent(item.id)}`}
+                          href={`${props.basePath}/agents/${encodeURIComponent(item.id)}?team=${encodeURIComponent(data.teamId)}`}
                         >
                           {item.name}
                         </Anchor>
@@ -207,12 +208,10 @@ export function Agents(props: AgentsProps): ReactElement {
             </Table.ScrollContainer>
           )}
           <Group>
-            {data.after ? (
-              <Anchor href={`${props.basePath}/agents`}>{c.first}</Anchor>
-            ) : null}
+            {data.after ? <Anchor href={listHref}>{c.first}</Anchor> : null}
             {data.page.nextAfter ? (
               <Anchor
-                href={`${props.basePath}/agents?after=${encodeURIComponent(data.page.nextAfter)}`}
+                href={`${listHref}&after=${encodeURIComponent(data.page.nextAfter)}`}
               >
                 {c.next}
               </Anchor>

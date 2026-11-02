@@ -30,7 +30,9 @@ test("global appearance entry point remains mounted through workspace recovery",
   expect(original).not.toBeNull();
   await page.getByRole("button", { name: "Try again", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "Your spaces", exact: true }),
+    page
+      .getByRole("heading", { name: "Invitations for you", exact: true })
+      .first(),
   ).toBeVisible();
   expect(await original.evaluate((element) => element.isConnected)).toBe(true);
   await expect(page.getByRole("banner")).toHaveCount(1);

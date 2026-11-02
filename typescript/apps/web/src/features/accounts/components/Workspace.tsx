@@ -119,7 +119,7 @@ function WorkspaceContent(props: WorkspaceContentProps): ReactNode {
       </WorkspaceFeedback>
     );
   }
-  const { identity, contexts, received, team } = state.data;
+  const { identity, received, team } = state.data;
   const pending = submission.type === "PENDING";
   const canManage = team !== null && !team.personal && team.role !== "MEMBER";
   const action = props.confirmation;
@@ -140,33 +140,19 @@ function WorkspaceContent(props: WorkspaceContentProps): ReactNode {
       mascotReplayLabel={c.replayMascot}
       basePath={props.basePath}
       contextLabel={team?.personal ? c.personal : c.team}
-      title={team?.name ?? c.contexts}
+      title={team?.name ?? c.receivedInvitations}
       identityLabel={identity}
       navigation={[
         { key: "agents", label: c.agents, href: `${props.basePath}/agents` },
         {
-          key: "home",
-          label: c.contexts,
-          href: `${props.basePath}/`,
+          key: "invitations",
+          label: c.receivedInvitations,
+          href: `${props.basePath}/invitations`,
           active: team === null,
         },
-        ...contexts.map((item) => ({
-          key: item.id,
-          label: item.personal ? c.personal : item.name,
-          href: `${props.basePath}/teams/${encodeURIComponent(item.id)}`,
-          active: item.id === team?.id,
-        })),
       ]}
       actions={props.accountActions}
     >
-      {props.supplementary?.contexts.type === "ERROR" ? (
-        <ErrorFeedback
-          title={c.errorTitle}
-          message={props.supplementary.contexts.message}
-          retryLabel={c.retry}
-          onRetry={props.onRetry}
-        />
-      ) : null}
       {submission.type === "ERROR" && props.confirmation === null ? (
         <Alert color="red" role="alert">
           {submission.message}
@@ -179,33 +165,7 @@ function WorkspaceContent(props: WorkspaceContentProps): ReactNode {
       ) : null}
       {team === null ? (
         <>
-          <Text c="dimmed">{c.contextDescription}</Text>
           <Stack gap="sm">
-            {contexts.map((item) => (
-              <Paper key={item.id} variant="row" className={classes.contextRow}>
-                <Group justify="space-between" wrap="wrap">
-                  <Stack gap="xs">
-                    <Anchor
-                      href={`${props.basePath}/teams/${encodeURIComponent(item.id)}`}
-                      fw={600}
-                      style={{ overflowWrap: "anywhere" }}
-                    >
-                      {item.personal ? c.personal : item.name}
-                    </Anchor>
-                    <Text size="sm" c="dimmed">
-                      {item.personal
-                        ? c.personalDescription
-                        : roleLabel(item.role, c)}
-                    </Text>
-                  </Stack>
-                  <Badge variant="light">
-                    {item.personal ? c.personal : c.team}
-                  </Badge>
-                </Group>
-              </Paper>
-            ))}
-          </Stack>
-          <ContentSection title={c.receivedInvitations}>
             {props.supplementary?.received.type === "LOADING" ? (
               <LoadingFeedback message={c.loading} />
             ) : props.supplementary?.received.type === "ERROR" ? (
@@ -253,38 +213,7 @@ function WorkspaceContent(props: WorkspaceContentProps): ReactNode {
                 </Paper>
               ))
             )}
-          </ContentSection>
-          <ContentSection title={c.createTeam}>
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                props.onCreate();
-              }}
-            >
-              <Stack gap="sm">
-                <TextInput
-                  label={c.teamName}
-                  value={props.name}
-                  onChange={(event) => props.onName(event.currentTarget.value)}
-                  required
-                  disabled={pending}
-                />
-                <TextInput
-                  label={c.handle}
-                  description={c.handleDescription}
-                  value={props.handle}
-                  onChange={(event) =>
-                    props.onHandle(event.currentTarget.value)
-                  }
-                  required
-                  disabled={pending}
-                />
-                <Button type="submit" w="fit-content" loading={pending}>
-                  {c.createTeam}
-                </Button>
-              </Stack>
-            </form>
-          </ContentSection>
+          </Stack>
         </>
       ) : team.personal ? (
         <EmptyFeedback title={c.personal} message={c.personalDescription} />
@@ -519,7 +448,7 @@ function WorkspaceContent(props: WorkspaceContentProps): ReactNode {
       <ConfirmationDialog
         opened={props.confirmation !== null}
         title={c.confirmTitle}
-        message={`${actionLabel} · ${props.confirmation?.label ?? ""} — ${props.confirmation?.type === "TRANSFER" ? c.transferWarning : props.confirmation?.type === "DELETE" ? c.deleteWarning : c.confirmDescription}`}
+        message={`${actionLabel} · ${props.confirmation?.label ?? ""} — ${props.confirmation?.type === "TRANSFER" ? c.transferWarning : props.confirmation?.type === "DELETE" ? c.deleteWarning : props.confirmation?.type === "LEAVE" ? c.leaveAgentWarning : props.confirmation?.type === "REMOVE" ? c.removeAgentWarning : c.confirmDescription}`}
         confirmLabel={c.confirm}
         cancelLabel={c.cancel}
         onConfirm={props.onConfirm}

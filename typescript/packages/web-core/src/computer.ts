@@ -96,6 +96,7 @@ export interface ComputerView extends ComputerStatus {
 }
 export interface AgentView {
   id: string;
+  teamId: string;
   name: string;
   computer: ComputerView;
 }
@@ -187,6 +188,7 @@ export function agent(value: Wire.Agent): AgentView {
   const computer = value.computer;
   return {
     id: text(value.id),
+    teamId: text(value.teamId),
     name: text(value.name),
     computer: {
       ...status(computer),

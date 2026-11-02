@@ -1,8 +1,7 @@
 "use client";
+import { AccountSettings } from "@chapchoo/ui/AccountSettings";
 import { HeaderControlsContext } from "@chapchoo/ui/AppHeader";
 import {
-  DisplayEntry,
-  DisplayPanel,
   DisplaySaveFeedback,
   DisplayToast,
 } from "@chapchoo/ui/DisplaySettings";
@@ -11,7 +10,9 @@ import { languageLocales, languageNames } from "@chapchoo/web-core/display";
 import { useDisplayController } from "@chapchoo/web-core/display-client";
 import { DisplayContext } from "@chapchoo/web-core/display-context";
 import { displayText } from "@chapchoo/web-core/display-messages";
-import { Anchor, Group } from "@mantine/core";
+import { shellCopy } from "@chapchoo/web-core/shell-messages";
+import { useMantineColorScheme } from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
 import { NextIntlClientProvider } from "next-intl";
 import { useEffect } from "react";
 import { trpc } from "@/shared/rpc/client";
@@ -26,12 +27,10 @@ const catalogs = { en, ko, ja, fr };
 export function DisplayProvider({
   initial,
   basePath,
-  admin = false,
   children,
 }: {
   initial: DisplayInitial;
   basePath: string;
-  admin?: boolean;
   children: ReactNode;
 }): ReactElement {
   const auth = useAuth();
@@ -51,6 +50,9 @@ export function DisplayProvider({
     },
   });
   const language = controller.value.language;
+  const shell = shellCopy(language);
+  const mobile = useMediaQuery("(max-width: 48em)");
+  const { colorScheme, setColorScheme } = useMantineColorScheme();
   const text = displayText(language);
   const copy = {
     ...text,
@@ -74,36 +76,50 @@ export function DisplayProvider({
     <DisplayContext.Provider value={controller}>
       <NextIntlClientProvider locale={locale} messages={messages}>
         <HeaderControlsContext.Provider
-          value={<DisplayEntry label={text.title} onOpen={controller.open} />}
+          value={
+            <AccountSettings
+              mobile={mobile}
+              opened={controller.opened}
+              onOpen={controller.open}
+              onClose={controller.close}
+              value={controller.fields}
+              selected={controller.choices}
+              automatic={controller.guest}
+              disabled={!controller.available || controller.busy}
+              zones={initial.zones}
+              copy={{
+                ...copy,
+                title: controller.guest ? shell.settings : shell.account,
+              }}
+              onChange={controller.change}
+              changed={controller.changed}
+              error={controller.error}
+              storageError={controller.storageError}
+              onRetry={controller.retry}
+              instant={initial.instant}
+              appearance={{
+                value: colorScheme === "auto" ? "system" : colorScheme,
+                label: messages.Appearance.label,
+                labels: messages.Appearance,
+                onChange: (value) =>
+                  setColorScheme(value === "system" ? "auto" : value),
+              }}
+              identityLabel={
+                auth.state.type === "AUTHENTICATED"
+                  ? auth.state.user.email
+                  : void 0
+              }
+              profileHref={`${basePath}/profile`}
+              profileLabel={shell.profile}
+              loginHref={`${basePath}/login`}
+              loginLabel={shell.login}
+              logoutLabel={shell.logout}
+              onLogout={auth.logout}
+            />
+          }
         >
           {children}
         </HeaderControlsContext.Provider>
-        <DisplayPanel
-          opened={controller.opened}
-          onClose={controller.close}
-          value={controller.fields}
-          selected={controller.choices}
-          automatic={controller.guest}
-          disabled={!controller.available || controller.busy}
-          zones={initial.zones}
-          copy={copy}
-          onChange={controller.change}
-          changed={controller.changed}
-          error={controller.error}
-          storageError={controller.storageError}
-          onRetry={controller.retry}
-          instant={initial.instant}
-          footer={
-            !controller.guest && controller.available ? (
-              <Group gap="lg">
-                <Anchor href={`${basePath}/profile`}>{text.profile}</Anchor>
-                {admin ? (
-                  <Anchor href={`${basePath}/settings`}>{text.server}</Anchor>
-                ) : null}
-              </Group>
-            ) : null
-          }
-        />
         <DisplayToast
           title={text.proposal}
           alternateTitle={targetText?.proposal}

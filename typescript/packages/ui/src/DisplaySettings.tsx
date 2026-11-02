@@ -51,6 +51,7 @@ export interface DisplayFieldsProps {
   disabled: boolean;
   zones: readonly string[];
   copy: DisplayCopy;
+  withinPortal?: boolean;
   onChange: (key: DisplayDimension, value: string | null) => void;
 }
 export function DisplayIcon({
@@ -145,6 +146,7 @@ export function DisplayFields(props: DisplayFieldsProps): ReactElement {
           key={key}
           label={props.copy[key]}
           searchable
+          comboboxProps={{ withinPortal: props.withinPortal ?? true }}
           allowDeselect={false}
           disabled={props.disabled}
           value={

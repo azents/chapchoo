@@ -62,7 +62,7 @@ test("both apps immediately dispose their cookie before best-effort backend revo
       assert.match(cookie, /HttpOnly/);
       assert.match(cookie, /Max-Age=0/);
       assert.ok(!cookie.includes("x".repeat(43)));
-      assert.match(cookie, app === "admin" ? /Path=\/admin;/ : /Path=\/;/);
+      assert.match(cookie, /Path=\/;/);
       await tasks[0]();
       assert.equal(calls, 1);
     }

@@ -64,6 +64,7 @@ export class Assembly {
   private constructor(
     private readonly directory: string,
     private readonly generalPort: number,
+    private readonly adminPort: number,
     generalWebPort: number,
     adminWebPort: number,
     private readonly packageRoot: string | null,
@@ -78,16 +79,17 @@ export class Assembly {
     const ports = new Set<number>();
     let assembly: Assembly | null = null;
     try {
-      while (ports.size < 3) {
+      while (ports.size < 4) {
         ports.add(await privatePort());
       }
-      const [general, generalWeb, adminWeb] = [...ports];
-      if (!general || !generalWeb || !adminWeb) {
+      const [general, admin, generalWeb, adminWeb] = [...ports];
+      if (!general || !admin || !generalWeb || !adminWeb) {
         throw new Error("Could not allocate isolated fixture ports");
       }
       assembly = new Assembly(
         directory,
         general,
+        admin,
         generalWeb,
         adminWeb,
         packageRoot,
@@ -120,6 +122,8 @@ export class Assembly {
       SWC_NATIVE_BINDING_CACHE: join(this.directory, "swc-cache"),
       CHAPCHOO_WEB_HOST: "127.0.0.1",
       CHAPCHOO_PUBLIC_URL: url,
+      CHAPCHOO_GENERAL_WEB_URL: this.generalUrl,
+      CHAPCHOO_ADMIN_WEB_URL: this.adminUrl,
       PORT: new URL(url).port,
       CHAPCHOO_BACKEND_URL: `http://127.0.0.1:${port}`,
     };
@@ -204,13 +208,29 @@ export class Assembly {
       backendEnv,
       60_000,
     );
+    const adminBackend = this.owner.start(
+      "Admin-only API server",
+      binary,
+      ["serve", "--groups", "admin", "--listen", `127.0.0.1:${this.adminPort}`],
+      repository,
+      {
+        ...backendEnv,
+        CHAPCHOO_SETUP_PROOF: this.setupProof,
+        CHAPCHOO_GENERAL_WEB_URL: this.generalUrl,
+        RUST_LOG: "chapchoo=info",
+      },
+    );
+    await adminBackend.ready(
+      /Selected backend service groups are ready/,
+      60_000,
+    );
     this.product = this.owner.start(
       "Product foreground server",
       binary,
       [
         "serve",
         "--groups",
-        "client,admin,control",
+        "client,control",
         "--listen",
         `127.0.0.1:${this.generalPort}`,
         ...(this.packageRoot
@@ -231,7 +251,7 @@ export class Assembly {
         CHAPCHOO_GENERAL_WEB_URL: this.generalUrl,
         CHAPCHOO_ADMIN_WEB_URL: this.adminUrl,
         CHAPCHOO_GENERAL_BACKEND_URL: `http://127.0.0.1:${this.generalPort}`,
-        CHAPCHOO_ADMIN_BACKEND_URL: `http://127.0.0.1:${this.generalPort}`,
+        CHAPCHOO_ADMIN_BACKEND_URL: `http://127.0.0.1:${this.adminPort}`,
         CHAPCHOO_SYSTEM_OWNER_ID: "fixture-owner",
         CHAPCHOO_SYSTEM_OWNER_PROVIDER_IDS: "fixture-provider",
         CHAPCHOO_SYSTEM_OWNER_TOKEN: this.providerOwnerToken,
@@ -250,7 +270,7 @@ export class Assembly {
     }
     for (const [name, url, backendPort] of [
       ["web", this.generalUrl, this.generalPort],
-      ["admin-web", this.adminUrl, this.generalPort],
+      ["admin-web", this.adminUrl, this.adminPort],
     ] satisfies [string, string, number][]) {
       const cwd = join(typescript, "apps", name);
       const env = this.webEnvironment(url, backendPort);
@@ -285,7 +305,7 @@ export class Assembly {
   }
   async initializeAdministrator(): Promise<void> {
     await seedAdministrator(
-      `127.0.0.1:${this.generalPort}`,
+      `127.0.0.1:${this.adminPort}`,
       this.setupProof,
       this.administrator,
     );
@@ -363,7 +383,7 @@ export class Assembly {
   async seedSecondUser(): Promise<void> {
     await seedRegisteredUser(
       `127.0.0.1:${this.generalPort}`,
-      `127.0.0.1:${this.generalPort}`,
+      `127.0.0.1:${this.adminPort}`,
       this.administrator,
       this.second,
     );

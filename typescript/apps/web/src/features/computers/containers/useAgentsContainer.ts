@@ -19,6 +19,7 @@ export function useAgentsContainer({
   initial,
   basePath,
 }: AgentsInput): AgentsProps {
+  const agentsHref = `${basePath}/agents?team=${encodeURIComponent(initial.teamId)}`;
   const auth = useAuth();
   const visibility = useDocumentVisibility();
   const enabled =
@@ -40,10 +41,12 @@ export function useAgentsContainer({
   const busy = useRef(false);
   const createRequest = useRef<{
     requestId: string;
+    teamId: string;
     name: string;
     providerId: string;
   } | null>(null);
   const listInput = {
+    teamId: initial.teamId,
     ...(initial.type === "list" && initial.after
       ? { after: initial.after }
       : {}),
@@ -104,9 +107,9 @@ export function useAgentsContainer({
       : { ...initial, agent: detail.data ?? initial.agent };
   useEffect(() => {
     if (detail.error?.data?.reason === "DOMAIN_REASON_NOT_FOUND") {
-      window.location.replace(`${basePath}/agents`);
+      window.location.replace(agentsHref);
     }
-  }, [detail.error, basePath]);
+  }, [detail.error, agentsHref]);
   async function refresh(): Promise<void> {
     await utils.computers.invalidate();
   }
@@ -118,6 +121,7 @@ export function useAgentsContainer({
     setSubmission({ type: "pending" });
     const payload = createRequest.current ?? {
       requestId: crypto.randomUUID(),
+      teamId: initial.teamId,
       name: name.trim(),
       providerId,
     };
@@ -131,7 +135,7 @@ export function useAgentsContainer({
       }
       void utils.computers.list.invalidate();
       window.location.assign(
-        `${basePath}/agents/${encodeURIComponent(result.agent.id)}`,
+        `${basePath}/agents/${encodeURIComponent(result.agent.id)}?team=${encodeURIComponent(result.agent.teamId)}`,
       );
     } catch {
       setSubmission({ type: "error", message: copy.lostSubmission });
@@ -155,7 +159,7 @@ export function useAgentsContainer({
           deletionRequestId: expectedRequestId,
         });
         void utils.computers.invalidate();
-        window.location.assign(`${basePath}/agents`);
+        window.location.assign(agentsHref);
         return;
       }
       const updated = await lifecycle.mutateAsync({

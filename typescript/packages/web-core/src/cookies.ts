@@ -8,26 +8,13 @@ export interface CookiePolicy {
 }
 
 export function cookiePolicy(config: WebConfig): CookiePolicy {
-  if (config.app === "general") {
-    return {
-      name: config.secure
-        ? "__Host-Chapchoo-General"
-        : "chapchoo-general-session",
-      path: "/",
-      secure: config.secure,
-      sameSite: config.secure ? "None" : "Lax",
-    };
-  }
-  const path = config.basePath || "/";
   return {
     name: config.secure
-      ? path === "/"
-        ? "__Host-Chapchoo-Admin"
-        : "__Secure-Chapchoo-Admin"
-      : "chapchoo-admin-session",
-    path,
+      ? "__Host-Chapchoo-General"
+      : "chapchoo-general-session",
+    path: "/",
     secure: config.secure,
-    sameSite: "Lax",
+    sameSite: config.secure ? "None" : "Lax",
   };
 }
 

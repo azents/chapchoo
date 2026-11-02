@@ -36,6 +36,17 @@ spec:
           imagePullPolicy: {{ $web.image.pullPolicy }}
           args: [serve, --groups, --web, {{ $role }}]
           env:
+            {{- if eq $role "admin" }}
+            {{- with $.Values.general.publicUrl }}
+            - name: CHAPCHOO_GENERAL_WEB_URL
+              value: {{ . | quote }}
+            {{- end }}
+            {{- else }}
+            {{- with $.Values.admin.publicUrl }}
+            - name: CHAPCHOO_ADMIN_WEB_URL
+              value: {{ . | quote }}
+            {{- end }}
+            {{- end }}
             - name: CHAPCHOO_{{ upper $role }}_WEB_URL
               value: {{ $web.publicUrl | quote }}
             - name: CHAPCHOO_{{ upper $role }}_WEB_LISTEN

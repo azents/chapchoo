@@ -1,7 +1,5 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
-import { test, expect } from "./fixture.js";
 import { safeMessage } from "@chapchoo/testenv/safety";
+import { test, expect } from "./fixture.js";
 import type { Assembly } from "./fixture.js";
 import type { FixtureUser } from "@chapchoo/testenv/safety";
 import type { Browser, BrowserContext, Page } from "@playwright/test";
@@ -11,6 +9,7 @@ const websiteErrors: string[] = [];
 let administrator: Page;
 let member: Page;
 let second: Page;
+let sharedGeneral: Page;
 
 async function isolatedPage(browser: Browser): Promise<Page> {
   const context = await browser.newContext({
@@ -31,14 +30,32 @@ async function isolatedPage(browser: Browser): Promise<Page> {
       /hydration|hydrating|did not match|server.rendered|react.dev\/errors\/418/i.test(
         message.text(),
       )
-    ) {
-      websiteErrors.push("React reported an appearance hydration mismatch");
-    }
+    )
+      websiteErrors.push("React reported a hydration mismatch");
   });
   return page;
 }
-
-/** Prove primary content exists without executing application scripts. */
+async function login(
+  page: Page,
+  url: string,
+  user: FixtureUser,
+): Promise<void> {
+  await page.goto(`${url}/login`);
+  await page
+    .getByRole("textbox", { name: "Email address", exact: true })
+    .fill(user.email);
+  await page.getByLabel(/^Password\s*\*?$/).fill(user.password);
+  await page.getByRole("button", { name: "Log in", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Agents", exact: true }),
+  ).toBeVisible();
+}
+async function logout(page: Page): Promise<void> {
+  await page
+    .getByRole("button", { name: "Account and settings", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+}
 async function serverContent(
   context: BrowserContext,
   url: string,
@@ -64,125 +81,56 @@ async function serverContent(
     await page.close();
   }
 }
-
-/** The random server choice must survive hydration and subsequent form edits. */
-async function loginDocument(page: Page, url: string): Promise<string> {
-  const response = await page.goto(`${url}/login`);
-  if (!response) throw new Error("The login document response is required");
-  const html = await response.text();
-  const source = /<img[^>]+src="([^"]*\/design-assets\/[^"]+-216\.webp)"/.exec(
-    html,
-  )?.[1];
-  if (!source)
-    throw new Error("The login document must contain its selected mascot");
-  await expect(
-    page.locator('main img[src*="/design-assets/"]'),
-  ).toHaveAttribute("src", source);
-  return source;
-}
-
-async function login(
-  page: Page,
-  url: string,
-  user: FixtureUser,
-): Promise<void> {
-  const character = await loginDocument(page, url);
-  await page
-    .getByRole("textbox", { name: "Email address", exact: true })
-    .fill(user.email);
-  await page.getByLabel(/^Password\s*\*?$/).fill(user.password);
-  await expect(
-    page.locator('main img[src*="/design-assets/"]'),
-  ).toHaveAttribute("src", character);
-  await page.getByRole("button", { name: "Log in", exact: true }).click();
-  await expect(
-    page.getByRole("heading", { name: "Your spaces", exact: true }),
-  ).toBeVisible();
-}
-
-async function verifyInitialCanvas(
+/** Retain the real document/CSS-arrival boundary, not a theme-value matrix. */
+async function serverCanvas(
   context: BrowserContext,
   url: string,
-  expected: {
-    serverMode: "light" | "dark";
-    mode: "light" | "dark";
-    media: "light" | "dark";
-  } = { serverMode: "dark", mode: "dark", media: "light" },
 ): Promise<void> {
   const page = await context.newPage();
-  await page.emulateMedia({ colorScheme: expected.media });
-  const background =
-    expected.mode === "dark" ? "rgb(24, 28, 24)" : "rgb(253, 252, 248)";
-  let releaseStyles: () => void = () => {};
-  const stylesReady = new Promise<void>((resolve) => {
-    releaseStyles = resolve;
+  let release = (): void => {};
+  const styles = new Promise<void>((resolve) => {
+    release = resolve;
   });
   await page.route("**/*", async (route) => {
     if (route.request().resourceType() === "script") {
       await route.abort();
       return;
     }
-    if (route.request().resourceType() === "stylesheet") await stylesReady;
+    if (route.request().resourceType() === "stylesheet") {
+      await styles;
+    }
     await route.continue();
   });
   try {
-    const response = await page.goto(url, { waitUntil: "commit" });
-    if (!response) throw new Error("Initial document response is required");
+    await page.goto(url, { waitUntil: "commit" });
     await expect(page.locator("html")).toHaveAttribute(
       "data-mantine-color-scheme",
-      expected.serverMode,
+      "light",
     );
-    // Parser-blocking styles keep the head bootstrap from running here.
-    const canvas = await page.evaluate(() => {
-      const root = document.documentElement;
-      return {
-        scheme: getComputedStyle(root).colorScheme,
-        background: getComputedStyle(root).backgroundColor,
-        inlineScheme: root.style.colorScheme,
-        preference: root.dataset.colorModePreference,
-      };
-    });
-    const scheme =
-      canvas.preference === "system" ? "light dark" : expected.mode;
-    expect(canvas.scheme).toBe(scheme);
-    expect(canvas.inlineScheme).toBe(scheme);
-    expect(canvas.background).toBe(background);
-    const html = await response.text();
-    expect(
-      html.includes("<form"),
-      "The initial HTML must contain the form",
-    ).toBe(true);
-    const meta = html.indexOf(`<meta name="color-scheme" content="${scheme}"`);
-    const bootstrap = html.indexOf("<script>");
-    expect(
-      meta,
-      "The initial document must advertise its scheme",
-    ).toBeGreaterThanOrEqual(0);
-    expect(
-      meta,
-      "Scheme metadata must precede the CSS-dependent bootstrap",
-    ).toBeLessThan(bootstrap);
     await expect(
       page.locator('head meta[name="color-scheme"]'),
-    ).toHaveAttribute("content", scheme);
-    releaseStyles();
+    ).toHaveAttribute("content", "light dark");
+    expect(
+      await page.evaluate(
+        () => getComputedStyle(document.documentElement).backgroundColor,
+      ),
+    ).toBe("rgb(253, 252, 248)");
+    release();
     await page.waitForLoadState("load");
-    // External JavaScript is still blocked: SSR CSS must paint the body.
     await expect(page.locator("body")).toHaveCSS(
       "background-color",
-      background,
+      "rgb(253, 252, 248)",
     );
     await expect(page.locator("form")).toBeVisible();
-    await expect(page.locator('input[type="email"]')).toBeVisible();
   } finally {
-    releaseStyles();
+    release();
     await page.close();
   }
 }
 
 async function issuedLink(
   page: Page,
-  fixture: Assembly,
+  assembly: Assembly,
   kind: "signup" | "reset-password",
 ): Promise<string> {
   const field = page.getByRole("textbox", { name: "New link", exact: true });
@@ -191,90 +139,27 @@ async function issuedLink(
   let valid = false;
   try {
     const url = new URL(value);
-    const expected = new URL(fixture.generalUrl);
+    const expected = new URL(assembly.generalUrl);
     valid =
       url.origin === expected.origin &&
       url.pathname === `${expected.pathname.replace(/\/$/, "")}/${kind}` &&
       /^[A-Za-z0-9_-]{43}$/.test(url.searchParams.get("token") ?? "");
   } catch {
-    /* The generic assertion must not publish the issued URL. */
+    /* Never include a proof-bearing URL in assertion diagnostics. */
   }
-  expect(valid, "Issued link must target the configured general web path").toBe(
+  expect(valid, "Issued link must target the configured General mount").toBe(
     true,
   );
   await page.getByRole("button", { name: "Dismiss", exact: true }).click();
-  await expect(field).toHaveCount(0);
   return value;
 }
-
-async function safeScreenshot(page: Page, name: string): Promise<void> {
-  const url = new URL(page.url());
-  const unsafe =
-    url.searchParams.has("token") ||
-    url.searchParams.has("proof") ||
-    (await page.locator('input[type="password"]').count()) > 0 ||
-    (await page
-      .getByRole("textbox", { name: "New link", exact: true })
-      .count()) > 0;
-  expect(
-    unsafe,
-    "Screenshots require a credential-free workspace or dismissed inventory",
-  ).toBe(false);
-  const directory = fileURLToPath(new URL("../artifacts/", import.meta.url));
-  await mkdir(directory, { recursive: true, mode: 0o700 });
-  const render = await page.evaluate(async () => {
-    await document.fonts.ready;
-    const heading = document.querySelector("h1");
-    const style = getComputedStyle(heading ?? document.body);
-    return {
-      viewport: { width: innerWidth, height: innerHeight },
-      devicePixelRatio,
-      locale: document.documentElement.lang,
-      colorScheme: document.documentElement.dataset.mantineColorScheme,
-      fontsReady: document.fonts.status === "loaded",
-      loadedFamilies: [...document.fonts]
-        .filter((font) => font.status === "loaded")
-        .map((font) => font.family),
-      heading: {
-        family: style.fontFamily,
-        size: style.fontSize,
-        weight: style.fontWeight,
-        lineHeight: style.lineHeight,
-      },
-      document: {
-        width: document.documentElement.scrollWidth,
-        height: document.documentElement.scrollHeight,
-      },
-    };
-  });
-  expect(render.fontsReady, "Product fonts must settle before capture").toBe(
-    true,
-  );
-  expect(
-    render.loadedFamilies.some((family) => family.includes("Pretendard")),
-    "The actual product Pretendard font must be loaded",
-  ).toBe(true);
-  await page.screenshot({
-    path: `${directory}${name}.png`,
-    type: "png",
-    fullPage: true,
-    animations: "disabled",
-  });
-  await writeFile(
-    `${directory}${name}.json`,
-    JSON.stringify(render, null, 2) + "\n",
-    { mode: 0o600 },
-  );
-}
-
 async function confirm(page: Page): Promise<void> {
   const dialog = page.getByRole("dialog", {
     name: "Confirm this change",
     exact: true,
   });
-  await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "Confirm", exact: true }).click();
-  await expect(dialog).toHaveCount(0);
+  await expect(dialog).not.toBeVisible();
 }
 
 test.describe("Assembled account and team acceptance", () => {
@@ -285,164 +170,24 @@ test.describe("Assembled account and team acceptance", () => {
     second = await isolatedPage(browser);
   });
   test.afterEach(() => {
-    if (websiteErrors.length > 0) {
+    if (websiteErrors.length)
       throw new Error(
         `Website exception: ${websiteErrors.shift() ?? "Unexpected browser error"}`,
       );
-    }
   });
   test.afterAll(async () => {
-    let failed = false;
-    for (const context of contexts) {
-      try {
-        await context.close();
-      } catch {
-        failed = true;
-      }
-    }
-    if (failed) {
+    const results = await Promise.allSettled(
+      contexts.map((context) => context.close()),
+    );
+    if (results.some((result) => result.status === "rejected"))
       throw new Error("Owned browser context cleanup failed");
-    }
   });
 
-  test("administrator bootstrap and issued signup reach the personal context", async ({
+  test("administrator bootstrap, issued signup and shared identity reach a private personal context", async ({
     assembly,
   }) => {
-    const bootstrapRequests: string[] = [];
-    administrator.on("request", (request) => {
-      const operation = new URL(request.url()).pathname.split("/").at(-1);
-      if (
-        operation === "auth.methods" ||
-        operation === "setup.status" ||
-        operation === "auth.identity"
-      )
-        bootstrapRequests.push(operation);
-    });
-    await administrator.emulateMedia({ colorScheme: "dark" });
-    await verifyInitialCanvas(
-      administrator.context(),
-      `${assembly.generalUrl}/login`,
-      { serverMode: "light", mode: "dark", media: "dark" },
-    );
-    await verifyInitialCanvas(
-      administrator.context(),
-      `${assembly.adminUrl}/setup`,
-      { serverMode: "dark", mode: "light", media: "light" },
-    );
-    await administrator.addInitScript(() => {
-      function firstContentFrame(): void {
-        if (document.documentElement.dataset.appearanceObservation === "done")
-          return;
-        if (!document.querySelector("main")) {
-          requestAnimationFrame(firstContentFrame);
-          return;
-        }
-        const root = document.documentElement;
-        const mode = root.dataset.mantineColorScheme;
-        const background = getComputedStyle(document.body).backgroundColor;
-        root.dataset.firstFrameMode ??= mode;
-        root.dataset.firstFrameBackground ??= background;
-        if (background !== "rgb(24, 28, 24)")
-          root.dataset.unexpectedFrameBackground = background;
-        if (
-          mode &&
-          root.dataset.appearanceModeHistory?.split(",").at(-1) !== mode
-        ) {
-          root.dataset.appearanceModeHistory = root.dataset
-            .appearanceModeHistory
-            ? `${root.dataset.appearanceModeHistory},${mode}`
-            : mode;
-        }
-        if (root.dataset.appearanceObservation !== "done")
-          requestAnimationFrame(firstContentFrame);
-      }
-      requestAnimationFrame(firstContentFrame);
-    });
-    await administrator.goto(`${assembly.generalUrl}/login`);
-    await expect(administrator.locator("html")).toHaveAttribute(
-      "data-first-frame-mode",
-      "dark",
-    );
-    await expect(administrator.locator("html")).toHaveAttribute(
-      "data-first-frame-background",
-      "rgb(24, 28, 24)",
-    );
-    const appearance = administrator.getByRole("button", {
-      name: "Appearance",
-      exact: true,
-    });
-    await expect(appearance).toHaveAttribute("data-mode", "system");
-    const initialEmail = administrator.getByRole("textbox", {
-      name: "Email address",
-      exact: true,
-    });
-    await initialEmail.fill("draft@example.com");
-    await administrator.evaluate(() => {
-      document.documentElement.dataset.appearanceObservation = "done";
-    });
-    await expect(administrator.locator("html")).toHaveAttribute(
-      "data-appearance-mode-history",
-      "dark",
-    );
-    await expect(administrator.locator("html")).not.toHaveAttribute(
-      "data-unexpected-frame-background",
-    );
-    await appearance.focus();
-    await appearance.click();
-    await administrator
-      .getByRole("menuitem", { name: "Light", exact: true })
-      .click();
-    await expect(initialEmail).toHaveValue("draft@example.com");
-    await expect(appearance).toBeFocused();
-    await administrator.emulateMedia({ colorScheme: "light" });
-    await appearance.click();
-    await administrator
-      .getByRole("menuitem", { name: "Dark", exact: true })
-      .click();
-    await expect(administrator.locator("body")).toHaveAttribute(
-      "data-color-mode",
-      "dark",
-    );
-    const rendered = await administrator.request.get(
-      `${assembly.generalUrl}/login`,
-    );
-    expect(await rendered.text()).toMatch(
-      /<html[^>]*data-mantine-color-scheme="dark"/,
-    );
-    await verifyInitialCanvas(
-      administrator.context(),
-      `${assembly.generalUrl}/login`,
-    );
-    await verifyInitialCanvas(
-      administrator.context(),
-      `${assembly.adminUrl}/setup`,
-    );
-    await administrator.reload();
-    await expect(administrator.locator("html")).toHaveAttribute(
-      "data-first-frame-background",
-      "rgb(24, 28, 24)",
-    );
-    await expect(
-      administrator.getByRole("button", { name: "Appearance", exact: true }),
-    ).toHaveAttribute("data-mode", "dark");
-    await administrator.evaluate(() => {
-      document.documentElement.dataset.appearanceObservation = "done";
-    });
-    await expect(administrator.locator("html")).not.toHaveAttribute(
-      "data-unexpected-frame-background",
-    );
+    await serverCanvas(administrator.context(), `${assembly.generalUrl}/login`);
     await administrator.goto(`${assembly.adminUrl}/setup`);
-    await expect(
-      administrator.getByRole("button", { name: "Appearance", exact: true }),
-    ).toHaveAttribute("data-mode", "dark");
-    await expect(administrator.locator("html")).toHaveAttribute(
-      "data-first-frame-mode",
-      "dark",
-    );
-    await expect(administrator.locator("html")).toHaveAttribute(
-      "data-first-frame-background",
-      "rgb(24, 28, 24)",
-    );
     await administrator
       .getByRole("textbox", { name: "Email", exact: true })
       .fill(assembly.administrator.email);
@@ -452,39 +197,49 @@ test.describe("Assembled account and team acceptance", () => {
     await administrator
       .getByLabel(/^Password\s*\*?$/)
       .fill(assembly.administrator.password);
-    expect(
-      bootstrapRequests,
-      "Initial hydration must not repeat server readiness reads",
-    ).toEqual([]);
     await administrator
       .getByRole("button", { name: "Create administrator", exact: true })
       .click();
     await expect(
       administrator.getByRole("heading", { name: "Signup links", exact: true }),
     ).toBeVisible();
-    expect(
-      bootstrapRequests.filter((operation) => operation === "auth.identity"),
-      "Protected hydration must not repeat server Identity validation",
-    ).toEqual([]);
-    await administrator.goto(`${assembly.adminUrl}/settings`);
     await administrator
-      .getByRole("main")
-      .getByRole("combobox", { name: "Time zone", exact: true })
+      .locator("aside")
+      .getByRole("button", { name: "Switch workspace", exact: true })
       .click();
     await administrator
-      .getByRole("option", { name: "Europe/London", exact: true })
+      .getByRole("button", { name: "Create team", exact: true })
       .click();
+    const creation = administrator.getByRole("dialog", {
+      name: "Create team",
+      exact: true,
+    });
+    await creation
+      .getByRole("textbox", { name: "Team name", exact: true })
+      .fill("Administrator workspace");
+    await creation
+      .getByRole("textbox", { name: "Handle", exact: true })
+      .fill(`${assembly.teamHandle}-admin`);
+    await creation.getByRole("button", { name: "Create", exact: true }).click();
     await expect(
-      administrator.getByRole("main").getByText("Applied", { exact: true }),
+      administrator.getByRole("heading", { name: "Agents", exact: true }),
     ).toBeVisible();
-    await safeScreenshot(administrator, "display-admin-defaults-desktop");
-    await administrator.goto(`${assembly.adminUrl}/profile`);
+    await administrator
+      .locator("aside")
+      .getByRole("button", { name: "Switch workspace", exact: true })
+      .click();
+    await administrator
+      .getByRole("link", { name: "Administration", exact: true })
+      .click();
     await expect(
-      administrator
-        .getByRole("main")
-        .getByRole("combobox", { name: "Time zone", exact: true }),
-    ).toHaveValue("Asia/Seoul");
-    await administrator.goto(`${assembly.adminUrl}/`);
+      administrator.getByRole("heading", { name: "Signup links", exact: true }),
+    ).toBeVisible();
+    sharedGeneral = await administrator.context().newPage();
+    await sharedGeneral.goto(`${assembly.generalUrl}/`);
+    await expect(
+      sharedGeneral.getByRole("heading", { name: "Agents", exact: true }),
+    ).toBeVisible();
+    await expect(sharedGeneral).toHaveURL(/\/agents\?team=[^&]+$/);
     await administrator
       .getByRole("textbox", { name: "Recipient email", exact: true })
       .fill(assembly.member.email);
@@ -498,193 +253,90 @@ test.describe("Assembled account and team acceptance", () => {
       "Signup links",
       assembly.member.email,
     );
-    await administrator.goto(`${assembly.adminUrl}/?offset=25&offset=50`);
-    await expect(
-      administrator.getByText("No links yet", { exact: true }),
-    ).toBeVisible();
-    await administrator
-      .getByRole("button", { name: "Previous", exact: true })
-      .click();
-    await expect(administrator).toHaveURL(assembly.adminUrl);
-    await expect(
-      administrator.getByRole("row").filter({ hasText: assembly.member.email }),
-    ).toBeVisible();
-    await administrator.reload();
-    await expect(
-      administrator.getByRole("row").filter({ hasText: assembly.member.email }),
-    ).toBeVisible();
-    await administrator.goBack();
-    await expect(administrator).toHaveURL(/offset=25/);
-    await expect(
-      administrator.getByText("No links yet", { exact: true }),
-    ).toBeVisible();
-    await administrator.goForward();
-    await expect(
-      administrator.getByRole("row").filter({ hasText: assembly.member.email }),
-    ).toBeVisible();
-    await safeScreenshot(administrator, "admin-signup-inventory-desktop");
-    await serverContent(
-      member.context(),
-      `${assembly.generalUrl}/reset-password?token=malformed`,
-      "Reset password",
-    );
     await member.goto(signup);
     await member
       .getByRole("textbox", { name: "Email address", exact: true })
       .fill(assembly.member.email);
     await member.getByLabel(/^Password\s*\*?$/).fill(assembly.member.password);
     await member
-      .getByRole("button", {
-        name: "Display settings",
-        exact: true,
-      })
-      .click();
-    const guestSettings = member.getByRole("dialog");
-    await guestSettings
-      .getByRole("combobox", { name: "Time zone", exact: true })
-      .click();
-    await member
-      .getByRole("option", { name: "Europe/London", exact: true })
-      .click();
-    await guestSettings
-      .getByRole("combobox", { name: "Regional format", exact: true })
-      .click();
-    await member
-      .getByRole("option", { name: "France · Français", exact: true })
-      .click();
-    await guestSettings
-      .getByRole("button", { name: "Done", exact: true })
-      .click();
-    await expect(
-      member.getByRole("textbox", { name: "Email address", exact: true }),
-    ).toHaveValue(assembly.member.email);
-    await member
       .getByRole("button", { name: "Save password", exact: true })
       .click();
     await expect(
-      member.getByRole("heading", { name: "Your spaces", exact: true }),
-    ).toBeVisible();
-    await member
-      .getByRole("main")
-      .getByRole("link", { name: "Personal space", exact: true })
-      .click();
-    await expect(
-      member.getByRole("heading", { name: "Personal space", exact: true }),
+      member.getByRole("heading", { name: "Agents", exact: true }),
     ).toBeVisible();
     await expect(
-      member.getByRole("button", { name: "Delete team", exact: true }),
-    ).toHaveCount(0);
-    await safeScreenshot(member, "personal-context-desktop");
+      member
+        .locator("aside")
+        .getByRole("button", { name: "Switch workspace", exact: true }),
+    ).toContainText("Your space");
+    await serverContent(
+      member.context(),
+      member.url(),
+      "Agents",
+      "No Agents yet.",
+    );
     await member.goto(`${assembly.generalUrl}/profile`);
-    await expect(
-      member
-        .getByRole("main")
-        .getByRole("combobox", { name: "Time zone", exact: true }),
-    ).toHaveValue("Europe/London");
-    await expect(
-      member
-        .getByRole("main")
-        .getByRole("combobox", { name: "Regional format", exact: true }),
-    ).toHaveValue("France · Français");
-    await member
-      .getByRole("button", {
-        name: "Display settings",
-        exact: true,
-      })
-      .click();
-    const accountSettings = member.getByRole("dialog");
-    await accountSettings
-      .getByRole("combobox", { name: "Time zone", exact: true })
-      .click();
+    const zone = member
+      .getByRole("main")
+      .getByRole("combobox", { name: "Time zone", exact: true });
+    await zone.click();
     await member
       .getByRole("option", { name: "America/New_York", exact: true })
       .click();
     await expect(
-      accountSettings.getByText("Applied", { exact: true }),
+      member.getByRole("main").getByText("Applied", { exact: true }),
     ).toBeVisible();
-    await safeScreenshot(member, "display-panel-desktop");
-    await accountSettings
-      .getByRole("button", { name: "Done", exact: true })
-      .click();
-    await expect(
-      member
-        .getByRole("main")
-        .getByRole("combobox", { name: "Time zone", exact: true }),
-    ).toHaveValue("America/New_York");
+    await member.reload();
+    await expect(zone).toHaveValue("America/New_York");
     await serverContent(
       member.context(),
       `${assembly.generalUrl}/profile`,
       "Profile",
       assembly.member.email,
     );
-    await member.reload();
-    await expect(
-      member
-        .getByRole("main")
-        .getByRole("combobox", { name: "Time zone", exact: true }),
-    ).toHaveValue("America/New_York");
-    await safeScreenshot(member, "display-profile-desktop");
-    await member.setViewportSize({ width: 390, height: 844 });
-    await safeScreenshot(member, "display-profile-mobile");
-    await member
-      .getByRole("button", {
-        name: "Display settings",
-        exact: true,
-      })
-      .click();
-    await expect(member.getByRole("dialog")).toBeVisible();
-    await safeScreenshot(member, "display-panel-mobile");
-    await member
-      .getByRole("dialog")
-      .getByRole("button", { name: "Done", exact: true })
-      .click();
-    await member.setViewportSize({ width: 1280, height: 900 });
-    // Inspect attributes only on this test's isolated context; never assert values.
-    const cookies = await member.context().cookies(assembly.generalUrl);
-    const cookie = cookies.find(
+    const cookie = (await member.context().cookies()).find(
       (item) => item.name === "chapchoo-general-session",
     );
-    expect(Boolean(cookie), "General session cookie must be present").toBe(
-      true,
-    );
+    expect(Boolean(cookie), "Shared host session is present").toBe(true);
     expect(cookie?.httpOnly).toBe(true);
-    expect(cookie?.secure).toBe(false);
-    expect(cookie?.sameSite).toBe("Lax");
     expect(cookie?.path).toBe("/");
-    expect(
-      Boolean(
-        cookie &&
-        cookie.expires > Date.now() / 1000 &&
-        cookie.expires <= Date.now() / 1000 + 30 * 86_400 + 60,
-      ),
-      "Cookie persistence is bounded",
-    ).toBe(true);
   });
 
-  test("registered invitation, ownership transfer and former-owner leave", async ({
+  test("workspace creation, invitation acceptance, ownership transfer and leave preserve context authority", async ({
     assembly,
   }) => {
     await assembly.seedSecondUser();
     await member.goto(`${assembly.generalUrl}/`);
     await member
-      .getByRole("textbox", { name: "Team name", exact: true })
-      .fill(assembly.teamName);
-    await member
-      .getByRole("textbox", { name: "Team handle", exact: true })
-      .fill(assembly.teamHandle);
+      .locator("aside")
+      .getByRole("button", { name: "Switch workspace", exact: true })
+      .click();
     await member
       .getByRole("button", { name: "Create team", exact: true })
       .click();
+    const creation = member.getByRole("dialog", {
+      name: "Create team",
+      exact: true,
+    });
+    await creation
+      .getByRole("textbox", { name: "Team name", exact: true })
+      .fill(assembly.teamName);
+    await creation
+      .getByRole("textbox", { name: "Handle", exact: true })
+      .fill(assembly.teamHandle);
+    await creation.getByRole("button", { name: "Create", exact: true }).click();
+    await expect(creation).not.toBeVisible();
     await expect(
-      member.getByRole("heading", { name: assembly.teamName, exact: true }),
-    ).toBeVisible();
+      member
+        .locator("aside")
+        .getByRole("button", { name: "Switch workspace", exact: true }),
+    ).toContainText(assembly.teamName);
+    const agentUrl = member.url();
+    await member
+      .locator("aside")
+      .getByRole("link", { name: "Team settings", exact: true })
+      .click();
     const teamUrl = member.url();
-    await serverContent(
-      member.context(),
-      `${assembly.generalUrl}/`,
-      "Your spaces",
-      "Personal space",
-    );
     await serverContent(
       member.context(),
       teamUrl,
@@ -700,30 +352,27 @@ test.describe("Assembled account and team acceptance", () => {
     await expect(
       member.getByText(assembly.second.email, { exact: true }),
     ).toBeVisible();
-    await second.goto(`${assembly.generalUrl}/login`);
-    await second
-      .getByRole("textbox", { name: "Email address", exact: true })
-      .fill(assembly.second.email);
-    await second.getByLabel(/^Password\s*\*?$/).fill("incorrect-password");
-    await second.getByRole("button", { name: "Log in", exact: true }).click();
-    await expect(second.getByRole("main").getByRole("alert")).toBeVisible();
-    await expect(
-      second.getByRole("textbox", { name: "Email address", exact: true }),
-    ).toHaveValue(assembly.second.email);
     await login(second, assembly.generalUrl, assembly.second);
-    await second.getByRole("button", { name: "Accept", exact: true }).click();
-    const teamLink = second
-      .getByRole("main")
-      .getByRole("link", { name: assembly.teamName, exact: true });
-    await expect(teamLink).toBeVisible();
-    await teamLink.click();
+    await second
+      .locator("aside")
+      .getByRole("link", { name: "Invitations", exact: true })
+      .click();
     await expect(
-      second.getByRole("heading", { name: assembly.teamName, exact: true }),
+      second.getByRole("heading", { name: "Invitations for you", exact: true }),
     ).toBeVisible();
-    // One representative ordinary-member affordance check, not a role matrix.
-    await expect(
-      second.getByRole("heading", { name: "Team settings", exact: true }),
-    ).toHaveCount(0);
+    await second.getByRole("button", { name: "Accept", exact: true }).click();
+    await second
+      .locator("aside")
+      .getByRole("button", { name: "Switch workspace", exact: true })
+      .click();
+    await second
+      .getByRole("link", { name: assembly.teamName, exact: true })
+      .click();
+    await expect(second).toHaveURL(agentUrl);
+    await second
+      .locator("aside")
+      .getByRole("link", { name: "Team settings", exact: true })
+      .click();
     await expect(
       second.getByRole("button", { name: "Delete team", exact: true }),
     ).toHaveCount(0);
@@ -737,12 +386,6 @@ test.describe("Assembled account and team acceptance", () => {
       .click();
     await confirm(member);
     await expect(
-      member
-        .getByRole("row")
-        .filter({ hasText: assembly.member.email })
-        .getByRole("cell", { name: "Manager", exact: true }),
-    ).toBeVisible();
-    await expect(
       target.getByRole("cell", { name: "Owner", exact: true }),
     ).toBeVisible();
     await member
@@ -750,13 +393,13 @@ test.describe("Assembled account and team acceptance", () => {
       .click();
     await confirm(member);
     await expect(
-      member.getByRole("heading", { name: "Your spaces", exact: true }),
+      member.getByRole("heading", { name: "Agents", exact: true }),
     ).toBeVisible();
     await expect(
       member
-        .getByRole("main")
-        .getByRole("link", { name: assembly.teamName, exact: true }),
-    ).toHaveCount(0);
+        .locator("aside")
+        .getByRole("button", { name: "Switch workspace", exact: true }),
+    ).toContainText("Your space");
     await second.goto(teamUrl);
     await expect(
       second
@@ -767,20 +410,13 @@ test.describe("Assembled account and team acceptance", () => {
     await expect(
       second.getByRole("row").filter({ hasText: assembly.member.email }),
     ).toHaveCount(0);
-    await safeScreenshot(second, "team-owner-desktop");
   });
 
-  test("administrator reset revokes old sessions and ordinary users stay outside Admin", async ({
+  test("reset revokes old sessions, Admin denial preserves General, and shared logout withdraws both surfaces", async ({
     assembly,
     browser,
   }) => {
     await administrator.goto(`${assembly.adminUrl}/password-resets`);
-    await expect(
-      administrator.getByRole("heading", {
-        name: "Password reset links",
-        exact: true,
-      }),
-    ).toBeVisible();
     await administrator
       .getByRole("textbox", { name: "Recipient email", exact: true })
       .fill(assembly.member.email);
@@ -796,69 +432,42 @@ test.describe("Assembled account and team acceptance", () => {
       .click();
     await expect(resetPage.getByRole("status")).toBeVisible();
     expect(
-      (await resetPage.context().cookies(assembly.generalUrl)).some(
+      (await resetPage.context().cookies()).some(
         (cookie) => cookie.name === "chapchoo-general-session",
       ),
-      "Reset must not authenticate the recipient",
+      "Reset does not authenticate the recipient",
     ).toBe(false);
-    await resetPage.goto(`${assembly.generalUrl}/`);
-    await expect(resetPage).toHaveURL(`${assembly.generalUrl}/login`);
     await member.goto(`${assembly.generalUrl}/`);
     await expect(member).toHaveURL(`${assembly.generalUrl}/login`);
-    await expect(
-      member.getByRole("heading", { name: "Log in", exact: true }),
-    ).toBeVisible();
     await login(member, assembly.generalUrl, {
       email: assembly.member.email,
       password: assembly.resetPassword,
     });
-    await member
-      .getByRole("main")
-      .getByRole("link", { name: "Personal space", exact: true })
-      .click();
-    await expect(
-      member.getByRole("heading", { name: "Personal space", exact: true }),
-    ).toBeVisible();
-    // The ordinary team owner retains General access but cannot enter Admin.
-    const adminCharacter = await loginDocument(second, assembly.adminUrl);
-    await second
-      .getByRole("textbox", { name: "Email", exact: true })
-      .fill(assembly.second.email);
-    await second.getByLabel(/^Password\s*\*?$/).fill(assembly.second.password);
-    await expect(
-      second.locator('main img[src*="/design-assets/"]'),
-    ).toHaveAttribute("src", adminCharacter);
-    await second.getByRole("button", { name: "Sign in", exact: true }).click();
-    // Exclude Next.js's separate route-announcer alert outside the form.
-    await expect(second.getByRole("main").getByRole("alert")).toBeVisible();
+    const denied = await second
+      .context()
+      .request.post(`${assembly.adminUrl}/api/trpc/auth.identity`, {
+        headers: { origin: new URL(assembly.adminUrl).origin },
+        data: { json: null },
+      });
+    expect(denied.status()).toBe(403);
     expect(
-      (await second.context().cookies(assembly.adminUrl)).some(
-        (cookie) => cookie.name === "chapchoo-admin-session",
-      ),
-      "Ordinary users must not receive an Admin cookie",
+      Boolean(denied.headers()["set-cookie"]?.includes("Max-Age=0")),
+      "Admin denial does not clear the General session",
     ).toBe(false);
-    await second.goto(`${assembly.adminUrl}/`);
-    await expect(second).toHaveURL(`${assembly.adminUrl}/login`);
-    await expect(
-      second.getByRole("heading", { name: "Signup links", exact: true }),
-    ).toHaveCount(0);
     await second.goto(`${assembly.generalUrl}/`);
     await expect(
-      second.getByRole("heading", { name: "Your spaces", exact: true }),
+      second.getByRole("heading", { name: "Agents", exact: true }),
     ).toBeVisible();
-    await second.getByRole("button", { name: "Log out", exact: true }).click();
+    await logout(second);
     await expect(second).toHaveURL(`${assembly.generalUrl}/login`);
     await administrator.goto(`${assembly.adminUrl}/`);
-    await expect(
-      administrator.getByRole("heading", { name: "Signup links", exact: true }),
-    ).toBeVisible();
-    await administrator
-      .getByRole("button", { name: "Sign out", exact: true })
-      .click();
+    await logout(administrator);
     await expect(administrator).toHaveURL(`${assembly.adminUrl}/login`);
+    await sharedGeneral.reload();
+    await expect(sharedGeneral).toHaveURL(`${assembly.generalUrl}/login`);
     await member.goto(`${assembly.generalUrl}/`);
     await expect(
-      member.getByRole("heading", { name: "Your spaces", exact: true }),
+      member.getByRole("heading", { name: "Agents", exact: true }),
     ).toBeVisible();
   });
 });

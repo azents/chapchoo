@@ -73,7 +73,7 @@ test("desktop sidebar motion retains the responsive mobile hiding rule", async (
   page,
 }) => {
   await page.goto(
-    "/iframe.html?id=accounts-workspace--contexts-and-invitation&viewMode=story",
+    "/iframe.html?id=accounts-workspace--received-invitations&viewMode=story",
   );
   const button = page.getByRole("button", {
     name: messages.accounts.replayMascot,

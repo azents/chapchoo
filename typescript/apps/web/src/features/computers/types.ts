@@ -9,7 +9,7 @@ import type { ComputerCopy } from "@chapchoo/web-core/computer-messages";
 export type InitialAgents = (
   | { type: "list"; page: Page<AgentView>; after: string }
   | { type: "detail"; agent: AgentView }
-) & { renderedAt: number; identity: string };
+) & { renderedAt: number; identity: string; teamId: string };
 export interface AgentsInput {
   initial: InitialAgents;
   basePath: string;

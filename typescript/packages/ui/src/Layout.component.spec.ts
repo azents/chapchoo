@@ -107,7 +107,9 @@ test("desktop sidebar and workspace scroll independently, including short window
   const bounds = await sidebar.boundingBox();
   const bottom = await footer.boundingBox();
   expect(bottom?.y).toBeGreaterThanOrEqual(bounds?.y ?? 0);
-  expect((bottom?.y ?? 0) + (bottom?.height ?? 0)).toBeLessThanOrEqual(300);
+  // Native scrollHeight/scrollTop round to whole pixels while line boxes retain
+  // fractional CSS pixels. Reject meaningful clipping without a rounding false positive.
+  expect((bottom?.y ?? 0) + (bottom?.height ?? 0) - 300).toBeLessThan(1);
   expect(await workspace.evaluate((element) => element.scrollTop)).toBe(0);
 
   await page.setViewportSize({ width: 390, height: 700 });

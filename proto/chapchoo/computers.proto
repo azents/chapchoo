@@ -5,7 +5,7 @@ import "google/protobuf/timestamp.proto";
 
 service Agents {
   rpc Create(CreateAgentRequest) returns (CreateAgentResult);
-  rpc List(Page) returns (AgentList);
+  rpc List(AgentListRequest) returns (AgentList);
   rpc Get(AgentRequest) returns (Agent);
   rpc ForceRemove(ForceRemoveRequest) returns (google.protobuf.Empty);
 }
@@ -22,13 +22,14 @@ service ProviderInventory {
   rpc ListResources(ResourcePage) returns (ResourceInventory);
 }
 message Page { optional string after = 1; uint32 limit = 2; }
+message AgentListRequest { string team_id = 1; Page page = 2; }
 message AgentRequest { string agent_id = 1; }
-message CreateAgentRequest { string request_id = 1; string provider_id = 2; string name = 3; }
+message CreateAgentRequest { string request_id = 1; string provider_id = 2; string name = 3; string team_id = 4; }
 message CreateAgentResult {
   oneof outcome { Agent agent = 1; RemovedCreation removed = 2; }
 }
 message RemovedCreation { string assigned_agent_id = 1; }
-message Agent { string id = 1; string name = 2; Computer computer = 3; }
+message Agent { string id = 1; string name = 2; Computer computer = 3; string team_id = 4; }
 message AgentList { repeated Agent items = 1; optional string next_after = 2; }
 message ProviderChoice { string id = 1; string name = 2; }
 message ProviderChoices { repeated ProviderChoice items = 1; optional string next_after = 2; }

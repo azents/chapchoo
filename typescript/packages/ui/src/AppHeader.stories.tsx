@@ -1,5 +1,6 @@
 import { Button, Stack, Text } from "@mantine/core";
-import { AppHeader } from "./AppHeader";
+import { AppHeader, HeaderControlsContext } from "./AppHeader";
+import { ApplicationAccountActions } from "./ApplicationShell";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import type { ReactElement } from "react";
 
@@ -37,6 +38,17 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const SignedIn: Story = {};
+export const UnifiedControls: Story = {
+  render: (props): ReactElement => (
+    <HeaderControlsContext.Provider value={<Button>Unified account</Button>}>
+      <AppHeader {...props} />
+      <ApplicationAccountActions
+        identityLabel="context@example.invalid"
+        actions={<Button>Context logout</Button>}
+      />
+    </HeaderControlsContext.Provider>
+  ),
+};
 export const SignedOut: Story = {
   args: { identityLabel: undefined, actions: undefined },
 };

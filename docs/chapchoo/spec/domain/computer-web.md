@@ -18,18 +18,19 @@ code_paths:
   - typescript/packages/web-core/src/computer-messages.ts
   - typescript/packages/web-core/src/rpc.ts
   - typescript/apps/e2e/src/computers.spec.ts
-last_verified_at: 2026-11-02
+last_verified_at: 2026-11-03
 spec_version: 1
 ---
 
 # Agent Computer Owner and Operator Web Contracts
 
-The General app exposes personal Agent list/create at `/agents` and Computer
-detail at `/agents/<Agent ID>`. Account/team pages retain their existing routes
-and navigation. Admin exposes read-only Provider inventory at `/computer-providers`,
+The General app exposes private Agent list/create at `/agents?team=<Team ID>` and
+Computer detail at `/agents/<Agent ID>?team=<Team ID>`. Every Agent has a required
+Team while retaining its individual owner. Account/team pages share the selected
+context navigation. Admin exposes read-only Provider inventory at `/computer-providers`,
 Provider Computers under the selected Provider path, and exact resource inventory
 at `/computers/<Computer ID>`. There is no harness, conversation, file-management,
-Team Agent or concrete Mac enrollment UI.
+team-public Agent or concrete Mac enrollment UI.
 
 ## Server rendering and scoped data
 
@@ -39,6 +40,15 @@ record/list; the same snapshot and query selection seed client continuation.
 Initial read failure belongs to the route boundary, not an empty inventory or a
 fabricated loading state. Provider choices are supplementary to the Agent list;
 their failure preserves primary content and entered work.
+
+Listing and creation carry the required Team ID through the browser DTO,
+Team-qualified query key and generated RPC request. Detail admission resolves
+the actual owned record and rejects a mismatched URL Team. A Teamless entry
+canonicalizes before rendering; list entry uses the validated recent/personal
+context and detail entry derives its Team from the authoritative Agent. Pagination,
+create-result navigation, force removal and normal disappearance retain that Team.
+Membership, individual ownership and lifecycle fences are revalidated by the
+backend; Team manager or installation Admin status does not widen private access.
 
 Generated Node RPC clients use each app's explicit backend target. A missing
 target fails configuration rather than inferring a local listener or another
@@ -70,7 +80,7 @@ query failure. Connector connectivity is not harness readiness. Display formatti
 uses the user's region/timezone; English, Korean, Japanese and French copy share
 the same typed key set.
 
-Creation retains name/Provider selection on rejection or unavailability and
+Creation retains Team/name/Provider selection on rejection or unavailability and
 navigates to the accepted Agent's detail. A pending/lost creation response retains
 its exact Request ID and payload for explicit recovery; unresolved payload edits
 are locked. An existing removed receipt is distinct from a newly created Agent.

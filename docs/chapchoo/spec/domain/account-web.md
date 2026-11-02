@@ -11,7 +11,7 @@ code_paths:
   - typescript/packages/web-core
   - typescript/apps/e2e
   - testenv/chapchoo
-last_verified_at: 2026-11-02
+last_verified_at: 2026-11-03
 spec_version: 1
 ---
 
@@ -30,7 +30,8 @@ Personal Agent/Computer routes and read-only Admin Provider/resource inventory
 reuse these same presentation/session boundaries. Their server-derived power,
 connectivity, confirmation and bounded observation behavior is specified in
 [Agent Computer web contracts](computer-web.md). Existing account/team routes
-remain intact, with navigation links to the new surfaces.
+retain Team-management and profile entrypoints. General app entry selects a
+validated recent Team instead of rendering the former combined contexts hub.
 
 Both apps use the same workspace UI theme, semantic CSS variables, provider,
 form controls, application shell and confirmation/feedback primitives. The
@@ -41,7 +42,9 @@ props/callbacks and imports no business RPC, environment, cookie or token store.
 Both web apps support System, Light and Dark and load locally bundled Pretendard
 with Geist Mono reserved for code. Pretendard uses the complete official
 unicode-range subset set; the browser fetches only ranges used by rendered text,
-without a whole-font or unused mono preload. The runtime mount is passed into
+without a whole-font or unused mono preload. Core subset 91 is preloaded with
+anonymous CORS; optional font display retains readable fallback on a slow cold
+view rather than replacing metrics late. The runtime mount is passed into
 font stylesheet, font and decorative mascot URLs. The 72px mascot uses a 216px
 alpha-preserving production derivative with normal composition. Six transparent
 PNG masters and small WebPs share both appearances; unchanged generated originals
@@ -49,9 +52,9 @@ and extraction provenance remain in common UI assets.
 Same-size single-line form fields and buttons share common frame heights through
 the theme's Input and Button variables: xs 36px, default/sm 44px, md 48px,
 lg 56px and xl 64px; narrow screens retain a 44px minimum. Textareas and
-multi-value fields can grow rather than clipping content. Workspace contexts
-use the shared transparent Paper row variant, aligning their text with adjacent
-sections without an edge-flush filled background.
+multi-value fields can grow rather than clipping content. General workspace
+selection lives in the sidebar selector or inline mobile picker, not the
+obsolete contexts-row hub.
 Shared tables default to the `lg` (16px) horizontal cell spacing token for both
 headers and body cells, including the outer columns. Explicit table spacing
 props still override this default. The table's outer edge remains aligned with
@@ -88,11 +91,58 @@ native selects retain their platform-owned line box. Visual principles remain
 in root DESIGN.md. Shared button and chip labels use untrimmed intrinsic line
 boxes; action controls grow for wrapped or enlarged text rather than clipping
 glyph extents. Auth footers link only to other auth modes and omit the current
-login/signup/reset destination. Desktop uses a side navigation pane; narrow views wrap
-the same navigation above full-width content. Sectioned forms/rows/tables replace
+login/signup/reset destination. Desktop uses a side navigation pane. General
+narrow views open navigation in a left Drawer instead of persistent rows above
+primary content. Sectioned forms/rows/tables replace
 the former scaffold layout without changing app-owned actions or permissions. General-purpose design work lives in the independent
 [design reference workspace](design-reference.md); app Storybooks retain their
 product-state review role.
+
+## General working context and navigation
+
+General `/` validates current identity and the current accessible Team list, then
+redirects to that user's remembered accessible Team or existing personal Team at
+`/agents?team=<Team ID>`. A missing personal context or unavailable required list
+is an error, not an invented Team. Host-root `chapchoo-workspace` stores only
+the public User/Team IDs for 30 days, SameSite=Lax and Secure on HTTPS. This
+JavaScript-readable preference is untrusted, scoped to its User and checked
+against current membership on every app-entry request. It is not authorization.
+
+The General root layout server-loads selector context and hands it to one
+identity-scoped client query. The URL selects Agent context or Team settings;
+profile and invitation routes retain the validated recent context. Navigation
+items remain Agents, Invitations and collaborative-Team settings across list,
+detail, settings and profile. A Team switch navigates to only the current user's
+private Agents in that Team. Desktop retains the independently scrolling sidebar;
+mobile hides it and uses the header's left Drawer. Its banner contains the
+current icon/name and chevron beside the independent close control; Team choices
+replace feature entries inline. The existing companion remains below the menu.
+
+Create Team sits immediately below the Team list and opens a name/handle modal.
+Cancel does not mutate or select. Successful ordinary creation selects the new
+Team after the server response. Validation/pending/uncertain errors retain their
+actual outcome; there is no automatic creation retry. Received invitation
+acceptance is reachable at `/invitations` and server-renders its required list.
+Existing `/teams/<ID>` membership/role/ownership operations remain reachable.
+Leave, kick and Team-delete confirmations disclose Agent and saved Computer-data
+deletion, without introducing archive or automatic rehoming.
+
+Admin uses the same shared workspace chrome with Administration selected,
+a shield/check icon and a lowercase `admin` brand badge. Its stable menu contains
+signup links, password reset links, Computer Providers and server settings,
+including on detail and profile routes. It has no duplicate subtitle or
+separate back-to-app row. The same left mobile Drawer and inline picker apply.
+
+Admin Node communicates only with its configured Admin API. The narrow
+AdminWorkspaces service lists the current administrator's accessible Teams and
+creates an ordinary caller-owned Team; full TeamManagement stays Client-only.
+Selecting a Team or confirmed creation navigates the browser to General, where
+ordinary admission independently runs. Both logos point to General entry and
+therefore resume its validated recent context. Public peer web URLs are optional
+validated runtime navigation metadata; they are not backend targets, inferred
+paths or compiled deployment hosts. Without a configured General destination,
+Admin renders a non-link brand and unavailable workspace selection rather than
+inventing a destination or submitting an unusable creation.
 
 ## Mascot motion
 
@@ -100,8 +150,9 @@ General/Admin authentication headings and desktop sidebar companions use shared
 `AgentMascotMotion` at their existing 72px-square placements. Production keeps the
 small WebP URL, character selection and surrounding geometry; per-character alpha
 contact metadata anchors the transform inside the square canvas. Authentication
-remains visible on narrow screens while sidebar companions retain their 48em
-hiding rule. The static `Mascot` primitive remains available for other artwork.
+remains visible on narrow screens. General shows the 72px companion at the lower
+left of its opened navigation Drawer; fallback sidebar compositions retain the
+48em hiding rule. The static `Mascot` primitive remains available for other artwork.
 
 The approved gesture extends by 5% for 1200ms toward 30 degrees clockwise from
 upward vertical, with a small damped return bounce and six-second automatic rest.
@@ -116,14 +167,14 @@ The independent design reference imports this same common-UI implementation.
 ## Appearance lifecycle
 
 Both applications reuse the same sticky global AppHeader through their auth/setup
-and workspace frames. Its brand is left-aligned and its 44×44 icon-only appearance
-entry point remains at the far right on desktop and narrow views, including
-workspace loading and recoverable errors. The entry point has a localized
-accessible name/hover title and a monitor, sun or moon for the
-selected preference. It opens a keyboard-operable System/Light/Dark menu with a
-current-selection check and restores focus on close. Account identity/logout
-join this header on desktop and remain in a separate context row below navigation
-on narrow views; only one responsive account-action presentation is visible.
+and workspace frames. Its brand is left-aligned and one 44×44 account/settings
+entry remains at the far right, including loading and recoverable errors.
+Authenticated users see a user icon; visitors see sliders. Desktop opens a
+Popover and narrow screens a right Drawer with mini-profile, System/Light/Dark,
+display controls and profile/sign-out or visitor sign-in. App-provided controls
+replace duplicate page account rows and the separate appearance entry.
+Escape/outside dismissal uses controlled callbacks and restores focus.
+General also supplies a narrow-screen navigation trigger and an app-entry brand link.
 The shared flex frame accommodates the header's actual height; wrapped or
 enlarged identity text grows the header without clipping or covering the content.
 The common UI is prop-driven and owns no identity request or authentication
@@ -186,11 +237,11 @@ retain the distinct personal-space label.
 
 ## Display settings
 
-Both apps expose the same always-visible header entry on public, authentication
-and protected surfaces. Its concise title is “Display settings” (“표시 설정” in
-Korean). The common theme gives every Drawer body an `xl` top inset below its
-header; the settings scope paragraph has no page-specific margin correction.
-The panel applies language, IANA time zone and regional
+Both apps expose the same always-visible account/settings entry on public,
+authentication and protected surfaces. Its title is “Account and settings” for
+authenticated users and “Settings” for visitors, with localized equivalents.
+The common theme gives every Drawer body an `xl` top inset below its header.
+The account Popover/Drawer applies language, IANA time zone and regional
 format independently and immediately. Protected `/profile` routes duplicate
 those controls over the same identity-query User; there is no separate account
 settings store. Changing language updates catalogs and document language without
@@ -281,8 +332,10 @@ Each app adapts its independent tRPC client to the shared web-core authenticatio
 Context and query/mutation policy. The Context exposes one identity-query
 projection plus logout, explicit recheck, authentication completion and local
 identity clearing; it does not keep a second mutable User. SSR success seeds that
-query without mount, focus or reconnect rechecks. Explicit recheck can recover an
-initial error and is the only authentication refresh requested by the page-level
+query without mount rechecks. Loaded identities, including a known guest, are
+rechecked on window focus and reconnect. A changed account clears prior scoped
+caches and navigates through server admission. Explicit recheck can recover an
+initial error and is the authentication refresh requested by the page-level
 recovery actions. Workspace/inventory containers own their business invalidation,
 not identity queries or session navigation. Header identity can remain visible
 while business data loads or fails.
@@ -309,7 +362,7 @@ initial User as an expected current session.
 
 Logout immediately clears client identity and account caches and submits a native
 same-origin POST to the current app's logout route. Exact configured Origin
-admission precedes credential handling. The route deletes only that app's
+admission precedes credential handling. The route deletes the shared host-root
 HttpOnly cookie and returns a no-store 303 to its configured login mount without
 renewing the session. Backend revocation is best effort, runs through the server's
 post-response lifecycle with a finite RPC deadline, and never blocks cookie
@@ -320,7 +373,7 @@ alone does not claim that offline credential disposal succeeded.
 
 ## Primary content and page state
 
-General home contexts, selected team details/membership, and the selected Admin
+General Agent pages, received invitations, selected team details/membership, and the selected Admin
 inventory page are loaded and rendered on the server. A request-local read scope
 shares validated Identity and lends the app credential only inside server reads;
 it never renews or writes cookies. Primary-data failures reach safe route-level
@@ -329,10 +382,10 @@ client-only initial loading states.
 
 Interactive queries receive the same initial data and selection for SSR and
 hydration, without mount/reconnect repeats. Later updates and invalidation remain
-client-owned. Received invitations and team management invitations are
-supplementary: their loading/failure stays in the corresponding section, rather
-than replacing otherwise usable primary content. Context navigation is also
-supplementary on a selected-team route. Existing visual hierarchy is preserved.
+client-owned. Received invitations are primary data at `/invitations`. Team
+management invitations remain supplementary to the member/settings record.
+Workspace-selector data is supplementary on other feature routes; its failure
+does not replace independently available primary content with an empty success.
 
 Admin inventory offset is a canonical decimal URL search value with the existing
 25-row page size and int64 bound. Admin login method is URL-owned and constrained
@@ -355,16 +408,13 @@ read/initial-query/URL-codec patterns are described in the
 
 There is one backend opaque session, not a web mapping database or separate
 access/refresh pair. HttpOnly cookies persist for at most 30 days and never beyond
-the returned backend expiry. Names distinguish the apps because ports do not
-isolate cookies:
+the returned backend expiry. General and Admin intentionally share one host-root
+cookie; ports do not isolate cookies:
 
-| App/transport           | Name                     | Path / SameSite                   |
-| ----------------------- | ------------------------ | --------------------------------- |
-| General local HTTP      | chapchoo-general-session | root / Lax                        |
-| General HTTPS           | __Host-Chapchoo-General  | root / None                       |
-| Admin local HTTP        | chapchoo-admin-session   | configured public base path / Lax |
-| Admin HTTPS at root     | __Host-Chapchoo-Admin    | root / Lax                        |
-| Admin HTTPS with prefix | __Secure-Chapchoo-Admin  | configured public base path / Lax |
+| App/transport            | Name                     | Path / SameSite |
+| ------------------------ | ------------------------ | --------------- |
+| General/Admin local HTTP | chapchoo-general-session | root / Lax      |
+| General/Admin HTTPS      | __Host-Chapchoo-General  | root / None     |
 
 HTTPS cookies have Secure; permitted local HTTP cookies do not. Both modes are
 host-only and HttpOnly. Deletion uses the same name/path/Secure/SameSite policy.
@@ -374,7 +424,9 @@ switch/logout clears identity-bound client query state.
 
 Cookie outcome is independent of ordinary business success:
 
-- Successful renewal survives later validation/permission/domain failure.
+- Successful renewal survives later validation/permission/domain failure,
+  including current non-administrator denial on Admin. The rotated credential
+  is published before that denial while Admin business dispatch remains blocked.
 - Invalid session at renewal clears the app cookie and blocks business dispatch.
 - Invalid session detected after renewal overrides its candidate cookie with
   deletion.

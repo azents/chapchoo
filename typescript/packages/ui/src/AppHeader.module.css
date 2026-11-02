@@ -17,6 +17,10 @@
   flex-shrink: 0;
   letter-spacing: -0.05em;
   color: var(--chapchoo-color-ink);
+  text-decoration: none;
+}
+.mobileNavigation {
+  display: none;
 }
 .tools {
   min-width: 0;
@@ -29,6 +33,9 @@
   min-width: 0;
 }
 @media (max-width: 48em) {
+  .mobileNavigation {
+    display: flex;
+  }
   .header {
     padding-block: var(--mantine-spacing-sm);
     padding-inline: var(--mantine-spacing-lg);

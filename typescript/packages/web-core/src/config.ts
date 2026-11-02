@@ -48,6 +48,17 @@ function endpoint(value: string): URL {
   return url;
 }
 
+/** Public navigation metadata never supplies an API client destination. */
+export function webDestination(value: string | undefined): string | null {
+  if (!value) return null;
+  const url = endpoint(value);
+  if (url.protocol === "http:" && !isLoopback(url.hostname))
+    invalidConfiguration();
+  const path = url.pathname.replace(/\/$/, "");
+  if (path.includes("//") || /[;%\\]/.test(path)) invalidConfiguration();
+  return url.origin + path;
+}
+
 /** Public metadata/build consumers do not require a deployment backend target. */
 export function publicWebConfig(input: PublicWebEnvironment): PublicWebConfig {
   const publicUrl = endpoint(input.publicUrl);

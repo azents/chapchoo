@@ -2,7 +2,7 @@ import "server-only";
 import { teamKind } from "@chapchoo/web-core/browser";
 import { RpcFailure } from "@chapchoo/web-core/errors";
 import { call } from "@chapchoo/web-core/rpc";
-import { members, team, teams } from "@chapchoo/web-core/validation";
+import { invitations, members, team } from "@chapchoo/web-core/validation";
 import { notFound, redirect } from "next/navigation";
 import { getConfig, getLoginRedirect } from "@/config";
 import { getBackend } from "@/shared/server/backend";
@@ -18,10 +18,14 @@ export async function loadWorkspace(teamId: string): Promise<InitialWorkspace> {
   try {
     if (!teamId) {
       return {
-        type: "HOME",
-        contexts: await scope.read(async (token) =>
-          teams(
-            await call(backend.teams.listTeams.bind(backend.teams), {}, token),
+        type: "INVITATIONS",
+        received: await scope.read(async (token) =>
+          invitations(
+            await call(
+              backend.invitations.receivedInvitations.bind(backend.invitations),
+              {},
+              token,
+            ),
           ),
         ),
       };

@@ -25,7 +25,6 @@ export const authRouter = router({
           ),
         );
         if (!result.isAdmin) {
-          ctx.session.clear();
           throw permissionDenied();
         }
         return result;
@@ -104,7 +103,6 @@ export const authRouter = router({
             ),
           );
           if (!result.isAdmin) {
-            ctx.session.clear();
             throw permissionDenied();
           }
           return result;

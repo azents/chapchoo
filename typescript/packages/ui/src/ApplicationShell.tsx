@@ -1,19 +1,15 @@
 "use client";
 
-import { Badge, Box, Group, NavLink, Stack, Text, Title } from "@mantine/core";
-import { AgentMascotMotion } from "./AgentMascotMotion";
+import { Badge, Box, Group, Stack, Text, Title } from "@mantine/core";
+import { useContext } from "react";
+import { HeaderControlsContext } from "./AppHeader";
+import { AppNavigationContext, NavigationPanel } from "./AppNavigation";
 import { AppFrame } from "./AppFrame";
 import classes from "./ApplicationShell.module.css";
 import type { ColorModeMenuProps } from "./ColorModeMenu";
 import type { ReactNode } from "react";
-
-export interface NavigationItem {
-  key: string;
-  label: string;
-  active?: boolean;
-  href?: string;
-  onSelect?: () => void;
-}
+import type { NavigationItem } from "./AppNavigation";
+export type { NavigationItem } from "./AppNavigation";
 export interface ApplicationShellProps {
   mascotReplayLabel: string;
   appearance?: ColorModeMenuProps;
@@ -39,6 +35,10 @@ export function ApplicationAccountActions({
   identityLabel?: string;
   actions?: ReactNode;
 }): ReactNode {
+  const headerControls = useContext(HeaderControlsContext);
+  if (headerControls) {
+    return null;
+  }
   return (
     <Box className={classes.contextHeader}>
       <Text size="sm" c="dimmed" className={classes.identity}>
@@ -80,51 +80,23 @@ export function ApplicationShellContent({
   children,
   basePath = "",
 }: ApplicationShellContentProps): ReactNode {
+  const current = useContext(AppNavigationContext);
   return (
-    <Box className={classes.shell}>
+    <Box className={classes.shell} data-contextual={Boolean(current) || void 0}>
       <Box component="aside" className={classes.sidebar}>
-        <div className={classes.brand}>
-          <Badge variant="light" size="sm">
-            {contextLabel}
-          </Badge>
-        </div>
-        <Box
-          component="nav"
-          aria-label={contextLabel}
-          className={classes.navigation}
-        >
-          {navigation.map((item) =>
-            item.href ? (
-              <NavLink
-                key={item.key}
-                component="a"
-                href={item.href}
-                label={item.label}
-                active={item.active}
-                aria-current={item.active ? "page" : undefined}
-                onClick={item.onSelect}
-              />
-            ) : (
-              <NavLink
-                key={item.key}
-                component="button"
-                type="button"
-                label={item.label}
-                active={item.active}
-                aria-current={item.active ? "page" : undefined}
-                onClick={item.onSelect}
-              />
-            ),
-          )}
-        </Box>
-        <div className={classes.companion}>
-          <AgentMascotMotion
-            basePath={basePath}
-            size={72}
-            playing
-            replayLabel={mascotReplayLabel}
-          />
-        </div>
+        <NavigationPanel
+          label={current?.label ?? contextLabel}
+          header={
+            current?.header ?? (
+              <Badge variant="light" size="sm">
+                {contextLabel}
+              </Badge>
+            )
+          }
+          items={current?.items ?? navigation}
+          basePath={basePath}
+          mascotReplayLabel={mascotReplayLabel}
+        />
       </Box>
       <div className={classes.workspace}>
         <ApplicationAccountActions

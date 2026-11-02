@@ -76,6 +76,9 @@
   }
 }
 @media (max-width: 48em) {
+  .shell[data-contextual] .sidebar {
+    display: none;
+  }
   .shell {
     display: block;
   }
