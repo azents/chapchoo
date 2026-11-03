@@ -1,4 +1,5 @@
 //! Forward native schema preservation, independent of external Provider IO.
+mod support;
 
 use chapchoo_crypto::BearerSecret;
 use chapchoo_persistence::{POSTGRES_MIGRATIONS, SQLITE_MIGRATIONS};
@@ -209,7 +210,5 @@ fn postgres_native_migration_preserves_closed_graph_and_constraints() -> Result<
         Ok::<_, Error>(())
     })();
     let cleanup = admin.batch_execute(&format!("DROP SCHEMA {schema} CASCADE"));
-    result?;
-    cleanup?;
-    Ok(())
+    support::combine(result, cleanup.map_err(Into::into)).map(|_| ())
 }
