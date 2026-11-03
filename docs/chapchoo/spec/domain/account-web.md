@@ -122,6 +122,9 @@ desktop and mobile; the feature navigation and companion remain mounted and
 unchanged behind it. Escape closes the picker first and returns focus to its
 banner without dismissing the mobile Drawer. A closed touch trigger has no
 sticky hover fill; keyboard focus and current-route selection remain distinct.
+The common DropdownButton owns same-trigger toggle, outside dismissal and
+Escape/focus behavior. Only the current responsive selector is mounted;
+a hidden desktop overlay cannot intercept mobile activation.
 Shared navigation rows retain their 44px minimum height and use 14px inline
 padding, balancing the existing single-line text's visible vertical inset.
 The shared NavigationIcon SVG frame supplies workspace symbols, Back, add and
@@ -130,7 +133,9 @@ rows retain their background and `aria-current` without a trailing decorative
 tick. Icon alignment does not depend on a font glyph's baseline.
 
 Create Team sits immediately below the Team list and opens a name/handle modal.
-Cancel does not mutate or select. Successful ordinary creation selects the new
+It closes the picker while retaining the open navigation Drawer. The modal owns
+focus and Escape/outside dismissal until closed; cancel restores the same
+navigation context without mutating or selecting. Successful ordinary creation selects the new
 Team after the server response. Validation/pending/uncertain errors retain their
 actual outcome; there is no automatic creation retry. Received invitation
 acceptance is reachable at `/invitations` and server-renders its required list.

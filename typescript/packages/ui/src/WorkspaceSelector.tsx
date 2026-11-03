@@ -7,13 +7,12 @@ import {
   Divider,
   Group,
   Loader,
-  Popover,
   Stack,
   Text,
   UnstyledButton,
 } from "@mantine/core";
 import { NavigationIcon } from "./NavigationIcon";
-import { InteractiveSurface } from "./InteractiveSurface";
+import { DropdownButton } from "./DropdownButton";
 import classes from "./WorkspaceSelector.module.css";
 import type { ReactElement } from "react";
 
@@ -128,56 +127,28 @@ export function WorkspaceChoices(props: WorkspaceSelectorProps): ReactElement {
     </Stack>
   );
 }
-function banner(props: WorkspaceSelectorProps): ReactElement {
-  return (
-    <InteractiveSurface
-      className={classes.trigger}
-      onClick={props.opened ? props.onClose : props.onOpen}
-      aria-label={props.copy.choose}
-      aria-expanded={props.opened}
-      onKeyDown={(event) => {
-        if (event.key === "Escape" && props.opened) {
-          props.onClose();
-        }
-      }}
-    >
-      <Group gap="sm" wrap="nowrap">
-        {props.current ? <NavigationIcon name={props.current.kind} /> : null}
-        <Text fw={600} size="sm" className={classes.triggerLabel}>
-          {props.current?.label ?? props.copy.choose}
-        </Text>
-        <NavigationIcon name="down" size="sm" className={classes.trailing} />
-      </Group>
-    </InteractiveSurface>
-  );
-}
 /** Presentation only: actual Team membership and destinations are app-owned. */
 export function WorkspaceSelector(props: WorkspaceSelectorProps): ReactElement {
-  const trigger = banner(props);
   return (
-    <Popover
+    <DropdownButton
       opened={props.opened}
       onChange={(opened) => (opened ? props.onOpen() : props.onClose())}
-      position="bottom-start"
       width="min(20rem, calc(100vw - 3rem))"
       withinPortal={!props.mobile}
-      trapFocus
-      returnFocus
-      shadow="sm"
+      accessibleLabel={props.copy.choose}
+      className={classes.trigger}
+      dropdownClassName={classes.dropdown}
+      label={
+        <Group gap="sm" wrap="nowrap">
+          {props.current ? <NavigationIcon name={props.current.kind} /> : null}
+          <Text fw={600} size="sm" className={classes.triggerLabel}>
+            {props.current?.label ?? props.copy.choose}
+          </Text>
+          <NavigationIcon name="down" size="sm" className={classes.trailing} />
+        </Group>
+      }
     >
-      <Popover.Target>{trigger}</Popover.Target>
-      <Popover.Dropdown
-        p="sm"
-        className={classes.dropdown}
-        onKeyDownCapture={(event) => {
-          if (event.key === "Escape") {
-            event.stopPropagation();
-            props.onClose();
-          }
-        }}
-      >
-        <WorkspaceChoices {...props} />
-      </Popover.Dropdown>
-    </Popover>
+      <WorkspaceChoices {...props} />
+    </DropdownButton>
   );
 }

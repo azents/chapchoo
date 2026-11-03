@@ -193,7 +193,6 @@ export function useNavigation({
     openPicker: () => setPicker(true),
     closePicker: () => setPicker(false),
     openCreation: () => {
-      setDrawer(false);
       setPicker(false);
       setCreating(true);
       setError(null);

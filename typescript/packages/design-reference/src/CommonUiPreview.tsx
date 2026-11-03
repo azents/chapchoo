@@ -7,6 +7,7 @@ import { useState } from "react";
 import { Mascot } from "@chapchoo/ui/Mascot";
 import { NavigationIcon } from "@chapchoo/ui/NavigationIcon";
 import { InteractiveSurface } from "@chapchoo/ui/InteractiveSurface";
+import { DropdownButton } from "@chapchoo/ui/DropdownButton";
 import {
   Button,
   Chip,
@@ -26,6 +27,7 @@ import "@mantine/core/styles.css";
 /** Loaded only by the isolated reuse document, never by neutral story canvases. */
 export default function CommonUiPreview(): ReactElement {
   const [opened, setOpened] = useState(false);
+  const [workspaceOpened, setWorkspaceOpened] = useState(false);
   const [value, setValue] = useState({
     language: "en",
     timeZone: "UTC",
@@ -112,12 +114,21 @@ export default function CommonUiPreview(): ReactElement {
           <Button variant="subtle" leftSection={<NavigationIcon name="back" />}>
             Back
           </Button>
-          <Button
-            variant="subtle"
-            rightSection={<NavigationIcon name="down" size="sm" />}
+          <DropdownButton
+            accessibleLabel="Choose workspace"
+            opened={workspaceOpened}
+            onChange={setWorkspaceOpened}
+            label={
+              <Group gap="sm">
+                <Text>Workspace</Text>
+                <NavigationIcon name="down" size="sm" />
+              </Group>
+            }
           >
-            Workspace
-          </Button>
+            <Button variant="subtle" onClick={() => setWorkspaceOpened(false)}>
+              Personal space
+            </Button>
+          </DropdownButton>
           <Button>Log in</Button>
           <Button variant="subtle" size="xs">
             Log out

@@ -253,6 +253,21 @@ control supplies the accessible name.
 
 ## Components
 
+### Dropdown buttons
+
+Use the common `DropdownButton` for a button that reveals a bounded choice
+overlay. The same button toggles it open and closed with mouse, touch, Enter
+or Space. Outside activation and Escape dismiss it; keyboard dismissal returns
+focus to the trigger. Escape dismisses the innermost overlay before its
+surrounding Drawer. Keep the closed touch surface neutral and the expanded
+surface distinct from route selection.
+
+Mount only the active responsive trigger/overlay instance. A CSS-hidden copy
+must not share the open state and treat the visible trigger as an outside target.
+Actions that open a dialog close the choice overlay without closing the
+surrounding navigation. While the dialog is active, it owns focus and dismissal;
+cancel returns to that navigation context.
+
 ### Clickable surfaces
 
 Workspace selection is an overlay, not a replacement navigation screen. Keep

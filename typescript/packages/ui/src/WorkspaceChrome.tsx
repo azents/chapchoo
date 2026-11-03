@@ -130,7 +130,7 @@ export function WorkspaceChrome(props: WorkspaceChromeProps): ReactElement {
       value={{
         label: props.current?.label ?? props.copy.chooseContext,
         items: props.items,
-        header: selector,
+        header: props.mobile ? null : selector,
         trigger,
         homeHref: props.homeHref,
         environment: props.environment,
@@ -139,7 +139,9 @@ export function WorkspaceChrome(props: WorkspaceChromeProps): ReactElement {
       {props.children}
       <Drawer
         opened={props.drawer && props.mobile}
-        closeOnEscape={!props.picker}
+        closeOnEscape={!props.picker && !props.creating}
+        closeOnClickOutside={!props.creating}
+        trapFocus={!props.creating}
         onClose={props.closeDrawer}
         position="left"
         size="sm"

@@ -1,9 +1,9 @@
 import classes from "./InteractiveSurface.module.css";
-import type { ComponentPropsWithoutRef, ReactElement } from "react";
+import type { ComponentPropsWithRef, ReactElement } from "react";
 
 export type InteractiveSurfaceProps =
-  | (ComponentPropsWithoutRef<"a"> & { href: string })
-  | (Omit<ComponentPropsWithoutRef<"button">, "type"> & { href?: never });
+  | (ComponentPropsWithRef<"a"> & { href: string })
+  | (Omit<ComponentPropsWithRef<"button">, "type"> & { href?: never });
 
 /** Native navigation/action semantics with the shared calm surface-state treatment. */
 export function InteractiveSurface(

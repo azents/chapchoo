@@ -165,6 +165,14 @@ test.describe("touch workspace overlay", () => {
       drawer.getByRole("link", { name: "Design team", exact: true }),
     ).toBeVisible();
     expect(await navigation.innerText()).toBe(before);
+    await trigger.tap();
+    await expect(trigger).toHaveAttribute("aria-expanded", "false");
+    await expect(drawer).toBeVisible();
+    await trigger.tap();
+    await expect(trigger).toHaveAttribute("aria-expanded", "true");
+    await expect(
+      drawer.getByRole("link", { name: "Your space", exact: true }),
+    ).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(trigger).toHaveAttribute("aria-expanded", "false");
     await expect(drawer).toBeVisible();
@@ -174,6 +182,74 @@ test.describe("touch workspace overlay", () => {
     await expect(drawer).not.toBeVisible();
     await expect(open).toBeFocused();
   });
+  test("team creation preserves the Drawer and returns focus on cancel", async ({
+    page,
+  }) => {
+    await page.goto(
+      "/iframe.html?id=navigation-workspace-chrome--mobile-interactive&viewMode=story",
+    );
+    await page
+      .getByRole("button", { name: "Open navigation", exact: true })
+      .tap();
+    const drawer = page.locator(".mantine-Drawer-content");
+    const trigger = drawer.getByRole("button", {
+      name: "Switch workspace",
+      exact: true,
+    });
+    await trigger.tap();
+    await drawer
+      .getByRole("button", { name: "Create team", exact: true })
+      .tap();
+    const creation = page.getByRole("dialog", {
+      name: "Create team",
+      exact: true,
+    });
+    await expect(creation).toBeVisible();
+    await expect(drawer).toBeVisible();
+    await expect(trigger).toHaveAttribute("aria-expanded", "false");
+    await creation.getByRole("button", { name: "Cancel", exact: true }).tap();
+    await expect(creation).not.toBeVisible();
+    await expect(drawer).toBeVisible();
+    await expect(trigger).toBeFocused();
+    await trigger.tap();
+    await drawer
+      .getByRole("button", { name: "Create team", exact: true })
+      .tap();
+    await expect(
+      creation.getByRole("textbox", { name: "Team name", exact: true }),
+    ).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(creation).not.toBeVisible();
+    await expect(drawer).toBeVisible();
+    await expect(trigger).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(drawer).not.toBeVisible();
+  });
+});
+
+test("desktop workspace banner toggles the picker with mouse and keyboard", async ({
+  page,
+}) => {
+  await page.goto(
+    "/iframe.html?id=navigation-workspace-chrome--desktop-interactive&viewMode=story",
+  );
+  const trigger = page.locator("aside").getByRole("button", {
+    name: "Switch workspace",
+    exact: true,
+  });
+  await trigger.click();
+  await expect(trigger).toHaveAttribute("aria-expanded", "true");
+  await trigger.click();
+  await expect(trigger).toHaveAttribute("aria-expanded", "false");
+  await trigger.focus();
+  await page.keyboard.press("Enter");
+  await expect(trigger).toHaveAttribute("aria-expanded", "true");
+  await expect(
+    page.getByRole("link", { name: "Your space", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(trigger).toHaveAttribute("aria-expanded", "false");
+  await expect(trigger).toBeFocused();
 });
 
 test("Admin chrome keeps Administration selected and shares the General logo destination", async ({
