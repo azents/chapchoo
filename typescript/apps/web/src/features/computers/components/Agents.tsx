@@ -12,7 +12,6 @@ import {
   Stack,
   Table,
   Text,
-  Title,
 } from "@mantine/core";
 import type { AgentsProps } from "../types";
 import type { ReactElement } from "react";
@@ -54,14 +53,10 @@ export function Agents(props: AgentsProps): ReactElement {
         { key: "accounts", label: c.accounts, href: `${props.basePath}/` },
       ]}
     >
-      <Group justify="space-between">
+      <Group justify={data.type === "list" ? "flex-end" : "space-between"}>
         {data.type === "detail" ? (
           <Anchor href={listHref}>{c.back}</Anchor>
-        ) : (
-          <Title order={2} size="h3">
-            {c.computerList}
-          </Title>
-        )}
+        ) : null}
         <Group gap="sm">
           {data.type === "list" ? (
             <Button
@@ -71,13 +66,15 @@ export function Agents(props: AgentsProps): ReactElement {
               {c.create}
             </Button>
           ) : null}
-          <Button
-            variant="subtle"
-            onClick={props.onRefresh}
-            disabled={props.pending}
-          >
-            {c.retry}
-          </Button>
+          {data.type === "detail" || props.stale ? (
+            <Button
+              variant="subtle"
+              onClick={props.onRefresh}
+              disabled={props.pending}
+            >
+              {data.type === "list" ? c.retryRead : c.retry}
+            </Button>
+          ) : null}
         </Group>
       </Group>
       {props.stale ? (
@@ -93,15 +90,14 @@ export function Agents(props: AgentsProps): ReactElement {
       {data.type === "list" ? (
         <>
           {data.page.items.length === 0 ? (
-            <Text c="dimmed">{c.emptyComputerList}</Text>
+            <Text c="dimmed">{c.noAgents}</Text>
           ) : (
-            <Table.ScrollContainer minWidth={rem(480)}>
+            <Table.ScrollContainer minWidth={rem(320)}>
               <Table>
                 <Table.Thead>
                   <Table.Tr>
                     <Table.Th>{c.name}</Table.Th>
-                    <Table.Th>{c.power}</Table.Th>
-                    <Table.Th>{c.phase}</Table.Th>
+                    <Table.Th>{c.computerStatus}</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
@@ -114,8 +110,12 @@ export function Agents(props: AgentsProps): ReactElement {
                           {item.name}
                         </Anchor>
                       </Table.Td>
-                      <Table.Td>{c[item.computer.power]}</Table.Td>
-                      <Table.Td>{c[item.computer.phase]}</Table.Td>
+                      <Table.Td>
+                        <Text size="sm">{c[item.computer.power]}</Text>
+                        <Text size="xs" c="dimmed">
+                          {c.phase}: {c[item.computer.phase]}
+                        </Text>
+                      </Table.Td>
                     </Table.Tr>
                   ))}
                 </Table.Tbody>

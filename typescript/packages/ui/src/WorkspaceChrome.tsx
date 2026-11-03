@@ -1,10 +1,7 @@
 "use client";
 import { AppNavigationContext, NavigationPanel } from "./AppNavigation";
-import {
-  WorkspaceBanner,
-  WorkspaceChoices,
-  WorkspaceSelector,
-} from "./WorkspaceSelector";
+import { WorkspaceSelector } from "./WorkspaceSelector";
+import classes from "./WorkspaceChrome.module.css";
 import {
   ActionIcon,
   Alert,
@@ -142,15 +139,19 @@ export function WorkspaceChrome(props: WorkspaceChromeProps): ReactElement {
       {props.children}
       <Drawer
         opened={props.drawer && props.mobile}
+        closeOnEscape={!props.picker}
         onClose={props.closeDrawer}
         position="left"
         size="sm"
-        title={<WorkspaceBanner {...selectorProps} />}
-        closeButtonProps={{ "aria-label": props.copy.close }}
+        title={selector}
+        closeButtonProps={{ "aria-label": props.copy.close, size: rem(44) }}
+        classNames={{
+          header: classes.drawerHeader,
+          title: classes.drawerTitle,
+          close: classes.drawerClose,
+        }}
         padding="lg"
         styles={{
-          header: { alignItems: "flex-start" },
-          title: { flex: 1, minWidth: 0 },
           body: {
             minHeight: "calc(100dvh - 5rem)",
             display: "flex",
@@ -161,8 +162,7 @@ export function WorkspaceChrome(props: WorkspaceChromeProps): ReactElement {
         <NavigationPanel
           mobileDrawer
           label={props.copy.navigation}
-          header={props.picker ? <WorkspaceChoices {...selectorProps} /> : null}
-          items={props.picker ? [] : props.items}
+          items={props.items}
           basePath={props.basePath}
           mascotReplayLabel={props.mascotReplayLabel}
           onSelect={props.closeDrawer}

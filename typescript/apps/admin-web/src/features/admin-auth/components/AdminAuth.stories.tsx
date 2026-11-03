@@ -1,5 +1,6 @@
 import { useState } from "react";
 import en from "../../../../messages/en-US.json";
+import ko from "../../../../messages/ko-KR.json";
 import { AdminAuth } from "./AdminAuth";
 import type { AdminAuthProps } from "./AdminAuth";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
@@ -40,6 +41,12 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const PasswordLogin: Story = {};
+export const KoreanLogin: Story = {
+  args: { text: (key) => ko.AdminAuth[key] },
+};
+export const KoreanSetup: Story = {
+  args: { mode: "setup", text: (key) => ko.AdminAuth[key] },
+};
 function CharacterLoginFixture(props: AdminAuthProps): ReactElement {
   const [email, setEmail] = useState(props.email);
   const [password, setPassword] = useState(props.password);

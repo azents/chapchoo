@@ -1,9 +1,11 @@
 import { Text } from "@mantine/core";
+import { useState } from "react";
 import { AppFrame } from "./AppFrame";
 import { ApplicationShellContent } from "./ApplicationShell";
 import { WorkspaceChrome } from "./WorkspaceChrome";
 import type { WorkspaceChromeProps } from "./WorkspaceChrome";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
+import type { ReactElement } from "react";
 
 const current = {
   key: "personal",
@@ -112,6 +114,39 @@ export const CreationPending: Story = {
 export const MobileMenu: Story = { args: { mobile: true, drawer: true } };
 export const MobilePicker: Story = {
   args: { mobile: true, drawer: true, picker: true },
+};
+function InteractiveChrome(props: WorkspaceChromeProps): ReactElement {
+  const [drawer, setDrawer] = useState(props.drawer);
+  const [picker, setPicker] = useState(props.picker);
+  return (
+    <WorkspaceChrome
+      {...props}
+      drawer={drawer}
+      picker={picker}
+      openDrawer={() => setDrawer(true)}
+      closeDrawer={() => {
+        setDrawer(false);
+        setPicker(false);
+      }}
+      openPicker={() => setPicker(true)}
+      closePicker={() => setPicker(false)}
+    />
+  );
+}
+export const MobileInteractive: Story = {
+  args: { mobile: true },
+  render: (args): ReactElement => <InteractiveChrome {...args} />,
+};
+export const MobileLongName: Story = {
+  args: {
+    mobile: true,
+    drawer: true,
+    current: {
+      ...current,
+      label:
+        "A workspace with a deliberately long name that must not cover Close",
+    },
+  },
 };
 export const Unavailable: Story = {
   args: { status: "error", picker: true, choices: [], current: null },

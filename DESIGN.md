@@ -255,6 +255,15 @@ control supplies the accessible name.
 
 ### Clickable surfaces
 
+Workspace selection is an overlay, not a replacement navigation screen. Keep
+the existing menu mounted when its Popover opens. The content-width workspace
+trigger keeps its chevron next to the name, caps at 18rem, and leaves a separate
+44px Drawer-close target with at least the shared large gap. A closed trigger
+is neutral on touch; its expanded state, keyboard focus and current-route
+selection are independent. Shared navigation rows keep their 44px minimum
+height and use 14px inline padding (0.875rem), matching the reviewed single-line
+text's roughly 14px visible top/bottom inset.
+
 Use a native link for navigation and a native button for an action. A clickable
 row or banner is one whole target and one keyboard stop; do not nest links or
 buttons inside it. Keep the purpose visible through its label and, for a drill-in

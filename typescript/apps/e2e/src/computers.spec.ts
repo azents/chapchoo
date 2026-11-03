@@ -163,7 +163,7 @@ test("owner manages one Computer while Admin observes independent cleanup invent
       timeout: 90_000,
     });
     await expect(
-      owner.getByText("No Computers yet.", { exact: true }),
+      owner.getByText("No Agents yet.", { exact: true }),
     ).toBeVisible();
     await expect(admin.getByText(/Cleanup confirmed/)).toBeVisible({
       timeout: 90_000,

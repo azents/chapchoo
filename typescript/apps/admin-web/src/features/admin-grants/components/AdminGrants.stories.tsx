@@ -1,4 +1,5 @@
 import en from "../../../../messages/en-US.json";
+import ko from "../../../../messages/ko-KR.json";
 import { AdminGrants } from "./AdminGrants";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 
@@ -90,6 +91,12 @@ export const Issued: Story = {
       url: "https://example.invalid/signup?token=non-redeemable-story-fixture",
     },
   },
+};
+export const Korean: Story = {
+  args: { text: (key) => ko.AdminGrants[key], signInLabel: ko.AdminAuth.login },
+};
+export const KoreanConfirmRevoke: Story = {
+  args: { ...Korean.args, revokeId: "available" },
 };
 export const ConfirmRevoke: Story = { args: { revokeId: "available" } };
 export const Revoking: Story = {

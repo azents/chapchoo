@@ -17,6 +17,7 @@ import {
   Paper,
   Text,
   Table,
+  NavLink,
   rem,
 } from "@mantine/core";
 import type { ReactElement } from "react";
@@ -91,6 +92,10 @@ export default function CommonUiPreview(): ReactElement {
         instant={1793428200000}
       />
       <Stack p="lg">
+        <Stack gap="xs" maw="18rem">
+          <NavLink label="Agents" active />
+          <NavLink label="Invitations" />
+        </Stack>
         <InteractiveSurface href="#profile-example">
           <Group justify="space-between">
             <Text>Profile and account</Text>

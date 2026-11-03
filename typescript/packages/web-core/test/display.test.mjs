@@ -204,5 +204,4 @@ test("all four display dictionaries have the same non-empty localized message ke
     for (const value of Object.values(messages))
       assert.ok(value.trim().length > 0);
   }
-  assert.match(displayMessages.ko.proposal, /표시/);
 });

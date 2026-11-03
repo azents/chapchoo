@@ -13,6 +13,7 @@ import {
   UnstyledButton,
 } from "@mantine/core";
 import { NavigationIcon } from "./NavigationIcon";
+import { InteractiveSurface } from "./InteractiveSurface";
 import classes from "./WorkspaceSelector.module.css";
 import type { ReactElement } from "react";
 
@@ -74,17 +75,6 @@ export function WorkspaceChoices(props: WorkspaceSelectorProps): ReactElement {
   const admin = props.choices.filter((choice) => choice.kind === "admin");
   return (
     <Stack gap="xs">
-      {props.mobile ? (
-        <Button
-          variant="subtle"
-          justify="flex-start"
-          className={classes.back}
-          leftSection={<NavigationIcon name="back" />}
-          onClick={props.onClose}
-        >
-          {props.copy.back}
-        </Button>
-      ) : null}
       {personal.map((choice) => (
         <Choice key={choice.key} choice={choice} onSelect={props.onSelect} />
       ))}
@@ -140,7 +130,7 @@ export function WorkspaceChoices(props: WorkspaceSelectorProps): ReactElement {
 }
 function banner(props: WorkspaceSelectorProps): ReactElement {
   return (
-    <UnstyledButton
+    <InteractiveSurface
       className={classes.trigger}
       onClick={props.opened ? props.onClose : props.onOpen}
       aria-label={props.copy.choose}
@@ -153,38 +143,39 @@ function banner(props: WorkspaceSelectorProps): ReactElement {
     >
       <Group gap="sm" wrap="nowrap">
         {props.current ? <NavigationIcon name={props.current.kind} /> : null}
-        <Text fw={600} size="sm" className={classes.label}>
+        <Text fw={600} size="sm" className={classes.triggerLabel}>
           {props.current?.label ?? props.copy.choose}
         </Text>
         <NavigationIcon name="down" size="sm" className={classes.trailing} />
       </Group>
-    </UnstyledButton>
+    </InteractiveSurface>
   );
-}
-export function WorkspaceBanner(props: WorkspaceSelectorProps): ReactElement {
-  return banner(props);
 }
 /** Presentation only: actual Team membership and destinations are app-owned. */
 export function WorkspaceSelector(props: WorkspaceSelectorProps): ReactElement {
   const trigger = banner(props);
-  return props.mobile ? (
-    props.opened ? (
-      <WorkspaceChoices {...props} />
-    ) : (
-      trigger
-    )
-  ) : (
+  return (
     <Popover
       opened={props.opened}
       onChange={(opened) => (opened ? props.onOpen() : props.onClose())}
       position="bottom-start"
-      width="target"
+      width="min(20rem, calc(100vw - 3rem))"
+      withinPortal={!props.mobile}
       trapFocus
       returnFocus
       shadow="sm"
     >
       <Popover.Target>{trigger}</Popover.Target>
-      <Popover.Dropdown p="sm" className={classes.dropdown}>
+      <Popover.Dropdown
+        p="sm"
+        className={classes.dropdown}
+        onKeyDownCapture={(event) => {
+          if (event.key === "Escape") {
+            event.stopPropagation();
+            props.onClose();
+          }
+        }}
+      >
         <WorkspaceChoices {...props} />
       </Popover.Dropdown>
     </Popover>

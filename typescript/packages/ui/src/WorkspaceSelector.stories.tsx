@@ -70,7 +70,7 @@ export const Administration: Story = {
     ],
   },
 };
-export const MobileInline: Story = { args: { mobile: true } };
+export const MobileOverlay: Story = { args: { mobile: true } };
 export const Unavailable: Story = {
   args: { status: "error", choices: [personal, admin] },
 };

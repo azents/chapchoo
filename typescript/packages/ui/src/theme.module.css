@@ -77,13 +77,16 @@
   border-radius: var(--mantine-radius-md);
   color: var(--chapchoo-color-secondary);
   min-height: 2.75rem;
+  padding-inline: 0.875rem;
 }
 .navLink.navLink[data-active] {
   background: var(--chapchoo-color-selected);
   color: var(--chapchoo-color-ink);
 }
-.navLink.navLink:hover {
-  background: var(--chapchoo-color-selected);
+@media (hover: hover) {
+  .navLink.navLink:hover {
+    background: var(--chapchoo-color-selected);
+  }
 }
 .navLabel {
   white-space: normal;
