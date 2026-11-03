@@ -40,6 +40,57 @@ pub enum Command {
     ComputerConnector(ConnectorOptions),
     /// Run a scoped Kubernetes Computer Provider without product DB authority.
     ComputerProvider(ProviderOptions),
+    /// Run a Docker Computer Provider using the selected daemon, without DB authority.
+    DockerProvider(DockerProviderOptions),
+}
+#[derive(Debug, Args)]
+pub struct DockerProviderOptions {
+    #[arg(long, env = "CHAPCHOO_CONTROL_ENDPOINT")]
+    pub endpoint: String,
+    #[arg(long, env = "CHAPCHOO_PROVIDER_ID")]
+    pub provider_id: String,
+    #[arg(long, env = "CHAPCHOO_PROVIDER_NAME")]
+    pub name: String,
+    #[arg(long, env = "CHAPCHOO_COMPUTER_IMAGE")]
+    pub image: String,
+    #[arg(
+        long,
+        env = "CHAPCHOO_COMPUTER_IMAGE_PULL_POLICY",
+        default_value = "IfNotPresent"
+    )]
+    pub image_pull_policy: String,
+    #[arg(
+        long,
+        env = "CHAPCHOO_COMPUTER_SAVED_MOUNT",
+        default_value = "/workspace"
+    )]
+    pub saved_mount: String,
+    #[arg(long, env = "CHAPCHOO_DOCKER_NETWORK")]
+    pub network: Option<String>,
+    #[arg(long, env = "CHAPCHOO_DOCKER_NANO_CPUS", default_value = "1000000000")]
+    pub nano_cpus: i64,
+    #[arg(
+        long,
+        env = "CHAPCHOO_DOCKER_MEMORY_BYTES",
+        default_value = "1073741824"
+    )]
+    pub memory_bytes: i64,
+    #[arg(long, env = "CHAPCHOO_CONTAINER_CONTROL_ENDPOINT")]
+    pub connector_endpoint: Option<String>,
+    #[arg(long, env = "CHAPCHOO_DOCKER_HOST")]
+    pub docker_host: Option<String>,
+    #[arg(long, env = "CHAPCHOO_DOCKER_TLS", requires = "docker_host")]
+    pub docker_tls: bool,
+    #[arg(long, env = "CHAPCHOO_DOCKER_TLS_SKIP_VERIFY", requires = "docker_tls")]
+    pub docker_tls_skip_verify: bool,
+    #[arg(long, env = "CHAPCHOO_DOCKER_CA_FILE", requires = "docker_tls")]
+    pub docker_ca_file: Option<PathBuf>,
+    #[arg(long, env = "CHAPCHOO_DOCKER_CERT_FILE", requires_all = ["docker_tls", "docker_key_file"])]
+    pub docker_cert_file: Option<PathBuf>,
+    #[arg(long, env = "CHAPCHOO_DOCKER_KEY_FILE", requires_all = ["docker_tls", "docker_cert_file"])]
+    pub docker_key_file: Option<PathBuf>,
+    #[arg(long, env = "CHAPCHOO_DOCKER_API_VERSION", requires = "docker_host")]
+    pub docker_api_version: Option<String>,
 }
 #[derive(Debug, Args)]
 pub struct ProviderOptions {

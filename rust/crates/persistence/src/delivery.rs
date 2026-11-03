@@ -45,6 +45,8 @@ pub struct DeliveryExecution {
     pub initial_allocation: bool,
     #[diesel(sql_type=Nullable<BigInt>)]
     pub retired_at: Option<i64>,
+    #[diesel(sql_type=Nullable<BigInt>)]
+    pub running_confirmed_at: Option<i64>,
 }
 #[derive(Debug)]
 pub struct DeliverySnapshot {

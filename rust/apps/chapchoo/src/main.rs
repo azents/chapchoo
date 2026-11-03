@@ -95,6 +95,21 @@ async fn execute(cli: Cli) -> Result<(), AppError> {
                 }
             }
         }
+        Command::DockerProvider(options) => {
+            let owner = config::provider_owner_key()?;
+            let stop = tokio_util::sync::CancellationToken::new();
+            let mut signal = runtime::Termination::new()?;
+            let task = provider::run_docker(options, owner, stop.clone());
+            tokio::pin!(task);
+            tokio::select! {
+                result=&mut task=>result?,
+                result=signal.wait()=>{
+                    result?;
+                    stop.cancel();
+                    tokio::time::timeout(Duration::from_secs(120),task).await??;
+                }
+            }
+        }
         Command::ComputerConnector(options) => {
             let initial = config::connector_initial_key()?;
             let stop = tokio_util::sync::CancellationToken::new();

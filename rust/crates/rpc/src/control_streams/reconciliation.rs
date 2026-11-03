@@ -7,13 +7,21 @@ use chapchoo_service::{ComputerRequest, ManagedComputer, ManagedResource};
 fn resource(value: &ManagedResource) -> wire::ManagedResource {
     crate::native_resources::encode(value)
 }
-fn retire_resource(value: &ManagedResource, require_terminal: bool) -> wire::RetireExecution {
-    let docker = value.kind() == chapchoo_domain::ManagedResourceKind::DockerContainer;
-    wire::RetireExecution {
-        pod: (!docker).then(|| resource(value)),
-        docker_container: docker.then(|| resource(value)),
-        require_terminal,
+fn retire_resource(
+    value: &ManagedResource,
+    require_terminal: bool,
+) -> Result<wire::RetireExecution, Status> {
+    if value.kind() != chapchoo_domain::ManagedResourceKind::Pod {
+        return Err(Status::failed_precondition(
+            "Kubernetes retirement requires a native Pod",
+        ));
     }
+    Ok(wire::RetireExecution {
+        pod: Some(resource(value)),
+        docker_container: None,
+        saved_volume: None,
+        require_terminal,
+    })
 }
 fn context(value: &ManagedComputer) -> wire::ComputerContext {
     wire::ComputerContext {
@@ -360,7 +368,7 @@ impl ComponentConnectionServices {
                 .dispatch_convergence(
                     &entry,
                     &current,
-                    wire::provider_command::Operation::Retire(retire_resource(pod, true)),
+                    wire::provider_command::Operation::Retire(retire_resource(pod, true)?),
                     deadline,
                 )
                 .await;
@@ -393,7 +401,7 @@ impl ComponentConnectionServices {
                 .dispatch_convergence(
                     &entry,
                     &current,
-                    wire::provider_command::Operation::Retire(retire_resource(pod, false)),
+                    wire::provider_command::Operation::Retire(retire_resource(pod, false)?),
                     deadline,
                 )
                 .await;

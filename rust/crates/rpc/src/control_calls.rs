@@ -408,6 +408,7 @@ mod tests {
                     pod: None,
                     require_terminal: false,
                     docker_container: None,
+                    saved_volume: None,
                 })
             } else {
                 wire::provider_command::Operation::Observe(wire::ObserveResources {

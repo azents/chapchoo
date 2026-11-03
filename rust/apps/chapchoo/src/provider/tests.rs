@@ -1,4 +1,5 @@
 //! Real Control stream and supported SDK with an isolated synthetic HTTP service.
+mod docker;
 use super::*;
 use base64::{Engine, engine::general_purpose::URL_SAFE};
 use chapchoo_crypto::{CredentialCipher, PasswordCost, RootKey, SystemOwnerVerifier};
@@ -300,7 +301,7 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
             "provider",
             owner,
             component_key,
-            Arc::new(adapter),
+            Arc::new(Adapter::Kubernetes(Arc::new(adapter))),
             provider_stop,
         )
         .await

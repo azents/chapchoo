@@ -63,10 +63,11 @@ namespaces. Volume identity accepts only local driver/scope with no driver
 options; it has no synthetic native UID. Equality preserves original metadata
 and the distinction between unavailable creation time and an observed value.
 
-Storage and wire admission use these typed values for both substrates. The
-existing executable adapter remains Kubernetes-specific; Docker SDK execution
-is not yet activated. Current-source authorization, immutable accepted allocation
-and sticky absence remain enforced at the owning store/adapter boundaries.
+Storage, wire admission and executable adapters use these typed values for both
+substrates. The separate DB-free Docker Provider uses native SDK operations and
+the [Docker runtime contract](computer-docker.md), without encoding Docker
+objects as Kubernetes objects. Current-source authorization, immutable accepted
+allocation and sticky absence remain enforced at owning store/adapter boundaries.
 
 ## Native schema and preservation
 
@@ -323,7 +324,12 @@ Stop/Restart `RETIRING` or terminal Delete `DELETING` to `UNCERTAIN` once.
 Qualified terminal retirement under Running intent additionally requires the
 exact completed current execution with admitted preparation; its expected old
 execution remains recorded. An already uncertain request yields no new admission.
-Late Running evidence cannot clear this Docker retirement fence.
+Late Running evidence cannot clear this Docker retirement fence. A Blocked
+issue report also preserves an already uncertain Docker lifecycle: a diagnostic
+is not proof that its native stage never started. Neither a late Running report
+nor a subsequent direct/context-driven Delete can turn that diagnostic into a
+fresh retirement claim. Definitive preparation failure and exact NotStarted
+release retain their separate qualified admission paths.
 
 The returned opaque admission records original phase/source/request/execution.
 Only Control's exact live manifest and proven prequeue/dequeue NotStarted result

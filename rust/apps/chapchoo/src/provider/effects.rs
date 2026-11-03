@@ -7,9 +7,9 @@ use tokio::{
 
 #[derive(Debug, thiserror::Error)]
 pub enum EffectError {
-    #[error("A Kubernetes lifecycle effect is already in flight")]
+    #[error("A native lifecycle effect is already in flight")]
     Busy,
-    #[error("A Kubernetes lifecycle effect task failed")]
+    #[error("A native lifecycle effect task failed")]
     Task(#[source] tokio::task::JoinError),
 }
 /// Retain this owner across stream reconnects. Never replace it merely because a
@@ -48,7 +48,6 @@ impl Effects {
         self.tasks.spawn(async move {
             let _permit = permit;
             let result = effect.await;
-            // A retired waiter does not cancel or free the running SDK task.
             let _ = sender.send(result);
         });
         Ok(receiver)

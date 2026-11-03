@@ -1,8 +1,6 @@
 //! Narrow standalone Pod/PVC/bootstrap-Secret adapter over the supported client.
 //! The caller owns source admission, SDK task lifetime and durable observations.
-mod effects;
 use chapchoo_protocol::control::{self as wire, ResourceKind};
-pub use effects::{EffectError, Effects};
 use futures_util::{StreamExt, TryStreamExt};
 use k8s_openapi::{
     ByteString,

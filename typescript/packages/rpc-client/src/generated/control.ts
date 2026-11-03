@@ -114,6 +114,15 @@ export interface ProviderCommandCheck {
   command: ProviderCommand | undefined;
 }
 
+/**
+ * Read-only evidence from the exact current execution, not a new mutation grant.
+ * A Provider's unknown native stage remains a veto despite an older completion.
+ */
+export interface ProviderCommandAdmission {
+  priorRunningCompletion: boolean;
+  initialAllocation: boolean;
+}
+
 export interface ConnectorCommandCheck {
   source: ConnectorConnectionCheck | undefined;
   command: ConnectorCommand | undefined;
@@ -340,7 +349,11 @@ export interface RetireExecution {
   /** Running-intent restoration cannot terminate a live/unknown execution. */
   requireTerminal: boolean;
   /** Mutually exclusive with pod; identifies the exact native execution. */
-  dockerContainer: ManagedResource | undefined;
+  dockerContainer:
+    | ManagedResource
+    | undefined;
+  /** Docker-only read-only reference for original mount/volume verification. */
+  savedVolume: ManagedResource | undefined;
 }
 
 export interface CleanupResources {
@@ -801,6 +814,73 @@ export const ProviderCommandCheck: MessageFns<ProviderCommandCheck> = {
     message.command = (object.command !== undefined && object.command !== null)
       ? ProviderCommand.fromPartial(object.command)
       : undefined;
+    return message;
+  },
+};
+
+function createBaseProviderCommandAdmission(): ProviderCommandAdmission {
+  return { priorRunningCompletion: false, initialAllocation: false };
+}
+
+export const ProviderCommandAdmission: MessageFns<ProviderCommandAdmission> = {
+  encode(message: ProviderCommandAdmission, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.priorRunningCompletion !== false) {
+      writer.uint32(8).bool(message.priorRunningCompletion);
+    }
+    if (message.initialAllocation !== false) {
+      writer.uint32(16).bool(message.initialAllocation);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ProviderCommandAdmission {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseProviderCommandAdmission();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.priorRunningCompletion = reader.bool();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.initialAllocation = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ProviderCommandAdmission>, I>>(base?: I): ProviderCommandAdmission {
+    return ProviderCommandAdmission.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ProviderCommandAdmission>, I>>(object: I): ProviderCommandAdmission {
+    const message = createBaseProviderCommandAdmission();
+    message.priorRunningCompletion = object.priorRunningCompletion ?? false;
+    message.initialAllocation = object.initialAllocation ?? false;
     return message;
   },
 };
@@ -3563,7 +3643,7 @@ export const DockerPreparation: MessageFns<DockerPreparation> = {
 };
 
 function createBaseRetireExecution(): RetireExecution {
-  return { pod: undefined, requireTerminal: false, dockerContainer: undefined };
+  return { pod: undefined, requireTerminal: false, dockerContainer: undefined, savedVolume: undefined };
 }
 
 export const RetireExecution: MessageFns<RetireExecution> = {
@@ -3576,6 +3656,9 @@ export const RetireExecution: MessageFns<RetireExecution> = {
     }
     if (message.dockerContainer !== undefined) {
       ManagedResource.encode(message.dockerContainer, writer.uint32(26).fork()).join();
+    }
+    if (message.savedVolume !== undefined) {
+      ManagedResource.encode(message.savedVolume, writer.uint32(34).fork()).join();
     }
     return writer;
   },
@@ -3617,6 +3700,14 @@ export const RetireExecution: MessageFns<RetireExecution> = {
             message.dockerContainer = ManagedResource.decode(reader, reader.uint32());
             continue;
           }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.savedVolume = ManagedResource.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -3640,6 +3731,9 @@ export const RetireExecution: MessageFns<RetireExecution> = {
     message.requireTerminal = object.requireTerminal ?? false;
     message.dockerContainer = (object.dockerContainer !== undefined && object.dockerContainer !== null)
       ? ManagedResource.fromPartial(object.dockerContainer)
+      : undefined;
+    message.savedVolume = (object.savedVolume !== undefined && object.savedVolume !== null)
+      ? ManagedResource.fromPartial(object.savedVolume)
       : undefined;
     return message;
   },
@@ -5264,8 +5358,9 @@ export const ProviderAuthenticationService = {
     responseStream: false as const,
     requestSerialize: (value: ProviderCommandCheck): Buffer => Buffer.from(ProviderCommandCheck.encode(value).finish()),
     requestDeserialize: (value: Buffer): ProviderCommandCheck => ProviderCommandCheck.decode(value),
-    responseSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
-    responseDeserialize: (value: Buffer): Empty => Empty.decode(value),
+    responseSerialize: (value: ProviderCommandAdmission): Buffer =>
+      Buffer.from(ProviderCommandAdmission.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ProviderCommandAdmission => ProviderCommandAdmission.decode(value),
   },
   checkConnection: {
     path: "/chapchoo.control.ProviderAuthentication/CheckConnection" as const,
@@ -5320,7 +5415,7 @@ export const ProviderAuthenticationService = {
 export interface ProviderAuthenticationServer extends UntypedServiceImplementation {
   report: handleUnaryCall<ProviderReport, Empty>;
   configureSystemProvider: handleUnaryCall<ProviderConfiguration, Empty>;
-  checkCommand: handleUnaryCall<ProviderCommandCheck, Empty>;
+  checkCommand: handleUnaryCall<ProviderCommandCheck, ProviderCommandAdmission>;
   checkConnection: handleUnaryCall<ProviderConnectionCheck, Empty>;
   rotateKey: handleUnaryCall<ProviderKeyRequest, ComponentKey>;
   revokeKey: handleUnaryCall<ProviderKeyRequest, Empty>;
@@ -5358,18 +5453,18 @@ export interface ProviderAuthenticationClient extends Client {
   ): ClientUnaryCall;
   checkCommand(
     request: ProviderCommandCheck,
-    callback: (error: ServiceError | null, response: Empty) => void,
+    callback: (error: ServiceError | null, response: ProviderCommandAdmission) => void,
   ): ClientUnaryCall;
   checkCommand(
     request: ProviderCommandCheck,
     metadata: Metadata,
-    callback: (error: ServiceError | null, response: Empty) => void,
+    callback: (error: ServiceError | null, response: ProviderCommandAdmission) => void,
   ): ClientUnaryCall;
   checkCommand(
     request: ProviderCommandCheck,
     metadata: Metadata,
     options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: Empty) => void,
+    callback: (error: ServiceError | null, response: ProviderCommandAdmission) => void,
   ): ClientUnaryCall;
   checkConnection(
     request: ProviderConnectionCheck,

@@ -995,7 +995,7 @@ impl Store {
             return Err(StoreError::InvalidInput);
         }
         operation!(self, |connection, dialect| {
-            let _ = current_source!(connection, dialect, source);
+            let (provider, _) = current_source!(connection, dialect, source);
             let current = current_computer!(connection, dialect, source, scope);
             if current.current_execution_id.as_deref() != execution_id
                 || current.cleanup_completed_at.is_some()
@@ -1009,7 +1009,10 @@ impl Store {
                 ),
             )
             .bind::<Text, _>(
-                if current.desired_state == "DELETING" && current.current_phase == "UNCERTAIN" {
+                if current.current_phase == "UNCERTAIN"
+                    && (current.desired_state == "DELETING"
+                        || provider.substrate()?.kind() == chapchoo_domain::ProviderKind::Docker)
+                {
                     "UNCERTAIN"
                 } else {
                     phase.as_str()

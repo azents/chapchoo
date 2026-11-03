@@ -83,6 +83,9 @@ fn normalized(mut command: wire::ProviderCommand) -> wire::ProviderCommand {
             if let Some(resource) = &mut value.docker_container {
                 resource.absence_confirmed = false;
             }
+            if let Some(resource) = &mut value.saved_volume {
+                resource.absence_confirmed = false;
+            }
         }
         Some(wire::provider_command::Operation::Cleanup(value)) => {
             for resource in &mut value.resources {
@@ -526,6 +529,13 @@ impl ComponentConnectionServices {
             wire::provider_command::Operation::Retire(wire::RetireExecution {
                 pod: None,
                 docker_container: Some(crate::native_resources::encode(resource)),
+                saved_volume: Some(crate::native_resources::encode(
+                    snapshot
+                        .resources
+                        .iter()
+                        .find(|resource| resource.kind() == ManagedResourceKind::DockerVolume)
+                        .ok_or_else(denied)?,
+                )),
                 require_terminal: terminal,
             })
         } else if progress.delete {

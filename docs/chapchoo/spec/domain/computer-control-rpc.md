@@ -106,6 +106,13 @@ exact connection. Checks do not renew connection leases. A check is not an atomi
 native effect or a reusable permission to keep acting after authority changes.
 Docker mutation dequeue additionally checks the exact live native manifest in
 the owning connection registry; a valid DB snapshot alone is insufficient.
+Provider CheckCommand returns `prior_running_completion` only from the exact
+execution's existing `running_confirmed_at` fact read under that current-source/
+request snapshot. This is read-only prior-completion evidence, not a new stored
+state, native quiescence attestation or dispatch/replay grant. A Provider's
+same-process unknown Start or later native stage remains a veto; bare running
+state cannot prove a possibly pending Start settled. Existing Kubernetes callers
+may ignore this evidence without changing their native behavior.
 
 ## Stream and call lifetime
 
@@ -183,8 +190,10 @@ use the same native gate. Existing Kubernetes dispatch behavior is unchanged.
 Synthetic Provider/real Store tests cover normal suffix progression, cancellation
 and exact late completion, lost-manifest observation-only reconnect, NotStarted/
 late-result ABA and the Stop/Restart/terminal entry points. They do not validate
-Docker SDK native stages, real Engine lifecycle or Mac Desktop compatibility.
-The native executable adapter is still separate delivery work.
+real Engine lifecycle or Mac Desktop compatibility. The separate native
+[Docker adapter](computer-docker.md) has public-SDK/real-Control fixtures for
+allocation ACK order, normal retirement/suffix progression, source replacement
+before ACK, and unknown Start across stream reconnect without replay.
 
 ## Computer Provider process and acknowledged evidence
 
@@ -193,7 +202,7 @@ It does not load backend DB configuration, connect to the product DB or receive
 the installation encryption root. Its product operations use authenticated
 Control RPC; storage transactions belong to the server. The single executable
 also contains backend commands, but their DB initialization is not shared with
-the `computer-provider` command.
+the `computer-provider` or `docker-provider` commands.
 
 A child-process boundary test reaches authenticated registration with no DB/root
 configuration and with deliberately invalid backend-only settings. A synthetic

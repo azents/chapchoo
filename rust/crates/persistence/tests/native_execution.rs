@@ -136,6 +136,15 @@ async fn exercise(
             .await?
     );
     store.mark_start_dispatched(&source, scope, "first").await?;
+    assert!(
+        store
+            .provider_delivery_snapshot(&source, scope, Some("first"))
+            .await?
+            .execution
+            .ok_or("Missing exact execution")?
+            .running_confirmed_at
+            .is_none()
+    );
     let volume = NativeIdentity::DockerVolume(DockerVolumeIdentity::local(
         "local",
         "local",
@@ -167,6 +176,15 @@ async fn exercise(
         .report_execution_running(&source, scope, "first")
         .await?;
     let foreign = NativeIdentity::DockerContainer(DockerContainerId::parse("b".repeat(64))?);
+    assert!(
+        store
+            .provider_delivery_snapshot(&source, scope, Some("first"))
+            .await?
+            .execution
+            .ok_or("Missing exact execution")?
+            .running_confirmed_at
+            .is_some()
+    );
     assert!(matches!(
         store
             .report_resource(
@@ -236,6 +254,30 @@ async fn exercise(
         .claim_native_retirement(&source, scope, Some("first"))
         .await?
         .ok_or("Missing admission")?;
+    // A user-relevant Blocked diagnostic is not definitive native NotStarted.
+    // It cannot clear retirement and make late Running or a new Delete replay it.
+    store
+        .report_lifecycle_issue(&source, scope, Some("first"), LifecyclePhase::Blocked)
+        .await?;
+    let current = store
+        .managed_computers(&source, None, 20)
+        .await?
+        .into_iter()
+        .find(|computer| computer.id == "computer")
+        .ok_or("Missing admitted native Computer")?;
+    assert_eq!(current.current_phase, "UNCERTAIN");
+    assert!(
+        store
+            .report_execution_running(&source, scope, "first")
+            .await
+            .is_err()
+    );
+    assert!(
+        store
+            .claim_native_retirement(&source, scope, Some("first"))
+            .await?
+            .is_none()
+    );
     // A new Delete must retain uncertainty from possibly accepted prior effects.
     let delete_request = if scoped_delete {
         store.delete_team(&user.digest(), "scope", now()?).await?;
