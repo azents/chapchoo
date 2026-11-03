@@ -250,11 +250,7 @@ fn domain_rpc_keeps_private_owner_authority_and_independent_admin_residual_inven
         };
         let execution = app.reserve_execution(&source, scope, "fixture").await?;
         for resource in &execution.resources {
-            let kind = match resource.resource_kind.as_str() {
-                "POD" => ManagedResourceKind::Pod,
-                "PVC" => ManagedResourceKind::Pvc,
-                _ => ManagedResourceKind::BootstrapSecret,
-            };
+            let kind = resource.resource_kind.parse::<ManagedResourceKind>()?;
             app.report_resource(
                 &source,
                 scope,

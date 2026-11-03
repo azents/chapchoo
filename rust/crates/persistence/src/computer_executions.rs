@@ -35,21 +35,7 @@ pub struct ComputerRequest<'a> {
     pub request_id: &'a str,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ManagedResourceKind {
-    Pod,
-    Pvc,
-    BootstrapSecret,
-}
-impl ManagedResourceKind {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Pod => "POD",
-            Self::Pvc => "PVC",
-            Self::BootstrapSecret => "BOOTSTRAP_SECRET",
-        }
-    }
-}
+pub use chapchoo_domain::ManagedResourceKind;
 
 #[derive(Debug)]
 pub struct ExecutionDraft {

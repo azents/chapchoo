@@ -6,6 +6,8 @@ spec_type: domain
 domain: computer-storage
 code_paths:
   - rust/crates/domain/src/computer.rs
+  - rust/crates/domain/src/computer_resource.rs
+  - rust/crates/domain/src/computer_resource/tests.rs
   - rust/crates/crypto/src/system_owner.rs
   - rust/crates/crypto/src/fingerprint.rs
   - rust/crates/crypto/src/token.rs
@@ -40,6 +42,28 @@ reservation and evidence, exact retirement, cleanup confirmation and retained
 inventory collection. External lifecycle effects, Control routing
 and Kubernetes execution are not implied by
 schema records. Runtime/transport exposure is separate.
+
+## Native domain values
+
+`chapchoo-domain` owns the strict resource-kind vocabulary and derives execution
+versus saved-environment roles and Provider substrate from each kind. Persistence
+reexports that kind rather than maintaining a second declaration. Unknown kind
+strings are rejected instead of becoming bootstrap Secrets.
+
+Protocol/database-independent native values describe Kubernetes namespace/name/
+original UID, Docker daemon/name/full container ID, and original local-volume
+creation/label observations. Reservation construction rejects cross-substrate
+scope and invalid/bounded addresses. Allocated identity variants must match the
+reserved kind. Docker daemon IDs are opaque bounded tokens, not 63-character
+namespaces. Volume identity accepts only local driver/scope with no driver
+options; it has no synthetic native UID. Equality preserves original metadata
+and the distinction between unavailable creation time and an observed value.
+
+These values grant no effect, report or recovery authority. Existing storage,
+wire and runtime still admit Kubernetes only at this implementation boundary;
+Docker reservation/binding/migrations and lifecycle activation are separate
+delivery work. Current-source authorization, immutable accepted allocation and
+sticky absence remain enforced at the owning store/adapter boundaries.
 
 ## Identities and Relationships
 
