@@ -1,4 +1,5 @@
 //! Both-engine native reservation/evidence and conservative retirement admission.
+mod support;
 use base64::{Engine, engine::general_purpose::URL_SAFE};
 use chapchoo_crypto::{BearerSecret, CredentialCipher, RootKey};
 use chapchoo_domain::{
@@ -474,7 +475,5 @@ fn postgres_run(scoped_delete: bool) -> Result<(), Error> {
         })
     })();
     let cleanup = admin.batch_execute(&format!("DROP SCHEMA {schema} CASCADE"));
-    result?;
-    cleanup?;
-    Ok(())
+    support::combine(result, cleanup.map_err(Into::into)).map(|_| ())
 }

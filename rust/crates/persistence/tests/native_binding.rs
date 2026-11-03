@@ -1,4 +1,5 @@
 //! The server owns immutable native binding; external Providers use scoped RPC.
+mod support;
 use base64::{Engine, engine::general_purpose::URL_SAFE};
 use chapchoo_crypto::{BearerSecret, CredentialCipher, RootKey, SystemOwnerVerifier};
 use chapchoo_domain::{DockerDaemonId, ProviderSubstrate};
@@ -136,7 +137,5 @@ fn postgres_native_binding_is_scoped_immutable_and_race_safe() -> Result<(), Err
         })
     })();
     let cleanup = admin.batch_execute(&format!("DROP SCHEMA {schema} CASCADE"));
-    result?;
-    cleanup?;
-    Ok(())
+    support::combine(result, cleanup.map_err(Into::into)).map(|_| ())
 }
