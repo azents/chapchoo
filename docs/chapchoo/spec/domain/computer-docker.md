@@ -15,7 +15,7 @@ code_paths:
   - rust/apps/chapchoo/src/main.rs
   - rust/apps/chapchoo/tests/provider_cli.rs
   - rust/apps/chapchoo/tests/provider_cli/docker.rs
-last_verified_at: 2026-11-03
+last_verified_at: 2026-11-04
 spec_version: 1
 ---
 
@@ -105,7 +105,9 @@ Connector session/key/endpoint, not newly allocated bootstrap credentials.
 The profile uses UID:GID 10001:10001, read-only root, dropped capabilities,
 no-new-privileges, constrained daemon seccomp and bounded CPU/memory settings.
 It has private PID/IPC, no privileged mode, host binds, devices, Docker socket,
-extra anonymous volumes or published ports. Only the saved named volume is
+extra anonymous volumes or published ports. Image `EXPOSE` declarations are
+advisory metadata; the Provider forbids `PublishAllPorts` and every nonempty
+`PortBindings` configuration independently. Only the saved named volume is
 mounted. Initial allocation permits image-directory population; successors use
 no-copy. More narrowly, only an opaque proof from a positively completed fresh
 volume creation permits that initial population. Recovered/existing originals,

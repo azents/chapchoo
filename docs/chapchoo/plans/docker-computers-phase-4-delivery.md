@@ -125,7 +125,14 @@ tags: [computer, docker, implementation, acceptance]
   failure records contain static SDK class/status, never native payload or source.
   Full Rust175 tests/Clippy/format/boundaries and global TS/support/integration
   checks pass. The same reviewer confirmed error preservation/privacy with no
-  findings; real exact-head native acceptance remains unpassed.
+  findings. CI41677847019 ata90f6f4 passed9 checks but preserved a real Create
+  failure: native profile Ownership rejection. The standard image's EXPOSE50051/
+  50053 metadata conflicted with an overstrict metadata check. Root reproduced
+  the mismatch with an SDK regression, removed only advisory ExposedPorts rejection,
+  and separately tests that PublishAllPorts=true and nonempty PortBindings remain
+  rejected. All176 Rust tests/Clippy/format/boundaries pass. The same reviewer
+  confirmed the actual no-published-ports boundary is preserved with no finding;
+  real exact-head native acceptance remains unpassed.
   Current host has no Engine socket; real fixture startup explicitly fails for
   missing authorized socket/image before launching DB/product. Actual Linux
   acceptance awaits the required CI gate after PR4 creation. No current Mac gate,

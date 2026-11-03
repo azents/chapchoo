@@ -124,6 +124,22 @@ async fn normal_native_lifecycle_submits_each_stage_once_and_keeps_original_save
 }
 
 #[tokio::test]
+async fn image_expose_metadata_is_not_host_port_publication() -> Result<(), TestError> {
+    let fixture = Fixture::new().await?;
+    let docker = fixture.connect().await?;
+    let prepared = prepare(&fixture, &docker).await?;
+    {
+        let mut state = fixture.state.lock().map_err(|_| "Fixture lock")?;
+        let value = state.container.as_mut().ok_or("Container")?;
+        // The standard backend image declares these ports as image metadata.
+        value.config.as_mut().ok_or("Config")?.exposed_ports =
+            Some(vec!["50051/tcp".into(), "50053/tcp".into()]);
+    }
+    assert!(docker.start_container(prepared).await?.running);
+    fixture.finish(docker).await
+}
+
+#[tokio::test]
 async fn ambiguous_native_start_cannot_be_cleared_by_running_observation_or_old_server_fact()
 -> Result<(), TestError> {
     let fixture = Fixture::new().await?;
@@ -292,7 +308,7 @@ async fn mismatched_bootstrap_mount_security_and_full_id_are_never_adopted() -> 
         .clone()
         .ok_or("Missing container")?;
     drop(prepared);
-    for variant in 0..9 {
+    for variant in 0..11 {
         let mut value = original.clone();
         match variant {
             0 => value
@@ -331,7 +347,12 @@ async fn mismatched_bootstrap_mount_security_and_full_id_are_never_adopted() -> 
                     .no_copy = Some(false)
             }
             7 => value.image = Some(format!("sha256:{}", "d".repeat(64))),
-            _ => value.image = Some(format!("sha256:{}", "z".repeat(64))),
+            8 => value.image = Some(format!("sha256:{}", "z".repeat(64))),
+            9 => value.host_config.as_mut().ok_or("Host")?.publish_all_ports = Some(true),
+            _ => {
+                value.host_config.as_mut().ok_or("Host")?.port_bindings =
+                    Some([("50051/tcp".into(), None)].into_iter().collect())
+            }
         }
         fixture.state.lock().map_err(|_| "Fixture lock")?.container = Some(value);
         assert!(

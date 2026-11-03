@@ -144,6 +144,8 @@ impl Docker {
         let config = value.config.as_ref().ok_or(Error::Ownership)?;
         let host = value.host_config.as_ref().ok_or(Error::Ownership)?;
         let policy = host.restart_policy.as_ref().and_then(|policy| policy.name);
+        // Image EXPOSE metadata does not publish ports. Enforce publication at
+        // HostConfig's PublishAllPorts and PortBindings boundaries below.
         if value.name.as_deref() != Some(format!("/{}", resource.name).as_str())
             || value.image.as_deref().is_none_or(|image| {
                 !crate::images::image_digest(image)
@@ -162,7 +164,6 @@ impl Docker {
             || config.tty == Some(true)
             || config.open_stdin == Some(true)
             || !none_or_empty(&config.volumes)
-            || !none_or_empty(&config.exposed_ports)
             || host.readonly_rootfs != Some(true)
             || host.privileged == Some(true)
             || host.memory != Some(self.config.memory_bytes)
