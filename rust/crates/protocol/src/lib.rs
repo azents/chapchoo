@@ -126,6 +126,7 @@ pub mod control {
         ProviderConnectionCheck,
         ConnectorConnectionCheck,
         ProviderCommandCheck,
+        ProviderCommandAdmission,
         ProviderReport,
         ConnectorCommandCheck,
         ProviderCapabilities,

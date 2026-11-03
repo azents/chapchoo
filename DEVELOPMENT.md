@@ -96,9 +96,42 @@ Computer components run independently from the backend:
   (128Mi), `CHAPCHOO_COMPUTER_CPU_LIMIT` (1),
   `CHAPCHOO_COMPUTER_MEMORY_LIMIT` (1Gi). StorageClass omission deliberately
   uses the operator's default class; no class is provisioned by the process.
+- `chapchoo docker-provider` requires `CHAPCHOO_CONTROL_ENDPOINT`,
+  `CHAPCHOO_PROVIDER_ID`, `CHAPCHOO_PROVIDER_NAME`,
+  `CHAPCHOO_PROVIDER_OWNER_TOKEN`, and `CHAPCHOO_COMPUTER_IMAGE`. It does not
+  load backend DB/root configuration. Default Docker selection uses the
+  executing account's CLI environment/context once; it never changes context or
+  starts Docker Desktop. Linux workloads require the selected daemon's supported
+  architecture, seccomp and CPU/memory enforcement.
+  An explicit `--docker-host` / `CHAPCHOO_DOCKER_HOST` selects a complete override:
+  optional `CHAPCHOO_DOCKER_TLS`, `CHAPCHOO_DOCKER_TLS_SKIP_VERIFY`,
+  `CHAPCHOO_DOCKER_CA_FILE`, paired `CHAPCHOO_DOCKER_CERT_FILE`/
+  `CHAPCHOO_DOCKER_KEY_FILE`, and `CHAPCHOO_DOCKER_API_VERSION` do not borrow
+  ambient context credentials. Without a pinned API version, startup negotiates
+  once. TLS material is captured; SSH keeps one authenticated OpenSSH master
+  and requires local `ssh` plus remote `docker system dial-stdio`. Lost SSH
+  source cannot reauthenticate under changed account settings; restart the
+  Provider explicitly to select new credentials/target.
+  TCP configurations requiring `HTTP_PROXY`/`HTTPS_PROXY` are currently rejected
+  before direct connection, not silently bypassed; Docker-style `NO_PROXY`
+  exclusions and loopback are honored. Unix/SSH do not use these HTTP proxy inputs.
+  No proxy credentials are printed.
+- Docker workload policy uses `CHAPCHOO_COMPUTER_SAVED_MOUNT` (/workspace),
+  `CHAPCHOO_COMPUTER_IMAGE_PULL_POLICY` (IfNotPresent; public images only),
+  `CHAPCHOO_DOCKER_NANO_CPUS` (1000000000),
+  `CHAPCHOO_DOCKER_MEMORY_BYTES` (1073741824) and optional
+  `CHAPCHOO_DOCKER_NETWORK` (existing outbound network; default bridge).
+  `CHAPCHOO_CONTAINER_CONTROL_ENDPOINT` overrides only the Container's outbound
+  Control target when the Provider's endpoint is not container-reachable.
+  The operator owns trusted listeners, network and firewall; the Provider creates
+  no tunnel, published port, host-network workaround or network. Its image must
+  supply the non-root saved-directory ownership. Existing data is never chowned,
+  refilled or replaced. Source fixtures are not real Engine/Mac acceptance;
+  see [the native contract](docs/chapchoo/spec/domain/computer-docker.md).
 - `chapchoo computer-connector` requires only its explicit Control endpoint,
   `CHAPCHOO_CONNECTOR_SESSION_ID`, and `CHAPCHOO_CONNECTOR_INITIAL_KEY`,
-  supplied by the execution's immutable bootstrap Secret. It receives neither
+  supplied by the execution's immutable Kubernetes Secret or Docker container
+  configuration. It receives neither
   Provider/owner credentials nor Kubernetes service-account API tokens. The
   Provider issues this initial key under an exact execution; do not manually
   reuse another execution's key or copy its Secret. Retire/revoke the session
@@ -111,6 +144,15 @@ fixtures exercise automatic create/stop/start/restart/restoration/delete through
 real local streams and peer delivery. These tests are not browser or live
 Kubernetes release-gate evidence. Do not deploy or provision a cluster merely to
 run the offline suites.
+
+The Docker supported-SDK/real-Control fixture checks allocation ACK order,
+normal stop/start/restart/delete, original-volume retention, source replacement
+before ACK and unknown Start across stream reconnect. A separate explicit local
+OpenSSH fixture uses disposable keys and an unprivileged inetd-mode server:
+`cargo test --locked -p chapchoo-docker --features ssh-fixture` from `rust/`.
+It requires `ssh`, `sshd`, `ssh-keygen` and `id` on PATH and fails for missing
+prerequisites. It changes no account SSH configuration or system daemon. This
+proves mux policy/lifetime, not remote Engine or Mac/Desktop compatibility.
 
 Control policy is runtime-configurable: `CHAPCHOO_CONTROL_VALIDITY_MS` and
 `CHAPCHOO_COMPONENT_VALIDITY_MS` default to 60000,

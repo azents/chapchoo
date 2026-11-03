@@ -9,7 +9,7 @@ import "google/protobuf/timestamp.proto";
 service ProviderAuthentication {
   rpc Report(ProviderReport) returns (google.protobuf.Empty);
   rpc ConfigureSystemProvider(ProviderConfiguration) returns (google.protobuf.Empty);
-  rpc CheckCommand(ProviderCommandCheck) returns (google.protobuf.Empty);
+  rpc CheckCommand(ProviderCommandCheck) returns (ProviderCommandAdmission);
   rpc CheckConnection(ProviderConnectionCheck) returns (google.protobuf.Empty);
   rpc RotateKey(ProviderKeyRequest) returns (ComponentKey);
   rpc RevokeKey(ProviderKeyRequest) returns (google.protobuf.Empty);
@@ -62,6 +62,12 @@ message ProviderReport {
 message ProviderCommandCheck {
   ProviderConnectionCheck source = 1;
   ProviderCommand command = 2;
+}
+// Read-only evidence from the exact current execution, not a new mutation grant.
+// A Provider's unknown native stage remains a veto despite an older completion.
+message ProviderCommandAdmission {
+  bool prior_running_completion = 1;
+  bool initial_allocation = 2;
 }
 message ConnectorCommandCheck {
   ConnectorConnectionCheck source = 1;
@@ -266,6 +272,8 @@ message RetireExecution {
   bool require_terminal = 2;
   // Mutually exclusive with pod; identifies the exact native execution.
   ManagedResource docker_container = 3;
+  // Docker-only read-only reference for original mount/volume verification.
+  ManagedResource saved_volume = 4;
 }
 message CleanupResources {
   repeated ManagedResource resources = 1;

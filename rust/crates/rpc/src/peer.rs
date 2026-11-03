@@ -314,13 +314,24 @@ pub(crate) fn validate_provider(
                 return Err(invalid());
             }
             let (resource, expected_kind) = match snapshot.substrate.kind() {
-                chapchoo_domain::ProviderKind::Kubernetes if retire.docker_container.is_none() => (
-                    retire.pod.as_ref().ok_or_else(invalid)?,
-                    wire::ResourceKind::Pod,
-                ),
+                chapchoo_domain::ProviderKind::Kubernetes
+                    if retire.docker_container.is_none() && retire.saved_volume.is_none() =>
+                {
+                    (
+                        retire.pod.as_ref().ok_or_else(invalid)?,
+                        wire::ResourceKind::Pod,
+                    )
+                }
                 chapchoo_domain::ProviderKind::Docker
                     if retire.pod.is_none() && computer.current_phase == "UNCERTAIN" =>
                 {
+                    let saved = retire.saved_volume.as_ref().ok_or_else(invalid)?;
+                    if saved.kind != wire::ResourceKind::DockerVolume as i32
+                        || saved.execution_id.is_some()
+                    {
+                        return Err(invalid());
+                    }
+                    check(std::slice::from_ref(saved))?;
                     (
                         retire.docker_container.as_ref().ok_or_else(invalid)?,
                         wire::ResourceKind::DockerContainer,

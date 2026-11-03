@@ -12,6 +12,8 @@ use tokio_stream::wrappers::TcpListenerStream;
 use tonic::{Request, Response, Status, transport::Server};
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
+#[path = "provider_cli/docker.rs"]
+mod docker;
 
 struct ControlBoundary {
     configured: mpsc::Sender<wire::ProviderConfiguration>,
@@ -48,7 +50,7 @@ impl ProviderAuthentication for ControlBoundary {
     async fn check_command(
         &self,
         _: Request<wire::ProviderCommandCheck>,
-    ) -> Result<Response<()>, Status> {
+    ) -> Result<Response<wire::ProviderCommandAdmission>, Status> {
         Err(Status::unimplemented("Not used by this boundary fixture"))
     }
 

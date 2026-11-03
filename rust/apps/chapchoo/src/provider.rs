@@ -1,11 +1,72 @@
 //! Scoped Computer Provider process. SDK effect ownership survives stream loss.
 use crate::{AppError, config::ProviderOptions};
 use chapchoo_crypto::BearerSecret;
-use chapchoo_kubernetes::{Effects, Kubernetes, Observation, Presence};
+mod control;
+mod docker_worker;
+mod effects;
+pub async fn run_docker(
+    options: crate::config::DockerProviderOptions,
+    owner: BearerSecret,
+    stop: CancellationToken,
+) -> Result<(), AppError> {
+    let explicit = options
+        .docker_host
+        .map(|host| {
+            chapchoo_docker::connection::Explicit::from_files(
+                host,
+                options.docker_tls,
+                options.docker_tls_skip_verify,
+                options.docker_ca_file.as_deref(),
+                options.docker_cert_file.as_deref(),
+                options.docker_key_file.as_deref(),
+                options.docker_api_version,
+            )
+        })
+        .transpose()?;
+    let selected = chapchoo_docker::connection::Selection::from_process(explicit)?;
+    let image_policy = match options.image_pull_policy.as_str() {
+        "Always" => chapchoo_docker::ImagePolicy::Always,
+        "IfNotPresent" => chapchoo_docker::ImagePolicy::IfNotPresent,
+        "Never" => chapchoo_docker::ImagePolicy::Never,
+        _ => return Err("Docker image pull policy is invalid".into()),
+    };
+    endpoint(&options.endpoint)?;
+    let connector_endpoint = options
+        .connector_endpoint
+        .as_deref()
+        .unwrap_or(&options.endpoint);
+    endpoint(connector_endpoint)?;
+    let adapter = chapchoo_docker::Docker::connect(
+        options.provider_id.clone(),
+        selected,
+        chapchoo_docker::Config {
+            image: options.image,
+            image_policy,
+            saved_mount: options.saved_mount,
+            network: options.network,
+            nano_cpus: options.nano_cpus,
+            memory_bytes: options.memory_bytes,
+        },
+    )
+    .await?;
+    run_docker_with_adapter(
+        &options.endpoint,
+        connector_endpoint,
+        &options.provider_id,
+        &options.name,
+        owner,
+        Arc::new(adapter),
+        stop,
+    )
+    .await
+}
+use chapchoo_kubernetes::{Kubernetes, Observation, Presence};
 use chapchoo_protocol::control::{
     self as wire, provider_authentication_client::ProviderAuthenticationClient,
     provider_connection_client::ProviderConnectionClient,
 };
+use control::Control;
+use effects::Effects;
 use std::{sync::Arc, time::Duration};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
@@ -45,6 +106,36 @@ fn endpoint(value: &str) -> Result<Endpoint, AppError> {
         .connect_timeout(Duration::from_secs(5))
         .buffer_size(8)
         .concurrency_limit(8))
+}
+enum Adapter {
+    Kubernetes(Arc<Kubernetes>),
+    Docker(Arc<chapchoo_docker::Docker>),
+}
+impl Adapter {
+    fn kind(&self) -> wire::ProviderKind {
+        match self {
+            Self::Kubernetes(_) => wire::ProviderKind::Kubernetes,
+            Self::Docker(_) => wire::ProviderKind::Docker,
+        }
+    }
+    fn daemon(&self) -> Option<String> {
+        match self {
+            Self::Kubernetes(_) => None,
+            Self::Docker(adapter) => Some(adapter.daemon_id().as_str().into()),
+        }
+    }
+    fn namespace(&self) -> &str {
+        match self {
+            Self::Kubernetes(adapter) => adapter.namespace(),
+            Self::Docker(_) => "",
+        }
+    }
+    async fn verify(&self) -> Result<(), AppError> {
+        if let Self::Docker(adapter) = self {
+            adapter.verify_daemon().await?;
+        }
+        Ok(())
+    }
 }
 pub async fn run(
     options: ProviderOptions,
@@ -90,6 +181,51 @@ pub(crate) async fn run_with_adapter(
     stop: CancellationToken,
 ) -> Result<(), AppError> {
     let channel = endpoint(endpoint_url)?.connect_lazy();
+    run_connection(
+        channel,
+        endpoint_url,
+        provider,
+        name,
+        owner,
+        Arc::new(Adapter::Kubernetes(adapter)),
+        stop,
+    )
+    .await
+}
+pub(crate) async fn run_docker_with_adapter(
+    endpoint_url: &str,
+    connector_endpoint: &str,
+    provider: &str,
+    name: &str,
+    owner: BearerSecret,
+    adapter: Arc<chapchoo_docker::Docker>,
+    stop: CancellationToken,
+) -> Result<(), AppError> {
+    endpoint(connector_endpoint)?;
+    let channel = endpoint(endpoint_url)?.connect_lazy();
+    let result = run_connection(
+        channel,
+        connector_endpoint,
+        provider,
+        name,
+        owner,
+        Arc::new(Adapter::Docker(adapter.clone())),
+        stop,
+    )
+    .await;
+    adapter.drain().await?;
+    result
+}
+async fn run_connection(
+    channel: Channel,
+    connector_endpoint: &str,
+    provider: &str,
+    name: &str,
+    owner: BearerSecret,
+    adapter: Arc<Adapter>,
+    stop: CancellationToken,
+) -> Result<(), AppError> {
+    adapter.verify().await?;
     let mut auth = ProviderAuthenticationClient::new(channel.clone())
         .max_decoding_message_size(64 * 1024)
         .max_encoding_message_size(64 * 1024);
@@ -97,8 +233,8 @@ pub(crate) async fn run_with_adapter(
         wire::ProviderConfiguration {
             provider_id: provider.into(),
             name: name.into(),
-            kind: wire::ProviderKind::Kubernetes as i32,
-            docker_daemon_id: None,
+            kind: adapter.kind() as i32,
+            docker_daemon_id: adapter.daemon(),
             capabilities: Some(wire::ProviderCapabilities {
                 create: true,
                 start: true,
@@ -120,7 +256,16 @@ pub(crate) async fn run_with_adapter(
         )?)
         .await?
         .into_inner();
-    stream_loop(channel, endpoint_url, provider, owner, key, adapter, stop).await
+    stream_loop(
+        channel,
+        connector_endpoint,
+        provider,
+        owner,
+        key,
+        adapter,
+        stop,
+    )
+    .await
 }
 async fn stream_loop(
     channel: Channel,
@@ -128,7 +273,7 @@ async fn stream_loop(
     provider: &str,
     owner: BearerSecret,
     key: wire::ComponentKey,
-    adapter: Arc<Kubernetes>,
+    adapter: Arc<Adapter>,
     stop: CancellationToken,
 ) -> Result<(), AppError> {
     let mut auth = ProviderAuthenticationClient::new(channel.clone());
@@ -201,10 +346,11 @@ async fn connected(
     provider: &str,
     connector_endpoint: &str,
     key: &BearerSecret,
-    adapter: Arc<Kubernetes>,
+    adapter: Arc<Adapter>,
     effects: &mut Effects,
     stop: &CancellationToken,
 ) -> Result<(), AppError> {
+    adapter.verify().await?;
     let auth = ProviderAuthenticationClient::new(channel.clone())
         .max_decoding_message_size(64 * 1024)
         .max_encoding_message_size(64 * 1024);
@@ -218,8 +364,8 @@ async fn connected(
                 provider_id: provider.into(),
                 namespace: adapter.namespace().into(),
                 connector_endpoint: connector_endpoint.into(),
-                kind: wire::ProviderKind::Kubernetes as i32,
-                docker_daemon_id: None,
+                kind: adapter.kind() as i32,
+                docker_daemon_id: adapter.daemon(),
             })),
         })
         .await?;
@@ -255,6 +401,7 @@ async fn connected(
             _=stop.cancelled()=>return Ok(()),
             _=heartbeat.tick()=>{
                 effects.reap_completed()?;
+                adapter.verify().await?;
                 if acknowledged.elapsed()>=Duration::from_millis(u64::from(connected.validity_ms)){return Err("Provider heartbeat acknowledgement expired".into());}
                 sender.try_send(wire::ProviderFrame{payload:Some(wire::provider_frame::Payload::Heartbeat(wire::Heartbeat{connection_id:connected.connection_id.clone()}))})?;
             }
@@ -264,11 +411,17 @@ async fn connected(
                     Some(wire::control_frame::Payload::Heartbeat(value)) if value.connection_id==connected.connection_id=>acknowledged=tokio::time::Instant::now(),
                     Some(wire::control_frame::Payload::Provider(command))=>{
                         if command.remaining_ms==0||command.identity.as_ref().is_none_or(|id|id.connection_id!=connected.connection_id){continue;}
-                        let worker=Worker{auth:auth.clone(),source:source.clone(),key:BearerSecret::parse(key.expose().to_owned())?,adapter:adapter.clone(),sender:sender.clone(),execution_terminal:false,preparation_retry_safe:false};
-                        if effects.active(){worker.reply(&command,wire::CommandOutcome::NotStarted).await?;continue;}
+                        let control=Control{auth:auth.clone(),source:source.clone(),key:BearerSecret::parse(key.expose().to_owned())?,sender:sender.clone()};
+                        if effects.active(){control.reply(&command,wire::CommandOutcome::NotStarted,false).await?;continue;}
                         // The task, not this call or stream, owns its permit. Its
                         // original identity makes late replies harmless after reconnect.
-                        let _waiter=effects.start(async move {worker.execute(command).await;})?;
+                        let adapter=adapter.clone();
+                        let _waiter=effects.start(async move {
+                            match adapter.as_ref() {
+                                Adapter::Kubernetes(adapter)=>Worker{control,adapter:adapter.clone(),execution_terminal:false,preparation_retry_safe:false}.execute(command).await,
+                                Adapter::Docker(adapter)=>docker_worker::Worker{control,adapter:adapter.clone(),preparation_retry_safe:false}.execute(command).await,
+                            }
+                        })?;
                     }
                     Some(wire::control_frame::Payload::Cancel(_))=>{},
                     _=>return Err("Unexpected Provider frame".into()),
@@ -280,23 +433,12 @@ async fn connected(
 struct Worker {
     execution_terminal: bool,
     preparation_retry_safe: bool,
-    auth: ProviderAuthenticationClient<Channel>,
-    source: wire::ProviderConnectionCheck,
-    key: BearerSecret,
+    control: Control,
     adapter: Arc<Kubernetes>,
-    sender: mpsc::Sender<wire::ProviderFrame>,
 }
 impl Worker {
     async fn check(&mut self, command: &wire::ProviderCommand) -> Result<(), AppError> {
-        self.auth
-            .check_command(request(
-                wire::ProviderCommandCheck {
-                    source: Some(self.source.clone()),
-                    command: Some(command.clone()),
-                },
-                &self.key,
-            )?)
-            .await?;
+        self.control.check(command).await?;
         Ok(())
     }
     async fn report(
@@ -306,38 +448,16 @@ impl Worker {
         fact: wire::ExecutionFact,
         cleanup: bool,
     ) -> Result<(), AppError> {
-        self.auth
-            .report(request(
-                wire::ProviderReport {
-                    source: Some(self.source.clone()),
-                    computer: Some(context.clone()),
-                    resources,
-                    execution: fact as i32,
-                    cleanup_complete: cleanup,
-                },
-                &self.key,
-            )?)
-            .await?;
-        Ok(())
+        self.control.report(context, resources, fact, cleanup).await
     }
     async fn reply(
         &self,
         command: &wire::ProviderCommand,
         outcome: wire::CommandOutcome,
     ) -> Result<(), AppError> {
-        self.sender.try_send(wire::ProviderFrame {
-            payload: Some(wire::provider_frame::Payload::Result(
-                wire::ProviderResult {
-                    identity: command.identity.clone(),
-                    computer: command.computer.clone(),
-                    outcome: outcome as i32,
-                    resources: vec![],
-                    execution: wire::ExecutionFact::Unspecified as i32,
-                    execution_terminal: self.execution_terminal,
-                },
-            )),
-        })?;
-        Ok(())
+        self.control
+            .reply(command, outcome, self.execution_terminal)
+            .await
     }
     async fn execute(mut self, mut command: wire::ProviderCommand) {
         let result = self.perform(&mut command).await;

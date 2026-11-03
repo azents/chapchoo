@@ -64,8 +64,11 @@ requester approval.
 
 Root runs format, Clippy, focused owner tests and interface-dependent checks before
 freezing each integrated phase for the assigned reviewer. Root fixes findings
-directly and runs affected checks, then opens the phase PR and checks exact-head
-CI. Hook execution is mandatory.
+directly and runs affected checks, then opens the phase PR before starting the
+next implementation phase. Create the complete planned PR stack first, then
+inspect exact-head CI across every phase. Handle reviews during implementation
+without replacing phase progression with CI monitoring. Hook execution is
+mandatory.
 
 - Domain: strict decoding, native bounds, role/substrate consistency, exact
   identity comparison and original-volume metadata preservation.

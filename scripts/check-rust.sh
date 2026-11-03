@@ -44,9 +44,13 @@ allowed = {
         "chapchoo-protocol", "kube", "k8s-openapi", "thiserror", "tokio", "futures-util",
         "tower", "http", "http-body-util", "serde_json",
     },
+    "chapchoo-docker": {
+        "bollard", "chapchoo-domain", "chapchoo-protocol", "futures-util", "hyper", "hyper-util", "jiff", "percent-encoding", "rustls", "rustls-native-certs", "serde", "serde_json", "sha2", "thiserror", "tokio", "tokio-rustls", "url", "zeroize",
+        "http-body-util", "rcgen", "tempfile",
+    },
     "chapchoo": {
         "chapchoo-crypto", "chapchoo-domain", "chapchoo-persistence", "chapchoo-service",
-        "chapchoo-rpc", "chapchoo-mail", "chapchoo-kubernetes", "clap", "tokio", "tokio-stream", "tokio-util",
+        "chapchoo-rpc", "chapchoo-mail", "chapchoo-kubernetes", "chapchoo-docker", "clap", "tokio", "tokio-stream", "tokio-util",
         "tonic", "tonic-health", "tracing", "tracing-subscriber", "thiserror", "zeroize",
         "url", "base64", "tempfile", "chapchoo-protocol", "prost-types", "nix",
         "kube", "tower", "http", "http-body-util", "serde_json",

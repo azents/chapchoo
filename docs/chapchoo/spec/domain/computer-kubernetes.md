@@ -6,7 +6,7 @@ spec_type: domain
 domain: computer
 code_paths:
   - rust/crates/kubernetes/src/lib.rs
-  - rust/crates/kubernetes/src/effects.rs
+  - rust/apps/chapchoo/src/provider/effects.rs
   - rust/crates/kubernetes/tests/adapter.rs
 last_verified_at: 2026-11-02
 spec_version: 1
@@ -88,7 +88,9 @@ also accepts exact committed absence only through DB-validated resource command
 authority. If necessary evidence was lost or expired, a new source remains
 uncertain; API 404 or a process timeout does not prove retirement.
 
-`Effects` owns started SDK tasks independently of call waiters and stream lifetime.
+The common Provider runtime's `Effects` owns started SDK tasks independently of
+call waiters and stream lifetime. It is no longer a Kubernetes-crate export;
+Kubernetes native identities, effect order, timings and witnesses are unchanged.
 One lifecycle permit remains held until the actual task ends, including when its
 response receiver is dropped. A Provider process must retain this owner across
 reconnects and supervise its drain; replacing a connection is not cancellation

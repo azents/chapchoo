@@ -783,14 +783,26 @@ async fn waiter_deadline_preserves_only_the_exact_live_task_until_native_settlem
             );
             Ok(request)
         };
-        client.check_command(check()?).await?;
+        assert!(
+            client
+                .check_command(check()?)
+                .await?
+                .into_inner()
+                .prior_running_completion
+        );
         // Await the actual invoke deadline, not cancellation or a scheduling
         // sleep. The synthetic native task remains unsettled behind this barrier.
         assert_eq!(
             pending.await??.outcome,
             wire::ForwardingOutcome::Uncertain as i32
         );
-        client.check_command(check()?).await?;
+        assert!(
+            client
+                .check_command(check()?)
+                .await?
+                .into_inner()
+                .prior_running_completion
+        );
         assert!(
             f.services
                 .dispatch_entry(&f.entry, retire.clone(), Instant::now() + RESPONSE_BUDGET,)
@@ -823,7 +835,13 @@ async fn waiter_deadline_preserves_only_the_exact_live_task_until_native_settlem
             wire::ForwardingOutcome::Uncertain as i32
         );
         assert!(f.receivers.commands.try_recv().is_err());
-        client.check_command(check()?).await?;
+        assert!(
+            client
+                .check_command(check()?)
+                .await?
+                .into_inner()
+                .prior_running_completion
+        );
         if native_outcome == wire::CommandOutcome::Completed {
             respond(&f.services, &f.entry, retire.clone(), &mut HashSet::new()).await?;
         } else {

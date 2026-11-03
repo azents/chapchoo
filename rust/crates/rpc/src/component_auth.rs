@@ -199,7 +199,7 @@ impl wire::provider_authentication_server::ProviderAuthentication
     async fn check_command(
         &self,
         request: Request<wire::ProviderCommandCheck>,
-    ) -> Result<Response<()>, Status> {
+    ) -> Result<Response<wire::ProviderCommandAdmission>, Status> {
         self.context.admit()?;
         let credential = input::actor(&request)?;
         let value = request.into_inner();
@@ -264,7 +264,16 @@ impl wire::provider_authentication_server::ProviderAuthentication
                 .await
                 .map_err(status)?;
         }
-        Ok(Response::new(()))
+        Ok(Response::new(wire::ProviderCommandAdmission {
+            initial_allocation: snapshot
+                .execution
+                .as_ref()
+                .is_some_and(|execution| execution.initial_allocation),
+            prior_running_completion: snapshot
+                .execution
+                .as_ref()
+                .is_some_and(|execution| execution.running_confirmed_at.is_some()),
+        }))
     }
     #[tracing::instrument(skip_all, fields(rpc = "check_provider_connection"))]
     async fn check_connection(
