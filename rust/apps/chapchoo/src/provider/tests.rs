@@ -1,4 +1,5 @@
 //! Real Control stream and supported SDK with an isolated synthetic HTTP service.
+mod docker;
 use super::*;
 use crate::test_support;
 use base64::{Engine, engine::general_purpose::URL_SAFE};
