@@ -1,5 +1,6 @@
 //! Native Control journey beneath the public Docker SDK, with owned fake bytes.
 use super::*;
+use crate::test_support::{self, Fixture};
 use base64::Engine as _;
 use chapchoo_domain::{DockerDaemonId, LifecycleAction, ManagedResourceKind, ProviderSubstrate};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -17,11 +18,10 @@ struct EngineState {
 struct Engine {
     state: Arc<Mutex<EngineState>>,
     port: u16,
-    stop: tokio::sync::oneshot::Sender<()>,
-    task: tokio::task::JoinHandle<Result<(), AppError>>,
 }
 impl Engine {
     async fn new(
+        fixture: &mut Fixture,
         app: Arc<ComputersService>,
         actor: chapchoo_crypto::SecretDigest,
         team: String,
@@ -30,9 +30,10 @@ impl Engine {
         let port = listener.local_addr()?.port();
         let state = Arc::new(Mutex::new(EngineState::default()));
         let shared = state.clone();
-        let (stop, mut stopping) = tokio::sync::oneshot::channel();
-        let task = tokio::spawn(async move {
+        let mut stopping = fixture.shutdown();
+        fixture.server(async move {
             let mut tasks = tokio::task::JoinSet::new();
+            let primary = async {
             loop {
                 tokio::select! {
                     _ = &mut stopping => break,
@@ -46,17 +47,12 @@ impl Engine {
                     }
                 }
             }
-            while let Some(result) = tasks.join_next().await {
-                result??;
-            }
-            Ok(())
+            Ok::<(), AppError>(())
+            }.await;
+            let cleanup = test_support::requests(&mut tasks).await;
+            test_support::completed(primary, cleanup)
         });
-        Ok(Self {
-            state,
-            port,
-            stop,
-            task,
-        })
+        Ok(Self { state, port })
     }
     async fn adapter(&self) -> Result<chapchoo_docker::Docker, AppError> {
         Ok(chapchoo_docker::Docker::connect(
@@ -358,335 +354,351 @@ async fn native_control_journey_acks_allocations_and_preserves_original_volume_w
 -> Result<(), AppError> {
     for (lose_start, replace_after_volume) in [(false, false), (true, false), (false, true)] {
         let directory = tempfile::tempdir()?;
-        let path = directory.path().join("native-provider.sqlite");
-        let cipher = Arc::new(CredentialCipher::new(RootKey::parse(
-            URL_SAFE.encode([41; 32]),
-        )?)?);
-        prepare_sqlite(&path, &cipher)?;
-        let setup = BearerSecret::generate()?;
-        let owner = BearerSecret::generate()?;
-        let verifier =
-            SystemOwnerVerifier::new("owner".into(), vec!["provider".into()], owner.digest())?;
-        let store = Store::connect_sqlite(path, cipher).await?;
-        let app = Arc::new(ComputersService::new(store.clone(), Some(verifier)));
-        let accounts = AccountsService::new(
-            store,
-            PasswordWork::new(1, PasswordCost::new(10)?)?,
-            None,
-            AccountsConfig {
-                general_web_url: "http://localhost:3000".into(),
-                setup_proof: Some(setup.digest()),
-                session_policy: SessionPolicy::default(),
-            },
-        )?;
-        let user = accounts
-            .initialize(
-                &setup,
-                chapchoo_domain::EmailAddress::parse("native@example.invalid")?,
-                Password::parse("Aa1!fixture-native".into())?,
-                AcceptanceTime::System,
+        test_support::scope(async |fixture| {
+            let path = directory.path().join("native-provider.sqlite");
+            let cipher = Arc::new(CredentialCipher::new(RootKey::parse(
+                URL_SAFE.encode([41; 32]),
+            )?)?);
+            prepare_sqlite(&path, &cipher)?;
+            let setup = BearerSecret::generate()?;
+            let owner = BearerSecret::generate()?;
+            let verifier =
+                SystemOwnerVerifier::new("owner".into(), vec!["provider".into()], owner.digest())?;
+            let store = Store::connect_sqlite(path, cipher).await?;
+            let app = Arc::new(ComputersService::new(store.clone(), Some(verifier)));
+            let accounts = AccountsService::new(
+                store,
+                PasswordWork::new(1, PasswordCost::new(10)?)?,
                 None,
-            )
-            .await?;
-        let team = accounts
-            .list_teams(&user.token.digest(), AcceptanceTime::System.now()?)
-            .await?
-            .remove(0);
-        let engine = Engine::new(app.clone(), user.token.digest(), team.id.clone()).await?;
-        engine.state.lock().map_err(|_| "Fixture lock")?.lose_start = lose_start;
-        engine
-            .state
-            .lock()
-            .map_err(|_| "Fixture lock")?
-            .replace_after_volume = replace_after_volume;
-        let adapter = Arc::new(Adapter::Docker(Arc::new(engine.adapter().await?)));
-        let listener = TcpListener::bind("127.0.0.1:0").await?;
-        let endpoint = format!("http://{}", listener.local_addr()?);
-        let peer_listener = TcpListener::bind("127.0.0.1:0").await?;
-        let control = app
-            .register_control(&format!("http://{}", peer_listener.local_addr()?))
-            .await?;
-        let connections = ComponentConnectionServices::new(
-            app.clone(),
-            control.id.clone(),
-            Arc::new(std::sync::atomic::AtomicBool::new(true)),
-        );
-        let authentication = ComponentAuthenticationServices::new(
-            app.clone(),
-            control.id.clone(),
-            connections.clone(),
-        );
-        let (stop_server, stopped) = tokio::sync::oneshot::channel();
-        let server = tokio::spawn(
-            Server::builder()
-                .add_service(authentication.provider_server())
-                .add_service(connections.provider_server())
-                .serve_with_incoming_shutdown(TcpListenerStream::new(listener), async {
-                    let _ = stopped.await;
-                }),
-        );
-        let peer = chapchoo_rpc::PeerServices::new(app.clone(), connections.clone());
-        let (stop_peer, stopped_peer) = tokio::sync::oneshot::channel();
-        let peer_server = tokio::spawn(
-            Server::builder()
-                .add_service(peer.server())
-                .serve_with_incoming_shutdown(TcpListenerStream::new(peer_listener), async {
-                    let _ = stopped_peer.await;
-                }),
-        );
-        app.configure_system_provider(
-            &owner,
-            "provider",
-            "Native fixture",
-            chapchoo_service::ProviderCapabilities {
-                create: true,
-                start: true,
-                stop: true,
-                restart: true,
-            },
-            &ProviderSubstrate::Docker(DockerDaemonId::parse("daemon:control-fixture".into())?),
-            AcceptanceTime::System,
-        )
-        .await?;
-        let key = app
-            .rotate_system_provider_key(&owner, "provider", "fixture-key", AcceptanceTime::System)
-            .await?;
-        let component_key = wire::ComponentKey {
-            token: key.token.expose().into(),
-            issued_at: None,
-            expires_at: None,
-            proactive_after: Some(prost_types::Timestamp {
-                seconds: key.proactive_after / 1000,
-                nanos: 0,
-            }),
-        };
-        let stop = CancellationToken::new();
-        let stopping = stop.clone();
-        let channel = super::super::endpoint(&endpoint)?.connect_lazy();
-        let reconnect_owner = BearerSecret::parse(owner.expose().into())?;
-        let reconnect_key = component_key.clone();
-        let reconnect_adapter = adapter.clone();
-        let reconnect_endpoint = endpoint.clone();
-        let provider = tokio::spawn(async move {
-            stream_loop(
-                channel,
-                &endpoint,
+                AccountsConfig {
+                    general_web_url: "http://localhost:3000".into(),
+                    setup_proof: Some(setup.digest()),
+                    session_policy: SessionPolicy::default(),
+                },
+            )?;
+            let user = accounts
+                .initialize(
+                    &setup,
+                    chapchoo_domain::EmailAddress::parse("native@example.invalid")?,
+                    Password::parse("Aa1!fixture-native".into())?,
+                    AcceptanceTime::System,
+                    None,
+                )
+                .await?;
+            let team = accounts
+                .list_teams(&user.token.digest(), AcceptanceTime::System.now()?)
+                .await?
+                .remove(0);
+            let engine =
+                Engine::new(fixture, app.clone(), user.token.digest(), team.id.clone()).await?;
+            engine.state.lock().map_err(|_| "Fixture lock")?.lose_start = lose_start;
+            engine
+                .state
+                .lock()
+                .map_err(|_| "Fixture lock")?
+                .replace_after_volume = replace_after_volume;
+            let docker = Arc::new(engine.adapter().await?);
+            let cleanup_docker = docker.clone();
+            fixture.cleanup(async move { cleanup_docker.drain().await.map_err(Into::into) });
+            let adapter = Arc::new(Adapter::Docker(docker));
+            let listener = TcpListener::bind("127.0.0.1:0").await?;
+            let endpoint = format!("http://{}", listener.local_addr()?);
+            let peer_listener = TcpListener::bind("127.0.0.1:0").await?;
+            let control = app
+                .register_control(&format!("http://{}", peer_listener.local_addr()?))
+                .await?;
+            let connections = ComponentConnectionServices::new(
+                app.clone(),
+                control.id.clone(),
+                Arc::new(std::sync::atomic::AtomicBool::new(true)),
+            );
+            let authentication = ComponentAuthenticationServices::new(
+                app.clone(),
+                control.id.clone(),
+                connections.clone(),
+            );
+            let cleanup_app = app.clone();
+            let cleanup_control = control.id.clone();
+            let cleanup_connections = connections.clone();
+            fixture.cleanup(async move {
+                let primary = cleanup_app
+                    .drain_control(&cleanup_control)
+                    .await
+                    .map_err(Into::into);
+                let cleanup = cleanup_connections.drain().await.map_err(Into::into);
+                test_support::completed(primary, cleanup)
+            });
+            let stopped = fixture.shutdown();
+            fixture.server(
+                Server::builder()
+                    .add_service(authentication.provider_server())
+                    .add_service(connections.provider_server())
+                    .serve_with_incoming_shutdown(TcpListenerStream::new(listener), async {
+                        let _ = stopped.await;
+                    }),
+            );
+            let peer = chapchoo_rpc::PeerServices::new(app.clone(), connections.clone());
+            let stopped_peer = fixture.shutdown();
+            fixture.server(
+                Server::builder()
+                    .add_service(peer.server())
+                    .serve_with_incoming_shutdown(TcpListenerStream::new(peer_listener), async {
+                        let _ = stopped_peer.await;
+                    }),
+            );
+            app.configure_system_provider(
+                &owner,
                 "provider",
-                owner,
-                component_key,
-                adapter,
-                stopping,
-            )
-            .await
-        });
-        tokio::time::timeout(Duration::from_secs(10), async {
-            loop {
-                if app.resolve_provider_route("provider").await?.is_some() {
-                    return Ok::<_, AppError>(());
-                }
-                tokio::time::sleep(Duration::from_millis(10)).await;
-            }
-        })
-        .await??;
-        let CreationOutcome::Present(agent) = app
-            .create_cloud_agent(
-                &user.token.digest(),
-                &team.id,
-                "create",
-                "provider",
-                "Native",
+                "Native fixture",
+                chapchoo_service::ProviderCapabilities {
+                    create: true,
+                    start: true,
+                    stop: true,
+                    restart: true,
+                },
+                &ProviderSubstrate::Docker(DockerDaemonId::parse("daemon:control-fixture".into())?),
                 AcceptanceTime::System,
             )
-            .await?
-        else {
-            return Err("Missing native Agent".into());
-        };
-        let delivery = chapchoo_rpc::PeerDelivery::new(app.clone());
-        connections.reconcile_once(&delivery).await?;
-        let observed = app
-            .agent(&user.token.digest(), &agent.id, AcceptanceTime::System)
             .await?;
-        if !replace_after_volume {
-            assert_eq!(
-                observed.computer.power,
-                if lose_start {
-                    chapchoo_domain::ObservedPower::Unknown
-                } else {
-                    chapchoo_domain::ObservedPower::Running
-                }
-            );
-        }
-        if replace_after_volume {
-            connections.reconcile_once(&delivery).await?;
-            connections.reconcile_once(&delivery).await?;
-            {
-                let state = engine.state.lock().map_err(|_| "Fixture lock")?;
-                assert_eq!(state.calls, ["volume-create"]);
-                assert!(state.volume.is_some() && state.container.is_none());
-            }
-            stop.cancel();
-            tokio::time::timeout(Duration::from_secs(10), provider).await???;
-        } else if lose_start {
-            assert_eq!(
-                observed.computer.progress.phase,
-                chapchoo_domain::LifecyclePhase::Uncertain
-            );
-            // New source and repeated convergence only observe; a running native
-            // process cannot settle an unknown same-process Start submission.
-            stop.cancel();
-            tokio::time::timeout(Duration::from_secs(10), provider).await???;
-            let prior_route = app.resolve_provider_route("provider").await?;
-            let reconnect_stop = CancellationToken::new();
-            let stopping = reconnect_stop.clone();
-            let channel = super::super::endpoint(&reconnect_endpoint)?.connect_lazy();
-            let reconnected = tokio::spawn(async move {
+            let key = app
+                .rotate_system_provider_key(
+                    &owner,
+                    "provider",
+                    "fixture-key",
+                    AcceptanceTime::System,
+                )
+                .await?;
+            let component_key = wire::ComponentKey {
+                token: key.token.expose().into(),
+                issued_at: None,
+                expires_at: None,
+                proactive_after: Some(prost_types::Timestamp {
+                    seconds: key.proactive_after / 1000,
+                    nanos: 0,
+                }),
+            };
+            let stop = CancellationToken::new();
+            let stopping = stop.clone();
+            let channel = super::super::endpoint(&endpoint)?.connect_lazy();
+            let reconnect_owner = BearerSecret::parse(owner.expose().into())?;
+            let reconnect_key = component_key.clone();
+            let reconnect_adapter = adapter.clone();
+            let reconnect_endpoint = endpoint.clone();
+            let provider = fixture.worker(stop.clone(), async move {
                 stream_loop(
                     channel,
-                    &reconnect_endpoint,
+                    &endpoint,
                     "provider",
-                    reconnect_owner,
-                    reconnect_key,
-                    reconnect_adapter,
+                    owner,
+                    component_key,
+                    adapter,
                     stopping,
                 )
                 .await
             });
             tokio::time::timeout(Duration::from_secs(10), async {
                 loop {
-                    if let Some(route) = app.resolve_provider_route("provider").await?
-                        && prior_route.as_ref().is_none_or(|prior| {
-                            prior.component.connection_id != route.component.connection_id
-                        })
-                    {
+                    if app.resolve_provider_route("provider").await?.is_some() {
                         return Ok::<_, AppError>(());
                     }
                     tokio::time::sleep(Duration::from_millis(10)).await;
                 }
             })
             .await??;
-            connections.reconcile_once(&delivery).await?;
-            connections.reconcile_once(&delivery).await?;
-            assert_eq!(
-                app.agent(&user.token.digest(), &agent.id, AcceptanceTime::System)
-                    .await?
-                    .computer
-                    .progress
-                    .phase,
-                chapchoo_domain::LifecyclePhase::Uncertain
-            );
-            app.request_lifecycle(
-                &user.token.digest(),
-                &agent.id,
-                &chapchoo_service::LifecycleRequest {
-                    request_id: "delete-uncertain".into(),
-                    expected_request_id: "create".into(),
-                    action: LifecycleAction::Delete,
-                },
-                AcceptanceTime::System,
-            )
-            .await?;
-            connections.reconcile_once(&delivery).await?;
-            assert_eq!(
-                engine.state.lock().map_err(|_| "Fixture lock")?.calls,
-                ["volume-create", "create", "start"]
-            );
-            reconnect_stop.cancel();
-            tokio::time::timeout(Duration::from_secs(10), reconnected).await???;
-        } else {
-            for (id, previous, action, running) in [
-                ("stop", "create", LifecycleAction::Stop, false),
-                ("start", "stop", LifecycleAction::Start, true),
-                ("restart", "start", LifecycleAction::Restart, true),
-            ] {
-                app.request_lifecycle(
+            let CreationOutcome::Present(agent) = app
+                .create_cloud_agent(
                     &user.token.digest(),
-                    &agent.id,
-                    &chapchoo_service::LifecycleRequest {
-                        request_id: id.into(),
-                        expected_request_id: previous.into(),
-                        action,
-                    },
+                    &team.id,
+                    "create",
+                    "provider",
+                    "Native",
                     AcceptanceTime::System,
                 )
+                .await?
+            else {
+                return Err("Missing native Agent".into());
+            };
+            let delivery = chapchoo_rpc::PeerDelivery::new(app.clone());
+            connections.reconcile_once(&delivery).await?;
+            let observed = app
+                .agent(&user.token.digest(), &agent.id, AcceptanceTime::System)
                 .await?;
+            if !replace_after_volume {
+                assert_eq!(
+                    observed.computer.power,
+                    if lose_start {
+                        chapchoo_domain::ObservedPower::Unknown
+                    } else {
+                        chapchoo_domain::ObservedPower::Running
+                    }
+                );
+            }
+            if replace_after_volume {
+                connections.reconcile_once(&delivery).await?;
+                connections.reconcile_once(&delivery).await?;
+                {
+                    let state = engine.state.lock().map_err(|_| "Fixture lock")?;
+                    assert_eq!(state.calls, ["volume-create"]);
+                    assert!(state.volume.is_some() && state.container.is_none());
+                }
+                stop.cancel();
+                tokio::time::timeout(Duration::from_secs(10), provider).await??;
+            } else if lose_start {
+                assert_eq!(
+                    observed.computer.progress.phase,
+                    chapchoo_domain::LifecyclePhase::Uncertain
+                );
+                // New source and repeated convergence only observe; a running native
+                // process cannot settle an unknown same-process Start submission.
+                stop.cancel();
+                tokio::time::timeout(Duration::from_secs(10), provider).await??;
+                let prior_route = app.resolve_provider_route("provider").await?;
+                let reconnect_stop = CancellationToken::new();
+                let stopping = reconnect_stop.clone();
+                let channel = super::super::endpoint(&reconnect_endpoint)?.connect_lazy();
+                let reconnected = fixture.worker(reconnect_stop.clone(), async move {
+                    stream_loop(
+                        channel,
+                        &reconnect_endpoint,
+                        "provider",
+                        reconnect_owner,
+                        reconnect_key,
+                        reconnect_adapter,
+                        stopping,
+                    )
+                    .await
+                });
+                tokio::time::timeout(Duration::from_secs(10), async {
+                    loop {
+                        if let Some(route) = app.resolve_provider_route("provider").await?
+                            && prior_route.as_ref().is_none_or(|prior| {
+                                prior.component.connection_id != route.component.connection_id
+                            })
+                        {
+                            return Ok::<_, AppError>(());
+                        }
+                        tokio::time::sleep(Duration::from_millis(10)).await;
+                    }
+                })
+                .await??;
                 connections.reconcile_once(&delivery).await?;
                 connections.reconcile_once(&delivery).await?;
                 assert_eq!(
                     app.agent(&user.token.digest(), &agent.id, AcceptanceTime::System)
                         .await?
                         .computer
-                        .power,
-                    if running {
-                        chapchoo_domain::ObservedPower::Running
-                    } else {
-                        chapchoo_domain::ObservedPower::Stopped
-                    }
+                        .progress
+                        .phase,
+                    chapchoo_domain::LifecyclePhase::Uncertain
                 );
-                assert!(
-                    engine
-                        .state
-                        .lock()
-                        .map_err(|_| "Fixture lock")?
-                        .volume
-                        .is_some()
-                );
-            }
-            app.request_lifecycle(
-                &user.token.digest(),
-                &agent.id,
-                &chapchoo_service::LifecycleRequest {
-                    request_id: "delete".into(),
-                    expected_request_id: "restart".into(),
-                    action: LifecycleAction::Delete,
-                },
-                AcceptanceTime::System,
-            )
-            .await?;
-            connections.reconcile_once(&delivery).await?;
-            connections.reconcile_once(&delivery).await?;
-            assert!(
-                app.agent(&user.token.digest(), &agent.id, AcceptanceTime::System)
-                    .await
-                    .is_err_and(|e| e.reason() == chapchoo_service::DomainReason::NotFound)
-            );
-            {
-                let state = engine.state.lock().map_err(|_| "Fixture lock")?;
-                assert_eq!(state.copies, [false, true, true]);
+                app.request_lifecycle(
+                    &user.token.digest(),
+                    &agent.id,
+                    &chapchoo_service::LifecycleRequest {
+                        request_id: "delete-uncertain".into(),
+                        expected_request_id: "create".into(),
+                        action: LifecycleAction::Delete,
+                    },
+                    AcceptanceTime::System,
+                )
+                .await?;
+                connections.reconcile_once(&delivery).await?;
                 assert_eq!(
-                    state.calls,
-                    [
-                        "volume-create",
-                        "create",
-                        "start",
-                        "update",
-                        "stop",
-                        "remove",
-                        "create",
-                        "start",
-                        "update",
-                        "stop",
-                        "remove",
-                        "create",
-                        "start",
-                        "update",
-                        "stop",
-                        "remove",
-                        "volume-remove"
-                    ]
+                    engine.state.lock().map_err(|_| "Fixture lock")?.calls,
+                    ["volume-create", "create", "start"]
                 );
-                assert!(state.volume.is_none() && state.container.is_none());
+                reconnect_stop.cancel();
+                tokio::time::timeout(Duration::from_secs(10), reconnected).await??;
+            } else {
+                for (id, previous, action, running) in [
+                    ("stop", "create", LifecycleAction::Stop, false),
+                    ("start", "stop", LifecycleAction::Start, true),
+                    ("restart", "start", LifecycleAction::Restart, true),
+                ] {
+                    app.request_lifecycle(
+                        &user.token.digest(),
+                        &agent.id,
+                        &chapchoo_service::LifecycleRequest {
+                            request_id: id.into(),
+                            expected_request_id: previous.into(),
+                            action,
+                        },
+                        AcceptanceTime::System,
+                    )
+                    .await?;
+                    connections.reconcile_once(&delivery).await?;
+                    connections.reconcile_once(&delivery).await?;
+                    assert_eq!(
+                        app.agent(&user.token.digest(), &agent.id, AcceptanceTime::System)
+                            .await?
+                            .computer
+                            .power,
+                        if running {
+                            chapchoo_domain::ObservedPower::Running
+                        } else {
+                            chapchoo_domain::ObservedPower::Stopped
+                        }
+                    );
+                    assert!(
+                        engine
+                            .state
+                            .lock()
+                            .map_err(|_| "Fixture lock")?
+                            .volume
+                            .is_some()
+                    );
+                }
+                app.request_lifecycle(
+                    &user.token.digest(),
+                    &agent.id,
+                    &chapchoo_service::LifecycleRequest {
+                        request_id: "delete".into(),
+                        expected_request_id: "restart".into(),
+                        action: LifecycleAction::Delete,
+                    },
+                    AcceptanceTime::System,
+                )
+                .await?;
+                connections.reconcile_once(&delivery).await?;
+                connections.reconcile_once(&delivery).await?;
+                assert!(
+                    app.agent(&user.token.digest(), &agent.id, AcceptanceTime::System)
+                        .await
+                        .is_err_and(|e| e.reason() == chapchoo_service::DomainReason::NotFound)
+                );
+                {
+                    let state = engine.state.lock().map_err(|_| "Fixture lock")?;
+                    assert_eq!(state.copies, [false, true, true]);
+                    assert_eq!(
+                        state.calls,
+                        [
+                            "volume-create",
+                            "create",
+                            "start",
+                            "update",
+                            "stop",
+                            "remove",
+                            "create",
+                            "start",
+                            "update",
+                            "stop",
+                            "remove",
+                            "create",
+                            "start",
+                            "update",
+                            "stop",
+                            "remove",
+                            "volume-remove"
+                        ]
+                    );
+                    assert!(state.volume.is_none() && state.container.is_none());
+                }
+                stop.cancel();
+                tokio::time::timeout(Duration::from_secs(10), provider).await??;
             }
-            stop.cancel();
-            tokio::time::timeout(Duration::from_secs(10), provider).await???;
-        }
-        app.drain_control(&control.id).await?;
-        connections.drain().await?;
-        let _ = stop_server.send(());
-        server.await??;
-        let _ = stop_peer.send(());
-        peer_server.await??;
-        let _ = engine.stop.send(());
-        engine.task.await??;
+            Ok(())
+        })
+        .await?;
     }
     Ok(())
 }
