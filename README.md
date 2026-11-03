@@ -5,7 +5,10 @@ An independent, channel-first agent project being built alongside Azents.
 **Current implementation:** General/Admin account and team applications plus the
 personal Agent/Computer lifecycle foundation. Client/Admin/Control service groups,
 independent Computer Provider/Computer Connector processes and the supported
-Kubernetes adapter share the same domain authority. AI task execution/harness,
+Kubernetes and native Docker adapters share the same domain authority. Docker
+has a separate DB-free Provider command that respects selected CLI context and
+portable host paths; no Mac build/distribution is included in this effort.
+AI task execution/harness,
 conversations, channels, integrations and routines are not implemented here yet.
 
 ## Development start
@@ -15,6 +18,9 @@ Account/product use also requires an explicitly prepared SQLite or PostgreSQL
 database and the installation's fixed key. Computer provisioning additionally
 requires explicit operator-owned namespace/image/credential policy; no cluster is
 created merely by starting the web app.
+Docker Providers instead require an explicitly reachable selected daemon and a
+container-to-Control network route. They never install/start Docker/Desktop,
+switch contexts or replace missing saved data.
 
 ```sh
 uvx pre-commit install

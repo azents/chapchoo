@@ -1,0 +1,27 @@
+{
+  "name": "@chapchoo/integration",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:integration": "pnpm --filter @chapchoo/testenv... build && node --experimental-strip-types --test src/docker.test.ts",
+    "test:unit": "node --experimental-strip-types --test src/nativeEvidence.test.ts src/readiness.test.ts",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --max-warnings 0",
+    "lint:fix": "eslint src --max-warnings 0 --fix",
+    "format": "prettier --write 'src/**/*.ts' 'package.json' '*.mjs' '*.md'",
+    "format:check": "prettier --check 'src/**/*.ts' 'package.json' '*.mjs' '*.md'"
+  },
+  "dependencies": {
+    "@chapchoo/testenv": "workspace:*",
+    "@chapchoo/rpc-client": "workspace:*",
+    "@grpc/grpc-js": "1.14.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "eslint": "^10.8.1",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.67.0"
+  }
+}

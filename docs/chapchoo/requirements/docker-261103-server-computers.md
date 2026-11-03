@@ -2,6 +2,7 @@
 title: "Docker Server Computers Requirements"
 created: 2026-11-03
 updated: 2026-11-03
+implemented: 2026-11-04
 tags: [computer, docker, provider, lifecycle]
 document_role: primary
 document_type: requirements
@@ -31,8 +32,8 @@ The Provider machine and Docker host need not be the same machine.
 ## Supporting Scenarios or Effects
 
 - Exercise the Computer lifecycle locally without Kubernetes prerequisites.
-- Run the Provider natively on macOS against Docker Desktop for Mac's Linux
-  containers, as well as the Linux Provider workflow.
+- Keep the Provider portable so a later native macOS build can naturally follow
+  Docker Desktop's selected context, without Mac-specific setup in this effort.
 - Retain the saved environment across execution replacement.
 - Continue safe observation and cleanup after Provider reconnection or visible
   Agent removal, within the established authority and evidence boundaries.
@@ -52,6 +53,8 @@ The Provider machine and Docker host need not be the same machine.
   across unrelated Docker hosts.
 - Installing, launching, restarting or configuring Docker Desktop/Engine, or
   switching the user's Docker CLI context.
+- Building, packaging or distributing a Mac executable in this effort, or
+  treating real-Mac validation as a completion gate for the current Docker work.
 - Automatic migration of saved environments between Docker hosts or between
   Kubernetes and Docker.
 - A new Agent harness, user-facing command shell, deployment or live host changes
@@ -88,10 +91,11 @@ connection configuration overrides that default.
 
 - A Provider process can manage a host it can access without requiring that the
   Docker daemon run on the Provider machine.
-- macOS native Provider execution with Docker Desktop for Mac is in scope.
-  Remote access from a Linux-only Provider is not a substitute for this local
-  developer workflow. Computers still use Linux containers, not macOS guest OS
-  containers.
+- Preserve portability for a later native macOS Provider build connecting to
+  Docker Desktop through its ordinary selected context. Do not introduce
+  unnecessary Linux-only host paths or behavior. This effort does not add Mac
+  build/distribution automation. Computers remain Linux containers, not macOS
+  guests.
 - Docker Desktop is already running and reachable as an operator prerequisite.
   The Provider naturally connects using the selected CLI context; it does not
   launch or manage Desktop. If the selected daemon is unavailable, report that
@@ -187,10 +191,9 @@ not only simulated responses or image-packaging commands.
   connection/execution fencing without duplicating the full E2E matrix.
 - Missing Docker prerequisites are reported as unavailable validation, not a
   successful or silently skipped lifecycle test.
-- macOS Provider build/startup, selected Docker Desktop context/socket,
-  Connector reachability and original-volume lifecycle receive real-Mac
-  validation. A Linux fixture or cross-compile alone does not establish this
-  supported workflow.
+- Real-Mac build/Desktop validation is outside this effort. Linux fixtures do
+  not establish a tested Mac support claim, and missing Mac infrastructure does
+  not block completing the current Docker feature.
 
 ## Fixed Constraints
 
@@ -242,6 +245,13 @@ On 2026-11-03 the requester explicitly extended the supported workflow to Docker
 Desktop for Mac, in response to the question about native macOS Provider
 execution. This scope amendment includes local native Provider execution and
 Mac-specific verification, not only a remotely accessible Docker host.
+
+On 2026-11-03 the requester corrected the implementation interpretation: respect
+Docker CLI context and keep the code naturally portable for a later Mac build;
+do not add Mac-specific builds, archives or distribution work now. The earlier
+native-build/real-Mac delivery-gate interpretation above was too broad. This
+clarification governs the current scope; Mac application/distribution design is
+separate future work.
 
 The requester subsequently confirmed that Desktop is already running and the
 Provider simply follows CLI context, then selected respecting the user's Docker

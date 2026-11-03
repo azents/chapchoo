@@ -36,7 +36,7 @@ export function fixtureUser(label: string): FixtureUser {
 
 /** Only complete, sanitized recent output lines may cross the diagnostic boundary. */
 export function diagnosticTail(output: string, truncated = false): string {
-  const lines = output.split(/\r?\n/);
+  const lines = output.replace(/\u001b\[[0-9;]*m/g, "").split(/\r?\n/);
   if (truncated) {
     lines.shift();
   }

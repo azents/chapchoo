@@ -47,6 +47,16 @@ fn main() -> ExitCode {
             }
             // Dependency source messages may contain SQL, endpoints or credentials.
             // Preserve them in the typed error, but publish only safe context.
+            if let Some(native) = error.downcast_ref::<chapchoo_docker::Error>() {
+                tracing::error!(
+                    engine = ?native.engine_diagnostic(),
+                    native_docker = %native,
+                    "Native Docker command failed"
+                );
+            }
+            if let Some(status) = error.downcast_ref::<tonic::Status>() {
+                tracing::error!(code = ?status.code(), "Control RPC command failed");
+            }
             tracing::error!(
                 source_depth = depth,
                 configuration = ?error.downcast_ref::<config::ConfigError>(),

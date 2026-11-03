@@ -43,7 +43,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 chapchoo \
     && useradd --no-log-init --create-home --uid 10001 --gid 10001 --shell /usr/sbin/nologin chapchoo \
-    && mkdir -p /opt/chapchoo && chown 10001:10001 /opt/chapchoo
+    && mkdir -p /opt/chapchoo /workspace && chown 10001:10001 /opt/chapchoo /workspace
 WORKDIR /opt/chapchoo
 COPY --chown=10001:10001 LICENSE ./LICENSE
 USER 10001:10001

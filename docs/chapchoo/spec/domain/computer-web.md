@@ -176,3 +176,8 @@ supported Kubernetes SDK. It verifies SSR, create/stop/start, one original PVC
 identity, independent Connector connectivity, operator resource reads and confirmed
 normal deletion. It does not create a real cluster, persist files on a real PVC,
 prove CNI/TLS or replace live substrate release gates.
+
+Real Docker resource/lifecycle validation belongs to the separate browser-free
+integration app through public RPC and actual Control/Provider/Connector. It does
+not duplicate the existing owner UI browser journey. Detailed native DTO/copy
+remains owner-layer coverage.

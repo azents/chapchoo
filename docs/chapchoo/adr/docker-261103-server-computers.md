@@ -300,6 +300,18 @@ as evidence, not an invented blanket secure-only product requirement.
 This completes the connection-security remainder discovered with D5; it does
 not add Windows Provider support or arbitrary volume-driver support.
 
+### D5 implementation-scope correction
+
+On 2026-11-03 the requester clarified that respecting Docker CLI context and
+avoiding unnecessary host-OS coupling should let a later Mac build work
+naturally. This does not authorize building, packaging or distributing a Mac
+executable now. The earlier D5 native-build/real-Mac release-gate decomposition
+is superseded for this effort. Keep the selected socket/context, already-running
+Desktop prerequisite and no-setup/no-fallback behavior; remove Mac-only CI and
+archive work. Future Mac distribution needs its own broader delivery design.
+Missing Mac infrastructure is not a blocker for completing this Docker feature,
+and Linux evidence is still not advertised as a verified Mac support result.
+
 ## Evidence
 
 - Existing Kubernetes ownership/retirement contract: [computer-kubernetes](../spec/domain/computer-kubernetes.md).

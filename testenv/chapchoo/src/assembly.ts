@@ -2,12 +2,16 @@ import { access, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   buildEnvironment,
   installedPackageRoot,
   safeEnvironment,
+  dockerFixtureConfig,
+  integrationBinary,
 } from "./config/index.js";
+import type { DockerFixtureConfig } from "./config/index.js";
+import { DockerFixture } from "./docker.js";
 import { ProcessOwner } from "./processes.js";
 import { fixtureUser, secret, safeMessage } from "./safety.js";
 import { seedRegisteredUser, seedAdministrator } from "./seed.js";
@@ -51,6 +55,7 @@ export class Assembly {
   readonly setupProof = secret();
   private readonly providerOwnerToken = secret();
   private kubernetes: SyntheticKubernetes | null = null;
+  readonly docker: DockerFixture | null;
   readonly teamName = "Acceptance team";
   readonly teamHandle = `acceptance-${secret().slice(0, 12).toLowerCase()}`;
   readonly generalUrl: string;
@@ -68,13 +73,24 @@ export class Assembly {
     generalWebPort: number,
     adminWebPort: number,
     private readonly packageRoot: string | null,
+    docker: DockerFixtureConfig | null,
+    private readonly nativeBinary: string | null,
   ) {
+    this.docker = docker ? new DockerFixture(docker) : null;
     this.owner = new ProcessOwner(join(directory, "owned-processes.jsonl"));
     this.generalUrl = `http://127.0.0.1:${generalWebPort}${packageRoot ? "" : "/app"}`;
     this.adminUrl = `http://127.0.0.1:${adminWebPort}${packageRoot ? "" : "/admin"}`;
   }
   static async create(): Promise<Assembly> {
-    const packageRoot = installedPackageRoot();
+    return Assembly.createOwned(false);
+  }
+  static async createDockerIntegration(): Promise<Assembly> {
+    return Assembly.createOwned(true);
+  }
+  private static async createOwned(realDocker: boolean): Promise<Assembly> {
+    const docker = realDocker ? dockerFixtureConfig() : null;
+    const packageRoot = realDocker ? null : installedPackageRoot();
+    const nativeBinary = realDocker ? integrationBinary() : null;
     const directory = await mkdtemp(join(tmpdir(), "chapchoo-e2e-"));
     const ports = new Set<number>();
     let assembly: Assembly | null = null;
@@ -93,6 +109,8 @@ export class Assembly {
         generalWeb,
         adminWeb,
         packageRoot,
+        docker,
+        nativeBinary,
       );
       await assembly.start();
       return assembly;
@@ -187,7 +205,7 @@ export class Assembly {
       CHAPCHOO_SECRET_KEY: `${secret()}=`,
     };
     const rust = join(repository, "rust");
-    if (!this.packageRoot) {
+    if (!this.packageRoot && !this.nativeBinary) {
       await this.owner.run(
         "Product binary build",
         "cargo",
@@ -197,9 +215,11 @@ export class Assembly {
         300_000,
       );
     }
-    const binary = this.packageRoot
-      ? join(this.packageRoot, "chapchoo")
-      : join(rust, "target/debug/chapchoo");
+    const binary =
+      this.nativeBinary ??
+      (this.packageRoot
+        ? join(this.packageRoot, "chapchoo")
+        : join(rust, "target/debug/chapchoo"));
     await this.owner.run(
       "Product schema preparation",
       binary,
@@ -232,8 +252,8 @@ export class Assembly {
         "--groups",
         "client,control",
         "--listen",
-        `127.0.0.1:${this.generalPort}`,
-        ...(this.packageRoot
+        `${this.docker ? "0.0.0.0" : "127.0.0.1"}:${this.generalPort}`,
+        ...(this.packageRoot && !this.docker
           ? [
               "--web",
               "both",
@@ -253,19 +273,21 @@ export class Assembly {
         CHAPCHOO_GENERAL_BACKEND_URL: `http://127.0.0.1:${this.generalPort}`,
         CHAPCHOO_ADMIN_BACKEND_URL: `http://127.0.0.1:${this.adminPort}`,
         CHAPCHOO_SYSTEM_OWNER_ID: "fixture-owner",
-        CHAPCHOO_SYSTEM_OWNER_PROVIDER_IDS: "fixture-provider",
+        CHAPCHOO_SYSTEM_OWNER_PROVIDER_IDS: this.docker
+          ? `fixture-provider,${this.docker.provider}`
+          : "fixture-provider",
         CHAPCHOO_SYSTEM_OWNER_TOKEN: this.providerOwnerToken,
         RUST_LOG: "chapchoo=info",
       },
     );
     await this.product.ready(
-      this.packageRoot
+      this.packageRoot && !this.docker
         ? /Selected components are ready/
         : /Selected backend service groups are ready/,
       60_000,
     );
     this.productReady = true;
-    if (this.packageRoot) {
+    if (this.packageRoot || this.docker) {
       return;
     }
     for (const [name, url, backendPort] of [
@@ -377,6 +399,42 @@ export class Assembly {
       },
     );
   }
+  get generalRpcEndpoint(): string {
+    return `127.0.0.1:${this.generalPort}`;
+  }
+  async startDockerProvider(): Promise<OwnedChild> {
+    if (!this.docker) {
+      throw new Error("Real Docker Assembly was not explicitly selected");
+    }
+    await this.docker.prepare(this.generalPort);
+    const binary =
+      this.nativeBinary ??
+      (this.packageRoot
+        ? join(this.packageRoot, "chapchoo")
+        : join(repository, "rust/target/debug/chapchoo"));
+    return this.owner.start(
+      "Native Docker Computer Provider",
+      binary,
+      ["docker-provider"],
+      repository,
+      {
+        ...safeEnvironment(),
+        ...(this.packageRoot
+          ? { PATH: join(this.directory, "no-host-tools") }
+          : {}),
+        CHAPCHOO_CONTROL_ENDPOINT: `http://127.0.0.1:${this.generalPort}`,
+        CHAPCHOO_CONTAINER_CONTROL_ENDPOINT: this.docker.controlEndpoint,
+        CHAPCHOO_PROVIDER_ID: this.docker.provider,
+        CHAPCHOO_PROVIDER_NAME: "Acceptance Docker",
+        CHAPCHOO_PROVIDER_OWNER_TOKEN: this.providerOwnerToken,
+        CHAPCHOO_DOCKER_HOST: pathToFileURL(
+          this.docker.config.socket,
+        ).href.replace(/^file:/, "unix:"),
+        CHAPCHOO_COMPUTER_IMAGE: this.docker.config.image,
+        CHAPCHOO_COMPUTER_IMAGE_PULL_POLICY: "Never",
+      },
+    );
+  }
   get savedAllocations(): number {
     return this.kubernetes?.savedAllocations ?? 0;
   }
@@ -393,19 +451,31 @@ export class Assembly {
       return;
     }
     this.closed = true;
-    let failed = false;
+    const failures: Error[] = [];
+    const record = (stage: string, error: unknown): void => {
+      failures.push(
+        new Error(
+          `${stage}: ${error instanceof Error ? safeMessage(error.message) : "Unknown failure"}`,
+        ),
+      );
+    };
     try {
       await this.owner.stopRunning();
       if (this.productReady) {
         await this.product?.finished(5_000);
       }
-    } catch {
-      failed = true;
+    } catch (error) {
+      record("Owned process shutdown", error);
     }
     try {
       await this.kubernetes?.close();
-    } catch {
-      failed = true;
+    } catch (error) {
+      record("Kubernetes fixture cleanup", error);
+    }
+    try {
+      await this.docker?.close();
+    } catch (error) {
+      record("Docker fixture cleanup", error);
     }
     // PostgreSQL is managed only by this fixture's exact private data directory.
     let postgresPresent = false;
@@ -419,7 +489,7 @@ export class Assembly {
           "code" in error &&
           error.code === "ENOENT"
         )) {
-          failed = true;
+          record("PostgreSQL presence verification", error);
         }
       }
     }
@@ -461,21 +531,22 @@ export class Assembly {
             safeEnvironment(),
             10_000,
           );
-        } catch {
-          failed = true;
+        } catch (error) {
+          record("PostgreSQL shutdown", error);
         }
       }
     }
     try {
       await this.owner.stopAll();
-    } catch {
-      failed = true;
+    } catch (error) {
+      record("Owned process reaping", error);
     }
-    if (!failed) {
+    if (failures.length === 0) {
       await rm(this.directory, { recursive: true, force: true });
     }
-    if (failed) {
-      throw new Error(
+    if (failures.length > 0) {
+      throw new AggregateError(
+        failures,
         "Owned fixture cleanup failed; private directory retained",
       );
     }

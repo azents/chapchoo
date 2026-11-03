@@ -15,7 +15,7 @@ code_paths:
   - rust/apps/chapchoo/src/main.rs
   - rust/apps/chapchoo/tests/provider_cli.rs
   - rust/apps/chapchoo/tests/provider_cli/docker.rs
-last_verified_at: 2026-11-03
+last_verified_at: 2026-11-04
 spec_version: 1
 ---
 
@@ -105,7 +105,9 @@ Connector session/key/endpoint, not newly allocated bootstrap credentials.
 The profile uses UID:GID 10001:10001, read-only root, dropped capabilities,
 no-new-privileges, constrained daemon seccomp and bounded CPU/memory settings.
 It has private PID/IPC, no privileged mode, host binds, devices, Docker socket,
-extra anonymous volumes or published ports. Only the saved named volume is
+extra anonymous volumes or published ports. Image `EXPOSE` declarations are
+advisory metadata; the Provider forbids `PublishAllPorts` and every nonempty
+`PortBindings` configuration independently. Only the saved named volume is
 mounted. Initial allocation permits image-directory population; successors use
 no-copy. More narrowly, only an opaque proof from a positively completed fresh
 volume creation permits that initial population. Recovered/existing originals,
@@ -171,3 +173,27 @@ These checks do not establish real writable-volume population, actual cgroup/
 seccomp enforcement, remote Engine security-mode acceptance, Engine restart behavior or
 native Mac/Desktop compatibility. Platform/image packaging and real acceptance
 remain separately validated delivery boundaries.
+
+## Platform and required acceptance delivery
+
+The standard Linux image stages its saved directory as UID:GID 10001:10001.
+The Provider respects CLI context/socket selection and avoids unnecessary
+host-OS coupling so a later Mac build can use it naturally. This effort adds
+no Mac-only build, packaging, distribution or real-Mac completion gate.
+
+The separate required Linux integration gate builds the Computer image from
+the same-run native binary artifact and runs one browser-free Docker lifecycle.
+An explicitly authorized disposable socket is mandatory. The fixture selects
+the existing bridge and supplies a container-reachable fixture Control address,
+not a guest port/tunnel/host-network workaround. The product journey verifies
+non-root initial saved writes, Stop/Start with original data, successor no-copy,
+emptied saved storage across Restart, exact normal cleanup and unrelated canaries.
+The integration app invokes generated public owner RPC against actual backend/
+Control/Provider/Connector. Support uses public Docker SDK calls and bounded
+test-only exec, never a product exec API or guest Docker credentials. The browser
+suite remains unchanged; no Docker-specific UI journey or Chromium is required.
+
+Missing required prerequisites fail; no synthetic fallback or skip counts as a
+real lifecycle pass. A workflow or cross-platform archive alone does not establish
+an executed Linux, native Desktop or remote transport result. Executed Linux
+acceptance does not imply verified native Desktop or remote transport behavior.

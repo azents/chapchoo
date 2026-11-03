@@ -2,6 +2,7 @@
 title: "Docker Server Computers Design"
 created: 2026-11-03
 updated: 2026-11-03
+implemented: 2026-11-04
 tags: [computer, docker, provider, architecture, security, verification]
 document_role: primary
 document_type: design
@@ -13,7 +14,7 @@ snapshot_id: docker-261103
 - Snapshot: `docker-261103`
 - Requirements: [docker-261103/REQ](../requirements/docker-261103-server-computers.md), confirmed on 2026-11-03.
 - Decisions: [docker-261103/ADR](../adr/docker-261103-server-computers.md).
-- Design revision: `6`; authority/feasibility reviewed and approved by the requester on 2026-11-03.
+- Design revision: `7`; revision6 authority/feasibility review retained with the requester's explicit M14 scope correction on 2026-11-03.
 - This document specifies intended changes, not implemented behavior or live Docker evidence.
 
 ## Current Behavior and Gaps
@@ -37,7 +38,7 @@ Kubernetes Secret for Docker.
 
 ## Design Authority
 
-- Design revision: `6`
+- Design revision: `7`
 - Decision owner: requester, Collaborative mode.
 
 | ID | Material design mechanism | Authority | Classification |
@@ -55,7 +56,7 @@ Kubernetes Secret for Docker.
 | M11 | Separate native API observation from Connector readiness; expose only bounded nonsecret native inventory | REQ-1, REQ-4, REQ-5; computer-web/control-rpc Specs | derived |
 | M12 | Minimal real-Docker lifecycle E2E and owner-layer fault/identity tests with explicit prerequisites | REQ-6; repository test-owned-contracts convention | required |
 | M13 | Docker `always` native same-container restart within the current execution, separate from owner-requested retirement and successor creation | REQ-3; ADR-D4 | decided |
-| M14 | Native macOS Provider with Docker Desktop for Mac alongside Linux; Mac-specific build and lifecycle evidence | amended REQ-2/REQ-6; ADR-D5 platform scope | decided |
+| M14 | Preserve host portability and ordinary selected Docker Desktop context for a later native Mac build; no Mac-only build/distribution work in this effort | corrected REQ-2/REQ-6; ADR-D5 implementation-scope correction | decided |
 | M15 | Preserve the selected user's Docker transport/authentication/TLS-verification/SSH policy, including deliberately configured unencrypted or verification-disabled remote settings | amended REQ-2; ADR-D1 and ADR-D6 | decided |
 | M16 | Docker retirement once-only phase admission with exact connection-local stage correlation and observation-only recovery after ambiguity or correlation loss | REQ-3/REQ-4; current cleanup correlation and non-replay contract; ADR-D4 retirement boundary | derived |
 
@@ -72,8 +73,9 @@ user-owned Provider, adoption API or operator cleanup API is introduced.
 - **D4 accepted:** native same-container `always` restart, recorded as M13.
   The earlier `RestartPolicy=no` proposal is superseded. Exact native terminal
   evidence under the chosen policy still needs feasibility validation.
-- **D5 accepted:** native macOS Provider and already-running Docker Desktop for
-  Mac alongside Linux, recorded as M14. No Desktop supervisor or installer.
+- **D5 clarified:** preserve portability and already-running Desktop context for
+  a later Mac build, recorded as M14. Mac-only build/distribution work and a
+  current real-Mac completion gate are excluded by the requester correction.
 - **D6 accepted:** respect the selected user's connection security configuration,
   recorded as M15. The earlier secure-only allowlist proposal is superseded.
 
@@ -86,7 +88,7 @@ helper.
 | Requirement | Mechanisms | Observable verification |
 | --- | --- | --- |
 | REQ-1 server ownership and Kubernetes preservation | M1, M4, M10, M11 | both DBs preserve current K8s rows; private API admission unchanged; Docker kind registered by scoped SYSTEM owner |
-| REQ-2 selected connected host | M2, M3, M14, M15 | CLI selection/override/security tests and native Mac path; changed daemon/context cannot relocate Computers |
+| REQ-2 selected connected host | M2, M3, M14, M15 | CLI selection/override/security tests and portable host paths; changed daemon/context cannot relocate Computers |
 | REQ-3 lifecycle and original saved environment | M4, M5, M7, M8, M13, M16 | real stop/start data preservation and normal cleanup; exact replay and unknown-outcome lower-layer checks |
 | REQ-4 bounded resources/credentials | M3, M4, M7, M8, M9, M11, M16 | foreign identities rejected; late effects remain uncertain; no daemon keys/socket in workload or browser DTO |
 | REQ-5 independent Connector path | M6, M11 | live daemon but blocked Connector path remains distinct; explicit address works from container |
@@ -169,23 +171,16 @@ The existing Computer image is Linux and the first Docker design targets Linux
 containers on Linux Engine or Docker Desktop's Linux-container daemon, with the
 same published CPU architectures as the existing image. Native Windows
 containers and alternate Docker-compatible engines are not inferred from a
-successful API ping. Native macOS Provider execution with Docker Desktop for
-Mac is required alongside Linux under ADR-D5. A Linux Provider talking remotely
-to a Mac is not the requested native workflow. This does not expand support to a
-macOS-native backend/web installation or Windows Provider by implication.
-
-Build and package a native macOS Provider-capable executable, without requiring
-the Linux web runtime to launch it. Audit unconditional Linux-only APIs and
-dependency/linker prerequisites across the existing binary; the current Unix
-termination handling is a reusable starting point, not proof of a Mac build.
-Existing Linux-only web-launch behavior remains scoped to that command. Validate
-Mac build/start/shutdown and real Desktop lifecycle on each claimed architecture.
-These build/start/shutdown checks concern the Provider process. Docker Desktop
-is already running as an operator prerequisite; the Provider neither launches
-nor installs, restarts or configures it. Desktop lifecycle tests observe
-operator/test-environment-initiated events, not a Provider-owned supervisor.
-Match the Linux Computer image architecture to the selected Desktop daemon;
-do not silently rely on cross-architecture emulation as native acceptance.
+successful API ping. Keep Provider code naturally portable for a later native
+Mac build connecting to Docker Desktop through its normal context. This effort
+does not build/package a Mac executable, add Mac-only CI, or design a macOS
+backend/web distribution. Do not add unnecessary Linux-only host paths or
+setup behavior to the Docker adapter. Existing Linux web-launch limitations
+remain scoped to that command. Real Mac build/Desktop acceptance is future
+evidence, not a current feature completion gate. When used with Desktop, the
+operator already has it running; the Provider never installs, launches,
+restarts or configures it. Match the selected daemon's Linux architecture
+without silently relying on emulation as native acceptance.
 
 Load the selected context's actual socket rather than hardcoding a Mac home
 directory or requiring a system socket symlink. Docker Desktop stores Linux
@@ -932,10 +927,11 @@ Docker SDK/image caches and unrelated host resources have no cleanup authority.
 
 ### Primary E2E contract
 
-Use the minimum existing product journey rather than a new broad browser matrix.
-One Docker-backed lifecycle test uses the real account/Control/Provider/Connector
-and a selected real Engine with isolated PostgreSQL or the existing supported
-fixture database. Verify:
+Use one browser-free integration journey through public account/Computer RPC,
+actual Control/Provider/Connector and a selected real Engine with isolated
+PostgreSQL or the existing supported fixture database. Existing browser E2E owns
+the unchanged owner/operator UI; do not duplicate it for Docker. Here end-to-end
+means the actual backend/native components, not a browser dependency. Verify:
 
 1. scoped SYSTEM Provider registers and owner creates a private Agent;
 2. real container starts and Connector becomes connected independently;
@@ -996,7 +992,8 @@ contract tests, with one focused real-host diagnosis only if needed.
 
 `testenv/chapchoo` may supply reusable private DB/process/credential and selected
 host fixture support, because those are shared assembly concerns. Product
-journeys stay in the E2E owner, not a second testenv acceptance framework.
+scenarios stay in the browser or native integration app that owns the boundary,
+not a second testenv acceptance framework.
 Docker fixtures use SDK operations with unique owned IDs and labels, explicit
 selected daemon, supported Linux image/architecture/network and no broad prune.
 Require operator-authorized disposable resources; never infer that any available
@@ -1008,26 +1005,22 @@ commands/assertions, observed outcomes and owned cleanup. Do not archive
 bootstrap environment, Docker config files or certificates. Fixture cleanup is
 separately verified and never reports test success from failed native cleanup.
 
-Extend the existing required Linux acceptance workflow with one serial
-Docker-backed Computer lifecycle alongside the existing synthetic-Kubernetes
-Computer journey. Reuse the job's freshly built backend/web/Connector artifacts
-and isolated account fixture, with a disposable runner-owned Engine. Build the
-Linux Computer image from those artifacts rather than fetching an untraceable
-mutable release. Do not duplicate the account/team/browser matrix per transport,
-remove existing K8s coverage or add a second nightly-only success substitute.
-Missing required Docker/image/network prerequisites fail this declared Linux
-path; they cannot silently skip.
+Add one required browser-free Docker integration job to ordinary CI. Reuse
+that run's native binary build artifact for the actual backend/Provider and
+Computer image with a disposable runner-owned Engine and isolated account
+fixture. Do not rebuild product binaries, require web artifacts or Chromium,
+or duplicate the owner UI/account/team browser matrix. Existing synthetic-
+Kubernetes browser coverage remains unchanged. Missing required Docker/image/
+network prerequisites fail the declared native path; they cannot silently skip.
+The requester explicitly corrected the browser/native test-layer separation
+on 2026-11-04; this preserves M12's real-component coverage without a browser.
 
-Native macOS Provider build checks cover both Apple Silicon and Intel targets
-claimed by the delivery, using native Mac build evidence for the binary and
-dependency/linker support. Real Docker Desktop for Mac acceptance uses an
-already-running operator-authorized Desktop daemon and selected CLI context;
-record native architecture, Desktop/Engine versions and minimum tested OS.
-It is an explicit delivery/release gate for Mac support, not optional evidence
-that Linux can replace. A hosted Mac compiler without a real Desktop daemon
-only satisfies the build gate. Missing authorized Mac infrastructure is
-unavailable validation and blocks the Mac support claim, not permission to
-launch/install Desktop or add an unapproved self-hosted service.
+No Mac-only compiler, startup, archive or Desktop lane is added in this effort.
+Respect selected context/socket behavior and retain portability for a later
+native Mac build. A future claim of a tested Mac combination needs its own
+real build/Desktop evidence; current Linux results are not that claim. Missing
+Mac infrastructure does not block this Docker feature, and never authorizes
+installing or launching Desktop or adding a self-hosted service.
 
 Remote SSH/TCP/TLS and selected security-mode acceptance is explicit opt-in with
 unavailable versus failed versus passed outcomes, plus required resolver/
@@ -1047,8 +1040,12 @@ in a deployed environment.
 
 ### Authority and source-design audit result
 
-Requirements REQ-1 through REQ-6 and ADR-D1 through ADR-D6 have been traced
-bidirectionally against revision `6`, mechanisms M1 through M16. Independent
+Requirements REQ-1 through REQ-6 and ADR-D1 through ADR-D6 are traced
+bidirectionally against revision `7`, mechanisms M1 through M16. This retains
+the independent revision6 authority/feasibility review and applies the requester's
+explicit ADR-D5/M14 narrowing: context respect and portability, without current
+Mac builds, distribution or a real-Mac gate. The browser-free test-owner
+correction preserves M12 and does not add a material mechanism. Independent
 read-only authority/feasibility review found no remaining concrete Design
 blocking defect after correcting:
 
@@ -1064,15 +1061,15 @@ coverage, with the following explicit implementation/delivery conditions:
 | Requirement | Assessment | Evidence and outstanding condition |
 | --- | --- | --- |
 | REQ-1 | conditional | current owner/SYSTEM authority reusable; both-engine FK/credential/receipt and K8s preservation tests must pass |
-| REQ-2 | conditional | released public SDK custom-transport path preserves selected settings; context/override/daemon mismatch fixtures and native Mac builds/selected real modes must pass |
+| REQ-2 | conditional | released public SDK custom-transport path preserves selected settings; context/override/daemon mismatch fixtures and portable host-path handling must pass |
 | REQ-3 | conditional | native `always` plus exact non-replay retirement and original-volume mechanisms coherent; native restart/stop/data/no-copy/crash regressions remain required |
 | REQ-4 | conditional | scoped kinds/identities, workload isolation and accepted D3 trust boundary explicit; real security/resource enforcement and no-replay/migration fixtures remain required |
-| REQ-5 | conditional | existing outbound Connector/default+override retained; real same-host/Mac/remote network reachability must be verified without tunnels or host changes |
-| REQ-6 | feasible verification plan | minimal Linux required journey and non-substitutable real-Mac release gate defined; actual runs are not yet performed |
+| REQ-5 | conditional | existing outbound Connector/default+override retained; declared Linux container reachability must pass without tunnels or host changes; untested combinations are not advertised |
+| REQ-6 | feasible verification plan | minimal Linux required journey retained; Mac build/distribution and its real-host gate are outside this corrected effort |
 
-No new requester-level policy choice remains from the audit. Missing native
-evidence is a declared gate, not an excuse to narrow the approved Mac/defaults
-scope silently. If implementation exposes a real contradiction, return the
+No new requester-level policy choice remains. Revision7 records the requester's
+explicit scope correction rather than treating Mac distribution as implied by
+context portability. If implementation exposes a real contradiction, return the
 exact requirement/material mechanism before changing authority.
 
 D1-D6 are accepted. Authority and source-level feasibility review must check the
@@ -1094,15 +1091,43 @@ recovery authority.
 - Decision owner: requester.
 - Approved on: 2026-11-03 at 15:45:15 KST, by the requester, explicitly approving
   the presented revision and requesting implementation.
-- Approved Design revision: `6`.
+- Approved Design revision: `7`, narrowed only by the requester's explicit
+  implementation-scope correction on 2026-11-03 at 23:41–23:42 KST: no Mac build,
+  archive, distribution or current Mac acceptance gate. The earlier revision6
+  approval remains the authority for unchanged mechanisms.
 - Approved authority IDs: M1, M2, M3, M4, M5, M6, M7, M8, M9, M10, M11, M12,
   M13, M14, M15, M16.
-- Approved scope: the complete revision 6 mechanisms and removal obligations,
+- Approved scope: unchanged revision6 mechanisms and removal obligations with
+  the explicit revision7 M14 scope correction,
   including native Docker server resources, preserved Kubernetes data, CLI-selected
   connection and security defaults, original-volume preservation, exact once-only
-  retirement, Linux and native macOS Provider delivery and their distinct validation
-  gates. Implementation, tests, independent review and PR delivery are authorized;
+  retirement, Linux Docker lifecycle and portable context behavior for a later
+  Mac build. Implementation, tests, independent review and PR delivery are authorized;
   merge, deployment and production Docker/Kubernetes changes are not authorized.
+
+## Implementation Verification
+
+Implemented on 2026-11-04 KST across PRs49–52. The exact `edd68d1` head passed
+all ten checks in [CI41680620064](https://github.com/azents/chapchoo/actions/runs/41680620064),
+including the separate browser-free real Docker lifecycle and all four retained
+browser journeys. Real Engine28.0.4/API1.48, Linuxamd64, selected explicit Unix
+socket and the existing bridge exercised actual backend/Control/Provider/Connector:
+non-root initial marker, connected creation, Stop/Start original data, distinct
+successors on the original volume, emptied-volume Restart/no-copy, normal Delete,
+native absence and unrelated canary preservation. Safe evidence was emitted only
+after owned cleanup succeeded.
+
+The completed root matrix includes176 Rust tests, Clippy/format/dependency
+boundaries, public-RPC checks on SQLite and PostgreSQL, frozen selected-transport
+fixtures and local OpenSSH fixtures, global TypeScript quality/build, owning
+support/component/browser checks, mandatory hooks and the same independent
+complete-feature reviewer. Final fixture-only lost-response cleanup was reviewed
+and tested separately; it does not change product recovery authority.
+
+This establishes the declared Linux acceptance, not an executed native Mac build,
+remote Engine TCP/TLS/SSH acceptance or support claim for untested combinations.
+The PR stack remains unmerged; deployment and production infrastructure changes
+were neither performed nor authorized.
 
 ## References
 

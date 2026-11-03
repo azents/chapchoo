@@ -1,7 +1,8 @@
 # Chapchoo E2E application
 
 `@chapchoo/e2e` is an executable Playwright app, not a shared package. It owns
-three serial account/team journeys and one Computer owner/operator journey. Fixture preparation comes from
+three serial account/team journeys and one Computer owner/operator journey.
+Fixture preparation comes from
 [`@chapchoo/testenv`](../../../testenv/chapchoo/README.md); product app source is
 not imported. No direct DB writes, mutation retries or existing browser state.
 
@@ -24,6 +25,11 @@ fail. Compiler cache stays inside the private fixture. Its ancestors must be
 securely owned or protected by a trusted sticky directory. Set a suitable
 `TMPDIR` before starting the runner if the host temporary root does not satisfy
 that native compiler requirement; do not relax shared-directory permissions.
+
+Docker-native lifecycle/storage checks belong to the separate browser-free
+[`@chapchoo/integration`](../integration/README.md) app and required CI job.
+This browser suite needs no Docker daemon and does not duplicate its UI flow
+for every native substrate.
 
 `CHAPCHOO_E2E_PACKAGE_ROOT` selects an absolute extracted source-free bundle.
 Package mode never falls back to source builds or host Node. The test substrate

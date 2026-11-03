@@ -47,6 +47,22 @@ impl std::fmt::Debug for Error {
     }
 }
 impl Error {
+    /// Static SDK failure category and numeric HTTP status; no native payload.
+    pub fn engine_diagnostic(&self) -> Option<(&'static str, Option<u16>)> {
+        use bollard::errors::Error as Sdk;
+        let Self::Engine(source) = self else {
+            return None;
+        };
+        Some(match source {
+            Sdk::DockerResponseServerError { status_code, .. } => ("server", Some(*status_code)),
+            Sdk::JsonDataError { .. } | Sdk::JsonSerdeError { .. } => ("decode", None),
+            Sdk::RequestTimeoutError => ("timeout", None),
+            Sdk::IOError { .. } => ("io", None),
+            Sdk::HyperResponseError { .. } | Sdk::HttpClientError { .. } => ("http", None),
+            Sdk::APIVersionParseError { .. } => ("version", None),
+            _ => ("other", None),
+        })
+    }
     pub fn definitely_rejected(&self) -> bool {
         matches!(self, Self::CreationRejected)
     }
@@ -54,5 +70,30 @@ impl Error {
     /// previous allocations have settled and their report ACKs were received.
     pub fn container_creation_retry_safe(&self) -> bool {
         matches!(self, Self::CreationRejected | Self::ContainerCapacity)
+    }
+}
+
+#[cfg(test)]
+mod diagnostic_tests {
+    use super::Error;
+    use bollard::errors::Error as Sdk;
+
+    #[test]
+    fn engine_diagnostics_publish_only_static_category_and_numeric_status() {
+        let response = Error::Engine(Sdk::DockerResponseServerError {
+            status_code: 400,
+            message: "private-native-response".into(),
+        });
+        assert_eq!(response.engine_diagnostic(), Some(("server", Some(400))));
+        let decode = Error::Engine(Sdk::JsonDataError {
+            message: "private-native-payload".into(),
+            column: 42,
+        });
+        assert_eq!(decode.engine_diagnostic(), Some(("decode", None)));
+        let io = Error::Engine(Sdk::IOError {
+            err: std::io::Error::other("private-endpoint"),
+        });
+        assert_eq!(io.engine_diagnostic(), Some(("io", None)));
+        assert_eq!(Error::WorkloadPolicy.engine_diagnostic(), None);
     }
 }

@@ -16,12 +16,13 @@ code_paths:
   - images/chapchoo
   - infra/charts/chapchoo
   - testenv/chapchoo
+  - typescript/apps/integration
   - .github/workflows/linux-package.yaml
   - .github/workflows/build-web.yaml
   - .github/workflows/build-binary.yaml
   - .github/workflows/snapshot.yaml
   - scripts/publish-snapshot.py
-last_verified_at: 2026-11-03
+last_verified_at: 2026-11-04
 spec_version: 1
 ---
 
@@ -118,6 +119,11 @@ web has the central executable, matching Node and selected standalone app, and
 receives no backend database/key credentials. Runtime supports a read-only root
 with an explicitly writable temporary directory. Database state is separately
 operator-provided, never baked into an image.
+
+The standard runtime stages `/workspace` owned by UID:GID 10001:10001. A true
+initial fresh Docker volume can copy that directory's ownership; existing
+original volumes use no-copy. The runtime never uses a privileged ownership
+repair helper. Custom mounts/images must meet the same non-root write contract.
 
 ## Chart and controller lifecycle
 
@@ -231,6 +237,27 @@ ARM64 remains a native build/ELF/assembly/image-smoke gate rather than a second
 product-test lane. Snapshot checks the exact images it publishes as well.
 Workflow configuration is not an executed success; actual exact-head CI results
 must be reported separately.
+
+The separate required `docker-integration` job owns a browser-free real Docker
+lifecycle. It downloads that same run's native binary artifact for actual
+backend/Control/Provider and the Computer image; no web artifact, server or
+Chromium is required. `typescript/apps/integration` calls generated public
+account/Computer RPC and asserts connected Create, Stop/Start with original data,
+successor no-copy including emptied storage, normal Delete and untouched canaries.
+Public Docker SDK support supplies only prerequisites/marker IO. Existing browser
+and synthetic-Kubernetes coverage stays unchanged. Missing required native
+socket/image/route fails, never skips. Safe startup diagnostics distinguish
+static native error classification and RPC status without raw source messages.
+
+Only this opt-in real-Docker Assembly binds ephemeral Client/Control to all
+interfaces so the existing bridge gateway (or explicit host override) can route
+the Connector. Ordinary fixtures remain loopback-bound. No guest port, host
+networking or tunnel is introduced. Test teardown never force-deletes ambiguous
+product work or prunes the daemon. A lost fixture-canary Create response permits
+only exact reserved-name/run-label inspection and individually verified cleanup;
+unknown Create outcomes remain failed even after observed cleanup. This does not
+reconstruct product authority or replay Create/Start. Bounded native evidence is published only for
+a passed test; raw guest/bootstrap output remains private.
 
 Separate reusable web and binary build jobs produce architecture-matched
 artifacts. The web job builds Next on a native Linux runner and exports validated
