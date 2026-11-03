@@ -101,7 +101,8 @@
     "typecheck": {
       "dependsOn": [
         "^build",
-        "^generate"
+        "^generate",
+        "generate"
       ]
     },
     "clean": {
