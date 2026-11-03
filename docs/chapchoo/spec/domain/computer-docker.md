@@ -195,5 +195,5 @@ suite remains unchanged; no Docker-specific UI journey or Chromium is required.
 
 Missing required prerequisites fail; no synthetic fallback or skip counts as a
 real lifecycle pass. A workflow or cross-platform archive alone does not establish
-an executed Linux, native Desktop or remote transport result. The snapshot
-remains unpromoted until its required real acceptance is complete.
+an executed Linux, native Desktop or remote transport result. Executed Linux
+acceptance does not imply verified native Desktop or remote transport behavior.

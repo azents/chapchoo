@@ -22,7 +22,7 @@ code_paths:
   - .github/workflows/build-binary.yaml
   - .github/workflows/snapshot.yaml
   - scripts/publish-snapshot.py
-last_verified_at: 2026-11-03
+last_verified_at: 2026-11-04
 spec_version: 1
 ---
 
@@ -253,7 +253,10 @@ Only this opt-in real-Docker Assembly binds ephemeral Client/Control to all
 interfaces so the existing bridge gateway (or explicit host override) can route
 the Connector. Ordinary fixtures remain loopback-bound. No guest port, host
 networking or tunnel is introduced. Test teardown never force-deletes ambiguous
-product work or prunes the daemon. Bounded native evidence is published only for
+product work or prunes the daemon. A lost fixture-canary Create response permits
+only exact reserved-name/run-label inspection and individually verified cleanup;
+unknown Create outcomes remain failed even after observed cleanup. This does not
+reconstruct product authority or replay Create/Start. Bounded native evidence is published only for
 a passed test; raw guest/bootstrap output remains private.
 
 Separate reusable web and binary build jobs produce architecture-matched

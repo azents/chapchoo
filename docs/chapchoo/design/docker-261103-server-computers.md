@@ -2,6 +2,7 @@
 title: "Docker Server Computers Design"
 created: 2026-11-03
 updated: 2026-11-03
+implemented: 2026-11-04
 tags: [computer, docker, provider, architecture, security, verification]
 document_role: primary
 document_type: design
@@ -1103,6 +1104,30 @@ recovery authority.
   retirement, Linux Docker lifecycle and portable context behavior for a later
   Mac build. Implementation, tests, independent review and PR delivery are authorized;
   merge, deployment and production Docker/Kubernetes changes are not authorized.
+
+## Implementation Verification
+
+Implemented on 2026-11-04 KST across PRs49–52. The exact `edd68d1` head passed
+all ten checks in [CI41680620064](https://github.com/azents/chapchoo/actions/runs/41680620064),
+including the separate browser-free real Docker lifecycle and all four retained
+browser journeys. Real Engine28.0.4/API1.48, Linuxamd64, selected explicit Unix
+socket and the existing bridge exercised actual backend/Control/Provider/Connector:
+non-root initial marker, connected creation, Stop/Start original data, distinct
+successors on the original volume, emptied-volume Restart/no-copy, normal Delete,
+native absence and unrelated canary preservation. Safe evidence was emitted only
+after owned cleanup succeeded.
+
+The completed root matrix includes176 Rust tests, Clippy/format/dependency
+boundaries, public-RPC checks on SQLite and PostgreSQL, frozen selected-transport
+fixtures and local OpenSSH fixtures, global TypeScript quality/build, owning
+support/component/browser checks, mandatory hooks and the same independent
+complete-feature reviewer. Final fixture-only lost-response cleanup was reviewed
+and tested separately; it does not change product recovery authority.
+
+This establishes the declared Linux acceptance, not an executed native Mac build,
+remote Engine TCP/TLS/SSH acceptance or support claim for untested combinations.
+The PR stack remains unmerged; deployment and production infrastructure changes
+were neither performed nor authorized.
 
 ## References
 

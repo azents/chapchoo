@@ -1,7 +1,11 @@
 import Docker from "dockerode";
 import { secret } from "./safety.js";
-import { cleanupCanary } from "./canaryCleanup.js";
-import type { CanaryState } from "./canaryCleanup.js";
+import {
+  cleanupCanary,
+  cleanupCanaryVolume,
+  recoverCanaryId,
+} from "./canaryCleanup.js";
+import type { CanaryState, CanaryVolumeState } from "./canaryCleanup.js";
 import type { DockerFixtureConfig } from "./config/index.js";
 import { runningSuccessor } from "./dockerObservation.js";
 import type { NativeComputer, NativeObservation } from "./dockerObservation.js";
@@ -403,9 +407,37 @@ export class DockerFixture {
       return;
     }
     await this.verifyDaemon();
-    const productAbsent = await this.productAbsent();
     let failed = this.uncertain !== null && this.uncertain !== "canary-start";
-    if (this.canary && this.canaryCreated) {
+    let productAbsent = false;
+    try {
+      productAbsent = await this.productAbsent();
+    } catch {
+      failed = true;
+    }
+    if (!this.canary && this.uncertain === "container-create") {
+      try {
+        const name = `${this.run}-container`;
+        const observed = await this.sdk.getContainer(name).inspect();
+        this.canaryId = recoverCanaryId(
+          {
+            id: observed.Id,
+            name: observed.Name,
+            labels: observed.Config.Labels ?? {},
+          },
+          name,
+          this.canaryLabels,
+        );
+        this.canary = this.sdk.getContainer(this.canaryId);
+      } catch (error) {
+        if (!missing(error)) {
+          failed = true;
+        }
+      }
+    }
+    if (
+      this.canary &&
+      (this.canaryCreated || this.uncertain === "container-create")
+    ) {
       try {
         const canary = this.canary;
         await cleanupCanary(
@@ -439,24 +471,34 @@ export class DockerFixture {
         failed = true;
       }
     }
-    if (this.canaryVolume && this.canaryVolumeCreated) {
+    if (this.canaryVolumeCreated || this.uncertain === "volume-create") {
       try {
-        const volume = await this.canaryVolume.inspect();
-        if (
-          volume.Name !== this.volumeName ||
-          !labelsMatch(volume.Labels, this.canaryLabels)
-        ) {
-          throw new Error("Canary volume identity changed");
-        }
-        await this.canaryVolume.remove({ force: false });
-        try {
-          await this.canaryVolume.inspect();
-          failed = true;
-        } catch (error) {
-          if (!missing(error)) {
-            failed = true;
-          }
-        }
+        const volume = this.canaryVolume ?? this.sdk.getVolume(this.volumeName);
+        await cleanupCanaryVolume(
+          {
+            inspect: async (): Promise<CanaryVolumeState | null> => {
+              try {
+                const observed = await volume.inspect();
+                return {
+                  name: observed.Name,
+                  driver: observed.Driver,
+                  scope: observed.Scope,
+                  labels: observed.Labels ?? {},
+                };
+              } catch (error) {
+                if (missing(error)) {
+                  return null;
+                }
+                throw new Error("Canary volume state is unverified");
+              }
+            },
+            remove: async (): Promise<void> => {
+              await volume.remove({ force: false });
+            },
+          },
+          this.volumeName,
+          this.canaryLabels,
+        );
       } catch {
         failed = true;
       }
@@ -465,7 +507,7 @@ export class DockerFixture {
       // Native product cleanup belongs to Control/Provider. Fixture failure
       // never force-deletes unknown product work to manufacture success.
       throw new Error(
-        "Docker fixture cleanup is unconfirmed; owned product remnants require diagnosis",
+        "Docker fixture cleanup is unconfirmed; owned resources require diagnosis",
       );
     }
   }

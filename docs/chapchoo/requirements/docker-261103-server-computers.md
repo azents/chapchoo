@@ -2,6 +2,7 @@
 title: "Docker Server Computers Requirements"
 created: 2026-11-03
 updated: 2026-11-03
+implemented: 2026-11-04
 tags: [computer, docker, provider, lifecycle]
 document_role: primary
 document_type: requirements
