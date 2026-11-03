@@ -51,7 +51,8 @@ Before planning implementation:
 - verify no material decision remains pending;
 - verify every Removal and Replacement obligation has a boundary and absence
   evidence, or an explicit `None` finding;
-- read relevant current Specs and impacted application/package rules; and
+- navigate `docs/chapchoo/spec/index.md` to the owning current-system pages and
+  their connections, and read impacted application/package rules; and
 - identify E2E, fixture, credential, and external prerequisites.
 
 Return to `technical-feature-design` when Requirements, ADR, Design authority,

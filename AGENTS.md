@@ -26,7 +26,7 @@ intentionally use other languages.
 - `proto/chapchoo/`: Protobuf service/message authority.
 - `infra/charts/`, `testenv/chapchoo/`, `images/`: deployment, acceptance guidance,
   target-build and packaging support.
-- `docs/chapchoo/`: Requirements, ADR, Design, and Living Spec documentation.
+- `docs/chapchoo/`: Requirements, ADR, Design, and connected Spec Wiki documentation.
 - `.claude/skills/`: source of truth for repository-local skills.
 - `.agents/skills`: relative symlink exposing the same skills to compatible tools.
 - `.claude/conventions/` and `.claude/rules/`: convention bodies and scoped indexes.
@@ -57,9 +57,12 @@ Never bypass commit hooks.
 For visual UI work, read [DESIGN.md](DESIGN.md).
 
 Read `docs/chapchoo/AGENTS.md` for the inherited documentation process.
-Read current specs first. Confirm Requirements before material technical design.
+Start at `docs/chapchoo/spec/index.md` and read the relevant connected pages.
+Follow `docs/chapchoo/spec/AGENTS.md` for ingest, query and semantic lint.
+Confirm Requirements before material technical design.
 Requirements snapshots become immutable after implementation; ADRs are append-only;
-Design records development-time decisions; Living Specs describe implemented behavior.
+Design records development-time decisions; only `spec/` is the current-system wiki.
+References are entrypoints, not exhaustive code coverage or execution instructions.
 Product discovery is not permission to implement features or provision services.
 
 ## Safety and delivery

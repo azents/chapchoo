@@ -1,51 +1,10 @@
 ---
-title: "Computer Data and Authority Foundations"
-created: 2026-11-02
-tags: [computer, agent, database, security]
-spec_type: domain
-domain: computer-storage
-code_paths:
-  - rust/crates/domain/src/computer.rs
-  - rust/crates/domain/src/computer_resource.rs
-  - rust/crates/domain/src/computer_resource/tests.rs
-  - rust/crates/crypto/src/system_owner.rs
-  - rust/crates/crypto/src/fingerprint.rs
-  - rust/crates/crypto/src/token.rs
-  - rust/crates/persistence/src/computers.rs
-  - rust/crates/persistence/src/component_keys.rs
-  - rust/crates/persistence/src/connector_keys.rs
-  - rust/crates/persistence/src/computer_executions.rs
-  - rust/crates/persistence/src/native_resources.rs
-  - rust/crates/persistence/src/agent_cleanup.rs
-  - rust/crates/persistence/src/delivery.rs
-  - rust/crates/service/src/computers.rs
-  - rust/crates/persistence/src/preparation.rs
-  - rust/crates/persistence/migrations
-  - rust/crates/persistence/tests/computer_schema.rs
-  - rust/crates/persistence/tests/native_binding.rs
-  - rust/crates/persistence/tests/native_execution.rs
-  - rust/crates/persistence/tests/native_migration.rs
-  - rust/crates/persistence/tests/computers.rs
-  - rust/crates/persistence/tests/computer_executions.rs
-  - rust/crates/persistence/tests/agent_teams.rs
-  - rust/crates/persistence/tests/agent_team_migration.rs
-  - rust/crates/service/tests/computers.rs
-last_verified_at: 2026-11-03
-spec_version: 1
+title: "Computer schema and native identities"
 ---
 
-# Computer Data and Authority Foundations
+# Computer schema and native identities
 
-This describes the implemented data/domain foundation, not a working Computer
-runtime or a completed management UI. Current direct storage operations cover
-configured system Provider metadata, available choices, atomic cloud Agent
-creation, owner-scoped reads, current-request lifecycle admission, force removal,
-Provider key rotation/revocation/recovery and execution-bound Connector session
-issuance/exchange/refresh/revocation, current-connection execution/resource
-reservation and evidence, exact retirement, cleanup confirmation and retained
-inventory collection. External lifecycle effects, Control routing
-and Kubernetes execution are not implied by
-schema records. Runtime/transport exposure is separate.
+Durable Computer state records authority, exact resource identity and cleanup obligations; schema records do not themselves perform external effects.
 
 ## Native domain values
 
@@ -122,7 +81,8 @@ erDiagram
 ```
 
 - `computer_providers`: stable ID, SYSTEM/USER owner discriminant and exactly one
-  corresponding owner reference, name, Kubernetes kind and capabilities. The USER
+  corresponding owner reference, name, immutable Kubernetes/Docker kind, optional
+  bound Docker daemon and capabilities. The USER
   relation references the existing account. Reconnection/key change does not
   allocate a different identity. There is no web enablement flag.
 - `computers`: owning User FK, kind/provider, durable desired state and only the
@@ -153,12 +113,14 @@ erDiagram
   facts; receiving a PVC UID does not turn initial creation into restoration.
   First confirmed-running evidence survives blocked/uncertain issue phases.
   Its composite identity prevents another Computer adopting the execution pointer.
-- `computer_resources`: exact kind/namespace/name/optional UID and matching
-  Computer/Provider composite FK. Provider/kind/namespace/name is unique across
-  Computers, so two Computers cannot reserve the same managed object. A partial
-  unique index permits one saved PVC identity per Computer. PVC is independent
-  of executions; Pod/bootstrap Secret requires its matching execution FK and has
-  one identity per execution/kind. Resource evidence retains observation time,
+- `computer_resources`: exact kind/native scope/name and matching
+  Computer/Provider composite FK. Provider/kind/native-scope/name is unique across
+  Computers, so two Computers cannot reserve the same managed object. Scope kind
+  derives from resource kind; Kubernetes retains namespace/UID, while Docker
+  retains daemon and container ID or volume metadata. A partial unique index
+  permits one saved environment (PVC or Docker volume) per Computer. Saved
+  resources are independent of executions; Pod/bootstrap Secret/container
+  resources require their matching execution FK and one identity per execution/kind. Resource evidence retains observation time,
   exact source connection and sticky confirmed-absence time. Resources/executions
   cascade only with actual Computer removal, not with Agent removal.
 - `provider_keys`: one current key record per Provider, current/previous digest,
@@ -187,308 +149,6 @@ infer completed cleanup or delete resources merely because a connection expired.
 Deleting a live Agent cannot cascade its Computer/PVC/session. Confirmed cleanup
 and retention collection must be driven by the owning verified lifecycle path;
 no automatic database-age deletion or operator cleanup endpoint is supplied here.
-
-## Team Scope and Context Deletion
-
-Migration 5 attaches every pre-existing Agent and creation receipt to its owner's
-existing `personal_contexts` Team, preserving Agent/Computer identities, names,
-execution and resource records. A missing mapping fails and rolls back the
-whole migration; rows are never dropped or assigned to an arbitrary Team.
-The down migration rejects erasing this required context.
-
-Team handles remain unique among live Teams, not hidden cleanup rows. Marking a
-Team deleted releases its public handle immediately, preserving prior deletion
-behavior while retaining its exact Team/Agent cleanup identities. Reusing the
-handle creates a new Team ID and cannot adopt old Agents or receipts.
-SQLite rebuilds the closed Team/membership/personal-context/invitation FK group
-inside the same preparation transaction, with foreign keys enabled and every
-existing row copied before replacement. PostgreSQL replaces the global handle
-constraint with the equivalent live-Team partial unique index. Both-engine
-tests verify row preservation and reuse while the deleted Team still has Agents;
-the PostgreSQL catalog verifies the unique-index predicate.
-
-Owner operations lock the selected Team and validate current membership before
-Provider and Computer admission. Detail, retry, lifecycle and force removal
-resolve the owned Agent's actual Team rather than trusting a caller's Team ID.
-Private dispatch revalidation also requires an existing Agent and membership;
-trusted Provider reconciliation remains independent of user membership.
-
-Team leave/kick records deleting intent for only the departing owner's cloud
-Agents, revokes Connector authority and then removes membership in the same
-transaction. Collaborative Team deletion applies that intent to all Agents.
-Context-driven Request IDs derive deterministically from the exact Team, Agent
-and predecessor request; an already-deleting Computer keeps its terminal request.
-All paths use the same never-prepared absence proof and resource cleanup gates
-as direct deletion. There is no automatic move to the personal Team.
-
-`teams.deletion_requested_at` marks an internal pending deletion. Such Teams are
-excluded from Team lookup/list/admission and invitation discovery immediately.
-The row is retained only because Agents still reference it; it is not an archive
-or restore capability. Empty pending Teams are physically deleted immediately.
-Confirmed cleanup, force removal and completed-inventory collection invoke Team
-collection in a separate transaction after Provider/Computer locks are released,
-preserving Team → sorted Providers → Computers lock order. Unresolved external
-resources have no TTL, including after their user's membership ends.
-
-Both-engine tests verify private same-Team isolation, cross-Team admission and
-receipt conflict, leave/kick/delete cleanup, background access after departure,
-concurrent creation versus Team deletion, preserving migration and atomic
-missing-map rollback. The migrated PostgreSQL catalog verifies the required
-`agents.team_id` and its non-cascading Team FK.
-
-## Operations and Permission Boundary
-
-Every owner read/mutation executes within the existing complete DB operation and
-revalidates the account session after its User lock. Foreign private Agents return
-not-found. Provider registration accepts a `VerifiedSystemOwner`, which can only
-be constructed by a configured verifier checking both credential digest and an
-explicit allowed Provider identity. An asserted owner name or Provider key is not
-that proof. Existing Provider ownership cannot be overwritten by another owner.
-This verifier neither generates configuration credentials nor treats the
-installation encryption root as authentication.
-
-Cloud creation locks the current owner and selected Team, checks membership and
-its owner-scoped creation receipt,
-then validates an authorized currently connected creation-capable Provider and
-writes the receipt, Computer/running intent and Agent atomically. Exact replay
-returns its assigned Agent/current state even if Provider connectivity has since
-changed. Reuse with a changed Team or canonical name/Provider payload rejects. Replay after
-Agent removal returns removed, never a fresh allocation. External provisioning is
-outside this transaction.
-
-Available Provider queries require eligible current Control/component connection,
-current or still-authorized immediately previous credential, nonrevoked/nonexpired
-Provider key and creation capability. Keys/endpoint/resource UIDs are not in
-choice results. Queries and Agent lists use bounded keyset pagination. No request
-queues or Kubernetes calls execute in these DB operations.
-
-Canonical payload fingerprints include operation and length-delimited typed field
-boundaries. They do not serialize arbitrary JSON or retain Agent content in the
-creation receipt. Stored credential digests and payload hashes are not bearers;
-Debug for owner verifier/proof, private rows, drafts and projections is redacted.
-
-## Current Lifecycle Admission and Provider Credentials
-
-Power requests compare the expected current Request ID under User, Team, Provider
-and Computer locks. An exact current request/fingerprint returns current progress;
-changed payload or a stale predecessor rejects. Running/stopped evidence must
-come from the current eligible Provider connection and match the current execution.
-An older connection's facts remain last-known information but yield unknown
-current power. Start additionally requires verified saved environment from the
-current Provider connection and no current execution; stop/restart require the
-confirmed current execution. Pending or uncertain operations block competing power
-work. Acceptance records intent/phase, not external execution success.
-
-Delete can supersede preparation and persists terminal intent. In the same
-transaction it revokes that Computer's Connector sessions, discards encrypted
-bootstrap/operational recovery material and removes Connector routes. Before
-replacing the intent it can record non-allocation only for the current candidate
-and unallocated saved environment when the captured Prepare fence proves no possible dispatch
-(or an acknowledged safe preparation failure). Older execution resources and
-allocated native identities are unchanged. Every native identity column
-participates in the never-allocated proof. These absence facts have no Provider source until
-fresh observation agrees; a possibly forwarded Prepare never grants this proof. Force
-removal requires the current deletion request and removes only the Agent; residual
-Computer/cleanup authority and creation receipt survive. An owned removed Agent
-can be recognized while residual inventory remains, but only with that Computer's
-exact current deletion Request ID. Wrong IDs reject, including retries racing
-normal or forced removal. After inventory collection, removal retry returns
-not-found rather than treating a creation receipt as proof of a deletion request.
-Creation replay still returns removed without recreating it.
-
-For Docker, direct Delete and context-driven leave/kick/Team deletion preserve
-prior uncertain retirement or possibly admitted preparation uncertainty. A new
-deleting Request ID cannot erase a possibly accepted native effect and create
-fresh dispatch permission. Connector revocation and terminal cleanup intent
-still commit; force removal does not clear that uncertainty.
-
-Provider key rotation/issuance requires verified system-owner scope or the current
-owning User session, never the Provider communication key. Each credential mutation
-has a target-scoped Request ID/fingerprint receipt. Exact current-result retry
-recovers the same encrypted key and original expiry; superseded/revoked/expired
-results cannot be recovered. Fresh rotation retains only the immediately previous
-digest for at most five minutes, capped by its original expiry. Communication
-admission checks current/previous digest, key expiry and revocation each time.
-
-Explicit revocation has no overlap, discards protected recovery and withdraws the
-Provider route. Its receipt makes retry safe; replay of an old revocation after a
-new owner-authorized issuance cannot revoke the new key. Owner-authorized fresh
-issuance can restore communication authority after revocation, but a new component
-connection is still needed. Key defaults are 24h validity, proactive owner rotation
-from 12h, and at most 5m prior-key overlap. No root or old-secret archive is exposed.
-
-## Docker retirement authority
-
-The current-source/current-request transaction claims eligible fresh
-Stop/Restart `RETIRING` or terminal Delete `DELETING` to `UNCERTAIN` once.
-Qualified terminal retirement under Running intent additionally requires the
-exact completed current execution with admitted preparation; its expected old
-execution remains recorded. An already uncertain request yields no new admission.
-Late Running evidence cannot clear this Docker retirement fence. A Blocked
-issue report also preserves an already uncertain Docker lifecycle: a diagnostic
-is not proof that its native stage never started. Neither a late Running report
-nor a subsequent direct/context-driven Delete can turn that diagnostic into a
-fresh retirement claim. Definitive preparation failure and exact NotStarted
-release retain their separate qualified admission paths.
-
-The returned opaque admission records original phase/source/request/execution.
-Only Control's exact live manifest and proven prequeue/dequeue NotStarted result
-may release that admission. Timeout, cancellation, connection loss and native
-rejection after any prior effect do not qualify. Durable state alone cannot prove
-a native call was never submitted. Current-source absence can retire an exact
-execution observationally without replay permission.
-
-Saved-volume cleanup requires terminal deleting intent, no current or live
-execution, current-source qualified absence of every reserved Docker container,
-and Control's live known-never-submitted suffix authority. Complete absence of
-every reserved resource can independently finish cleanup after correlation loss;
-absence of a subset cannot authorize a new volume mutation.
-
-## Execution-Bound Connector Credentials
-
-The assigned currently authenticated Provider can issue/recover the unique session
-for a Computer's current, nonretired execution while terminal deletion has not
-been accepted. The immutable binding fingerprint is checked and the original
-accepted issuance Request ID is returned. Retries with newly prepared server-side
-session IDs/keys recover that same binding and bootstrap result; they do not
-allocate another session or invalidate operational keys. Revoked bindings cannot
-be silently replaced. Bootstrap and operational recovery use distinct domain-
-qualified encryption contexts, separate from Provider/account sessions.
-
-Bootstrap exchange authenticates the reusable initial key and current execution.
-A genuinely new exchange clears all previous operational-key authority and its
-route immediately. Exact still-current request retry only recovers its original
-result. Ordinary refresh authenticates the current or immediately previous key;
-only the current key may create a successor. The previous key may recover the
-exact current refresh response within its original fixed overlap. Request
-fingerprints, scope and latest-result identity reject stale exchanges, changed
-purpose and attempts to create another successor from a previous key.
-
-Every operation locks/rechecks the Computer/session binding, current execution,
-retirement, terminal intent and revocation. Connector exchange/refresh/identity
-does not require a live Provider stream or a valid Provider communication key,
-and does not acquire a global Provider lock. Provider-authorized issuance and
-explicit revocation acquire Provider then Computer authority. Revocation discards
-both bootstrap and operational recovery and withdraws only that session's route;
-old-session revocation cannot clear another session's connection.
-
-Identity methods return admission snapshots, not reusable permission to accept
-future frames. Later messages/reports/heartbeats must recheck current credential
-and exact connection authority. Reconnecting with a valid key remains the same
-session; replacing an execution requires another authorized binding.
-
-## Current-Connection Execution and Resource Evidence
-
-Managed operations authenticate the Computer Provider key and exact current
-Provider/Control/Connection ID plus the route's credential digest. Provider,
-route and Computer mutations use short DB-only locks; PostgreSQL shares the
-Control lock to fence draining without serializing unrelated Providers.
-Directory/key expiry uses DB time after locks, never a component-supplied
-timestamp. Expired/draining Control, expired route, key revocation, a superseded
-route or a different credential cannot authorize a report. After the Computer
-lock, exact current Request ID and current authority are rechecked.
-
-`reserve_execution` commits the candidate execution and substrate-native resource
-names before external creation: Pod/Secret/PVC for Kubernetes, container/original
-saved volume for Docker. A recovered
-current candidate is returned even if the service prepared different draft IDs
-and names. Uncertain/blocked preparation does not replace that candidate.
-Resource reservation collisions roll back the entire operation. A successor
-requires prior-execution retirement and current-connection evidence of the
-original saved resource with its accepted native identity. First allocation may resume only with
-definitive never-allocated evidence; it cannot replace previously allocated
-missing storage. Initial creation uses create capability; saved-environment
-starts/restoration use start capability.
-Reservation recovery returns the same initial-allocation classification. Dispatch
-checks this execution fact even after the initial PVC has been confirmed, so a
-create-capable/start-incapable Provider can finish its initial preparation.
-
-`prepare_admitted_at` is a durable once-only admission fence, separate from
-`initial_start_dispatch_at`, which records actual component dequeue. Its
-Computer-locked CAS revalidates the exact current source, request and execution.
-A reconnect cannot reset an admitted uncertain Prepare. The Control can release
-an exact current claim only when it proves rejection before queue acceptance;
-possible forwarding, cancellation and lost results retain the fence. A current
-Provider can report PreparationBlocked only for the current starting execution
-with an unallocated Pod identity, after explicit native creation rejection or a
-pre-Pod authority failure following acknowledged resource allocation. That report
-sets Blocked and clears the prepare fence, but never resumes effects itself.
-Owner RetryPreparation compares the exact predecessor request under the usual
-User/Provider/Computer locks, requires this safe blocked state and live management,
-and assigns a fresh Request ID while retaining the same execution and resources.
-It resets the dispatch interval for this explicit new request. Exact result retry
-uses the same request/fingerprint and cannot create another attempt. An authorized successor
-reservation clears both fields only after retirement/original-PVC gates; an
-existing candidate retry preserves them. Both engines add this nullable field in
-`00000000000004_prepare_admission`, backfilling known actual-dispatch timestamps.
-The down migration refuses to remove the fence.
-
-Resource reports identify the exact reserved object and execution. Owned-present
-evidence binds the original UID; a different same-name UID is rejected. Unknown
-presence does not clear identity. Definitive absence must match the stored UID,
-or explicitly concern a never-observed candidate after all possibly accepted
-creates are quiescent. A timeout, disconnection or bare GET 404 is unknown, not
-that evidence. Confirmed absence of an allocated object is sticky even after an
-unknown report: later present reports cannot adopt/recreate it. The external
-Computer Provider is responsible for verifying ownership/content and the
-supported substrate retirement boundary; this module performs no Kubernetes IO.
-
-Running completion requires a separately reported actual running execution plus
-current-connection present/UID evidence for its Pod/bootstrap Secret and original
-PVC. Pod existence alone is not running. Stop/restart cannot complete while the
-old execution remains current, even if a blocked/uncertain phase obscures the
-retiring display phase. During terminal deletion, an admitted uncertain cleanup
-keeps its uncertainty fence across Pod retirement and later blocked issue reports;
-those facts cannot reset the lifecycle to a fresh deleting admission. `retire_execution` requires definitive current-source
-Pod absence, retires the exact execution, revokes and wipes its Connector session
-authority and withdraws its route before clearing the current pointer.
-If that exact retirement is replayed while no successor exists, fresh definitive
-Pod absence from the current connection can reconfirm stopped power after
-reconnect. Replay preserves the lifecycle phase and dispatch interval. An older
-connection's absence alone cannot refresh current power; original saved-PVC
-evidence must independently be refreshed before Start admission.
-Restart advances to ordinary start under the same Request ID; late old-execution
-reports cannot stop or complete a successor. Automatic restoration uses the same
-old-absence, intact-storage, current-capability and conflicting-intent gates.
-Original dispatch time is set once per start operation; reconnect/retry does not
-reset it. Unexpected disappearance after completed running starts a fresh
-restoration dispatch interval.
-The reset uses the retired execution's confirmed-running fact rather than its
-mutable current issue phase; reporting uncertainty before definitive retirement
-cannot make recovery inherit a previous execution's dispatch timer.
-
-Managed inventory is Provider-scoped and independent of an Agent association.
-Terminal Computers accept exact safe cleanup reports without resurrecting an
-Agent. Normal cleanup confirmation requires no current/live execution and
-definitive absence of every reserved resource from the current source; it then
-removes the Agent and records confirmed completion once. Force removal does not
-imply any of those facts. Completed cleanup inventory rejects every further
-resource report, including unknown/absence evidence, preserving its confirmed
-terminal facts until collection. A completed stop with no current execution also
-rejects lifecycle issue reports; late blocked/uncertain reports cannot reopen that
-operation and strand the next start. Running executions can still report issues
-without claiming definitive power-off.
-Explicit collection removes only confirmed completed
-Computers at least 24 hours after completion, with no live execution or unresolved
-resource. Unresolved cleanup has no TTL. Creation receipts survive collection.
-These are internal lifecycle operations, not public adoption/cleanup controls.
-
-## Application Service
-
-`ComputersService` generates Agent, Computer, execution and session IDs and all
-new component credentials server-side. Caller Request IDs remain stable for
-deduplication. Its system-owner verifier is supplied by trusted composition, not
-constructed from request owner assertions. System metadata/key methods verify
-configured credential and Provider scope; component keys cannot self-rotate.
-User-owner methods use current account authority. Store validation and locked
-admission remain authoritative for every generated draft.
-
-Credential methods use execution-scoped sessions and distinct bootstrap versus
-operational roles. Key recovery returns the exact current result and expiry,
-not a new generated draft. The service also exposes typed owner reads/lifecycle
-admission and internal current-source inventory/evidence methods. It does not
-activate component listeners, configure deployment credentials, create a
-reconciler or perform external resource effects.
 
 ## Preparation and Verification Boundary
 
@@ -531,3 +191,18 @@ Service tests verify configured
 owner scope, independent communication authority and generated-key recovery.
 These tests do not establish working component streams, external power actions
 or UI/E2E.
+
+## Connections
+
+- [Private Agent ownership and Team deletion](agent-ownership.md) — Team membership selects context while individual ownership remains the private Agent boundary. Context deletion accepts cleanup intent, not completed native deletion.
+- [Computer lifecycle admission and Provider keys](computer-lifecycle.md) — Owner requests commit durable intent under current authority. Component evidence and external completion determine what may happen next.
+- [Execution reservation, evidence and cleanup](execution-evidence.md) — Reservations precede effects; current-source observations qualify power, retirement and resource absence without granting ambiguous replay.
+- [Execution-bound Connector credentials](connector-credentials.md) — A Connector session belongs to one execution. Bootstrap recovery, operational refresh and revocation have different permissions and retained results.
+- [Control directory authority](computer-directory.md) — The durable directory chooses current component owners and excludes expired, revoked or draining authority. Listener and native effect lifetime are separate owners.
+
+## References
+
+- [`rust/crates/domain/src/computer_resource.rs`](../../../../rust/crates/domain/src/computer_resource.rs)
+- [`rust/crates/persistence/migrations`](../../../../rust/crates/persistence/migrations)
+- [`rust/crates/persistence/src/preparation.rs`](../../../../rust/crates/persistence/src/preparation.rs)
+- [`rust/crates/persistence/src/native_resources.rs`](../../../../rust/crates/persistence/src/native_resources.rs)

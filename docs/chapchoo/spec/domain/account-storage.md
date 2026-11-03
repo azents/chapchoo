@@ -1,32 +1,10 @@
 ---
-title: "Account Storage and Explicit Preparation"
-created: 2026-10-29
-tags: [accounts, rust, database]
-spec_type: domain
-domain: accounts
-code_paths:
-  - rust/crates/persistence/src/preparation.rs
-  - rust/crates/persistence/src/store.rs
-  - rust/crates/persistence/src/models.rs
-  - rust/crates/persistence/src/identity.rs
-  - rust/crates/persistence/src/accounts.rs
-  - rust/crates/persistence/src/challenges.rs
-  - rust/crates/persistence/src/sessions.rs
-  - rust/crates/persistence/src/teams.rs
-  - rust/crates/persistence/src/agent_cleanup.rs
-  - rust/crates/persistence/src/display.rs
-  - rust/crates/domain/src/display.rs
-  - rust/crates/persistence/migrations/sqlite/00000000000001_accounts/up.sql
-  - rust/crates/persistence/migrations/postgres/00000000000001_accounts/up.sql
-  - rust/crates/persistence/migrations/sqlite/00000000000002_display/up.sql
-  - rust/crates/persistence/migrations/postgres/00000000000002_display/up.sql
-  - rust/crates/persistence/migrations/sqlite/00000000000005_agent_teams/up.sql
-  - rust/crates/persistence/migrations/postgres/00000000000005_agent_teams/up.sql
-last_verified_at: 2026-11-03
-spec_version: 1
+title: "Account schema and explicit preparation"
 ---
 
-# Account Storage and Explicit Preparation
+# Account schema and explicit preparation
+
+The Store owns durable account identities, schema preparation and installation key binding. Completed account operations are described separately.
 
 ## Current Reachability
 
@@ -92,100 +70,15 @@ application startup invokes only readiness, not preparation. A
 changed root, absent history or incorrect migration set does not authorize
 adopting a new key, deleting data or creating the first administrator.
 
-## Completed Operation Boundaries
+## Connections
 
-Every asynchronous operation acquires its own official bb8 connection lease,
-executes a complete DB-only transaction and returns detached typed values.
-SQLite uses immediate write admission with foreign keys enabled on each
-connection; PostgreSQL locks the actor/target User before mutable session or
-credential state, and Team before membership changes. User state uses
-`FOR NO KEY UPDATE`, preserving serialization without blocking the FK key-share
-checks needed during an ownership transfer.
+- [Account and Team transaction contracts](account-transactions.md) — Account, session, membership and invitation state changes complete under current database authority before external delivery.
+- [Credential primitives](credential-primitives.md) — Reusable domain and crypto values protect representation and secrecy; service and persistence owners supply admission, expiry and installation binding.
+- [Computer schema and native identities](computer-storage.md) — Durable Computer state records authority, exact resource identity and cleanup obligations; schema records do not themselves perform external effects.
+- [Display language, time zone and regional format](display-settings.md) — Personal values, visitor choices and installation defaults are distinct authorities for the three independent display dimensions.
 
-Password verification takes a detached credential snapshot, runs bcrypt outside
-the transaction and returns an opaque `VerifiedCredential`. Session acceptance
-locks/revalidates that same stored hash so reset cannot leave an old-password
-session alive. Initial administrator creation and signup create the User,
-password, personal Team/membership/association and initial session together.
-Signup also consumes its grant in that transaction.
-Each creation input can omit display dimensions; current defaults resolve those
-dimensions inside that same transaction. Personal display updates authenticate
-and lock the current User, patch only supplied dimensions and return the committed
-complete User. Concurrent independent patches preserve unrelated fields. Admin
-default updates authenticate current administrator authority and lock the
-singleton; they never update existing users. A public defaults read exposes only
-the three validated presentation values.
+## References
 
-Session renewal uses the configured validity, rotation and previous-token
-overlap, rejects expired/revoked state and returns one committed latest value
-to concurrent previous-token holders. Unchanged and previous-token renewals
-do not extend expiry. Logout revokes the corresponding session. Reset consumes
-the intended User's recovery grant, updates its verifier and revokes all that
-User's sessions together, without returning a new session.
-
-Correct email-code verification consumes its challenge once. An unknown email
-returns a committed registration-required outcome, not unrestricted signup.
-Wrong codes neither consume nor extend a challenge. Creating a new request
-retains other still-unconsumed, unexpired challenges. The service checks mail
-configuration before email-only issuance and delivers after commit; the
-repository sends no email and stores no raw code.
-
-Collaborative Team creation atomically creates owner membership. Current
-membership and owner reference determine permissions, including after concurrent
-changes. Only the owner appoints/demotes managers, transfers ownership or deletes;
-the former owner is retained as Manager. Managers manage settings and ordinary
-members but cannot remove managers/owner. Personal Team management is rejected.
-Leaving or removing a member atomically accepts terminal deletion for that
-member's private cloud Agents before removing membership. Collaborative Team
-deletion accepts terminal deletion for all its Agents, immediately hides the
-Team from lookup, selection and invitation discovery, and removes invitations.
-The Team row and memberships remain only as operational cleanup bookkeeping
-while Agent FKs still exist. A partial unique index enforces handle uniqueness
-only for live Teams, so the deleted handle is immediately reusable under a new
-Team ID without transferring any old Agent. After confirmed Computer cleanup removes the last
-Agent, a separate post-commit collection removes that Team and cascades its
-memberships. Empty Teams are collected immediately. Accounts, personal contexts
-and historical Agent creation receipts survive. These internal rows are not
-selectable archives and cannot be restored. If post-commit collection fails,
-only the current owner may explicitly retry deletion against the retained pending
-Team. That retry preserves the original deletion timestamp and terminal Computer
-intent, then retries collection; other reads and mutations still hide the Team.
-A newly created Team reusing its handle has independent identity and resources.
-
-Invitations bind canonical recipient email and are processed exactly once by
-that recipient. Acceptance creates Member membership; decline does not. An
-unknown email with a prepared configured-mail signup draft creates grant and
-invitation together; without that draft it creates only the pending invitation.
-An already registered recipient never receives an extra signup grant from this
-operation. Signup does not accept an invitation.
-
-The operator recovery method promotes an existing User only. It has no network
-authentication and must only be wired into the operator CLI capability, not a
-public/general/Admin RPC. Connection/readiness authority is still required.
-
-Grant revocation is scoped to its expected Signup/PasswordReset kind inside
-the accepting transaction. Typed rejections distinguish mismatched recipient,
-registered email, duplicate membership, processed invitation, owner-leave
-restriction and unique Team-handle conflicts. Generic integrity/DB errors do not
-become fabricated specific business outcomes.
-
-## Verification Boundary
-
-Actual temporary SQLite and private PostgreSQL tests exercised initial/repeat
-preparation, same/wrong key behavior, read-only readiness, owner/membership
-constraints and missing-binding rejection. A fixture also exercised resuming
-explicit preparation after schema creation but before first key binding.
-
-Both-engine operation tests also cover concurrent renewal/signup, old-password
-login racing reset, grant consumption rollback after a failed session insertion,
-code consumption, team role rules, duplicate acceptance, transfer racing target
-leave, invitation/grant rollback and collaborative cleanup. Owned-future
-cancellation tests verify connection replacement through a connection-local
-marker, zero committed cancelled rows and a successful subsequent write.
-
-Display upgrade tests on both engines start with populated version-1 data,
-exercise failed migration rollback and successful retry, preserve existing
-account/team/session data, and reject incomplete readiness. Display operation
-tests cover independent patches, permissions and creation-time defaults.
-These library tests are distinct from the public RPC/browser evidence in the
-corresponding Specs and do not establish Helm/Argo CD execution.
+- [`rust/crates/persistence/src/preparation.rs`](../../../../rust/crates/persistence/src/preparation.rs)
+- [`rust/crates/persistence/src/store.rs`](../../../../rust/crates/persistence/src/store.rs)
+- [`rust/crates/persistence/migrations`](../../../../rust/crates/persistence/migrations)

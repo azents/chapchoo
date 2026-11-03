@@ -1,30 +1,19 @@
 ---
-title: "Credential Primitives"
-created: 2026-10-29
-tags: [accounts, rust, security]
-spec_type: domain
-domain: credentials
-code_paths:
-  - rust/crates/domain/src/email.rs
-  - rust/crates/domain/src/password.rs
-  - rust/crates/domain/src/role.rs
-  - rust/crates/crypto/src/lib.rs
-  - rust/crates/crypto/src/root.rs
-  - rust/crates/crypto/src/code.rs
-  - rust/crates/crypto/src/password.rs
-  - rust/crates/crypto/src/token.rs
-last_verified_at: 2026-10-29
-spec_version: 1
+title: "Credential primitives"
 ---
+
+# Credential primitives
+
+Reusable domain and crypto values protect representation and secrecy; service and persistence owners supply admission, expiry and installation binding.
 
 # Credential Primitives
 
 ## Current Reachability
 
-The Rust workspace exposes library primitives with unit tests. There is no
-running account server, database persistence, web login or CLI service yet.
-These APIs do not establish session expiry, authorize an actor or change a
-configured installation key.
+The Rust workspace exposes library primitives consumed by the account service,
+persistence and foreground composition. These primitives do not themselves
+establish session expiry, authorize an actor or change a configured installation
+key; those contracts belong to the linked service and storage pages.
 
 ## Domain Values
 
@@ -56,7 +45,7 @@ keys using HKDF-SHA-256. It exposes no root replacement or rotation API.
   rejection sampling, and submitted ASCII alphanumeric codes normalize to
   uppercase. HMAC-SHA-256 binds canonical email, challenge bearer and code.
 - The secret-key check is a purpose-separated MAC of a fixed context.
-  The primitive checks equality; the future repository owns one-time binding
+  The primitive checks equality; the repository owns one-time binding
   and prevents replacing the stored check.
 
 All secret-bearing structures have redacted Debug and explicit access methods,
@@ -74,8 +63,8 @@ Login input is checked for the accepted 8-64 printable-ASCII representation
 before bcrypt verification, preventing repeated-key equivalence involving
 embedded NULs. Creation-only character-class checks are not repeated at login.
 
-Hashing is synchronous CPU work. The eventual service caller must provide bounded
-blocking admission and retain capacity until the work actually completes.
+Hashing is synchronous CPU work. The service caller provides bounded
+blocking admission and retains capacity until the work actually completes.
 Library primitives have no task spawner, logging or persistent attempt counter.
 Unexpected random/bcrypt failures preserve their source while public Display
 stays sanitized. Application boundaries own structured reporting/backtraces.
@@ -86,4 +75,20 @@ stays sanitized. Application boundaries own structured reporting/backtraces.
 compile-fail tests, and explicit Cargo dependency-boundary checks. Tests cover
 password length/classes/ASCII/full-value verification, fresh salts, root mismatch,
 tampered ciphertext/nonce/context/hash, code identity binding and secret-safe
-formatting. Required database/network/browser checks remain later-phase work.
+formatting. Database, RPC and browser evidence belongs to their respective owning pages;
+primitive tests alone do not establish those contracts.
+
+## Connections
+
+- [Account service operations and mail](account-operations.md) — Application operations prepare credentials, bound password work and submit optional mail outside database transactions.
+- [Account schema and explicit preparation](account-storage.md) — The Store owns durable account identities, schema preparation and installation key binding. Completed account operations are described separately.
+- [Account and Team transaction contracts](account-transactions.md) — Account, session, membership and invitation state changes complete under current database authority before external delivery.
+- [Execution-bound Connector credentials](connector-credentials.md) — A Connector session belongs to one execution. Bootstrap recovery, operational refresh and revocation have different permissions and retained results.
+
+## References
+
+- [`rust/crates/domain/src/email.rs`](../../../../rust/crates/domain/src/email.rs)
+- [`rust/crates/domain/src/password.rs`](../../../../rust/crates/domain/src/password.rs)
+- [`rust/crates/crypto/src/root.rs`](../../../../rust/crates/crypto/src/root.rs)
+- [`rust/crates/crypto/src/token.rs`](../../../../rust/crates/crypto/src/token.rs)
+- [`rust/crates/crypto/src/password.rs`](../../../../rust/crates/crypto/src/password.rs)

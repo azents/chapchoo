@@ -1,22 +1,10 @@
 ---
-title: "Account RPC and Foreground Backend"
-created: 2026-10-30
-tags: [accounts, rust, grpc, cli]
-spec_type: domain
-domain: accounts
-code_paths:
-  - proto/chapchoo/accounts.proto
-  - rust/crates/protocol
-  - rust/crates/service
-  - rust/crates/rpc
-  - rust/crates/mail
-  - rust/apps/chapchoo
-  - typescript/packages/rpc-client
-last_verified_at: 2026-11-04
-spec_version: 2
+title: "Account RPC boundaries"
 ---
 
-# Account RPC and Foreground Backend
+# Account RPC boundaries
+
+Account transport owns service admission, caller credentials and validated wire outcomes. Business transactions and process lifetime have separate owners.
 
 ## Composition and authority
 
@@ -91,64 +79,6 @@ work is RESOURCE_EXHAUSTED. Infrastructure failures retain sanitized failure
 status and never imply rollback or authorize mutation replay. Missing/unknown
 reason metadata remains a generic transport failure for clients.
 
-## Application operations
-
-The service prepares identifiers/credentials outside repository transactions.
-Bcrypt owns a bounded `try_acquire_owned` permit inside its blocking task, so
-caller cancellation does not make still-running work free capacity. Expensive
-password transitions sample production acceptance time after CPU work. Complete
-repository operations still revalidate proof, credential and authority state.
-
-Signup links last 7 days; reset links 24 hours; email challenges 10 minutes.
-Sessions default to 180-day validity, 10-minute rotation and 5-minute previous
-token overlap with an optional absolute cap. These windows use server time.
-Reset consumes its grant and revokes all sessions without issuing a replacement.
-
-Mail configuration is checked before mail-only mutation admission. The maintained
-Lettre SMTP transport uses explicit sender/host, mandatory STARTTLS by default
-(port 587) or implicit certificate-verified TLS (port 465), and an optional paired
-username/password. An explicit nonzero port can override the default.
-Plaintext is restricted to an explicit numeric-loopback unauthenticated relay;
-no remote downgrade or credential transmission over plaintext is supported.
-The former SES SDK, variables and AWS credential chain are removed.
-The adapter submits once with 5-second SMTP command timeouts and a 15-second
-whole-send budget, without a pool/reconnect retry. CI capture mailers are injected
-only into tests. Production has no logged-code fallback.
-Delivery occurs after commit; failure preserves state and reports uncertainty.
-Without mail, invitations remain pending without automatic signup grants.
-
-Infrastructure reports retain source errors and captured backtraces. RPC logging
-prints safe category/uncertainty/backtrace, never raw dependency messages,
-request DTOs or authorization metadata. Transport errors contain static sanitized
-messages rather than SQL, stack traces or submitted secrets.
-
-## Foreground lifecycle and health
-
-The selected group union defaults to loopback plaintext HTTP/2 on port 50051. Explicit
-deployment binds require a trusted internal network and a separate operator TLS
-edge for external access. The executable does not issue certificates or provide
-native gRPC TLS.
-
-Selected backend groups and optional bundled web children are one failure unit.
-Readiness follows configuration, read-only
-DB/schema/key checks, dependency construction and successful binds. Partial bind
-failure drops already acquired sockets. SIGINT/SIGTERM withdraws admission before
-drain. Owned tasks are joined; a component exit or cleanup timeout returns failure.
-Defaults are 60 seconds for startup, 20 for graceful shutdown and a further
-5 for forced cleanup. Started blocking work is not assumed abortable.
-Backend task, web reap and signal failures are retained together privately instead
-of replacing an earlier failure with a later cleanup result. Completed forced
-cleanup still reports failure rather than a successful graceful stop.
-
-Unary gRPC health for an empty service, either common service or any domain
-service actually registered on the listener rereads read-only database
-readiness with bounded probe capacity. `chapchoo.liveness` reports process
-responsiveness independently. Unknown services return NOT_FOUND; Watch is not
-implemented. Optional `--web general|admin|both` starts executable-relative bundled
-Node children; `--groups` without values permits web-only execution without loading DB/key
-configuration. There is no daemon, automatic restart or global process scan.
-See [Linux delivery](account-delivery.md) for child ownership and package layout.
-
 ## Verification boundary
 
 Rust unit/integration suites cover credential admission/cancellation, optional
@@ -163,3 +93,16 @@ of an untrusted TLS certificate, not an external mailbox.
 The backend tests do not establish packaged browser or cluster acceptance.
 Those verification boundaries are recorded in the
 [web](account-web.md) and [delivery](account-delivery.md) Specs.
+
+## Connections
+
+- [Account and Team transaction contracts](account-transactions.md) — Account, session, membership and invitation state changes complete under current database authority before external delivery.
+- [Credential primitives](credential-primitives.md) — Reusable domain and crypto values protect representation and secrecy; service and persistence owners supply admission, expiry and installation binding.
+- [Web authentication, request ownership and cookies](web-session.md) — Node request contexts and browser authentication have independent lifetimes. Cookie disposition is not an ordinary business operation’s success flag.
+- [Foreground process ownership and health](runtime-process.md) — The composition root owns admission, startup and shutdown of its selected backend and web processes. A successful cleanup submission is not completed shutdown.
+
+## References
+
+- [`proto/chapchoo/accounts.proto`](../../../../proto/chapchoo/accounts.proto)
+- [`rust/crates/rpc/src/adapters`](../../../../rust/crates/rpc/src/adapters)
+- [`rust/crates/rpc/src/groups.rs`](../../../../rust/crates/rpc/src/groups.rs)

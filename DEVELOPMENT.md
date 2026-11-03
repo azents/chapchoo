@@ -379,13 +379,13 @@ still requires explicit environment, exposure, data/Secret and full-sync scope.
 uvx pre-commit install
 uvx pre-commit run --all-files
 uv run --project .codex python -m unittest discover -s .codex/hooks -p '*_test.py'
-python -m unittest scripts.tests.test_docs_catalog
-python scripts/docs_catalog.py validate
+python -m unittest scripts.tests.test_validate_docs
+python scripts/validate_docs.py
 for skill in .claude/skills/*; do
   uv run --locked --project .codex python .claude/skills/skill-creator/scripts/quick_validate.py "$skill"
 done
 python -m unittest discover -s .claude/skills/ci-optimization/scripts -p '*_test.py'
-for skill in convention-audit living-spec-audit skill-creator; do
+for skill in convention-audit skill-creator; do
   uv run --locked --project .codex --with 'pytest==9.1.1' python -m pytest ".claude/skills/$skill/scripts" -q
 done
 ```

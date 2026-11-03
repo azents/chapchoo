@@ -1,21 +1,10 @@
 ---
-title: "Computer Client and Inventory RPC"
-created: 2026-11-02
-tags: [agent, computer, grpc, security, inventory]
-spec_type: domain
-domain: computer
-code_paths:
-  - proto/chapchoo/computers.proto
-  - rust/crates/protocol/src/lib.rs
-  - rust/crates/rpc/src/computers.rs
-  - rust/crates/rpc/src/groups.rs
-  - rust/crates/persistence/src/computers.rs
-  - rust/crates/service/src/computers.rs
-  - rust/crates/rpc/tests/computers.rs
-  - typescript/packages/rpc-client/src/generated/computers.ts
-last_verified_at: 2026-11-03
-spec_version: 1
+title: "Computer owner and installation inventory RPC"
 ---
+
+# Computer owner and installation inventory RPC
+
+Owner operations and redacted installation inventory are separate capabilities over current account authority.
 
 # Computer Client and Inventory RPC
 
@@ -98,3 +87,16 @@ Connector state, resource pagination, force removal and residual retention.
 Both-engine storage fixtures cover Admin admission, Computer pagination and
 residual visibility. These checks are not browser or actual Kubernetes lifecycle
 acceptance; those remain separate integration gates.
+
+## Connections
+
+- [Private Agent ownership and Team deletion](agent-ownership.md) — Team membership selects context while individual ownership remains the private Agent boundary. Context deletion accepts cleanup intent, not completed native deletion.
+- [Computer lifecycle admission and Provider keys](computer-lifecycle.md) — Owner requests commit durable intent under current authority. Component evidence and external completion determine what may happen next.
+- [Computer owner and operator web](computer-web.md) — Server-rendered owner controls and redacted administrator inventory project backend authority rather than creating browser lifecycle state.
+- [Computer schema and native identities](computer-storage.md) — Durable Computer state records authority, exact resource identity and cleanup obligations; schema records do not themselves perform external effects.
+
+## References
+
+- [`proto/chapchoo/computers.proto`](../../../../proto/chapchoo/computers.proto)
+- [`rust/crates/rpc/src/computers.rs`](../../../../rust/crates/rpc/src/computers.rs)
+- [`rust/crates/rpc/tests/computers.rs`](../../../../rust/crates/rpc/tests/computers.rs)

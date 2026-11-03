@@ -1,42 +1,10 @@
 ---
-title: "Computer Control RPC Boundaries"
-created: 2026-11-02
-tags: [computer, control, grpc, security]
-spec_type: domain
-domain: computer
-code_paths:
-  - proto/chapchoo/control.proto
-  - rust/crates/protocol/src/lib.rs
-  - rust/crates/rpc/src/component_auth.rs
-  - rust/crates/rpc/src/control_calls.rs
-  - rust/crates/rpc/src/control_streams.rs
-  - rust/crates/rpc/src/control_streams/tests.rs
-  - rust/crates/rpc/src/control_streams/reconciliation.rs
-  - rust/crates/rpc/src/control_streams/reconciliation/cleanup.rs
-  - rust/crates/rpc/src/control_streams/native_retirement.rs
-  - rust/crates/rpc/src/control_streams/native_retirement/tests.rs
-  - rust/crates/rpc/src/native_resources.rs
-  - rust/crates/rpc/src/native_resources/tests.rs
-  - rust/apps/chapchoo/src/provider/tests.rs
-  - rust/crates/rpc/src/delivery.rs
-  - rust/crates/rpc/src/groups.rs
-  - rust/crates/rpc/src/memory.rs
-  - rust/crates/rpc/src/peer.rs
-  - rust/crates/rpc/src/reports.rs
-  - rust/crates/persistence/src/delivery.rs
-  - rust/apps/chapchoo/src/config.rs
-  - rust/apps/chapchoo/src/connector.rs
-  - rust/apps/chapchoo/src/provider.rs
-  - rust/apps/chapchoo/tests/provider_cli.rs
-  - rust/apps/chapchoo/src/control_plane.rs
-  - rust/apps/chapchoo/src/completion.rs
-  - rust/apps/chapchoo/src/runtime.rs
-  - rust/apps/chapchoo/src/health.rs
-last_verified_at: 2026-11-04
-spec_version: 1
+title: "Control admission, streams and calls"
 ---
 
-# Computer Control RPC Boundaries
+# Control admission, streams and calls
+
+Control separates public component authority from trusted peer delivery. Streams and exact-call correlation do not form a durable transport log.
 
 ## Component and peer authority
 
@@ -158,178 +126,18 @@ dispatched. Timeout or connection loss after acceptance is uncertain. Cancellati
 releases only that waiter and sends a best-effort exact-call cancel; it does not
 close a shared stream or prove that an external effect stopped.
 
-## Docker retirement correlation
+## Connections
 
-The server claims fresh retirement/deletion once through the durable phase CAS,
-reserving bounded connection-local manifest capacity before its await. Each
-manifest fixes the Computer/request/execution, source connection, immutable
-reservation-set fingerprint, exact native command/call and dispatch stage.
-Local and peer forwarding share the same gate; CheckCommand validates that same
-registry after its fresh server authorization. Unknown or changed calls/targets
-cannot create mutation permission. Queue-budget reduction and refreshed absence
-flags do not alter the immutable call target.
+- [Control directory authority](computer-directory.md) — The durable directory chooses current component owners and excludes expired, revoked or draining authority. Listener and native effect lifetime are separate owners.
+- [Docker retirement and exact-call correlation](native-retirement.md) — A live manifest qualifies continuation of one possibly accepted native call; lost correlation never becomes replay authority.
+- [Provider process and allocation acknowledgements](provider-process.md) — External trusted Providers own native IO, while authenticated server operations own durable mutations and evidence acknowledgements.
+- [Connector process lifecycle](connector-process.md) — The execution-local Connector exchanges bootstrap authority, maintains its own stream and reports connectivity, not substrate power or harness readiness.
+- [Memory and direct peer delivery](peer-delivery.md) — Memory and network delivery use the same generated handlers. A fresh route is a snapshot, not permission to replay a possibly forwarded call.
+- [Foreground process ownership and health](runtime-process.md) — The composition root owns admission, startup and shutdown of its selected backend and web processes. A successful cleanup submission is not completed shutdown.
 
-Potentially forwarded/in-flight/uncertain stages are observation-only on subsequent
-convergence. The response waiter's deadline is not the native task's deadline:
-its expiry preserves only the exact already-forwarded task's next-stage checks
-under the still-current source. It grants no second submission. An explicit
-Provider-reported native uncertain outcome, completed result, source replacement
-or correlation loss ends that task's continuation authority. An exact late result
-can settle its manifest after the original waiter is gone; another call's result
-cannot release or advance it. Only proven
-NotStarted before acceptance can release the exact initial admission. Once a
-prefix completed, a later NotStarted retains the request fence and permits only
-its known-unsent suffix. Lost connection/process correlation cannot be rebuilt
-from the durable phase.
+## References
 
-Normal same-connection Delete retires its current container before the original
-saved-volume suffix. Advancement requires a positively settled prior stage and
-fresh committed absence for its complete target set, revalidated source/request/
-Delete intent and no current/live execution. Already retired history is freshly
-observed, not retired again. All reserved resources must be absent to finish
-cleanup observationally after correlation loss; subset absence never proves the
-volume suffix was not submitted. Stop, Restart and qualified terminal retirement
-use the same native gate. Existing Kubernetes dispatch behavior is unchanged.
-
-Synthetic Provider/real Store tests cover normal suffix progression, cancellation
-and exact late completion, lost-manifest observation-only reconnect, NotStarted/
-late-result ABA and the Stop/Restart/terminal entry points. They do not validate
-real Engine lifecycle or Mac Desktop compatibility. The separate native
-[Docker adapter](computer-docker.md) has public-SDK/real-Control fixtures for
-allocation ACK order, normal retirement/suffix progression, source replacement
-before ACK, and unknown Start across stream reconnect without replay.
-
-## Computer Provider process and acknowledged evidence
-
-The Provider is an external process, including when run by a trusted third party.
-It does not load backend DB configuration, connect to the product DB or receive
-the installation encryption root. Its product operations use authenticated
-Control RPC; storage transactions belong to the server. The single executable
-also contains backend commands, but their DB initialization is not shared with
-the `computer-provider` or `docker-provider` commands.
-
-A child-process boundary test reaches authenticated registration with no DB/root
-configuration and with deliberately invalid backend-only settings. A synthetic
-Control denies registration before native effects; this test requires neither a
-product database nor a live Kubernetes cluster. It is not complete lifecycle or
-third-party onboarding acceptance.
-
-`chapchoo computer-provider` selects explicit in-cluster credentials or an
-explicit kubeconfig path, not ambient cluster discovery. It accepts runtime
-namespace/image/storage/resources/ServiceAccount policy and a scoped owner token
-through `CHAPCHOO_PROVIDER_OWNER_TOKEN`, never a credential CLI argument.
-It owner-authenticates stable metadata configuration and communication-key
-issuance, opens its own authenticated stream and maintains heartbeats separately
-from lifecycle work. Proactive owner-authorized key renewal preserves its
-absolute schedule across reconnects. Provider keys cannot self-rotate.
-
-One `Effects` owner survives stream replacement and caller cancellation. A
-started SDK task retains the lifecycle permit until it actually ends, including
-when its result waiter is gone. Each task captures its original connection and
-request identities; a later connection does not adopt its calls or reports.
-Every completed Provider loop exit, including a propagated error, awaits the same
-SDK task owner's drain. Signal-triggered shutdown retains the command's existing
-120-second outer budget; an operational-error drain introduces no new timeout.
-Drain joins all retained tasks before returning a task failure. When the loop and
-cleanup both fail, both causes remain private and the primary error remains the
-source-traversal root.
-
-ProviderAuthentication.Report returns a unary ACK only after its source-bound
-evidence operations complete. It shares resource/execution mapping with stream
-reports. Every operation independently revalidates current Provider source and
-Computer request; a batch can have earlier persisted evidence when a later item
-fails, so failure is not rollback proof. The ACK is not a command replay receipt.
-The process reports actual PVC UID and waits for its ACK before creating the
-bootstrap Secret, then reports/ACKs that UID before creating the standalone Pod.
-It rechecks the updated command's current source/request/resource authority
-between stages. A lost ACK stops later effects; it is never treated as success.
-
-Observe commands report only current source observations. Retirement uses the
-SDK's exact ordered terminal/deletion proof, never a successful delete response.
-Cleanup cannot destroy the saved PVC while Pod retirement remains unknown.
-Completed cleanup requires the existing storage-side confirmation predicates.
-Unknown native outcomes report uncertainty instead of automatically repeating
-the effect. A same-name foreign UID/ownership or missing original environment
-blocks the request. Heartbeat and exact late-call identity remain independent.
-
-## Owner-scoped convergence and recovery
-
-Control owns a 15-second reconciliation worker independently of lease renewal.
-Current Connector owners are selected first; they invoke the exact current
-Provider owner through typed direct peer delivery. Provider owners handle only
-Computers without an eligible Connector. Per-Provider scans are bounded to 20
-Computers with a cursor and one concurrent convergence permit. A source/current
-request check precedes each operation; these checks are not an atomic substrate
-transaction.
-
-A short Computer-locked CAS claims `prepare_admitted_at` once before dispatch.
-Reconnect does not replay an accepted/uncertain Prepare. `initial_start_dispatch_at`
-is recorded separately at actual component dequeue; delayed-start display uses
-that actual event. An authorized new execution clears both markers only after
-retirement and original-storage gates; retrying an existing reservation does not.
-Migration 4 adds and conservatively backfills the admission field on both DBs.
-
-Each pass observes reserved resources before deciding. Unexpected definitive
-terminal evidence under Running intent requests exact retirement with
-`require_terminal`; the Provider freshly reobserves and rejects live or unknown
-Pods. A successor is reserved only after committed retirement and original-PVC
-proof. The SDK retains at most 256 exact UID-bound terminal witnesses across
-same-process reconnects. They do not survive a process crash. Bare 404, node loss,
-foreign UIDs and missing original storage never authorize recreation. Exact
-committed absence remains independently storage-validated at command dequeue.
-
-Delete sorts the complete reserved inventory Pod, bootstrap Secret, then PVC,
-and sends sequential frames of at most 32 resources under one original deadline.
-Only the final completed batch requests whole-Computer cleanup confirmation.
-Any uncertain/failed frame stops later dispatch; no implicit effect replay occurs.
-Already committed current-source absence can finish confirmation independently
-of a lost final response.
-
-Real local Control streams and supported-client synthetic HTTP exercise automatic
-create/stop/start/restart, missing-Pod uncertainty, terminal restoration with one
-original PVC, and deletion across more than 32 historical resources, including
-an eleven-second nonfinal Secret finalizer that outlives the ten-second caller.
-Fresh convergence completes only the never-submitted remainder and the fixture
-asserts exactly one DELETE per object. A separate Connector Control takes precedence and uses network peer forwarding while the
-Provider-only fallback remains inactive. These fixtures are not live Kubernetes
-or browser product-flow release-gate evidence.
-
-## Computer Connector process
-
-`chapchoo computer-connector` requires an explicit trusted-network Control
-endpoint, execution session ID and bootstrap key. The initial key is read only
-from `CHAPCHOO_CONNECTOR_INITIAL_KEY`, not a CLI argument. The process has no
-product DB, installation root, Provider or owner credential dependency.
-
-It exchanges the bootstrap key, opens its own operational stream, verifies Hello
-acceptance, sends heartbeats, requires finite acknowledgements and uses current
-command-dequeue checks before reporting execution connectivity. It handles only
-ObserveConnector; readiness here is connectivity, not harness or power state.
-Proactive key refresh uses an absolute schedule retained across reconnects; a
-refreshed key starts a new authenticated stream before the old overlap ends.
-Disconnection creates a fresh bounded-admission attempt after a one-second delay,
-never replay of previous calls. Revoked/unauthorized authority ends the process.
-SIGINT/SIGTERM cancels its owned loop under a finite shutdown budget.
-
-A real child-process test provides only execution bootstrap inputs, waits for the
-current Connector route, revokes the Computer Provider key, then obtains an
-independent Connector observation and verifies owned process shutdown.
-
-## Memory and direct delivery
-
-`memory_transport` supplies bounded Tokio duplex IO to the same generated gRPC
-clients, Protobuf codecs and Tonic server handlers used by TCP. The composition
-root owns the server future and shutdown. There is no direct handler bypass or
-unowned background server.
-
-`PeerDelivery` reuses HTTP/2 Channels, limits total pending delivery and bounds its
-remote channel cache. A separately registered local memory Channel is retained
-outside the remote cache. A fresh route lookup occurs before every delivery
-attempt. Only an explicit `NOT_OWNER` response allows one re-resolution under the
-same Request ID and original deadline, with a new Call ID. Native gRPC status,
-timeout and connection failure never trigger automatic invocation replay; possible
-forwarding is reported as uncertain.
-
-No stream, transient call or response is stored as a durable transport log. DB
-checks followed by network/SDK work remain non-atomic. These local transport tests
-are not Kubernetes retirement/quiescence or browser product-flow evidence.
+- [`proto/chapchoo/control.proto`](../../../../proto/chapchoo/control.proto)
+- [`rust/crates/rpc/src/component_auth.rs`](../../../../rust/crates/rpc/src/component_auth.rs)
+- [`rust/crates/rpc/src/control_calls.rs`](../../../../rust/crates/rpc/src/control_calls.rs)
+- [`rust/crates/rpc/src/control_streams.rs`](../../../../rust/crates/rpc/src/control_streams.rs)

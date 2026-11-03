@@ -41,8 +41,10 @@ Batch accepted findings into one correction pass on the same branch.
 
 ### 3. Complete the spec-impact gate
 
-Run `/spec-review` against the final change and resolve required current-Spec
-updates before creating the PR. Reuse completed evidence when it covers the
+Run `/spec-review` against the final change and resolve required Spec Wiki edits
+and connected claims before creating the PR. Follow `docs/chapchoo/spec/AGENTS.md`
+and discover owners semantically from `docs/chapchoo/spec/index.md`, not source-path
+matching. Reuse completed evidence when it covers the
 current behavioral diff; for phased work, follow the project's one pre-QA
 spec-review phase. Recheck material behavior changes made after that evidence.
 Record the result even when no Spec update is required. A PR-body `Spec Impact`
