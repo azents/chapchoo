@@ -59,6 +59,46 @@ struct Fixture {
     state: Arc<Mutex<State>>,
     shutdown: oneshot::Sender<()>,
     server: JoinHandle<Result<(), TestError>>,
+    adapters: Mutex<Vec<Arc<Docker>>>,
+}
+
+#[derive(Debug)]
+struct FixtureFailures(Vec<TestError>);
+impl std::fmt::Display for FixtureFailures {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (index, error) in self.0.iter().enumerate() {
+            if index != 0 {
+                f.write_str("; additionally: ")?;
+            }
+            write!(f, "{error}")?;
+        }
+        Ok(())
+    }
+}
+impl std::error::Error for FixtureFailures {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.0
+            .first()
+            .map(|cause| cause.as_ref() as &dyn std::error::Error)
+    }
+}
+fn finish_causes(mut failures: Vec<TestError>) -> Result<(), TestError> {
+    match failures.len() {
+        0 => Ok(()),
+        1 => Err(failures.remove(0)),
+        _ => Err(Box::new(FixtureFailures(failures))),
+    }
+}
+async fn finish_requests(tasks: &mut JoinSet<Result<(), TestError>>) -> Result<(), TestError> {
+    let mut failures = Vec::new();
+    while let Some(result) = tasks.join_next().await {
+        match result {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => failures.push(error),
+            Err(error) => failures.push(error.into()),
+        }
+    }
+    finish_causes(failures)
 }
 fn labels() -> HashMap<String, String> {
     HashMap::from([
@@ -391,11 +431,18 @@ impl Fixture {
         let (shutdown, mut stop) = oneshot::channel();
         let server = tokio::spawn(async move {
             let mut tasks = JoinSet::new();
+            let mut failures = Vec::new();
             loop {
                 tokio::select! {
                     _ = &mut stop => break,
                     accepted = listener.accept() => {
-                        let (stream, _) = accepted?;
+                        let (stream, _) = match accepted {
+                            Ok(accepted) => accepted,
+                            Err(error) => {
+                                failures.push(error.into());
+                                break;
+                            }
+                        };
                         let shared = shared.clone();
                         tasks.spawn(async move {
                             hyper::server::conn::http1::Builder::new().keep_alive(false)
@@ -405,302 +452,413 @@ impl Fixture {
                     }
                 }
             }
-            while let Some(result) = tasks.join_next().await {
-                result??;
+            if let Err(error) = finish_requests(&mut tasks).await {
+                failures.push(error);
             }
-            Ok(())
+            finish_causes(failures)
         });
         Ok(Self {
             port,
             state,
             shutdown,
             server,
+            adapters: Mutex::new(Vec::new()),
         })
     }
-    async fn connect(&self) -> Result<Docker, TestError> {
+    async fn run(
+        exercise: impl AsyncFnOnce(&Fixture) -> Result<(), TestError>,
+    ) -> Result<(), TestError> {
+        let fixture = Self::new().await?;
+        let result = exercise(&fixture).await;
+        fixture.finish(result).await
+    }
+    async fn connect(&self) -> Result<Arc<Docker>, TestError> {
         self.connect_policy(ImagePolicy::Never).await
     }
-    async fn connect_policy(&self, image_policy: ImagePolicy) -> Result<Docker, TestError> {
-        Ok(Docker::connect(
-            "provider".into(),
-            Selection {
-                api_version: None,
-                endpoint: Endpoint::Tcp {
-                    host: "127.0.0.1".into(),
-                    port: self.port,
+    async fn connect_policy(&self, image_policy: ImagePolicy) -> Result<Arc<Docker>, TestError> {
+        let adapter = Arc::new(
+            Docker::connect(
+                "provider".into(),
+                Selection {
+                    api_version: None,
+                    endpoint: Endpoint::Tcp {
+                        host: "127.0.0.1".into(),
+                        port: self.port,
+                    },
+                    tls: None,
                 },
-                tls: None,
-            },
-            Config {
-                image: "public.example.invalid/computer:fixture".into(),
-                image_policy,
-                saved_mount: "/workspace".into(),
-                network: None,
-                nano_cpus: 1_000_000_000,
-                memory_bytes: 1024 * 1024 * 1024,
-            },
-        )
-        .await?)
+                Config {
+                    image: "public.example.invalid/computer:fixture".into(),
+                    image_policy,
+                    saved_mount: "/workspace".into(),
+                    network: None,
+                    nano_cpus: 1_000_000_000,
+                    memory_bytes: 1024 * 1024 * 1024,
+                },
+            )
+            .await?,
+        );
+        self.adapters
+            .lock()
+            .map_err(|_| "Fixture adapter registry poisoned")?
+            .push(adapter.clone());
+        Ok(adapter)
     }
-    async fn finish(self, docker: Docker) -> Result<(), TestError> {
-        docker.drain().await?;
+    async fn finish(self, result: Result<(), TestError>) -> Result<(), TestError> {
+        let mut failures = result.err().into_iter().collect::<Vec<_>>();
+        // The registry is private and no caller holds its lock across an await.
+        let adapters = match self.adapters.into_inner() {
+            Ok(adapters) => adapters,
+            Err(error) => {
+                failures.push("Fixture adapter registry poisoned".into());
+                error.into_inner()
+            }
+        };
+        for adapter in adapters {
+            if let Err(error) = adapter.drain().await {
+                failures.push(error.into());
+            }
+        }
         let _ = self.shutdown.send(());
-        self.server.await??;
-        Ok(())
+        match self.server.await {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => failures.push(error),
+            Err(error) => failures.push(error.into()),
+        }
+        finish_causes(failures)
     }
+}
+
+#[tokio::test]
+async fn failed_exercise_finishes_acceptor_and_retains_its_independent_request_failure()
+-> Result<(), TestError> {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let port = Arc::new(std::sync::atomic::AtomicU16::new(0));
+    let observed = port.clone();
+    let failure = Fixture::run(async |fixture| {
+        observed.store(fixture.port, std::sync::atomic::Ordering::SeqCst);
+        let _adapter = fixture.connect().await?;
+        let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", fixture.port)).await?;
+        stream.write_all(b"invalid request\r\n\r\n").await?;
+        stream.shutdown().await?;
+        let mut response = Vec::new();
+        stream.read_to_end(&mut response).await?;
+        Err("Primary SDK exercise failure".into())
+    })
+    .await
+    .err()
+    .ok_or("Missing failed exercise")?;
+    let combined = failure
+        .downcast_ref::<FixtureFailures>()
+        .ok_or("Lost independent server failure")?;
+    assert_eq!(combined.0.len(), 2);
+    assert_eq!(combined.0[0].to_string(), "Primary SDK exercise failure");
+    let released = tokio::net::TcpListener::bind((
+        "127.0.0.1",
+        port.load(std::sync::atomic::Ordering::SeqCst),
+    ))
+    .await?;
+    drop(released);
+    Ok(())
+}
+
+#[tokio::test]
+async fn request_drain_waits_for_later_work_after_an_earlier_failure() -> Result<(), TestError> {
+    let mut tasks = JoinSet::new();
+    tasks.spawn(async { Err("Earlier request failure".into()) });
+    let (release, released) = oneshot::channel();
+    let (done, completed) = oneshot::channel();
+    tasks.spawn(async move {
+        released.await?;
+        let _ = done.send(());
+        Err("Later request failure".into())
+    });
+    let mut draining = Box::pin(finish_requests(&mut tasks));
+    std::future::poll_fn(|context| {
+        assert!(draining.as_mut().poll(context).is_pending());
+        std::task::Poll::Ready(())
+    })
+    .await;
+    release
+        .send(())
+        .map_err(|_| "Later request was abandoned")?;
+    let failure = draining.await.err().ok_or("Missing request failures")?;
+    completed.await?;
+    let failures = failure
+        .downcast_ref::<FixtureFailures>()
+        .ok_or("Missing independent causes")?;
+    assert_eq!(failures.0.len(), 2);
+    Ok(())
 }
 
 #[tokio::test]
 async fn replaced_creation_identity_and_local_driver_options_remain_unverified()
 -> Result<(), TestError> {
-    let fixture = Fixture::new().await?;
-    let docker = fixture.connect().await?;
-    for variant in 0..3 {
-        let mut value = volume();
-        match variant {
-            0 => value.created_at = Some("2026-11-04T06:45:15Z".into()),
-            1 => {
-                value.options.insert("device".into(), "/host/data".into());
+    Fixture::run(async |fixture| {
+        let docker = fixture.connect().await?;
+        for variant in 0..3 {
+            let mut value = volume();
+            match variant {
+                0 => value.created_at = Some("2026-11-04T06:45:15Z".into()),
+                1 => {
+                    value.options.insert("device".into(), "/host/data".into());
+                }
+                _ => value.scope = Some(VolumeScopeEnum::GLOBAL),
             }
-            _ => value.scope = Some(VolumeScopeEnum::GLOBAL),
+            fixture.state.lock().map_err(|_| "Fixture lock")?.volume = Some(value);
+            assert!(
+                docker
+                    .ensure_volume(&context(), &reserved(true), true)
+                    .await
+                    .is_err()
+            );
         }
-        fixture.state.lock().map_err(|_| "Fixture lock")?.volume = Some(value);
-        assert!(
-            docker
-                .ensure_volume(&context(), &reserved(true), true)
-                .await
-                .is_err()
-        );
-    }
-    {
-        let state = fixture.state.lock().map_err(|_| "Fixture lock")?;
-        assert_eq!((state.creates, state.removes), (0, 0));
-    }
-    fixture.finish(docker).await
+        {
+            let state = fixture.state.lock().map_err(|_| "Fixture lock")?;
+            assert_eq!((state.creates, state.removes), (0, 0));
+        }
+        Ok(())
+    })
+    .await
 }
 
 #[tokio::test]
 async fn absence_proof_never_adopts_or_deletes_a_surprisingly_present_volume()
 -> Result<(), TestError> {
-    let fixture = Fixture::new().await?;
-    let docker = fixture.connect().await?;
-    fixture.state.lock().map_err(|_| "Fixture lock")?.volume = Some(volume());
-    for allocated in [false, true] {
-        let mut reservation = reserved(allocated);
-        reservation.absence_confirmed = true;
-        assert!(
-            docker
-                .observe_volume(&context(), &reservation)
-                .await
-                .is_err()
-        );
-        assert!(
-            docker
-                .remove_volume(&context(), &reservation)
-                .await
-                .is_err()
-        );
-    }
-    {
-        let state = fixture.state.lock().map_err(|_| "Fixture lock")?;
-        assert_eq!((state.creates, state.removes), (0, 0));
-    }
-    fixture.finish(docker).await
+    Fixture::run(async |fixture| {
+        let docker = fixture.connect().await?;
+        fixture.state.lock().map_err(|_| "Fixture lock")?.volume = Some(volume());
+        for allocated in [false, true] {
+            let mut reservation = reserved(allocated);
+            reservation.absence_confirmed = true;
+            assert!(
+                docker
+                    .observe_volume(&context(), &reservation)
+                    .await
+                    .is_err()
+            );
+            assert!(
+                docker
+                    .remove_volume(&context(), &reservation)
+                    .await
+                    .is_err()
+            );
+        }
+        {
+            let state = fixture.state.lock().map_err(|_| "Fixture lock")?;
+            assert_eq!((state.creates, state.removes), (0, 0));
+        }
+        Ok(())
+    })
+    .await
 }
 
 #[tokio::test]
 async fn original_volume_is_never_replaced_even_during_initial_execution() -> Result<(), TestError>
 {
-    let fixture = Fixture::new().await?;
-    let docker = fixture.connect().await?;
-    assert!(matches!(
-        docker
-            .ensure_volume(&context(), &reserved(true), true)
-            .await,
-        Err(Error::MissingEnvironment)
-    ));
-    assert!(matches!(
-        docker
-            .ensure_volume(&context(), &reserved(false), false)
-            .await,
-        Err(Error::MissingEnvironment)
-    ));
-    assert_eq!(fixture.state.lock().map_err(|_| "Fixture lock")?.creates, 0);
-    fixture.finish(docker).await
+    Fixture::run(async |fixture| {
+        let docker = fixture.connect().await?;
+        assert!(matches!(
+            docker
+                .ensure_volume(&context(), &reserved(true), true)
+                .await,
+            Err(Error::MissingEnvironment)
+        ));
+        assert!(matches!(
+            docker
+                .ensure_volume(&context(), &reserved(false), false)
+                .await,
+            Err(Error::MissingEnvironment)
+        ));
+        assert_eq!(fixture.state.lock().map_err(|_| "Fixture lock")?.creates, 0);
+        Ok(())
+    })
+    .await
 }
 #[tokio::test]
 async fn native_create_and_scoped_remove_happen_once_with_original_metadata()
 -> Result<(), TestError> {
-    let fixture = Fixture::new().await?;
-    let docker = fixture.connect().await?;
-    let allocated = docker
-        .ensure_volume(&context(), &reserved(false), true)
-        .await?;
-    let allocated = allocated.resource();
-    let Some(Native::DockerVolume(native)) = &allocated.native else {
-        return Err("Wrong native identity".into());
-    };
-    assert_eq!(
-        native
-            .identity
-            .as_ref()
-            .and_then(|identity| identity.created_at.as_deref()),
-        Some("2026-11-03T06:45:15Z")
-    );
-    docker.ensure_volume(&context(), allocated, true).await?;
-    let observed = docker.remove_volume(&context(), allocated).await?;
-    assert_eq!(observed.presence, Presence::Absent);
-    {
-        let state = fixture.state.lock().map_err(|_| "Fixture lock")?;
-        assert_eq!((state.creates, state.removes), (1, 1));
-    }
-    fixture.finish(docker).await
+    Fixture::run(async |fixture| {
+        let docker = fixture.connect().await?;
+        let allocated = docker
+            .ensure_volume(&context(), &reserved(false), true)
+            .await?;
+        let allocated = allocated.resource();
+        let Some(Native::DockerVolume(native)) = &allocated.native else {
+            return Err("Wrong native identity".into());
+        };
+        assert_eq!(
+            native
+                .identity
+                .as_ref()
+                .and_then(|identity| identity.created_at.as_deref()),
+            Some("2026-11-03T06:45:15Z")
+        );
+        docker.ensure_volume(&context(), allocated, true).await?;
+        let observed = docker.remove_volume(&context(), allocated).await?;
+        assert_eq!(observed.presence, Presence::Absent);
+        {
+            let state = fixture.state.lock().map_err(|_| "Fixture lock")?;
+            assert_eq!((state.creates, state.removes), (1, 1));
+        }
+        Ok(())
+    })
+    .await
 }
 #[tokio::test]
 async fn lost_native_result_is_uncertain_and_observation_never_repeats_create()
 -> Result<(), TestError> {
-    let fixture = Fixture::new().await?;
-    fixture.state.lock().map_err(|_| "Fixture lock")?.create = Create::AcceptedLost;
-    let docker = fixture.connect().await?;
-    let error = docker
-        .ensure_volume(&context(), &reserved(false), true)
-        .await
-        .err()
-        .ok_or("Expected lost native result")?;
-    assert!(!error.definitely_rejected());
-    assert_eq!(
-        docker
-            .observe_volume(&context(), &reserved(false))
-            .await?
-            .presence,
-        Presence::Present
-    );
-    assert_eq!(fixture.state.lock().map_err(|_| "Fixture lock")?.creates, 1);
-    fixture.finish(docker).await
+    Fixture::run(async |fixture| {
+        fixture.state.lock().map_err(|_| "Fixture lock")?.create = Create::AcceptedLost;
+        let docker = fixture.connect().await?;
+        let error = docker
+            .ensure_volume(&context(), &reserved(false), true)
+            .await
+            .err()
+            .ok_or("Expected lost native result")?;
+        assert!(!error.definitely_rejected());
+        assert_eq!(
+            docker
+                .observe_volume(&context(), &reserved(false))
+                .await?
+                .presence,
+            Presence::Present
+        );
+        assert_eq!(fixture.state.lock().map_err(|_| "Fixture lock")?.creates, 1);
+        Ok(())
+    })
+    .await
 }
 #[tokio::test]
 async fn only_create_rejection_is_definitive_and_unallocated_404_does_not_allow_cleanup()
 -> Result<(), TestError> {
-    let fixture = Fixture::new().await?;
-    fixture.state.lock().map_err(|_| "Fixture lock")?.create = Create::Rejected;
-    let docker = fixture.connect().await?;
-    assert_eq!(
-        docker
-            .observe_volume(&context(), &reserved(false))
-            .await?
-            .presence,
-        Presence::Unknown
-    );
-    assert!(matches!(
-        docker.remove_volume(&context(), &reserved(false)).await,
-        Err(Error::Uncertain)
-    ));
-    let error = docker
-        .ensure_volume(&context(), &reserved(false), true)
-        .await
-        .err()
-        .ok_or("Expected explicit rejection")?;
-    assert!(error.definitely_rejected());
-    let cause = std::error::Error::source(&error).ok_or("Native rejection cause was discarded")?;
-    assert!(matches!(
-        cause.downcast_ref::<bollard::errors::Error>(),
-        Some(bollard::errors::Error::DockerResponseServerError {
-            status_code: 400,
-            ..
-        })
-    ));
-    assert!(!error.to_string().contains("fixture native outcome"));
-    assert!(!format!("{error:?}").contains("fixture native outcome"));
-    assert_eq!(fixture.state.lock().map_err(|_| "Fixture lock")?.removes, 0);
-    fixture.finish(docker).await
+    Fixture::run(async |fixture| {
+        fixture.state.lock().map_err(|_| "Fixture lock")?.create = Create::Rejected;
+        let docker = fixture.connect().await?;
+        assert_eq!(
+            docker
+                .observe_volume(&context(), &reserved(false))
+                .await?
+                .presence,
+            Presence::Unknown
+        );
+        assert!(matches!(
+            docker.remove_volume(&context(), &reserved(false)).await,
+            Err(Error::Uncertain)
+        ));
+        let error = docker
+            .ensure_volume(&context(), &reserved(false), true)
+            .await
+            .err()
+            .ok_or("Expected explicit rejection")?;
+        assert!(error.definitely_rejected());
+        let cause =
+            std::error::Error::source(&error).ok_or("Native rejection cause was discarded")?;
+        assert!(matches!(
+            cause.downcast_ref::<bollard::errors::Error>(),
+            Some(bollard::errors::Error::DockerResponseServerError {
+                status_code: 400,
+                ..
+            })
+        ));
+        assert!(!error.to_string().contains("fixture native outcome"));
+        assert!(!format!("{error:?}").contains("fixture native outcome"));
+        assert_eq!(fixture.state.lock().map_err(|_| "Fixture lock")?.removes, 0);
+        Ok(())
+    })
+    .await
 }
 #[tokio::test]
 async fn container_create_rejection_retains_native_cause_without_another_submission()
 -> Result<(), TestError> {
-    let fixture = Fixture::new().await?;
-    let docker = fixture.connect().await?;
-    let saved = docker
-        .ensure_volume(&context(), &reserved(false), true)
-        .await?;
-    fixture
-        .state
-        .lock()
-        .map_err(|_| "Fixture lock")?
-        .reject_container = true;
-    let resource = wire::ManagedResource {
-        kind: wire::ResourceKind::DockerContainer as i32,
-        name: "execution-candidate".into(),
-        execution_id: Some("execution".into()),
-        native: Some(Native::DockerContainer(wire::DockerContainerNative {
-            daemon_id: "daemon:fixture".into(),
-            container_id: None,
-        })),
-        ..Default::default()
-    };
-    let image = docker.prepare_image().await?;
-    let failure = docker
-        .prepare_container(
-            &context(),
-            &resource,
-            &saved,
-            &image,
-            &chapchoo_docker::Bootstrap {
-                session: "session-original",
-                initial_key: "fixture-bootstrap",
-                endpoint: "http://control.invalid:50051",
-            },
-            true,
-        )
-        .await
-        .err()
-        .ok_or("Expected explicit container rejection")?;
-    assert!(failure.container_creation_retry_safe());
-    let cause =
-        std::error::Error::source(&failure).ok_or("Native rejection cause was discarded")?;
-    assert!(matches!(
-        cause.downcast_ref::<bollard::errors::Error>(),
-        Some(bollard::errors::Error::DockerResponseServerError {
-            status_code: 400,
-            ..
-        })
-    ));
-    assert!(!failure.to_string().contains("fixture native outcome"));
-    assert!(!format!("{failure:?}").contains("fixture native outcome"));
-    {
-        let state = fixture.state.lock().map_err(|_| "Fixture lock")?;
-        assert_eq!(state.container_actions, ["create"]);
-        assert!(state.container.is_none());
-        assert_eq!((state.creates, state.removes), (1, 0));
-    }
-    fixture.finish(docker).await
+    Fixture::run(async |fixture| {
+        let docker = fixture.connect().await?;
+        let saved = docker
+            .ensure_volume(&context(), &reserved(false), true)
+            .await?;
+        fixture
+            .state
+            .lock()
+            .map_err(|_| "Fixture lock")?
+            .reject_container = true;
+        let resource = wire::ManagedResource {
+            kind: wire::ResourceKind::DockerContainer as i32,
+            name: "execution-candidate".into(),
+            execution_id: Some("execution".into()),
+            native: Some(Native::DockerContainer(wire::DockerContainerNative {
+                daemon_id: "daemon:fixture".into(),
+                container_id: None,
+            })),
+            ..Default::default()
+        };
+        let image = docker.prepare_image().await?;
+        let failure = docker
+            .prepare_container(
+                &context(),
+                &resource,
+                &saved,
+                &image,
+                &chapchoo_docker::Bootstrap {
+                    session: "session-original",
+                    initial_key: "fixture-bootstrap",
+                    endpoint: "http://control.invalid:50051",
+                },
+                true,
+            )
+            .await
+            .err()
+            .ok_or("Expected explicit container rejection")?;
+        assert!(failure.container_creation_retry_safe());
+        let cause =
+            std::error::Error::source(&failure).ok_or("Native rejection cause was discarded")?;
+        assert!(matches!(
+            cause.downcast_ref::<bollard::errors::Error>(),
+            Some(bollard::errors::Error::DockerResponseServerError {
+                status_code: 400,
+                ..
+            })
+        ));
+        assert!(!failure.to_string().contains("fixture native outcome"));
+        assert!(!format!("{failure:?}").contains("fixture native outcome"));
+        {
+            let state = fixture.state.lock().map_err(|_| "Fixture lock")?;
+            assert_eq!(state.container_actions, ["create"]);
+            assert!(state.container.is_none());
+            assert_eq!((state.creates, state.removes), (1, 0));
+        }
+        Ok(())
+    })
+    .await
 }
 #[tokio::test]
 async fn changed_daemon_or_foreign_volume_cannot_be_adopted_or_mutated() -> Result<(), TestError> {
-    let fixture = Fixture::new().await?;
-    let docker = fixture.connect().await?;
-    {
-        let mut state = fixture.state.lock().map_err(|_| "Fixture lock")?;
-        state.volume = Some(Volume {
-            labels: HashMap::from([("foreign".into(), "owner".into())]),
-            ..volume()
-        });
-    }
-    assert!(matches!(
-        docker
-            .ensure_volume(&context(), &reserved(false), true)
-            .await,
-        Err(Error::Ownership)
-    ));
-    fixture.state.lock().map_err(|_| "Fixture lock")?.info.id = Some("different-daemon".into());
-    assert!(matches!(
-        docker
-            .ensure_volume(&context(), &reserved(false), true)
-            .await,
-        Err(Error::DaemonIdentity)
-    ));
-    {
-        let state = fixture.state.lock().map_err(|_| "Fixture lock")?;
-        assert_eq!((state.creates, state.removes), (0, 0));
-    }
-    fixture.finish(docker).await
+    Fixture::run(async |fixture| {
+        let docker = fixture.connect().await?;
+        {
+            let mut state = fixture.state.lock().map_err(|_| "Fixture lock")?;
+            state.volume = Some(Volume {
+                labels: HashMap::from([("foreign".into(), "owner".into())]),
+                ..volume()
+            });
+        }
+        assert!(matches!(
+            docker
+                .ensure_volume(&context(), &reserved(false), true)
+                .await,
+            Err(Error::Ownership)
+        ));
+        fixture.state.lock().map_err(|_| "Fixture lock")?.info.id = Some("different-daemon".into());
+        assert!(matches!(
+            docker
+                .ensure_volume(&context(), &reserved(false), true)
+                .await,
+            Err(Error::DaemonIdentity)
+        ));
+        {
+            let state = fixture.state.lock().map_err(|_| "Fixture lock")?;
+            assert_eq!((state.creates, state.removes), (0, 0));
+        }
+        Ok(())
+    })
+    .await
 }
