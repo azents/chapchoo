@@ -279,8 +279,7 @@ async fn stream_loop(
     let mut auth = ProviderAuthenticationClient::new(channel.clone());
     let mut renewal = refresh_at(key.proactive_after.as_ref())?;
     let mut key = BearerSecret::parse(key.token)?;
-    let mut effects = Effects::new();
-    let result = loop {
+    own_effects(async |effects| loop {
         if stop.is_cancelled() {
             break Ok(());
         }
@@ -291,7 +290,7 @@ async fn stream_loop(
             connector_endpoint,
             &key,
             adapter.clone(),
-            &mut effects,
+            effects,
             &stop,
         )=>result,_=tokio::time::sleep_until(renewal)=>Err(Box::new(Status::unauthenticated("Scheduled Provider key renewal")) as AppError)};
         if stop.is_cancelled() {
@@ -326,10 +325,17 @@ async fn stream_loop(
             }
         }
         tokio::select! {_=stop.cancelled()=>break Ok(()),_=tokio::time::sleep(Duration::from_secs(1))=>{}}
-    };
-    // Do not abort started SDK work merely because its old connection vanished.
-    effects.drain().await?;
-    result
+    })
+    .await
+}
+
+async fn own_effects(
+    run: impl AsyncFnOnce(&mut Effects) -> Result<(), AppError>,
+) -> Result<(), AppError> {
+    let mut effects = Effects::new();
+    let primary = run(&mut effects).await;
+    // All loop exits, including propagated errors, finish the same effect owner.
+    crate::completion::complete(primary, effects.drain().await.map_err(Into::into))
 }
 fn refresh_at(value: Option<&prost_types::Timestamp>) -> Result<tokio::time::Instant, AppError> {
     let value = value.ok_or("Provider key refresh time missing")?;

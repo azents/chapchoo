@@ -1,5 +1,6 @@
 //! Owned Control lifetime. Listener binding precedes directory publication.
 use crate::AppError;
+use crate::completion::complete;
 use chapchoo_rpc::{
     ComponentAuthenticationServices, ComponentConnectionServices, MemoryIncoming, PeerDelivery,
     PeerServices, memory_transport,
@@ -119,9 +120,7 @@ impl ControlPlane {
         } else {
             Ok(())
         };
-        directory?;
-        streams?;
-        withdrawal?;
-        Ok(())
+        let primary = complete(directory.map_err(Into::into), streams.map_err(Into::into));
+        complete(primary, withdrawal.map_err(Into::into))
     }
 }

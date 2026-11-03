@@ -59,15 +59,52 @@ impl Effects {
         Ok(())
     }
     pub async fn drain(&mut self) -> Result<(), EffectError> {
+        let mut failure = None;
         while let Some(result) = self.tasks.join_next().await {
-            result.map_err(EffectError::Task)?;
+            if let Err(error) = result {
+                failure.get_or_insert(error);
+            }
         }
-        Ok(())
+        failure.map_or(Ok(()), |error| Err(EffectError::Task(error)))
     }
 }
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn drain_finishes_retained_work_even_after_an_earlier_task_failure()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut effects = Effects::new();
+        let failed = effects.start(std::future::pending::<()>())?;
+        effects.tasks.abort_all();
+        // The closed waiter proves the aborted task released physical capacity.
+        assert!(failed.await.is_err());
+        let (release, released) = oneshot::channel();
+        let completed = effects.start(async move {
+            let _ = released.await;
+            9
+        })?;
+        let mut drain = Box::pin(effects.drain());
+        std::future::poll_fn(|context| {
+            assert!(
+                drain.as_mut().poll(context).is_pending(),
+                "An earlier task error must not abandon the later owned task"
+            );
+            std::task::Poll::Ready(())
+        })
+        .await;
+        release.send(()).map_err(|_| "Effect was cancelled")?;
+        assert!(matches!(
+            drain.await,
+            Err(EffectError::Task(error)) if error.is_cancelled()
+        ));
+        assert_eq!(completed.await?, 9);
+        assert!(!effects.active());
+        assert!(effects.tasks.is_empty());
+        Ok(())
+    }
+
     #[tokio::test]
     async fn dropping_a_waiter_or_reconnecting_does_not_release_the_started_sdk_permit()
     -> Result<(), Box<dyn std::error::Error>> {

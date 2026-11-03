@@ -2,8 +2,6 @@ use chapchoo_crypto::PasswordCost;
 use chapchoo_rpc::{AccountServices, ComputerServices, ServiceGroup, ServiceGroups};
 use chapchoo_service::{AccountsService, ComputersService, Mailer, PasswordWork};
 use std::{
-    error::Error,
-    fmt,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -18,6 +16,7 @@ use tonic_health::pb::health_server::HealthServer;
 
 use crate::{
     AppError,
+    completion::complete,
     config::{ApplicationConfig, BackendConfig, ConfigError, ServeOptions, WebApp, web_configs},
     control_plane::ControlPlane,
     health::HealthService,
@@ -25,33 +24,6 @@ use crate::{
 };
 
 type BackendTasks = JoinSet<Result<(), AppError>>;
-
-/// Preserve both failures without exposing native source messages through Debug.
-struct FailedCleanup {
-    primary: AppError,
-    cleanup: AppError,
-}
-
-impl fmt::Debug for FailedCleanup {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("FailedCleanup([REDACTED])")
-    }
-}
-
-impl fmt::Display for FailedCleanup {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("Selected-component failure was followed by owned cleanup failure")
-    }
-}
-
-impl Error for FailedCleanup {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        // Keep the cleanup error reachable through its concrete field as well;
-        // source traversal must never format either native error for operators.
-        let _ = &self.cleanup;
-        Some(self.primary.as_ref())
-    }
-}
 
 pub async fn serve(config: Option<BackendConfig>, options: ServeOptions) -> Result<(), AppError> {
     if options.groups.is_empty() && options.web.is_none() {
@@ -190,14 +162,9 @@ pub async fn serve(config: Option<BackendConfig>, options: ServeOptions) -> Resu
         tasks.spawn(control.shutdown());
     }
     let cleanup = cleanup(&mut tasks, &mut general_web, &mut admin_web).await;
-    match (failure, cleanup) {
-        (Some(primary), Err(cleanup)) => Err(Box::new(FailedCleanup { primary, cleanup })),
-        (Some(error), Ok(())) | (None, Err(error)) => Err(error),
-        (None, Ok(())) => {
-            tracing::info!("Selected components stopped");
-            Ok(())
-        }
-    }
+    complete(failure.map_or(Ok(()), Err), cleanup)?;
+    tracing::info!("Selected components stopped");
+    Ok(())
 }
 
 async fn start_backends(

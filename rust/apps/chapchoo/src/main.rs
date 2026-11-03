@@ -1,4 +1,5 @@
 //! Foreground composition root and local operator commands.
+mod completion;
 mod config;
 mod connector;
 mod control_plane;
