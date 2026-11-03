@@ -29,9 +29,10 @@ code_paths:
   - rust/apps/chapchoo/src/provider.rs
   - rust/apps/chapchoo/tests/provider_cli.rs
   - rust/apps/chapchoo/src/control_plane.rs
+  - rust/apps/chapchoo/src/completion.rs
   - rust/apps/chapchoo/src/runtime.rs
   - rust/apps/chapchoo/src/health.rs
-last_verified_at: 2026-11-03
+last_verified_at: 2026-11-04
 spec_version: 1
 ---
 
@@ -223,7 +224,12 @@ One `Effects` owner survives stream replacement and caller cancellation. A
 started SDK task retains the lifecycle permit until it actually ends, including
 when its result waiter is gone. Each task captures its original connection and
 request identities; a later connection does not adopt its calls or reports.
-Shutdown drains started SDK work under the component command's finite budget.
+Every completed Provider loop exit, including a propagated error, awaits the same
+SDK task owner's drain. Signal-triggered shutdown retains the command's existing
+120-second outer budget; an operational-error drain introduces no new timeout.
+Drain joins all retained tasks before returning a task failure. When the loop and
+cleanup both fail, both causes remain private and the primary error remains the
+source-traversal root.
 
 ProviderAuthentication.Report returns a unary ACK only after its source-bound
 evidence operations complete. It shares resource/execution mapping with stream

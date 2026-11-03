@@ -18,6 +18,35 @@ use std::{collections::BTreeMap, convert::Infallible, sync::Mutex};
 use tokio::net::TcpListener;
 use tokio_stream::wrappers::TcpListenerStream;
 use tonic::transport::Server;
+
+#[tokio::test]
+async fn propagated_loop_error_waits_for_its_started_effect_before_returning()
+-> Result<(), AppError> {
+    let (release, released) = tokio::sync::oneshot::channel();
+    let (completed, completion) = tokio::sync::oneshot::channel();
+    let mut owned = Box::pin(own_effects(async |effects| {
+        let _waiter = effects.start(async move {
+            let _ = released.await;
+            let _ = completed.send(7);
+        })?;
+        Err::<(), AppError>(std::io::Error::other("Private loop failure").into())?;
+        Ok(())
+    }));
+    std::future::poll_fn(|context| {
+        assert!(
+            owned.as_mut().poll(context).is_pending(),
+            "The loop failure must not drop an unfinished SDK task"
+        );
+        std::task::Poll::Ready(())
+    })
+    .await;
+    release.send(()).map_err(|_| "Effect was cancelled")?;
+    let failure = owned.await.err().ok_or("Missing primary failure")?;
+    assert_eq!(failure.to_string(), "Private loop failure");
+    assert_eq!(completion.await?, 7);
+    Ok(())
+}
+
 #[tokio::test]
 async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_uids()
 -> Result<(), AppError> {
