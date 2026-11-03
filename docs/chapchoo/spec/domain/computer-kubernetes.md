@@ -8,7 +8,7 @@ code_paths:
   - rust/crates/kubernetes/src/lib.rs
   - rust/apps/chapchoo/src/provider/effects.rs
   - rust/crates/kubernetes/tests/adapter.rs
-last_verified_at: 2026-11-02
+last_verified_at: 2026-11-04
 spec_version: 1
 ---
 
@@ -94,7 +94,9 @@ Kubernetes native identities, effect order, timings and witnesses are unchanged.
 One lifecycle permit remains held until the actual task ends, including when its
 response receiver is dropped. A Provider process must retain this owner across
 reconnects and supervise its drain; replacing a connection is not cancellation
-of a possibly accepted substrate effect.
+of a possibly accepted substrate effect. Drain joins every retained task before
+returning its first task failure, including work retained after an earlier failed
+task released its permit.
 
 ## Verification
 
