@@ -12,7 +12,7 @@ code_paths:
   - rust/crates/mail
   - rust/apps/chapchoo
   - typescript/packages/rpc-client
-last_verified_at: 2026-11-03
+last_verified_at: 2026-11-04
 spec_version: 2
 ---
 
