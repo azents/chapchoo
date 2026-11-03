@@ -1,6 +1,7 @@
 //! Real Control stream and supported SDK with an isolated synthetic HTTP service.
 mod docker;
 use super::*;
+use crate::test_support;
 use base64::{Engine, engine::general_purpose::URL_SAFE};
 use chapchoo_crypto::{CredentialCipher, PasswordCost, RootKey, SystemOwnerVerifier};
 use chapchoo_domain::Password;
@@ -51,6 +52,7 @@ async fn propagated_loop_error_waits_for_its_started_effect_before_returning()
 async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_uids()
 -> Result<(), AppError> {
     let dir = tempfile::tempdir()?;
+    test_support::scope(async |fixture| {
     let path = dir.path().join("provider.sqlite");
     let cipher = Arc::new(CredentialCipher::new(RootKey::parse(
         URL_SAFE.encode([39; 32]),
@@ -96,10 +98,17 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
         control.id.clone(),
         Arc::new(std::sync::atomic::AtomicBool::new(true)),
     );
-    let authentication =
-        ComponentAuthenticationServices::new(app.clone(), control.id.clone(), connections.clone());
-    let (stop_server, stopped) = tokio::sync::oneshot::channel();
-    let server = tokio::spawn(
+    let authentication = ComponentAuthenticationServices::new(app.clone(), control.id.clone(), connections.clone());
+    let cleanup_app = app.clone();
+    let cleanup_control = control.id.clone();
+    let cleanup_connections = connections.clone();
+    fixture.cleanup(async move {
+        let primary = cleanup_app.drain_control(&cleanup_control).await.map_err(Into::into);
+        let cleanup = cleanup_connections.drain().await.map_err(Into::into);
+        test_support::completed(primary, cleanup)
+    });
+    let stopped = fixture.shutdown();
+    fixture.server(
         Server::builder()
             .add_service(authentication.provider_server())
             .add_service(connections.provider_server())
@@ -108,8 +117,8 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
             }),
     );
     let peer = chapchoo_rpc::PeerServices::new(app.clone(), connections.clone());
-    let (stop_peer, stopped_peer) = tokio::sync::oneshot::channel();
-    let peer_server = tokio::spawn(
+    let stopped_peer = fixture.shutdown();
+    fixture.server(
         Server::builder()
             .add_service(peer.server())
             .serve_with_incoming_shutdown(TcpListenerStream::new(peer_listener), async {
@@ -162,40 +171,39 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
                     let agents = database
                         .agents(&actor, &team_id, None, 20, AcceptanceTime::System)
                         .await;
-                    let valid = if let Ok(agents) = agents {
-                        if let Some(agent) = agents.iter().find(|a| {
-                            body["metadata"]["annotations"]["chapchoo.io/computer"].as_str()
-                                == Some(&a.computer.id)
-                        }) {
-                            if let Ok(snapshot) = database
-                                .delivery_snapshot(
-                                    Some(&actor),
-                                    ComputerRequest {
-                                        computer_id: &agent.computer.id,
-                                        request_id: &agent.computer.current_request_id,
-                                    },
-                                    None,
-                                )
-                                .await
-                            {
-                                snapshot.resources.iter().any(|r| {
-                                    r.kind() == chapchoo_domain::ManagedResourceKind::Pvc
-                                        && r.identity().is_some()
-                                }) && (kind != "Pod"
-                                    || snapshot.resources.iter().any(|r| {
-                                        r.kind()
-                                            == chapchoo_domain::ManagedResourceKind::BootstrapSecret
-                                            && r.identity().is_some()
-                                    }))
+                    let valid =
+                        if let Ok(agents) = agents {
+                            if let Some(agent) = agents.iter().find(|a| {
+                                body["metadata"]["annotations"]["chapchoo.io/computer"].as_str()
+                                    == Some(&a.computer.id)
+                            }) {
+                                if let Ok(snapshot) = database
+                                    .delivery_snapshot(
+                                        Some(&actor),
+                                        ComputerRequest {
+                                            computer_id: &agent.computer.id,
+                                            request_id: &agent.computer.current_request_id,
+                                        },
+                                        None,
+                                    )
+                                    .await
+                                {
+                                    snapshot.resources.iter().any(|r| {
+                                        r.kind() == chapchoo_domain::ManagedResourceKind::Pvc && r.identity().is_some()
+                                    }) && (kind != "Pod"
+                                        || snapshot.resources.iter().any(|r| {
+                                            r.kind() == chapchoo_domain::ManagedResourceKind::BootstrapSecret
+                                                && r.identity().is_some()
+                                        }))
+                                } else {
+                                    false
+                                }
                             } else {
                                 false
                             }
                         } else {
                             false
-                        }
-                    } else {
-                        false
-                    };
+                        };
                     if !valid && let Ok(mut violations) = violations.lock() {
                         violations.push(kind.clone());
                     }
@@ -323,7 +331,7 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
     };
     let channel = super::endpoint(&endpoint)?.connect_lazy();
     let provider_endpoint = endpoint.clone();
-    let provider = tokio::spawn(async move {
+    let provider = fixture.worker(stop.clone(), async move {
         stream_loop(
             channel,
             &provider_endpoint,
@@ -439,13 +447,17 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
         connector_control.id.clone(),
         Arc::new(std::sync::atomic::AtomicBool::new(true)),
     );
-    let connector_auth = ComponentAuthenticationServices::new(
-        app.clone(),
-        connector_control.id.clone(),
-        connector_connections.clone(),
-    );
-    let (stop_connector_server, stopped_connector_server) = tokio::sync::oneshot::channel();
-    let connector_server = tokio::spawn(
+    let connector_auth = ComponentAuthenticationServices::new(app.clone(), connector_control.id.clone(), connector_connections.clone());
+    let cleanup_app = app.clone();
+    let cleanup_control = connector_control.id.clone();
+    let cleanup_connections = connector_connections.clone();
+    fixture.cleanup(async move {
+        let primary = cleanup_app.drain_control(&cleanup_control).await.map_err(Into::into);
+        let cleanup = cleanup_connections.drain().await.map_err(Into::into);
+        test_support::completed(primary, cleanup)
+    });
+    let stopped_connector_server = fixture.shutdown();
+    fixture.server(
         Server::builder()
             .add_service(connector_auth.connector_server())
             .add_service(connector_connections.connector_server())
@@ -483,7 +495,7 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
         .await?;
     let connector_stop = CancellationToken::new();
     let connector_stopping = connector_stop.clone();
-    let connector = tokio::spawn(async move {
+    let connector = fixture.worker(connector_stop.clone(), async move {
         crate::connector::run(
             &connector_endpoint,
             session.id,
@@ -524,11 +536,10 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
         chapchoo_domain::ObservedPower::Stopped
     );
     connector_stop.cancel();
-    let _ = tokio::time::timeout(Duration::from_secs(10), connector).await?;
-    app.drain_control(&connector_control.id).await?;
-    connector_connections.drain().await?;
-    let _ = stop_connector_server.send(());
-    connector_server.await??;
+    tokio::time::timeout(Duration::from_secs(10), connector).await??;
+    let primary = app.drain_control(&connector_control.id).await.map_err(Into::into);
+    let cleanup = connector_connections.drain().await.map_err(Into::into);
+    test_support::completed(primary, cleanup)?;
     app.request_lifecycle(
         &user.token.digest(),
         &agent.id,
@@ -594,16 +605,9 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
     let pod = before_restoration
         .resources
         .iter()
-        .find(|r| {
-            r.kind() == chapchoo_domain::ManagedResourceKind::Pod
-                && r.execution_id.as_deref() == Some(&previous)
-        })
+        .find(|r| r.kind() == chapchoo_domain::ManagedResourceKind::Pod && r.execution_id.as_deref() == Some(&previous))
         .ok_or("Current Pod")?;
-    let pod_path = format!(
-        "/api/v1/namespaces/{}/pods/{}",
-        pod.native().scope().as_str(),
-        pod.native().name()
-    );
+    let pod_path = format!("/api/v1/namespaces/{}/pods/{}", pod.native().scope().as_str(), pod.native().name());
     let mut disappeared = substrate
         .lock()
         .map_err(|_| "Substrate lock")?
@@ -684,18 +688,14 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
         let pod = snapshot
             .resources
             .iter()
-            .find(|r| {
-                r.kind() == chapchoo_domain::ManagedResourceKind::Pod
-                    && r.execution_id.as_deref() == Some(execution)
-            })
+            .find(|r| r.kind() == chapchoo_domain::ManagedResourceKind::Pod && r.execution_id.as_deref() == Some(execution))
             .ok_or("Current Pod")?;
         {
             let mut objects = substrate.lock().map_err(|_| "Substrate lock")?;
             let object = objects
                 .get_mut(&format!(
                     "/api/v1/namespaces/{}/pods/{}",
-                    pod.native().scope().as_str(),
-                    pod.native().name()
+                    pod.native().scope().as_str(), pod.native().name()
                 ))
                 .ok_or("Synthetic current Pod")?;
             object["status"] = json!({"phase":"Succeeded","containerStatuses":[{"name":"computer-connector","image":"fixture","imageID":"fixture-id","ready":false,"restartCount":0,"state":{"terminated":{"containerID":"containerd://fixture","exitCode":0,"reason":"Completed","finishedAt":"2026-11-02T00:00:00Z"}}}]});
@@ -725,8 +725,7 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
     *delayed_finalizer.lock().map_err(|_| "Finalizer lock")? = Some((
         format!(
             "/api/v1/namespaces/{}/secrets/{}",
-            delayed_secret.native().scope().as_str(),
-            delayed_secret.native().name()
+            delayed_secret.native().scope().as_str(), delayed_secret.native().name()
         ),
         None,
     ));
@@ -782,12 +781,7 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
         chapchoo_service::DomainReason::NotFound
     );
     stop.cancel();
-    tokio::time::timeout(Duration::from_secs(10), provider).await???;
-    app.drain_control(&control.id).await?;
-    connections.drain().await?;
-    let _ = stop_server.send(());
-    server.await??;
-    let _ = stop_peer.send(());
-    peer_server.await??;
+    tokio::time::timeout(Duration::from_secs(10), provider).await??;
     Ok(())
+    }).await
 }

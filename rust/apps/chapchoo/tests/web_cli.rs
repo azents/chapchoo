@@ -21,6 +21,8 @@ use tokio::{
 };
 
 type TestError = Box<dyn Error + Send + Sync>;
+#[path = "../test_support.rs"]
+mod test_support;
 
 struct Bundle {
     directory: tempfile::TempDir,
@@ -84,6 +86,75 @@ impl Bundle {
 
 struct OwnedRoot(Child);
 
+impl OwnedRoot {
+    async fn run(
+        child: Child,
+        exercise: impl AsyncFnOnce(&mut Child) -> Result<(), TestError>,
+    ) -> Result<(), TestError> {
+        let mut root = Self(child);
+        let primary = exercise(&mut root.0).await;
+        let cleanup = async {
+            let observed = root.0.try_wait();
+            if matches!(observed, Ok(Some(_))) {
+                return Ok(());
+            }
+            // Keep product-coordinated group cleanup on normal Result failure.
+            // A deadline is not evidence that the root or descendants stopped.
+            let signal = (|| -> Result<(), TestError> {
+                let id = i32::try_from(root.0.id().ok_or("Missing owned root PID")?)?;
+                kill(Pid::from_raw(id), Signal::SIGTERM)?;
+                Ok(())
+            })();
+            let preparation =
+                test_support::completed(observed.map(|_| ()).map_err(Into::into), signal);
+            let waited = match tokio::time::timeout(Duration::from_secs(30), root.0.wait()).await {
+                Ok(result) => result.map(|_| ()).map_err(Into::into),
+                Err(deadline) => {
+                    let completion = root.0.wait().await.map(|_| ()).map_err(Into::into);
+                    test_support::completed(Err(deadline.into()), completion)
+                }
+            };
+            test_support::completed(preparation, waited)
+        }
+        .await;
+        test_support::completed(primary, cleanup)
+    }
+
+    async fn output(
+        command: &mut Command,
+        deadline: Duration,
+    ) -> Result<std::process::Output, TestError> {
+        let mut captured = None;
+        Self::run(command.spawn()?, async |child| {
+            let mut stdout = child.stdout.take().ok_or("Missing stdout")?;
+            let mut stderr = child.stderr.take().ok_or("Missing stderr")?;
+            let mut out = Vec::new();
+            let mut err = Vec::new();
+            let status = tokio::time::timeout(deadline, async {
+                let (status, output, errors) = tokio::join!(
+                    child.wait(),
+                    stdout.read_to_end(&mut out),
+                    stderr.read_to_end(&mut err)
+                );
+                let reads = test_support::completed(
+                    output.map(|_| ()).map_err(Into::into),
+                    errors.map(|_| ()).map_err(Into::into),
+                );
+                test_support::completed(status.map_err(Into::into), reads)
+            })
+            .await??;
+            captured = Some(std::process::Output {
+                status,
+                stdout: out,
+                stderr: err,
+            });
+            Ok(())
+        })
+        .await?;
+        captured.ok_or_else(|| "Missing captured root output".into())
+    }
+}
+
 impl Drop for OwnedRoot {
     fn drop(&mut self) {
         // Failure fallback requests the product's own coordinated cleanup; do
@@ -133,11 +204,11 @@ fn group_gone(group: Pid) -> Result<bool, TestError> {
 }
 
 #[tokio::test]
-async fn web_only_needs_no_database_key_or_host_node_and_stops_its_group() -> Result<(), TestError>
-{
+async fn ordinary_exercise_error_waits_for_root_and_owned_group_cleanup() -> Result<(), TestError> {
     let bundle = Bundle::new("serve")?;
     let web_port = port()?;
-    let mut root = OwnedRoot(
+    let mut group = None;
+    let failure = OwnedRoot::run(
         bundle
             .command()
             .args([
@@ -149,20 +220,55 @@ async fn web_only_needs_no_database_key_or_host_node_and_stops_its_group() -> Re
                 &format!("127.0.0.1:{web_port}"),
             ])
             .spawn()?,
-    );
-    let _output = ready(&mut root.0).await?;
-    let group = bundle.child_group(web_port)?;
-    let status = stop(&mut root.0, 10).await?;
-    assert!(status.success());
-    assert!(group_gone(group)?);
+        async |root| {
+            let _output = ready(root).await?;
+            group = Some(bundle.child_group(web_port)?);
+            Err("Primary web exercise failure".into())
+        },
+    )
+    .await
+    .err()
+    .ok_or("Expected exercise failure")?;
+    assert_eq!(failure.to_string(), "Primary web exercise failure");
+    assert!(group_gone(group.ok_or("Missing owned web group")?)?);
+    let _released = TcpListener::bind(("127.0.0.1", web_port))?;
     Ok(())
+}
+
+#[tokio::test]
+async fn web_only_needs_no_database_key_or_host_node_and_stops_its_group() -> Result<(), TestError>
+{
+    let bundle = Bundle::new("serve")?;
+    let web_port = port()?;
+    OwnedRoot::run(
+        bundle
+            .command()
+            .args([
+                "serve",
+                "--groups",
+                "--web",
+                "general",
+                "--general-web-listen",
+                &format!("127.0.0.1:{web_port}"),
+            ])
+            .spawn()?,
+        async |root| {
+            let _output = ready(root).await?;
+            let group = bundle.child_group(web_port)?;
+            let status = stop(root, 10).await?;
+            assert!(status.success());
+            assert!(group_gone(group)?);
+            Ok(())
+        },
+    )
+    .await
 }
 
 #[tokio::test]
 async fn forced_cleanup_reaps_adopted_descendants_and_reports_failure() -> Result<(), TestError> {
     let bundle = Bundle::new("leak-descendant")?;
     let web_port = port()?;
-    let mut root = OwnedRoot(
+    OwnedRoot::run(
         bundle
             .command()
             .args([
@@ -174,39 +280,50 @@ async fn forced_cleanup_reaps_adopted_descendants_and_reports_failure() -> Resul
                 &format!("127.0.0.1:{web_port}"),
             ])
             .spawn()?,
-    );
-    let _output = ready(&mut root.0).await?;
-    let group = bundle.child_group(web_port)?;
-    let status = stop(&mut root.0, 30).await?;
-    assert!(!status.success());
-    assert!(group_gone(group)?);
-    Ok(())
+        async |root| {
+            let _output = ready(root).await?;
+            let group = bundle.child_group(web_port)?;
+            let status = stop(root, 30).await?;
+            assert!(!status.success());
+            assert!(group_gone(group)?);
+            Ok(())
+        },
+    )
+    .await
 }
 
 #[tokio::test]
 async fn occupied_foreign_web_listener_cannot_satisfy_owned_startup() -> Result<(), TestError> {
     let bundle = Bundle::new("serve")?;
+    test_support::scope(async |fixture| {
     let foreign = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let address = foreign.local_addr()?;
-    let foreign_server = tokio::spawn(async move {
+    let mut shutdown = fixture.shutdown();
+    fixture.server(async move {
+        let mut requests = tokio::task::JoinSet::new();
+        let primary = async {
         loop {
-            let (mut stream, _) = foreign.accept().await?;
-            tokio::spawn(async move {
+            let (mut stream, _) = tokio::select! {
+                _ = &mut shutdown => break,
+                accepted = foreign.accept() => accepted?,
+            };
+            requests.spawn(async move {
                 let mut buffer = [0; 1024];
-                let _ = stream.read(&mut buffer).await;
-                let _ = stream
-                    .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}")
-                    .await;
+                // A caller checking only listener reachability may close without
+                // requesting HTTP. No reply is owed on that deliberate probe.
+                if stream.read(&mut buffer).await? > 0 {
+                    stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}").await?;
+                }
+                Ok::<(), TestError>(())
             });
         }
-        #[allow(unreachable_code)]
-        Ok::<_, std::io::Error>(())
+        Ok::<(), TestError>(())
+        }.await;
+        let cleanup = test_support::requests(&mut requests).await;
+        test_support::completed(primary, cleanup)
     });
-    let outcome = async {
-        let output = tokio::time::timeout(
-            Duration::from_secs(15),
-            bundle
-                .command()
+        let output = OwnedRoot::output(
+            bundle.command()
                 .args([
                     "serve",
                     "--groups",
@@ -214,24 +331,16 @@ async fn occupied_foreign_web_listener_cannot_satisfy_owned_startup() -> Result<
                     "general",
                     "--general-web-listen",
                     &address.to_string(),
-                ])
-                .output(),
+                ]),
+            Duration::from_secs(15),
         )
-        .await??;
+        .await?;
         let stream = tokio::net::TcpStream::connect(address).await?;
         drop(stream);
-        Ok::<_, TestError>((
-            output.status.success(),
-            String::from_utf8_lossy(&output.stdout).contains("Selected components are ready"),
-        ))
-    }
-    .await;
-    foreign_server.abort();
-    let _ = foreign_server.await;
-    let (success, announced) = outcome?;
-    assert!(!success);
-    assert!(!announced);
+    assert!(!output.status.success());
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("Selected components are ready"));
     Ok(())
+    }).await
 }
 
 #[tokio::test]
@@ -249,7 +358,7 @@ async fn first_ready_web_exit_is_supervised_while_other_web_starts() -> Result<(
         while admin_port == general_port {
             admin_port = port()?;
         }
-        let mut root = OwnedRoot(
+        OwnedRoot::run(
             bundle
                 .command()
                 .env("RUST_LOG", "chapchoo=debug")
@@ -264,79 +373,83 @@ async fn first_ready_web_exit_is_supervised_while_other_web_starts() -> Result<(
                     &format!("127.0.0.1:{admin_port}"),
                 ])
                 .spawn()?,
-        );
-        let mut reader = BufReader::new(root.0.stdout.take().ok_or("Missing root output")?);
-        // Product-side readiness is an explicit barrier, not a timing sleep.
-        tokio::time::timeout(Duration::from_secs(10), async {
-            loop {
-                let mut line = String::new();
-                if reader.read_line(&mut line).await? == 0 {
-                    return Err("Root exited before first-child readiness".into());
-                }
-                assert!(!line.contains("Selected components are ready"));
-                if line.contains("Selected web process is ready") {
-                    assert!(line.contains(if first == "general" {
-                        "General"
-                    } else {
-                        "Admin"
-                    }));
-                    return Ok::<_, TestError>(());
-                }
-            }
-        })
-        .await??;
-        let waiting_port = if first == "general" {
-            admin_port
-        } else {
-            general_port
-        };
-        let barrier = bundle
-            .directory
-            .path()
-            .join(format!("waiting-{waiting_port}"));
-        tokio::time::timeout(Duration::from_secs(10), async {
-            while !barrier.exists() {
-                tokio::time::sleep(Duration::from_millis(25)).await;
-            }
-        })
+            async |root| {
+                let mut reader = BufReader::new(root.stdout.take().ok_or("Missing root output")?);
+                // Product-side readiness is an explicit barrier, not a timing sleep.
+                tokio::time::timeout(Duration::from_secs(10), async {
+                    loop {
+                        let mut line = String::new();
+                        if reader.read_line(&mut line).await? == 0 {
+                            return Err("Root exited before first-child readiness".into());
+                        }
+                        assert!(!line.contains("Selected components are ready"));
+                        if line.contains("Selected web process is ready") {
+                            assert!(line.contains(if first == "general" {
+                                "General"
+                            } else {
+                                "Admin"
+                            }));
+                            return Ok::<_, TestError>(());
+                        }
+                    }
+                })
+                .await??;
+                let waiting_port = if first == "general" {
+                    admin_port
+                } else {
+                    general_port
+                };
+                let barrier = bundle
+                    .directory
+                    .path()
+                    .join(format!("waiting-{waiting_port}"));
+                tokio::time::timeout(Duration::from_secs(10), async {
+                    while !barrier.exists() {
+                        tokio::time::sleep(Duration::from_millis(25)).await;
+                    }
+                })
+                .await?;
+                let group = bundle.child_group(if first == "general" {
+                    general_port
+                } else {
+                    admin_port
+                })?;
+                kill(group, Signal::SIGTERM)?;
+                let mut remaining = String::new();
+                // Observe failure promptly, separately from the approved20s+5s drain.
+                // Waiting for full process exit in5s incorrectly shortened that budget.
+                let observed = tokio::time::timeout(Duration::from_secs(10), async {
+                    loop {
+                        let mut line = String::new();
+                        if reader.read_line(&mut line).await? == 0 {
+                            return Ok::<_, TestError>(false);
+                        }
+                        remaining.push_str(&line);
+                        if line.contains("A selected web process exited unexpectedly") {
+                            return Ok(true);
+                        }
+                    }
+                })
+                .await
+                .unwrap_or(Ok(false))?;
+                let status = if observed {
+                    tokio::time::timeout(Duration::from_secs(30), root.wait()).await??
+                } else {
+                    stop(root, 30).await?
+                };
+                reader.read_to_string(&mut remaining).await?;
+                assert!(
+                    observed,
+                    "First-ready exit waited for the other startup deadline ({first}): {remaining}"
+                );
+                assert!(!status.success());
+                assert!(!remaining.contains("Selected components are ready"));
+                assert!(group_gone(bundle.child_group(general_port)?)?);
+                assert!(group_gone(bundle.child_group(admin_port)?)?);
+                Ok(())
+            },
+        )
         .await?;
-        let group = bundle.child_group(if first == "general" {
-            general_port
-        } else {
-            admin_port
-        })?;
-        kill(group, Signal::SIGTERM)?;
-        let mut remaining = String::new();
-        // Observe failure promptly, separately from the approved20s+5s drain.
-        // Waiting for full process exit in5s incorrectly shortened that budget.
-        let observed = tokio::time::timeout(Duration::from_secs(10), async {
-            loop {
-                let mut line = String::new();
-                if reader.read_line(&mut line).await? == 0 {
-                    return Ok::<_, TestError>(false);
-                }
-                remaining.push_str(&line);
-                if line.contains("A selected web process exited unexpectedly") {
-                    return Ok(true);
-                }
-            }
-        })
-        .await
-        .unwrap_or(Ok(false))?;
-        let status = if observed {
-            tokio::time::timeout(Duration::from_secs(30), root.0.wait()).await??
-        } else {
-            stop(&mut root.0, 30).await?
-        };
-        reader.read_to_string(&mut remaining).await?;
-        assert!(
-            observed,
-            "First-ready exit waited for the other startup deadline ({first}): {remaining}"
-        );
-        assert!(!status.success());
-        assert!(!remaining.contains("Selected components are ready"));
-        assert!(group_gone(bundle.child_group(general_port)?)?);
-        assert!(group_gone(bundle.child_group(admin_port)?)?);
     }
     Ok(())
 }
@@ -349,7 +462,7 @@ async fn pending_health_readiness_survives_the_other_web_becoming_ready() -> Res
     while admin_port == general_port {
         admin_port = port()?;
     }
-    let mut root = OwnedRoot(
+    OwnedRoot::run(
         bundle
             .command()
             .env("RUST_LOG", "chapchoo=debug")
@@ -364,66 +477,69 @@ async fn pending_health_readiness_survives_the_other_web_becoming_ready() -> Res
                 &format!("127.0.0.1:{admin_port}"),
             ])
             .spawn()?,
-    );
-    let mut reader = BufReader::new(root.0.stdout.take().ok_or("Missing root output")?);
-    // Both Ready oneshots have been consumed before either health completes.
-    // Release General alone, forcing the first-completion branch to preserve
-    // Admin's already-running health future rather than restart its receiver.
-    for web_port in [general_port, admin_port] {
-        let barrier = bundle
-            .directory
-            .path()
-            .join(format!("health-waiting-{web_port}"));
-        tokio::time::timeout(Duration::from_secs(10), async {
-            while !barrier.exists() {
-                tokio::time::sleep(Duration::from_millis(25)).await;
+        async |root| {
+            let mut reader = BufReader::new(root.stdout.take().ok_or("Missing root output")?);
+            // Both Ready oneshots have been consumed before either health completes.
+            // Release General alone, forcing the first-completion branch to preserve
+            // Admin's already-running health future rather than restart its receiver.
+            for web_port in [general_port, admin_port] {
+                let barrier = bundle
+                    .directory
+                    .path()
+                    .join(format!("health-waiting-{web_port}"));
+                tokio::time::timeout(Duration::from_secs(10), async {
+                    while !barrier.exists() {
+                        tokio::time::sleep(Duration::from_millis(25)).await;
+                    }
+                })
+                .await?;
             }
-        })
-        .await?;
-    }
-    std::fs::write(
-        bundle
-            .directory
-            .path()
-            .join(format!("health-release-{general_port}")),
-        b"release",
-    )?;
-    tokio::time::timeout(Duration::from_secs(10), async {
-        loop {
-            let mut line = String::new();
-            if reader.read_line(&mut line).await? == 0 {
-                return Err("Root exited before the fast web became ready".into());
-            }
-            if line.contains("Selected web process is ready") {
-                assert!(line.contains("General"));
-                return Ok::<_, TestError>(());
-            }
-        }
-    })
-    .await??;
-    std::fs::write(
-        bundle
-            .directory
-            .path()
-            .join(format!("health-release-{admin_port}")),
-        b"release",
-    )?;
-    tokio::time::timeout(Duration::from_secs(10), async {
-        loop {
-            let mut line = String::new();
-            if reader.read_line(&mut line).await? == 0 {
-                return Err("Root discarded the pending web readiness future".into());
-            }
-            if line.contains("Selected components are ready") {
-                return Ok::<_, TestError>(());
-            }
-        }
-    })
-    .await??;
-    assert!(stop(&mut root.0, 10).await?.success());
-    assert!(group_gone(bundle.child_group(general_port)?)?);
-    assert!(group_gone(bundle.child_group(admin_port)?)?);
-    Ok(())
+            std::fs::write(
+                bundle
+                    .directory
+                    .path()
+                    .join(format!("health-release-{general_port}")),
+                b"release",
+            )?;
+            tokio::time::timeout(Duration::from_secs(10), async {
+                loop {
+                    let mut line = String::new();
+                    if reader.read_line(&mut line).await? == 0 {
+                        return Err("Root exited before the fast web became ready".into());
+                    }
+                    if line.contains("Selected web process is ready") {
+                        assert!(line.contains("General"));
+                        return Ok::<_, TestError>(());
+                    }
+                }
+            })
+            .await??;
+            std::fs::write(
+                bundle
+                    .directory
+                    .path()
+                    .join(format!("health-release-{admin_port}")),
+                b"release",
+            )?;
+            tokio::time::timeout(Duration::from_secs(10), async {
+                loop {
+                    let mut line = String::new();
+                    if reader.read_line(&mut line).await? == 0 {
+                        return Err("Root discarded the pending web readiness future".into());
+                    }
+                    if line.contains("Selected components are ready") {
+                        return Ok::<_, TestError>(());
+                    }
+                }
+            })
+            .await??;
+            assert!(stop(root, 10).await?.success());
+            assert!(group_gone(bundle.child_group(general_port)?)?);
+            assert!(group_gone(bundle.child_group(admin_port)?)?);
+            Ok(())
+        },
+    )
+    .await
 }
 
 #[tokio::test]
@@ -450,23 +566,21 @@ async fn partial_web_failure_releases_only_its_co_selected_backend() -> Result<(
         .env_remove("CHAPCHOO_SETUP_PROOF")
         .env("CHAPCHOO_SQLITE_PATH", &data)
         .env("CHAPCHOO_SECRET_KEY", key);
-    let output = tokio::time::timeout(
+    let output = OwnedRoot::output(
+        command.args([
+            "serve",
+            "--groups",
+            "client",
+            "--web",
+            "general",
+            "--listen",
+            &format!("127.0.0.1:{backend_port}"),
+            "--general-web-listen",
+            &format!("127.0.0.1:{web_port}"),
+        ]),
         Duration::from_secs(15),
-        command
-            .args([
-                "serve",
-                "--groups",
-                "client",
-                "--web",
-                "general",
-                "--listen",
-                &format!("127.0.0.1:{backend_port}"),
-                "--general-web-listen",
-                &format!("127.0.0.1:{web_port}"),
-            ])
-            .output(),
     )
-    .await??;
+    .await?;
     assert!(!output.status.success());
     let released = TcpListener::bind(("127.0.0.1", backend_port))?;
     assert_eq!(released.local_addr()?.port(), backend_port);
