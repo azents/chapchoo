@@ -43,7 +43,10 @@ async fn failed_exercise_finishes_workers_and_cleanup_before_stopping_dependenci
         let dependency = stopped.clone();
         fixture.cleanup(async move {
             assert!(!dependency.load(Ordering::SeqCst));
-            Err("Independent cleanup failure".into())
+            test_support::completed(
+                Err("Independent cleanup failure".into()),
+                Err("Independent second cleanup failure".into()),
+            )
         });
         Err("Primary exercise failure".into())
     })
@@ -59,6 +62,7 @@ async fn failed_exercise_finishes_workers_and_cleanup_before_stopping_dependenci
         "Primary exercise failure",
         "Independent worker failure",
         "Independent cleanup failure",
+        "Independent second cleanup failure",
         "Independent server failure",
     ] {
         assert!(retained.contains(cause), "{retained}");

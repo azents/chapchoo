@@ -24,7 +24,7 @@ struct Failures(Vec<TestError>);
 impl fmt::Debug for Failures {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_list()
-            .entries(self.0.iter().map(ToString::to_string))
+            .entries(self.0.iter().map(|cause| format!("{cause:?}")))
             .finish()
     }
 }
@@ -45,11 +45,15 @@ fn finish(mut causes: Vec<TestError>) -> Result<(), TestError> {
         _ => Err(Box::new(Failures(causes))),
     }
 }
-pub fn completed(
-    primary: Result<(), TestError>,
+pub fn completed<T>(
+    primary: Result<T, TestError>,
     cleanup: Result<(), TestError>,
-) -> Result<(), TestError> {
-    finish(primary.err().into_iter().chain(cleanup.err()).collect())
+) -> Result<T, TestError> {
+    match (primary, cleanup) {
+        (Ok(value), Ok(())) => Ok(value),
+        (Err(error), Ok(())) | (Ok(_), Err(error)) => Err(error),
+        (Err(primary), Err(cleanup)) => Err(Box::new(Failures(vec![primary, cleanup]))),
+    }
 }
 async fn collect(tasks: &mut JoinSet<Result<(), TestError>>, causes: &mut Vec<TestError>) {
     while let Some(result) = tasks.join_next().await {
