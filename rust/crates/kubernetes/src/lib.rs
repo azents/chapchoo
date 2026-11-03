@@ -31,7 +31,7 @@ pub enum Error {
     #[error("Kubernetes operation failed; its external outcome may be uncertain")]
     Client(#[from] kube::Error),
     #[error("Kubernetes explicitly rejected resource creation")]
-    CreationRejected,
+    CreationRejected(#[source] kube::Error),
     #[error("Managed resource identity or ownership does not match")]
     Ownership,
     #[error("The original saved environment is missing or unverified")]
@@ -50,7 +50,7 @@ impl Error {
     /// An explicit native POST rejection proves create non-acceptance.
     /// GET, collision follow-up, transport and server errors remain uncertain.
     pub fn definitely_rejected(&self) -> bool {
-        matches!(self, Self::CreationRejected)
+        matches!(self, Self::CreationRejected(_))
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -398,7 +398,7 @@ impl Kubernetes {
             Ok(created) => created,
             Err(kube::Error::Api(error)) if error.code == 409 => api.get(&resource.name).await?,
             Err(kube::Error::Api(error)) if matches!(error.code, 400 | 401 | 403 | 422 | 429) => {
-                return Err(Error::CreationRejected);
+                return Err(Error::CreationRejected(kube::Error::Api(error)));
             }
             Err(error) => return Err(error.into()),
         };
@@ -461,7 +461,7 @@ impl Kubernetes {
                     Err(kube::Error::Api(error))
                         if matches!(error.code, 400 | 401 | 403 | 422 | 429) =>
                     {
-                        return Err(Error::CreationRejected);
+                        return Err(Error::CreationRejected(kube::Error::Api(error)));
                     }
                     Err(error) => return Err(error.into()),
                 }
@@ -586,7 +586,7 @@ impl Kubernetes {
             Ok(created) => created,
             Err(kube::Error::Api(error)) if error.code == 409 => api.get(&pod.name).await?,
             Err(kube::Error::Api(error)) if matches!(error.code, 400 | 401 | 403 | 422 | 429) => {
-                return Err(Error::CreationRejected);
+                return Err(Error::CreationRejected(kube::Error::Api(error)));
             }
             Err(error) => return Err(error.into()),
         };
