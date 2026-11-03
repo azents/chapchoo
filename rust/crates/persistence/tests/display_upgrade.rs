@@ -1,3 +1,5 @@
+mod support;
+
 use base64::{Engine, engine::general_purpose::URL_SAFE};
 use chapchoo_crypto::{BearerSecret, CredentialCipher, RootKey};
 use chapchoo_domain::DisplaySettings;
@@ -128,9 +130,7 @@ fn postgres_populated_upgrade_is_atomic_and_preserves_default_and_backfill_autho
     let url = format!("{base}{separator}options=-csearch_path%3D{schema}");
     let result = postgres_upgrade(&url);
     let cleanup = admin.batch_execute(&format!("DROP SCHEMA {schema} CASCADE"));
-    result?;
-    cleanup?;
-    Ok(())
+    support::combine(result, cleanup.map_err(Into::into)).map(|_| ())
 }
 fn postgres_upgrade(url: &str) -> Result<(), TestError> {
     let cipher = cipher()?;

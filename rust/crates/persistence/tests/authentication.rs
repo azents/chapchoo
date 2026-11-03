@@ -1,3 +1,5 @@
+mod support;
+
 use base64::{Engine, engine::general_purpose::URL_SAFE};
 use chapchoo_crypto::{
     BearerSecret, CredentialCipher, EmailCode, PasswordCost, PasswordHasher, RootKey,
@@ -309,8 +311,17 @@ async fn exercise(store: Store) -> Result<(), TestError> {
     }
     let mut latest = None;
     let mut expiry = None;
+    let mut completions = Ok(Vec::new());
     while let Some(result) = calls.join_next().await {
-        let result = result??;
+        let result = result
+            .map_err(Into::into)
+            .and_then(|result| result.map_err(Into::into));
+        completions = support::combine(completions, result).map(|(mut items, result)| {
+            items.push(result);
+            items
+        });
+    }
+    for result in completions? {
         if let Some(token) = &latest {
             assert_eq!(result.token.expose(), token);
         } else {
@@ -525,7 +536,5 @@ fn authentication_on_postgres() -> Result<(), TestError> {
             .block_on(async { exercise(Store::connect_postgres(url, cipher).await?).await })
     })();
     let cleanup = connection.batch_execute(&format!("DROP SCHEMA {schema} CASCADE"));
-    result?;
-    cleanup?;
-    Ok(())
+    support::combine(result, cleanup.map_err(Into::into)).map(|_| ())
 }

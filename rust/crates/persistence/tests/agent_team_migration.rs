@@ -1,3 +1,5 @@
+mod support;
+
 use chapchoo_crypto::BearerSecret;
 use chapchoo_persistence::{POSTGRES_MIGRATIONS, SQLITE_MIGRATIONS};
 use diesel::{
@@ -77,9 +79,7 @@ fn postgres_agent_team_backfill_is_preserving_and_atomic() -> Result<(), TestErr
     let url = format!("{base}{separator}options=-csearch_path%3D{schema}");
     let result = postgres_in_schema(&url);
     let cleanup = admin.batch_execute(&format!("DROP SCHEMA {schema} CASCADE"));
-    result?;
-    cleanup?;
-    Ok(())
+    support::combine(result, cleanup.map_err(Into::into)).map(|_| ())
 }
 fn postgres_in_schema(url: &str) -> Result<(), TestError> {
     let mut connection = AsyncConnectionWrapper::<AsyncPgConnection>::establish(url)?;

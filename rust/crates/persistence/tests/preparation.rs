@@ -1,3 +1,5 @@
+mod support;
+
 use base64::{Engine, engine::general_purpose::URL_SAFE};
 use chapchoo_crypto::{CredentialCipher, RootKey};
 use chapchoo_persistence::{
@@ -9,14 +11,14 @@ use diesel_async::{AsyncPgConnection, async_connection_wrapper::AsyncConnectionW
 use diesel_migrations::MigrationHarness;
 use std::{error::Error, fs::OpenOptions};
 
-fn cipher(byte: u8) -> Result<CredentialCipher, Box<dyn Error>> {
+fn cipher(byte: u8) -> Result<CredentialCipher, Box<dyn Error + Send + Sync>> {
     Ok(CredentialCipher::new(RootKey::parse(
         URL_SAFE.encode([byte; 32]),
     )?)?)
 }
 
 #[test]
-fn sqlite_preparation_and_read_only_admission() -> Result<(), Box<dyn Error>> {
+fn sqlite_preparation_and_read_only_admission() -> Result<(), Box<dyn Error + Send + Sync>> {
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("database?#%.sqlite");
     let original = cipher(1)?;
@@ -91,7 +93,8 @@ fn sqlite_preparation_and_read_only_admission() -> Result<(), Box<dyn Error>> {
 }
 
 #[test]
-fn explicit_sqlite_preparation_resumes_before_first_key_binding() -> Result<(), Box<dyn Error>> {
+fn explicit_sqlite_preparation_resumes_before_first_key_binding()
+-> Result<(), Box<dyn Error + Send + Sync>> {
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("first-binding.sqlite");
     let mut connection =
@@ -108,7 +111,8 @@ fn explicit_sqlite_preparation_resumes_before_first_key_binding() -> Result<(), 
 }
 
 #[test]
-fn postgres_preparation_requires_real_disposable_database() -> Result<(), Box<dyn Error>> {
+fn postgres_preparation_requires_real_disposable_database()
+-> Result<(), Box<dyn Error + Send + Sync>> {
     // Mandatory integration prerequisite, never a skip counted as success.
     let base = std::env::var("CHAPCHOO_TEST_POSTGRES_URL")?;
     let mut connection = AsyncConnectionWrapper::<AsyncPgConnection>::establish(&base)?;
@@ -123,12 +127,10 @@ fn postgres_preparation_requires_real_disposable_database() -> Result<(), Box<dy
     let url = format!("{base}{separator}options=-csearch_path%3D{schema}");
     let result = postgres_preparation_in_schema(&url);
     let cleanup = connection.batch_execute(&format!("DROP SCHEMA {schema} CASCADE"));
-    result?;
-    cleanup?;
-    Ok(())
+    support::combine(result, cleanup.map_err(Into::into)).map(|_| ())
 }
 
-fn postgres_preparation_in_schema(url: &str) -> Result<(), Box<dyn Error>> {
+fn postgres_preparation_in_schema(url: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
     let original = cipher(1)?;
     let wrong = cipher(2)?;
     assert!(matches!(

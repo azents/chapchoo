@@ -1,3 +1,7 @@
+mod support;
+#[path = "support/tasks.rs"]
+mod tasks;
+
 use base64::{Engine, engine::general_purpose::URL_SAFE};
 use chapchoo_crypto::{BearerSecret, CredentialCipher, RootKey};
 use chapchoo_domain::{DesiredState, LifecycleAction};
@@ -318,12 +322,14 @@ async fn concurrent_team_deletion(
             )
             .await
     });
-    let (created, deleted) = tokio::time::timeout(std::time::Duration::from_secs(10), async {
-        (create.await, delete.await)
-    })
+    let (created, deleted) = tasks::join_pair(
+        create,
+        delete,
+        Some(tokio::time::Instant::now() + std::time::Duration::from_secs(10)),
+    )
     .await?;
-    deleted??;
-    match created? {
+    deleted?;
+    match created {
         Ok(CreationOutcome::Present(_)) => clean(store, provider, "race").await?,
         Err(StoreError::NotFound) => {}
         other => return Err(format!("Unexpected concurrent outcome: {other:?}").into()),
@@ -395,9 +401,7 @@ fn postgres_private_team_agents_and_departure_cleanup() -> Result<(), TestError>
     let url = format!("{base}{separator}options=-csearch_path%3D{schema}");
     let result = postgres_in_schema(&url);
     let cleanup = admin.batch_execute(&format!("DROP SCHEMA {schema} CASCADE"));
-    result?;
-    cleanup?;
-    Ok(())
+    support::combine(result, cleanup.map_err(Into::into)).map(|_| ())
 }
 fn postgres_in_schema(url: &str) -> Result<(), TestError> {
     let cipher = cipher()?;

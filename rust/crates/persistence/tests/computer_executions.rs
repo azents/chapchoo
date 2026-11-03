@@ -1,3 +1,7 @@
+mod support;
+#[path = "support/tasks.rs"]
+mod tasks;
+
 use base64::{Engine, engine::general_purpose::URL_SAFE};
 use chapchoo_crypto::{BearerSecret, CredentialCipher, RootKey};
 use chapchoo_domain::{
@@ -784,8 +788,8 @@ async fn exercise(
                 .await
         }));
     }
-    let a = tasks.remove(0).await??;
-    let b = tasks.remove(0).await??;
+    let (a, b) = tasks::join_pair(tasks.remove(0), tasks.remove(0), None).await?;
+    let (a, b) = support::combine(a.map_err(Into::into), b.map_err(Into::into))?;
     assert_eq!(a.execution_id, b.execution_id);
 
     // Once allocated storage is missing, neither name reuse nor empty replacement is allowed.
@@ -1160,8 +1164,7 @@ async fn exercise_provider_directory(
                 .await
         }));
     }
-    let a = tasks.remove(0).await?;
-    let b = tasks.remove(0).await?;
+    let (a, b) = tasks::join_pair(tasks.remove(0), tasks.remove(0), None).await?;
     let winner = match (a, b) {
         (Ok(route), Err(StoreError::Conflict)) | (Err(StoreError::Conflict), Ok(route)) => route,
         _ => return Err("Exactly one concurrent stream admission must succeed".into()),
@@ -1410,8 +1413,7 @@ async fn exercise_connector_directory(
                 .await
         }));
     }
-    let a = tasks.remove(0).await?;
-    let b = tasks.remove(0).await?;
+    let (a, b) = tasks::join_pair(tasks.remove(0), tasks.remove(0), None).await?;
     let winner = match (a, b) {
         (Ok(route), Err(StoreError::Conflict)) | (Err(StoreError::Conflict), Ok(route)) => route,
         _ => return Err("Exactly one empty-tuple Connector admission must succeed".into()),
@@ -2030,7 +2032,5 @@ fn postgres_current_source_execution_and_cleanup() -> Result<(), TestError> {
         })
     })();
     let cleanup = admin.batch_execute(&format!("DROP SCHEMA {schema} CASCADE"));
-    result?;
-    cleanup?;
-    Ok(())
+    support::combine(result, cleanup.map_err(Into::into)).map(|_| ())
 }
