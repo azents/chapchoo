@@ -160,6 +160,10 @@ same-daemon absence. Each later mutation requires a fresh Control check. Grace i
 No unpause, kill, force-delete or repeated mutation is introduced as recovery.
 
 The original native task/permit survives a lost call waiter or stream incarnation.
+Every returned Provider-loop exit, including propagated errors, finishes its
+retained effect owner. Earlier join failures do not abandon later work, and
+collected causes survive cancellation of a drain waiter. Independent Docker
+transport cleanup failure is retained alongside the primary Provider failure.
 A failed authority check/report ACK stops later effects; old-source results cannot
 report under a new connection. A native uncertain result does not return a token
 for the next stage. Correlation loss permits observation, not reconstructed Start,

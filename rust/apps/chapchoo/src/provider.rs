@@ -201,20 +201,22 @@ pub(crate) async fn run_docker_with_adapter(
     adapter: Arc<chapchoo_docker::Docker>,
     stop: CancellationToken,
 ) -> Result<(), AppError> {
-    endpoint(connector_endpoint)?;
-    let channel = endpoint(endpoint_url)?.connect_lazy();
-    let result = run_connection(
-        channel,
-        connector_endpoint,
-        provider,
-        name,
-        owner,
-        Arc::new(Adapter::Docker(adapter.clone())),
-        stop,
-    )
+    let result = async {
+        endpoint(connector_endpoint)?;
+        let channel = endpoint(endpoint_url)?.connect_lazy();
+        run_connection(
+            channel,
+            connector_endpoint,
+            provider,
+            name,
+            owner,
+            Arc::new(Adapter::Docker(adapter.clone())),
+            stop,
+        )
+        .await
+    }
     .await;
-    adapter.drain().await?;
-    result
+    crate::completion::complete(result, adapter.drain().await.map_err(Into::into))
 }
 async fn run_connection(
     channel: Channel,
@@ -293,6 +295,13 @@ async fn stream_loop(
             effects,
             &stop,
         )=>result,_=tokio::time::sleep_until(renewal)=>Err(Box::new(Status::unauthenticated("Scheduled Provider key renewal")) as AppError)};
+        // A consumed owned-worker failure is not a reconnectable stream error.
+        // Return it through the completion boundary instead of discarding it.
+        if result.as_ref().err().is_some_and(|error| {
+            error.downcast_ref::<effects::EffectError>().is_some()
+        }) {
+            break result;
+        }
         if stop.is_cancelled() {
             break Ok(());
         }
@@ -325,8 +334,7 @@ async fn stream_loop(
             }
         }
         tokio::select! {_=stop.cancelled()=>break Ok(()),_=tokio::time::sleep(Duration::from_secs(1))=>{}}
-    })
-    .await
+    }).await
 }
 
 async fn own_effects(
@@ -334,7 +342,7 @@ async fn own_effects(
 ) -> Result<(), AppError> {
     let mut effects = Effects::new();
     let primary = run(&mut effects).await;
-    // All loop exits, including propagated errors, finish the same effect owner.
+    // Every propagated loop error finishes the same retained native owner.
     crate::completion::complete(primary, effects.drain().await.map_err(Into::into))
 }
 fn refresh_at(value: Option<&prost_types::Timestamp>) -> Result<tokio::time::Instant, AppError> {

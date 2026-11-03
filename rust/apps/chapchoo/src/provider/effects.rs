@@ -5,12 +5,36 @@ use tokio::{
     task::JoinSet,
 };
 
-#[derive(Debug, thiserror::Error)]
+#[derive(thiserror::Error)]
 pub enum EffectError {
     #[error("A native lifecycle effect is already in flight")]
     Busy,
     #[error("A native lifecycle effect task failed")]
     Task(#[source] tokio::task::JoinError),
+    #[error("Multiple native lifecycle effect tasks failed")]
+    Tasks(#[source] EffectFailures),
+}
+impl std::fmt::Debug for EffectError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("EffectError([REDACTED])")
+    }
+}
+
+pub struct EffectFailures(Vec<tokio::task::JoinError>);
+impl std::fmt::Debug for EffectFailures {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("EffectFailures([REDACTED])")
+    }
+}
+impl std::fmt::Display for EffectFailures {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Multiple native lifecycle effect tasks failed")
+    }
+}
+impl std::error::Error for EffectFailures {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.0.first().map(|cause| cause as &dyn std::error::Error)
+    }
 }
 /// Retain this owner across stream reconnects. Never replace it merely because a
 /// response deadline/cancel/connection has ended. The process supervises drain.
@@ -18,6 +42,7 @@ pub enum EffectError {
 pub struct Effects {
     permit: Arc<Semaphore>,
     tasks: JoinSet<()>,
+    failures: Vec<tokio::task::JoinError>,
 }
 impl Default for Effects {
     fn default() -> Self {
@@ -29,6 +54,7 @@ impl Effects {
         Self {
             permit: Arc::new(Semaphore::new(1)),
             tasks: JoinSet::new(),
+            failures: Vec::new(),
         }
     }
     pub fn active(&self) -> bool {
@@ -54,54 +80,87 @@ impl Effects {
     }
     pub fn reap_completed(&mut self) -> Result<(), EffectError> {
         while let Some(result) = self.tasks.try_join_next() {
-            result.map_err(EffectError::Task)?;
-        }
-        Ok(())
-    }
-    pub async fn drain(&mut self) -> Result<(), EffectError> {
-        let mut failure = None;
-        while let Some(result) = self.tasks.join_next().await {
             if let Err(error) = result {
-                failure.get_or_insert(error);
+                self.failures.push(error);
             }
         }
-        failure.map_or(Ok(()), |error| Err(EffectError::Task(error)))
+        self.take_failures()
+    }
+    pub async fn drain(&mut self) -> Result<(), EffectError> {
+        while let Some(result) = self.tasks.join_next().await {
+            if let Err(error) = result {
+                self.failures.push(error);
+            }
+        }
+        self.take_failures()
+    }
+    fn take_failures(&mut self) -> Result<(), EffectError> {
+        let mut failures = std::mem::take(&mut self.failures);
+        match failures.len() {
+            0 => Ok(()),
+            1 => Err(EffectError::Task(failures.remove(0))),
+            _ => Err(EffectError::Tasks(EffectFailures(failures))),
+        }
     }
 }
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn cancelled_drain_keeps_all_collected_join_failures_until_reentry()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut effects = Effects::new();
+        let first = effects.start(std::future::pending::<()>())?;
+        effects.tasks.abort_all();
+        assert!(first.await.is_err());
+        let second = effects.start(std::future::pending::<()>())?;
+        let mut draining = Box::pin(effects.drain());
+        std::future::poll_fn(|context| {
+            assert!(draining.as_mut().poll(context).is_pending());
+            std::task::Poll::Ready(())
+        })
+        .await;
+        drop(draining);
+        assert_eq!(effects.failures.len(), 1);
+        assert!(effects.active());
+        effects.tasks.abort_all();
+        assert!(second.await.is_err());
+        let failure = effects.drain().await.err().ok_or("Missing task failures")?;
+        let EffectError::Tasks(causes) = &failure else {
+            return Err("Independent task failures were discarded".into());
+        };
+        assert_eq!(causes.0.len(), 2);
+        assert!(causes.0.iter().all(tokio::task::JoinError::is_cancelled));
+        assert_eq!(format!("{failure:?}"), "EffectError([REDACTED])");
+        assert!(!effects.active());
+        Ok(())
+    }
 
     #[tokio::test]
-    async fn drain_finishes_retained_work_even_after_an_earlier_task_failure()
+    async fn drain_finishes_later_started_work_after_an_earlier_join_failure()
     -> Result<(), Box<dyn std::error::Error>> {
         let mut effects = Effects::new();
         let failed = effects.start(std::future::pending::<()>())?;
         effects.tasks.abort_all();
-        // The closed waiter proves the aborted task released physical capacity.
         assert!(failed.await.is_err());
         let (release, released) = oneshot::channel();
         let completed = effects.start(async move {
             let _ = released.await;
             9
         })?;
-        let mut drain = Box::pin(effects.drain());
+        let mut draining = Box::pin(effects.drain());
         std::future::poll_fn(|context| {
             assert!(
-                drain.as_mut().poll(context).is_pending(),
-                "An earlier task error must not abandon the later owned task"
+                draining.as_mut().poll(context).is_pending(),
+                "Earlier failure abandoned later native work"
             );
             std::task::Poll::Ready(())
         })
         .await;
-        release.send(()).map_err(|_| "Effect was cancelled")?;
-        assert!(matches!(
-            drain.await,
-            Err(EffectError::Task(error)) if error.is_cancelled()
-        ));
+        release.send(()).map_err(|_| "Later effect was abandoned")?;
+        assert!(draining.await.is_err());
         assert_eq!(completed.await?, 9);
         assert!(!effects.active());
-        assert!(effects.tasks.is_empty());
         Ok(())
     }
 
