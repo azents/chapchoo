@@ -80,6 +80,7 @@ void test(
       ready: (value: T) => boolean,
     ): Promise<T> => poll(read, ready, signal);
     const assembly = await Assembly.createDockerIntegration();
+    context.after(() => assembly.close());
     const options = { "grpc.enable_retries": 0 };
     const endpoint = assembly.generalRpcEndpoint;
     const auth = new AuthenticationClient(
@@ -108,6 +109,7 @@ void test(
       options,
     );
     let evidence: NativeEvidence | null = null;
+    let failure: Error | null = null;
     try {
       await assembly.initializeAdministrator();
       const session = await call(
@@ -139,12 +141,14 @@ void test(
           session.token,
         );
         assert.ok(created.agent, "Agent allocation must be returned");
+        console.info("Native Docker step: allocation returned");
         const agentId = created.agent.id;
         const get = (): Promise<Agent> =>
           call(agents.get.bind(agents), { agentId }, session.token);
         await waitFor(get, (value) =>
           lifecycleReady(value.computer, "create", Power.POWER_RUNNING, true),
         );
+        console.info("Native Docker step: connected original execution");
         const original = await docker.current();
         assert.equal(original.user, "10001:10001");
         assert.equal(original.noCopy, false);
@@ -261,19 +265,41 @@ void test(
             throw new Error("Native Docker Provider exited unexpectedly");
           }),
         ]);
+      } catch (error) {
+        const diagnostic = provider.diagnostic();
+        throw new Error(
+          `Native Docker journey failed${diagnostic ? `: ${diagnostic}` : "; no complete safe Provider diagnostic"}`,
+          { cause: error },
+        );
       } finally {
         // Drain the losing branch before closing clients or native resources.
         // An in-flight mutation is never replayed; its finite RPC settles first.
         controller.abort(new Error("Native integration journey stopped"));
         await runningJourney.catch(() => undefined);
       }
+    } catch (error) {
+      failure =
+        error instanceof Error ? error : new Error("Native integration failed");
     } finally {
       auth.close();
       teams.close();
       agents.close();
       computers.close();
       catalog.close();
-      await assembly.close();
+      try {
+        await assembly.close();
+      } catch (cleanup) {
+        if (failure) {
+          throw new AggregateError(
+            [failure, cleanup],
+            "Native integration failed and owned cleanup was unconfirmed",
+          );
+        }
+        throw cleanup;
+      }
+    }
+    if (failure) {
+      throw failure;
     }
     console.info(`Native Docker evidence: ${JSON.stringify(evidence)}`);
   },

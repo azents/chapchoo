@@ -61,6 +61,15 @@ impl Worker {
         let outcome = match result {
             Ok(()) => wire::CommandOutcome::Completed,
             Err(error) => {
+                if let Some(native) = error.downcast_ref::<Error>() {
+                    tracing::warn!(
+                        engine = ?native.engine_diagnostic(),
+                        native_docker = %native,
+                        "Native Docker lifecycle command failed"
+                    );
+                } else if let Some(status) = error.downcast_ref::<tonic::Status>() {
+                    tracing::warn!(code = ?status.code(), "Docker lifecycle Control RPC failed");
+                }
                 let blocked = error.downcast_ref::<Error>().is_some_and(|error| {
                     matches!(
                         error,

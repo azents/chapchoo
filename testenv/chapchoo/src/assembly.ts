@@ -451,24 +451,31 @@ export class Assembly {
       return;
     }
     this.closed = true;
-    let failed = false;
+    const failures: Error[] = [];
+    const record = (stage: string, error: unknown): void => {
+      failures.push(
+        new Error(
+          `${stage}: ${error instanceof Error ? safeMessage(error.message) : "Unknown failure"}`,
+        ),
+      );
+    };
     try {
       await this.owner.stopRunning();
       if (this.productReady) {
         await this.product?.finished(5_000);
       }
-    } catch {
-      failed = true;
+    } catch (error) {
+      record("Owned process shutdown", error);
     }
     try {
       await this.kubernetes?.close();
-    } catch {
-      failed = true;
+    } catch (error) {
+      record("Kubernetes fixture cleanup", error);
     }
     try {
       await this.docker?.close();
-    } catch {
-      failed = true;
+    } catch (error) {
+      record("Docker fixture cleanup", error);
     }
     // PostgreSQL is managed only by this fixture's exact private data directory.
     let postgresPresent = false;
@@ -482,7 +489,7 @@ export class Assembly {
           "code" in error &&
           error.code === "ENOENT"
         )) {
-          failed = true;
+          record("PostgreSQL presence verification", error);
         }
       }
     }
@@ -524,21 +531,22 @@ export class Assembly {
             safeEnvironment(),
             10_000,
           );
-        } catch {
-          failed = true;
+        } catch (error) {
+          record("PostgreSQL shutdown", error);
         }
       }
     }
     try {
       await this.owner.stopAll();
-    } catch {
-      failed = true;
+    } catch (error) {
+      record("Owned process reaping", error);
     }
-    if (!failed) {
+    if (failures.length === 0) {
       await rm(this.directory, { recursive: true, force: true });
     }
-    if (failed) {
-      throw new Error(
+    if (failures.length > 0) {
+      throw new AggregateError(
+        failures,
         "Owned fixture cleanup failed; private directory retained",
       );
     }

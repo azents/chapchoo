@@ -58,8 +58,11 @@ export class OwnedChild {
       listener();
     }
   }
+  diagnostic(): string {
+    return diagnosticTail(this.output, this.truncated);
+  }
   private failure(message: string): Error {
-    const diagnostic = diagnosticTail(this.output, this.truncated);
+    const diagnostic = this.diagnostic();
     return new Error(
       `${this.label} ${message}${diagnostic ? `: ${diagnostic}` : "; no complete safe diagnostic"}`,
     );

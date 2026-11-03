@@ -116,7 +116,16 @@ tags: [computer, docker, implementation, acceptance]
   positively-created ID/label inspection and observed normal stop/remove; no Start
   replay or forced product cleanup. Global TS checks/all9 builds and15 pure+5 export
   support tests pass. The same reviewer found no ownership/privacy/framing issue
-  in this targeted material delta. A new exact-head actual Docker CI run is required.
+  in this targeted material delta. CI41674479629 atd50f12a passed9 checks,
+  including browser acceptance, and native Provider registration now succeeded.
+  The native journey failed after Create/connected began, but cleanup's generic
+  exception masked the primary failure. Root preserves primary plus stage-tagged
+  sanitized cleanup errors, registers immediate fallback teardown, and exposes
+  only the existing bounded/redacted owned Provider diagnostic tail. Worker
+  failure records contain static SDK class/status, never native payload or source.
+  Full Rust175 tests/Clippy/format/boundaries and global TS/support/integration
+  checks pass. The same reviewer confirmed error preservation/privacy with no
+  findings; real exact-head native acceptance remains unpassed.
   Current host has no Engine socket; real fixture startup explicitly fails for
   missing authorized socket/image before launching DB/product. Actual Linux
   acceptance awaits the required CI gate after PR4 creation. No current Mac gate,
