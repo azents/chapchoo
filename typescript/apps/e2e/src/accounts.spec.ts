@@ -273,7 +273,7 @@ test.describe("Assembled account and team acceptance", () => {
       member.context(),
       member.url(),
       "Agents",
-      "No Agents yet.",
+      "No Computers yet.",
     );
     await member.goto(`${assembly.generalUrl}/profile`);
     const zone = member

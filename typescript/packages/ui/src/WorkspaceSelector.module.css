@@ -17,8 +17,12 @@
   overflow-wrap: anywhere;
 }
 .trailing {
+  display: block;
   flex-shrink: 0;
   margin-left: auto;
+}
+.back {
+  padding-inline: var(--mantine-spacing-sm);
 }
 .dropdown {
   max-height: min(32rem, calc(100dvh - 8rem));

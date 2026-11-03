@@ -4,6 +4,10 @@
   overflow-y: auto;
 }
 .identity {
+  flex: 1;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+.profile {
+  width: 100%;
 }

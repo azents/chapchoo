@@ -23,6 +23,11 @@ for (const [story, width] of [
       page.getByRole("link", { name: "Profile", exact: true }),
     ).toHaveAttribute("href", "/profile");
     await expect(
+      page
+        .getByRole("link", { name: "Profile", exact: true })
+        .getByText("companion@example.invalid", { exact: true }),
+    ).toBeVisible();
+    await expect(
       page.getByRole("button", { name: "Sign out", exact: true }),
     ).toHaveCount(1);
     for (const label of ["Language", "Time zone", "Regional format"]) {
@@ -45,3 +50,16 @@ for (const [story, width] of [
     await expect(trigger).toBeFocused();
   });
 }
+
+test("account menu retains real save and retry feedback", async ({ page }) => {
+  await page.goto(
+    "/iframe.html?id=chrome-account-settings--saved&viewMode=story",
+  );
+  await expect(page.getByRole("status")).toHaveText("Saved");
+  await page.goto(
+    "/iframe.html?id=chrome-account-settings--failed-save&viewMode=story",
+  );
+  await expect(
+    page.getByRole("button", { name: "Retry", exact: true }),
+  ).toBeVisible();
+});

@@ -7,14 +7,11 @@ import {
   Anchor,
   Button,
   Group,
-  Paper,
   rem,
-  Select,
   SimpleGrid,
   Stack,
   Table,
   Text,
-  TextInput,
   Title,
 } from "@mantine/core";
 import type { AgentsProps } from "../types";
@@ -61,15 +58,27 @@ export function Agents(props: AgentsProps): ReactElement {
         {data.type === "detail" ? (
           <Anchor href={listHref}>{c.back}</Anchor>
         ) : (
-          <span />
+          <Title order={2} size="h3">
+            {c.computerList}
+          </Title>
         )}
-        <Button
-          variant="subtle"
-          onClick={props.onRefresh}
-          disabled={props.pending}
-        >
-          {c.retry}
-        </Button>
+        <Group gap="sm">
+          {data.type === "list" ? (
+            <Button
+              component="a"
+              href={`${props.basePath}/agents/new?team=${encodeURIComponent(data.teamId)}`}
+            >
+              {c.create}
+            </Button>
+          ) : null}
+          <Button
+            variant="subtle"
+            onClick={props.onRefresh}
+            disabled={props.pending}
+          >
+            {c.retry}
+          </Button>
+        </Group>
       </Group>
       {props.stale ? (
         <Alert color="yellow" role="status">
@@ -83,102 +92,8 @@ export function Agents(props: AgentsProps): ReactElement {
       ) : null}
       {data.type === "list" ? (
         <>
-          <Paper withBorder p="lg">
-            <Stack
-              component="form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                props.onCreate();
-              }}
-            >
-              <Title order={2} size="h3">
-                {c.create}
-              </Title>
-              <TextInput
-                label={c.name}
-                value={props.name}
-                onChange={(event) => props.onName(event.currentTarget.value)}
-                required
-                maxLength={120}
-                disabled={props.pending || props.creationLocked}
-              />
-              <Select
-                label={c.provider}
-                placeholder={c.chooseProvider}
-                value={props.providerId || null}
-                data={
-                  props.providers.type === "loaded"
-                    ? props.providers.items.map((item) => ({
-                        value: item.id,
-                        label: item.name,
-                      }))
-                    : []
-                }
-                onChange={(value) => props.onProvider(value ?? "")}
-                disabled={
-                  props.pending ||
-                  props.creationLocked ||
-                  props.providers.type !== "loaded"
-                }
-                required
-              />
-              {props.providers.type === "loaded" &&
-              props.providers.items.length === 0 ? (
-                <Text c="dimmed">{c.noProviders}</Text>
-              ) : null}
-              {props.providers.type === "loaded" ? (
-                <Group>
-                  {props.providers.after ? (
-                    <Button
-                      variant="subtle"
-                      disabled={props.pending || props.creationLocked}
-                      type="button"
-                      onClick={() => props.onProviderPage(null)}
-                    >
-                      {c.first}
-                    </Button>
-                  ) : null}
-                  {props.providers.nextAfter ? (
-                    <Button
-                      variant="subtle"
-                      disabled={props.pending || props.creationLocked}
-                      type="button"
-                      onClick={() =>
-                        props.providers.type === "loaded" &&
-                        props.onProviderPage(props.providers.nextAfter)
-                      }
-                    >
-                      {c.next}
-                    </Button>
-                  ) : null}
-                </Group>
-              ) : null}
-              {props.providers.type === "error" ||
-              (props.providers.type === "loaded" && props.providers.stale) ? (
-                <Alert color="yellow">{c.unavailable}</Alert>
-              ) : null}
-              <Group>
-                <Button
-                  type="submit"
-                  loading={props.pending}
-                  disabled={
-                    !props.creationLocked &&
-                    (!props.name.trim() ||
-                      !props.providerId ||
-                      props.providers.type !== "loaded" ||
-                      props.providers.stale ||
-                      !props.providers.items.some(
-                        (item) => item.id === props.providerId,
-                      ))
-                  }
-                >
-                  {props.creationLocked ? c.recoverCreation : c.create}
-                </Button>
-              </Group>
-            </Stack>
-          </Paper>
           {data.page.items.length === 0 ? (
-            <Text c="dimmed">{c.noAgents}</Text>
+            <Text c="dimmed">{c.emptyComputerList}</Text>
           ) : (
             <Table.ScrollContainer minWidth={rem(480)}>
               <Table>

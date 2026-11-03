@@ -5,7 +5,7 @@ test("Exact unresolved creation remains recoverable after its Provider disappear
   page,
 }) => {
   await page.goto(
-    "/iframe.html?id=computers-agents--unresolved-creation-without-provider&viewMode=story",
+    "/iframe.html?id=computers-agent-creation--unresolved-creation-without-provider&viewMode=story",
   );
   await expect(
     page.getByRole("button", { name: copy.recoverCreation, exact: true }),
@@ -69,17 +69,35 @@ test("Computer read failure preserves the last-known detail and disables control
   await expect(page.getByText(copy.connector, { exact: true })).toBeVisible();
   await expect(page.getByText(copy.management, { exact: true })).toBeVisible();
 });
-test("Provider read failure does not erase the existing Agent list", async ({
+test("Creation Provider read failure retains the entered draft and recovery action", async ({
   page,
 }) => {
   await page.goto(
-    "/iframe.html?id=computers-agents--provider-read-failure&viewMode=story",
+    "/iframe.html?id=computers-agent-creation--provider-read-failure&viewMode=story",
   );
   await expect(
-    page.getByRole("link", { name: "Research companion" }),
-  ).toBeVisible();
+    page.getByRole("textbox", { name: copy.name, exact: true }),
+  ).toHaveValue("Research companion");
   await expect(page.getByRole("alert")).toContainText(copy.unavailable);
   await expect(page.getByRole("button", { name: copy.create })).toBeDisabled();
+});
+
+test("Empty Computer list keeps its refresh and Team-qualified creation entry", async ({
+  page,
+}) => {
+  await page.goto("/iframe.html?id=computers-agents--empty&viewMode=story");
+  await expect(
+    page.getByRole("heading", { name: copy.computerList, exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(copy.emptyComputerList, { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: copy.retry, exact: true }),
+  ).toBeEnabled();
+  await expect(
+    page.getByRole("link", { name: copy.create, exact: true }),
+  ).toHaveAttribute("href", "/agents/new?team=team");
 });
 test("Computer detail and force warning fit narrow screens", async ({
   page,

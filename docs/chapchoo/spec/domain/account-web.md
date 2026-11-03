@@ -117,6 +117,10 @@ private Agents in that Team. Desktop retains the independently scrolling sidebar
 mobile hides it and uses the header's left Drawer. Its banner contains the
 current icon/name and chevron beside the independent close control; Team choices
 replace feature entries inline. The existing companion remains below the menu.
+The shared NavigationIcon SVG frame supplies workspace symbols, Back, add and
+chevron geometry with non-shrinking, vertically centered icon slots. Selected
+rows retain their background and `aria-current` without a trailing decorative
+tick. Icon alignment does not depend on a font glyph's baseline.
 
 Create Team sits immediately below the Team list and opens a name/handle modal.
 Cancel does not mutate or select. Successful ordinary creation selects the new
@@ -171,8 +175,12 @@ and workspace frames. Its brand is left-aligned and one 44×44 account/settings
 entry remains at the far right, including loading and recoverable errors.
 Authenticated users see a user icon; visitors see sliders. Desktop opens a
 Popover and narrow screens a right Drawer with mini-profile, System/Light/Dark,
-display controls and profile/sign-out or visitor sign-in. App-provided controls
-replace duplicate page account rows and the separate appearance entry.
+display controls and profile/sign-out or visitor sign-in. The avatar, identity and
+profile label form one full-banner native link using the common InteractiveSurface
+hover/pressed/focus-visible treatment, with a trailing navigation chevron. It is
+one keyboard stop and closes the menu on navigation. Static scope/immediate-help
+rows are omitted from this menu; actual saved, failure and retry feedback remain.
+App-provided controls replace duplicate page account rows and the separate appearance entry.
 Escape/outside dismissal uses controlled callbacks and restores focus.
 General also supplies a narrow-screen navigation trigger and an app-entry brand link.
 The shared flex frame accommodates the header's actual height; wrapped or

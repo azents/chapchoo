@@ -1,4 +1,35 @@
 import { expect, test } from "@playwright/test";
+import type { Locator } from "@playwright/test";
+
+async function center(locator: Locator): Promise<{ x: number; y: number }> {
+  return locator.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+  });
+}
+
+test("navigation icon frames align to control centers instead of font baselines", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 402, height: 874 });
+  await page.goto(
+    "/iframe.html?id=navigation-workspace-chrome--mobile-picker&viewMode=story",
+  );
+  await page.evaluate(() => document.fonts.ready);
+  const drawer = page.getByRole("dialog");
+  const trigger = drawer.getByRole("button", {
+    name: "Switch workspace",
+    exact: true,
+  });
+  const triggerCenter = await center(trigger);
+  for (const icon of await trigger.locator("svg").all()) {
+    expect(Math.abs((await center(icon)).y - triggerCenter.y)).toBeLessThan(1);
+  }
+  const back = drawer.getByRole("button", { name: "Back", exact: true });
+  expect(
+    Math.abs((await center(back.locator("svg"))).y - (await center(back)).y),
+  ).toBeLessThan(1);
+});
 
 test("creation dialog owns explicit cancel, pending admission and uncertain-outcome feedback", async ({
   page,
