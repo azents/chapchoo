@@ -2,6 +2,45 @@ use super::*;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
+#[test]
+fn provider_binding_and_required_resources_are_substrate_specific() -> TestResult {
+    let bound = ProviderSubstrate::Docker(DockerDaemonId::parse("daemon:original".into())?);
+    let current = NativeScope::parse("DOCKER_DAEMON", "daemon:original".into())?;
+    let replacement = NativeScope::parse("DOCKER_DAEMON", "daemon:other".into())?;
+    let namespace = NativeScope::parse("KUBERNETES_NAMESPACE", "fixture".into())?;
+    assert!(bound.accepts_scope(&current));
+    assert!(!bound.accepts_scope(&replacement));
+    assert!(!bound.accepts_scope(&namespace));
+    assert!(ProviderSubstrate::Kubernetes.accepts_scope(&namespace));
+    assert!(!ProviderSubstrate::Kubernetes.accepts_scope(&current));
+    assert_eq!(bound.docker_daemon_id(), Some("daemon:original"));
+    assert_eq!(current.kind_str(), "DOCKER_DAEMON");
+    assert!(NativeScope::parse("UNSPECIFIED", "fixture".into()).is_err());
+    assert_eq!(
+        ProviderKind::Docker.required_resource_kinds(),
+        &[
+            ManagedResourceKind::DockerContainer,
+            ManagedResourceKind::DockerVolume
+        ]
+    );
+    for kind in [ProviderKind::Kubernetes, ProviderKind::Docker] {
+        assert_eq!(
+            kind.saved_resource_kind().role(),
+            ResourceRole::SavedEnvironment
+        );
+        assert_eq!(
+            kind.execution_resource_kind().role(),
+            ResourceRole::Execution
+        );
+        assert!(
+            kind.required_resource_kinds()
+                .iter()
+                .all(|r| r.provider_kind() == kind)
+        );
+    }
+    Ok(())
+}
+
 fn daemon() -> Result<NativeScope, InvalidNativeResource> {
     Ok(NativeScope::DockerDaemon(DockerDaemonId::parse(format!(
         "daemon:{}",

@@ -1,10 +1,12 @@
 use base64::{Engine, engine::general_purpose::URL_SAFE};
 use chapchoo_crypto::{BearerSecret, CredentialCipher, RootKey};
-use chapchoo_domain::{LifecycleAction, LifecyclePhase, ObservedPower};
+use chapchoo_domain::{
+    KubernetesUid, LifecycleAction, LifecyclePhase, NativeIdentity, ObservedPower, ResourcePresence,
+};
 use chapchoo_persistence::{
     ComputerRequest, CreateCloudAgent, CreationOutcome, ExecutionDraft, LifecycleRequest,
-    ManagedResource, ManagedResourceKind, ProviderSource, ResourceEvidence, ResourceReport, Store,
-    StoreError, prepare_postgres, prepare_sqlite,
+    ManagedResource, ManagedResourceKind, ProviderSource, ResourceEvidence as NativeEvidence,
+    ResourceReport, Store, StoreError, prepare_postgres, prepare_sqlite,
 };
 use diesel::{Connection, connection::SimpleConnection};
 use diesel_async::{AsyncPgConnection, async_connection_wrapper::AsyncConnectionWrapper};
@@ -15,6 +17,14 @@ use std::{
 };
 
 type TestError = Box<dyn Error + Send + Sync>;
+// Keep this Kubernetes-only fixture's native assertions readable. Production
+// ingress and storage consume only the shared typed evidence contract.
+#[derive(Clone, Copy)]
+enum ResourceEvidence<'a> {
+    OwnedPresent { uid: &'a str },
+    DefinitivelyAbsent { expected_uid: Option<&'a str> },
+    Unknown,
+}
 fn now() -> Result<i64, TestError> {
     Ok(SystemTime::now()
         .duration_since(UNIX_EPOCH)?
@@ -62,10 +72,12 @@ fn creation(id: &str) -> CreateCloudAgent {
 fn draft(id: &str) -> ExecutionDraft {
     ExecutionDraft {
         id: id.into(),
-        namespace: "fixture".into(),
-        pod_name: format!("pod-{id}"),
-        bootstrap_secret_name: format!("secret-{id}"),
-        saved_pvc_name: format!("pvc-{id}"),
+        native: chapchoo_persistence::ExecutionResources::Kubernetes {
+            namespace: "fixture".into(),
+            pod_name: format!("pod-{id}"),
+            bootstrap_secret_name: format!("secret-{id}"),
+            saved_pvc_name: format!("pvc-{id}"),
+        },
     }
 }
 fn scope<'a>(computer_id: &'a str, request_id: &'a str) -> ComputerRequest<'a> {
@@ -75,7 +87,7 @@ fn scope<'a>(computer_id: &'a str, request_id: &'a str) -> ComputerRequest<'a> {
     }
 }
 fn kind(resource: &ManagedResource) -> Result<ManagedResourceKind, TestError> {
-    Ok(resource.resource_kind.parse()?)
+    Ok(resource.kind())
 }
 async fn report(
     store: &Store,
@@ -84,20 +96,34 @@ async fn report(
     resource: &ManagedResource,
     evidence: ResourceEvidence<'_>,
 ) -> Result<(), StoreError> {
-    let kind = resource
-        .resource_kind
-        .parse()
-        .map_err(|_| StoreError::Integrity)?;
+    let identity = match evidence {
+        ResourceEvidence::OwnedPresent { uid } => Some(uid),
+        ResourceEvidence::DefinitivelyAbsent { expected_uid } => expected_uid,
+        ResourceEvidence::Unknown => None,
+    }
+    .map(|uid| {
+        KubernetesUid::parse(uid.to_owned())
+            .map(NativeIdentity::KubernetesObject)
+            .map_err(|_| StoreError::InvalidInput)
+    })
+    .transpose()?;
+    let native_evidence = match evidence {
+        ResourceEvidence::OwnedPresent { .. } => NativeEvidence::OwnedPresent {
+            identity: identity.as_ref().ok_or(StoreError::InvalidInput)?,
+        },
+        ResourceEvidence::DefinitivelyAbsent { .. } => NativeEvidence::DefinitivelyAbsent {
+            expected_identity: identity.as_ref(),
+        },
+        ResourceEvidence::Unknown => NativeEvidence::Unknown,
+    };
     store
         .report_resource(
             source,
             scope,
             ResourceReport {
-                kind,
-                namespace: &resource.namespace,
-                name: &resource.name,
+                native: resource.native(),
                 execution_id: resource.execution_id.as_deref(),
-                evidence,
+                evidence: native_evidence,
             },
         )
         .await
@@ -117,9 +143,9 @@ async fn present_all(
             continue;
         }
         let uid = resource
-            .resource_uid
-            .clone()
-            .unwrap_or_else(|| format!("uid-{}", resource.name));
+            .kubernetes_uid()
+            .map(str::to_owned)
+            .unwrap_or_else(|| format!("uid-{}", resource.native().name()));
         report(
             store,
             source,
@@ -364,7 +390,7 @@ async fn exercise(
         reserved
             .resources
             .iter()
-            .all(|r| r.presence == "UNKNOWN" && r.resource_uid.is_none())
+            .all(|r| r.presence == ResourcePresence::Unknown && r.identity().is_none())
     );
     let replay = store
         .reserve_execution(&source, one, &draft("ignored"))
@@ -395,7 +421,11 @@ async fn exercise(
         Err(StoreError::Conflict)
     ));
     let mut collision = draft("unique-execution");
-    collision.pod_name = "pod-first".into();
+    if let chapchoo_persistence::ExecutionResources::Kubernetes { pod_name, .. } =
+        &mut collision.native
+    {
+        *pod_name = "pod-first".into();
+    }
     assert!(matches!(
         store
             .reserve_execution(&source, scope("collision", "create-collision"), &collision)
@@ -490,7 +520,7 @@ async fn exercise(
         .managed_resources(&source, one)
         .await?
         .into_iter()
-        .find(|r| r.resource_kind == "POD")
+        .find(|r| r.kind() == ManagedResourceKind::Pod)
         .ok_or("Missing Pod")?;
     assert!(matches!(
         report(
@@ -588,7 +618,7 @@ async fn exercise(
         restarting,
         &pod,
         ResourceEvidence::DefinitivelyAbsent {
-            expected_uid: pod.resource_uid.as_deref(),
+            expected_uid: pod.kubernetes_uid(),
         },
     )
     .await?;
@@ -617,7 +647,7 @@ async fn exercise(
         replacement
             .resources
             .iter()
-            .filter(|r| r.resource_kind == "PVC")
+            .filter(|r| r.kind() == ManagedResourceKind::Pvc)
             .count(),
         1
     );
@@ -625,9 +655,9 @@ async fn exercise(
         replacement
             .resources
             .iter()
-            .any(|r| r.resource_kind == "PVC"
-                && r.name == "pvc-first"
-                && r.resource_uid.as_deref() == Some("uid-pvc-first"))
+            .any(|r| r.kind() == ManagedResourceKind::Pvc
+                && r.native().name() == "pvc-first"
+                && r.kubernetes_uid() == Some("uid-pvc-first"))
     );
     assert!(matches!(
         store.retire_execution(&source, restarting, "first").await,
@@ -649,7 +679,9 @@ async fn exercise(
         .managed_resources(&source, restarting)
         .await?
         .into_iter()
-        .find(|r| r.resource_kind == "POD" && r.execution_id.as_deref() == Some("second"))
+        .find(|r| {
+            r.kind() == ManagedResourceKind::Pod && r.execution_id.as_deref() == Some("second")
+        })
         .ok_or("Missing replacement Pod")?;
     report(
         &store,
@@ -657,7 +689,7 @@ async fn exercise(
         restarting,
         &pod2,
         ResourceEvidence::DefinitivelyAbsent {
-            expected_uid: pod2.resource_uid.as_deref(),
+            expected_uid: pod2.kubernetes_uid(),
         },
     )
     .await?;
@@ -688,7 +720,7 @@ async fn exercise(
         .managed_resources(&current_source, restarting)
         .await?
         .into_iter()
-        .find(|r| r.resource_kind == "PVC")
+        .find(|r| r.kind() == ManagedResourceKind::Pvc)
         .ok_or("Missing saved PVC")?;
     report(
         &store,
@@ -696,7 +728,7 @@ async fn exercise(
         restarting,
         &pvc,
         ResourceEvidence::OwnedPresent {
-            uid: pvc.resource_uid.as_deref().ok_or("Missing saved UID")?,
+            uid: pvc.kubernetes_uid().ok_or("Missing saved UID")?,
         },
     )
     .await?;
@@ -709,7 +741,11 @@ async fn exercise(
     ));
     mutate_fixture(connection, "UPDATE computer_providers SET can_start=TRUE")?;
     let mut wrong_namespace = draft("wrong-namespace");
-    wrong_namespace.namespace = "other".into();
+    if let chapchoo_persistence::ExecutionResources::Kubernetes { namespace, .. } =
+        &mut wrong_namespace.native
+    {
+        *namespace = "other".into();
+    }
     assert!(matches!(
         store
             .reserve_execution(&current_source, restarting, &wrong_namespace)
@@ -765,7 +801,7 @@ async fn exercise(
             two,
             &resource,
             ResourceEvidence::DefinitivelyAbsent {
-                expected_uid: resource.resource_uid.as_deref(),
+                expected_uid: resource.kubernetes_uid(),
             },
         )
         .await?;
@@ -783,7 +819,7 @@ async fn exercise(
         .managed_resources(&current_source, two)
         .await?
         .into_iter()
-        .find(|r| r.resource_kind == "PVC")
+        .find(|r| r.kind() == ManagedResourceKind::Pvc)
         .ok_or("Missing original PVC")?;
     report(
         &store,
@@ -800,7 +836,7 @@ async fn exercise(
             two,
             &lost,
             ResourceEvidence::OwnedPresent {
-                uid: lost.resource_uid.as_deref().ok_or("Missing old UID")?
+                uid: lost.kubernetes_uid().ok_or("Missing old UID")?
             }
         )
         .await,
@@ -848,7 +884,7 @@ async fn exercise(
             deleting,
             &resource,
             ResourceEvidence::DefinitivelyAbsent {
-                expected_uid: resource.resource_uid.as_deref(),
+                expected_uid: resource.kubernetes_uid(),
             },
         )
         .await?;
@@ -915,7 +951,7 @@ async fn exercise(
             .managed_resources(&current_source, deleting)
             .await?
             .iter()
-            .all(|r| r.presence == "ABSENT")
+            .all(|r| r.presence == ResourcePresence::Absent)
     );
     assert!(matches!(
         report(
@@ -948,7 +984,7 @@ async fn exercise(
             .managed_resources(&current_source, scope("pending", "delete-pending"))
             .await?
             .iter()
-            .all(|r| r.resource_uid.is_none()
+            .all(|r| r.identity().is_none()
                 && r.absence_confirmed_at.is_some()
                 && r.source_connection_id.is_none())
     );
@@ -1642,7 +1678,7 @@ async fn exercise_stop_and_initial(
         .managed_resources(source, stop)
         .await?
         .into_iter()
-        .find(|r| r.resource_kind == "POD")
+        .find(|r| r.kind() == ManagedResourceKind::Pod)
         .ok_or("Missing stop Pod")?;
     report(
         store,
@@ -1650,7 +1686,7 @@ async fn exercise_stop_and_initial(
         stop,
         &pod,
         ResourceEvidence::DefinitivelyAbsent {
-            expected_uid: pod.resource_uid.as_deref(),
+            expected_uid: pod.kubernetes_uid(),
         },
     )
     .await?;
@@ -1720,7 +1756,7 @@ async fn exercise_stop_and_initial(
         stop,
         &pod,
         ResourceEvidence::DefinitivelyAbsent {
-            expected_uid: pod.resource_uid.as_deref(),
+            expected_uid: pod.kubernetes_uid(),
         },
     )
     .await?;
@@ -1734,7 +1770,7 @@ async fn exercise_stop_and_initial(
         .managed_resources(&reconnected, stop)
         .await?
         .into_iter()
-        .find(|r| r.resource_kind == "PVC")
+        .find(|r| r.kind() == ManagedResourceKind::Pvc)
         .ok_or("Missing stopped PVC")?;
     report(
         store,
@@ -1742,10 +1778,7 @@ async fn exercise_stop_and_initial(
         stop,
         &pvc,
         ResourceEvidence::OwnedPresent {
-            uid: pvc
-                .resource_uid
-                .as_deref()
-                .ok_or("Missing stopped PVC UID")?,
+            uid: pvc.kubernetes_uid().ok_or("Missing stopped PVC UID")?,
         },
     )
     .await?;
@@ -1798,9 +1831,14 @@ async fn exercise_stop_and_initial(
     let resumed = store
         .reserve_execution(source, initial, &draft("initial-resumed"))
         .await?;
-    assert!(resumed.resources.iter().any(|r| r.resource_kind == "PVC"
-        && r.name == "pvc-never-created"
-        && r.resource_uid.is_none()));
+    assert!(
+        resumed
+            .resources
+            .iter()
+            .any(|r| r.kind() == ManagedResourceKind::Pvc
+                && r.native().name() == "pvc-never-created"
+                && r.identity().is_none())
+    );
     present_all(store, source, initial, "initial-resumed").await?;
     store
         .report_execution_running(source, initial, "initial-resumed")
@@ -1838,7 +1876,7 @@ async fn exercise_review_regressions(
             .managed_resources(source, request)
             .await?
             .into_iter()
-            .find(|r| r.resource_kind == "PVC")
+            .find(|r| r.kind() == ManagedResourceKind::Pvc)
             .ok_or("Missing initial PVC")?;
         report(
             store,
@@ -1846,7 +1884,7 @@ async fn exercise_review_regressions(
             request,
             &pvc,
             ResourceEvidence::OwnedPresent {
-                uid: &format!("uid-{}", pvc.name),
+                uid: &format!("uid-{}", pvc.native().name()),
             },
         )
         .await?;
@@ -1875,7 +1913,7 @@ async fn exercise_review_regressions(
             .managed_resources(source, request)
             .await?
             .into_iter()
-            .find(|r| r.resource_kind == "POD")
+            .find(|r| r.kind() == ManagedResourceKind::Pod)
             .ok_or("Missing running Pod")?;
         report(
             store,
@@ -1883,7 +1921,7 @@ async fn exercise_review_regressions(
             request,
             &pod,
             ResourceEvidence::DefinitivelyAbsent {
-                expected_uid: pod.resource_uid.as_deref(),
+                expected_uid: pod.kubernetes_uid(),
             },
         )
         .await?;

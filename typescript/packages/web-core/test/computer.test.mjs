@@ -110,6 +110,7 @@ test("Inventory remains independent, redacted and retains cleanup visibility", (
           id: "provider",
           name: "Community",
           management: 2,
+          kind: 1,
           capabilities: {
             create: true,
             start: true,
@@ -130,6 +131,7 @@ test("Provider capability and safe preparation retry are explicit redacted proje
           id: "provider",
           name: "Community",
           management: 1,
+          kind: 2,
           capabilities: {
             create: canCreate,
             start: true,
@@ -141,6 +143,7 @@ test("Provider capability and safe preparation retry are explicit redacted proje
       ],
     });
     assert.equal(result.items[0].canCreate, canCreate);
+    assert.equal(result.items[0].kind, "docker");
     assert.equal(result.items[0].management, "connected");
     assert.equal(JSON.stringify(result).includes("private-owner"), false);
   }
@@ -171,7 +174,13 @@ test("List limits and action mapping enforce the browser boundary", () => {
 });
 test("Resource inventory retains exact identities without leaking bootstrap data", () => {
   const resource = {
-    identity: { kind: "PVC", namespace: "managed", name: "original" },
+    identity: {
+      kind: "PVC",
+      namespace: "managed",
+      name: "original",
+      nativeScopeKind: "",
+      nativeScope: "",
+    },
     uid: "original-uid",
     executionId: undefined,
     presence: "UNKNOWN",
@@ -185,6 +194,52 @@ test("Resource inventory retains exact identities without leaking bootstrap data
   assert.throws(() =>
     resources({ items: [{ ...resource, presence: "DELETED" }] }),
   );
+});
+test("Docker inventory preserves daemon and full IDs while rejecting mixed native metadata", () => {
+  const identity = {
+    kind: "DOCKER_CONTAINER",
+    namespace: "",
+    name: "execution",
+    nativeScopeKind: "DOCKER_DAEMON",
+    nativeScope: "daemon-" + "x".repeat(600),
+  };
+  const container = {
+    identity,
+    dockerContainerId: "a".repeat(64),
+    presence: "ABSENT",
+    endpoint: "private-endpoint",
+    labels: { token: "private-bootstrap" },
+  };
+  const result = resources({ items: [container], nextAfter: identity });
+  assert.deepEqual(result.nextAfter, identity);
+  assert.equal(result.items[0].dockerContainerId, container.dockerContainerId);
+  assert.equal(result.items[0].uid, null);
+  assert.equal(JSON.stringify(result).includes("private-"), false);
+  const volume = {
+    identity: { ...identity, kind: "DOCKER_VOLUME", name: "original" },
+    presence: "UNKNOWN",
+    dockerVolumeCreatedAt: "2026-11-03T06:45:15Z",
+  };
+  assert.equal(
+    resources({ items: [volume] }).items[0].dockerVolumeCreatedAt,
+    volume.dockerVolumeCreatedAt,
+  );
+  for (const invalid of [
+    { ...container, uid: "fake-kubernetes" },
+    { ...container, dockerContainerId: "a".repeat(12) },
+    { ...container, dockerVolumeCreatedAt: volume.dockerVolumeCreatedAt },
+    { ...volume, dockerContainerId: container.dockerContainerId },
+    { ...container, identity: { ...identity, namespace: "managed" } },
+    { ...container, identity: { ...identity, nativeScopeKind: "" } },
+    { ...container, identity: { ...identity, nativeScope: "bad daemon" } },
+    { ...container, identity: { ...identity, nativeScope: "é".repeat(513) } },
+    { ...container, identity: { ...identity, kind: "UNKNOWN" } },
+    {
+      ...container,
+      identity: { ...identity, kind: "PVC", namespace: "managed" },
+    },
+  ])
+    assert.throws(() => resources({ items: [invalid] }));
 });
 test("Desired intent remains independent from actual power", () => {
   const result = agent({ ...wire, computer: { ...computer, desired: 3 } });

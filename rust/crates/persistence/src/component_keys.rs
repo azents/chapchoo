@@ -1,6 +1,6 @@
 use crate::{
     Store, StoreError,
-    computers::{ProviderChoice, ProviderRow, provider_lock, valid_id},
+    computers::{ProviderIdentity, ProviderRow, provider_lock, valid_id},
     models::authenticate,
     store::operation,
 };
@@ -194,6 +194,9 @@ macro_rules! authenticate_provider {
             return Err($crate::StoreError::Unauthenticated);
         }
         provider
+            .substrate()
+            .map_err(|_| $crate::StoreError::Unauthenticated)?;
+        provider
     }};
 }
 
@@ -336,12 +339,14 @@ impl Store {
         provider_id: &str,
         digest: &SecretDigest,
         now: i64,
-    ) -> Result<ProviderChoice, StoreError> {
+    ) -> Result<ProviderIdentity, StoreError> {
         operation!(self, |connection, dialect| {
             let provider = authenticate_provider!(connection, dialect, provider_id, digest, now);
-            Ok(ProviderChoice {
+            let substrate = provider.substrate()?;
+            Ok(ProviderIdentity {
                 id: provider.id,
                 name: provider.name,
+                substrate,
             })
         })
     }

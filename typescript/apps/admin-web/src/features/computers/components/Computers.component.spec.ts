@@ -60,6 +60,39 @@ test("Operator inventory remains read-only and exposes unresolved cleanup separa
     page.getByRole("button", { name: copy.stop, exact: true }),
   ).toHaveCount(0);
 });
+test("Docker diagnostics retain native identities and restorable cursors on a narrow viewport", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(
+    "/iframe.html?id=computers-resources--docker-original-volume&viewMode=story",
+  );
+  await expect(
+    page.getByText(copy.dockerVolume, { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(`${copy.containerId}: ${"b".repeat(64)}`, { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(`${copy.volumeCreatedAt}: 2026-11-03T06:45:15Z`, {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(page.getByText(/^Namespace:|^UID:/)).toHaveCount(0);
+  const next = page.getByRole("link", { name: copy.next, exact: true });
+  const href = await next.getAttribute("href");
+  expect(href).not.toBeNull();
+  const query = new URL(href ?? "", "http://localhost").searchParams;
+  expect(query.get("nativeScope")).toBe(`daemon-${"a".repeat(300)}`);
+  expect(query.get("nativeScopeKind")).toBe("DOCKER_DAEMON");
+  await next.focus();
+  await expect(next).toBeFocused();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+});
 test("Disconnected inventory is retained on browser read failure", async ({
   page,
 }) => {

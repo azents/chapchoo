@@ -8,12 +8,14 @@ const initial: InitialComputers = {
     items: [
       {
         id: "provider",
+        kind: "kubernetes",
         name: "Community Kubernetes",
         management: "connected",
         canCreate: true,
       },
       {
         id: "incapable",
+        kind: "docker",
         name: "Existing Computers only",
         management: "connected",
         canCreate: false,

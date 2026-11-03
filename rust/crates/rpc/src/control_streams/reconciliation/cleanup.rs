@@ -1,20 +1,32 @@
 //! Bounded connection-local cleanup correlation, never effect replay authority.
 use super::*;
 
-type ResourceKey = (u8, String, String);
+type ResourceKey = (u8, i32, String, String, String);
 fn key(value: &wire::ManagedResource) -> ResourceKey {
+    let (scope_kind, scope) = match &value.native {
+        Some(wire::managed_resource::Native::DockerContainer(native)) => {
+            ("DOCKER_DAEMON", native.daemon_id.clone())
+        }
+        Some(wire::managed_resource::Native::DockerVolume(native)) => {
+            ("DOCKER_DAEMON", native.daemon_id.clone())
+        }
+        None => ("KUBERNETES_NAMESPACE", value.namespace.clone()),
+    };
     (
         match wire::ResourceKind::try_from(value.kind) {
-            Ok(wire::ResourceKind::Pod) => 0,
+            Ok(wire::ResourceKind::Pod | wire::ResourceKind::DockerContainer) => 0,
             Ok(wire::ResourceKind::BootstrapSecret) => 1,
-            _ => 2,
+            Ok(wire::ResourceKind::Pvc | wire::ResourceKind::DockerVolume) => 2,
+            _ => u8::MAX,
         },
-        value.namespace.clone(),
+        value.kind,
+        scope_kind.into(),
+        scope,
         value.name.clone(),
     )
 }
 fn absent(value: &ManagedResource, source: &ProviderSource<'_>) -> bool {
-    value.presence == "ABSENT"
+    value.presence == chapchoo_domain::ResourcePresence::Absent
         && value.source_connection_id.as_deref() == Some(source.connection_id)
 }
 fn completed(result: &wire::ProviderInvocationResult) -> bool {
@@ -121,11 +133,9 @@ impl ComponentConnectionServices {
                         .iter()
                         .map(resource)
                         .find(|current| {
-                            current.kind == expected.kind
-                                && current.namespace == expected.namespace
-                                && current.name == expected.name
-                                && current.uid == expected.uid
-                                && current.execution_id == expected.execution_id
+                            let mut original = expected.clone();
+                            original.absence_confirmed = current.absence_confirmed;
+                            current == &original
                         })
                         .ok_or_else(|| {
                             Status::failed_precondition("Cleanup batch identity changed")

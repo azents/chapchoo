@@ -61,6 +61,7 @@ async fn connector_process_exchanges_connects_and_observes_independently_of_prov
             stop: true,
             restart: true,
         },
+        &chapchoo_domain::ProviderSubstrate::Kubernetes,
         AcceptanceTime::System,
     )
     .await?;
@@ -101,7 +102,13 @@ async fn connector_process_exchanges_connects_and_observes_independently_of_prov
         computer_id: &agent.computer.id,
         request_id: "create",
     };
-    let execution = app.reserve_execution(&source, scope, "fixture").await?;
+    let execution = app
+        .reserve_execution(
+            &source,
+            scope,
+            &chapchoo_domain::NativeScope::kubernetes("fixture".into())?,
+        )
+        .await?;
     let session = app
         .issue_connector_session_from_source(
             &source,
@@ -110,12 +117,13 @@ async fn connector_process_exchanges_connects_and_observes_independently_of_prov
             AcceptanceTime::System,
         )
         .await?;
-    let authentication = ComponentAuthenticationServices::new(app.clone(), control.id.clone());
     let connections = ComponentConnectionServices::new(
         app.clone(),
         control.id.clone(),
         Arc::new(AtomicBool::new(true)),
     );
+    let authentication =
+        ComponentAuthenticationServices::new(app.clone(), control.id.clone(), connections.clone());
     let (stop, stopped) = tokio::sync::oneshot::channel();
     let server = tokio::spawn(
         Server::builder()

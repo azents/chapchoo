@@ -27,9 +27,25 @@ pub(crate) struct ScopedAgent {
     pub current_phase: String,
     #[diesel(sql_type = Text)]
     pub desired_state: String,
+    #[diesel(sql_type = Nullable<Text>)]
+    pub provider_kind: Option<String>,
 }
 
-pub(crate) const SCOPED_AGENTS: &str = "SELECT a.id AS agent_id,c.id,c.kind,c.provider_id,c.current_request_id,c.current_execution_id,c.prepare_admitted_at,c.initial_start_dispatch_at,c.current_phase,c.desired_state FROM agents a JOIN computers c ON c.id=a.computer_id";
+pub(crate) const SCOPED_AGENTS: &str = "SELECT a.id AS agent_id,c.id,c.kind,c.provider_id,c.current_request_id,c.current_execution_id,c.prepare_admitted_at,c.initial_start_dispatch_at,c.current_phase,c.desired_state,p.provider_kind FROM agents a JOIN computers c ON c.id=a.computer_id LEFT JOIN computer_providers p ON p.id=c.provider_id";
+
+pub(crate) fn deletion_phase(
+    provider: Option<&str>,
+    phase: &str,
+    prepare_admitted: bool,
+) -> &'static str {
+    if provider == Some("DOCKER")
+        && (phase == "UNCERTAIN" || (phase == "STARTING" && prepare_admitted))
+    {
+        "UNCERTAIN"
+    } else {
+        "DELETING"
+    }
+}
 
 pub(crate) fn deletion_identity(team: &str, agent: &str, previous: &str) -> (String, [u8; 32]) {
     let identity = payload_fingerprint(
@@ -49,7 +65,7 @@ macro_rules! revoke_deleted_computer {
         if $never_prepared {
             // Only the same locked, never-admitted preparation can establish
             // absence without an external observation. Never erase allocated UIDs.
-            diesel::sql_query($dialect.query("UPDATE computer_resources SET presence='ABSENT',observed_at=?,source_connection_id=NULL,absence_confirmed_at=COALESCE(absence_confirmed_at,?) WHERE computer_id=? AND resource_uid IS NULL AND (resource_kind='PVC' OR execution_id=?)"))
+            diesel::sql_query($dialect.query("UPDATE computer_resources SET presence='ABSENT',observed_at=?,source_connection_id=NULL,absence_confirmed_at=COALESCE(absence_confirmed_at,?) WHERE computer_id=? AND resource_uid IS NULL AND docker_container_id IS NULL AND docker_volume_metadata IS NULL AND (resource_kind IN ('PVC','DOCKER_VOLUME') OR execution_id=?)"))
                 .bind::<diesel::sql_types::BigInt,_>($now)
                 .bind::<diesel::sql_types::BigInt,_>($now)
                 .bind::<diesel::sql_types::Text,_>($computer)
@@ -101,9 +117,11 @@ macro_rules! delete_team_agents {
             if current.desired_state == "DELETING" { continue; }
             if current.kind != "CLOUD" { return Err($crate::StoreError::InvalidTransition); }
             let (request, payload) = $crate::agent_cleanup::deletion_identity(team, &current.agent_id, &current.current_request_id);
-            let changed = diesel::sql_query($dialect.query("UPDATE computers SET desired_state='DELETING',current_request_id=?,current_payload_hash=?,current_action='DELETE',current_phase='DELETING',initial_start_dispatch_at=NULL,prepare_admitted_at=NULL,expected_old_execution_id=current_execution_id WHERE id=? AND current_request_id=?"))
+            let phase = $crate::agent_cleanup::deletion_phase(current.provider_kind.as_deref(), &current.current_phase, current.prepare_admitted_at.is_some());
+            let changed = diesel::sql_query($dialect.query("UPDATE computers SET desired_state='DELETING',current_request_id=?,current_payload_hash=?,current_action='DELETE',current_phase=?,initial_start_dispatch_at=NULL,prepare_admitted_at=NULL,expected_old_execution_id=current_execution_id WHERE id=? AND current_request_id=?"))
                 .bind::<diesel::sql_types::Text,_>(&request)
                 .bind::<diesel::sql_types::Binary,_>(payload.as_slice())
+                .bind::<diesel::sql_types::Text,_>(phase)
                 .bind::<diesel::sql_types::Text,_>(&current.id)
                 .bind::<diesel::sql_types::Text,_>(&current.current_request_id)
                 .execute($connection).await?;

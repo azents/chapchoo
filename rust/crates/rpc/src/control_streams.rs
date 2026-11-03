@@ -1,5 +1,6 @@
 //! Component-initiated streams and exact connection-local dispatch. Peer/user
 //! business authorization is separate from these transport ownership checks.
+mod native_retirement;
 mod reconciliation;
 #[cfg(test)]
 mod tests;
@@ -71,6 +72,7 @@ struct Connection {
     convergence: Arc<Semaphore>,
     cursor: Mutex<Option<String>>,
     cleanup: Mutex<HashMap<String, CleanupProgress>>,
+    native: Mutex<HashMap<String, native_retirement::NativeProgress>>,
 }
 #[derive(Clone)]
 struct CleanupProgress {
@@ -80,7 +82,7 @@ struct CleanupProgress {
 }
 #[derive(Debug, Clone)]
 struct ProviderPolicy {
-    namespace: String,
+    native_scope: chapchoo_domain::NativeScope,
     connector_endpoint: String,
 }
 impl fmt::Debug for Connection {
@@ -351,6 +353,7 @@ impl Inner {
                 {
                     return Err(error);
                 }
+                native_retirement::result(entry, &value)?;
                 entry.calls.provider_result(value);
                 Ok(())
             }
@@ -546,6 +549,38 @@ impl ComponentConnectionServices {
     }
     /// Transport primitive for an already-authorized domain invocation. The peer
     /// adapter must validate actor/current-intent authority before calling this.
+    async fn dispatch_entry(
+        &self,
+        entry: &Connection,
+        command: wire::ProviderCommand,
+        deadline: Instant,
+    ) -> Result<wire::ProviderInvocationResult, Status> {
+        self.inner.verify(entry).await?;
+        native_retirement::before_forward(entry, &command)?;
+        let expected = command.clone();
+        match entry
+            .calls
+            .invoke(Command::Provider(Box::new(command)), deadline)
+            .await
+        {
+            Ok(Reply::Provider(result)) => {
+                native_retirement::result(entry, &result)?;
+                Ok(wire::ProviderInvocationResult {
+                    outcome: wire::ForwardingOutcome::Completed as i32,
+                    result: Some(*result),
+                })
+            }
+            Ok(_) => Err(Status::internal("Provider reply kind mismatch")),
+            Err(error) => {
+                native_retirement::forwarding_failed(entry, &expected, error)?;
+                Ok(wire::ProviderInvocationResult {
+                    outcome: outcome(error) as i32,
+                    result: None,
+                })
+            }
+        }
+    }
+
     pub async fn invoke_provider(
         &self,
         provider_id: &str,
@@ -608,22 +643,7 @@ impl ComponentConnectionServices {
                 result: None,
             });
         }
-        match entry
-            .calls
-            .invoke(Command::Provider(Box::new(command)), deadline)
-            .await
-        {
-            Ok(Reply::Provider(result)) => Ok(wire::ProviderInvocationResult {
-                outcome: wire::ForwardingOutcome::Completed as i32,
-                result: Some(*result),
-            }),
-            Ok(_) => Err(Status::internal("Component reply kind does not match")),
-            Err(CallFailure::Invalid) => Err(Status::invalid_argument("Component call is invalid")),
-            Err(error) => Ok(wire::ProviderInvocationResult {
-                outcome: outcome(error) as i32,
-                result: None,
-            }),
-        }
+        self.dispatch_entry(&entry, command, deadline).await
     }
     pub async fn invoke_connector(
         &self,
@@ -778,17 +798,21 @@ impl wire::provider_connection_server::ProviderConnection for ProviderConnection
         let Some(wire::provider_frame::Payload::Hello(hello)) = first.payload else {
             return Err(Status::invalid_argument("Provider hello must be first"));
         };
-        let endpoint = url_policy(&hello.connector_endpoint);
-        if hello.namespace.is_empty()
-            || hello.namespace.len() > 63
-            || !hello
-                .namespace
-                .bytes()
-                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
-            || !endpoint
-        {
+        let native_scope = crate::native_resources::hello_scope(&hello)?;
+        if !url_policy(&hello.connector_endpoint) {
             return Err(Status::invalid_argument(
-                "Provider namespace or Connector endpoint is invalid",
+                "Provider Connector endpoint is invalid",
+            ));
+        }
+        let identity = self
+            .inner
+            .service
+            .provider_identity(&hello.provider_id, &credential, AcceptanceTime::System)
+            .await
+            .map_err(status)?;
+        if !identity.substrate.accepts_scope(&native_scope) {
+            return Err(Status::permission_denied(
+                "Provider native target does not match its binding",
             ));
         }
         let prepared = Arc::new(
@@ -812,12 +836,13 @@ impl wire::provider_connection_server::ProviderConnection for ProviderConnection
         let entry = Arc::new(Connection {
             target: Target::Provider(hello.provider_id),
             policy: Some(ProviderPolicy {
-                namespace: hello.namespace,
+                native_scope,
                 connector_endpoint: hello.connector_endpoint,
             }),
             convergence: Arc::new(Semaphore::new(1)),
             cursor: Mutex::new(None),
             cleanup: Mutex::new(HashMap::new()),
+            native: Mutex::new(HashMap::new()),
             prepared,
             credential,
             calls,
@@ -913,6 +938,7 @@ impl wire::connector_connection_server::ConnectorConnection for ConnectorConnect
             convergence: Arc::new(Semaphore::new(1)),
             cursor: Mutex::new(None),
             cleanup: Mutex::new(HashMap::new()),
+            native: Mutex::new(HashMap::new()),
             prepared,
             credential,
             calls,

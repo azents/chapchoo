@@ -73,10 +73,18 @@ message ProviderCapabilities {
   bool stop = 3;
   bool restart = 4;
 }
+enum ProviderKind {
+  PROVIDER_KIND_UNSPECIFIED = 0;
+  PROVIDER_KIND_KUBERNETES = 1;
+  PROVIDER_KIND_DOCKER = 2;
+}
 message ProviderConfiguration {
   string provider_id = 1;
   string name = 2;
   ProviderCapabilities capabilities = 3;
+  ProviderKind kind = 4;
+  // Observed by the external Provider before server-side compare-and-bind.
+  optional string docker_daemon_id = 5;
 }
 message ProviderKeyRequest {
   string provider_id = 1;
@@ -117,6 +125,8 @@ message ProviderHello {
   // Trusted Provider policy, not user input. Used only by its exact owner.
   string namespace = 2;
   string connector_endpoint = 3;
+  optional string docker_daemon_id = 4;
+  ProviderKind kind = 5;
 }
 message ConnectorHello { string session_id = 1; }
 message Connected {
@@ -147,6 +157,23 @@ enum ResourceKind {
   RESOURCE_KIND_POD = 1;
   RESOURCE_KIND_PVC = 2;
   RESOURCE_KIND_BOOTSTRAP_SECRET = 3;
+  RESOURCE_KIND_DOCKER_CONTAINER = 4;
+  RESOURCE_KIND_DOCKER_VOLUME = 5;
+}
+message DockerVolumeIdentity {
+  string driver = 1;
+  string scope = 2;
+  map<string,string> options = 3;
+  map<string,string> labels = 4;
+  optional string created_at = 5;
+}
+message DockerContainerNative {
+  string daemon_id = 1;
+  optional string container_id = 2;
+}
+message DockerVolumeNative {
+  string daemon_id = 1;
+  DockerVolumeIdentity identity = 2;
 }
 message ManagedResource {
   ResourceKind kind = 1;
@@ -157,11 +184,29 @@ message ManagedResource {
   // Reconstructed from committed exact-resource absence evidence; never a
   // caller assertion or proof derived from transport failure.
   bool absence_confirmed = 6;
+  // Kubernetes uses the existing namespace/uid fields only. Docker requires
+  // exactly its kind-matching native payload and empty namespace/uid fields.
+  oneof native {
+    DockerContainerNative docker_container = 7;
+    DockerVolumeNative docker_volume = 8;
+  }
 }
-message OwnedPresent { string uid = 1; }
+message OwnedPresent {
+  string uid = 1;
+  oneof native_identity {
+    string docker_container_id = 2;
+    DockerVolumeIdentity docker_volume = 3;
+  }
+}
 // Sender must have established substrate retirement/quiescence. A bare GET 404,
 // disconnected node, timeout or cancelled caller cannot produce this evidence.
-message DefinitivelyAbsent { optional string expected_uid = 1; }
+message DefinitivelyAbsent {
+  optional string expected_uid = 1;
+  oneof expected_native_identity {
+    string docker_container_id = 2;
+    DockerVolumeIdentity docker_volume = 3;
+  }
+}
 message UnknownResource {}
 message ResourceEvidence {
   ManagedResource resource = 1;
@@ -208,11 +253,19 @@ message PrepareExecution {
   string connector_session_id = 5;
   string connector_initial_key = 6;
   string connector_endpoint = 7;
+  // Mutually exclusive with the Kubernetes resource fields.
+  DockerPreparation docker = 8;
+}
+message DockerPreparation {
+  ManagedResource saved_volume = 1;
+  ManagedResource container = 2;
 }
 message RetireExecution {
   ManagedResource pod = 1;
   // Running-intent restoration cannot terminate a live/unknown execution.
   bool require_terminal = 2;
+  // Mutually exclusive with pod; identifies the exact native execution.
+  ManagedResource docker_container = 3;
 }
 message CleanupResources {
   repeated ManagedResource resources = 1;

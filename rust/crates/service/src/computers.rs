@@ -1,13 +1,13 @@
 use crate::{AcceptanceTime, DomainReason, ServiceError};
 use chapchoo_crypto::{BearerSecret, SecretDigest, SystemOwnerVerifier, VerifiedSystemOwner};
-use chapchoo_domain::LifecyclePhase;
+use chapchoo_domain::{LifecyclePhase, NativeScope, ProviderSubstrate};
 use chapchoo_persistence::{
     AgentRemoval, AgentSummary, ComponentKeyDraft, ComponentKeyPolicy, ComponentKeyResult,
     ComponentRoute, ComputerRequest, ConnectionOwner, ConnectorIdentity, ConnectorSessionDraft,
     ConnectorSessionResult, ConnectorSource, ControlRegistration, CreateCloudAgent,
-    CreationOutcome, DirectoryPolicy, ExecutionDraft, ExecutionReservation, LifecycleRequest,
-    ManagedComputer, ManagedResource, ProviderCapabilities, ProviderChoice, ProviderOwner,
-    ProviderSource, ResolvedRoute, ResourceReport, Store,
+    CreationOutcome, DirectoryPolicy, ExecutionDraft, ExecutionReservation, ExecutionResources,
+    LifecycleRequest, ManagedComputer, ManagedResource, ProviderCapabilities, ProviderChoice,
+    ProviderIdentity, ProviderOwner, ProviderSource, ResolvedRoute, ResourceReport, Store,
 };
 use std::{fmt, sync::Arc};
 use url::Url;
@@ -393,12 +393,13 @@ impl ComputersService {
         provider_id: &str,
         name: &str,
         capabilities: ProviderCapabilities,
+        substrate: &ProviderSubstrate,
         clock: AcceptanceTime,
     ) -> Result<(), ServiceError> {
         let proof = self.system_proof(provider_id, credential)?;
         Ok(self
             .store
-            .configure_system_provider(&proof, name, capabilities, clock.now()?)
+            .configure_system_provider(&proof, name, capabilities, substrate, clock.now()?)
             .await?)
     }
     pub async fn rotate_system_provider_key(
@@ -480,7 +481,7 @@ impl ComputersService {
         provider_id: &str,
         credential: &SecretDigest,
         clock: AcceptanceTime,
-    ) -> Result<ProviderChoice, ServiceError> {
+    ) -> Result<ProviderIdentity, ServiceError> {
         Ok(self
             .store
             .provider_key_identity(provider_id, credential, clock.now()?)
@@ -700,22 +701,30 @@ impl ComputersService {
             .await?)
     }
 
-    /// Namespace is trusted Provider configuration. Resource names and execution
+    /// Native scope is trusted Provider configuration. Resource names and execution
     /// identity are server-generated and committed before any external effect.
     pub async fn reserve_execution(
         &self,
         source: &ProviderSource<'_>,
         scope: ComputerRequest<'_>,
-        namespace: &str,
+        native_scope: &NativeScope,
     ) -> Result<ExecutionReservation, ServiceError> {
         let id = opaque_id()?;
-        let draft = ExecutionDraft {
-            pod_name: format!("computer-{id}"),
-            bootstrap_secret_name: format!("connector-{id}"),
-            saved_pvc_name: format!("computer-{}", opaque_id()?),
-            id,
-            namespace: namespace.into(),
+        let saved_name = format!("computer-{}", opaque_id()?);
+        let native = match native_scope {
+            NativeScope::KubernetesNamespace(namespace) => ExecutionResources::Kubernetes {
+                namespace: namespace.clone(),
+                pod_name: format!("computer-{id}"),
+                bootstrap_secret_name: format!("connector-{id}"),
+                saved_pvc_name: saved_name,
+            },
+            NativeScope::DockerDaemon(daemon) => ExecutionResources::Docker {
+                daemon: daemon.clone(),
+                container_name: format!("computer-{id}"),
+                saved_volume_name: saved_name,
+            },
         };
+        let draft = ExecutionDraft { id, native };
         Ok(self.store.reserve_execution(source, scope, &draft).await?)
     }
     pub async fn claim_execution_dispatch(
@@ -729,6 +738,40 @@ impl ComputersService {
             .claim_execution_dispatch(source, scope, execution)
             .await?)
     }
+    pub async fn verify_native_cleanup_suffix(
+        &self,
+        source: &ProviderSource<'_>,
+        scope: ComputerRequest<'_>,
+    ) -> Result<(), ServiceError> {
+        Ok(self
+            .store
+            .verify_native_cleanup_suffix(source, scope)
+            .await?)
+    }
+
+    pub async fn claim_native_retirement(
+        &self,
+        source: &ProviderSource<'_>,
+        scope: ComputerRequest<'_>,
+        terminal_execution: Option<&str>,
+    ) -> Result<Option<chapchoo_persistence::NativeRetirementAdmission>, ServiceError> {
+        Ok(self
+            .store
+            .claim_native_retirement(source, scope, terminal_execution)
+            .await?)
+    }
+
+    pub async fn release_unstarted_native_retirement(
+        &self,
+        source: &ProviderSource<'_>,
+        admission: &chapchoo_persistence::NativeRetirementAdmission,
+    ) -> Result<(), ServiceError> {
+        Ok(self
+            .store
+            .release_unstarted_native_retirement(source, admission)
+            .await?)
+    }
+
     pub async fn connector_identity_for_prepared(
         &self,
         prepared: &PreparedComponentConnection,

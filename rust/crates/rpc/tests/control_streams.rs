@@ -85,6 +85,8 @@ async fn open(
                 provider_id: "provider".into(),
                 namespace: "fixture".into(),
                 connector_endpoint: "http://127.0.0.1:1".into(),
+                kind: wire::ProviderKind::Kubernetes as i32,
+                docker_daemon_id: None,
             })),
         })
         .await?;
@@ -127,6 +129,7 @@ fn two_control_replacement_cancellation_and_late_replies_preserve_current_stream
                 stop: true,
                 restart: true,
             },
+            &chapchoo_domain::ProviderSubstrate::Kubernetes,
             AcceptanceTime::System,
         )
         .await?;

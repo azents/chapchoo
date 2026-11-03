@@ -65,13 +65,13 @@ fn exercise_constraints(
             )
             .is_err()
     );
-    assert!(connection.batch_execute("INSERT INTO computer_resources(computer_id,provider_id,resource_kind,namespace,name,execution_id,presence) VALUES('local','provider-a','POD','fixture','foreign','execution-a','PRESENT')").is_err());
-    connection.batch_execute("INSERT INTO computer_resources(computer_id,provider_id,resource_kind,namespace,name,resource_uid,presence) VALUES('cloud','provider-a','PVC','fixture','saved','uid-saved','PRESENT')")?;
-    assert!(connection.batch_execute("INSERT INTO computer_resources(computer_id,provider_id,resource_kind,namespace,name,presence) VALUES('cloud','provider-a','PVC','fixture','empty-replacement','PRESENT')").is_err());
+    assert!(connection.batch_execute("INSERT INTO computer_resources(computer_id,provider_id,resource_kind,native_scope,name,execution_id,presence) VALUES('local','provider-a','POD','fixture','foreign','execution-a','PRESENT')").is_err());
+    connection.batch_execute("INSERT INTO computer_resources(computer_id,provider_id,resource_kind,native_scope,name,resource_uid,presence) VALUES('cloud','provider-a','PVC','fixture','saved','uid-saved','PRESENT')")?;
+    assert!(connection.batch_execute("INSERT INTO computer_resources(computer_id,provider_id,resource_kind,native_scope,name,presence) VALUES('cloud','provider-a','PVC','fixture','empty-replacement','PRESENT')").is_err());
     // The same Provider resource cannot be assigned to a second Computer.
-    assert!(connection.batch_execute("INSERT INTO computer_resources(computer_id,provider_id,resource_kind,namespace,name,presence) VALUES('local','provider-a','PVC','fixture','saved','UNKNOWN')").is_err());
+    assert!(connection.batch_execute("INSERT INTO computer_resources(computer_id,provider_id,resource_kind,native_scope,name,presence) VALUES('local','provider-a','PVC','fixture','saved','UNKNOWN')").is_err());
     connection.batch_execute(&provider_sql("provider-b"))?;
-    assert!(connection.batch_execute("INSERT INTO computer_resources(computer_id,provider_id,resource_kind,namespace,name,presence) VALUES('local','provider-b','PVC','fixture','wrong-provider','UNKNOWN')").is_err());
+    assert!(connection.batch_execute("INSERT INTO computer_resources(computer_id,provider_id,resource_kind,native_scope,name,presence) VALUES('local','provider-b','PVC','fixture','wrong-provider','UNKNOWN')").is_err());
     assert!(
         connection
             .batch_execute("UPDATE computers SET agent_removed_at=1 WHERE id='cloud'")

@@ -105,14 +105,19 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
                 stop: true,
                 restart: true,
             },
+            &chapchoo_domain::ProviderSubstrate::Kubernetes,
             AcceptanceTime::System,
         )
         .await?;
         let admission = Arc::new(AtomicBool::new(true));
-        let services = ComponentAuthenticationServices::new(app.clone(), control.id.clone())
-            .with_admission(admission.clone());
         let connections =
             ComponentConnectionServices::new(app.clone(), control.id.clone(), admission.clone());
+        let services = ComponentAuthenticationServices::new(
+            app.clone(),
+            control.id.clone(),
+            connections.clone(),
+        )
+        .with_admission(admission.clone());
         let (stop, stopped) = oneshot::channel();
         let server = tokio::spawn(
             Server::builder()
@@ -222,7 +227,7 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
                     computer_id: &created.computer.id,
                     request_id: "create",
                 },
-                "fixture",
+                &chapchoo_domain::NativeScope::kubernetes("fixture".into())?,
             )
             .await?;
         let bootstrap = provider

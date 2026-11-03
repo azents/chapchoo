@@ -99,6 +99,13 @@ export enum BlockReason {
   UNRECOGNIZED = -1,
 }
 
+export enum ProviderKind {
+  PROVIDER_KIND_UNSPECIFIED = 0,
+  PROVIDER_KIND_KUBERNETES = 1,
+  PROVIDER_KIND_DOCKER = 2,
+  UNRECOGNIZED = -1,
+}
+
 export interface Page {
   after?: string | undefined;
   limit: number;
@@ -207,6 +214,7 @@ export interface ProviderSummary {
   name: string;
   capabilities: ProviderCapabilities | undefined;
   management: Connectivity;
+  kind: ProviderKind;
 }
 
 export interface ProviderList {
@@ -244,8 +252,11 @@ export interface ComputerInventory {
 
 export interface ResourceCursor {
   kind: string;
+  /** Exclusively Kubernetes; never an opaque Docker daemon ID. */
   namespace: string;
   name: string;
+  nativeScopeKind: string;
+  nativeScope: string;
 }
 
 export interface ResourcePage {
@@ -259,7 +270,12 @@ export interface InventoryResource {
   uid?: string | undefined;
   executionId?: string | undefined;
   presence: string;
-  observedAt: Timestamp | undefined;
+  observedAt:
+    | Timestamp
+    | undefined;
+  /** Non-paging observations; Docker volume names are not synthetic native UIDs. */
+  dockerContainerId?: string | undefined;
+  dockerVolumeCreatedAt?: string | undefined;
 }
 
 export interface ResourceInventory {
@@ -1640,7 +1656,7 @@ export const ProviderCapabilities: MessageFns<ProviderCapabilities> = {
 };
 
 function createBaseProviderSummary(): ProviderSummary {
-  return { id: "", name: "", capabilities: undefined, management: 0 };
+  return { id: "", name: "", capabilities: undefined, management: 0, kind: 0 };
 }
 
 export const ProviderSummary: MessageFns<ProviderSummary> = {
@@ -1656,6 +1672,9 @@ export const ProviderSummary: MessageFns<ProviderSummary> = {
     }
     if (message.management !== 0) {
       writer.uint32(32).int32(message.management);
+    }
+    if (message.kind !== 0) {
+      writer.uint32(40).int32(message.kind);
     }
     return writer;
   },
@@ -1705,6 +1724,14 @@ export const ProviderSummary: MessageFns<ProviderSummary> = {
             message.management = reader.int32() as any;
             continue;
           }
+          case 5: {
+            if (tag !== 40) {
+              break;
+            }
+
+            message.kind = reader.int32() as any;
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1728,6 +1755,7 @@ export const ProviderSummary: MessageFns<ProviderSummary> = {
       ? ProviderCapabilities.fromPartial(object.capabilities)
       : undefined;
     message.management = object.management ?? 0;
+    message.kind = object.kind ?? 0;
     return message;
   },
 };
@@ -2164,7 +2192,7 @@ export const ComputerInventory: MessageFns<ComputerInventory> = {
 };
 
 function createBaseResourceCursor(): ResourceCursor {
-  return { kind: "", namespace: "", name: "" };
+  return { kind: "", namespace: "", name: "", nativeScopeKind: "", nativeScope: "" };
 }
 
 export const ResourceCursor: MessageFns<ResourceCursor> = {
@@ -2177,6 +2205,12 @@ export const ResourceCursor: MessageFns<ResourceCursor> = {
     }
     if (message.name !== "") {
       writer.uint32(26).string(message.name);
+    }
+    if (message.nativeScopeKind !== "") {
+      writer.uint32(34).string(message.nativeScopeKind);
+    }
+    if (message.nativeScope !== "") {
+      writer.uint32(42).string(message.nativeScope);
     }
     return writer;
   },
@@ -2218,6 +2252,22 @@ export const ResourceCursor: MessageFns<ResourceCursor> = {
             message.name = reader.string();
             continue;
           }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.nativeScopeKind = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.nativeScope = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2238,6 +2288,8 @@ export const ResourceCursor: MessageFns<ResourceCursor> = {
     message.kind = object.kind ?? "";
     message.namespace = object.namespace ?? "";
     message.name = object.name ?? "";
+    message.nativeScopeKind = object.nativeScopeKind ?? "";
+    message.nativeScope = object.nativeScope ?? "";
     return message;
   },
 };
@@ -2324,7 +2376,15 @@ export const ResourcePage: MessageFns<ResourcePage> = {
 };
 
 function createBaseInventoryResource(): InventoryResource {
-  return { identity: undefined, uid: undefined, executionId: undefined, presence: "", observedAt: undefined };
+  return {
+    identity: undefined,
+    uid: undefined,
+    executionId: undefined,
+    presence: "",
+    observedAt: undefined,
+    dockerContainerId: undefined,
+    dockerVolumeCreatedAt: undefined,
+  };
 }
 
 export const InventoryResource: MessageFns<InventoryResource> = {
@@ -2343,6 +2403,12 @@ export const InventoryResource: MessageFns<InventoryResource> = {
     }
     if (message.observedAt !== undefined) {
       Timestamp.encode(message.observedAt, writer.uint32(42).fork()).join();
+    }
+    if (message.dockerContainerId !== undefined) {
+      writer.uint32(50).string(message.dockerContainerId);
+    }
+    if (message.dockerVolumeCreatedAt !== undefined) {
+      writer.uint32(58).string(message.dockerVolumeCreatedAt);
     }
     return writer;
   },
@@ -2400,6 +2466,22 @@ export const InventoryResource: MessageFns<InventoryResource> = {
             message.observedAt = Timestamp.decode(reader, reader.uint32());
             continue;
           }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.dockerContainerId = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.dockerVolumeCreatedAt = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2426,6 +2508,8 @@ export const InventoryResource: MessageFns<InventoryResource> = {
     message.observedAt = (object.observedAt !== undefined && object.observedAt !== null)
       ? Timestamp.fromPartial(object.observedAt)
       : undefined;
+    message.dockerContainerId = object.dockerContainerId ?? undefined;
+    message.dockerVolumeCreatedAt = object.dockerVolumeCreatedAt ?? undefined;
     return message;
   },
 };

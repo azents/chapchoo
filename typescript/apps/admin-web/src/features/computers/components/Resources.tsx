@@ -66,21 +66,23 @@ export function Resources(props: ResourcesProps): ReactElement {
       ) : null}
       {data.items.length === 0 ? <Text c="dimmed">{c.noResources}</Text> : null}
       {data.items.map((item) => (
-        <Paper
-          key={`${item.identity.kind}/${item.identity.namespace}/${item.identity.name}`}
-          withBorder
-          p="md"
-        >
+        <Paper key={JSON.stringify(item.identity)} withBorder p="md">
           <Stack gap="xs" style={{ overflowWrap: "anywhere" }}>
             <Text fw={600}>
               {item.identity.kind === "POD"
                 ? c.pod
                 : item.identity.kind === "PVC"
                   ? c.pvc
-                  : c.bootstrapSecret}
+                  : item.identity.kind === "BOOTSTRAP_SECRET"
+                    ? c.bootstrapSecret
+                    : item.identity.kind === "DOCKER_CONTAINER"
+                      ? c.dockerContainer
+                      : c.dockerVolume}
             </Text>
             <Text>
-              {c.namespace}: {item.identity.namespace}
+              {item.identity.nativeScopeKind === "DOCKER_DAEMON"
+                ? `${c.dockerDaemon}: ${item.identity.nativeScope}`
+                : `${c.namespace}: ${item.identity.namespace}`}
             </Text>
             <Text>
               {c.resourceName}: {item.identity.name}
@@ -89,7 +91,11 @@ export function Resources(props: ResourcesProps): ReactElement {
               {c.presence}: {c[item.presence]}
             </Text>
             <Text>
-              {c.uid}: {item.uid ?? c.unknown}
+              {item.identity.kind === "DOCKER_CONTAINER"
+                ? `${c.containerId}: ${item.dockerContainerId ?? c.unknown}`
+                : item.identity.kind === "DOCKER_VOLUME"
+                  ? `${c.volumeCreatedAt}: ${item.dockerVolumeCreatedAt ?? c.unknown}`
+                  : `${c.uid}: ${item.uid ?? c.unknown}`}
             </Text>
             {item.executionId ? (
               <Text>

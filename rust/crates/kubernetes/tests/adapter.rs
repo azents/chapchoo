@@ -112,6 +112,7 @@ fn resource(kind: ResourceKind, uid: Option<&str>) -> wire::ManagedResource {
         uid: uid.map(str::to_owned),
         execution_id: (kind != ResourceKind::Pvc).then(|| "execution".into()),
         absence_confirmed: false,
+        native: None,
     }
 }
 fn metadata(name: &str, uid: &str, execution: bool) -> Value {

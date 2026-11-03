@@ -10,8 +10,8 @@ use chapchoo_protocol::computers::{
 use chapchoo_rpc::{ComputerServices, memory_transport};
 use chapchoo_service::{
     AcceptanceTime, AccountsConfig, AccountsService, ComputerRequest, ComputersService,
-    ManagedResourceKind, PasswordWork, ProviderCapabilities, ProviderSource, ResourceEvidence,
-    ResourceReport, SessionPolicy,
+    PasswordWork, ProviderCapabilities, ProviderSource, ResourceEvidence, ResourceReport,
+    SessionPolicy,
 };
 use std::sync::{
     Arc,
@@ -115,6 +115,7 @@ fn domain_rpc_keeps_private_owner_authority_and_independent_admin_residual_inven
                 stop: true,
                 restart: true,
             },
+            &chapchoo_domain::ProviderSubstrate::Kubernetes,
             AcceptanceTime::System,
         )
         .await?;
@@ -248,19 +249,27 @@ fn domain_rpc_keeps_private_owner_authority_and_independent_admin_residual_inven
             connection_id: &prepared.owner().connection_id,
             credential: &key.token.digest(),
         };
-        let execution = app.reserve_execution(&source, scope, "fixture").await?;
+        let execution = app
+            .reserve_execution(
+                &source,
+                scope,
+                &chapchoo_domain::NativeScope::kubernetes("fixture".into())?,
+            )
+            .await?;
         for resource in &execution.resources {
-            let kind = resource.resource_kind.parse::<ManagedResourceKind>()?;
             app.report_resource(
                 &source,
                 scope,
                 ResourceReport {
-                    kind,
-                    namespace: &resource.namespace,
-                    name: &resource.name,
+                    native: resource.native(),
                     execution_id: resource.execution_id.as_deref(),
                     evidence: ResourceEvidence::OwnedPresent {
-                        uid: &format!("uid-{}", resource.resource_kind),
+                        identity: &chapchoo_domain::NativeIdentity::KubernetesObject(
+                            chapchoo_domain::KubernetesUid::parse(format!(
+                                "uid-{}",
+                                resource.kind().as_str()
+                            ))?,
+                        ),
                     },
                 },
             )

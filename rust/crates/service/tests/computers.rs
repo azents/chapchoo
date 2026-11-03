@@ -64,6 +64,7 @@ fn generated_connection_admission_context_cannot_steal_a_winner() -> Result<(), 
                 stop: true,
                 restart: true,
             },
+            &chapchoo_domain::ProviderSubstrate::Kubernetes,
             AcceptanceTime::System,
         )
         .await?;
@@ -161,15 +162,29 @@ fn configured_owner_scope_and_generated_key_recovery_are_composed() -> Result<()
         ] {
             assert_eq!(
                 service
-                    .configure_system_provider(credential, provider, "Fixture", capabilities, clock)
+                    .configure_system_provider(
+                        credential,
+                        provider,
+                        "Fixture",
+                        capabilities,
+                        &chapchoo_domain::ProviderSubstrate::Kubernetes,
+                        clock
+                    )
                     .await
                     .err()
                     .map(|e| e.reason()),
                 Some(DomainReason::PermissionDenied)
             );
         }
-        app.configure_system_provider(&owner, "allowed-provider", "Fixture", capabilities, clock)
-            .await?;
+        app.configure_system_provider(
+            &owner,
+            "allowed-provider",
+            "Fixture",
+            capabilities,
+            &chapchoo_domain::ProviderSubstrate::Kubernetes,
+            clock,
+        )
+        .await?;
         let key = app
             .rotate_system_provider_key(&owner, "allowed-provider", "key-one", clock)
             .await?;

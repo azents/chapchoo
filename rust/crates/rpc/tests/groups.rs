@@ -42,13 +42,13 @@ fn selectable_group_unions_deduplicate_shared_services_and_exclude_peers() -> Re
             },
         )?));
         let app = Arc::new(ComputersService::new(store, None));
-        let auth = ComponentAuthenticationServices::new(app.clone(), "control".into());
         let computers = chapchoo_rpc::ComputerServices::new(app.clone());
         let connections = ComponentConnectionServices::new(
-            app,
+            app.clone(),
             "control".into(),
             Arc::new(AtomicBool::new(true)),
         );
+        let auth = ComponentAuthenticationServices::new(app, "control".into(), connections.clone());
         for groups in [
             vec![ServiceGroup::Client],
             vec![ServiceGroup::Admin],

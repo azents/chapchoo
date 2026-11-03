@@ -19,6 +19,34 @@ impl ProviderKind {
             Self::Docker => "DOCKER",
         }
     }
+
+    pub fn saved_resource_kind(self) -> ManagedResourceKind {
+        match self {
+            Self::Kubernetes => ManagedResourceKind::Pvc,
+            Self::Docker => ManagedResourceKind::DockerVolume,
+        }
+    }
+
+    pub fn execution_resource_kind(self) -> ManagedResourceKind {
+        match self {
+            Self::Kubernetes => ManagedResourceKind::Pod,
+            Self::Docker => ManagedResourceKind::DockerContainer,
+        }
+    }
+
+    pub fn required_resource_kinds(self) -> &'static [ManagedResourceKind] {
+        match self {
+            Self::Kubernetes => &[
+                ManagedResourceKind::Pod,
+                ManagedResourceKind::BootstrapSecret,
+                ManagedResourceKind::Pvc,
+            ],
+            Self::Docker => &[
+                ManagedResourceKind::DockerContainer,
+                ManagedResourceKind::DockerVolume,
+            ],
+        }
+    }
 }
 
 impl FromStr for ProviderKind {
@@ -123,6 +151,39 @@ native_value!(DockerContainerId, |v: &str| v.len() == 64
     && v.bytes()
         .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)));
 
+/// A Docker Provider is usable only after the server accepts its daemon binding.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProviderSubstrate {
+    Kubernetes,
+    Docker(DockerDaemonId),
+}
+
+impl ProviderSubstrate {
+    pub fn kind(&self) -> ProviderKind {
+        match self {
+            Self::Kubernetes => ProviderKind::Kubernetes,
+            Self::Docker(_) => ProviderKind::Docker,
+        }
+    }
+
+    pub fn docker_daemon_id(&self) -> Option<&str> {
+        match self {
+            Self::Kubernetes => None,
+            Self::Docker(daemon) => Some(daemon.as_str()),
+        }
+    }
+
+    pub fn accepts_scope(&self, scope: &NativeScope) -> bool {
+        match (self, scope) {
+            (Self::Kubernetes, NativeScope::KubernetesNamespace(namespace)) => {
+                kubernetes_name(namespace, 63)
+            }
+            (Self::Docker(bound), NativeScope::DockerDaemon(observed)) => bound == observed,
+            _ => false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NativeScope {
     KubernetesNamespace(String),
@@ -130,6 +191,21 @@ pub enum NativeScope {
 }
 
 impl NativeScope {
+    pub fn parse(kind: &str, value: String) -> Result<Self, InvalidNativeResource> {
+        match kind {
+            "KUBERNETES_NAMESPACE" => Self::kubernetes(value),
+            "DOCKER_DAEMON" => Ok(Self::DockerDaemon(DockerDaemonId::parse(value)?)),
+            _ => Err(InvalidNativeResource),
+        }
+    }
+
+    pub fn kind_str(&self) -> &'static str {
+        match self {
+            Self::KubernetesNamespace(_) => "KUBERNETES_NAMESPACE",
+            Self::DockerDaemon(_) => "DOCKER_DAEMON",
+        }
+    }
+
     pub fn kubernetes(namespace: String) -> Result<Self, InvalidNativeResource> {
         if kubernetes_name(&namespace, 63) {
             Ok(Self::KubernetesNamespace(namespace))

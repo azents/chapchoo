@@ -1,12 +1,37 @@
 import { z } from "zod";
 
-const resourceCursor = z
-  .object({
-    kind: z.enum(["POD", "BOOTSTRAP_SECRET", "PVC"]),
-    namespace: z.string().min(1).max(253),
-    name: z.string().min(1).max(253),
-  })
-  .strict();
+const kubernetesName = z.string().regex(/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/);
+const resourceCursor = z.union([
+  z
+    .object({
+      kind: z.enum(["POD", "BOOTSTRAP_SECRET", "PVC"]),
+      namespace: kubernetesName.max(63),
+      name: kubernetesName.max(253),
+      nativeScopeKind: z.literal("").default(""),
+      nativeScope: z.literal("").default(""),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.enum(["DOCKER_CONTAINER", "DOCKER_VOLUME"]),
+      namespace: z.literal("").default(""),
+      name: z
+        .string()
+        .regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/)
+        .max(255),
+      nativeScopeKind: z.literal("DOCKER_DAEMON"),
+      nativeScope: z
+        .string()
+        .min(1)
+        .max(1024)
+        .refine(
+          (value) =>
+            new TextEncoder().encode(value).length <= 1024 &&
+            !/[\s\p{Cc}]/u.test(value),
+        ),
+    })
+    .strict(),
+]);
 export const resourceInput = z
   .object({
     computerId: z.string().min(1).max(128),
@@ -24,6 +49,8 @@ export function resourceSelection(
     kind: search.kind,
     namespace: search.namespace,
     name: search.name,
+    nativeScopeKind: search.nativeScopeKind,
+    nativeScope: search.nativeScope,
   });
   return resourceInput.parse({
     computerId,

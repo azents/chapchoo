@@ -81,6 +81,9 @@ export function Computers(props: ComputersProps): ReactElement {
                     {item.name}
                   </Anchor>
                   <Group gap="sm">
+                    <Text>
+                      {item.kind === "docker" ? "Docker" : "Kubernetes"}
+                    </Text>
                     <Text>{c[item.management]}</Text>
                     <Badge color={item.canCreate ? "teal" : "gray"}>
                       {item.canCreate ? c.canCreate : c.cannotCreate}

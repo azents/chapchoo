@@ -34,14 +34,26 @@ export interface ComputerStatus {
   saved: "verified" | "missing" | "unknown";
   observedAt: number | null;
 }
-export interface ResourceCursor {
-  kind: string;
-  namespace: string;
-  name: string;
-}
+export type ResourceCursor =
+  | {
+      kind: "POD" | "PVC" | "BOOTSTRAP_SECRET";
+      namespace: string;
+      name: string;
+      nativeScopeKind: "";
+      nativeScope: "";
+    }
+  | {
+      kind: "DOCKER_CONTAINER" | "DOCKER_VOLUME";
+      namespace: "";
+      name: string;
+      nativeScopeKind: "DOCKER_DAEMON";
+      nativeScope: string;
+    };
 export interface ResourceView {
   identity: ResourceCursor;
   uid: string | null;
+  dockerContainerId: string | null;
+  dockerVolumeCreatedAt: string | null;
   executionId: string | null;
   presence: "present" | "absent" | "unknown";
   observedAt: number | null;
@@ -51,19 +63,70 @@ export interface ResourcePage {
   nextAfter: ResourceCursor | null;
 }
 function cursor(value: Wire.ResourceCursor): ResourceCursor {
-  if (!["POD", "BOOTSTRAP_SECRET", "PVC"].includes(value.kind))
-    return invalidResponse();
-  return {
-    kind: value.kind,
-    namespace: text(value.namespace),
-    name: text(value.name),
-  };
+  switch (value.kind) {
+    case "POD":
+    case "PVC":
+    case "BOOTSTRAP_SECRET":
+      if (
+        value.nativeScopeKind !== "" ||
+        value.nativeScope !== "" ||
+        !/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(value.namespace) ||
+        value.namespace.length > 63 ||
+        !/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(value.name) ||
+        value.name.length > 253
+      )
+        return invalidResponse();
+      return {
+        kind: value.kind,
+        namespace: value.namespace,
+        name: value.name,
+        nativeScopeKind: "",
+        nativeScope: "",
+      };
+    case "DOCKER_CONTAINER":
+    case "DOCKER_VOLUME":
+      if (
+        value.namespace !== "" ||
+        value.nativeScopeKind !== "DOCKER_DAEMON" ||
+        !value.nativeScope ||
+        new TextEncoder().encode(value.nativeScope).length > 1024 ||
+        /[\s\p{Cc}]/u.test(value.nativeScope) ||
+        !/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(value.name) ||
+        value.name.length > 255
+      )
+        return invalidResponse();
+      return {
+        kind: value.kind,
+        namespace: "",
+        name: value.name,
+        nativeScopeKind: "DOCKER_DAEMON",
+        nativeScope: value.nativeScope,
+      };
+    default:
+      return invalidResponse();
+  }
 }
 export function resources(value: Wire.ResourceInventory): ResourcePage {
   if (value.items.length > 20) return invalidResponse();
   return {
     items: value.items.map((item) => {
       if (!item.identity) return invalidResponse();
+      const identity = cursor(item.identity);
+      const kubernetes = identity.nativeScopeKind === "";
+      if (
+        (!kubernetes && item.uid !== undefined) ||
+        (identity.kind !== "DOCKER_CONTAINER" &&
+          item.dockerContainerId !== undefined) ||
+        (identity.kind !== "DOCKER_VOLUME" &&
+          item.dockerVolumeCreatedAt !== undefined) ||
+        (item.dockerContainerId !== undefined &&
+          !/^[0-9a-f]{64}$/.test(item.dockerContainerId)) ||
+        (item.dockerVolumeCreatedAt !== undefined &&
+          (!item.dockerVolumeCreatedAt ||
+            item.dockerVolumeCreatedAt.length > 128 ||
+            /[\s\p{Cc}]/u.test(item.dockerVolumeCreatedAt)))
+      )
+        return invalidResponse();
       const presence =
         item.presence === "PRESENT"
           ? "present"
@@ -73,8 +136,10 @@ export function resources(value: Wire.ResourceInventory): ResourcePage {
               ? "unknown"
               : invalidResponse();
       return {
-        identity: cursor(item.identity),
+        identity,
         uid: item.uid ? text(item.uid) : null,
+        dockerContainerId: item.dockerContainerId ?? null,
+        dockerVolumeCreatedAt: item.dockerVolumeCreatedAt ?? null,
         executionId: item.executionId ? text(item.executionId) : null,
         presence,
         observedAt: instant(item.observedAt),
@@ -105,6 +170,7 @@ export interface ProviderChoice {
   name: string;
 }
 export interface ProviderView extends ProviderChoice {
+  kind: "kubernetes" | "docker";
   management: Connection;
   canCreate: boolean;
 }
@@ -242,6 +308,7 @@ export function providers(value: Wire.ProviderList): Page<ProviderView> {
         id: text(item.id),
         name: text(item.name),
         canCreate: item.capabilities.create,
+        kind: label<ProviderView["kind"]>(item.kind, ["kubernetes", "docker"]),
         management: label<Connection>(item.management, [
           "connected",
           "disconnected",

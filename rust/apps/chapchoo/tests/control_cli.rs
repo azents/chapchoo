@@ -109,6 +109,8 @@ async fn control_group_has_components_and_separate_network_peer_listener() -> Re
     let configuration = control::ProviderConfiguration {
         provider_id: "provider".into(),
         name: "Fixture".into(),
+        kind: control::ProviderKind::Kubernetes as i32,
+        docker_daemon_id: None,
         capabilities: Some(control::ProviderCapabilities {
             create: true,
             start: true,

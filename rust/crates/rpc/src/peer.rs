@@ -205,18 +205,12 @@ pub(crate) fn validate_call(
     Ok(())
 }
 fn resource_matches(resource: &wire::ManagedResource, saved: &ManagedResource) -> bool {
-    let kind = match wire::ResourceKind::try_from(resource.kind) {
-        Ok(wire::ResourceKind::Pod) => "POD",
-        Ok(wire::ResourceKind::Pvc) => "PVC",
-        Ok(wire::ResourceKind::BootstrapSecret) => "BOOTSTRAP_SECRET",
-        _ => return false,
-    };
-    saved.absence_confirmed_at.is_some() == resource.absence_confirmed
-        && saved.resource_kind == kind
-        && saved.namespace == resource.namespace
-        && saved.name == resource.name
-        && saved.resource_uid == resource.uid
-        && saved.execution_id == resource.execution_id
+    crate::native_resources::decode(resource).is_ok_and(|decoded| {
+        saved.absence_confirmed_at.is_some() == decoded.absence_confirmed
+            && saved.native() == &decoded.native
+            && saved.identity() == decoded.identity.as_ref()
+            && saved.execution_id == decoded.execution_id
+    })
 }
 pub(crate) fn validate_provider(
     command: &wire::ProviderCommand,
@@ -262,18 +256,48 @@ pub(crate) fn validate_provider(
             {
                 return Err(invalid());
             }
-            let resources = [
-                prepare.saved_pvc.clone().ok_or_else(invalid)?,
-                prepare.bootstrap_secret.clone().ok_or_else(invalid)?,
-                prepare.pod.clone().ok_or_else(invalid)?,
-            ];
-            if resources[0].kind != wire::ResourceKind::Pvc as i32
-                || resources[1].kind != wire::ResourceKind::BootstrapSecret as i32
-                || resources[2].kind != wire::ResourceKind::Pod as i32
+            let resources = match snapshot.substrate.kind() {
+                chapchoo_domain::ProviderKind::Kubernetes if prepare.docker.is_none() => vec![
+                    prepare.saved_pvc.clone().ok_or_else(invalid)?,
+                    prepare.bootstrap_secret.clone().ok_or_else(invalid)?,
+                    prepare.pod.clone().ok_or_else(invalid)?,
+                ],
+                chapchoo_domain::ProviderKind::Docker
+                    if prepare.saved_pvc.is_none()
+                        && prepare.bootstrap_secret.is_none()
+                        && prepare.pod.is_none() =>
+                {
+                    let docker = prepare.docker.as_ref().ok_or_else(invalid)?;
+                    vec![
+                        docker.saved_volume.clone().ok_or_else(invalid)?,
+                        docker.container.clone().ok_or_else(invalid)?,
+                    ]
+                }
+                _ => return Err(invalid()),
+            };
+            let expected = match snapshot.substrate.kind() {
+                chapchoo_domain::ProviderKind::Kubernetes => vec![
+                    wire::ResourceKind::Pvc,
+                    wire::ResourceKind::BootstrapSecret,
+                    wire::ResourceKind::Pod,
+                ],
+                chapchoo_domain::ProviderKind::Docker => vec![
+                    wire::ResourceKind::DockerVolume,
+                    wire::ResourceKind::DockerContainer,
+                ],
+            };
+            if resources
+                .iter()
+                .zip(expected)
+                .any(|(resource, kind)| resource.kind != kind as i32)
+                || resources[0].execution_id.is_some()
                 || resources[1..]
                     .iter()
                     .any(|r| r.execution_id.as_deref() != Some(&context.execution_id))
-                || (!prepare.initial_allocation && resources[0].uid.is_none())
+                || (!prepare.initial_allocation
+                    && crate::native_resources::decode(&resources[0])?
+                        .identity
+                        .is_none())
             {
                 return Err(invalid());
             }
@@ -289,13 +313,27 @@ pub(crate) fn validate_provider(
             {
                 return Err(invalid());
             }
-            let pod = retire.pod.as_ref().ok_or_else(invalid)?;
-            if pod.kind != wire::ResourceKind::Pod as i32
-                || pod.execution_id.as_deref() != Some(&context.execution_id)
+            let (resource, expected_kind) = match snapshot.substrate.kind() {
+                chapchoo_domain::ProviderKind::Kubernetes if retire.docker_container.is_none() => (
+                    retire.pod.as_ref().ok_or_else(invalid)?,
+                    wire::ResourceKind::Pod,
+                ),
+                chapchoo_domain::ProviderKind::Docker
+                    if retire.pod.is_none() && computer.current_phase == "UNCERTAIN" =>
+                {
+                    (
+                        retire.docker_container.as_ref().ok_or_else(invalid)?,
+                        wire::ResourceKind::DockerContainer,
+                    )
+                }
+                _ => return Err(invalid()),
+            };
+            if resource.kind != expected_kind as i32
+                || resource.execution_id.as_deref() != Some(&context.execution_id)
             {
                 return Err(invalid());
             }
-            check(std::slice::from_ref(pod))
+            check(std::slice::from_ref(resource))
         }
         wire::provider_command::Operation::Cleanup(cleanup) => {
             if computer.desired_state != "DELETING" {
