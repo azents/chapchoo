@@ -1,4 +1,6 @@
 //! Peer retry decisions are tested independently of component stream behavior.
+mod support;
+
 use base64::{Engine, engine::general_purpose::URL_SAFE};
 use chapchoo_crypto::{BearerSecret, CredentialCipher, RootKey, SystemOwnerVerifier};
 use chapchoo_persistence::{Store, prepare_sqlite};
@@ -12,7 +14,7 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
-use tokio::{sync::oneshot, time::Instant};
+use tokio::time::Instant;
 use tonic::{Request, Response, Status, transport::Server};
 type Error = Box<dyn std::error::Error + Send + Sync>;
 #[derive(Debug, Clone)]
@@ -68,7 +70,7 @@ fn explicit_not_owner_is_the_only_bounded_retry_and_native_error_is_uncertain() 
     let owner = BearerSecret::generate()?;
     let verifier =
         SystemOwnerVerifier::new("system".into(), vec!["provider".into()], owner.digest())?;
-    tokio::runtime::Runtime::new()?.block_on(async {
+    tokio::runtime::Runtime::new()?.block_on(support::scope(async |fixture| {
         let app = Arc::new(ComputersService::new(
             Store::connect_sqlite(path, cipher).await?,
             Some(verifier),
@@ -102,8 +104,8 @@ fn explicit_not_owner_is_the_only_bounded_retry_and_native_error_is_uncertain() 
             };
             let calls = probe.calls.clone();
             let (channel, incoming) = memory_transport();
-            let (stop, stopped) = oneshot::channel();
-            let server = tokio::spawn(
+            let stopped = fixture.shutdown();
+            fixture.server(
                 Server::builder()
                     .add_service(PeerRelayServer::new(probe))
                     .serve_with_incoming_shutdown(incoming, async {
@@ -165,10 +167,8 @@ fn explicit_not_owner_is_the_only_bounded_retry_and_native_error_is_uncertain() 
                     );
                 }
             }
-            let _ = stop.send(());
             drop(delivery);
-            server.await??;
         }
         Ok(())
-    })
+    }))
 }

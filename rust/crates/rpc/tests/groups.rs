@@ -1,3 +1,5 @@
+mod support;
+
 use base64::{Engine, engine::general_purpose::URL_SAFE};
 use chapchoo_crypto::{CredentialCipher, PasswordCost, RootKey};
 use chapchoo_persistence::{Store, prepare_sqlite};
@@ -29,7 +31,7 @@ fn selectable_group_unions_deduplicate_shared_services_and_exclude_peers() -> Re
         URL_SAFE.encode([36; 32]),
     )?)?);
     prepare_sqlite(&path, &cipher)?;
-    tokio::runtime::Runtime::new()?.block_on(async {
+    tokio::runtime::Runtime::new()?.block_on(support::scope(async |fixture| {
         let store = Store::connect_sqlite(path, cipher).await?;
         let account = AccountServices::new(Arc::new(AccountsService::new(
             store.clone(),
@@ -63,8 +65,8 @@ fn selectable_group_unions_deduplicate_shared_services_and_exclude_peers() -> Re
         ] {
             let groups = ServiceGroups::new(groups);
             let (channel, incoming) = memory_transport();
-            let (stop, stopped) = tokio::sync::oneshot::channel();
-            let server = tokio::spawn(
+            let stopped = fixture.shutdown();
+            fixture.server(
                 Server::builder()
                     .add_routes(groups.routes(
                         Some(&account),
@@ -127,9 +129,7 @@ fn selectable_group_unions_deduplicate_shared_services_and_exclude_peers() -> Re
                     .code(),
                 Code::Unimplemented
             );
-            let _ = stop.send(());
             drop(channel);
-            server.await??;
         }
         assert!(ServiceGroups::default().routes(None, None, None).is_err());
         assert!(
@@ -143,5 +143,5 @@ fn selectable_group_unions_deduplicate_shared_services_and_exclude_peers() -> Re
                 .is_err()
         );
         Ok(())
-    })
+    }))
 }
