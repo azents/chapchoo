@@ -24,6 +24,13 @@ async fn selected_connection_and_drain_outlive_headers_until_sdk_body_completion
                 return Err::<(), TestError>("Unbounded fixture request".into());
             }
         }
+        let request = String::from_utf8(request)?;
+        assert!(request.starts_with("GET /_ping HTTP/1.1\r\n"));
+        assert!(
+            request
+                .to_ascii_lowercase()
+                .contains(&format!("\r\nhost: 127.0.0.1:{port}\r\n"))
+        );
         stream
             .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n")
             .await?;

@@ -150,11 +150,30 @@ impl Transport {
 
     async fn request(
         &self,
-        request: BollardRequest,
+        mut request: BollardRequest,
     ) -> Result<Response<Incoming>, bollard::errors::Error> {
         if !self.0.admitting.load(Ordering::Acquire) {
             return Err(sdk_error());
         }
+        // Hyper's connection API does not supply Host or convert absolute URI
+        // form. This is a direct selected connection, never an HTTP proxy.
+        let authority = request.uri().authority().ok_or_else(sdk_error)?.clone();
+        if !request.headers().contains_key(hyper::header::HOST) {
+            request.headers_mut().insert(
+                hyper::header::HOST,
+                hyper::header::HeaderValue::from_str(authority.as_str())
+                    .map_err(|_| sdk_error())?,
+            );
+        }
+        let path = request
+            .uri()
+            .path_and_query()
+            .ok_or_else(sdk_error)?
+            .clone();
+        *request.uri_mut() = hyper::Uri::builder()
+            .path_and_query(path)
+            .build()
+            .map_err(|_| sdk_error())?;
         let permit = self
             .0
             .permits

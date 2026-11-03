@@ -65,6 +65,16 @@ void test("partial boundary lines are never released and diagnostics remain boun
   assert.ok(bounded.length <= 6 * 200 + 5 * 3);
 });
 
+void test("ANSI formatting cannot consume the safe diagnostic field budget", () => {
+  const result = diagnosticTail(
+    `${"\u001b[31m".repeat(50)}Native Docker command failed native_docker=workload-policy\u001b[0m\n`,
+  );
+  assert.equal(
+    result,
+    "Native Docker command failed native_docker=workload-policy",
+  );
+});
+
 void test("reporter messages expose only a sanitized bounded first line", () => {
   const token = "M".repeat(43);
   const result = safeMessage(

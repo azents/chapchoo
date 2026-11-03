@@ -105,7 +105,18 @@ tags: [computer, docker, implementation, acceptance]
   completed power/connectivity report and bounds all in-progress observations,
   including UNCERTAIN, without mutation replay. All3 integration unit tests,
   lint/typecheck/build pass after the fix; the same reviewer confirmed the P2
-  resolved with no remaining findings. New exact-head CI is still required.
+  resolved with no remaining findings. CI41670547386 at3f33f59 passed9 checks,
+  including all four browser journeys; native Docker failed on Provider early exit.
+  ANSI formatting consumed the diagnostic budget, so root strips it before bounds
+  and emits short static Docker SDK category/HTTP status records without sources.
+  A strict wire regression independently reproduced the custom transport's missing
+  direct HTTP framing contract; root now supplies Host and origin-form URI while
+  preserving the selected connection and path/query. Full Rust gates passed again.
+  An automated review's canary Start-response-loss leak is corrected by exact
+  positively-created ID/label inspection and observed normal stop/remove; no Start
+  replay or forced product cleanup. Global TS checks/all9 builds and15 pure+5 export
+  support tests pass. The same reviewer found no ownership/privacy/framing issue
+  in this targeted material delta. A new exact-head actual Docker CI run is required.
   Current host has no Engine socket; real fixture startup explicitly fails for
   missing authorized socket/image before launching DB/product. Actual Linux
   acceptance awaits the required CI gate after PR4 creation. No current Mac gate,

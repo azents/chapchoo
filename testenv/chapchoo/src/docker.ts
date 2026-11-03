@@ -1,5 +1,7 @@
 import Docker from "dockerode";
 import { secret } from "./safety.js";
+import { cleanupCanary } from "./canaryCleanup.js";
+import type { CanaryState } from "./canaryCleanup.js";
 import type { DockerFixtureConfig } from "./config/index.js";
 import { runningSuccessor } from "./dockerObservation.js";
 import type { NativeComputer, NativeObservation } from "./dockerObservation.js";
@@ -402,32 +404,37 @@ export class DockerFixture {
     }
     await this.verifyDaemon();
     const productAbsent = await this.productAbsent();
-    let failed = this.uncertain !== null;
-    if (
-      this.canary &&
-      this.canaryCreated &&
-      this.uncertain !== "canary-start"
-    ) {
+    let failed = this.uncertain !== null && this.uncertain !== "canary-start";
+    if (this.canary && this.canaryCreated) {
       try {
-        const container = await this.canary.inspect();
-        if (
-          container.Id !== this.canaryId ||
-          !labelsMatch(container.Config.Labels, this.canaryLabels)
-        ) {
-          throw new Error("Canary identity changed");
-        }
-        if (container.State.Running) {
-          await this.canary.stop({ t: 5 });
-        }
-        await this.canary.remove({ force: false, v: false });
-        try {
-          await this.canary.inspect();
-          failed = true;
-        } catch (error) {
-          if (!missing(error)) {
-            failed = true;
-          }
-        }
+        const canary = this.canary;
+        await cleanupCanary(
+          {
+            inspect: async (): Promise<CanaryState | null> => {
+              try {
+                const container = await canary.inspect();
+                return {
+                  id: container.Id,
+                  running: container.State.Running,
+                  labels: container.Config.Labels ?? {},
+                };
+              } catch (error) {
+                if (missing(error)) {
+                  return null;
+                }
+                throw new Error("Canary state is unverified");
+              }
+            },
+            stop: async (): Promise<void> => {
+              await canary.stop({ t: 5 });
+            },
+            remove: async (): Promise<void> => {
+              await canary.remove({ force: false, v: false });
+            },
+          },
+          this.canaryId,
+          this.canaryLabels,
+        );
       } catch {
         failed = true;
       }
