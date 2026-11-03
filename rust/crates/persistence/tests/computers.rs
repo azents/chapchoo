@@ -1,3 +1,7 @@
+mod support;
+#[path = "support/tasks.rs"]
+mod tasks;
+
 use base64::{Engine, engine::general_purpose::URL_SAFE};
 use chapchoo_crypto::{BearerSecret, CredentialCipher, RootKey, SystemOwnerVerifier};
 use chapchoo_domain::{DesiredState, LifecycleAction, ObservedPower};
@@ -383,8 +387,10 @@ async fn exercise(store: Store, users: &[BearerSecret]) -> Result<(), TestError>
         b.create_cloud_agent(&db, &draft("race-two", "race-computer-two", "race"), NOW)
             .await
     });
-    let first = present(one.await??)?;
-    let second = present(two.await??)?;
+    let (first, second) = tasks::join_pair(one, two, None).await?;
+    let (first, second) = support::combine(first.map_err(Into::into), second.map_err(Into::into))?;
+    let first = present(first)?;
+    let second = present(second)?;
     assert_eq!(first.id, second.id);
     store
         .create_cloud_agent(
@@ -421,9 +427,10 @@ async fn exercise(store: Store, users: &[BearerSecret]) -> Result<(), TestError>
         b.force_remove_agent(&db, "force-race", "unaccepted-delete", NOW)
             .await
     });
-    assert_eq!(correct.await??, AgentRemoval::Removed);
+    let (correct, wrong) = tasks::join_pair(correct, wrong, None).await?;
+    assert_eq!(correct?, AgentRemoval::Removed);
     assert!(matches!(
-        wrong.await?,
+        wrong,
         Err(StoreError::Conflict | StoreError::InvalidTransition)
     ));
     exercise_provider_keys(&store, &proof).await?;
@@ -862,8 +869,9 @@ async fn exercise_connector_keys(
         b.refresh_connector_key(&sb, &kb, &db, policy, time + 152)
             .await
     });
-    let raced_one = one.await??;
-    let raced_two = two.await??;
+    let (one, two) = tasks::join_pair(one, two, None).await?;
+    let (raced_one, raced_two) =
+        support::combine(one.map_err(Into::into), two.map_err(Into::into))?;
     assert!(raced_one.token.expose() == raced_two.token.expose());
     assert_eq!(raced_one.expires_at, raced_two.expires_at);
     let a = store.clone();
@@ -888,7 +896,8 @@ async fn exercise_connector_keys(
     });
     let mut accepted = None;
     let mut rejected = 0;
-    for outcome in [one.await?, two.await?] {
+    let (one, two) = tasks::join_pair(one, two, None).await?;
+    for outcome in [one, two] {
         match outcome {
             Ok(key) => assert!(accepted.replace(key).is_none()),
             Err(StoreError::InvalidTransition) => rejected += 1,
@@ -1037,9 +1046,7 @@ fn computer_operations_postgres() -> Result<(), TestError> {
     let url = format!("{base}{separator}options=-csearch_path%3D{schema}");
     let result = postgres_in_schema(&url);
     let cleanup = admin.batch_execute(&format!("DROP SCHEMA {schema} CASCADE"));
-    result?;
-    cleanup?;
-    Ok(())
+    support::combine(result, cleanup.map_err(Into::into)).map(|_| ())
 }
 fn postgres_in_schema(url: &str) -> Result<(), TestError> {
     let cipher = Arc::new(CredentialCipher::new(RootKey::parse(

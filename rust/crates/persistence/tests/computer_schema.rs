@@ -1,3 +1,5 @@
+mod support;
+
 use base64::{Engine, engine::general_purpose::URL_SAFE};
 use chapchoo_crypto::{BearerSecret, CredentialCipher, RootKey};
 use chapchoo_persistence::{
@@ -9,7 +11,7 @@ use diesel_async::{AsyncPgConnection, async_connection_wrapper::AsyncConnectionW
 use diesel_migrations::MigrationHarness;
 use std::error::Error;
 
-type TestError = Box<dyn Error>;
+type TestError = Box<dyn Error + Send + Sync>;
 
 fn cipher(byte: u8) -> Result<CredentialCipher, TestError> {
     Ok(CredentialCipher::new(RootKey::parse(
@@ -125,9 +127,7 @@ fn postgres_computer_constraints_and_provider_only_root_guard() -> Result<(), Te
     let url = format!("{base}{separator}options=-csearch_path%3D{schema}");
     let result = postgres_in_schema(&url);
     let cleanup = admin.batch_execute(&format!("DROP SCHEMA {schema} CASCADE"));
-    result?;
-    cleanup?;
-    Ok(())
+    support::combine(result, cleanup.map_err(Into::into)).map(|_| ())
 }
 
 fn postgres_in_schema(url: &str) -> Result<(), TestError> {

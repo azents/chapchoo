@@ -1,3 +1,7 @@
+mod support;
+#[path = "support/tasks.rs"]
+mod tasks;
+
 use base64::{Engine, engine::general_purpose::URL_SAFE};
 use chapchoo_crypto::{BearerSecret, CredentialCipher, RootKey};
 use chapchoo_domain::{EmailAddress, MembershipRole, TeamKind, TeamRole};
@@ -387,7 +391,8 @@ async fn exercise(store: Store, tokens: &[BearerSecret]) -> Result<(), TestError
             .process_invitation(&second_digest, "race", true, NOW)
             .await
     });
-    let results = [first.await?, second.await?];
+    let (first, second) = tasks::join_pair(first, second, None).await?;
+    let results = [first, second];
     assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
     assert!(
         results
@@ -497,7 +502,7 @@ async fn exercise(store: Store, tokens: &[BearerSecret]) -> Result<(), TestError
             .leave_team(&target_digest, "transfer-race", NOW)
             .await
     });
-    match (transfer.await?, leave.await?) {
+    match tasks::join_pair(transfer, leave, None).await? {
         (Ok(summary), Err(StoreError::OwnerTransferRequired)) => {
             assert_eq!(summary.owner_user_id, "user-3");
             assert_eq!(
@@ -715,7 +720,5 @@ fn team_and_invitation_operations_on_postgres() -> Result<(), TestError> {
         Ok(())
     })();
     let cleanup = admin.batch_execute(&format!("DROP SCHEMA {schema} CASCADE"));
-    result?;
-    cleanup?;
-    Ok(())
+    support::combine(result, cleanup.map_err(Into::into)).map(|_| ())
 }
