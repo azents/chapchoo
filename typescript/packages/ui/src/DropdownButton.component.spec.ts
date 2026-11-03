@@ -60,11 +60,17 @@ for (const touch of [false, true]) {
       }
       await expect(trigger).toHaveAttribute("aria-expanded", "false");
       await activate();
+      await expect(
+        page.getByRole("button", { name: "Personal space", exact: true }),
+      ).toBeFocused();
       await page.keyboard.press("Escape");
       await expect(trigger).toHaveAttribute("aria-expanded", "false");
       await expect(trigger).toBeFocused();
       await page.keyboard.press("Space");
       await expect(trigger).toHaveAttribute("aria-expanded", "true");
+      await expect(
+        page.getByRole("button", { name: "Personal space", exact: true }),
+      ).toBeFocused();
       await page.keyboard.press("Escape");
       await expect(trigger).toHaveAttribute("aria-expanded", "false");
     });
