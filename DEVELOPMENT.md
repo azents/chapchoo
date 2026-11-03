@@ -145,6 +145,25 @@ real local streams and peer delivery. These tests are not browser or live
 Kubernetes release-gate evidence. Do not deploy or provision a cluster merely to
 run the offline suites.
 
+The Docker Provider respects the selected CLI context/socket and keeps host
+behavior portable so it can naturally be built on Mac later. This effort adds
+no Mac-only build workflow, archive or distribution, and real-Mac validation is
+not its completion gate. It never installs or launches Docker Desktop. A future
+claim of a tested Desktop or remote SSH/TCP/TLS combination still needs explicit
+real-target evidence; Linux socket results do not imply those results.
+
+The complete Linux E2E now also requires a disposable authorized Docker Engine,
+not merely a CLI. The single CI browser job builds the Computer image using its
+same-run packaged binary, then selects the runner-owned socket explicitly.
+Local E2E requires `CHAPCHOO_E2E_DOCKER_AUTHORIZED=disposable`, an absolute
+`CHAPCHOO_E2E_DOCKER_SOCKET`, and `CHAPCHOO_E2E_DOCKER_IMAGE` naming the current
+built Linux image. Keep ambient Docker transport variables unset for this
+fixture. The default existing bridge gateway must reach its ephemeral fixture
+Control listener; an optional `CHAPCHOO_E2E_DOCKER_CONTROL_HOST` supplies an
+already-reachable host instead. No networks, guest port mappings or tunnels are
+created by the Provider. Missing required inputs fail rather than skip. See
+[the E2E owner](typescript/apps/e2e/README.md) for commands and evidence boundaries.
+
 The Docker supported-SDK/real-Control fixture checks allocation ACK order,
 normal stop/start/restart/delete, original-volume retention, source replacement
 before ACK and unknown Start across stream reconnect. A separate explicit local

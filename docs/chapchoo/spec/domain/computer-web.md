@@ -18,6 +18,7 @@ code_paths:
   - typescript/packages/web-core/src/computer-messages.ts
   - typescript/packages/web-core/src/rpc.ts
   - typescript/apps/e2e/src/computers.spec.ts
+  - typescript/apps/e2e/src/docker.spec.ts
 last_verified_at: 2026-11-03
 spec_version: 1
 ---
@@ -176,3 +177,12 @@ supported Kubernetes SDK. It verifies SSR, create/stop/start, one original PVC
 identity, independent Connector connectivity, operator resource reads and confirmed
 normal deletion. It does not create a real cluster, persist files on a real PVC,
 prove CNI/TLS or replace live substrate release gates.
+
+One separate minimal real-Docker journey uses the same owner UI and actual
+Control/Provider/Connector against an explicitly authorized disposable Engine.
+It verifies connected Create, Stop/Start with a distinct native container and
+the same saved-volume marker, no-copy after replacement/restart, normal native
+cleanup and untouched unrelated canaries. Detailed General/Admin native inventory
+and copy remain owner-layer tests rather than duplicated E2E permutations.
+Workflow declarations are not executed Linux/Mac/remote support claims; actual
+platform acceptance outcomes are recorded separately.

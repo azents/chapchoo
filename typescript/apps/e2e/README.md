@@ -1,7 +1,8 @@
 # Chapchoo E2E application
 
 `@chapchoo/e2e` is an executable Playwright app, not a shared package. It owns
-three serial account/team journeys and one Computer owner/operator journey. Fixture preparation comes from
+three serial account/team journeys, one synthetic-Kubernetes owner/operator
+journey and one minimal real-Docker lifecycle. Fixture preparation comes from
 [`@chapchoo/testenv`](../../../testenv/chapchoo/README.md); product app source is
 not imported. No direct DB writes, mutation retries or existing browser state.
 
@@ -24,6 +25,23 @@ fail. Compiler cache stays inside the private fixture. Its ancestors must be
 securely owned or protected by a trusted sticky directory. Set a suitable
 `TMPDIR` before starting the runner if the host temporary root does not satisfy
 that native compiler requirement; do not relax shared-directory permissions.
+
+The complete required Linux run additionally needs an operator-authorized
+disposable Engine socket and a current built Computer image. Set
+`CHAPCHOO_E2E_DOCKER_AUTHORIZED=disposable`,
+`CHAPCHOO_E2E_DOCKER_SOCKET=/absolute/disposable/docker.sock`, and
+`CHAPCHOO_E2E_DOCKER_IMAGE=<current-built-image>`. Keep ambient Docker host/TLS
+variables unset so fixture SDK configuration cannot merge credential sources.
+The image must match the selected Linux daemon architecture. No daemon/image
+is automatically installed or pulled, and missing inputs fail, never skip.
+Do not point the test at an arbitrary developer/production socket.
+
+CI uses the disposable hosted Linux runner's Engine and builds its Computer
+image from the same run's extracted release executable. It runs this one
+serial lifecycle alongside existing scenarios in the single browser gate.
+To diagnose only the existing synthetic Kubernetes boundary without a real
+Engine, explicitly select `pnpm --filter @chapchoo/e2e test:e2e computers.spec.ts`;
+that filtered result is not full Docker/required-CI acceptance.
 
 `CHAPCHOO_E2E_PACKAGE_ROOT` selects an absolute extracted source-free bundle.
 Package mode never falls back to source builds or host Node. The test substrate
@@ -63,9 +81,17 @@ contracts with `/app` and `/admin` mounts and production web listeners.
    Actual Control, Computer Provider and Computer Connector processes use isolated
    synthetic Kubernetes HTTP beneath the supported SDK. This is not live
    cluster/storage/CNI evidence.
+5. A separate isolated account fixture registers a Docker Provider, creates a
+   personal Agent and awaits independently connected real Connector. Bounded
+   non-root SDK exec writes a marker; Stop removes the exact old container and
+   Start replaces it using the same original volume/data with no-copy. Restart
+   also preserves deliberately emptied original storage. Normal Delete confirms
+   native absence and leaves unrelated canary container/volume untouched.
+   Teardown checks its individually owned canaries separately, without prune,
+   forced product cleanup or mutation retries.
 
 Web-core owns the focused real-browser logout boundary in
-`test/logout.browser.spec.mjs`. This E2E app owns the four assembled product
+`test/logout.browser.spec.mjs`. This E2E app owns the five assembled product
 journeys, not browser cookie semantics or dependency component tests.
 
 ## Detail coverage moved to owning components
@@ -106,3 +132,11 @@ website exceptions remain failures. No automatic traces/videos/failure screensho
 or mutation retries are enabled. Substrate safety tests cover secret shapes,
 partial log lines and diagnostic bounds; the E2E app's unit test checks private
 runner output ownership.
+
+For a passed real-Docker case the reporter decodes a dedicated bounded evidence
+annotation and publishes only daemon/Engine/API/architecture, actual image digest,
+native execution/volume IDs, fixed fixture route kind and confirmed cleanup/
+canary outcomes. Raw stdout, bootstrap configuration, file contents, Docker
+credential files and unknown annotation fields are never forwarded.
+This Linux socket case is not native Mac/Desktop or remote SSH/TCP/TLS
+acceptance. Those require separate authorized real-target evidence.

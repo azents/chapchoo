@@ -172,6 +172,31 @@ class CiStructureTests(unittest.TestCase):
         self.assertIn("hashFiles('pnpm-lock.yaml')", web)
         self.assertIn("pnpm exec turbo run build", web)
 
+    def test_real_docker_journey_uses_same_run_binary_in_the_existing_gate(
+        self,
+    ) -> None:
+        ci = (
+            (ROOT / ".github/workflows/ci.yaml")
+            .read_text()
+            .split("  browser-e2e:", 1)[1]
+        )
+        for required in [
+            "needs: native-build",
+            "computer-binary",
+            "installed/chapchoo-linux-x86_64/chapchoo",
+            "--build-context",
+            "CHAPCHOO_E2E_DOCKER_AUTHORIZED=disposable",
+            "CHAPCHOO_E2E_DOCKER_SOCKET=/var/run/docker.sock",
+            "CHAPCHOO_E2E_DOCKER_IMAGE=chapchoo-computer-acceptance:ci",
+        ]:
+            self.assertIn(required, ci)
+        self.assertEqual(ci.count("pnpm --filter @chapchoo/e2e test:e2e"), 1)
+        image = (ROOT / "images/chapchoo/Dockerfile").read_text()
+        self.assertIn("mkdir -p /opt/chapchoo /workspace", image)
+        self.assertIn("chown 10001:10001 /opt/chapchoo /workspace", image)
+        self.assertTrue((ROOT / "typescript/apps/e2e/src/computers.spec.ts").is_file())
+        self.assertTrue((ROOT / "typescript/apps/e2e/src/docker.spec.ts").is_file())
+
 
 if __name__ == "__main__":
     unittest.main()

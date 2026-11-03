@@ -119,6 +119,11 @@ receives no backend database/key credentials. Runtime supports a read-only root
 with an explicitly writable temporary directory. Database state is separately
 operator-provided, never baked into an image.
 
+The standard runtime stages `/workspace` owned by UID:GID 10001:10001. A true
+initial fresh Docker volume can copy that directory's ownership; existing
+original volumes use no-copy. The runtime never uses a privileged ownership
+repair helper. Custom mounts/images must meet the same non-root write contract.
+
 ## Chart and controller lifecycle
 
 `infra/charts/chapchoo` configures a combined Client/Admin/Control union or
@@ -224,13 +229,30 @@ exports archives/checksums. This checks root/prefixed startup, runtime isolation
 static assets, private RPC and shutdown before PR merge without another build
 or product E2E. General CI owns product-test orchestration:
 its single downstream `browser-e2e` job waits for the native build and consumes
-that same run's x86-64 archive, verifies its checksum, and runs the four core
+that same run's x86-64 archive, verifies its checksum, and runs the five core
 PostgreSQL/browser journeys once using only the bundled executable, Node and web
 outputs. It does not rebuild the product or repeat source/per-architecture E2E.
 ARM64 remains a native build/ELF/assembly/image-smoke gate rather than a second
 product-test lane. Snapshot checks the exact images it publishes as well.
 Workflow configuration is not an executed success; actual exact-head CI results
 must be reported separately.
+
+The fifth journey is the minimal real Docker Computer lifecycle, not a second
+account/browser matrix. The disposable hosted runner's Engine is explicitly
+authorized; its Computer image is assembled from that same run's extracted
+binary. Public Docker SDK fixture operations supply prerequisites, bounded
+non-root marker IO and disjoint canary objects. The E2E owner asserts connected
+Create, Stop/Start native replacement with original saved data, no-copy on
+successors including emptied storage, normal Delete absence and untouched
+canaries. Existing synthetic-Kubernetes coverage stays. Missing required
+socket/image/route fails this path, never skips.
+
+Only this opt-in real-Docker Assembly binds ephemeral Client/Control to all
+interfaces so the existing bridge gateway (or explicit host override) can route
+the Connector. Ordinary fixtures remain loopback-bound. No guest port, host
+networking or tunnel is introduced. Test teardown never force-deletes ambiguous
+product work or prunes the daemon. Bounded native evidence is published only for
+a passed test; raw guest/bootstrap output remains private.
 
 Separate reusable web and binary build jobs produce architecture-matched
 artifacts. The web job builds Next on a native Linux runner and exports validated

@@ -3,7 +3,11 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { installedPackageRoot, safeEnvironment } from "./index.ts";
+import {
+  installedPackageRoot,
+  safeEnvironment,
+  dockerFixtureConfig,
+} from "./index.ts";
 
 void test("child environments omit backend, mail and Node preload authority", () => {
   const keys = [
@@ -55,6 +59,50 @@ void test("explicit package prerequisites never fall back to source execution", 
       delete process.env.CHAPCHOO_E2E_PACKAGE_ROOT;
     } else {
       process.env.CHAPCHOO_E2E_PACKAGE_ROOT = saved;
+    }
+  }
+});
+
+void test("real Docker prerequisites cannot implicitly authorize a daemon or accept a regular file", () => {
+  const keys = [
+    "CHAPCHOO_E2E_DOCKER_AUTHORIZED",
+    "CHAPCHOO_E2E_DOCKER_SOCKET",
+    "CHAPCHOO_E2E_DOCKER_IMAGE",
+  ];
+  const saved = new Map(keys.map((key) => [key, process.env[key]]));
+  const root = mkdtempSync(join(tmpdir(), "chapchoo-docker-prerequisite-"));
+  try {
+    for (const key of keys) {
+      delete process.env[key];
+    }
+    assert.throws(dockerFixtureConfig, /authorized disposable socket/);
+    process.env.CHAPCHOO_E2E_DOCKER_AUTHORIZED = "disposable";
+    process.env.CHAPCHOO_E2E_DOCKER_IMAGE = "current-built:fixture";
+    process.env.CHAPCHOO_E2E_DOCKER_SOCKET = "relative.sock";
+    assert.throws(dockerFixtureConfig, /authorized disposable socket/);
+    const regular = join(root, "not-a-socket");
+    writeFileSync(regular, "fixture");
+    process.env.CHAPCHOO_E2E_DOCKER_SOCKET = regular;
+    assert.throws(dockerFixtureConfig, /authorized disposable socket/);
+    process.env.CHAPCHOO_E2E_DOCKER_SOCKET = join(
+      root,
+      "unavailable-private-endpoint",
+    );
+    assert.throws(
+      dockerFixtureConfig,
+      (error: unknown) =>
+        error instanceof Error &&
+        error.message.includes("selected socket is unavailable") &&
+        !error.message.includes(root),
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    for (const [key, value] of saved) {
+      if (value === void 0) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
     }
   }
 });

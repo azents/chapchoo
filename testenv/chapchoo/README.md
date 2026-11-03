@@ -48,3 +48,29 @@ original UID identities and emits terminal deletion observations only after that
 owned Connector exits. It creates no cluster, PVC filesystem or CNI; those remain
 separate live gates. Setup uses ordinary CLI/RPC, never SQL. Compiler cache is
 private to each fixture; secure temporary ancestors remain a host prerequisite.
+
+`Assembly.create(true)` instead requires explicit real-Docker fixture inputs:
+`CHAPCHOO_E2E_DOCKER_AUTHORIZED=disposable`,
+`CHAPCHOO_E2E_DOCKER_SOCKET` (absolute selected Unix socket), and
+`CHAPCHOO_E2E_DOCKER_IMAGE` (current built Linux image). This is authorization
+for disposable test resources, never an inference from an available user socket.
+The fixture uses public `dockerode` operations; optional native ssh2/cpu-features
+install scripts are disabled because this fixture uses only Unix sockets.
+Ambient Docker host/TLS/path overrides are rejected rather than mixed with
+explicit fixture credentials. `startDockerProvider()` registers a unique scoped
+Provider and supplies no product DB/root settings to its child.
+
+The real-Docker Assembly exposes its own ephemeral Client/Control listener on
+all interfaces so the already-configured bridge can reach it. The default
+container route uses that bridge's gateway; an explicit
+`CHAPCHOO_E2E_DOCKER_CONTROL_HOST` can name another already-reachable host (for
+example an authorized Desktop fixture). It neither publishes guest ports nor
+creates networks, host networking or tunnels. Ordinary Assemblies keep loopback
+listeners. Use a disposable trusted host/network; this is not production wiring.
+
+Native support observes exact full IDs and the original volume, provides bounded
+non-root marker IO via SDK exec, and allocates unrelated labeled canaries.
+Product lifecycle assertions stay in the E2E app. Cleanup never prunes or force
+removes product resources. Only Control/Provider owns native product cleanup;
+unknown effects or failed product cleanup fail teardown and retain diagnostic
+responsibility. Canary cleanup is separately scoped and checked.

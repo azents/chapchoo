@@ -49,11 +49,62 @@ export function safeEnvironment(): NodeJS.ProcessEnv {
 
 export function buildEnvironment(): NodeJS.ProcessEnv {
   const result = safeEnvironment();
-  for (const name of ["CARGO_HOME", "RUSTUP_HOME"]) {
+  for (const name of ["CARGO_HOME", "RUSTUP_HOME", "CARGO_INCREMENTAL"]) {
     const value = process.env[name];
     if (value) {
       result[name] = value;
     }
   }
   return result;
+}
+
+export interface DockerFixtureConfig {
+  socket: string;
+  image: string;
+  controlHost: string | null;
+}
+
+/** Opt-in authorizes only an operator-selected disposable fixture daemon. */
+export function dockerFixtureConfig(): DockerFixtureConfig {
+  const socket = process.env.CHAPCHOO_E2E_DOCKER_SOCKET;
+  const image = process.env.CHAPCHOO_E2E_DOCKER_IMAGE;
+  const controlHost = process.env.CHAPCHOO_E2E_DOCKER_CONTROL_HOST ?? null;
+  if (
+    process.env.CHAPCHOO_E2E_DOCKER_AUTHORIZED !== "disposable" ||
+    !socket ||
+    !isAbsolute(socket) ||
+    !image ||
+    image.length > 1024 ||
+    /\s/.test(image) ||
+    (controlHost !== null && !/^[a-zA-Z0-9.-]+$/.test(controlHost))
+  ) {
+    throw new Error(
+      "Real Docker acceptance requires an authorized disposable socket, current built image and reachable Control host",
+    );
+  }
+  try {
+    if (!statSync(socket).isSocket()) {
+      throw new Error("Not a Unix socket");
+    }
+  } catch {
+    throw new Error(
+      "Real Docker acceptance requires an authorized disposable socket; selected socket is unavailable",
+    );
+  }
+  // docker-modem reads environment defaults before explicit options. Prevent
+  // those defaults from supplying another host, TLS bundle or path prefix.
+  for (const name of [
+    "DOCKER_HOST",
+    "DOCKER_CERT_PATH",
+    "DOCKER_TLS_VERIFY",
+    "DOCKER_TLS",
+    "DOCKER_PATH_PREFIX",
+  ]) {
+    if (process.env[name]) {
+      throw new Error(
+        "Docker acceptance SDK requires a clean Docker transport environment; use the explicit fixture inputs",
+      );
+    }
+  }
+  return { socket, image, controlHost };
 }

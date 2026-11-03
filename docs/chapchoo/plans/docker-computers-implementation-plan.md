@@ -10,11 +10,15 @@ tags: [computer, docker, implementation]
 
 - Inputs: [Requirements](../requirements/docker-261103-server-computers.md),
   [accepted ADR D1–D6](../adr/docker-261103-server-computers.md), and
-  [approved Design revision 6](../design/docker-261103-server-computers.md).
+  [Design revision 7](../design/docker-261103-server-computers.md), retaining
+  approved revision6 mechanisms with the requester's explicit M14 scope correction.
 - Requester approval: 2026-11-03, 15:45:15 KST.
 - Approved mechanisms: M1, M2, M3, M4, M5, M6, M7, M8, M9, M10, M11, M12,
   M13, M14, M15, M16.
 - Design delta: None.
+- Current scope clarification: respect Docker context and retain portability for
+  a later native Mac build. Do not add Mac-only build/CI/package/distribution
+  work or make real-Mac validation a completion gate in this effort.
 - External execution boundary, explicitly clarified by the requester after
   approval: either Provider may be run by a trusted third party, with no product
   DB or installation-root access. All persisted work in this plan belongs to the
@@ -34,7 +38,7 @@ tags: [computer, docker, implementation]
 | Docker computers [1/4]: native resource contracts | Domain-owned native kinds, scopes, identities and roles; strict persisted kind decoding replaces the storage-owned K8s enum. M3/M4/M7 foundations, M10/M12 owner-layer evidence. No Docker activation or schema change. | Base main; fixes typed contracts before persisted/wire integration. Existing K8s behavior unchanged. |
 | Docker computers [2/4]: durable native authority and protocol | Both-engine preservation migration, typed store/service native reservations and evidence, immutable daemon binding, wire/DTO/cursor changes, generated clients and complete server-side exact retirement manifest/admission. M1/M3/M4/M5/M8/M10/M11/M16. | Phase 1; DB-first prepare required, coordinated components required. No Docker effect forwarding before the complete server once-only gate is integrated. |
 | Docker computers [3/4]: selected Docker transport and lifecycle | CLI context/default/override resolver, public SDK transport, native adapter, shared task owner and Provider-side once-only native stages matching the server retirement manifest. M2/M3/M5/M6/M7/M8/M9/M13/M15/M16. | Phase 2; only isolated explicitly selected fixture resources. Existing K8s contract remains green. |
-| Docker computers [4/4]: platform delivery and acceptance | Native Mac build/distribution, Linux image ownership, General/Admin labels and generated-client consumption, minimal real Linux E2E, distinct native-Mac/remote acceptance evidence and final Spec promotion. M9/M10/M11/M12/M14 and complete-feature regression. | Phase 3; missing native acceptance blocks support claims, not permission to narrow scope. |
+| Docker computers [4/4]: image and real lifecycle acceptance | Linux image ownership, General/Admin labels and generated-client consumption, minimal real Linux E2E, portable context behavior and final Spec promotion. No Mac build/distribution. M9/M10/M11/M12/M14 and complete-feature regression. | Phase3; real Linux gate remains required; untested Mac/remote combinations are not advertised. |
 
 All paths remain root-owned; phase plans specify exact current paths, integration
 order and commands. A later phase may refine execution decomposition without
@@ -84,16 +88,16 @@ mandatory.
 - Linux: one serial Docker Computer lifecycle added to required existing
   acceptance using current built artifacts and runner-owned disposable Engine.
   Missing declared prerequisites fail; do not duplicate the browser matrix.
-- macOS: native build checks for claimed Apple/Intel targets, plus separately
-  recorded real already-running Docker Desktop acceptance on authorized resources.
-  Linux and cross-builds do not satisfy real-Mac acceptance.
+- macOS portability: preserve ordinary context/socket selection and avoid
+  unnecessary host-OS coupling for a later build. Current Mac compiler,
+  distribution and real-Desktop gates are outside the requester-corrected scope.
 - Remote SSH/TCP/TLS modes: explicit opt-in real selected-mode evidence;
   unavailable, failed and passed remain distinct. Ordinary CI owns resolver and
   transport fixture coverage.
 
 Current environment is Linux. Docker CLI presence establishes neither a reachable
-daemon nor mutation authorization. No native Mac/real Desktop infrastructure has
-been established. These gates stay visible throughout implementation.
+daemon nor mutation authorization. No current Mac delivery gate is introduced;
+Linux results do not establish a verified Mac or remote-mode support claim.
 
 ## Checkpoints, rollout and completion
 

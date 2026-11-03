@@ -183,6 +183,21 @@ jobs:
           mkdir "$RUNNER_TEMP/installed"
           tar -xzf chapchoo-linux-x86_64.tar.gz -C "$RUNNER_TEMP/installed"
           echo "CHAPCHOO_E2E_PACKAGE_ROOT=$RUNNER_TEMP/installed/chapchoo-linux-x86_64" >> "$GITHUB_ENV"
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - name: Prepare the same-run Computer image on the disposable runner Engine
+        run: |
+          set -euo pipefail
+          test "$(docker info --format '{{.OSType}}')" = linux
+          test -S /var/run/docker.sock
+          mkdir "$RUNNER_TEMP/computer-binary"
+          cp "$RUNNER_TEMP/installed/chapchoo-linux-x86_64/chapchoo" "$RUNNER_TEMP/computer-binary/"
+          printf 'amd64\n' > "$RUNNER_TEMP/computer-binary/architecture"
+          docker buildx build --load --target backend \
+            --build-context "binary-artifacts=$RUNNER_TEMP/computer-binary" \
+            -f images/chapchoo/Dockerfile -t chapchoo-computer-acceptance:ci .
+          echo "CHAPCHOO_E2E_DOCKER_AUTHORIZED=disposable" >> "$GITHUB_ENV"
+          echo "CHAPCHOO_E2E_DOCKER_SOCKET=/var/run/docker.sock" >> "$GITHUB_ENV"
+          echo "CHAPCHOO_E2E_DOCKER_IMAGE=chapchoo-computer-acceptance:ci" >> "$GITHUB_ENV"
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @chapchoo/e2e exec playwright install chromium
       - run: pnpm --filter @chapchoo/e2e test:e2e

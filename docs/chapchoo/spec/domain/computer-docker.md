@@ -171,3 +171,25 @@ These checks do not establish real writable-volume population, actual cgroup/
 seccomp enforcement, remote Engine security-mode acceptance, Engine restart behavior or
 native Mac/Desktop compatibility. Platform/image packaging and real acceptance
 remain separately validated delivery boundaries.
+
+## Platform and required acceptance delivery
+
+The standard Linux image stages its saved directory as UID:GID 10001:10001.
+The Provider respects CLI context/socket selection and avoids unnecessary
+host-OS coupling so a later Mac build can use it naturally. This effort adds
+no Mac-only build, packaging, distribution or real-Mac completion gate.
+
+The existing required Linux browser gate additionally builds the Computer image
+from its same-run release executable and runs one serial real-Docker lifecycle.
+An explicitly authorized disposable socket is mandatory. The fixture selects
+the existing bridge and supplies a container-reachable fixture Control address,
+not a guest port/tunnel/host-network workaround. The product journey verifies
+non-root initial saved writes, Stop/Start with original data, successor no-copy,
+emptied saved storage across Restart, exact normal cleanup and unrelated canaries.
+The fixture uses public Docker SDK calls and bounded test-only exec, never a
+product exec API or guest Docker credentials.
+
+Missing required prerequisites fail; no synthetic fallback or skip counts as a
+real lifecycle pass. A workflow or cross-platform archive alone does not establish
+an executed Linux, native Desktop or remote transport result. The snapshot
+remains unpromoted until its required real acceptance is complete.
