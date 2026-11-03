@@ -86,6 +86,7 @@ fn memory_and_tcp_peer_handlers_revalidate_domain_and_exact_reconciler_authority
                 stop: true,
                 restart: true,
             },
+            &chapchoo_domain::ProviderSubstrate::Kubernetes,
             AcceptanceTime::System,
         )
         .await?;
@@ -101,7 +102,11 @@ fn memory_and_tcp_peer_handlers_revalidate_domain_and_exact_reconciler_authority
             Arc::new(AtomicBool::new(true)),
         );
         let peer = PeerServices::new(app.clone(), connections.clone());
-        let auth = ComponentAuthenticationServices::new(app.clone(), control.id.clone());
+        let auth = ComponentAuthenticationServices::new(
+            app.clone(),
+            control.id.clone(),
+            connections.clone(),
+        );
         let (component_channel, component_incoming) = memory_transport();
         let (peer_channel, peer_incoming) = memory_transport();
         let (stop_components, stop_components_rx) = oneshot::channel();
@@ -137,6 +142,8 @@ fn memory_and_tcp_peer_handlers_revalidate_domain_and_exact_reconciler_authority
                     provider_id: "provider".into(),
                     namespace: "fixture".into(),
                     connector_endpoint: "http://127.0.0.1:1".into(),
+                    kind: wire::ProviderKind::Kubernetes as i32,
+                    docker_daemon_id: None,
                 })),
             })
             .await?;
@@ -180,23 +187,31 @@ fn memory_and_tcp_peer_handlers_revalidate_domain_and_exact_reconciler_authority
             credential: &key.token.digest(),
         };
         let execution = app
-            .reserve_execution(&source, scope(&context), "fixture")
+            .reserve_execution(
+                &source,
+                scope(&context),
+                &chapchoo_domain::NativeScope::kubernetes("fixture".into())?,
+            )
             .await?;
         context.execution_id = execution.execution_id;
         let resources = execution
             .resources
             .iter()
             .map(|r| wire::ManagedResource {
-                kind: match r.resource_kind.as_str() {
-                    "POD" => wire::ResourceKind::Pod,
-                    "PVC" => wire::ResourceKind::Pvc,
-                    _ => wire::ResourceKind::BootstrapSecret,
+                kind: match r.kind() {
+                    chapchoo_domain::ManagedResourceKind::Pod => wire::ResourceKind::Pod,
+                    chapchoo_domain::ManagedResourceKind::Pvc => wire::ResourceKind::Pvc,
+                    chapchoo_domain::ManagedResourceKind::BootstrapSecret => {
+                        wire::ResourceKind::BootstrapSecret
+                    }
+                    _ => wire::ResourceKind::Unspecified,
                 } as i32,
-                namespace: r.namespace.clone(),
-                name: r.name.clone(),
-                uid: r.resource_uid.clone(),
+                namespace: r.native().scope().as_str().into(),
+                name: r.native().name().into(),
+                uid: r.kubernetes_uid().map(str::to_owned),
                 execution_id: r.execution_id.clone(),
                 absence_confirmed: r.absence_confirmed_at.is_some(),
+                native: None,
             })
             .collect();
         let owner = wire::ExpectedOwner {
@@ -434,7 +449,7 @@ fn memory_and_tcp_peer_handlers_revalidate_domain_and_exact_reconciler_authority
         let pvc = execution
             .resources
             .iter()
-            .find(|r| r.resource_kind == "PVC")
+            .find(|r| r.kind() == chapchoo_domain::ManagedResourceKind::Pvc)
             .ok_or("PVC reservation")?;
         let report = wire::ProviderReport {
             source: Some(wire::ProviderConnectionCheck {
@@ -446,15 +461,17 @@ fn memory_and_tcp_peer_handlers_revalidate_domain_and_exact_reconciler_authority
             resources: vec![wire::ResourceEvidence {
                 resource: Some(wire::ManagedResource {
                     kind: wire::ResourceKind::Pvc as i32,
-                    namespace: pvc.namespace.clone(),
-                    name: pvc.name.clone(),
+                    namespace: pvc.native().scope().as_str().into(),
+                    name: pvc.native().name().into(),
                     uid: Some("acknowledged-uid".into()),
                     execution_id: None,
                     absence_confirmed: false,
+                    native: None,
                 }),
                 evidence: Some(wire::resource_evidence::Evidence::Present(
                     wire::OwnedPresent {
                         uid: "acknowledged-uid".into(),
+                        native_identity: None,
                     },
                 )),
             }],
@@ -475,8 +492,8 @@ fn memory_and_tcp_peer_handlers_revalidate_domain_and_exact_reconciler_authority
             app.managed_resources(&source, scope(&context))
                 .await?
                 .iter()
-                .any(|r| r.resource_kind == "PVC"
-                    && r.resource_uid.as_deref() == Some("acknowledged-uid"))
+                .any(|r| r.kind() == chapchoo_domain::ManagedResourceKind::Pvc
+                    && r.kubernetes_uid() == Some("acknowledged-uid"))
         );
         let mut stale = report.clone();
         stale.source.as_mut().ok_or("Source")?.connection_id = "old-connection".into();

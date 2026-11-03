@@ -51,6 +51,7 @@ pub struct DeliverySnapshot {
     pub computer: DeliveryComputer,
     pub execution: Option<DeliveryExecution>,
     pub resources: Vec<ManagedResource>,
+    pub substrate: chapchoo_domain::ProviderSubstrate,
 }
 impl Store {
     pub async fn verify_delivery_bootstrap(
@@ -164,11 +165,19 @@ impl Store {
                 } else {
                     None
                 };
-            let resources=diesel::sql_query(dialect.query("SELECT * FROM computer_resources WHERE computer_id=? ORDER BY resource_kind,namespace,name")).bind::<Text,_>(scope.computer_id).load::<ManagedResource>(connection).await?;
+            let provider =
+                diesel::sql_query(dialect.query("SELECT * FROM computer_providers WHERE id=?"))
+                    .bind::<Text, _>(&computer.provider_id)
+                    .get_result::<crate::computers::ProviderRow>(connection)
+                    .await?;
+            let resources=diesel::sql_query(dialect.query("SELECT * FROM computer_resources WHERE computer_id=? ORDER BY resource_kind,native_scope,name")).bind::<Text,_>(scope.computer_id).load::<crate::native_resources::ResourceRow>(connection).await?
+                .into_iter().map(ManagedResource::try_from).collect::<Result<Vec<_>,StoreError>>()?;
+            crate::computer_executions::validate_native_inventory(&provider, &resources)?;
             Ok(DeliverySnapshot {
                 computer,
                 execution,
                 resources,
+                substrate: provider.substrate()?,
             })
         })
     }

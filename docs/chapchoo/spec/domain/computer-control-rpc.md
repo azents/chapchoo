@@ -13,6 +13,10 @@ code_paths:
   - rust/crates/rpc/src/control_streams/tests.rs
   - rust/crates/rpc/src/control_streams/reconciliation.rs
   - rust/crates/rpc/src/control_streams/reconciliation/cleanup.rs
+  - rust/crates/rpc/src/control_streams/native_retirement.rs
+  - rust/crates/rpc/src/control_streams/native_retirement/tests.rs
+  - rust/crates/rpc/src/native_resources.rs
+  - rust/crates/rpc/src/native_resources/tests.rs
   - rust/apps/chapchoo/src/provider/tests.rs
   - rust/crates/rpc/src/delivery.rs
   - rust/crates/rpc/src/groups.rs
@@ -65,7 +69,11 @@ System-owner configuration is optional but complete when present:
 `CHAPCHOO_SYSTEM_OWNER_ID`, comma-separated `CHAPCHOO_SYSTEM_OWNER_PROVIDER_IDS`
 and `CHAPCHOO_SYSTEM_OWNER_TOKEN`. The configured bearer is verified against its
 exact provider scope. ConfigureSystemProvider updates only owner-authorized
-Provider metadata/capabilities; it allocates no Computer or Kubernetes resource.
+Provider metadata/capabilities and immutable substrate/daemon binding; it
+allocates no Computer or native resource. Kubernetes and Docker Providers may
+run outside the installation under a trusted third party. Their authenticated
+Control boundary, not product database access, performs server-owned mutations.
+Neither executable Provider receives database/root-key configuration.
 
 Provider credentials cannot act as owner credentials. Connector bootstrap keys
 can only exchange for operational keys. Operational Connector authority is bound
@@ -80,7 +88,10 @@ precedence over Provider-owner management authority. The Provider owner is admit
 only while no eligible Connector route exists. Current Request ID, applicable
 execution identity and current reserved resources are read again before forwarding.
 Prepare/retire/cleanup commands must match the current durable lifecycle intent;
-resource kind, namespace, name, execution and optional UID must match reservations.
+resource kind, native scope, name, execution and optional native identity must
+match reservations. Kubernetes namespace/UID and Docker daemon/full container ID/
+original-volume metadata are separate typed payloads; mixed or unknown input is
+rejected at ingress, not mapped to another substrate or Secret.
 Prepare also verifies the execution-bound bootstrap session and key digest.
 Provider-originated bootstrap session issuance/revocation verifies the exact live
 Provider source inside the same Provider/Computer-locked transaction as credential
@@ -92,7 +103,9 @@ command contract used by the peer adapter. A valid Prepare dequeue records the
 existing first-start-dispatch marker with fresh source/current-intent checks.
 Connector command dequeue verifies the current request, execution, session and
 exact connection. Checks do not renew connection leases. A check is not an atomic
-Kubernetes effect or a reusable permission to keep acting after authority changes.
+native effect or a reusable permission to keep acting after authority changes.
+Docker mutation dequeue additionally checks the exact live native manifest in
+the owning connection registry; a valid DB snapshot alone is insufficient.
 
 ## Stream and call lifetime
 
@@ -133,6 +146,45 @@ consumes its original deadline, capped at ten seconds. Expired queued work is no
 dispatched. Timeout or connection loss after acceptance is uncertain. Cancellation
 releases only that waiter and sends a best-effort exact-call cancel; it does not
 close a shared stream or prove that an external effect stopped.
+
+## Docker retirement correlation
+
+The server claims fresh retirement/deletion once through the durable phase CAS,
+reserving bounded connection-local manifest capacity before its await. Each
+manifest fixes the Computer/request/execution, source connection, immutable
+reservation-set fingerprint, exact native command/call and dispatch stage.
+Local and peer forwarding share the same gate; CheckCommand validates that same
+registry after its fresh server authorization. Unknown or changed calls/targets
+cannot create mutation permission. Queue-budget reduction and refreshed absence
+flags do not alter the immutable call target.
+
+Potentially forwarded/in-flight/uncertain stages are observation-only on subsequent
+convergence. The response waiter's deadline is not the native task's deadline:
+its expiry preserves only the exact already-forwarded task's next-stage checks
+under the still-current source. It grants no second submission. An explicit
+Provider-reported native uncertain outcome, completed result, source replacement
+or correlation loss ends that task's continuation authority. An exact late result
+can settle its manifest after the original waiter is gone; another call's result
+cannot release or advance it. Only proven
+NotStarted before acceptance can release the exact initial admission. Once a
+prefix completed, a later NotStarted retains the request fence and permits only
+its known-unsent suffix. Lost connection/process correlation cannot be rebuilt
+from the durable phase.
+
+Normal same-connection Delete retires its current container before the original
+saved-volume suffix. Advancement requires a positively settled prior stage and
+fresh committed absence for its complete target set, revalidated source/request/
+Delete intent and no current/live execution. Already retired history is freshly
+observed, not retired again. All reserved resources must be absent to finish
+cleanup observationally after correlation loss; subset absence never proves the
+volume suffix was not submitted. Stop, Restart and qualified terminal retirement
+use the same native gate. Existing Kubernetes dispatch behavior is unchanged.
+
+Synthetic Provider/real Store tests cover normal suffix progression, cancellation
+and exact late completion, lost-manifest observation-only reconnect, NotStarted/
+late-result ABA and the Stop/Restart/terminal entry points. They do not validate
+Docker SDK native stages, real Engine lifecycle or Mac Desktop compatibility.
+The native executable adapter is still separate delivery work.
 
 ## Computer Provider process and acknowledged evidence
 

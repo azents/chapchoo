@@ -1,8 +1,8 @@
 use chapchoo_crypto::{SecretDigest, VerifiedSystemOwner, payload_fingerprint};
 use chapchoo_domain::{
     ActionAvailability, ComputerActionContext, ComputerKind, ConnectionStatus, DesiredState,
-    LifecycleAction, LifecyclePhase, LifecycleProgress, ObservedPower, PowerCapabilities,
-    SavedEnvironment,
+    DockerDaemonId, LifecycleAction, LifecyclePhase, LifecycleProgress, NativeReservation,
+    ObservedPower, PowerCapabilities, ProviderKind, ProviderSubstrate, SavedEnvironment,
 };
 use diesel::{
     OptionalExtension,
@@ -29,6 +29,10 @@ pub(crate) struct ProviderRow {
     pub user_owner_id: Option<String>,
     #[diesel(sql_type = Text)]
     pub name: String,
+    #[diesel(sql_type = Text)]
+    pub provider_kind: String,
+    #[diesel(sql_type = Nullable<Text>)]
+    pub docker_daemon_id: Option<String>,
     #[diesel(sql_type = Bool)]
     pub can_create: bool,
     #[diesel(sql_type = Bool)]
@@ -41,6 +45,23 @@ pub(crate) struct ProviderRow {
 impl fmt::Debug for ProviderRow {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("ProviderRow([REDACTED])")
+    }
+}
+
+impl ProviderRow {
+    pub(crate) fn substrate(&self) -> Result<ProviderSubstrate, StoreError> {
+        match (
+            self.provider_kind.parse::<ProviderKind>(),
+            &self.docker_daemon_id,
+        ) {
+            (Ok(ProviderKind::Kubernetes), None) => Ok(ProviderSubstrate::Kubernetes),
+            (Ok(ProviderKind::Docker), Some(daemon)) if self.owner_kind == "SYSTEM" => {
+                Ok(ProviderSubstrate::Docker(
+                    DockerDaemonId::parse(daemon.clone()).map_err(|_| StoreError::Integrity)?,
+                ))
+            }
+            _ => Err(StoreError::Integrity),
+        }
     }
 }
 
@@ -60,6 +81,17 @@ pub struct ProviderChoice {
 impl fmt::Debug for ProviderChoice {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("ProviderChoice([REDACTED])")
+    }
+}
+
+pub struct ProviderIdentity {
+    pub id: String,
+    pub name: String,
+    pub substrate: ProviderSubstrate,
+}
+impl fmt::Debug for ProviderIdentity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("ProviderIdentity([REDACTED])")
     }
 }
 
@@ -165,6 +197,7 @@ pub enum AgentRemoval {
 pub struct ProviderInventorySummary {
     pub id: String,
     pub name: String,
+    pub kind: ProviderKind,
     pub capabilities: ProviderCapabilities,
 }
 #[derive(Debug)]
@@ -173,12 +206,7 @@ pub struct ComputerInventorySummary {
     pub residual: bool,
     pub cleanup_completed_at: Option<i64>,
 }
-#[derive(Debug, Clone)]
-pub struct ResourceCursor {
-    pub kind: String,
-    pub namespace: String,
-    pub name: String,
-}
+pub type ResourceCursor = NativeReservation;
 #[derive(diesel::QueryableByName)]
 struct CleanupSummary {
     #[diesel(sql_type=Nullable<BigInt>)]
@@ -446,7 +474,7 @@ fn valid_name(value: &str) -> bool {
 
 macro_rules! available_provider {
     ($connection:expr, $dialect:expr, $provider:expr, $owner:expr, $now:expr) => {{
-        let q = $dialect.query("SELECT p.* FROM computer_providers p JOIN provider_keys k ON k.provider_id=p.id JOIN provider_connections pc ON pc.provider_id=p.id JOIN control_instances ci ON ci.id=pc.control_id WHERE p.id=? AND (p.owner_kind='SYSTEM' OR p.user_owner_id=?) AND p.can_create=TRUE AND k.revoked_at IS NULL AND k.expires_at>? AND pc.expires_at>? AND ci.expires_at>? AND ci.draining=FALSE AND (pc.credential_hash=k.current_hash OR (pc.credential_hash=k.previous_hash AND k.previous_valid_until>?))");
+        let q = $dialect.query("SELECT p.* FROM computer_providers p JOIN provider_keys k ON k.provider_id=p.id JOIN provider_connections pc ON pc.provider_id=p.id JOIN control_instances ci ON ci.id=pc.control_id WHERE p.id=? AND (p.owner_kind='SYSTEM' OR p.user_owner_id=?) AND (p.provider_kind='KUBERNETES' OR (p.owner_kind='SYSTEM' AND p.docker_daemon_id IS NOT NULL)) AND p.can_create=TRUE AND k.revoked_at IS NULL AND k.expires_at>? AND pc.expires_at>? AND ci.expires_at>? AND ci.draining=FALSE AND (pc.credential_hash=k.current_hash OR (pc.credential_hash=k.previous_hash AND k.previous_valid_until>?))");
         diesel::sql_query(q).bind::<Text,_>($provider).bind::<Text,_>($owner)
             .bind::<BigInt,_>($now).bind::<BigInt,_>($now).bind::<BigInt,_>($now).bind::<BigInt,_>($now)
             .get_result::<ProviderRow>($connection).await.optional()?.ok_or(StoreError::InvalidTransition)?
@@ -476,19 +504,24 @@ impl Store {
             .bind::<BigInt, _>(limit)
             .load::<ProviderRow>(connection)
             .await?;
-            Ok(rows
-                .into_iter()
-                .map(|row| ProviderInventorySummary {
-                    id: row.id,
-                    name: row.name,
-                    capabilities: ProviderCapabilities {
-                        create: row.can_create,
-                        start: row.can_start,
-                        stop: row.can_stop,
-                        restart: row.can_restart,
-                    },
+            rows.into_iter()
+                .map(|row| {
+                    Ok(ProviderInventorySummary {
+                        id: row.id,
+                        name: row.name,
+                        kind: row
+                            .provider_kind
+                            .parse()
+                            .map_err(|_| StoreError::Integrity)?,
+                        capabilities: ProviderCapabilities {
+                            create: row.can_create,
+                            start: row.can_start,
+                            stop: row.can_stop,
+                            restart: row.can_restart,
+                        },
+                    })
                 })
-                .collect())
+                .collect()
         })
     }
     pub async fn computer_inventory(
@@ -546,11 +579,7 @@ impl Store {
         limit: i64,
         now: i64,
     ) -> Result<Vec<crate::ManagedResource>, StoreError> {
-        if !valid_id(computer)
-            || !(1..=50).contains(&limit)
-            || after
-                .is_some_and(|c| c.kind.len() > 32 || c.namespace.len() > 63 || c.name.len() > 253)
-        {
+        if !valid_id(computer) || !(1..=20).contains(&limit) {
             return Err(StoreError::InvalidInput);
         }
         operation!(self, |connection, dialect| {
@@ -558,11 +587,12 @@ impl Store {
             if !user.is_admin {
                 return Err(StoreError::Forbidden);
             }
-            let (kind, namespace, name) = after.map_or(("", "", ""), |c| {
-                (c.kind.as_str(), c.namespace.as_str(), c.name.as_str())
+            let (kind, native_scope, name) = after.map_or(("", "", ""), |c| {
+                (c.kind().as_str(), c.scope().as_str(), c.name())
             });
-            Ok(diesel::sql_query(dialect.query("SELECT * FROM computer_resources WHERE computer_id=? AND (resource_kind>? OR (resource_kind=? AND namespace>?) OR (resource_kind=? AND namespace=? AND name>?)) ORDER BY resource_kind,namespace,name LIMIT ?"))
-                .bind::<Text,_>(computer).bind::<Text,_>(kind).bind::<Text,_>(kind).bind::<Text,_>(namespace).bind::<Text,_>(kind).bind::<Text,_>(namespace).bind::<Text,_>(name).bind::<BigInt,_>(limit).load::<crate::ManagedResource>(connection).await?)
+            diesel::sql_query(dialect.query("SELECT * FROM computer_resources WHERE computer_id=? AND (resource_kind>? OR (resource_kind=? AND native_scope>?) OR (resource_kind=? AND native_scope=? AND name>?)) ORDER BY resource_kind,native_scope,name LIMIT ?"))
+                .bind::<Text,_>(computer).bind::<Text,_>(kind).bind::<Text,_>(kind).bind::<Text,_>(native_scope).bind::<Text,_>(kind).bind::<Text,_>(native_scope).bind::<Text,_>(name).bind::<BigInt,_>(limit).load::<crate::native_resources::ResourceRow>(connection).await?
+                .into_iter().map(crate::ManagedResource::try_from).collect()
         })
     }
     pub async fn configure_system_provider(
@@ -570,6 +600,7 @@ impl Store {
         proof: &VerifiedSystemOwner,
         name: &str,
         capabilities: ProviderCapabilities,
+        substrate: &ProviderSubstrate,
         now: i64,
     ) -> Result<(), StoreError> {
         if !valid_name(name) {
@@ -587,11 +618,21 @@ impl Store {
                 {
                     return Err(StoreError::Forbidden);
                 }
-                diesel::sql_query(dialect.query("UPDATE computer_providers SET name=?,can_create=?,can_start=?,can_stop=?,can_restart=? WHERE id=?"))
-                    .bind::<Text,_>(name).bind::<Bool,_>(capabilities.create).bind::<Bool,_>(capabilities.start).bind::<Bool,_>(capabilities.stop).bind::<Bool,_>(capabilities.restart).bind::<Text,_>(proof.provider_id()).execute(connection).await?;
+                if existing.provider_kind != substrate.kind().as_str()
+                    || existing
+                        .docker_daemon_id
+                        .as_deref()
+                        .is_some_and(|bound| Some(bound) != substrate.docker_daemon_id())
+                {
+                    return Err(StoreError::Conflict);
+                }
+                // The same scoped lock binds a previously unbound Docker target;
+                // metadata updates can neither substitute nor clear that binding.
+                diesel::sql_query(dialect.query("UPDATE computer_providers SET name=?,can_create=?,can_start=?,can_stop=?,can_restart=?,docker_daemon_id=COALESCE(docker_daemon_id,?) WHERE id=?"))
+                    .bind::<Text,_>(name).bind::<Bool,_>(capabilities.create).bind::<Bool,_>(capabilities.start).bind::<Bool,_>(capabilities.stop).bind::<Bool,_>(capabilities.restart).bind::<Nullable<Text>,_>(substrate.docker_daemon_id()).bind::<Text,_>(proof.provider_id()).execute(connection).await?;
             } else {
-                diesel::sql_query(dialect.query("INSERT INTO computer_providers(id,owner_kind,system_owner_id,name,provider_kind,can_create,can_start,can_stop,can_restart,created_at) VALUES(?,'SYSTEM',?,?,'KUBERNETES',?,?,?,?,?)"))
-                    .bind::<Text,_>(proof.provider_id()).bind::<Text,_>(proof.owner_id()).bind::<Text,_>(name)
+                diesel::sql_query(dialect.query("INSERT INTO computer_providers(id,owner_kind,system_owner_id,name,provider_kind,docker_daemon_id,can_create,can_start,can_stop,can_restart,created_at) VALUES(?,'SYSTEM',?,?,?,?,?,?,?,?,?)"))
+                    .bind::<Text,_>(proof.provider_id()).bind::<Text,_>(proof.owner_id()).bind::<Text,_>(name).bind::<Text,_>(substrate.kind().as_str()).bind::<Nullable<Text>,_>(substrate.docker_daemon_id())
                     .bind::<Bool,_>(capabilities.create).bind::<Bool,_>(capabilities.start).bind::<Bool,_>(capabilities.stop).bind::<Bool,_>(capabilities.restart).bind::<BigInt,_>(now).execute(connection).await?;
             }
             Ok(())
@@ -610,7 +651,7 @@ impl Store {
         }
         operation!(self, |connection, dialect| {
             let user = authenticate!(connection, dialect, actor, now);
-            let q = dialect.query("SELECT p.* FROM computer_providers p JOIN provider_keys k ON k.provider_id=p.id JOIN provider_connections pc ON pc.provider_id=p.id JOIN control_instances ci ON ci.id=pc.control_id WHERE (p.owner_kind='SYSTEM' OR p.user_owner_id=?) AND p.can_create=TRUE AND k.revoked_at IS NULL AND k.expires_at>? AND pc.expires_at>? AND ci.expires_at>? AND ci.draining=FALSE AND (pc.credential_hash=k.current_hash OR (pc.credential_hash=k.previous_hash AND k.previous_valid_until>?)) AND p.id>? ORDER BY p.id LIMIT ?");
+            let q = dialect.query("SELECT p.* FROM computer_providers p JOIN provider_keys k ON k.provider_id=p.id JOIN provider_connections pc ON pc.provider_id=p.id JOIN control_instances ci ON ci.id=pc.control_id WHERE (p.owner_kind='SYSTEM' OR p.user_owner_id=?) AND (p.provider_kind='KUBERNETES' OR (p.owner_kind='SYSTEM' AND p.docker_daemon_id IS NOT NULL)) AND p.can_create=TRUE AND k.revoked_at IS NULL AND k.expires_at>? AND pc.expires_at>? AND ci.expires_at>? AND ci.draining=FALSE AND (pc.credential_hash=k.current_hash OR (pc.credential_hash=k.previous_hash AND k.previous_valid_until>?)) AND p.id>? ORDER BY p.id LIMIT ?");
             let rows = diesel::sql_query(q)
                 .bind::<Text, _>(&user.id)
                 .bind::<BigInt, _>(now)
@@ -680,6 +721,9 @@ impl Store {
                 return Err(StoreError::InvalidTransition);
             }
             let _eligible = available_provider!(connection, dialect, &provider.id, &user.id, now);
+            let _ = provider
+                .substrate()
+                .map_err(|_| StoreError::InvalidTransition)?;
             diesel::sql_query(dialect.query("INSERT INTO computers(id,owner_user_id,kind,provider_id,desired_state,current_request_id,current_payload_hash,current_action,current_phase,created_at) VALUES(?,?,'CLOUD',?,'RUNNING',?,?,'CREATE','ACCEPTED',?)"))
                 .bind::<Text,_>(&draft.computer_id).bind::<Text,_>(&user.id).bind::<Text,_>(&draft.provider_id).bind::<Text,_>(&draft.request_id).bind::<Binary,_>(fingerprint.as_slice()).bind::<BigInt,_>(now).execute(connection).await?;
             diesel::sql_query(dialect.query("INSERT INTO agents(id,owner_user_id,team_id,name,computer_id,computer_kind,created_at) VALUES(?,?,?,?,?,'CLOUD',?)"))
@@ -904,7 +948,14 @@ impl Store {
             }
             let phase = match request.action {
                 LifecycleAction::Stop | LifecycleAction::Restart => LifecyclePhase::Retiring,
-                LifecycleAction::Delete => LifecyclePhase::Deleting,
+                LifecycleAction::Delete => match crate::agent_cleanup::deletion_phase(
+                    Some(&provider.provider_kind),
+                    &current.current_phase,
+                    current.prepare_admitted_at.is_some(),
+                ) {
+                    "UNCERTAIN" => LifecyclePhase::Uncertain,
+                    _ => LifecyclePhase::Deleting,
+                },
                 _ => LifecyclePhase::Accepted,
             };
             let changed = diesel::sql_query(dialect.query("UPDATE computers SET desired_state=?,current_request_id=?,current_payload_hash=?,current_action=?,current_phase=?,initial_start_dispatch_at=NULL,prepare_admitted_at=NULL,expected_old_execution_id=current_execution_id WHERE id=? AND current_request_id=?"))

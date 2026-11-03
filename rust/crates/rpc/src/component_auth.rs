@@ -20,6 +20,7 @@ struct Context {
     service: Arc<ComputersService>,
     control_id: String,
     admission: Arc<AtomicBool>,
+    connections: crate::ComponentConnectionServices,
 }
 impl Context {
     fn admit(&self) -> Result<(), Status> {
@@ -35,12 +36,17 @@ pub struct ComponentAuthenticationServices {
     context: Context,
 }
 impl ComponentAuthenticationServices {
-    pub fn new(service: Arc<ComputersService>, control_id: String) -> Self {
+    pub fn new(
+        service: Arc<ComputersService>,
+        control_id: String,
+        connections: crate::ComponentConnectionServices,
+    ) -> Self {
         Self {
             context: Context {
                 service,
                 control_id,
                 admission: Arc::new(AtomicBool::new(true)),
+                connections,
             },
         }
     }
@@ -150,6 +156,26 @@ impl wire::provider_authentication_server::ProviderAuthentication
         let capabilities = value
             .capabilities
             .ok_or_else(|| Status::invalid_argument("Provider capabilities are required"))?;
+        let substrate = match (
+            wire::ProviderKind::try_from(value.kind),
+            value.docker_daemon_id,
+        ) {
+            (Ok(wire::ProviderKind::Kubernetes), None) => {
+                chapchoo_service::ProviderSubstrate::Kubernetes
+            }
+            (Ok(wire::ProviderKind::Docker), Some(daemon)) => {
+                chapchoo_service::ProviderSubstrate::Docker(
+                    chapchoo_service::DockerDaemonId::parse(daemon).map_err(|_| {
+                        Status::invalid_argument("Docker daemon identity is invalid")
+                    })?,
+                )
+            }
+            _ => {
+                return Err(Status::invalid_argument(
+                    "Provider substrate and binding are invalid",
+                ));
+            }
+        };
         self.context
             .service
             .configure_system_provider(
@@ -162,6 +188,7 @@ impl wire::provider_authentication_server::ProviderAuthentication
                     stop: capabilities.stop,
                     restart: capabilities.restart,
                 },
+                &substrate,
                 AcceptanceTime::System,
             )
             .await
@@ -211,6 +238,21 @@ impl wire::provider_authentication_server::ProviderAuthentication
             .await
             .map_err(status)?;
         crate::peer::validate_provider(&command, &snapshot)?;
+        self.context
+            .connections
+            .verify_native_dequeue(&source, &command)?;
+        if snapshot.substrate.kind() == chapchoo_domain::ProviderKind::Docker
+            && matches!(
+                command.operation,
+                Some(wire::provider_command::Operation::Cleanup(_))
+            )
+        {
+            self.context
+                .service
+                .verify_native_cleanup_suffix(&source, crate::peer::scope(context))
+                .await
+                .map_err(status)?;
+        }
         crate::peer::validate_bootstrap(&self.context.service, &command).await?;
         if matches!(
             command.operation,

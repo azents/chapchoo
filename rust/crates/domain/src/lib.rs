@@ -30,7 +30,7 @@ pub use computer::{
 pub use computer_resource::{
     DockerContainerId, DockerDaemonId, DockerVolumeIdentity, InvalidNativeResource, KubernetesUid,
     ManagedResourceKind, NativeAllocation, NativeIdentity, NativeReservation, NativeScope,
-    ProviderKind, ResourceRole,
+    ProviderKind, ProviderSubstrate, ResourceRole,
 };
 pub use display::{DisplayPatch, DisplaySettings, InvalidDisplaySettings};
 pub use email::{EmailAddress, InvalidEmail};

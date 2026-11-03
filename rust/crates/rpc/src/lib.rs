@@ -9,6 +9,7 @@ mod groups;
 mod ingress;
 mod mapping;
 mod memory;
+mod native_resources;
 mod peer;
 mod reports;
 mod status;

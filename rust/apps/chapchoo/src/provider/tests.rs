@@ -61,12 +61,13 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
     let control = app
         .register_control(&format!("http://{}", peer_listener.local_addr()?))
         .await?;
-    let authentication = ComponentAuthenticationServices::new(app.clone(), control.id.clone());
     let connections = ComponentConnectionServices::new(
         app.clone(),
         control.id.clone(),
         Arc::new(std::sync::atomic::AtomicBool::new(true)),
     );
+    let authentication =
+        ComponentAuthenticationServices::new(app.clone(), control.id.clone(), connections.clone());
     let (stop_server, stopped) = tokio::sync::oneshot::channel();
     let server = tokio::spawn(
         Server::builder()
@@ -131,39 +132,40 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
                     let agents = database
                         .agents(&actor, &team_id, None, 20, AcceptanceTime::System)
                         .await;
-                    let valid =
-                        if let Ok(agents) = agents {
-                            if let Some(agent) = agents.iter().find(|a| {
-                                body["metadata"]["annotations"]["chapchoo.io/computer"].as_str()
-                                    == Some(&a.computer.id)
-                            }) {
-                                if let Ok(snapshot) = database
-                                    .delivery_snapshot(
-                                        Some(&actor),
-                                        ComputerRequest {
-                                            computer_id: &agent.computer.id,
-                                            request_id: &agent.computer.current_request_id,
-                                        },
-                                        None,
-                                    )
-                                    .await
-                                {
-                                    snapshot.resources.iter().any(|r| {
-                                        r.resource_kind == "PVC" && r.resource_uid.is_some()
-                                    }) && (kind != "Pod"
-                                        || snapshot.resources.iter().any(|r| {
-                                            r.resource_kind == "BOOTSTRAP_SECRET"
-                                                && r.resource_uid.is_some()
-                                        }))
-                                } else {
-                                    false
-                                }
+                    let valid = if let Ok(agents) = agents {
+                        if let Some(agent) = agents.iter().find(|a| {
+                            body["metadata"]["annotations"]["chapchoo.io/computer"].as_str()
+                                == Some(&a.computer.id)
+                        }) {
+                            if let Ok(snapshot) = database
+                                .delivery_snapshot(
+                                    Some(&actor),
+                                    ComputerRequest {
+                                        computer_id: &agent.computer.id,
+                                        request_id: &agent.computer.current_request_id,
+                                    },
+                                    None,
+                                )
+                                .await
+                            {
+                                snapshot.resources.iter().any(|r| {
+                                    r.kind() == chapchoo_domain::ManagedResourceKind::Pvc
+                                        && r.identity().is_some()
+                                }) && (kind != "Pod"
+                                    || snapshot.resources.iter().any(|r| {
+                                        r.kind()
+                                            == chapchoo_domain::ManagedResourceKind::BootstrapSecret
+                                            && r.identity().is_some()
+                                    }))
                             } else {
                                 false
                             }
                         } else {
                             false
-                        };
+                        }
+                    } else {
+                        false
+                    };
                     if !valid && let Ok(mut violations) = violations.lock() {
                         violations.push(kind.clone());
                     }
@@ -272,6 +274,7 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
             stop: true,
             restart: true,
         },
+        &chapchoo_domain::ProviderSubstrate::Kubernetes,
         AcceptanceTime::System,
     )
     .await?;
@@ -353,7 +356,7 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
             computer_id: &unstarted.computer.id,
             request_id: "never-started",
         },
-        "fixture",
+        &chapchoo_domain::NativeScope::kubernetes("fixture".into())?,
     )
     .await?;
     app.request_lifecycle(
@@ -401,12 +404,15 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
     let connector_listener = TcpListener::bind("127.0.0.1:0").await?;
     let connector_endpoint = format!("http://{}", connector_listener.local_addr()?);
     let connector_control = app.register_control(&connector_endpoint).await?;
-    let connector_auth =
-        ComponentAuthenticationServices::new(app.clone(), connector_control.id.clone());
     let connector_connections = ComponentConnectionServices::new(
         app.clone(),
         connector_control.id.clone(),
         Arc::new(std::sync::atomic::AtomicBool::new(true)),
+    );
+    let connector_auth = ComponentAuthenticationServices::new(
+        app.clone(),
+        connector_control.id.clone(),
+        connector_connections.clone(),
     );
     let (stop_connector_server, stopped_connector_server) = tokio::sync::oneshot::channel();
     let connector_server = tokio::spawn(
@@ -558,9 +564,16 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
     let pod = before_restoration
         .resources
         .iter()
-        .find(|r| r.resource_kind == "POD" && r.execution_id.as_deref() == Some(&previous))
+        .find(|r| {
+            r.kind() == chapchoo_domain::ManagedResourceKind::Pod
+                && r.execution_id.as_deref() == Some(&previous)
+        })
         .ok_or("Current Pod")?;
-    let pod_path = format!("/api/v1/namespaces/{}/pods/{}", pod.namespace, pod.name);
+    let pod_path = format!(
+        "/api/v1/namespaces/{}/pods/{}",
+        pod.native().scope().as_str(),
+        pod.native().name()
+    );
     let mut disappeared = substrate
         .lock()
         .map_err(|_| "Substrate lock")?
@@ -641,14 +654,18 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
         let pod = snapshot
             .resources
             .iter()
-            .find(|r| r.resource_kind == "POD" && r.execution_id.as_deref() == Some(execution))
+            .find(|r| {
+                r.kind() == chapchoo_domain::ManagedResourceKind::Pod
+                    && r.execution_id.as_deref() == Some(execution)
+            })
             .ok_or("Current Pod")?;
         {
             let mut objects = substrate.lock().map_err(|_| "Substrate lock")?;
             let object = objects
                 .get_mut(&format!(
                     "/api/v1/namespaces/{}/pods/{}",
-                    pod.namespace, pod.name
+                    pod.native().scope().as_str(),
+                    pod.native().name()
                 ))
                 .ok_or("Synthetic current Pod")?;
             object["status"] = json!({"phase":"Succeeded","containerStatuses":[{"name":"computer-connector","image":"fixture","imageID":"fixture-id","ready":false,"restartCount":0,"state":{"terminated":{"containerID":"containerd://fixture","exitCode":0,"reason":"Completed","finishedAt":"2026-11-02T00:00:00Z"}}}]});
@@ -673,12 +690,13 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
     let delayed_secret = accumulated
         .resources
         .iter()
-        .find(|r| r.resource_kind == "BOOTSTRAP_SECRET")
+        .find(|r| r.kind() == chapchoo_domain::ManagedResourceKind::BootstrapSecret)
         .ok_or("Historical Secret missing")?;
     *delayed_finalizer.lock().map_err(|_| "Finalizer lock")? = Some((
         format!(
             "/api/v1/namespaces/{}/secrets/{}",
-            delayed_secret.namespace, delayed_secret.name
+            delayed_secret.native().scope().as_str(),
+            delayed_secret.native().name()
         ),
         None,
     ));

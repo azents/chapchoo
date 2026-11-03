@@ -34,11 +34,20 @@ export enum OwnerAuthority {
   UNRECOGNIZED = -1,
 }
 
+export enum ProviderKind {
+  PROVIDER_KIND_UNSPECIFIED = 0,
+  PROVIDER_KIND_KUBERNETES = 1,
+  PROVIDER_KIND_DOCKER = 2,
+  UNRECOGNIZED = -1,
+}
+
 export enum ResourceKind {
   RESOURCE_KIND_UNSPECIFIED = 0,
   RESOURCE_KIND_POD = 1,
   RESOURCE_KIND_PVC = 2,
   RESOURCE_KIND_BOOTSTRAP_SECRET = 3,
+  RESOURCE_KIND_DOCKER_CONTAINER = 4,
+  RESOURCE_KIND_DOCKER_VOLUME = 5,
   UNRECOGNIZED = -1,
 }
 
@@ -121,6 +130,9 @@ export interface ProviderConfiguration {
   providerId: string;
   name: string;
   capabilities: ProviderCapabilities | undefined;
+  kind: ProviderKind;
+  /** Observed by the external Provider before server-side compare-and-bind. */
+  dockerDaemonId?: string | undefined;
 }
 
 export interface ProviderKeyRequest {
@@ -167,6 +179,8 @@ export interface ProviderHello {
   /** Trusted Provider policy, not user input. Used only by its exact owner. */
   namespace: string;
   connectorEndpoint: string;
+  dockerDaemonId?: string | undefined;
+  kind: ProviderKind;
 }
 
 export interface ConnectorHello {
@@ -205,6 +219,34 @@ export interface ComputerContext {
   executionId: string;
 }
 
+export interface DockerVolumeIdentity {
+  driver: string;
+  scope: string;
+  options: { [key: string]: string };
+  labels: { [key: string]: string };
+  createdAt?: string | undefined;
+}
+
+export interface DockerVolumeIdentity_OptionsEntry {
+  key: string;
+  value: string;
+}
+
+export interface DockerVolumeIdentity_LabelsEntry {
+  key: string;
+  value: string;
+}
+
+export interface DockerContainerNative {
+  daemonId: string;
+  containerId?: string | undefined;
+}
+
+export interface DockerVolumeNative {
+  daemonId: string;
+  identity: DockerVolumeIdentity | undefined;
+}
+
 export interface ManagedResource {
   kind: ResourceKind;
   namespace: string;
@@ -218,10 +260,14 @@ export interface ManagedResource {
    * caller assertion or proof derived from transport failure.
    */
   absenceConfirmed: boolean;
+  dockerContainer?: DockerContainerNative | undefined;
+  dockerVolume?: DockerVolumeNative | undefined;
 }
 
 export interface OwnedPresent {
   uid: string;
+  dockerContainerId?: string | undefined;
+  dockerVolume?: DockerVolumeIdentity | undefined;
 }
 
 /**
@@ -230,6 +276,8 @@ export interface OwnedPresent {
  */
 export interface DefinitivelyAbsent {
   expectedUid?: string | undefined;
+  dockerContainerId?: string | undefined;
+  dockerVolume?: DockerVolumeIdentity | undefined;
 }
 
 export interface UnknownResource {
@@ -276,6 +324,13 @@ export interface PrepareExecution {
   connectorSessionId: string;
   connectorInitialKey: string;
   connectorEndpoint: string;
+  /** Mutually exclusive with the Kubernetes resource fields. */
+  docker: DockerPreparation | undefined;
+}
+
+export interface DockerPreparation {
+  savedVolume: ManagedResource | undefined;
+  container: ManagedResource | undefined;
 }
 
 export interface RetireExecution {
@@ -284,6 +339,8 @@ export interface RetireExecution {
     | undefined;
   /** Running-intent restoration cannot terminate a live/unknown execution. */
   requireTerminal: boolean;
+  /** Mutually exclusive with pod; identifies the exact native execution. */
+  dockerContainer: ManagedResource | undefined;
 }
 
 export interface CleanupResources {
@@ -911,7 +968,7 @@ export const ProviderCapabilities: MessageFns<ProviderCapabilities> = {
 };
 
 function createBaseProviderConfiguration(): ProviderConfiguration {
-  return { providerId: "", name: "", capabilities: undefined };
+  return { providerId: "", name: "", capabilities: undefined, kind: 0, dockerDaemonId: undefined };
 }
 
 export const ProviderConfiguration: MessageFns<ProviderConfiguration> = {
@@ -924,6 +981,12 @@ export const ProviderConfiguration: MessageFns<ProviderConfiguration> = {
     }
     if (message.capabilities !== undefined) {
       ProviderCapabilities.encode(message.capabilities, writer.uint32(26).fork()).join();
+    }
+    if (message.kind !== 0) {
+      writer.uint32(32).int32(message.kind);
+    }
+    if (message.dockerDaemonId !== undefined) {
+      writer.uint32(42).string(message.dockerDaemonId);
     }
     return writer;
   },
@@ -965,6 +1028,22 @@ export const ProviderConfiguration: MessageFns<ProviderConfiguration> = {
             message.capabilities = ProviderCapabilities.decode(reader, reader.uint32());
             continue;
           }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.kind = reader.int32() as any;
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.dockerDaemonId = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -987,6 +1066,8 @@ export const ProviderConfiguration: MessageFns<ProviderConfiguration> = {
     message.capabilities = (object.capabilities !== undefined && object.capabilities !== null)
       ? ProviderCapabilities.fromPartial(object.capabilities)
       : undefined;
+    message.kind = object.kind ?? 0;
+    message.dockerDaemonId = object.dockerDaemonId ?? undefined;
     return message;
   },
 };
@@ -1510,7 +1591,7 @@ export const ConnectorKeyRequest: MessageFns<ConnectorKeyRequest> = {
 };
 
 function createBaseProviderHello(): ProviderHello {
-  return { providerId: "", namespace: "", connectorEndpoint: "" };
+  return { providerId: "", namespace: "", connectorEndpoint: "", dockerDaemonId: undefined, kind: 0 };
 }
 
 export const ProviderHello: MessageFns<ProviderHello> = {
@@ -1523,6 +1604,12 @@ export const ProviderHello: MessageFns<ProviderHello> = {
     }
     if (message.connectorEndpoint !== "") {
       writer.uint32(26).string(message.connectorEndpoint);
+    }
+    if (message.dockerDaemonId !== undefined) {
+      writer.uint32(34).string(message.dockerDaemonId);
+    }
+    if (message.kind !== 0) {
+      writer.uint32(40).int32(message.kind);
     }
     return writer;
   },
@@ -1564,6 +1651,22 @@ export const ProviderHello: MessageFns<ProviderHello> = {
             message.connectorEndpoint = reader.string();
             continue;
           }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.dockerDaemonId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 40) {
+              break;
+            }
+
+            message.kind = reader.int32() as any;
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1584,6 +1687,8 @@ export const ProviderHello: MessageFns<ProviderHello> = {
     message.providerId = object.providerId ?? "";
     message.namespace = object.namespace ?? "";
     message.connectorEndpoint = object.connectorEndpoint ?? "";
+    message.dockerDaemonId = object.dockerDaemonId ?? undefined;
+    message.kind = object.kind ?? 0;
     return message;
   },
 };
@@ -2073,8 +2178,420 @@ export const ComputerContext: MessageFns<ComputerContext> = {
   },
 };
 
+function createBaseDockerVolumeIdentity(): DockerVolumeIdentity {
+  return { driver: "", scope: "", options: {}, labels: {}, createdAt: undefined };
+}
+
+export const DockerVolumeIdentity: MessageFns<DockerVolumeIdentity> = {
+  encode(message: DockerVolumeIdentity, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.driver !== "") {
+      writer.uint32(10).string(message.driver);
+    }
+    if (message.scope !== "") {
+      writer.uint32(18).string(message.scope);
+    }
+    globalThis.Object.entries(message.options).forEach(([key, value]: [string, string]) => {
+      DockerVolumeIdentity_OptionsEntry.encode({ key: key as any, value }, writer.uint32(26).fork()).join();
+    });
+    globalThis.Object.entries(message.labels).forEach(([key, value]: [string, string]) => {
+      DockerVolumeIdentity_LabelsEntry.encode({ key: key as any, value }, writer.uint32(34).fork()).join();
+    });
+    if (message.createdAt !== undefined) {
+      writer.uint32(42).string(message.createdAt);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DockerVolumeIdentity {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseDockerVolumeIdentity();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.driver = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.scope = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            const entry3 = DockerVolumeIdentity_OptionsEntry.decode(reader, reader.uint32());
+            if (entry3.value !== undefined) {
+              message.options[entry3.key] = entry3.value;
+            }
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            const entry4 = DockerVolumeIdentity_LabelsEntry.decode(reader, reader.uint32());
+            if (entry4.value !== undefined) {
+              message.labels[entry4.key] = entry4.value;
+            }
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.createdAt = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<DockerVolumeIdentity>, I>>(base?: I): DockerVolumeIdentity {
+    return DockerVolumeIdentity.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<DockerVolumeIdentity>, I>>(object: I): DockerVolumeIdentity {
+    const message = createBaseDockerVolumeIdentity();
+    message.driver = object.driver ?? "";
+    message.scope = object.scope ?? "";
+    message.options = (globalThis.Object.entries(object.options ?? {}) as [string, string][]).reduce(
+      (acc: { [key: string]: string }, [key, value]: [string, string]) => {
+        if (value !== undefined) {
+          acc[key] = globalThis.String(value);
+        }
+        return acc;
+      },
+      {},
+    );
+    message.labels = (globalThis.Object.entries(object.labels ?? {}) as [string, string][]).reduce(
+      (acc: { [key: string]: string }, [key, value]: [string, string]) => {
+        if (value !== undefined) {
+          acc[key] = globalThis.String(value);
+        }
+        return acc;
+      },
+      {},
+    );
+    message.createdAt = object.createdAt ?? undefined;
+    return message;
+  },
+};
+
+function createBaseDockerVolumeIdentity_OptionsEntry(): DockerVolumeIdentity_OptionsEntry {
+  return { key: "", value: "" };
+}
+
+export const DockerVolumeIdentity_OptionsEntry: MessageFns<DockerVolumeIdentity_OptionsEntry> = {
+  encode(message: DockerVolumeIdentity_OptionsEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.key !== "") {
+      writer.uint32(10).string(message.key);
+    }
+    if (message.value !== "") {
+      writer.uint32(18).string(message.value);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DockerVolumeIdentity_OptionsEntry {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseDockerVolumeIdentity_OptionsEntry();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.key = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.value = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<DockerVolumeIdentity_OptionsEntry>, I>>(
+    base?: I,
+  ): DockerVolumeIdentity_OptionsEntry {
+    return DockerVolumeIdentity_OptionsEntry.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<DockerVolumeIdentity_OptionsEntry>, I>>(
+    object: I,
+  ): DockerVolumeIdentity_OptionsEntry {
+    const message = createBaseDockerVolumeIdentity_OptionsEntry();
+    message.key = object.key ?? "";
+    message.value = object.value ?? "";
+    return message;
+  },
+};
+
+function createBaseDockerVolumeIdentity_LabelsEntry(): DockerVolumeIdentity_LabelsEntry {
+  return { key: "", value: "" };
+}
+
+export const DockerVolumeIdentity_LabelsEntry: MessageFns<DockerVolumeIdentity_LabelsEntry> = {
+  encode(message: DockerVolumeIdentity_LabelsEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.key !== "") {
+      writer.uint32(10).string(message.key);
+    }
+    if (message.value !== "") {
+      writer.uint32(18).string(message.value);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DockerVolumeIdentity_LabelsEntry {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseDockerVolumeIdentity_LabelsEntry();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.key = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.value = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<DockerVolumeIdentity_LabelsEntry>, I>>(
+    base?: I,
+  ): DockerVolumeIdentity_LabelsEntry {
+    return DockerVolumeIdentity_LabelsEntry.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<DockerVolumeIdentity_LabelsEntry>, I>>(
+    object: I,
+  ): DockerVolumeIdentity_LabelsEntry {
+    const message = createBaseDockerVolumeIdentity_LabelsEntry();
+    message.key = object.key ?? "";
+    message.value = object.value ?? "";
+    return message;
+  },
+};
+
+function createBaseDockerContainerNative(): DockerContainerNative {
+  return { daemonId: "", containerId: undefined };
+}
+
+export const DockerContainerNative: MessageFns<DockerContainerNative> = {
+  encode(message: DockerContainerNative, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.daemonId !== "") {
+      writer.uint32(10).string(message.daemonId);
+    }
+    if (message.containerId !== undefined) {
+      writer.uint32(18).string(message.containerId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DockerContainerNative {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseDockerContainerNative();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.daemonId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.containerId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<DockerContainerNative>, I>>(base?: I): DockerContainerNative {
+    return DockerContainerNative.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<DockerContainerNative>, I>>(object: I): DockerContainerNative {
+    const message = createBaseDockerContainerNative();
+    message.daemonId = object.daemonId ?? "";
+    message.containerId = object.containerId ?? undefined;
+    return message;
+  },
+};
+
+function createBaseDockerVolumeNative(): DockerVolumeNative {
+  return { daemonId: "", identity: undefined };
+}
+
+export const DockerVolumeNative: MessageFns<DockerVolumeNative> = {
+  encode(message: DockerVolumeNative, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.daemonId !== "") {
+      writer.uint32(10).string(message.daemonId);
+    }
+    if (message.identity !== undefined) {
+      DockerVolumeIdentity.encode(message.identity, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DockerVolumeNative {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseDockerVolumeNative();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.daemonId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.identity = DockerVolumeIdentity.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<DockerVolumeNative>, I>>(base?: I): DockerVolumeNative {
+    return DockerVolumeNative.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<DockerVolumeNative>, I>>(object: I): DockerVolumeNative {
+    const message = createBaseDockerVolumeNative();
+    message.daemonId = object.daemonId ?? "";
+    message.identity = (object.identity !== undefined && object.identity !== null)
+      ? DockerVolumeIdentity.fromPartial(object.identity)
+      : undefined;
+    return message;
+  },
+};
+
 function createBaseManagedResource(): ManagedResource {
-  return { kind: 0, namespace: "", name: "", uid: undefined, executionId: undefined, absenceConfirmed: false };
+  return {
+    kind: 0,
+    namespace: "",
+    name: "",
+    uid: undefined,
+    executionId: undefined,
+    absenceConfirmed: false,
+    dockerContainer: undefined,
+    dockerVolume: undefined,
+  };
 }
 
 export const ManagedResource: MessageFns<ManagedResource> = {
@@ -2096,6 +2613,12 @@ export const ManagedResource: MessageFns<ManagedResource> = {
     }
     if (message.absenceConfirmed !== false) {
       writer.uint32(48).bool(message.absenceConfirmed);
+    }
+    if (message.dockerContainer !== undefined) {
+      DockerContainerNative.encode(message.dockerContainer, writer.uint32(58).fork()).join();
+    }
+    if (message.dockerVolume !== undefined) {
+      DockerVolumeNative.encode(message.dockerVolume, writer.uint32(66).fork()).join();
     }
     return writer;
   },
@@ -2161,6 +2684,22 @@ export const ManagedResource: MessageFns<ManagedResource> = {
             message.absenceConfirmed = reader.bool();
             continue;
           }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.dockerContainer = DockerContainerNative.decode(reader, reader.uint32());
+            continue;
+          }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.dockerVolume = DockerVolumeNative.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2184,18 +2723,30 @@ export const ManagedResource: MessageFns<ManagedResource> = {
     message.uid = object.uid ?? undefined;
     message.executionId = object.executionId ?? undefined;
     message.absenceConfirmed = object.absenceConfirmed ?? false;
+    message.dockerContainer = (object.dockerContainer !== undefined && object.dockerContainer !== null)
+      ? DockerContainerNative.fromPartial(object.dockerContainer)
+      : undefined;
+    message.dockerVolume = (object.dockerVolume !== undefined && object.dockerVolume !== null)
+      ? DockerVolumeNative.fromPartial(object.dockerVolume)
+      : undefined;
     return message;
   },
 };
 
 function createBaseOwnedPresent(): OwnedPresent {
-  return { uid: "" };
+  return { uid: "", dockerContainerId: undefined, dockerVolume: undefined };
 }
 
 export const OwnedPresent: MessageFns<OwnedPresent> = {
   encode(message: OwnedPresent, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.uid !== "") {
       writer.uint32(10).string(message.uid);
+    }
+    if (message.dockerContainerId !== undefined) {
+      writer.uint32(18).string(message.dockerContainerId);
+    }
+    if (message.dockerVolume !== undefined) {
+      DockerVolumeIdentity.encode(message.dockerVolume, writer.uint32(26).fork()).join();
     }
     return writer;
   },
@@ -2221,6 +2772,22 @@ export const OwnedPresent: MessageFns<OwnedPresent> = {
             message.uid = reader.string();
             continue;
           }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.dockerContainerId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.dockerVolume = DockerVolumeIdentity.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2239,18 +2806,28 @@ export const OwnedPresent: MessageFns<OwnedPresent> = {
   fromPartial<I extends Exact<DeepPartial<OwnedPresent>, I>>(object: I): OwnedPresent {
     const message = createBaseOwnedPresent();
     message.uid = object.uid ?? "";
+    message.dockerContainerId = object.dockerContainerId ?? undefined;
+    message.dockerVolume = (object.dockerVolume !== undefined && object.dockerVolume !== null)
+      ? DockerVolumeIdentity.fromPartial(object.dockerVolume)
+      : undefined;
     return message;
   },
 };
 
 function createBaseDefinitivelyAbsent(): DefinitivelyAbsent {
-  return { expectedUid: undefined };
+  return { expectedUid: undefined, dockerContainerId: undefined, dockerVolume: undefined };
 }
 
 export const DefinitivelyAbsent: MessageFns<DefinitivelyAbsent> = {
   encode(message: DefinitivelyAbsent, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.expectedUid !== undefined) {
       writer.uint32(10).string(message.expectedUid);
+    }
+    if (message.dockerContainerId !== undefined) {
+      writer.uint32(18).string(message.dockerContainerId);
+    }
+    if (message.dockerVolume !== undefined) {
+      DockerVolumeIdentity.encode(message.dockerVolume, writer.uint32(26).fork()).join();
     }
     return writer;
   },
@@ -2276,6 +2853,22 @@ export const DefinitivelyAbsent: MessageFns<DefinitivelyAbsent> = {
             message.expectedUid = reader.string();
             continue;
           }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.dockerContainerId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.dockerVolume = DockerVolumeIdentity.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2294,6 +2887,10 @@ export const DefinitivelyAbsent: MessageFns<DefinitivelyAbsent> = {
   fromPartial<I extends Exact<DeepPartial<DefinitivelyAbsent>, I>>(object: I): DefinitivelyAbsent {
     const message = createBaseDefinitivelyAbsent();
     message.expectedUid = object.expectedUid ?? undefined;
+    message.dockerContainerId = object.dockerContainerId ?? undefined;
+    message.dockerVolume = (object.dockerVolume !== undefined && object.dockerVolume !== null)
+      ? DockerVolumeIdentity.fromPartial(object.dockerVolume)
+      : undefined;
     return message;
   },
 };
@@ -2747,6 +3344,7 @@ function createBasePrepareExecution(): PrepareExecution {
     connectorSessionId: "",
     connectorInitialKey: "",
     connectorEndpoint: "",
+    docker: undefined,
   };
 }
 
@@ -2772,6 +3370,9 @@ export const PrepareExecution: MessageFns<PrepareExecution> = {
     }
     if (message.connectorEndpoint !== "") {
       writer.uint32(58).string(message.connectorEndpoint);
+    }
+    if (message.docker !== undefined) {
+      DockerPreparation.encode(message.docker, writer.uint32(66).fork()).join();
     }
     return writer;
   },
@@ -2845,6 +3446,14 @@ export const PrepareExecution: MessageFns<PrepareExecution> = {
             message.connectorEndpoint = reader.string();
             continue;
           }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.docker = DockerPreparation.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2875,12 +3484,86 @@ export const PrepareExecution: MessageFns<PrepareExecution> = {
     message.connectorSessionId = object.connectorSessionId ?? "";
     message.connectorInitialKey = object.connectorInitialKey ?? "";
     message.connectorEndpoint = object.connectorEndpoint ?? "";
+    message.docker = (object.docker !== undefined && object.docker !== null)
+      ? DockerPreparation.fromPartial(object.docker)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseDockerPreparation(): DockerPreparation {
+  return { savedVolume: undefined, container: undefined };
+}
+
+export const DockerPreparation: MessageFns<DockerPreparation> = {
+  encode(message: DockerPreparation, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.savedVolume !== undefined) {
+      ManagedResource.encode(message.savedVolume, writer.uint32(10).fork()).join();
+    }
+    if (message.container !== undefined) {
+      ManagedResource.encode(message.container, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DockerPreparation {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseDockerPreparation();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.savedVolume = ManagedResource.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.container = ManagedResource.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<DockerPreparation>, I>>(base?: I): DockerPreparation {
+    return DockerPreparation.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<DockerPreparation>, I>>(object: I): DockerPreparation {
+    const message = createBaseDockerPreparation();
+    message.savedVolume = (object.savedVolume !== undefined && object.savedVolume !== null)
+      ? ManagedResource.fromPartial(object.savedVolume)
+      : undefined;
+    message.container = (object.container !== undefined && object.container !== null)
+      ? ManagedResource.fromPartial(object.container)
+      : undefined;
     return message;
   },
 };
 
 function createBaseRetireExecution(): RetireExecution {
-  return { pod: undefined, requireTerminal: false };
+  return { pod: undefined, requireTerminal: false, dockerContainer: undefined };
 }
 
 export const RetireExecution: MessageFns<RetireExecution> = {
@@ -2890,6 +3573,9 @@ export const RetireExecution: MessageFns<RetireExecution> = {
     }
     if (message.requireTerminal !== false) {
       writer.uint32(16).bool(message.requireTerminal);
+    }
+    if (message.dockerContainer !== undefined) {
+      ManagedResource.encode(message.dockerContainer, writer.uint32(26).fork()).join();
     }
     return writer;
   },
@@ -2923,6 +3609,14 @@ export const RetireExecution: MessageFns<RetireExecution> = {
             message.requireTerminal = reader.bool();
             continue;
           }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.dockerContainer = ManagedResource.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2944,6 +3638,9 @@ export const RetireExecution: MessageFns<RetireExecution> = {
       ? ManagedResource.fromPartial(object.pod)
       : undefined;
     message.requireTerminal = object.requireTerminal ?? false;
+    message.dockerContainer = (object.dockerContainer !== undefined && object.dockerContainer !== null)
+      ? ManagedResource.fromPartial(object.dockerContainer)
+      : undefined;
     return message;
   },
 };

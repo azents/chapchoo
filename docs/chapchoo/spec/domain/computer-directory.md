@@ -11,7 +11,7 @@ code_paths:
   - rust/crates/service/src/computers.rs
   - rust/crates/persistence/tests/computer_executions.rs
   - rust/crates/service/tests/computers.rs
-last_verified_at: 2026-11-02
+last_verified_at: 2026-11-03
 spec_version: 1
 ---
 
@@ -67,6 +67,19 @@ sequenceDiagram
 ```
 
 ## Credentials, Renewal and Frame Checks
+
+Kubernetes and Docker Providers are external trusted processes, including
+third-party-operated processes. SYSTEM is an owner-admission category, not a
+requirement to colocate with the backend. Neither Provider receives the product
+database configuration or installation encryption root. Native IO belongs to
+the Provider; route, immutable substrate/daemon binding, reservation, evidence
+and retirement transactions belong to the server behind authenticated Control.
+
+Provider Hello declares its exact substrate and native scope. Kubernetes scope
+is its managed namespace; Docker scope must match its immutable bound daemon.
+Unknown/mixed kinds or scopes fail admission rather than being interpreted as
+Kubernetes identities. This check does not attest the remote daemon atomically
+or authorize another connection to reuse a prior successful source check.
 
 Computer Provider operations lock Provider then route then shared Control.
 Computer Connector operations use the existing Computer/session lock, then route

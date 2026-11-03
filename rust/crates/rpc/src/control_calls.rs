@@ -407,6 +407,7 @@ mod tests {
                 wire::provider_command::Operation::Retire(wire::RetireExecution {
                     pod: None,
                     require_terminal: false,
+                    docker_container: None,
                 })
             } else {
                 wire::provider_command::Operation::Observe(wire::ObserveResources {
@@ -587,10 +588,12 @@ mod tests {
                     uid: Some("u".repeat(128)),
                     execution_id: Some("e".repeat(128)),
                     absence_confirmed: false,
+                    native: None,
                 }),
                 evidence: Some(wire::resource_evidence::Evidence::Present(
                     wire::OwnedPresent {
                         uid: "u".repeat(128),
+                        native_identity: None,
                     },
                 )),
             })

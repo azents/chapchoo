@@ -2,10 +2,7 @@
 use crate::status::status;
 use chapchoo_domain::LifecyclePhase;
 use chapchoo_protocol::control as wire;
-use chapchoo_service::{
-    ComputerRequest, ComputersService, ManagedResourceKind, ProviderSource, ResourceEvidence,
-    ResourceReport,
-};
+use chapchoo_service::{ComputerRequest, ComputersService, ProviderSource, ResourceReport};
 use tonic::Status;
 pub(crate) async fn resource(
     service: &ComputersService,
@@ -16,24 +13,25 @@ pub(crate) async fn resource(
     let resource = evidence
         .resource
         .ok_or_else(|| Status::invalid_argument("Resource identity is required"))?;
-    let kind = match wire::ResourceKind::try_from(resource.kind) {
-        Ok(wire::ResourceKind::Pod) => ManagedResourceKind::Pod,
-        Ok(wire::ResourceKind::Pvc) => ManagedResourceKind::Pvc,
-        Ok(wire::ResourceKind::BootstrapSecret) => ManagedResourceKind::BootstrapSecret,
-        _ => return Err(Status::invalid_argument("Resource kind is invalid")),
-    };
+    let native = crate::native_resources::decode(&resource)?;
     let value = evidence
         .evidence
         .ok_or_else(|| Status::invalid_argument("Resource evidence is required"))?;
-    let evidence = match &value {
-        wire::resource_evidence::Evidence::Present(value) => {
-            ResourceEvidence::OwnedPresent { uid: &value.uid }
+    let evidence = crate::native_resources::evidence(&value, native.native.kind())?;
+    if let Some(asserted) = &native.identity {
+        let agrees = match &evidence {
+            crate::native_resources::DecodedEvidence::Present(identity) => asserted == identity,
+            crate::native_resources::DecodedEvidence::Absent(identity) => {
+                Some(asserted) == identity.as_ref()
+            }
+            crate::native_resources::DecodedEvidence::Unknown => true,
+        };
+        if !agrees {
+            return Err(Status::invalid_argument(
+                "Native identity and evidence disagree",
+            ));
         }
-        wire::resource_evidence::Evidence::Absent(value) => ResourceEvidence::DefinitivelyAbsent {
-            expected_uid: value.expected_uid.as_deref(),
-        },
-        wire::resource_evidence::Evidence::Unknown(_) => ResourceEvidence::Unknown,
-    };
+    }
     service
         .report_resource(
             source,
@@ -42,11 +40,9 @@ pub(crate) async fn resource(
                 request_id: &computer.request_id,
             },
             ResourceReport {
-                kind,
-                namespace: &resource.namespace,
-                name: &resource.name,
-                execution_id: resource.execution_id.as_deref(),
-                evidence,
+                native: &native.native,
+                execution_id: native.execution_id.as_deref(),
+                evidence: evidence.store(),
             },
         )
         .await

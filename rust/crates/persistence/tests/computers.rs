@@ -136,7 +136,13 @@ async fn exercise(store: Store, users: &[BearerSecret]) -> Result<(), TestError>
         restart: true,
     };
     store
-        .configure_system_provider(&proof, "Configured", caps, NOW)
+        .configure_system_provider(
+            &proof,
+            "Configured",
+            caps,
+            &chapchoo_domain::ProviderSubstrate::Kubernetes,
+            NOW,
+        )
         .await?;
     let wrong = SystemOwnerVerifier::new(
         "other-owner".into(),
@@ -146,7 +152,13 @@ async fn exercise(store: Store, users: &[BearerSecret]) -> Result<(), TestError>
     .verify("provider", &config_key)?;
     assert!(matches!(
         store
-            .configure_system_provider(&wrong, "Hijacked", caps, NOW)
+            .configure_system_provider(
+                &wrong,
+                "Hijacked",
+                caps,
+                &chapchoo_domain::ProviderSubstrate::Kubernetes,
+                NOW
+            )
             .await,
         Err(StoreError::Forbidden)
     ));

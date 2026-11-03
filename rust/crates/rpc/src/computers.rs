@@ -4,7 +4,7 @@ use chapchoo_domain as domain;
 use chapchoo_protocol::computers as wire;
 use chapchoo_service::{
     AcceptanceTime, AgentSummary, ComputerSummary, ComputersService, CreationOutcome,
-    LifecycleRequest, ResourceCursor,
+    LifecycleRequest,
 };
 use std::sync::{
     Arc,
@@ -428,6 +428,10 @@ impl wire::provider_inventory_server::ProviderInventory for InventoryAdapter {
             result.push(wire::ProviderSummary {
                 id: item.id,
                 name: item.name,
+                kind: match item.kind {
+                    domain::ProviderKind::Kubernetes => wire::ProviderKind::Kubernetes,
+                    domain::ProviderKind::Docker => wire::ProviderKind::Docker,
+                } as i32,
                 capabilities: Some(wire::ProviderCapabilities {
                     create: item.capabilities.create,
                     start: item.capabilities.start,
@@ -507,11 +511,10 @@ impl wire::provider_inventory_server::ProviderInventory for InventoryAdapter {
         let value = request.into_inner();
         id(&value.computer_id)?;
         let limit = limit(value.limit)?;
-        let cursor = value.after.map(|c| ResourceCursor {
-            kind: c.kind,
-            namespace: c.namespace,
-            name: c.name,
-        });
+        let cursor = value
+            .after
+            .map(crate::native_resources::decode_cursor)
+            .transpose()?;
         let items = self
             .0
             .service
@@ -525,26 +528,39 @@ impl wire::provider_inventory_server::ProviderInventory for InventoryAdapter {
             .await
             .map_err(status)?;
         let next_after = if items.len() == limit as usize {
-            items.last().map(|r| wire::ResourceCursor {
-                kind: r.resource_kind.clone(),
-                namespace: r.namespace.clone(),
-                name: r.name.clone(),
-            })
+            items
+                .last()
+                .map(|r| crate::native_resources::cursor(r.native()))
         } else {
             None
         };
         let items = items
             .into_iter()
             .map(|r| {
+                let docker_container_id = match r.identity() {
+                    Some(domain::NativeIdentity::DockerContainer(id)) => {
+                        Some(id.as_str().to_owned())
+                    }
+                    _ => None,
+                };
+                let docker_volume_created_at = match r.identity() {
+                    Some(domain::NativeIdentity::DockerVolume(volume)) => {
+                        volume.created_at().map(str::to_owned)
+                    }
+                    _ => None,
+                };
                 Ok(wire::InventoryResource {
-                    identity: Some(wire::ResourceCursor {
-                        kind: r.resource_kind,
-                        namespace: r.namespace,
-                        name: r.name,
-                    }),
-                    uid: r.resource_uid,
+                    identity: Some(crate::native_resources::cursor(r.native())),
+                    uid: r.kubernetes_uid().map(str::to_owned),
+                    docker_container_id,
+                    docker_volume_created_at,
                     execution_id: r.execution_id,
-                    presence: r.presence,
+                    presence: match r.presence {
+                        domain::ResourcePresence::Present => "PRESENT",
+                        domain::ResourcePresence::Absent => "ABSENT",
+                        domain::ResourcePresence::Unknown => "UNKNOWN",
+                    }
+                    .into(),
                     observed_at: r.observed_at.map(timestamp).transpose()?,
                 })
             })

@@ -15,12 +15,16 @@ code_paths:
   - rust/crates/persistence/src/component_keys.rs
   - rust/crates/persistence/src/connector_keys.rs
   - rust/crates/persistence/src/computer_executions.rs
+  - rust/crates/persistence/src/native_resources.rs
   - rust/crates/persistence/src/agent_cleanup.rs
   - rust/crates/persistence/src/delivery.rs
   - rust/crates/service/src/computers.rs
   - rust/crates/persistence/src/preparation.rs
   - rust/crates/persistence/migrations
   - rust/crates/persistence/tests/computer_schema.rs
+  - rust/crates/persistence/tests/native_binding.rs
+  - rust/crates/persistence/tests/native_execution.rs
+  - rust/crates/persistence/tests/native_migration.rs
   - rust/crates/persistence/tests/computers.rs
   - rust/crates/persistence/tests/computer_executions.rs
   - rust/crates/persistence/tests/agent_teams.rs
@@ -59,11 +63,41 @@ namespaces. Volume identity accepts only local driver/scope with no driver
 options; it has no synthetic native UID. Equality preserves original metadata
 and the distinction between unavailable creation time and an observed value.
 
-These values grant no effect, report or recovery authority. Existing storage,
-wire and runtime still admit Kubernetes only at this implementation boundary;
-Docker reservation/binding/migrations and lifecycle activation are separate
-delivery work. Current-source authorization, immutable accepted allocation and
-sticky absence remain enforced at the owning store/adapter boundaries.
+Storage and wire admission use these typed values for both substrates. The
+existing executable adapter remains Kubernetes-specific; Docker SDK execution
+is not yet activated. Current-source authorization, immutable accepted allocation
+and sticky absence remain enforced at the owning store/adapter boundaries.
+
+## Native schema and preservation
+
+Forward migration 6 preserves existing Kubernetes rows and adds immutable
+`KUBERNETES`/`DOCKER` Provider kind plus nullable Docker daemon binding. Docker
+binding is compare-and-bind under the Provider lock: the first accepted daemon
+is retained, concurrent different first bindings conflict, and later metadata
+configuration cannot replace the kind or daemon. Provider processes obtain no
+database configuration or installation encryption root; binding, reservations
+and evidence changes occur only inside authenticated server service operations.
+
+Resources use kind, native scope kind/value and name as their unique address.
+Kubernetes keeps its namespace and original UID. Docker keeps daemon/name,
+full 64-character container ID or the original local-volume creation/label
+identity. Native identity columns are mutually exclusive and ingress checks
+their agreement with resource kind and Provider binding. Names and daemon IDs
+are separate values; a daemon is not a namespace. Saved-environment and execution
+completeness derive from typed resource roles, not a fixed three-object list.
+
+SQLite rebuilds the closed eleven-table dependency graph: `computer_providers`,
+`provider_keys`, `provider_key_requests`, `computers`, `agents`,
+`computer_executions`, `computer_resources`, `connector_sessions`,
+`connector_key_requests`, `provider_connections` and `connector_connections`.
+Preparation keeps foreign keys enabled, refuses unexpected incoming dependencies,
+stages/copies/compares every row and identity, empties the cyclic old graph before
+replacement, restores indexes and verifies counts/foreign-key integrity atomically.
+Only the old snapshot's nullable execution cycle is cleared during removal.
+Credential BLOBs, key receipts, routes and external dependents are preserved.
+PostgreSQL alters the corresponding constrained native columns in place. Both
+engines test populated migration and rollback; schema down-migration refuses
+destructive native-data erasure.
 
 ## Identities and Relationships
 
@@ -248,9 +282,10 @@ Delete can supersede preparation and persists terminal intent. In the same
 transaction it revokes that Computer's Connector sessions, discards encrypted
 bootstrap/operational recovery material and removes Connector routes. Before
 replacing the intent it can record non-allocation only for the current candidate
-and UID-less PVC when the captured Prepare fence proves no possible dispatch
+and unallocated saved environment when the captured Prepare fence proves no possible dispatch
 (or an acknowledged safe preparation failure). Older execution resources and
-allocated UIDs are unchanged. These absence facts have no Provider source until
+allocated native identities are unchanged. Every native identity column
+participates in the never-allocated proof. These absence facts have no Provider source until
 fresh observation agrees; a possibly forwarded Prepare never grants this proof. Force
 removal requires the current deletion request and removes only the Agent; residual
 Computer/cleanup authority and creation receipt survive. An owned removed Agent
@@ -259,6 +294,12 @@ exact current deletion Request ID. Wrong IDs reject, including retries racing
 normal or forced removal. After inventory collection, removal retry returns
 not-found rather than treating a creation receipt as proof of a deletion request.
 Creation replay still returns removed without recreating it.
+
+For Docker, direct Delete and context-driven leave/kick/Team deletion preserve
+prior uncertain retirement or possibly admitted preparation uncertainty. A new
+deleting Request ID cannot erase a possibly accepted native effect and create
+fresh dispatch permission. Connector revocation and terminal cleanup intent
+still commit; force removal does not clear that uncertainty.
 
 Provider key rotation/issuance requires verified system-owner scope or the current
 owning User session, never the Provider communication key. Each credential mutation
@@ -274,6 +315,28 @@ new owner-authorized issuance cannot revoke the new key. Owner-authorized fresh
 issuance can restore communication authority after revocation, but a new component
 connection is still needed. Key defaults are 24h validity, proactive owner rotation
 from 12h, and at most 5m prior-key overlap. No root or old-secret archive is exposed.
+
+## Docker retirement authority
+
+The current-source/current-request transaction claims eligible fresh
+Stop/Restart `RETIRING` or terminal Delete `DELETING` to `UNCERTAIN` once.
+Qualified terminal retirement under Running intent additionally requires the
+exact completed current execution with admitted preparation; its expected old
+execution remains recorded. An already uncertain request yields no new admission.
+Late Running evidence cannot clear this Docker retirement fence.
+
+The returned opaque admission records original phase/source/request/execution.
+Only Control's exact live manifest and proven prequeue/dequeue NotStarted result
+may release that admission. Timeout, cancellation, connection loss and native
+rejection after any prior effect do not qualify. Durable state alone cannot prove
+a native call was never submitted. Current-source absence can retire an exact
+execution observationally without replay permission.
+
+Saved-volume cleanup requires terminal deleting intent, no current or live
+execution, current-source qualified absence of every reserved Docker container,
+and Control's live known-never-submitted suffix authority. Complete absence of
+every reserved resource can independently finish cleanup after correlation loss;
+absence of a subset cannot authorize a new volume mutation.
 
 ## Execution-Bound Connector Credentials
 
@@ -319,13 +382,14 @@ timestamp. Expired/draining Control, expired route, key revocation, a superseded
 route or a different credential cannot authorize a report. After the Computer
 lock, exact current Request ID and current authority are rechecked.
 
-`reserve_execution` commits the candidate execution and exact Pod, bootstrap
-Secret and initial PVC resource names before any external creation. A recovered
+`reserve_execution` commits the candidate execution and substrate-native resource
+names before external creation: Pod/Secret/PVC for Kubernetes, container/original
+saved volume for Docker. A recovered
 current candidate is returned even if the service prepared different draft IDs
 and names. Uncertain/blocked preparation does not replace that candidate.
 Resource reservation collisions roll back the entire operation. A successor
 requires prior-execution retirement and current-connection evidence of the
-original saved PVC with its actual UID. First allocation may resume only with
+original saved resource with its accepted native identity. First allocation may resume only with
 definitive never-allocated evidence; it cannot replace previously allocated
 missing storage. Initial creation uses create capability; saved-environment
 starts/restoration use start capability.

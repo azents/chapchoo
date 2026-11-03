@@ -97,6 +97,8 @@ pub(crate) async fn run_with_adapter(
         wire::ProviderConfiguration {
             provider_id: provider.into(),
             name: name.into(),
+            kind: wire::ProviderKind::Kubernetes as i32,
+            docker_daemon_id: None,
             capabilities: Some(wire::ProviderCapabilities {
                 create: true,
                 start: true,
@@ -216,6 +218,8 @@ async fn connected(
                 provider_id: provider.into(),
                 namespace: adapter.namespace().into(),
                 connector_endpoint: connector_endpoint.into(),
+                kind: wire::ProviderKind::Kubernetes as i32,
+                docker_daemon_id: None,
             })),
         })
         .await?;
@@ -448,6 +452,9 @@ impl Worker {
                 .await?;
             }
             wire::provider_command::Operation::Prepare(mut value) => {
+                if value.docker.is_some() {
+                    return Err(chapchoo_kubernetes::Error::Configuration.into());
+                }
                 self.preparation_retry_safe = false;
                 let pvc = value.saved_pvc.as_ref().ok_or("Saved PVC missing")?;
                 let pvc = self
@@ -520,6 +527,9 @@ impl Worker {
                     .await?;
             }
             wire::provider_command::Operation::Retire(value) => {
+                if value.docker_container.is_some() {
+                    return Err(chapchoo_kubernetes::Error::Configuration.into());
+                }
                 let pod = value.pod.as_ref().ok_or("Retirement Pod missing")?;
                 if value.require_terminal {
                     let prior = self.adapter.observe(&context, pod, None).await?;
@@ -627,6 +637,7 @@ fn present(resource: wire::ManagedResource) -> wire::ResourceEvidence {
         evidence: Some(wire::resource_evidence::Evidence::Present(
             wire::OwnedPresent {
                 uid: resource.uid.clone().unwrap_or_default(),
+                native_identity: None,
             },
         )),
         resource: Some(resource),
@@ -636,9 +647,11 @@ fn evidence(observation: Observation) -> wire::ResourceEvidence {
     let evidence = match observation.presence {
         Presence::Present => wire::resource_evidence::Evidence::Present(wire::OwnedPresent {
             uid: observation.resource.uid.clone().unwrap_or_default(),
+            native_identity: None,
         }),
         Presence::Absent => wire::resource_evidence::Evidence::Absent(wire::DefinitivelyAbsent {
             expected_uid: observation.resource.uid.clone(),
+            expected_native_identity: None,
         }),
         Presence::Unknown => wire::resource_evidence::Evidence::Unknown(wire::UnknownResource {}),
     };

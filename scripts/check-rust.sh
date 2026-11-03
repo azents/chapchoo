@@ -22,7 +22,7 @@ allowed = {
     "chapchoo-persistence": {
         "chapchoo-crypto", "chapchoo-domain", "diesel", "diesel-async",
         "diesel_migrations", "libsqlite3-sys", "thiserror", "zeroize", "tokio",
-        "base64", "tempfile",
+        "base64", "tempfile", "serde", "serde_json",
     },
     "chapchoo-protocol": {
         "prost", "prost-types", "tonic", "tonic-prost", "tonic-prost-build",

@@ -37,9 +37,12 @@ impl ControlPlane {
             registration.id.clone(),
             admission.clone(),
         );
-        let authentication =
-            ComponentAuthenticationServices::new(service.clone(), registration.id.clone())
-                .with_admission(admission);
+        let authentication = ComponentAuthenticationServices::new(
+            service.clone(),
+            registration.id.clone(),
+            connections.clone(),
+        )
+        .with_admission(admission);
         let peer = PeerServices::new(service.clone(), connections.clone());
         let (channel, incoming) = memory_transport();
         let delivery = PeerDelivery::new(service.clone());

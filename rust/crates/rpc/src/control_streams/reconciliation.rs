@@ -5,17 +5,14 @@ use crate::PeerDelivery;
 use chapchoo_service::{ComputerRequest, ManagedComputer, ManagedResource};
 
 fn resource(value: &ManagedResource) -> wire::ManagedResource {
-    wire::ManagedResource {
-        kind: match value.resource_kind.as_str() {
-            "POD" => wire::ResourceKind::Pod,
-            "PVC" => wire::ResourceKind::Pvc,
-            _ => wire::ResourceKind::BootstrapSecret,
-        } as i32,
-        namespace: value.namespace.clone(),
-        name: value.name.clone(),
-        uid: value.resource_uid.clone(),
-        execution_id: value.execution_id.clone(),
-        absence_confirmed: value.absence_confirmed_at.is_some(),
+    crate::native_resources::encode(value)
+}
+fn retire_resource(value: &ManagedResource, require_terminal: bool) -> wire::RetireExecution {
+    let docker = value.kind() == chapchoo_domain::ManagedResourceKind::DockerContainer;
+    wire::RetireExecution {
+        pod: (!docker).then(|| resource(value)),
+        docker_container: docker.then(|| resource(value)),
+        require_terminal,
     }
 }
 fn context(value: &ManagedComputer) -> wire::ComputerContext {
@@ -29,7 +26,7 @@ fn context(value: &ManagedComputer) -> wire::ComputerContext {
             .unwrap_or_default(),
     }
 }
-fn outcome(outcome: wire::ForwardingOutcome) -> wire::ProviderInvocationResult {
+pub(super) fn outcome(outcome: wire::ForwardingOutcome) -> wire::ProviderInvocationResult {
     wire::ProviderInvocationResult {
         outcome: outcome as i32,
         result: None,
@@ -52,7 +49,7 @@ fn not_started(result: &Result<wire::ProviderInvocationResult, Status>) -> bool 
                     ))
         })
 }
-fn call_id() -> Result<String, Status> {
+pub(super) fn call_id() -> Result<String, Status> {
     Ok(chapchoo_crypto::BearerSecret::generate()
         .map_err(|_| Status::internal("Call identity generation failed"))?
         .digest()
@@ -187,6 +184,7 @@ impl ComponentConnectionServices {
                     .await;
             }
             self.prune_cleanup(&entry, &source).await?;
+            self.prune_native(&entry, &source).await?;
             let _ = self
                 .inner
                 .service
@@ -243,6 +241,25 @@ impl ComponentConnectionServices {
         if snapshot.computer.cleanup_completed_at.is_some() {
             return Ok(outcome(wire::ForwardingOutcome::Completed));
         }
+        if snapshot.substrate.kind() == chapchoo_domain::ProviderKind::Docker
+            && (snapshot.computer.desired_state == "DELETING"
+                || snapshot.computer.current_phase == "RETIRING"
+                || (snapshot.computer.current_phase == "UNCERTAIN"
+                    && snapshot.computer.expected_old_execution_id.is_some()))
+        {
+            let native_context = wire::ComputerContext {
+                execution_id: snapshot
+                    .computer
+                    .current_execution_id
+                    .clone()
+                    .or_else(|| snapshot.computer.expected_old_execution_id.clone())
+                    .unwrap_or_default(),
+                ..computer.clone()
+            };
+            return self
+                .reconcile_native_retirement(&entry, &native_context, snapshot, false, deadline)
+                .await;
+        }
         let mut terminal = false;
         if snapshot.computer.desired_state == "RUNNING"
             && snapshot.computer.current_phase == "BLOCKED"
@@ -252,6 +269,7 @@ impl ComponentConnectionServices {
             // a proven-safe failed preparation.
             return Ok(outcome(wire::ForwardingOutcome::Completed));
         }
+        let substrate_kind = snapshot.substrate.kind();
         let unsubmitted_prepare = snapshot.computer.current_phase == "STARTING"
             && snapshot.computer.prepare_admitted_at.is_none()
             && snapshot.computer.initial_start_dispatch_at.is_none();
@@ -274,9 +292,9 @@ impl ComponentConnectionServices {
                             .resources
                             .iter()
                             .filter(|r| {
-                                r.resource_kind == "PVC"
+                                r.kind() == substrate_kind.saved_resource_kind()
                                     || r.execution_id == snapshot.computer.current_execution_id
-                                    || (r.resource_kind == "POD"
+                                    || (r.kind() == substrate_kind.execution_resource_kind()
                                         && r.execution_id
                                             == snapshot.computer.expected_old_execution_id)
                             })
@@ -313,11 +331,21 @@ impl ComponentConnectionServices {
             ..computer.clone()
         };
         if terminal && state.desired_state == "RUNNING" && state.current_execution_id.is_some() {
+            if snapshot.substrate.kind() == chapchoo_domain::ProviderKind::Docker {
+                return self
+                    .reconcile_native_retirement(&entry, &current, snapshot, true, deadline)
+                    .await;
+            }
             let pod = snapshot
                 .resources
                 .iter()
-                .find(|r| r.resource_kind == "POD" && r.execution_id == state.current_execution_id)
-                .ok_or_else(|| Status::failed_precondition("Terminal execution Pod missing"))?;
+                .find(|r| {
+                    r.kind() == substrate_kind.execution_resource_kind()
+                        && r.execution_id == state.current_execution_id
+                })
+                .ok_or_else(|| {
+                    Status::failed_precondition("Terminal native execution object is missing")
+                })?;
             self.inner
                 .service
                 .report_lifecycle_issue(
@@ -332,10 +360,7 @@ impl ComponentConnectionServices {
                 .dispatch_convergence(
                     &entry,
                     &current,
-                    wire::provider_command::Operation::Retire(wire::RetireExecution {
-                        pod: Some(resource(pod)),
-                        require_terminal: true,
-                    }),
+                    wire::provider_command::Operation::Retire(retire_resource(pod, true)),
                     deadline,
                 )
                 .await;
@@ -347,8 +372,13 @@ impl ComponentConnectionServices {
             let pod = snapshot
                 .resources
                 .iter()
-                .find(|r| r.resource_kind == "POD" && r.execution_id == state.current_execution_id)
-                .ok_or_else(|| Status::failed_precondition("Current execution Pod is missing"))?;
+                .find(|r| {
+                    r.kind() == substrate_kind.execution_resource_kind()
+                        && r.execution_id == state.current_execution_id
+                })
+                .ok_or_else(|| {
+                    Status::failed_precondition("Current native execution object is missing")
+                })?;
             self.inner
                 .service
                 .report_lifecycle_issue(
@@ -363,10 +393,7 @@ impl ComponentConnectionServices {
                 .dispatch_convergence(
                     &entry,
                     &current,
-                    wire::provider_command::Operation::Retire(wire::RetireExecution {
-                        pod: Some(resource(pod)),
-                        require_terminal: false,
-                    }),
+                    wire::provider_command::Operation::Retire(retire_resource(pod, false)),
                     deadline,
                 )
                 .await;
@@ -385,7 +412,7 @@ impl ComponentConnectionServices {
         let reservation = self
             .inner
             .service
-            .reserve_execution(&source, scope, &policy.namespace)
+            .reserve_execution(&source, scope, &policy.native_scope)
             .await
             .map_err(status)?;
         let session = self
@@ -399,27 +426,39 @@ impl ComponentConnectionServices {
             )
             .await
             .map_err(status)?;
-        let find = |kind: &str| {
+        let find = |kind: chapchoo_domain::ManagedResourceKind| {
             reservation
                 .resources
                 .iter()
                 .find(|r| {
-                    r.resource_kind == kind
-                        && (kind == "PVC"
+                    r.kind() == kind
+                        && (kind.role() == chapchoo_domain::ResourceRole::SavedEnvironment
                             || r.execution_id.as_deref() == Some(&reservation.execution_id))
                 })
                 .map(resource)
                 .ok_or_else(|| Status::failed_precondition("Execution reservation incomplete"))
         };
-        let command = wire::PrepareExecution {
+        let mut command = wire::PrepareExecution {
             initial_allocation: reservation.initial_allocation,
-            saved_pvc: Some(find("PVC")?),
-            bootstrap_secret: Some(find("BOOTSTRAP_SECRET")?),
-            pod: Some(find("POD")?),
             connector_session_id: session.id,
             connector_initial_key: session.initial_key.expose().into(),
             connector_endpoint: policy.connector_endpoint.clone(),
+            ..Default::default()
         };
+        match substrate_kind {
+            chapchoo_domain::ProviderKind::Kubernetes => {
+                command.saved_pvc = Some(find(chapchoo_domain::ManagedResourceKind::Pvc)?);
+                command.bootstrap_secret =
+                    Some(find(chapchoo_domain::ManagedResourceKind::BootstrapSecret)?);
+                command.pod = Some(find(chapchoo_domain::ManagedResourceKind::Pod)?);
+            }
+            chapchoo_domain::ProviderKind::Docker => {
+                command.docker = Some(wire::DockerPreparation {
+                    saved_volume: Some(find(chapchoo_domain::ManagedResourceKind::DockerVolume)?),
+                    container: Some(find(chapchoo_domain::ManagedResourceKind::DockerContainer)?),
+                });
+            }
+        }
         if !self
             .inner
             .service
@@ -452,7 +491,7 @@ impl ComponentConnectionServices {
         }
         result
     }
-    async fn dispatch_convergence(
+    pub(super) async fn dispatch_convergence(
         &self,
         entry: &Connection,
         computer: &wire::ComputerContext,
@@ -477,17 +516,6 @@ impl ComponentConnectionServices {
             remaining_ms,
             operation: Some(operation),
         };
-        match entry
-            .calls
-            .invoke(Command::Provider(Box::new(command)), deadline)
-            .await
-        {
-            Ok(Reply::Provider(result)) => Ok(wire::ProviderInvocationResult {
-                outcome: wire::ForwardingOutcome::Completed as i32,
-                result: Some(*result),
-            }),
-            Ok(_) => Err(Status::internal("Provider reply kind mismatch")),
-            Err(error) => Ok(outcome(super::outcome(error))),
-        }
+        self.dispatch_entry(entry, command, deadline).await
     }
 }

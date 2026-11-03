@@ -66,8 +66,11 @@ app's target. No browser credential, owner token, endpoint or connection ID is
 serialized into these views. Browser DTOs copy only approved fields and validate
 required identities, enum meanings, timestamps and bounded pages. Timestamps
 become JSON-safe milliseconds. Operator resources deliberately retain non-secret
-namespace/name/original UID/execution identities; Agent names/user content and
-bootstrap data are excluded.
+native scope/name/original identity/execution values; Agent names/user content
+and bootstrap data are excluded. Kubernetes retains namespace and UID. Docker
+retains opaque daemon scope, full container ID and optional original volume
+creation identity without synthesizing Kubernetes UIDs. Volume labels/options,
+daemon endpoints, credentials and bootstrap content are not browser DTO fields.
 
 Existing account Origin, POST unary tRPC, cookie/renewal, identity-cache clearing,
 display and error boundaries remain authoritative. Cleared/unverifiable account
@@ -131,7 +134,10 @@ use the RPC limit of twenty items. Primary page/selected detail/cursors live in
 the URL; transient form edits and supplementary Provider-choice paging do not
 become another authoritative lifecycle store.
 
-Resource URL cursors normalize only recognized scalar kind/namespace/name fields.
+Resource URL cursors normalize only recognized scalar kind/scope/name fields.
+Kubernetes requires namespace and empty native scope fields; Docker requires
+empty namespace and explicit `DOCKER_DAEMON` scope. Opaque daemon IDs retain up to
+1024 UTF-8 bytes rather than being truncated to generic label/namespace limits.
 Complete valid cursors preserve the selected page while unrelated decoration is
 ignored. Partial, repeated or malformed cursor fields select the first page
 instead of throwing before the route's required-data boundary. RPC input remains
@@ -146,11 +152,15 @@ invalidation updates related queries without imperative per-hook refetch.
 ## Read-only operator inventory
 
 Current installation-admin authority is required at SSR and every subsequent RPC.
-Provider inventory remains independent of live Agent associations. It shows
+Provider inventory remains independent of live Agent associations. It shows the
+declared Kubernetes/Docker substrate without exposing connection configuration.
+It shows
 the typed read-only creation capability independently from connectivity, and shows
 management/Connector/power separately, terminal intent and unresolved versus
-confirmed cleanup. Resource detail exposes exact reserved namespace/name/UID and
-presence/observation without keys or user files. It provides no adoption, cleanup,
+confirmed cleanup. Resource detail labels native daemon/container/volume facts
+separately from Kubernetes namespace/Pod/PVC/UID, and preserves presence/observation
+independently of original identity. Long native values wrap on narrow viewports.
+It provides no adoption, cleanup,
 retry, force removal or other operator mutation control. Confirmed cleanup stays
 visible under the backend's 24-hour retention; unresolved evidence does not expire
 merely because it is old.

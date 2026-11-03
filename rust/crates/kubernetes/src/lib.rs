@@ -260,6 +260,7 @@ impl Kubernetes {
         resource: &wire::ManagedResource,
     ) -> Result<ResourceKind, Error> {
         if computer.computer_id.is_empty()
+            || resource.native.is_some()
             || resource.namespace != self.config.namespace
             || resource.name.is_empty()
         {

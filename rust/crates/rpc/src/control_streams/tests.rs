@@ -11,7 +11,7 @@ use chapchoo_service::{
 use tokio::sync::oneshot;
 type TestError = Box<dyn std::error::Error + Send + Sync>;
 
-async fn entry(
+pub(super) async fn entry(
     inner: &Inner,
     credential: SecretDigest,
     connector: Option<(&str, &str, &str)>,
@@ -55,6 +55,7 @@ async fn entry(
             convergence: Arc::new(Semaphore::new(1)),
             cursor: Mutex::new(None),
             cleanup: Mutex::new(HashMap::new()),
+            native: Mutex::new(HashMap::new()),
         }),
         receivers,
     ))
@@ -90,6 +91,7 @@ fn delayed_admission_cannot_displace_a_new_provider_or_connector() -> Result<(),
                     stop: true,
                     restart: true,
                 },
+                &chapchoo_domain::ProviderSubstrate::Kubernetes,
                 AcceptanceTime::System,
             )
             .await?;
@@ -161,7 +163,7 @@ fn delayed_admission_cannot_displace_a_new_provider_or_connector() -> Result<(),
                     computer_id: &agent.computer.id,
                     request_id: "create",
                 },
-                "fixture",
+                &chapchoo_domain::NativeScope::kubernetes("fixture".into())?,
             )
             .await?;
         let session = service

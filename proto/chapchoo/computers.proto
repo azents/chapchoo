@@ -61,7 +61,12 @@ message PreparationRetryRequest { string agent_id = 1; string request_id = 2; st
 message LifecycleRequest { string agent_id = 1; string request_id = 2; string expected_request_id = 3; Action action = 4; }
 message ForceRemoveRequest { string agent_id = 1; string deletion_request_id = 2; }
 message ProviderCapabilities { bool create = 1; bool start = 2; bool stop = 3; bool restart = 4; }
-message ProviderSummary { string id = 1; string name = 2; ProviderCapabilities capabilities = 3; Connectivity management = 4; }
+enum ProviderKind {
+  PROVIDER_KIND_UNSPECIFIED = 0;
+  PROVIDER_KIND_KUBERNETES = 1;
+  PROVIDER_KIND_DOCKER = 2;
+}
+message ProviderSummary { string id = 1; string name = 2; ProviderCapabilities capabilities = 3; Connectivity management = 4; ProviderKind kind = 5; }
 message ProviderList { repeated ProviderSummary items = 1; optional string next_after = 2; }
 message InventoryRequest { string provider_id = 1; Page page = 2; }
 // No user identity, Agent name, keys, bootstrap content or user file data.
@@ -74,10 +79,20 @@ message InventoryComputer {
   google.protobuf.Timestamp power_observed_at = 14;
 }
 message ComputerInventory { repeated InventoryComputer items = 1; optional string next_after = 2; }
-message ResourceCursor { string kind = 1; string namespace = 2; string name = 3; }
+message ResourceCursor {
+  string kind = 1;
+  // Exclusively Kubernetes; never an opaque Docker daemon ID.
+  string namespace = 2;
+  string name = 3;
+  string native_scope_kind = 4;
+  string native_scope = 5;
+}
 message ResourcePage { string computer_id = 1; ResourceCursor after = 2; uint32 limit = 3; }
 message InventoryResource {
   ResourceCursor identity = 1; optional string uid = 2; optional string execution_id = 3;
   string presence = 4; google.protobuf.Timestamp observed_at = 5;
+  // Non-paging observations; Docker volume names are not synthetic native UIDs.
+  optional string docker_container_id = 6;
+  optional string docker_volume_created_at = 7;
 }
 message ResourceInventory { repeated InventoryResource items = 1; ResourceCursor next_after = 2; }
