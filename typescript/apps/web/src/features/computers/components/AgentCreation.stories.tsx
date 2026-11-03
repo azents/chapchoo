@@ -81,6 +81,22 @@ export const UnresolvedCreationWithoutProvider: Story = {
   },
 };
 export const Pending: Story = { args: { pending: true, creationLocked: true } };
+export const Japanese: Story = {
+  args: {
+    copy: computerCopy("ja-JP"),
+    providers: Empty.args?.providers,
+    name: "",
+    providerId: "",
+  },
+};
+export const French: Story = {
+  args: {
+    copy: computerCopy("fr-FR"),
+    providers: Empty.args?.providers,
+    name: "",
+    providerId: "",
+  },
+};
 export const Korean: Story = {
   args: {
     copy: computerCopy("ko-KR"),

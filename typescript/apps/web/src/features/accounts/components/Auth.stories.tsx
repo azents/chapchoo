@@ -1,5 +1,7 @@
 import { useState } from "react";
 import messages from "../../../../messages/en-US.json";
+import french from "../../../../messages/fr-FR.json";
+import japanese from "../../../../messages/ja-JP.json";
 import korean from "../../../../messages/ko-KR.json";
 import { Auth } from "./Auth";
 import type { AuthProps } from "../types";
@@ -123,6 +125,8 @@ export const InvalidCredentials: Story = {
     },
   },
 };
+export const Japanese: Story = { args: { copy: japanese.accounts } };
+export const French: Story = { args: { copy: french.accounts } };
 export const Korean: Story = {
   args: {
     copy: korean.accounts,

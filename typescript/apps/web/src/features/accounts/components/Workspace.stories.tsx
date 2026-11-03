@@ -1,5 +1,7 @@
 import { useState } from "react";
 import messages from "../../../../messages/en-US.json";
+import french from "../../../../messages/fr-FR.json";
+import japanese from "../../../../messages/ja-JP.json";
 import korean from "../../../../messages/ko-KR.json";
 import { Workspace } from "./Workspace";
 import type { WorkspaceData, WorkspaceProps } from "../types";
@@ -188,6 +190,8 @@ export const Error: Story = {
   args: { state: { type: "ERROR", message: messages.accounts.genericError } },
 };
 export const Korean: Story = { args: { copy: korean.accounts } };
+export const Japanese: Story = { args: { copy: japanese.accounts } };
+export const French: Story = { args: { copy: french.accounts } };
 export const SupplementaryUnavailable: Story = {
   args: {
     supplementary: {

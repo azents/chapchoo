@@ -1,5 +1,7 @@
 import { useState } from "react";
 import en from "../../../../messages/en-US.json";
+import fr from "../../../../messages/fr-FR.json";
+import ja from "../../../../messages/ja-JP.json";
 import ko from "../../../../messages/ko-KR.json";
 import { AdminAuth } from "./AdminAuth";
 import type { AdminAuthProps } from "./AdminAuth";
@@ -46,6 +48,18 @@ export const KoreanLogin: Story = {
 };
 export const KoreanSetup: Story = {
   args: { mode: "setup", text: (key) => ko.AdminAuth[key] },
+};
+export const JapaneseLogin: Story = {
+  args: { text: (key) => ja.AdminAuth[key] },
+};
+export const JapaneseSetup: Story = {
+  args: { mode: "setup", text: (key) => ja.AdminAuth[key] },
+};
+export const FrenchLogin: Story = {
+  args: { text: (key) => fr.AdminAuth[key] },
+};
+export const FrenchSetup: Story = {
+  args: { mode: "setup", text: (key) => fr.AdminAuth[key] },
 };
 function CharacterLoginFixture(props: AdminAuthProps): ReactElement {
   const [email, setEmail] = useState(props.email);
