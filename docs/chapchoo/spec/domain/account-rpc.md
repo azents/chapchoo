@@ -136,6 +136,9 @@ failure drops already acquired sockets. SIGINT/SIGTERM withdraws admission befor
 drain. Owned tasks are joined; a component exit or cleanup timeout returns failure.
 Defaults are 60 seconds for startup, 20 for graceful shutdown and a further
 5 for forced cleanup. Started blocking work is not assumed abortable.
+Backend task, web reap and signal failures are retained together privately instead
+of replacing an earlier failure with a later cleanup result. Completed forced
+cleanup still reports failure rather than a successful graceful stop.
 
 Unary gRPC health for an empty service, either common service or any domain
 service actually registered on the listener rereads read-only database

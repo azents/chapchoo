@@ -11,6 +11,60 @@ use chapchoo_service::{
 use tokio::sync::oneshot;
 type TestError = Box<dyn std::error::Error + Send + Sync>;
 
+#[tokio::test]
+async fn drain_waits_for_later_owned_work_after_an_earlier_worker_fails() -> Result<(), TestError> {
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("drain.sqlite");
+    let cipher = Arc::new(CredentialCipher::new(RootKey::parse(
+        URL_SAFE.encode([30; 32]),
+    )?)?);
+    prepare_sqlite(&path, &cipher)?;
+    let store = Store::connect_sqlite(path, cipher).await?;
+    let service = Arc::new(ComputersService::new(store, None));
+    let admission = Arc::new(AtomicBool::new(true));
+    let services = ComponentConnectionServices::new(service, "draining".into(), admission.clone());
+    let (cancelled, cancellation) = oneshot::channel::<()>();
+    {
+        let mut workers = services
+            .inner
+            .workers
+            .lock()
+            .map_err(|_| "Workers unavailable")?;
+        workers.spawn(async move {
+            let _cancelled = cancelled;
+            std::future::pending::<()>().await;
+        });
+        workers.abort_all();
+    }
+    assert!(cancellation.await.is_err());
+    let (release, released) = oneshot::channel();
+    let (finished, completion) = oneshot::channel();
+    services
+        .inner
+        .workers
+        .lock()
+        .map_err(|_| "Workers unavailable")?
+        .spawn(async move {
+            let _ = released.await;
+            let _ = finished.send(7);
+        });
+    let mut drain = Box::pin(services.drain());
+    std::future::poll_fn(|context| {
+        assert!(
+            drain.as_mut().poll(context).is_pending(),
+            "A worker failure must not abandon other retained work"
+        );
+        Poll::Ready(())
+    })
+    .await;
+    assert!(!admission.load(Ordering::Acquire));
+    release.send(()).map_err(|_| "Worker was abandoned")?;
+    let error = drain.await.err().ok_or("Missing worker failure")?;
+    assert_eq!(error.code(), tonic::Code::Internal);
+    assert_eq!(completion.await?, 7);
+    Ok(())
+}
+
 pub(super) async fn entry(
     inner: &Inner,
     credential: SecretDigest,

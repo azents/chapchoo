@@ -59,6 +59,9 @@ Control renewal runs every twenty seconds with the existing sixty-second lease.
 A failed renewal/worker health check closes admission and fails the owned runtime.
 Shutdown drains the exact Control, closes stream waiters and conditionally
 withdraws only its connections, under the foreground runtime's cleanup budget.
+The stream worker drain joins remaining retained workers after a worker failure,
+within its existing twenty-second drain budget. A failure is not successful drain;
+deadline expiry still aborts and joins the remaining workers.
 Readiness recognizes only registered business service names.
 
 Bundled General/Admin web clients require their independent

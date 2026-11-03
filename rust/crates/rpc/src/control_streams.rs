@@ -531,10 +531,13 @@ impl ComponentConnectionServices {
             std::mem::replace(&mut *guard, JoinSet::new())
         };
         let done = async {
+            let mut failure = None;
             while let Some(result) = workers.join_next().await {
-                result.map_err(|_| Status::internal("A Control worker failed"))?;
+                if result.is_err() {
+                    failure.get_or_insert_with(|| Status::internal("A Control worker failed"));
+                }
             }
-            Ok::<(), Status>(())
+            failure.map_or(Ok(()), Err)
         };
         match tokio::time::timeout(Duration::from_secs(20), done).await {
             Ok(result) => result,

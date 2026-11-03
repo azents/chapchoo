@@ -338,29 +338,44 @@ async fn ready_web_pair(
     }
 }
 
-async fn reap_web(child: &mut Option<WebChild>) -> Result<(), AppError> {
-    if let Some(child) = child {
-        child.reap().await?;
-    }
-    Ok(())
+fn retain(failure: &mut Result<(), AppError>, next: Result<(), AppError>) {
+    *failure = complete(std::mem::replace(failure, Ok(())), next);
 }
 
-async fn drain(tasks: &mut BackendTasks) -> Result<(), AppError> {
-    let mut failure = None;
-    while let Some(result) = tasks.join_next().await {
-        let error = match result {
-            Err(error) if error.is_cancelled() => None,
-            Err(error) => Some(Box::new(error) as AppError),
-            Ok(Err(error)) => Some(error),
-            Ok(Ok(())) => None,
-        };
-        if failure.is_none() {
-            failure = error;
+struct CleanupFailures {
+    backend: Result<(), AppError>,
+    general: Result<(), AppError>,
+    admin: Result<(), AppError>,
+}
+
+impl CleanupFailures {
+    fn new() -> Self {
+        Self {
+            backend: Ok(()),
+            general: Ok(()),
+            admin: Ok(()),
         }
     }
-    match failure {
-        Some(error) => Err(error),
-        None => Ok(()),
+
+    fn finish(self) -> Result<(), AppError> {
+        complete(complete(self.backend, self.general), self.admin)
+    }
+}
+
+async fn reap_web(child: &mut Option<WebChild>, failure: &mut Result<(), AppError>) {
+    if let Some(child) = child {
+        retain(failure, child.reap().await);
+    }
+}
+
+async fn drain(tasks: &mut BackendTasks, failure: &mut Result<(), AppError>) {
+    while let Some(result) = tasks.join_next().await {
+        let result = match result {
+            Err(error) if error.is_cancelled() => Ok(()),
+            Err(error) => Err(Box::new(error) as AppError),
+            Ok(result) => result,
+        };
+        retain(failure, result);
     }
 }
 
@@ -368,12 +383,13 @@ async fn join_owned(
     tasks: &mut BackendTasks,
     general: &mut Option<WebChild>,
     admin: &mut Option<WebChild>,
-) -> Result<(), AppError> {
-    let (backend, general, admin) = tokio::join!(drain(tasks), reap_web(general), reap_web(admin));
-    backend?;
-    general?;
-    admin?;
-    Ok(())
+    failures: &mut CleanupFailures,
+) {
+    tokio::join!(
+        drain(tasks, &mut failures.backend),
+        reap_web(general, &mut failures.general),
+        reap_web(admin, &mut failures.admin)
+    );
 }
 
 async fn cleanup(
@@ -381,35 +397,34 @@ async fn cleanup(
     general: &mut Option<WebChild>,
     admin: &mut Option<WebChild>,
 ) -> Result<(), AppError> {
-    let mut signal_failure = None;
+    // Completed causes outlive a timed-out join future and its forced successor.
+    let mut failures = CleanupFailures::new();
+    let mut signals = Ok(());
     for child in [general.as_ref(), admin.as_ref()].into_iter().flatten() {
-        if let Err(error) = child.terminate() {
-            signal_failure.get_or_insert(error);
-        }
+        signals = complete(signals, child.terminate());
     }
-    let graceful =
-        tokio::time::timeout(Duration::from_secs(20), join_owned(tasks, general, admin)).await;
-    if let Ok(result) = graceful {
-        result?;
-        return match signal_failure {
-            Some(error) => Err(error),
-            None => Ok(()),
-        };
+    let graceful = tokio::time::timeout(
+        Duration::from_secs(20),
+        join_owned(tasks, general, admin, &mut failures),
+    )
+    .await;
+    if graceful.is_ok() {
+        return complete(failures.finish(), signals);
     }
     for child in [general.as_ref(), admin.as_ref()].into_iter().flatten() {
-        if let Err(error) = child.force() {
-            signal_failure.get_or_insert(error);
-        }
+        signals = complete(signals, child.force());
     }
     tasks.abort_all();
-    let forced =
-        tokio::time::timeout(Duration::from_secs(5), join_owned(tasks, general, admin)).await;
-    if let Some(error) = signal_failure {
-        return Err(error);
-    }
-    if let Ok(Err(error)) = forced {
-        return Err(error);
-    }
+    let forced = tokio::time::timeout(
+        Duration::from_secs(5),
+        join_owned(tasks, general, admin, &mut failures),
+    )
+    .await;
+    let forced = complete(
+        failures.finish(),
+        forced.map_err(|_| ConfigError::CleanupTimeout.into()),
+    );
+    complete(signals, forced)?;
     // Forced cleanup or an unreaped child is never a successful graceful stop.
     Err(ConfigError::CleanupTimeout.into())
 }
@@ -450,5 +465,87 @@ impl Termination {
 
     pub(crate) async fn wait(&mut self) -> Result<(), std::io::Error> {
         tokio::signal::ctrl_c().await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{error::Error, fmt, sync::atomic::AtomicUsize};
+
+    #[derive(Debug)]
+    struct RetainedFailure(Arc<AtomicUsize>);
+    impl fmt::Display for RetainedFailure {
+        fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            formatter.write_str("Synthetic retained failure")
+        }
+    }
+    impl Error for RetainedFailure {}
+    impl Drop for RetainedFailure {
+        fn drop(&mut self) {
+            self.0.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    #[tokio::test]
+    async fn backend_drain_keeps_every_owned_failure_until_the_combined_result_is_dropped()
+    -> Result<(), AppError> {
+        let dropped = Arc::new(AtomicUsize::new(0));
+        let mut tasks = BackendTasks::new();
+        for _ in 0..2 {
+            let cause = RetainedFailure(dropped.clone());
+            tasks.spawn(async move { Err(Box::new(cause) as AppError) });
+        }
+        let mut failure = Ok(());
+        drain(&mut tasks, &mut failure).await;
+        let failure = failure.err().ok_or("Missing failures")?;
+        assert!(tasks.is_empty());
+        assert_eq!(dropped.load(Ordering::SeqCst), 0);
+        drop(failure);
+        assert_eq!(dropped.load(Ordering::SeqCst), 2);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn completed_causes_survive_cancellation_of_a_partial_join() -> Result<(), AppError> {
+        let dropped = Arc::new(AtomicUsize::new(0));
+        let cause = RetainedFailure(dropped.clone());
+        let mut tasks = BackendTasks::new();
+        let (ended, end) = tokio::sync::oneshot::channel::<()>();
+        tasks.spawn(async move {
+            let _ended = ended;
+            Err(Box::new(cause) as AppError)
+        });
+        assert!(end.await.is_err());
+        let (release, released) = tokio::sync::oneshot::channel();
+        tasks.spawn(async move {
+            released.await?;
+            Ok(())
+        });
+        let mut failures = CleanupFailures::new();
+        let mut general = None;
+        let mut admin = None;
+        {
+            let mut join = Box::pin(join_owned(
+                &mut tasks,
+                &mut general,
+                &mut admin,
+                &mut failures,
+            ));
+            std::future::poll_fn(|context| {
+                assert!(join.as_mut().poll(context).is_pending());
+                std::task::Poll::Ready(())
+            })
+            .await;
+        }
+        assert!(failures.backend.is_err());
+        assert_eq!(dropped.load(Ordering::SeqCst), 0);
+        release.send(()).map_err(|_| "Worker was abandoned")?;
+        join_owned(&mut tasks, &mut general, &mut admin, &mut failures).await;
+        let failure = failures.finish().err().ok_or("Missing completed cause")?;
+        assert_eq!(dropped.load(Ordering::SeqCst), 0);
+        drop(failure);
+        assert_eq!(dropped.load(Ordering::SeqCst), 1);
+        Ok(())
     }
 }
