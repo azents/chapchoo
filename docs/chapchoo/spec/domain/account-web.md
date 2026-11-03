@@ -115,8 +115,15 @@ items remain Agents, Invitations and collaborative-Team settings across list,
 detail, settings and profile. A Team switch navigates to only the current user's
 private Agents in that Team. Desktop retains the independently scrolling sidebar;
 mobile hides it and uses the header's left Drawer. Its banner contains the
-current icon/name and chevron beside the independent close control; Team choices
-replace feature entries inline. The existing companion remains below the menu.
+current icon/name and an adjacent chevron, with a bounded content-width trigger.
+The independent close control retains a 44px target and at least the shared
+large gap. Team choices open in a bounded Popover below the banner on both
+desktop and mobile; the feature navigation and companion remain mounted and
+unchanged behind it. Escape closes the picker first and returns focus to its
+banner without dismissing the mobile Drawer. A closed touch trigger has no
+sticky hover fill; keyboard focus and current-route selection remain distinct.
+Shared navigation rows retain their 44px minimum height and use 14px inline
+padding, balancing the existing single-line text's visible vertical inset.
 The shared NavigationIcon SVG frame supplies workspace symbols, Back, add and
 chevron geometry with non-shrinking, vertically centered icon slots. Selected
 rows retain their background and `aria-current` without a trailing decorative
@@ -135,7 +142,7 @@ Admin uses the same shared workspace chrome with Administration selected,
 a shield/check icon and a lowercase `admin` brand badge. Its stable menu contains
 signup links, password reset links, Computer Providers and server settings,
 including on detail and profile routes. It has no duplicate subtitle or
-separate back-to-app row. The same left mobile Drawer and inline picker apply.
+separate back-to-app row. The same left mobile Drawer and overlay picker apply.
 
 Admin Node communicates only with its configured Admin API. The narrow
 AdminWorkspaces service lists the current administrator's accessible Teams and

@@ -24,12 +24,15 @@ spec_version: 1
 
 # Agent Computer Owner and Operator Web Contracts
 
-The General app exposes the private Agent's Computer list at
+The General app exposes the private Agent list at
 `/agents?team=<Team ID>`, a separate creation form at
 `/agents/new?team=<Team ID>` and Computer detail at
-`/agents/<Agent ID>?team=<Team ID>`. The list labels its Computer scope explicitly,
-keeps the refresh action visible when empty, and displays an empty-Computer message.
-Its Create Agent entry navigates to the dedicated form instead of embedding it. Every Agent has a required
+`/agents/<Agent ID>?team=<Team ID>`. The list uses Agent-oriented headings and
+empty copy. Agent names link to detail, and Computer power/operation observations
+are subordinate information in one Computer-status column, not an overall Agent
+health model. The list has no routine Refresh button; existing automatic observation
+continues and a stale read exposes an explicit retry. Its Create Agent entry
+navigates to the dedicated form instead of embedding it. Every Agent has a required
 Team while retaining its individual owner. Account/team pages share the selected
 context navigation. Admin exposes read-only Provider inventory at `/computer-providers`,
 Provider Computers under the selected Provider path, and exact resource inventory
@@ -42,7 +45,7 @@ Each route authenticates and resolves primary content on the server through the
 existing request-local account session boundary. The server HTML renders that
 record/list; the same snapshot and query selection seed client continuation.
 Initial read failure belongs to the route boundary, not an empty inventory or a
-fabricated loading state. The list reads only its Computer projections; Provider
+fabricated loading state. The list reads owned Agent records and their Computer projections; Provider
 choices belong to the separate creation page. That route verifies current Team
 membership and server-renders the initial bounded Provider-choice snapshot with
 the form. Subsequent Provider read failures preserve the entered draft and expose

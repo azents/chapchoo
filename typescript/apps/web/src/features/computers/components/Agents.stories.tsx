@@ -1,8 +1,14 @@
+import { AccountSettings } from "@chapchoo/ui/AccountSettings";
+import { HeaderControlsContext } from "@chapchoo/ui/AppHeader";
+import { WorkspaceChrome } from "@chapchoo/ui/WorkspaceChrome";
 import { computerCopy } from "@chapchoo/web-core/computer-messages";
+import { shellCopy } from "@chapchoo/web-core/shell-messages";
+import { useState } from "react";
 import { Agents } from "./Agents";
-import type { InitialAgents } from "../types";
+import type { AgentsProps, InitialAgents } from "../types";
 import type { AgentView } from "@chapchoo/web-core/computer";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
+import type { ReactElement } from "react";
 
 const agent: AgentView = {
   id: "agent",
@@ -68,6 +74,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const AgentList: Story = {};
+export const StaleList: Story = { args: { stale: true } };
 export const SignedOut: Story = {
   args: { access: "signedOut", initial: detail, data: detail },
 };
@@ -80,6 +87,150 @@ export const Empty: Story = {
       page: { items: [], nextAfter: null },
     },
   },
+};
+function FeedbackChrome({
+  mobile,
+  ...props
+}: AgentsProps & { mobile: boolean }): ReactElement {
+  const [drawer, setDrawer] = useState(false);
+  const [picker, setPicker] = useState(false);
+  const c = shellCopy("ko");
+  const current = {
+    key: "personal",
+    kind: "personal" as const,
+    label: c.yourSpace,
+    href: "/agents?team=team",
+    selected: true,
+  };
+  return (
+    <WorkspaceChrome
+      identity
+      basePath=""
+      homeHref="/"
+      mobile={mobile}
+      drawer={drawer}
+      picker={picker}
+      creating={false}
+      name=""
+      handle=""
+      error={null}
+      status="ready"
+      busy={false}
+      copy={c}
+      choices={[
+        current,
+        {
+          key: "research",
+          kind: "team",
+          label: "리서치 팀",
+          href: "/agents?team=research",
+          selected: false,
+        },
+        {
+          key: "admin",
+          kind: "admin",
+          label: c.administration,
+          href: "/admin",
+          selected: false,
+        },
+      ]}
+      current={current}
+      items={[
+        {
+          key: "agents",
+          label: c.agents,
+          href: "/agents?team=team",
+          active: true,
+        },
+        { key: "invitations", label: c.invitations, href: "/invitations" },
+      ]}
+      mascotReplayLabel="캐릭터 동작 다시 보기"
+      openDrawer={() => setDrawer(true)}
+      closeDrawer={() => {
+        setDrawer(false);
+        setPicker(false);
+      }}
+      openPicker={() => setPicker(true)}
+      closePicker={() => setPicker(false)}
+      openCreation={() => {
+        setPicker(false);
+      }}
+      closeCreation={() => {}}
+      onName={() => {}}
+      onHandle={() => {}}
+      onSubmit={() => {}}
+      retry={() => {}}
+      select={() => {
+        setPicker(false);
+      }}
+    >
+      <HeaderControlsContext.Provider
+        value={
+          <AccountSettings
+            opened={false}
+            mobile={mobile}
+            onOpen={() => {}}
+            onClose={() => {}}
+            identityLabel={initial.identity}
+            profileHref="/profile"
+            profileLabel="프로필"
+            loginHref="/login"
+            loginLabel="로그인"
+            logoutLabel="로그아웃"
+            onLogout={() => {}}
+            value={{ language: "ko", timeZone: "Asia/Seoul", region: "ko-KR" }}
+            selected={{}}
+            automatic={false}
+            disabled={false}
+            zones={["Asia/Seoul"]}
+            copy={{
+              title: "계정 및 설정",
+              language: "언어",
+              timeZone: "시간대",
+              region: "지역 형식",
+              follow: "자동",
+              preview: "미리 보기",
+              unavailable: "불러오지 못했습니다.",
+              scope: "",
+              done: "완료",
+              close: "닫기",
+              immediate: "",
+              saved: "저장했습니다.",
+              error: "저장하지 못했습니다.",
+              storageError: "기기에 저장하지 못했습니다.",
+              retry: "다시 시도",
+            }}
+            appearance={{
+              value: "light",
+              label: "화면 모드",
+              labels: { system: "시스템", light: "라이트", dark: "다크" },
+              onChange: () => {},
+            }}
+            changed={false}
+            error={false}
+            storageError={false}
+            instant={initial.renderedAt}
+            onChange={() => {}}
+            onRetry={() => {}}
+          />
+        }
+      >
+        <Agents {...props} />
+      </HeaderControlsContext.Provider>
+    </WorkspaceChrome>
+  );
+}
+export const FeedbackMobile: Story = {
+  args: { ...Empty.args, copy: computerCopy("ko-KR") },
+  render: (args): ReactElement => <FeedbackChrome {...args} mobile />,
+};
+export const FeedbackDesktop: Story = {
+  args: { ...Empty.args, copy: computerCopy("ko-KR") },
+  render: (args): ReactElement => <FeedbackChrome {...args} mobile={false} />,
+};
+export const FeedbackPopulated: Story = {
+  args: { copy: computerCopy("ko-KR") },
+  render: (args): ReactElement => <FeedbackChrome {...args} mobile />,
 };
 export const Running: Story = { args: { initial: detail, data: detail } };
 export const StopConfirmation: Story = {

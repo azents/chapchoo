@@ -81,7 +81,7 @@ test("production panel and profile edit the same committed identity snapshot in 
   await page.getByRole("button", { name: "계정 및 설정", exact: true }).click();
   await select(page, "dialog", "시간대", "America/New_York");
   await expect(
-    page.getByRole("dialog").getByText("반영됨", { exact: true }),
+    page.getByRole("dialog").getByText("저장했습니다", { exact: true }),
   ).toBeVisible();
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "프로필 보기", exact: true }).click();
@@ -112,7 +112,7 @@ test("titled icon suggestions apply independently and dismissal survives reload 
   await page.goto(story("profile"));
   const toast = page
     .getByRole("status")
-    .filter({ hasText: "표시 설정을 바꿀까요?" });
+    .filter({ hasText: "언어와 지역 설정을 바꿀까요?" });
   await expect(toast.locator("[data-proposal]")).toHaveCount(3);
   await expect(toast.locator("[data-proposal] svg")).toHaveCount(3);
   await toast.locator('[data-proposal="language"]').getByRole("button").click();
@@ -245,7 +245,8 @@ test("older browser timezone data cannot crash suggestions, profile or the panel
     });
   });
   await page.goto(story("profile"));
-  const unavailable = "이 환경에서는 선택한 시간대를 표시할 수 없습니다.";
+  const unavailable =
+    "이 환경에서는 선택한 시간대로 날짜와 시간을 표시할 수 없습니다.";
   await expect(page.getByRole("main").getByText(unavailable)).toBeVisible();
   await expect(page.locator('[data-proposal="timeZone"]')).toContainText("UTC");
   await page.getByRole("button", { name: "계정 및 설정", exact: true }).click();

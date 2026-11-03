@@ -6,10 +6,24 @@
   padding: var(--mantine-spacing-sm);
   border-radius: var(--mantine-radius-md);
 }
-.trigger:hover,
-.choice:hover,
+.trigger {
+  width: max-content;
+  max-width: min(100%, 18rem);
+}
+.trigger[aria-expanded="true"],
 .choice[data-selected] {
   background: var(--chapchoo-color-selected);
+}
+@media (hover: hover) {
+  .choice:hover {
+    background: var(--chapchoo-color-selected);
+  }
+}
+.triggerLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .label {
   flex: 1;
@@ -19,10 +33,6 @@
 .trailing {
   display: block;
   flex-shrink: 0;
-  margin-left: auto;
-}
-.back {
-  padding-inline: var(--mantine-spacing-sm);
 }
 .dropdown {
   max-height: min(32rem, calc(100dvh - 8rem));

@@ -82,22 +82,37 @@ test("Creation Provider read failure retains the entered draft and recovery acti
   await expect(page.getByRole("button", { name: copy.create })).toBeDisabled();
 });
 
-test("Empty Computer list keeps its refresh and Team-qualified creation entry", async ({
+test("Empty Agent list keeps its Team-qualified creation entry", async ({
   page,
 }) => {
   await page.goto("/iframe.html?id=computers-agents--empty&viewMode=story");
   await expect(
-    page.getByRole("heading", { name: copy.computerList, exact: true }),
+    page.getByRole("heading", { name: copy.agents, exact: true }),
   ).toBeVisible();
-  await expect(
-    page.getByText(copy.emptyComputerList, { exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: copy.retry, exact: true }),
-  ).toBeEnabled();
+  await expect(page.getByText(copy.noAgents, { exact: true })).toBeVisible();
   await expect(
     page.getByRole("link", { name: copy.create, exact: true }),
   ).toHaveAttribute("href", "/agents/new?team=team");
+});
+test("Agent identity is primary and stale list reads have explicit recovery", async ({
+  page,
+}) => {
+  await page.goto(
+    "/iframe.html?id=computers-agents--stale-list&viewMode=story",
+  );
+  await expect(
+    page.getByRole("columnheader", { name: copy.name, exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("columnheader", { name: copy.computerStatus, exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Research companion", exact: true }),
+  ).toHaveAttribute("href", "/agents/agent?team=team");
+  await expect(
+    page.getByRole("button", { name: copy.retryRead, exact: true }),
+  ).toBeEnabled();
+  await expect(page.getByRole("status")).toContainText(copy.stale);
 });
 test("Computer detail and force warning fit narrow screens", async ({
   page,
