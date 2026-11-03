@@ -1,3 +1,5 @@
+mod support;
+
 use base64::{Engine, engine::general_purpose::URL_SAFE};
 use chapchoo_crypto::{BearerSecret, CredentialCipher, PasswordCost, RootKey, SystemOwnerVerifier};
 use chapchoo_domain::{EmailAddress, Password};
@@ -17,10 +19,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 use std::time::Duration;
-use tokio::{
-    net::TcpListener,
-    sync::{mpsc, oneshot},
-};
+use tokio::{net::TcpListener, sync::mpsc};
 use tokio_stream::wrappers::{ReceiverStream, TcpListenerStream};
 use tonic::{Code, Request, transport::Server};
 type TestError = Box<dyn std::error::Error + Send + Sync>;
@@ -89,7 +88,7 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
         vec!["provider".into()],
         owner.digest(),
     )?;
-    tokio::runtime::Runtime::new()?.block_on(async {
+    tokio::runtime::Runtime::new()?.block_on(support::scope(async |fixture| {
         let store = Store::connect_sqlite(path, cipher).await?;
         let app = Arc::new(ComputersService::new(store.clone(), Some(verifier)));
         let listener = TcpListener::bind("127.0.0.1:0").await?;
@@ -118,8 +117,8 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
             connections.clone(),
         )
         .with_admission(admission.clone());
-        let (stop, stopped) = oneshot::channel();
-        let server = tokio::spawn(
+        let stopped = fixture.shutdown();
+        fixture.server(
             Server::builder()
                 .add_service(services.provider_server())
                 .add_service(services.connector_server())
@@ -330,7 +329,7 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
         let computer_id = created.computer.id.clone();
         let execution_id = bootstrap.execution_id.clone();
         let target = connected.clone();
-        let pending = tokio::spawn(async move {
+        let pending = fixture.call(async move {
             calls
                 .invoke_connector(
                     &computer_id,
@@ -375,7 +374,7 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
             .await?;
         assert!(
             pending
-                .await??
+                .await?
                 .result
                 .ok_or("Missing Connector reply")?
                 .ready
@@ -439,8 +438,6 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
         connections.drain().await?;
         app.withdraw_drained_control_connections(&control.id)
             .await?;
-        let _ = stop.send(());
-        server.await??;
         Ok::<(), TestError>(())
-    })
+    }))
 }

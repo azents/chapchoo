@@ -1,3 +1,5 @@
+mod support;
+
 use base64::{Engine, engine::general_purpose::URL_SAFE};
 use chapchoo_crypto::{BearerSecret, CredentialCipher, RootKey, SystemOwnerVerifier};
 use chapchoo_persistence::{Store, prepare_sqlite};
@@ -11,11 +13,7 @@ use std::{
     sync::{Arc, atomic::AtomicBool},
     time::Duration,
 };
-use tokio::{
-    net::TcpListener,
-    sync::{mpsc, oneshot},
-    time::Instant,
-};
+use tokio::{net::TcpListener, sync::mpsc, time::Instant};
 use tokio_stream::wrappers::{ReceiverStream, TcpListenerStream};
 use tonic::{Request, Streaming, transport::Server};
 type TestError = Box<dyn std::error::Error + Send + Sync>;
@@ -114,7 +112,8 @@ fn two_control_replacement_cancellation_and_late_replies_preserve_current_stream
     let owner = BearerSecret::generate()?;
     let verifier =
         SystemOwnerVerifier::new("owner".into(), vec!["provider".into()], owner.digest())?;
-    tokio::runtime::Runtime::new()?.block_on(async {
+    tokio::runtime::Runtime::new()?.block_on(support::scope(async |fixture| {
+        fixture.shutdown_budget(Duration::from_secs(5));
         let app = Arc::new(ComputersService::new(
             Store::connect_sqlite(path, cipher).await?,
             Some(verifier),
@@ -152,16 +151,16 @@ fn two_control_replacement_cancellation_and_late_replies_preserve_current_stream
             control_b.id.clone(),
             Arc::new(AtomicBool::new(true)),
         );
-        let (stop_a, stopped_a) = oneshot::channel();
-        let (stop_b, stopped_b) = oneshot::channel();
-        let server_a = tokio::spawn(
+        let stopped_a = fixture.shutdown();
+        let stopped_b = fixture.shutdown();
+        fixture.server(
             Server::builder()
                 .add_service(services_a.provider_server())
                 .serve_with_incoming_shutdown(TcpListenerStream::new(a), async {
                     let _ = stopped_a.await;
                 }),
         );
-        let server_b = tokio::spawn(
+        fixture.server(
             Server::builder()
                 .add_service(services_b.provider_server())
                 .serve_with_incoming_shutdown(TcpListenerStream::new(b), async {
@@ -243,7 +242,7 @@ fn two_control_replacement_cancellation_and_late_replies_preserve_current_stream
         );
         let service = services_b.clone();
         let target = owner_b.clone();
-        let cancelled = tokio::spawn(async move {
+        let cancelled = fixture.call(async move {
             service
                 .invoke_provider(
                     "provider",
@@ -258,7 +257,7 @@ fn two_control_replacement_cancellation_and_late_replies_preserve_current_stream
         else {
             return Err("Expected first command".into());
         };
-        cancelled.abort();
+        fixture.abort(&cancelled);
         assert!(cancelled.await.is_err());
         let Some(wire::control_frame::Payload::Cancel(cancel)) =
             frame(&mut stream_b).await?.payload
@@ -274,7 +273,7 @@ fn two_control_replacement_cancellation_and_late_replies_preserve_current_stream
         );
         let service = services_b.clone();
         let target = owner_b.clone();
-        let pending = tokio::spawn(async move {
+        let pending = fixture.call(async move {
             service
                 .invoke_provider(
                     "provider",
@@ -311,7 +310,7 @@ fn two_control_replacement_cancellation_and_late_replies_preserve_current_stream
             Some(wire::control_frame::Payload::Heartbeat(_))
         ));
         sender_b.send(reply(current)).await?;
-        let result = pending.await??;
+        let result = pending.await?;
         assert_eq!(result.outcome, wire::ForwardingOutcome::Completed as i32);
         assert_eq!(
             result
@@ -333,10 +332,6 @@ fn two_control_replacement_cancellation_and_late_replies_preserve_current_stream
                 .await?
                 .is_ok_and(|value| value.is_none())
         );
-        let _ = stop_a.send(());
-        let _ = stop_b.send(());
-        tokio::time::timeout(Duration::from_secs(5), server_a).await???;
-        tokio::time::timeout(Duration::from_secs(5), server_b).await???;
         Ok::<(), TestError>(())
-    })
+    }))
 }

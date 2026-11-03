@@ -1,3 +1,5 @@
+mod support;
+
 use base64::{Engine, engine::general_purpose::URL_SAFE};
 use chapchoo_crypto::{BearerSecret, CredentialCipher, PasswordCost, RootKey, SystemOwnerVerifier};
 use chapchoo_domain::{EmailAddress, Password};
@@ -18,11 +20,7 @@ use std::{
     sync::{Arc, atomic::AtomicBool},
     time::Duration,
 };
-use tokio::{
-    net::TcpListener,
-    sync::{mpsc, oneshot},
-    time::Instant,
-};
+use tokio::{net::TcpListener, sync::mpsc, time::Instant};
 use tokio_stream::wrappers::{ReceiverStream, TcpListenerStream};
 use tonic::{Request, transport::Server};
 type Error = Box<dyn std::error::Error + Send + Sync>;
@@ -54,7 +52,7 @@ fn memory_and_tcp_peer_handlers_revalidate_domain_and_exact_reconciler_authority
     let setup = BearerSecret::generate()?;
     let verifier =
         SystemOwnerVerifier::new("system".into(), vec!["provider".into()], system.digest())?;
-    tokio::runtime::Runtime::new()?.block_on(async {
+    tokio::runtime::Runtime::new()?.block_on(support::scope(async |fixture| {
         let store = Store::connect_sqlite(path, cipher).await?;
         let app = Arc::new(ComputersService::new(store.clone(), Some(verifier)));
         let accounts = AccountsService::new(
@@ -109,10 +107,10 @@ fn memory_and_tcp_peer_handlers_revalidate_domain_and_exact_reconciler_authority
         );
         let (component_channel, component_incoming) = memory_transport();
         let (peer_channel, peer_incoming) = memory_transport();
-        let (stop_components, stop_components_rx) = oneshot::channel();
-        let (stop_memory, stop_memory_rx) = oneshot::channel();
-        let (stop_tcp, stop_tcp_rx) = oneshot::channel();
-        let component_server = tokio::spawn(
+        let stop_components_rx = fixture.shutdown();
+        let stop_memory_rx = fixture.shutdown();
+        let stop_tcp_rx = fixture.shutdown();
+        fixture.server(
             Server::builder()
                 .add_service(connections.provider_server())
                 .add_service(auth.provider_server())
@@ -120,14 +118,14 @@ fn memory_and_tcp_peer_handlers_revalidate_domain_and_exact_reconciler_authority
                     let _ = stop_components_rx.await;
                 }),
         );
-        let memory_server = tokio::spawn(
+        fixture.server(
             Server::builder()
                 .add_service(peer.server())
                 .serve_with_incoming_shutdown(peer_incoming, async {
                     let _ = stop_memory_rx.await;
                 }),
         );
-        let tcp_server = tokio::spawn(
+        fixture.server(
             Server::builder()
                 .add_service(peer.server())
                 .serve_with_incoming_shutdown(TcpListenerStream::new(tcp), async {
@@ -390,7 +388,7 @@ fn memory_and_tcp_peer_handlers_revalidate_domain_and_exact_reconciler_authority
                 )),
             });
             let mut call_client = client.clone();
-            let call = tokio::spawn(async move { call_client.invoke_provider(reconcile).await });
+            let call = fixture.call(async move { call_client.invoke_provider(reconcile).await });
             let Some(wire::control_frame::Payload::Provider(command)) =
                 next(&mut stream).await?.payload
             else {
@@ -411,14 +409,14 @@ fn memory_and_tcp_peer_handlers_revalidate_domain_and_exact_reconciler_authority
                 })
                 .await?;
             assert_eq!(
-                call.await??.into_inner().outcome,
+                call.await?.into_inner().outcome,
                 wire::ForwardingOutcome::Completed as i32
             );
         }
         // Local delivery uses the same peer handler, without opening a peer socket.
         let delivery = PeerDelivery::new(app.clone());
         delivery.register_local(control.id.clone(), peer_channel)?;
-        let call = tokio::spawn(async move {
+        let call = fixture.call(async move {
             delivery
                 .provider(invocation, Instant::now() + Duration::from_secs(5))
                 .await
@@ -443,7 +441,7 @@ fn memory_and_tcp_peer_handlers_revalidate_domain_and_exact_reconciler_authority
             })
             .await?;
         assert_eq!(
-            call.await??.outcome,
+            call.await?.outcome,
             wire::ForwardingOutcome::Completed as i32
         );
         let pvc = execution
@@ -508,12 +506,6 @@ fn memory_and_tcp_peer_handlers_revalidate_domain_and_exact_reconciler_authority
         app.drain_control(&control.id).await?;
         connections.drain().await?;
         // A memory acceptor also finishes normally when its last client drops.
-        let _ = stop_components.send(());
-        let _ = stop_memory.send(());
-        let _ = stop_tcp.send(());
-        component_server.await??;
-        memory_server.await??;
-        tcp_server.await??;
         Ok(())
-    })
+    }))
 }

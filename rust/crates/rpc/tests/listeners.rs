@@ -1,3 +1,5 @@
+mod support;
+
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
@@ -15,7 +17,7 @@ use chapchoo_protocol::accounts::{
 };
 use chapchoo_rpc::{AccountServices, DOMAIN_REASON_METADATA};
 use chapchoo_service::{AccountsConfig, AccountsService, PasswordWork};
-use tokio::{net::TcpListener, sync::oneshot};
+use tokio::net::TcpListener;
 use tokio_stream::wrappers::TcpListenerStream;
 use tonic::{
     Code, Request, Status,
@@ -409,72 +411,72 @@ async fn exercise(
 #[tokio::test]
 async fn two_listeners_enforce_surfaces_credentials_and_typed_ingress() -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
-    let path = directory.path().join("rpc.sqlite");
-    let cipher = Arc::new(CredentialCipher::new(RootKey::parse(
-        URL_SAFE.encode([2; 32]),
-    )?)?);
-    prepare_sqlite(&path, &cipher)?;
-    let store = Store::connect_sqlite(path, cipher).await?;
-    let proof = BearerSecret::generate()?;
-    let application = Arc::new(AccountsService::new(
-        store,
-        PasswordWork::new(2, PasswordCost::new(10)?)?,
-        None,
-        AccountsConfig {
-            general_web_url: "http://localhost:3000".into(),
-            setup_proof: Some(proof.digest()),
-            session_policy: SessionPolicy::default(),
-        },
-    )?);
-    let admission = Arc::new(AtomicBool::new(true));
-    let adapter = AccountServices::new(application).with_admission(admission.clone());
-    let general_listener = TcpListener::bind("127.0.0.1:0").await?;
-    let admin_listener = TcpListener::bind("127.0.0.1:0").await?;
-    let general_address = general_listener.local_addr()?;
-    let admin_address = admin_listener.local_addr()?;
-    let (general_stop, general_stopped) = oneshot::channel();
-    let (admin_stop, admin_stopped) = oneshot::channel();
-    let general_auth = adapter.authentication_server();
-    let lifecycle = adapter.account_lifecycle_server();
-    let teams = adapter.teams_server();
-    let invitations = adapter.invitations_server();
-    let general_preferences = adapter.personal_preferences_server();
-    let admin_auth = adapter.authentication_server();
-    let installation = adapter.installation_server();
-    let grants = adapter.account_grants_server();
-    let defaults = adapter.display_defaults_server();
-    let admin_preferences = adapter.personal_preferences_server();
-    let workspaces = adapter.admin_workspaces_server();
-    let general_task = tokio::spawn(async move {
-        Server::builder()
-            .add_service(general_auth)
-            .add_service(general_preferences)
-            .add_service(lifecycle)
-            .add_service(teams)
-            .add_service(invitations)
-            .serve_with_incoming_shutdown(TcpListenerStream::new(general_listener), async {
-                match general_stopped.await {
-                    Ok(()) | Err(_) => {}
-                }
-            })
-            .await
-    });
-    let admin_task = tokio::spawn(async move {
-        Server::builder()
-            .add_service(admin_auth)
-            .add_service(admin_preferences)
-            .add_service(installation)
-            .add_service(grants)
-            .add_service(defaults)
-            .add_service(workspaces)
-            .serve_with_incoming_shutdown(TcpListenerStream::new(admin_listener), async {
-                match admin_stopped.await {
-                    Ok(()) | Err(_) => {}
-                }
-            })
-            .await
-    });
-    let result = async {
+    support::scope(async |fixture| {
+        let path = directory.path().join("rpc.sqlite");
+        let cipher = Arc::new(CredentialCipher::new(RootKey::parse(
+            URL_SAFE.encode([2; 32]),
+        )?)?);
+        prepare_sqlite(&path, &cipher)?;
+        let store = Store::connect_sqlite(path, cipher).await?;
+        let proof = BearerSecret::generate()?;
+        let application = Arc::new(AccountsService::new(
+            store,
+            PasswordWork::new(2, PasswordCost::new(10)?)?,
+            None,
+            AccountsConfig {
+                general_web_url: "http://localhost:3000".into(),
+                setup_proof: Some(proof.digest()),
+                session_policy: SessionPolicy::default(),
+            },
+        )?);
+        let admission = Arc::new(AtomicBool::new(true));
+        let adapter = AccountServices::new(application).with_admission(admission.clone());
+        let general_listener = TcpListener::bind("127.0.0.1:0").await?;
+        let admin_listener = TcpListener::bind("127.0.0.1:0").await?;
+        let general_address = general_listener.local_addr()?;
+        let admin_address = admin_listener.local_addr()?;
+        let general_stopped = fixture.required_shutdown("General shutdown receiver dropped");
+        let admin_stopped = fixture.required_shutdown("Admin shutdown receiver dropped");
+        let general_auth = adapter.authentication_server();
+        let lifecycle = adapter.account_lifecycle_server();
+        let teams = adapter.teams_server();
+        let invitations = adapter.invitations_server();
+        let general_preferences = adapter.personal_preferences_server();
+        let admin_auth = adapter.authentication_server();
+        let installation = adapter.installation_server();
+        let grants = adapter.account_grants_server();
+        let defaults = adapter.display_defaults_server();
+        let admin_preferences = adapter.personal_preferences_server();
+        let workspaces = adapter.admin_workspaces_server();
+        fixture.server(async move {
+            Server::builder()
+                .add_service(general_auth)
+                .add_service(general_preferences)
+                .add_service(lifecycle)
+                .add_service(teams)
+                .add_service(invitations)
+                .serve_with_incoming_shutdown(TcpListenerStream::new(general_listener), async {
+                    match general_stopped.await {
+                        Ok(()) | Err(_) => {}
+                    }
+                })
+                .await
+        });
+        fixture.server(async move {
+            Server::builder()
+                .add_service(admin_auth)
+                .add_service(admin_preferences)
+                .add_service(installation)
+                .add_service(grants)
+                .add_service(defaults)
+                .add_service(workspaces)
+                .serve_with_incoming_shutdown(TcpListenerStream::new(admin_listener), async {
+                    match admin_stopped.await {
+                        Ok(()) | Err(_) => {}
+                    }
+                })
+                .await
+        });
         let general = Channel::from_shared(format!("http://{general_address}"))?
             .connect()
             .await?;
@@ -482,15 +484,6 @@ async fn two_listeners_enforce_surfaces_credentials_and_typed_ingress() -> Resul
             .connect()
             .await?;
         exercise(general, admin, &proof, admission).await
-    }
-    .await;
-    // Collect every owned task before propagating any test/cleanup failure.
-    let general_signal = general_stop.send(());
-    let admin_signal = admin_stop.send(());
-    let (general_exit, admin_exit) = tokio::join!(general_task, admin_task);
-    general_signal.map_err(|_| "General shutdown receiver dropped")?;
-    admin_signal.map_err(|_| "Admin shutdown receiver dropped")?;
-    general_exit??;
-    admin_exit??;
-    result
+    })
+    .await
 }

@@ -1,3 +1,5 @@
+mod support;
+
 use base64::{Engine, engine::general_purpose::URL_SAFE};
 use chapchoo_crypto::{BearerSecret, CredentialCipher, PasswordCost, RootKey, SystemOwnerVerifier};
 use chapchoo_domain::{EmailAddress, Password};
@@ -67,7 +69,7 @@ fn domain_rpc_keeps_private_owner_authority_and_independent_admin_residual_inven
     let owner = BearerSecret::generate()?;
     let verifier =
         SystemOwnerVerifier::new("system".into(), vec!["provider".into()], owner.digest())?;
-    tokio::runtime::Runtime::new()?.block_on(async {
+    tokio::runtime::Runtime::new()?.block_on(support::scope(async |fixture| {
         let store = Store::connect_sqlite(path, cipher).await?;
         let accounts = AccountsService::new(
             store.clone(),
@@ -130,8 +132,8 @@ fn domain_rpc_keeps_private_owner_authority_and_independent_admin_residual_inven
         let admission = Arc::new(AtomicBool::new(true));
         let services = ComputerServices::new(app.clone()).with_admission(admission.clone());
         let (channel, incoming) = memory_transport();
-        let (stop, stopped) = tokio::sync::oneshot::channel();
-        let server = tokio::spawn(
+        let stopped = fixture.shutdown();
+        fixture.server(
             Server::builder()
                 .add_service(services.agents_server())
                 .add_service(services.computers_server())
@@ -437,9 +439,7 @@ fn domain_rpc_keeps_private_owner_authority_and_independent_admin_residual_inven
                 .code(),
             Code::Unavailable
         );
-        let _ = stop.send(());
         drop((agents, computers, catalog, inventory, channel));
-        server.await??;
         Ok(())
-    })
+    }))
 }
