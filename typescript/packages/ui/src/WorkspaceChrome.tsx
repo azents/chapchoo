@@ -1,6 +1,7 @@
 "use client";
 import { AppNavigationContext, NavigationPanel } from "./AppNavigation";
 import { WorkspaceSelector } from "./WorkspaceSelector";
+import { useRef } from "react";
 import classes from "./WorkspaceChrome.module.css";
 import {
   ActionIcon,
@@ -67,6 +68,7 @@ export interface WorkspaceChromeProps {
 }
 
 export function WorkspaceChrome(props: WorkspaceChromeProps): ReactElement {
+  const workspaceTrigger = useRef<HTMLButtonElement>(null);
   if (!props.identity) {
     return (
       <AppNavigationContext.Provider
@@ -89,6 +91,7 @@ export function WorkspaceChrome(props: WorkspaceChromeProps): ReactElement {
     status: props.status,
     mobile: props.mobile,
     opened: props.picker,
+    triggerRef: workspaceTrigger,
     copy: {
       choose: props.copy.chooseContext,
       teams: props.copy.teams,
@@ -172,6 +175,10 @@ export function WorkspaceChrome(props: WorkspaceChromeProps): ReactElement {
       </Drawer>
       <Modal
         opened={props.creating}
+        returnFocus={false}
+        onExitTransitionEnd={() =>
+          workspaceTrigger.current?.focus({ preventScroll: true })
+        }
         onClose={props.closeCreation}
         title={props.copy.createTeam}
         closeButtonProps={{ "aria-label": props.copy.close }}

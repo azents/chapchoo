@@ -14,7 +14,7 @@ import {
 import { NavigationIcon } from "./NavigationIcon";
 import { DropdownButton } from "./DropdownButton";
 import classes from "./WorkspaceSelector.module.css";
-import type { ReactElement } from "react";
+import type { ReactElement, Ref } from "react";
 
 export interface WorkspaceChoice {
   key: string;
@@ -29,6 +29,7 @@ export interface WorkspaceSelectorProps {
   status: "ready" | "loading" | "error";
   mobile: boolean;
   opened: boolean;
+  triggerRef?: Ref<HTMLButtonElement>;
   copy: {
     choose: string;
     teams: string;
@@ -132,6 +133,7 @@ export function WorkspaceSelector(props: WorkspaceSelectorProps): ReactElement {
   return (
     <DropdownButton
       opened={props.opened}
+      triggerRef={props.triggerRef}
       onChange={(opened) => (opened ? props.onOpen() : props.onClose())}
       width="min(20rem, calc(100vw - 3rem))"
       withinPortal={!props.mobile}

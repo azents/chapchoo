@@ -227,6 +227,41 @@ test.describe("touch workspace overlay", () => {
   });
 });
 
+test("desktop team creation returns focus to the workspace banner on cancel and Escape", async ({
+  page,
+}) => {
+  await page.goto(
+    "/iframe.html?id=navigation-workspace-chrome--desktop-interactive&viewMode=story",
+  );
+  const trigger = page.locator("aside").getByRole("button", {
+    name: "Switch workspace",
+    exact: true,
+  });
+  const creation = page.getByRole("dialog", {
+    name: "Create team",
+    exact: true,
+  });
+  for (const dismissal of ["cancel", "escape"]) {
+    await trigger.click();
+    await page
+      .getByRole("button", { name: "Create team", exact: true })
+      .click();
+    await expect(
+      creation.getByRole("textbox", { name: "Team name", exact: true }),
+    ).toBeFocused();
+    if (dismissal === "cancel") {
+      await creation
+        .getByRole("button", { name: "Cancel", exact: true })
+        .click();
+    } else {
+      await page.keyboard.press("Escape");
+    }
+    await expect(creation).not.toBeVisible();
+    await expect(trigger).toBeFocused();
+    await expect(trigger).toHaveAttribute("aria-expanded", "false");
+  }
+});
+
 test("desktop workspace banner toggles the picker with mouse and keyboard", async ({
   page,
 }) => {
