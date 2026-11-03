@@ -15,6 +15,7 @@
 //! ```
 
 mod computer;
+mod computer_resource;
 mod display;
 mod email;
 mod password;
@@ -25,6 +26,11 @@ pub use computer::{
     DesiredState, InvalidComputerValue, LifecycleAction, LifecyclePhase, LifecycleProgress,
     ObservedPower, PowerCapabilities, ResourcePresence, RestorationBlockReason,
     RestorationEvidence, SavedEnvironment,
+};
+pub use computer_resource::{
+    DockerContainerId, DockerDaemonId, DockerVolumeIdentity, InvalidNativeResource, KubernetesUid,
+    ManagedResourceKind, NativeAllocation, NativeIdentity, NativeReservation, NativeScope,
+    ProviderKind, ResourceRole,
 };
 pub use display::{DisplayPatch, DisplaySettings, InvalidDisplaySettings};
 pub use email::{EmailAddress, InvalidEmail};

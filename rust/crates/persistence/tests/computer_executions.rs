@@ -75,12 +75,7 @@ fn scope<'a>(computer_id: &'a str, request_id: &'a str) -> ComputerRequest<'a> {
     }
 }
 fn kind(resource: &ManagedResource) -> Result<ManagedResourceKind, TestError> {
-    match resource.resource_kind.as_str() {
-        "POD" => Ok(ManagedResourceKind::Pod),
-        "PVC" => Ok(ManagedResourceKind::Pvc),
-        "BOOTSTRAP_SECRET" => Ok(ManagedResourceKind::BootstrapSecret),
-        _ => Err("Invalid resource kind".into()),
-    }
+    Ok(resource.resource_kind.parse()?)
 }
 async fn report(
     store: &Store,
@@ -89,11 +84,10 @@ async fn report(
     resource: &ManagedResource,
     evidence: ResourceEvidence<'_>,
 ) -> Result<(), StoreError> {
-    let kind = match resource.resource_kind.as_str() {
-        "POD" => ManagedResourceKind::Pod,
-        "PVC" => ManagedResourceKind::Pvc,
-        _ => ManagedResourceKind::BootstrapSecret,
-    };
+    let kind = resource
+        .resource_kind
+        .parse()
+        .map_err(|_| StoreError::Integrity)?;
     store
         .report_resource(
             source,

@@ -23,10 +23,11 @@ code_paths:
   - rust/apps/chapchoo/src/config.rs
   - rust/apps/chapchoo/src/connector.rs
   - rust/apps/chapchoo/src/provider.rs
+  - rust/apps/chapchoo/tests/provider_cli.rs
   - rust/apps/chapchoo/src/control_plane.rs
   - rust/apps/chapchoo/src/runtime.rs
   - rust/apps/chapchoo/src/health.rs
-last_verified_at: 2026-11-02
+last_verified_at: 2026-11-03
 spec_version: 1
 ---
 
@@ -134,6 +135,19 @@ releases only that waiter and sends a best-effort exact-call cancel; it does not
 close a shared stream or prove that an external effect stopped.
 
 ## Computer Provider process and acknowledged evidence
+
+The Provider is an external process, including when run by a trusted third party.
+It does not load backend DB configuration, connect to the product DB or receive
+the installation encryption root. Its product operations use authenticated
+Control RPC; storage transactions belong to the server. The single executable
+also contains backend commands, but their DB initialization is not shared with
+the `computer-provider` command.
+
+A child-process boundary test reaches authenticated registration with no DB/root
+configuration and with deliberately invalid backend-only settings. A synthetic
+Control denies registration before native effects; this test requires neither a
+product database nor a live Kubernetes cluster. It is not complete lifecycle or
+third-party onboarding acceptance.
 
 `chapchoo computer-provider` selects explicit in-cluster credentials or an
 explicit kubeconfig path, not ambient cluster discovery. It accepts runtime
