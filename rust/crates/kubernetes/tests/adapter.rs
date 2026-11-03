@@ -8,6 +8,7 @@ use serde_json::{Value, json};
 use std::{
     collections::VecDeque,
     convert::Infallible,
+    error::Error as _,
     sync::{Arc, Mutex},
 };
 type TestError = Box<dyn std::error::Error + Send + Sync>;
@@ -357,23 +358,85 @@ async fn asynchronous_cleanup_waits_for_absence_without_resubmitting_delete()
 #[tokio::test]
 async fn creation_rejection_is_distinct_from_unknown_without_automatic_retry()
 -> Result<(), TestError> {
-    for status in [403, 503] {
-        let (api, calls) = fixture(vec![
-            reply(Method::GET, "/persistentvolumeclaims/pvc", 404, missing()),
+    for (kind, suffix, collection) in [
+        (
+            ResourceKind::Pvc,
+            "/persistentvolumeclaims/pvc",
+            "/persistentvolumeclaims",
+        ),
+        (
+            ResourceKind::BootstrapSecret,
+            "/secrets/bootstrap",
+            "/secrets",
+        ),
+        (ResourceKind::Pod, "/pods/pod", "/pods"),
+    ] {
+        for status in [403, 503] {
+            let private = "Synthetic private API response";
+            let mut replies = Vec::new();
+            if kind == ResourceKind::Pod {
+                replies.extend([
+                reply(Method::GET, "/persistentvolumeclaims/pvc", 200, pvc("pvc-uid")),
+                reply(Method::GET, "/secrets/bootstrap", 200,
+                    json!({"apiVersion":"v1","kind":"Secret","metadata":metadata("bootstrap","secret-uid",true)})),
+            ]);
+            }
+            replies.extend([
+            reply(Method::GET, suffix, 404, missing()),
             reply(
                 Method::POST,
-                "/persistentvolumeclaims",
+                collection,
                 status,
-                json!({"apiVersion":"v1","kind":"Status","status":"Failure","reason":"Rejected","code":status}),
+                json!({"apiVersion":"v1","kind":"Status","status":"Failure","reason":"Rejected","message":private,"code":status}),
             ),
-        ])?;
-        let error = api
-            .ensure_pvc(&context(), &resource(ResourceKind::Pvc, None), true)
-            .await
-            .err()
-            .ok_or("Creation unexpectedly succeeded")?;
-        assert_eq!(error.definitely_rejected(), status == 403);
-        assert_eq!(calls.lock().map_err(|_| "calls")?.len(), 2);
+        ]);
+            let (api, calls) = fixture(replies)?;
+            let result = match kind {
+                ResourceKind::Pvc => {
+                    api.ensure_pvc(&context(), &resource(kind, None), true)
+                        .await
+                }
+                ResourceKind::BootstrapSecret => {
+                    api.ensure_bootstrap(
+                        &context(),
+                        &resource(kind, None),
+                        "session",
+                        "fixture-initial-key",
+                        "http://control.invalid",
+                    )
+                    .await
+                }
+                ResourceKind::Pod => {
+                    api.ensure_pod(
+                        &context(),
+                        &resource(kind, None),
+                        &resource(ResourceKind::Pvc, Some("pvc-uid")),
+                        &resource(ResourceKind::BootstrapSecret, Some("secret-uid")),
+                    )
+                    .await
+                }
+                _ => return Err("Unsupported fixture kind".into()),
+            };
+            let error = result.err().ok_or("Creation unexpectedly succeeded")?;
+            assert_eq!(error.definitely_rejected(), status == 403);
+            let source = error
+                .source()
+                .and_then(|source| source.downcast_ref::<kube::Error>())
+                .ok_or("Missing original SDK cause")?;
+            let kube::Error::Api(response) = source else {
+                return Err("Missing original API response".into());
+            };
+            assert_eq!(response.code, status);
+            assert_eq!(response.message, private);
+            assert!(!error.to_string().contains(private));
+            assert_eq!(format!("{error:?}"), "KubernetesError([REDACTED])");
+            let calls = calls.lock().map_err(|_| "calls")?;
+            assert_eq!(
+                calls.iter().filter(|call| call.0 == Method::POST).count(),
+                1
+            );
+            assert_eq!(calls.len(), if kind == ResourceKind::Pod { 4 } else { 2 });
+        }
     }
     // GET rejection after an AlreadyExists collision is not a rejected POST:
     // an object may already exist, so it cannot authorize preparation replay.

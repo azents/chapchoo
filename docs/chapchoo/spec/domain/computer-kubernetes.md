@@ -59,6 +59,8 @@ resubmits DELETE; timeout, observation failure or replacement UID remains a
 failure rather than cleanup success. The lifecycle permit remains held while
 this observation task runs. Native create rejection is classified only at the
 POST response; a GET/AlreadyExists follow-up error cannot grant preparation retry.
+The classified rejection retains its original typed SDK cause for private handling;
+ordinary Display and Debug still expose only the adapter's static safe context.
 
 ## Evidence and task lifetime
 
