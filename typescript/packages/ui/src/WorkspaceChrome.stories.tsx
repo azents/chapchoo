@@ -1,4 +1,5 @@
 import { Text } from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
 import { useState } from "react";
 import { AppFrame } from "./AppFrame";
 import { ApplicationShellContent } from "./ApplicationShell";
@@ -118,11 +119,13 @@ export const MobilePicker: Story = {
 function InteractiveChrome(props: WorkspaceChromeProps): ReactElement {
   const [drawer, setDrawer] = useState(props.drawer);
   const [picker, setPicker] = useState(props.picker);
+  const [creating, setCreating] = useState(props.creating);
   return (
     <WorkspaceChrome
       {...props}
       drawer={drawer}
       picker={picker}
+      creating={creating}
       openDrawer={() => setDrawer(true)}
       closeDrawer={() => {
         setDrawer(false);
@@ -130,9 +133,24 @@ function InteractiveChrome(props: WorkspaceChromeProps): ReactElement {
       }}
       openPicker={() => setPicker(true)}
       closePicker={() => setPicker(false)}
+      openCreation={() => {
+        setPicker(false);
+        setCreating(true);
+      }}
+      closeCreation={() => setCreating(false)}
     />
   );
 }
+export const DesktopInteractive: Story = {
+  render: (args): ReactElement => <InteractiveChrome {...args} />,
+};
+function ResponsiveChrome(props: WorkspaceChromeProps): ReactElement {
+  const mobile = useMediaQuery("(max-width: 48em)");
+  return <InteractiveChrome {...props} mobile={mobile} />;
+}
+export const ResponsiveInteractive: Story = {
+  render: (args): ReactElement => <ResponsiveChrome {...args} />,
+};
 export const MobileInteractive: Story = {
   args: { mobile: true },
   render: (args): ReactElement => <InteractiveChrome {...args} />,
