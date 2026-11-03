@@ -2,6 +2,7 @@
 //! stream; no endpoint fallback, HTTP retry or handwritten Engine operation.
 use crate::{
     Error,
+    completion::{OwnedTasks, complete},
     connection::{Endpoint, Selection},
 };
 use bollard::{BollardRequest, Docker};
@@ -18,7 +19,6 @@ use std::{
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::{Mutex, Semaphore},
-    task::JoinSet,
 };
 
 mod ssh;
@@ -38,7 +38,8 @@ struct Inner {
     ssh: Option<Arc<ssh::Session>>,
     admitting: AtomicBool,
     permits: Arc<Semaphore>,
-    connections: Mutex<JoinSet<()>>,
+    connections: Mutex<OwnedTasks>,
+    ssh_completion: Mutex<Option<OwnedTasks>>,
 }
 /// Keep this owner through SDK body consumption and explicit process drain.
 #[derive(Clone)]
@@ -70,7 +71,8 @@ impl Transport {
             ssh,
             admitting: AtomicBool::new(true),
             permits: Arc::new(Semaphore::new(CONNECTIONS)),
-            connections: Mutex::new(JoinSet::new()),
+            connections: Mutex::new(OwnedTasks::default()),
+            ssh_completion: Mutex::new(None),
         })))
     }
 
@@ -189,18 +191,21 @@ impl Transport {
             .map_err(|_| sdk_error())?;
         {
             let mut connections = self.0.connections.lock().await;
-            while connections.try_join_next().is_some() {}
+            connections.reap();
             if !self.0.admitting.load(Ordering::Acquire) {
                 return Err(sdk_error());
             }
             let owner = self.clone();
-            connections.spawn(async move {
+            connections.tasks.spawn(async move {
                 // Header delivery is not body completion. The SDK stream and
                 // connection driver keep the selected source alive independently
                 // of a response waiter or a dropped temporary Docker clone.
                 let _owner = owner;
                 let _permit = permit;
+                // The SDK response/body consumer owns ordinary HTTP failures.
+                // Unexpected worker JoinErrors belong to this transport owner.
                 let _ = connection.await;
+                Ok(())
             });
         }
         sender.send_request(request).await.map_err(|_| sdk_error())
@@ -208,16 +213,24 @@ impl Transport {
 
     pub async fn drain(&self) -> Result<(), Error> {
         self.0.admitting.store(false, Ordering::Release);
-        let mut connections = {
-            let mut active = self.0.connections.lock().await;
-            std::mem::take(&mut *active)
-        };
-        while let Some(result) = connections.join_next().await {
-            result.map_err(|_| Error::Transport)?;
+        {
+            let mut connections = self.0.connections.lock().await;
+            connections.join().await;
         }
-        if let Some(session) = &self.0.ssh {
-            session.shutdown().await?;
+        // A pre-registration SSH stream may still be waiting for the connection
+        // mutex to recheck admission. Let it acquire that mutex and drop before
+        // waiting for SSH processes. The shutdown task stays physically owned.
+        let mut shutdown = self.0.ssh_completion.lock().await;
+        if shutdown.is_none() {
+            let mut owned = OwnedTasks::default();
+            if let Some(session) = self.0.ssh.clone() {
+                owned.tasks.spawn(async move { session.shutdown().await });
+            }
+            *shutdown = Some(owned);
         }
-        Ok(())
+        let owned = shutdown.as_mut().ok_or(Error::Transport)?;
+        owned.join().await;
+        let mut connections = self.0.connections.lock().await;
+        complete(connections.finish(), owned.finish())
     }
 }

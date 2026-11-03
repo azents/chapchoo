@@ -127,20 +127,30 @@ impl Docker {
         }
         let negotiate = selected.api_version.is_none();
         let transport = Transport::new(selected).await?;
-        let sdk = transport.sdk()?.with_timeout(Duration::from_secs(10));
-        let sdk = if negotiate {
-            tokio::time::timeout(Duration::from_secs(10), sdk.negotiate_version())
+        let initialized: Result<_, Error> = async {
+            let sdk = transport.sdk()?.with_timeout(Duration::from_secs(10));
+            let sdk = if negotiate {
+                tokio::time::timeout(Duration::from_secs(10), sdk.negotiate_version())
+                    .await
+                    .map_err(|_| Error::Transport)??
+            } else {
+                sdk
+            };
+            let info = tokio::time::timeout(Duration::from_secs(10), sdk.info())
                 .await
-                .map_err(|_| Error::Transport)??
-        } else {
-            sdk
+                .map_err(|_| Error::Transport)??;
+            let daemon = identity(&info)?;
+            workload_policy(&info)?;
+            let architecture = architecture(&info)?.to_owned();
+            Ok((sdk, daemon, architecture))
+        }
+        .await;
+        let (sdk, daemon, architecture) = match initialized {
+            Ok(initialized) => initialized,
+            Err(primary) => {
+                return crate::completion::complete(Err(primary), transport.drain().await);
+            }
         };
-        let info = tokio::time::timeout(Duration::from_secs(10), sdk.info())
-            .await
-            .map_err(|_| Error::Transport)??;
-        let daemon = identity(&info)?;
-        workload_policy(&info)?;
-        let architecture = architecture(&info)?.to_owned();
         Ok(Self {
             sdk,
             transport,

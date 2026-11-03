@@ -7,6 +7,48 @@ use tokio::{
 type TestError = Box<dyn std::error::Error + Send + Sync>;
 
 #[tokio::test]
+async fn failed_driver_does_not_abandon_later_work_even_when_drain_wait_is_cancelled()
+-> Result<(), TestError> {
+    let transport = Transport::new(Selection {
+        api_version: None,
+        endpoint: Endpoint::Unix("/unused-transport-regression.sock".into()),
+        tls: None,
+    })
+    .await?;
+    let (release, released) = oneshot::channel();
+    let (finished, completed) = oneshot::channel();
+    {
+        let mut owned = transport.0.connections.lock().await;
+        let failed = owned.tasks.spawn(std::future::pending());
+        failed.abort();
+        owned.tasks.spawn(async move {
+            released.await.map_err(|_| Error::Transport)?;
+            let _ = finished.send(());
+            Ok(())
+        });
+    }
+    let mut draining = Box::pin(transport.drain());
+    std::future::poll_fn(|context| {
+        assert!(draining.as_mut().poll(context).is_pending());
+        std::task::Poll::Ready(())
+    })
+    .await;
+    drop(draining);
+    release
+        .send(())
+        .map_err(|_| "Cancelled drain abandoned later work")?;
+    let failure = transport
+        .drain()
+        .await
+        .err()
+        .ok_or("Missing driver failure")?;
+    assert!(matches!(failure, Error::TransportTask(_)));
+    completed.await?;
+    assert!(transport.drain().await.is_ok());
+    Ok(())
+}
+
+#[tokio::test]
 async fn selected_connection_and_drain_outlive_headers_until_sdk_body_completion()
 -> Result<(), TestError> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;

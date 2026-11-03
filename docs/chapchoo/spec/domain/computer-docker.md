@@ -53,6 +53,9 @@ authentication source. Independent SDK channels reuse that private mux socket
 without rereading account configuration. Missing master/socket fails closed,
 never direct-reauthenticates or selects another target. Drain ends the master
 after its connection drivers finish.
+Every local mux child remains owned through an explicit awaited exit; stream
+destruction signals that owner rather than treating best-effort runtime reaping
+as completion. Startup failure also terminates and reaps its owned master/check.
 
 Effective Docker TCP `HTTP_PROXY`/`HTTPS_PROXY` routing is currently an explicit
 compatibility error before direct connection. `NO_PROXY` host/port, domain,
@@ -69,6 +72,12 @@ merely response headers. Drain stops new transport admission and joins owned
 connections. SDK request deadlines and explicit total-operation timeouts are
 separate from Control's ten-second response waiter. Image pull consumes its
 entire bounded stream and embedded errors. A native mutation timeout is uncertain.
+Unexpected worker failures do not abandon later drivers or skip SSH cleanup.
+Collected completion causes and pending workers remain owned if a drain waiter
+is cancelled; ordinary HTTP failures continue to belong to SDK request/body
+consumers rather than becoming duplicate sticky process incidents.
+Failed adapter initialization drains the selected transport before returning and
+retains its primary failure if independent transport cleanup also fails.
 
 Startup reads actual `/info`, accepts only the required Linux architecture and
 reported seccomp/CPU/memory-limit capability, then registers the daemon identity

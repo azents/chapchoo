@@ -1,11 +1,13 @@
 //! Selected-daemon Docker SDK adapter. Product database authority stays in Control.
 mod adapter;
+mod completion;
 pub mod connection;
 mod containers;
 mod images;
 pub mod transport;
 mod volumes;
 pub use adapter::{Config, Docker, ImagePolicy};
+pub use completion::CompletionFailures;
 pub use containers::{
     Bootstrap, PreparedContainer, Retirement, StoppedContainer, UpdatedContainer,
 };
@@ -24,6 +26,12 @@ pub enum Error {
     UnsupportedProxy,
     #[error("Selected Docker transport is unavailable; its external outcome may be uncertain")]
     Transport,
+    #[error("Selected Docker transport is unavailable; its external outcome may be uncertain")]
+    TransportIo(#[source] std::io::Error),
+    #[error("Selected Docker transport worker failed")]
+    TransportTask(#[source] tokio::task::JoinError),
+    #[error("Owned Docker transport completion failed")]
+    Completion(#[source] CompletionFailures),
     #[error("Selected Docker daemon identity changed or cannot be verified")]
     DaemonIdentity,
     #[error("Selected Docker daemon cannot enforce the required Linux workload policy")]
