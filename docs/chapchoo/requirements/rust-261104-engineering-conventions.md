@@ -32,41 +32,44 @@ actual ownership, crate boundaries, error handling, asynchronous work and tests.
 ### REQ-2. Separate human judgment from automatic checks
 
 Do not put any rule detectable by a linter in Rust convention documentation.
-Use Rustfmt, compiler/Clippy lints and appropriate existing automated boundary
-checks for mechanically decidable requirements. Convention bodies address
-semantic decisions that tools cannot decide, with actionable applicability,
-concise examples, justified exceptions and links to primary references.
+Mechanically decidable policies must be enforced automatically rather than
+duplicated as prose obligations. Human guidance must support actionable semantic
+judgment, explain its applicability and exceptions, and have primary-source
+evidence appropriate to this repository.
 
 ### REQ-3. Reliable discoverability and scope
 
-An agent editing Rust must discover the relevant Rust convention index through
-the existing path-scoped loading mechanism. Non-Rust edits must not receive
-unrelated Rust rules. Verify generated indexes, nested paths, new files and the
-loading contract with executable tests; do not rely on declaration alone.
+An agent editing an existing, deeply nested or new Rust file must reliably
+discover the relevant guidance. Non-Rust edits must not receive unrelated Rust
+rules. Discoverability and scope must be demonstrated by executable verification,
+not declaration alone.
 
 ### REQ-4. Reviewable delivery and enforcement
 
-Deliver convention content, its research/disposition evidence, scoped loading
-and tooling configuration as a dedicated PR based on main. Tooling must actually
-run in existing local hooks and CI and be compatible with the supported toolchain.
-Resolve baseline tooling failures before presenting the setup PR as ready. Do not
-merge, deploy, add a toolchain-version scheme or silently add compatibility paths.
+The convention setup and code adoption must be independently reviewable, with
+clear scope and verification evidence. Automatic policy enforcement must run in
+ordinary local and CI validation and support the repository's accepted toolchain.
+Readiness must reflect resolved baseline failures and successful validation of the
+delivered revision, not a declaration or a different revision's result.
 
 ### REQ-5. Whole-codebase adoption without behavioral drift
 
-After the convention setup, inspect all Rust crates and the application, record
-coverage and refactor owned contracts to comply in separately reviewable code
-PRs. Include new Docker code in the coverage inventory while keeping its unmerged
-feature stack distinct from the main-based convention PR. Preserve public wire,
+Inspect all Rust crates and the application, record coverage and refactor owned
+contracts to comply. Include new Docker code in the coverage inventory while
+keeping its unmerged feature work distinct from convention setup. Preserve public wire,
 API, database/migration, security/credential, lifecycle, cancellation and external
 effect semantics unless a separately authorized requirement changes them.
-Strengthen behavior-preserving tests where meaningful; do not duplicate dependency
-internals or expand browser E2E for lower-layer combinations. Finish review,
-mandatory hooks, exact-head CI and review-response handling for each delivered PR.
+Demonstrate behavior preservation through owned-contract tests without duplicating
+dependency internals or using browser journeys for lower-layer combinations.
+Every delivered revision must have completed review, required validation and
+review-response handling.
 
 ## Constraints and completion evidence
 
 - All Docker PR CI is already green; no Docker merge/deployment is authorized.
+- As explicitly requested, deliver the independent convention setup before the
+  subsequent code adoption. Merge and deployment are not authorized for either.
+- Do not introduce a toolchain-version scheme or unrequested compatibility paths.
 - Inspect current files and primary sources; inherited conventions may be stale.
 - New Rust language scope and its existing-loader integration are necessary parts
   of the explicitly requested Rust convention setup, not a new product capability.

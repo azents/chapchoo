@@ -185,6 +185,21 @@ adopt that style restriction. Reason presence is not duplicated as a human rule.
 Likewise, const/style/length/trait boilerplate suggestions are not universal
 conventions; compiler and existing default lints remain active.
 
+## Setup and adoption delivery
+
+The setup PR is based on main and contains the concise title-frontmatter
+convention bodies, generated `rust/**` index, existing-loader regression checks
+and focused Rustfmt/compiler/Clippy/rustdoc enforcement. These are implementation
+choices for the Requirements' semantic-guidance, discoverability and automatic
+enforcement outcomes, not additional product requirements.
+
+Whole-codebase adoption follows in independently reviewable code PRs. Record
+actual source coverage and owned-contract behavior tests; keep the unmerged
+Docker stack explicit rather than importing its feature diff into setup.
+Run mandatory local hooks, inspect each PR's exact-head CI and address grounded
+review feedback. Do not mark the broader adoption complete when setup alone is
+verified. This sequence preserves the requester's separate-delivery constraint.
+
 ## Initial integrated verification
 
 Root executed the canonical gate with disposable PostgreSQL after the setup:
