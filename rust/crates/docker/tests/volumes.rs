@@ -46,6 +46,7 @@ struct State {
     removes: usize,
     container: Option<ContainerInspectResponse>,
     container_actions: Vec<String>,
+    reject_container: bool,
     fail_stage: Option<&'static str>,
     image_present: bool,
     image_error: bool,
@@ -170,6 +171,9 @@ async fn serve(
     }
     if path.ends_with("/containers/create") && parts.method == hyper::Method::POST {
         state.container_actions.push("create".into());
+        if state.reject_container {
+            return message(400);
+        }
         let profile: ContainerCreateBody = serde_json::from_slice(&body)?;
         let name = url::form_urlencoded::parse(parts.uri.query().unwrap_or("").as_bytes())
             .find(|(key, _)| key == "name")
@@ -375,6 +379,7 @@ impl Fixture {
             removes: 0,
             container: None,
             container_actions: vec![],
+            reject_container: false,
             fail_stage: None,
             image_present: true,
             image_error: false,
@@ -596,7 +601,77 @@ async fn only_create_rejection_is_definitive_and_unallocated_404_does_not_allow_
         .err()
         .ok_or("Expected explicit rejection")?;
     assert!(error.definitely_rejected());
+    let cause = std::error::Error::source(&error).ok_or("Native rejection cause was discarded")?;
+    assert!(matches!(
+        cause.downcast_ref::<bollard::errors::Error>(),
+        Some(bollard::errors::Error::DockerResponseServerError {
+            status_code: 400,
+            ..
+        })
+    ));
+    assert!(!error.to_string().contains("fixture native outcome"));
+    assert!(!format!("{error:?}").contains("fixture native outcome"));
     assert_eq!(fixture.state.lock().map_err(|_| "Fixture lock")?.removes, 0);
+    fixture.finish(docker).await
+}
+#[tokio::test]
+async fn container_create_rejection_retains_native_cause_without_another_submission()
+-> Result<(), TestError> {
+    let fixture = Fixture::new().await?;
+    let docker = fixture.connect().await?;
+    let saved = docker
+        .ensure_volume(&context(), &reserved(false), true)
+        .await?;
+    fixture
+        .state
+        .lock()
+        .map_err(|_| "Fixture lock")?
+        .reject_container = true;
+    let resource = wire::ManagedResource {
+        kind: wire::ResourceKind::DockerContainer as i32,
+        name: "execution-candidate".into(),
+        execution_id: Some("execution".into()),
+        native: Some(Native::DockerContainer(wire::DockerContainerNative {
+            daemon_id: "daemon:fixture".into(),
+            container_id: None,
+        })),
+        ..Default::default()
+    };
+    let image = docker.prepare_image().await?;
+    let failure = docker
+        .prepare_container(
+            &context(),
+            &resource,
+            &saved,
+            &image,
+            &chapchoo_docker::Bootstrap {
+                session: "session-original",
+                initial_key: "fixture-bootstrap",
+                endpoint: "http://control.invalid:50051",
+            },
+            true,
+        )
+        .await
+        .err()
+        .ok_or("Expected explicit container rejection")?;
+    assert!(failure.container_creation_retry_safe());
+    let cause =
+        std::error::Error::source(&failure).ok_or("Native rejection cause was discarded")?;
+    assert!(matches!(
+        cause.downcast_ref::<bollard::errors::Error>(),
+        Some(bollard::errors::Error::DockerResponseServerError {
+            status_code: 400,
+            ..
+        })
+    ));
+    assert!(!failure.to_string().contains("fixture native outcome"));
+    assert!(!format!("{failure:?}").contains("fixture native outcome"));
+    {
+        let state = fixture.state.lock().map_err(|_| "Fixture lock")?;
+        assert_eq!(state.container_actions, ["create"]);
+        assert!(state.container.is_none());
+        assert_eq!((state.creates, state.removes), (1, 0));
+    }
     fixture.finish(docker).await
 }
 #[tokio::test]

@@ -60,6 +60,10 @@ IP/CIDR and wildcard exclusions plus Go's unconditional loopback/localhost
 bypass are honored. Unix/SSH ignore HTTP proxy routing. A proxy-required target
 is never silently reached directly; no proxy credential is logged.
 
+Explicit volume/container creation rejections retain their original SDK cause
+privately. Public error formatting remains safe; reviewed diagnostics expose only
+the static SDK category and numeric HTTP status, not native response text.
+
 At most 64 connection drivers are owned through response-body completion, not
 merely response headers. Drain stops new transport admission and joins owned
 connections. SDK request deadlines and explicit total-operation timeouts are
