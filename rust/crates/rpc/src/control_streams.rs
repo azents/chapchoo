@@ -125,6 +125,7 @@ impl Inner {
         // kinds. A delayed predecessor cannot evict the committed winner.
         let _activation = self.activation.lock().await;
         self.admit()?;
+        let frame = connected(self, &entry.prepared)?;
         self.service
             .admit_component_connection(&entry.prepared)
             .await
@@ -141,10 +142,7 @@ impl Inner {
                 let _ = resume.await;
             }
         }
-        entry
-            .calls
-            .priority(connected(self, &entry.prepared))
-            .map_err(call_status)?;
+        entry.calls.priority(frame).map_err(call_status)?;
         self.install(entry)
     }
     fn admit(&self) -> Result<(), Status> {
@@ -771,15 +769,20 @@ impl Drop for ComponentOutbound {
 }
 type ComponentStream =
     Pin<Box<dyn Stream<Item = Result<wire::ControlFrame, Status>> + Send + 'static>>;
-fn connected(inner: &Inner, prepared: &PreparedComponentConnection) -> wire::ControlFrame {
-    wire::ControlFrame {
+fn connected(
+    inner: &Inner,
+    prepared: &PreparedComponentConnection,
+) -> Result<wire::ControlFrame, Status> {
+    let validity_ms = u32::try_from(inner.service.policy().directory.component_validity_ms)
+        .map_err(|_| Status::internal("Component validity policy is invalid"))?;
+    Ok(wire::ControlFrame {
         payload: Some(wire::control_frame::Payload::Connected(wire::Connected {
             instance_id: inner.instance_id.clone(),
             connection_id: prepared.owner().connection_id.clone(),
             heartbeat_interval_ms: inner.service.policy().heartbeat_ms,
-            validity_ms: inner.service.policy().directory.component_validity_ms as u32,
+            validity_ms,
         })),
-    }
+    })
 }
 #[tonic::async_trait]
 impl wire::provider_connection_server::ProviderConnection for ProviderConnectionAdapter {

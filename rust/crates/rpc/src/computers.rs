@@ -168,7 +168,8 @@ fn page(value: &wire::Page) -> Result<i64, Status> {
     limit(value.limit)
 }
 fn next(items: usize, limit: i64, last: Option<&str>) -> Option<String> {
-    (items == limit as usize)
+    usize::try_from(limit)
+        .is_ok_and(|limit| items == limit)
         .then(|| last.map(str::to_owned))
         .flatten()
 }
@@ -527,7 +528,7 @@ impl wire::provider_inventory_server::ProviderInventory for InventoryAdapter {
             )
             .await
             .map_err(status)?;
-        let next_after = if items.len() == limit as usize {
+        let next_after = if usize::try_from(limit).is_ok_and(|limit| items.len() == limit) {
             items
                 .last()
                 .map(|r| crate::native_resources::cursor(r.native()))

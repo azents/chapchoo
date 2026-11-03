@@ -75,6 +75,7 @@ lettre = { version = "0.11.23", default-features = false, features = ["builder",
 [workspace.lints.rust]
 unsafe_code = "forbid"
 missing_debug_implementations = "deny"
+unused_must_use = "deny"
 
 [workspace.lints.clippy]
 unwrap_used = "deny"
@@ -83,3 +84,17 @@ panic = "deny"
 dbg_macro = "deny"
 print_stdout = "deny"
 print_stderr = "deny"
+await_holding_lock = "deny"
+await_holding_refcell_ref = "deny"
+await_holding_invalid_type = "deny"
+let_underscore_future = "deny"
+mem_forget = "deny"
+exit = "deny"
+cast_possible_truncation = "deny"
+cast_possible_wrap = "deny"
+cast_sign_loss = "deny"
+cast_precision_loss = "deny"
+checked_conversions = "deny"
+
+[workspace.lints.rustdoc]
+broken_intra_doc_links = "deny"

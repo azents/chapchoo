@@ -155,6 +155,41 @@ class WebRuleScopeTest(unittest.TestCase):
                 )
 
 
+class RustRuleScopeTest(unittest.TestCase):
+    def test_actual_rust_index_follows_existing_nested_and_new_rust_paths(self) -> None:
+        project_root = MODULE_PATH.parents[2]
+        rust_rule = project_root / ".claude/rules/rust-conventions.md"
+        cases = (
+            ("rust/Cargo.toml", True),
+            ("rust/apps/chapchoo/src/main.rs", True),
+            ("rust/crates/domain/src/email.rs", True),
+            ("rust/crates/new-adapter/src/nested/new.rs", True),
+            ("rust/apps/chapchoo/tests/future_contract.rs", True),
+            ("typescript/apps/web/src/app/page.tsx", False),
+            ("proto/chapchoo/accounts.proto", False),
+            ("scripts/check-rust.sh", False),
+            ("other/rust/example.rs", False),
+        )
+        for target, expected in cases:
+            with self.subTest(target=target):
+                rules = hook._rules_for_targets(project_root, [project_root / target])
+                self.assertEqual(
+                    any(rule.real_path == rust_rule for rule in rules), expected
+                )
+
+    def test_loaded_rust_index_keeps_every_body_discoverable(self) -> None:
+        project_root = MODULE_PATH.parents[2]
+        rules = hook._rules_for_targets(
+            project_root, [project_root / "rust/crates/new/src/lib.rs"]
+        )
+        rendered = hook._format_rules(rules)
+        for body in sorted((project_root / ".claude/conventions/rust").glob("*.md")):
+            with self.subTest(body=body.name):
+                post = hook.frontmatter.load(body)
+                self.assertIn(post.metadata["title"], rendered)
+                self.assertIn(f"../conventions/rust/{body.name}", rendered)
+
+
 class TargetExtractionTest(unittest.TestCase):
     def test_extracts_typed_file_and_bash_targets(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -42,7 +42,8 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .map_err(ServiceError::infrastructure)?
             .as_millis();
-        assert!((before..=after).contains(&(actual as u128)));
+        let actual = u128::try_from(actual).map_err(ServiceError::infrastructure)?;
+        assert!((before..=after).contains(&actual));
         Ok(())
     }
 }

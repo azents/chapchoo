@@ -1,0 +1,4 @@
+await-holding-invalid-types = [
+    { path = "tracing::span::Entered", reason = "A thread-local entered span must not survive an async suspension; instrument the future instead." },
+    { path = "tracing::span::EnteredSpan", reason = "A thread-local entered span must not survive an async suspension; instrument the future instead." },
+]

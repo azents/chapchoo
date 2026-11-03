@@ -30,6 +30,7 @@ Current scopes:
 | --- | --- |
 | `global` | Every file in the repo |
 | `python` | `python/**` |
+| `rust` | `rust/**` |
 | `typescript` | `typescript/**` |
 | `web` | General/Admin web apps, shared web packages, and browser verification; see `.claude/rules/web-conventions.md` for current paths |
 | `infra` | `infra/**` |
