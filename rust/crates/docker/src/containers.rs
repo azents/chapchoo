@@ -319,7 +319,7 @@ impl Docker {
                         }) {
                             records.remove(&context.execution_id);
                         }
-                        return Err(Error::CreationRejected);
+                        return Err(Error::CreationRejected(error));
                     }
                     Err(error) => return Err(error.into()),
                 };

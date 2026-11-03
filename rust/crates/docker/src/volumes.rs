@@ -276,7 +276,7 @@ impl Docker {
         .map_err(|_| Error::Uncertain)?;
         let created = match created {
             Ok(created) => created,
-            Err(error) if create_rejected(&error) => return Err(Error::CreationRejected),
+            Err(error) if create_rejected(&error) => return Err(Error::CreationRejected(error)),
             Err(error) => return Err(error.into()),
         };
         Ok(PreparedVolume {
