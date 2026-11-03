@@ -1,4 +1,5 @@
 import { Text } from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
 import { useState } from "react";
 import { AppFrame } from "./AppFrame";
 import { ApplicationShellContent } from "./ApplicationShell";
@@ -142,6 +143,13 @@ function InteractiveChrome(props: WorkspaceChromeProps): ReactElement {
 }
 export const DesktopInteractive: Story = {
   render: (args): ReactElement => <InteractiveChrome {...args} />,
+};
+function ResponsiveChrome(props: WorkspaceChromeProps): ReactElement {
+  const mobile = useMediaQuery("(max-width: 48em)");
+  return <InteractiveChrome {...props} mobile={mobile} />;
+}
+export const ResponsiveInteractive: Story = {
+  render: (args): ReactElement => <ResponsiveChrome {...args} />,
 };
 export const MobileInteractive: Story = {
   args: { mobile: true },

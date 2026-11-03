@@ -227,6 +227,41 @@ test.describe("touch workspace overlay", () => {
   });
 });
 
+test("resizing an open Drawer leaves one current trigger for desktop dialog focus", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 402, height: 874 });
+  await page.goto(
+    "/iframe.html?id=navigation-workspace-chrome--responsive-interactive&viewMode=story",
+  );
+  await page
+    .getByRole("button", { name: "Open navigation", exact: true })
+    .click();
+  const drawer = page.locator(".mantine-Drawer-content");
+  await expect(drawer).toBeVisible();
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const trigger = page.locator("aside").getByRole("button", {
+    name: "Switch workspace",
+    exact: true,
+  });
+  await expect(drawer).not.toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Switch workspace", exact: true }),
+  ).toHaveCount(1);
+  await trigger.click();
+  await page.getByRole("button", { name: "Create team", exact: true }).click();
+  const creation = page.getByRole("dialog", {
+    name: "Create team",
+    exact: true,
+  });
+  await expect(
+    creation.getByRole("textbox", { name: "Team name", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(creation).not.toBeVisible();
+  await expect(trigger).toBeFocused();
+});
+
 test("desktop team creation returns focus to the workspace banner on cancel and Escape", async ({
   page,
 }) => {

@@ -148,7 +148,7 @@ export function WorkspaceChrome(props: WorkspaceChromeProps): ReactElement {
         onClose={props.closeDrawer}
         position="left"
         size="sm"
-        title={selector}
+        title={props.mobile ? selector : null}
         closeButtonProps={{ "aria-label": props.copy.close, size: rem(44) }}
         classNames={{
           header: classes.drawerHeader,
