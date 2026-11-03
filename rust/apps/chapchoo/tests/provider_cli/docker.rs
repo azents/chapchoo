@@ -6,11 +6,13 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 async fn external_docker_provider_reaches_scoped_control_without_db_root_or_ambient_context()
 -> Result<(), Error> {
     let dir = tempfile::tempdir()?;
+    test_support::scope(async |fixture| {
     let native = TcpListener::bind("127.0.0.1:0").await?;
     let host = format!("tcp://{}", native.local_addr()?);
-    let (native_shutdown, mut native_stopped) = tokio::sync::oneshot::channel();
-    let native_server = tokio::spawn(async move {
+    let mut native_stopped = fixture.shutdown();
+    fixture.server(async move {
         let mut tasks = tokio::task::JoinSet::new();
+        let primary = async {
         loop {
             tokio::select! {
                 _ = &mut native_stopped => break,
@@ -37,18 +39,18 @@ async fn external_docker_provider_reaches_scoped_control_without_db_root_or_ambi
                 }
             }
         }
-        while let Some(task) = tasks.join_next().await {
-            task??;
-        }
         Ok::<(), Error>(())
+        }.await;
+        let cleanup = test_support::requests(&mut tasks).await;
+        test_support::completed(primary, cleanup)
     });
     let listener = TcpListener::bind("127.0.0.1:0").await?;
     let endpoint = format!("http://{}", listener.local_addr()?);
     let owner = BearerSecret::generate()?;
     let token = owner.expose().to_owned();
     let (configured, mut received) = mpsc::channel(2);
-    let (shutdown, stopped) = tokio::sync::oneshot::channel();
-    let server = tokio::spawn(
+    let stopped = fixture.shutdown();
+    fixture.server(
         Server::builder()
             .add_service(ProviderAuthenticationServer::new(ControlBoundary {
                 configured,
@@ -89,7 +91,7 @@ async fn external_docker_provider_reaches_scoped_control_without_db_root_or_ambi
                 .env("CHAPCHOO_POSTGRES_URL", "invalid-product-db")
                 .env("CHAPCHOO_SECRET_KEY", "invalid-root");
         }
-        let mut child = command.spawn()?;
+        let child = fixture.child(&mut command)?;
         let configured = tokio::time::timeout(Duration::from_secs(10), received.recv())
             .await?
             .ok_or("Docker Provider did not reach Control")?;
@@ -100,15 +102,12 @@ async fn external_docker_provider_reaches_scoped_control_without_db_root_or_ambi
             Some("external:docker-daemon")
         );
         assert!(
-            !tokio::time::timeout(Duration::from_secs(10), child.wait())
+            !tokio::time::timeout(Duration::from_secs(10), child.lock().await.wait())
                 .await??
                 .success()
         );
         assert!(!db_canary.exists());
     }
-    let _ = shutdown.send(());
-    server.await??;
-    let _ = native_shutdown.send(());
-    native_server.await??;
     Ok(())
+    }).await
 }

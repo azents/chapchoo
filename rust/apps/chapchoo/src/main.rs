@@ -6,6 +6,9 @@ mod control_plane;
 mod health;
 mod provider;
 mod runtime;
+#[cfg(test)]
+#[path = "../test_support.rs"]
+mod test_support;
 mod web;
 
 use clap::Parser;
