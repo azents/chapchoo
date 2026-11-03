@@ -134,6 +134,11 @@ async fn authenticated_mux_target_survives_config_loss_but_never_reauthenticates
         0
     );
     session.shutdown().await?;
+    assert_eq!(
+        session.permits.available_permits(),
+        super::super::CONNECTIONS
+    );
+    assert!(session.channels.lock().await.owned.tasks.is_empty());
     assert!(session.connect(None).await.is_err());
     tokio::time::timeout(Duration::from_secs(5), server).await???;
     Ok(())

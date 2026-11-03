@@ -1,6 +1,9 @@
 //! One process-lifetime OpenSSH authentication/target, with independent mux
 //! channels for SDK streams. No new authentication after that master is lost.
-use crate::Error;
+use crate::{
+    Error,
+    completion::{OwnedTasks, complete},
+};
 use std::{
     path::{Path, PathBuf},
     pin::Pin,
@@ -12,11 +15,18 @@ use std::{
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
     process::{Child, ChildStdin, ChildStdout, Command},
-    sync::Mutex,
+    sync::{Mutex, OwnedSemaphorePermit, Semaphore, oneshot},
 };
 
+struct Channels {
+    admitting: bool,
+    owned: OwnedTasks,
+}
+
 pub(super) struct Session {
-    master: Mutex<Child>,
+    master: Mutex<Option<Child>>,
+    channels: Mutex<Channels>,
+    permits: Arc<Semaphore>,
     directory: tempfile::TempDir,
     host: String,
     user: Option<String>,
@@ -29,7 +39,7 @@ impl std::fmt::Debug for Session {
 }
 pub(super) struct Stream {
     _session: Arc<Session>,
-    _child: Child,
+    stop: Option<oneshot::Sender<()>>,
     input: ChildStdin,
     output: ChildStdout,
 }
@@ -38,6 +48,49 @@ impl std::fmt::Debug for Stream {
         f.write_str("DockerSshStream([REDACTED])")
     }
 }
+impl Drop for Stream {
+    fn drop(&mut self) {
+        // The Session's worker owns fallible termination and reaping.
+        if let Some(stop) = self.stop.take() {
+            let _ = stop.send(());
+        }
+    }
+}
+
+async fn terminate(child: &mut Child) -> Result<(), Error> {
+    match child.try_wait() {
+        Ok(Some(_)) => Ok(()),
+        state => {
+            let primary = state.map(|_| ()).map_err(Error::TransportIo);
+            let signal = child.start_kill().map_err(Error::TransportIo);
+            let reaped = child.wait().await.map(|_| ()).map_err(Error::TransportIo);
+            complete(complete(primary, signal), reaped)
+        }
+    }
+}
+
+fn own_channel(
+    child: Child,
+    mut stop: oneshot::Receiver<()>,
+    permit: OwnedSemaphorePermit,
+    owned: &mut OwnedTasks,
+) {
+    owned.tasks.spawn(async move {
+        let _permit = permit;
+        let mut child = child;
+        tokio::select! {
+            exit = child.wait() => match exit {
+                Ok(_) => Ok(()),
+                Err(error) => {
+                    let cleanup = terminate(&mut child).await;
+                    complete(Err(Error::TransportIo(error)), cleanup)
+                }
+            },
+            _ = &mut stop => terminate(&mut child).await,
+        }
+    });
+}
+
 fn quoted(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
 }
@@ -122,7 +175,7 @@ impl Session {
         let directory = tempfile::Builder::new()
             .prefix("chapchoo-ssh-")
             .tempdir()
-            .map_err(|_| Error::Transport)?;
+            .map_err(Error::TransportIo)?;
         let path = socket_path(directory.path());
         let master = Command::new("ssh")
             .args(master_arguments(&path, host, user, port)?)
@@ -131,7 +184,7 @@ impl Session {
             .stderr(Stdio::null())
             .kill_on_drop(true)
             .spawn()
-            .map_err(|_| Error::Transport)?;
+            .map_err(Error::TransportIo)?;
         Self::ready(host, user, port, directory, master).await
     }
     async fn ready(
@@ -143,47 +196,65 @@ impl Session {
     ) -> Result<Arc<Self>, Error> {
         let path = socket_path(directory.path());
         let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
-        loop {
-            if master.try_wait().map_err(|_| Error::Transport)?.is_some() {
-                return Err(Error::Transport);
-            }
-            // `-O check` never opens an alternate SSH connection. Socket
-            // existence is only readiness to attempt this authoritative check.
-            if path.exists() {
-                let checked = Command::new("ssh")
-                    .args(["-F", "/dev/null"])
-                    .arg("-S")
-                    .arg(&path)
-                    .args(["-O", "check"])
-                    .args({
-                        let mut args = Vec::new();
-                        target(&mut args, host, user, port);
-                        args
-                    })
-                    .stdin(Stdio::null())
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .kill_on_drop(true)
-                    .status();
-                if tokio::time::timeout_at(deadline, checked)
-                    .await
-                    .map_err(|_| Error::Transport)?
-                    .map_err(|_| Error::Transport)?
-                    .success()
-                {
-                    break;
+        let readiness = async {
+            loop {
+                if master.try_wait().map_err(Error::TransportIo)?.is_some() {
+                    return Err(Error::Transport);
                 }
+                // `-O check` never opens an alternate SSH connection. Socket
+                // existence is only readiness to attempt this authoritative check.
+                if path.exists() {
+                    let mut checked = Command::new("ssh")
+                        .args(["-F", "/dev/null"])
+                        .arg("-S")
+                        .arg(&path)
+                        .args(["-O", "check"])
+                        .args({
+                            let mut args = Vec::new();
+                            target(&mut args, host, user, port);
+                            args
+                        })
+                        .stdin(Stdio::null())
+                        .stdout(Stdio::null())
+                        .stderr(Stdio::null())
+                        .kill_on_drop(true)
+                        .spawn()
+                        .map_err(Error::TransportIo)?;
+                    let checked = match tokio::time::timeout_at(deadline, checked.wait()).await {
+                        Ok(Ok(status)) => status,
+                        result => {
+                            let primary = match result {
+                                Ok(Err(error)) => Error::TransportIo(error),
+                                _ => Error::Transport,
+                            };
+                            return complete(Err(primary), terminate(&mut checked).await);
+                        }
+                    };
+                    if checked.success() {
+                        break;
+                    }
+                }
+                if tokio::time::Instant::now() >= deadline {
+                    return Err(Error::Transport);
+                }
+                tokio::time::sleep_until(
+                    (tokio::time::Instant::now() + Duration::from_millis(25)).min(deadline),
+                )
+                .await;
             }
-            if tokio::time::Instant::now() >= deadline {
-                return Err(Error::Transport);
-            }
-            tokio::time::sleep_until(
-                (tokio::time::Instant::now() + Duration::from_millis(25)).min(deadline),
-            )
-            .await;
+            Ok(())
+        }
+        .await;
+        if let Err(primary) = readiness {
+            return complete(Err(primary), terminate(&mut master).await);
         }
         Ok(Arc::new(Self {
-            master: Mutex::new(master),
+            master: Mutex::new(Some(master)),
+            channels: Mutex::new(Channels {
+                admitting: true,
+                owned: OwnedTasks::default(),
+            }),
+            permits: Arc::new(Semaphore::new(super::CONNECTIONS)),
             directory,
             host: host.into(),
             user: user.map(str::to_owned),
@@ -195,12 +266,24 @@ impl Session {
             .master
             .lock()
             .await
+            .as_mut()
+            .ok_or(Error::Transport)?
             .try_wait()
-            .map_err(|_| Error::Transport)?
+            .map_err(Error::TransportIo)?
             .is_some()
         {
             return Err(Error::Transport);
         }
+        let mut channels = self.channels.lock().await;
+        if !channels.admitting {
+            return Err(Error::Transport);
+        }
+        channels.owned.reap();
+        let permit = self
+            .permits
+            .clone()
+            .try_acquire_owned()
+            .map_err(|_| Error::Transport)?;
         let mut child = Command::new("ssh")
             .args(client_arguments(
                 &socket_path(self.directory.path()),
@@ -214,22 +297,33 @@ impl Session {
             .stderr(Stdio::null())
             .kill_on_drop(true)
             .spawn()
-            .map_err(|_| Error::Transport)?;
-        let input = child.stdin.take().ok_or(Error::Transport)?;
-        let output = child.stdout.take().ok_or(Error::Transport)?;
+            .map_err(Error::TransportIo)?;
+        let pipes = child.stdin.take().zip(child.stdout.take());
+        let Some((input, output)) = pipes else {
+            return complete(Err(Error::Transport), terminate(&mut child).await);
+        };
+        let (stop, stopped) = oneshot::channel();
+        own_channel(child, stopped, permit, &mut channels.owned);
         Ok(Stream {
             _session: self.clone(),
-            _child: child,
+            stop: Some(stop),
             input,
             output,
         })
     }
     pub(super) async fn shutdown(&self) -> Result<(), Error> {
+        let mut channels = self.channels.lock().await;
+        channels.admitting = false;
+        channels.owned.join().await;
         let mut master = self.master.lock().await;
-        if master.try_wait().map_err(|_| Error::Transport)?.is_none() {
-            master.kill().await.map_err(|_| Error::Transport)?;
+        if let Some(mut master) = master.take() {
+            channels
+                .owned
+                .tasks
+                .spawn(async move { terminate(&mut master).await });
         }
-        Ok(())
+        channels.owned.join().await;
+        channels.owned.finish()
     }
 }
 impl AsyncRead for Stream {
@@ -269,6 +363,146 @@ mod fixture;
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn drain_releases_registration_lock_before_waiting_for_unregistered_ssh_stream()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use super::super::{CONNECTIONS, Transport};
+        use crate::connection::{Endpoint, Selection};
+        let master = Command::new("cat")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .kill_on_drop(true)
+            .spawn()?;
+        let master_pid = master.id().ok_or("Missing synthetic master")?;
+        let session = Arc::new(Session {
+            master: Mutex::new(Some(master)),
+            channels: Mutex::new(Channels {
+                admitting: true,
+                owned: OwnedTasks::default(),
+            }),
+            permits: Arc::new(Semaphore::new(CONNECTIONS)),
+            directory: tempfile::tempdir()?,
+            host: "unused".into(),
+            user: None,
+            port: None,
+        });
+        let mut transport = Transport::new(Selection {
+            endpoint: Endpoint::Unix("/unused-registration-fixture".into()),
+            tls: None,
+            api_version: None,
+        })
+        .await?;
+        Arc::get_mut(&mut transport.0)
+            .ok_or("Transport already shared")?
+            .ssh = Some(session.clone());
+        let mut child = Command::new("cat")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .kill_on_drop(true)
+            .spawn()?;
+        let channel_pid = child.id().ok_or("Missing synthetic channel")?;
+        let input = child.stdin.take().ok_or("Missing channel input")?;
+        let output = child.stdout.take().ok_or("Missing channel output")?;
+        let permit = session.permits.clone().try_acquire_owned()?;
+        let (stop, stopped) = oneshot::channel();
+        own_channel(
+            child,
+            stopped,
+            permit,
+            &mut session.channels.lock().await.owned,
+        );
+        let stream = Stream {
+            _session: session.clone(),
+            stop: Some(stop),
+            input,
+            output,
+        };
+        let mut draining = Box::pin(transport.drain());
+        std::future::poll_fn(|context| {
+            assert!(draining.as_mut().poll(context).is_pending());
+            std::task::Poll::Ready(())
+        })
+        .await;
+        // An already-open request must be able to recheck closed admission and
+        // drop its not-yet-registered stream, independently of drain completion.
+        let mut registration = Box::pin(async {
+            let _guard = transport.0.connections.lock().await;
+            assert!(
+                !transport
+                    .0
+                    .admitting
+                    .load(std::sync::atomic::Ordering::Acquire)
+            );
+            drop(stream);
+        });
+        std::future::poll_fn(|context| {
+            assert!(registration.as_mut().poll(context).is_ready());
+            std::task::Poll::Ready(())
+        })
+        .await;
+        drop(registration);
+        draining.await?;
+        assert_eq!(session.permits.available_permits(), CONNECTIONS);
+        for pid in [master_pid, channel_pid] {
+            assert!(!Path::new(&format!("/proc/{pid}")).exists());
+        }
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn closed_channel_is_reaped_before_capacity_is_released()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut child = Command::new("cat")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .kill_on_drop(true)
+            .spawn()?;
+        let pid = child.id().ok_or("Missing fixture process")?;
+        let _input = child.stdin.take().ok_or("Missing fixture input")?;
+        let _output = child.stdout.take().ok_or("Missing fixture output")?;
+        let permits = Arc::new(Semaphore::new(1));
+        let permit = permits.clone().try_acquire_owned()?;
+        let mut owned = OwnedTasks::default();
+        let (stop, stopped) = oneshot::channel();
+        own_channel(child, stopped, permit, &mut owned);
+        assert_eq!(permits.available_permits(), 0);
+        drop(stop);
+        owned.join().await;
+        owned.finish()?;
+        assert_eq!(permits.available_permits(), 1);
+        assert!(!Path::new(&format!("/proc/{pid}")).exists());
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn unsuccessful_master_readiness_returns_only_after_process_exit_is_reaped()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::Builder::new()
+            .prefix("failed-ssh-fixture-")
+            .tempdir()?;
+        let master = Command::new("sh")
+            .args(["-c", "exit 1"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .kill_on_drop(true)
+            .spawn()?;
+        let pid = master.id().ok_or("Missing fixture master PID")?;
+        assert!(
+            Session::ready("unused-fixture", None, None, directory, master)
+                .await
+                .is_err()
+        );
+        assert!(!Path::new(&format!("/proc/{pid}")).exists());
+        Ok(())
+    }
+
     #[test]
     fn selected_authentication_policy_is_preserved_and_mux_clients_cannot_reauthenticate()
     -> Result<(), Error> {
