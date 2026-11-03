@@ -22,7 +22,7 @@ struct CompletionFailure(Vec<TestError>);
 impl fmt::Debug for CompletionFailure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_list()
-            .entries(self.0.iter().map(ToString::to_string))
+            .entries(self.0.iter().map(|cause| format!("{cause:?}")))
             .finish()
     }
 }
