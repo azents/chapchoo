@@ -16,6 +16,7 @@ code_paths:
   - images/chapchoo
   - infra/charts/chapchoo
   - testenv/chapchoo
+  - typescript/apps/integration
   - .github/workflows/linux-package.yaml
   - .github/workflows/build-web.yaml
   - .github/workflows/build-binary.yaml
@@ -229,7 +230,7 @@ exports archives/checksums. This checks root/prefixed startup, runtime isolation
 static assets, private RPC and shutdown before PR merge without another build
 or product E2E. General CI owns product-test orchestration:
 its single downstream `browser-e2e` job waits for the native build and consumes
-that same run's x86-64 archive, verifies its checksum, and runs the five core
+that same run's x86-64 archive, verifies its checksum, and runs the four core
 PostgreSQL/browser journeys once using only the bundled executable, Node and web
 outputs. It does not rebuild the product or repeat source/per-architecture E2E.
 ARM64 remains a native build/ELF/assembly/image-smoke gate rather than a second
@@ -237,15 +238,16 @@ product-test lane. Snapshot checks the exact images it publishes as well.
 Workflow configuration is not an executed success; actual exact-head CI results
 must be reported separately.
 
-The fifth journey is the minimal real Docker Computer lifecycle, not a second
-account/browser matrix. The disposable hosted runner's Engine is explicitly
-authorized; its Computer image is assembled from that same run's extracted
-binary. Public Docker SDK fixture operations supply prerequisites, bounded
-non-root marker IO and disjoint canary objects. The E2E owner asserts connected
-Create, Stop/Start native replacement with original saved data, no-copy on
-successors including emptied storage, normal Delete absence and untouched
-canaries. Existing synthetic-Kubernetes coverage stays. Missing required
-socket/image/route fails this path, never skips.
+The separate required `docker-integration` job owns a browser-free real Docker
+lifecycle. It downloads that same run's native binary artifact for actual
+backend/Control/Provider and the Computer image; no web artifact, server or
+Chromium is required. `typescript/apps/integration` calls generated public
+account/Computer RPC and asserts connected Create, Stop/Start with original data,
+successor no-copy including emptied storage, normal Delete and untouched canaries.
+Public Docker SDK support supplies only prerequisites/marker IO. Existing browser
+and synthetic-Kubernetes coverage stays unchanged. Missing required native
+socket/image/route fails, never skips. Safe startup diagnostics distinguish
+static native error classification and RPC status without raw source messages.
 
 Only this opt-in real-Docker Assembly binds ephemeral Client/Control to all
 interfaces so the existing bridge gateway (or explicit host override) can route

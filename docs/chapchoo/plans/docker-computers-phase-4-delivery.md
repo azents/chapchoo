@@ -10,9 +10,14 @@ tags: [computer, docker, implementation, acceptance]
 - Branch/base: `feat/docker-computers-4-delivery` →
   `feat/docker-computers-3-native-runtime` at `7815553`
   ([PR #51](https://github.com/azents/chapchoo/pull/51)).
-- PR boundary: non-root image saved-directory ownership, one serial real Docker
-  product lifecycle in the existing Linux acceptance gate, and truthful evidence
-  and current Specs. No Mac build/distribution work.
+- PR boundary: non-root image saved-directory ownership and one browser-free
+  real Docker integration lifecycle through public RPC and actual Control/
+  Provider/Connector, with truthful evidence and current Specs. Existing browser
+  E2E remains unchanged. No Mac build/distribution work.
+- Test-owner correction: the requester clarified that Docker resource validation
+  does not belong in browser E2E. Reuse testenv prerequisites, but own the native
+  scenario in `typescript/apps/integration/` and a separate required CI job that
+  consumes the existing same-run binary artifact; do not duplicate the UI flow.
 - Inputs: phase3's DB-free CLI/selected public SDK/once-only lifecycle;
   174 Rust tests in50 groups,31 Docker/local OpenSSH cases,67 live RPC checks per
   database, mandatory hooks and independent review. Three preceding PRs are open.
@@ -32,7 +37,7 @@ tags: [computer, docker, implementation, acceptance]
   credentials; new product exec APIs/browser matrices; force/prune cleanup;
   merge/deploy or support claims from unexecuted configurations.
 - Interfaces: unchanged approved lifecycle/RPC/private-owner boundaries;
-  `docker-provider` runtime flags; existing package artifact and E2E Assembly
+  `docker-provider` runtime flags; existing binary artifact and native Assembly
   ownership; public Docker SDK fixture operations and bounded test-only marker
   exec. Deployment configuration never enters published images.
 - Approved mechanisms: M9/M10/M11/M12/M14, consuming existing M1–M16 native safety.
@@ -53,11 +58,11 @@ tags: [computer, docker, implementation, acceptance]
 | Workstream | Owner | Paths | Output | Validation |
 | --- | --- | --- | --- | --- |
 | Image saved storage | `/root` | `images/chapchoo/`, existing image/workflow owner tests | UID:GID10001:10001 directory, no privileged helper or baked deployment setting | Offline contracts and actual non-root initial write/successor no-copy |
-| Real native prerequisites | `/root` | `testenv/chapchoo/src/{assembly,config,docker}.ts`, package manifest/lock, pure tests | Public SDK, unique scoped resources/canaries, bounded test-only exec and verified cleanup; no scenarios/assertions in support package | Pure helper/config/export tests, type/lint, E2E-owned assembly |
-| Minimal real product journey | `/root` | `typescript/apps/e2e/`, existing Linux CI gate | One serial Create/connected/marker/Stop/Start/data/Delete/canary journey; K8s scenario retained | Required real Engine path fails on missing prerequisites, same-run binary/image |
+| Real native prerequisites | `/root` | `testenv/chapchoo/src/{assembly,config,docker}.ts`, package manifest/lock, pure tests | Public SDK, unique scoped resources/canaries, bounded test-only exec and verified cleanup; no scenarios/assertions in support package | Pure helper/config/export tests, type/lint, integration-owned assembly |
+| Minimal real product journey | `/root` | `typescript/apps/integration/`, separate required Linux CI gate | One serial public-RPC Create/connected/marker/Stop/Start/data/Restart/Delete/canary journey; existing browser journeys unchanged | Required real Engine path fails on missing prerequisites, same-run binary/image, no web or browser |
 | Current contract/evidence | `/root` | Owning Specs, DEVELOPMENT/README, plans and scope correction | Passed/failed/unavailable evidence without expanding platform delivery | Full affected root checks, spec review, exact reviewer, hooks and PR4 |
 
-- Integration order: corrected scope recorded → image/support → minimal E2E/CI
+- Integration order: corrected scope recorded → image/support → native integration/CI
   integration → root checks → frozen complete diff review → root corrections/
   affected reruns → PR4 → entire-stack exact-head CI and automatic-review handling.
   Do not poll earlier CI before the planned stack exists.
@@ -65,13 +70,13 @@ tags: [computer, docker, implementation, acceptance]
   reviewer. Root owns edits, integration, all verification and corrections.
 - Final validation: existing Python image/build/workflow contracts; global TS
   format/lint/typecheck/build and support/app tests; docs/diff checks; required
-  single Linux real Engine E2E and preserved K8s journey. Rust/RPC gates rerun if
+  single Linux real Engine integration and preserved browser journeys. Rust/RPC gates rerun if
   those interfaces change. Remote modes remain separately reported opt-in real
   evidence; no missing prerequisite counts as passed or silently skipped.
 - Scope drift: no new product authority, lifecycle retry/reset, source of truth,
   DB access in Providers, host-network/proxy workaround or Docker installation.
   No Mac build/distribution added merely because context resolution is portable.
-- Context checkpoint: source image/SDK support and E2E integration implemented.
+- Context checkpoint: source image/SDK support and browser-free native integration implemented.
   Ordinary Assemblies remain loopback; only explicit real-Docker fixtures expose
   their trusted ephemeral Control route to the existing bridge. Guest credentials
   stay scoped to Connector; bounded native evidence is reported only after a
@@ -88,6 +93,19 @@ tags: [computer, docker, implementation, acceptance]
   build/support gates passed again. The exact reviewer confirmed the original
   P2 and its removing-state remainder resolved with no remaining findings. Rust/wire/product UI contracts are unchanged
   from phase3, whose174 Rust/67-per-engine RPC evidence remains valid.
+  The initial PR52 CI passed all four existing browser journeys but failed the
+  wrongly placed Docker browser scenario on Provider selection timeout. That log
+  does not establish the native startup cause. The corrected required
+  `docker-integration` job consumes the same-run binary without web artifacts or
+  another Cargo build, starts no web/browser, and reports safe startup classes.
+  Root reran Rust format/tests/Clippy/boundaries, global TS format/lint/typecheck/
+  all9 builds, testenv11 pure+5 export tests, remaining E2E unit test and25
+  Python contracts successfully. Complete corrected-phase review found one P2:
+  normal once-only retirement also uses UNCERTAIN. Root requires the same request's
+  completed power/connectivity report and bounds all in-progress observations,
+  including UNCERTAIN, without mutation replay. All3 integration unit tests,
+  lint/typecheck/build pass after the fix; the same reviewer confirmed the P2
+  resolved with no remaining findings. New exact-head CI is still required.
   Current host has no Engine socket; real fixture startup explicitly fails for
   missing authorized socket/image before launching DB/product. Actual Linux
   acceptance awaits the required CI gate after PR4 creation. No current Mac gate,

@@ -13,7 +13,7 @@ snapshot_id: docker-261103
 - Snapshot: `docker-261103`
 - Requirements: [docker-261103/REQ](../requirements/docker-261103-server-computers.md), confirmed on 2026-11-03.
 - Decisions: [docker-261103/ADR](../adr/docker-261103-server-computers.md).
-- Design revision: `6`; authority/feasibility reviewed and approved by the requester on 2026-11-03.
+- Design revision: `7`; revision6 authority/feasibility review retained with the requester's explicit M14 scope correction on 2026-11-03.
 - This document specifies intended changes, not implemented behavior or live Docker evidence.
 
 ## Current Behavior and Gaps
@@ -926,10 +926,11 @@ Docker SDK/image caches and unrelated host resources have no cleanup authority.
 
 ### Primary E2E contract
 
-Use the minimum existing product journey rather than a new broad browser matrix.
-One Docker-backed lifecycle test uses the real account/Control/Provider/Connector
-and a selected real Engine with isolated PostgreSQL or the existing supported
-fixture database. Verify:
+Use one browser-free integration journey through public account/Computer RPC,
+actual Control/Provider/Connector and a selected real Engine with isolated
+PostgreSQL or the existing supported fixture database. Existing browser E2E owns
+the unchanged owner/operator UI; do not duplicate it for Docker. Here end-to-end
+means the actual backend/native components, not a browser dependency. Verify:
 
 1. scoped SYSTEM Provider registers and owner creates a private Agent;
 2. real container starts and Connector becomes connected independently;
@@ -990,7 +991,8 @@ contract tests, with one focused real-host diagnosis only if needed.
 
 `testenv/chapchoo` may supply reusable private DB/process/credential and selected
 host fixture support, because those are shared assembly concerns. Product
-journeys stay in the E2E owner, not a second testenv acceptance framework.
+scenarios stay in the browser or native integration app that owns the boundary,
+not a second testenv acceptance framework.
 Docker fixtures use SDK operations with unique owned IDs and labels, explicit
 selected daemon, supported Linux image/architecture/network and no broad prune.
 Require operator-authorized disposable resources; never infer that any available
@@ -1002,15 +1004,15 @@ commands/assertions, observed outcomes and owned cleanup. Do not archive
 bootstrap environment, Docker config files or certificates. Fixture cleanup is
 separately verified and never reports test success from failed native cleanup.
 
-Extend the existing required Linux acceptance workflow with one serial
-Docker-backed Computer lifecycle alongside the existing synthetic-Kubernetes
-Computer journey. Reuse the job's freshly built backend/web/Connector artifacts
-and isolated account fixture, with a disposable runner-owned Engine. Build the
-Linux Computer image from those artifacts rather than fetching an untraceable
-mutable release. Do not duplicate the account/team/browser matrix per transport,
-remove existing K8s coverage or add a second nightly-only success substitute.
-Missing required Docker/image/network prerequisites fail this declared Linux
-path; they cannot silently skip.
+Add one required browser-free Docker integration job to ordinary CI. Reuse
+that run's native binary build artifact for the actual backend/Provider and
+Computer image with a disposable runner-owned Engine and isolated account
+fixture. Do not rebuild product binaries, require web artifacts or Chromium,
+or duplicate the owner UI/account/team browser matrix. Existing synthetic-
+Kubernetes browser coverage remains unchanged. Missing required Docker/image/
+network prerequisites fail the declared native path; they cannot silently skip.
+The requester explicitly corrected the browser/native test-layer separation
+on 2026-11-04; this preserves M12's real-component coverage without a browser.
 
 No Mac-only compiler, startup, archive or Desktop lane is added in this effort.
 Respect selected context/socket behavior and retain portability for a later
@@ -1037,8 +1039,12 @@ in a deployed environment.
 
 ### Authority and source-design audit result
 
-Requirements REQ-1 through REQ-6 and ADR-D1 through ADR-D6 have been traced
-bidirectionally against revision `6`, mechanisms M1 through M16. Independent
+Requirements REQ-1 through REQ-6 and ADR-D1 through ADR-D6 are traced
+bidirectionally against revision `7`, mechanisms M1 through M16. This retains
+the independent revision6 authority/feasibility review and applies the requester's
+explicit ADR-D5/M14 narrowing: context respect and portability, without current
+Mac builds, distribution or a real-Mac gate. The browser-free test-owner
+correction preserves M12 and does not add a material mechanism. Independent
 read-only authority/feasibility review found no remaining concrete Design
 blocking defect after correcting:
 

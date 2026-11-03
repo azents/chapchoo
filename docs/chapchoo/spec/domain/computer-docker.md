@@ -179,15 +179,17 @@ The Provider respects CLI context/socket selection and avoids unnecessary
 host-OS coupling so a later Mac build can use it naturally. This effort adds
 no Mac-only build, packaging, distribution or real-Mac completion gate.
 
-The existing required Linux browser gate additionally builds the Computer image
-from its same-run release executable and runs one serial real-Docker lifecycle.
+The separate required Linux integration gate builds the Computer image from
+the same-run native binary artifact and runs one browser-free Docker lifecycle.
 An explicitly authorized disposable socket is mandatory. The fixture selects
 the existing bridge and supplies a container-reachable fixture Control address,
 not a guest port/tunnel/host-network workaround. The product journey verifies
 non-root initial saved writes, Stop/Start with original data, successor no-copy,
 emptied saved storage across Restart, exact normal cleanup and unrelated canaries.
-The fixture uses public Docker SDK calls and bounded test-only exec, never a
-product exec API or guest Docker credentials.
+The integration app invokes generated public owner RPC against actual backend/
+Control/Provider/Connector. Support uses public Docker SDK calls and bounded
+test-only exec, never a product exec API or guest Docker credentials. The browser
+suite remains unchanged; no Docker-specific UI journey or Chromium is required.
 
 Missing required prerequisites fail; no synthetic fallback or skip counts as a
 real lifecycle pass. A workflow or cross-platform archive alone does not establish

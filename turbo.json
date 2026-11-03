@@ -7,6 +7,12 @@
     "SWC_NATIVE_BINDING_CACHE"
   ],
   "tasks": {
+    "@chapchoo/integration#build": {
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": []
+    },
     "@chapchoo/design-reference#build": {
       "dependsOn": [
         "^build"

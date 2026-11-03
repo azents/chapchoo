@@ -38,7 +38,7 @@ tags: [computer, docker, implementation]
 | Docker computers [1/4]: native resource contracts | Domain-owned native kinds, scopes, identities and roles; strict persisted kind decoding replaces the storage-owned K8s enum. M3/M4/M7 foundations, M10/M12 owner-layer evidence. No Docker activation or schema change. | Base main; fixes typed contracts before persisted/wire integration. Existing K8s behavior unchanged. |
 | Docker computers [2/4]: durable native authority and protocol | Both-engine preservation migration, typed store/service native reservations and evidence, immutable daemon binding, wire/DTO/cursor changes, generated clients and complete server-side exact retirement manifest/admission. M1/M3/M4/M5/M8/M10/M11/M16. | Phase 1; DB-first prepare required, coordinated components required. No Docker effect forwarding before the complete server once-only gate is integrated. |
 | Docker computers [3/4]: selected Docker transport and lifecycle | CLI context/default/override resolver, public SDK transport, native adapter, shared task owner and Provider-side once-only native stages matching the server retirement manifest. M2/M3/M5/M6/M7/M8/M9/M13/M15/M16. | Phase 2; only isolated explicitly selected fixture resources. Existing K8s contract remains green. |
-| Docker computers [4/4]: image and real lifecycle acceptance | Linux image ownership, General/Admin labels and generated-client consumption, minimal real Linux E2E, portable context behavior and final Spec promotion. No Mac build/distribution. M9/M10/M11/M12/M14 and complete-feature regression. | Phase3; real Linux gate remains required; untested Mac/remote combinations are not advertised. |
+| Docker computers [4/4]: image and real lifecycle acceptance | Linux image ownership, General/Admin labels and generated-client consumption, minimal browser-free real Linux integration, portable context behavior and final Spec promotion. No Mac build/distribution. M9/M10/M11/M12/M14 and complete-feature regression. | Phase3; real Linux gate remains required; untested Mac/remote combinations are not advertised. |
 
 All paths remain root-owned; phase plans specify exact current paths, integration
 order and commands. A later phase may refine execution decomposition without
@@ -85,8 +85,8 @@ mandatory.
 - Adapter/Control: supported SDK synthetic transport tests; endpoint/context/TLS/
   SSH configuration fidelity; no alternate-host fallback; retained task lifetime,
   ACK boundaries, native retirement stages and uncertain progress.
-- Linux: one serial Docker Computer lifecycle added to required existing
-  acceptance using current built artifacts and runner-owned disposable Engine.
+- Linux: one serial Docker Computer lifecycle in a separate required browser-free
+  integration app/job using current binary artifacts and runner-owned disposable Engine.
   Missing declared prerequisites fail; do not duplicate the browser matrix.
 - macOS portability: preserve ordinary context/socket selection and avoid
   unnecessary host-OS coupling for a later build. Current Mac compiler,

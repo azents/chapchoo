@@ -172,30 +172,35 @@ class CiStructureTests(unittest.TestCase):
         self.assertIn("hashFiles('pnpm-lock.yaml')", web)
         self.assertIn("pnpm exec turbo run build", web)
 
-    def test_real_docker_journey_uses_same_run_binary_in_the_existing_gate(
+    def test_real_docker_integration_has_a_native_owner_and_same_run_binary(
         self,
     ) -> None:
-        ci = (
-            (ROOT / ".github/workflows/ci.yaml")
-            .read_text()
-            .split("  browser-e2e:", 1)[1]
+        ci = (ROOT / ".github/workflows/ci.yaml").read_text()
+        browser, native = ci.split("  browser-e2e:", 1)[1].split(
+            "  docker-integration:", 1
         )
         for required in [
             "needs: native-build",
-            "computer-binary",
-            "installed/chapchoo-linux-x86_64/chapchoo",
+            "name: binary-build-x86_64",
+            "binary-artifacts.tar",
             "--build-context",
-            "CHAPCHOO_E2E_DOCKER_AUTHORIZED=disposable",
-            "CHAPCHOO_E2E_DOCKER_SOCKET=/var/run/docker.sock",
-            "CHAPCHOO_E2E_DOCKER_IMAGE=chapchoo-computer-acceptance:ci",
+            "CHAPCHOO_INTEGRATION_BINARY=",
+            "CHAPCHOO_INTEGRATION_DOCKER_AUTHORIZED=disposable",
+            "CHAPCHOO_INTEGRATION_DOCKER_SOCKET=/var/run/docker.sock",
+            "CHAPCHOO_INTEGRATION_DOCKER_IMAGE=chapchoo-computer-acceptance:ci",
+            "pnpm --filter @chapchoo/integration test:integration",
         ]:
-            self.assertIn(required, ci)
-        self.assertEqual(ci.count("pnpm --filter @chapchoo/e2e test:e2e"), 1)
+            self.assertIn(required, native)
+        self.assertIn("pnpm --filter @chapchoo/e2e test:e2e", browser)
+        self.assertNotIn("CHAPCHOO_INTEGRATION_DOCKER", browser)
+        self.assertNotIn("playwright", native)
         image = (ROOT / "images/chapchoo/Dockerfile").read_text()
         self.assertIn("mkdir -p /opt/chapchoo /workspace", image)
         self.assertIn("chown 10001:10001 /opt/chapchoo /workspace", image)
         self.assertTrue((ROOT / "typescript/apps/e2e/src/computers.spec.ts").is_file())
-        self.assertTrue((ROOT / "typescript/apps/e2e/src/docker.spec.ts").is_file())
+        self.assertTrue(
+            (ROOT / "typescript/apps/integration/src/docker.test.ts").is_file()
+        )
 
 
 if __name__ == "__main__":

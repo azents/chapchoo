@@ -22,4 +22,6 @@ safe metadata only; credentials, grants and proof-bearing URLs stay private.
 Run from the repository root: `pnpm --filter @chapchoo/testenv test`, `lint`, and
 `typecheck`. Its support tests exercise pure helpers/configuration and do not
 launch products, Docker, PostgreSQL or network listeners. Root/integrator owns
-assembled-product execution from `@chapchoo/e2e`.
+assembled execution from its owning app: browser journeys in `@chapchoo/e2e`,
+browser-free native backend integration in `@chapchoo/integration`. Native mode
+must not launch web servers or a browser.

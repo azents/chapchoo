@@ -152,17 +152,20 @@ not its completion gate. It never installs or launches Docker Desktop. A future
 claim of a tested Desktop or remote SSH/TCP/TLS combination still needs explicit
 real-target evidence; Linux socket results do not imply those results.
 
-The complete Linux E2E now also requires a disposable authorized Docker Engine,
-not merely a CLI. The single CI browser job builds the Computer image using its
-same-run packaged binary, then selects the runner-owned socket explicitly.
-Local E2E requires `CHAPCHOO_E2E_DOCKER_AUTHORIZED=disposable`, an absolute
-`CHAPCHOO_E2E_DOCKER_SOCKET`, and `CHAPCHOO_E2E_DOCKER_IMAGE` naming the current
-built Linux image. Keep ambient Docker transport variables unset for this
-fixture. The default existing bridge gateway must reach its ephemeral fixture
-Control listener; an optional `CHAPCHOO_E2E_DOCKER_CONTROL_HOST` supplies an
-already-reachable host instead. No networks, guest port mappings or tunnels are
+The browser-free Docker integration job requires a disposable authorized Engine,
+not merely a CLI. It uses the same run's native binary artifact for actual
+backend/Control/Provider and the Computer image, without web servers or Chromium.
+The existing four browser E2E journeys remain unchanged. Run
+`pnpm --filter @chapchoo/integration test:integration` with
+`CHAPCHOO_INTEGRATION_DOCKER_AUTHORIZED=disposable`, an absolute
+`CHAPCHOO_INTEGRATION_DOCKER_SOCKET`, and `CHAPCHOO_INTEGRATION_DOCKER_IMAGE`
+naming the current built Linux image. `CHAPCHOO_INTEGRATION_BINARY` selects an
+explicit built executable without source-build fallback. Keep ambient Docker
+transport variables unset. The default existing bridge gateway must reach the
+fixture Control listener; optional `CHAPCHOO_INTEGRATION_DOCKER_CONTROL_HOST`
+selects an already-reachable host. No networks, guest ports or tunnels are
 created by the Provider. Missing required inputs fail rather than skip. See
-[the E2E owner](typescript/apps/e2e/README.md) for commands and evidence boundaries.
+[the native owner](typescript/apps/integration/README.md) for evidence boundaries.
 
 The Docker supported-SDK/real-Control fixture checks allocation ACK order,
 normal stop/start/restart/delete, original-volume retention, source replacement

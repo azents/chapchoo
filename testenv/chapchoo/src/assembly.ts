@@ -8,6 +8,7 @@ import {
   installedPackageRoot,
   safeEnvironment,
   dockerFixtureConfig,
+  integrationBinary,
 } from "./config/index.js";
 import type { DockerFixtureConfig } from "./config/index.js";
 import { DockerFixture } from "./docker.js";
@@ -73,15 +74,23 @@ export class Assembly {
     adminWebPort: number,
     private readonly packageRoot: string | null,
     docker: DockerFixtureConfig | null,
+    private readonly nativeBinary: string | null,
   ) {
     this.docker = docker ? new DockerFixture(docker) : null;
     this.owner = new ProcessOwner(join(directory, "owned-processes.jsonl"));
     this.generalUrl = `http://127.0.0.1:${generalWebPort}${packageRoot ? "" : "/app"}`;
     this.adminUrl = `http://127.0.0.1:${adminWebPort}${packageRoot ? "" : "/admin"}`;
   }
-  static async create(realDocker = false): Promise<Assembly> {
+  static async create(): Promise<Assembly> {
+    return Assembly.createOwned(false);
+  }
+  static async createDockerIntegration(): Promise<Assembly> {
+    return Assembly.createOwned(true);
+  }
+  private static async createOwned(realDocker: boolean): Promise<Assembly> {
     const docker = realDocker ? dockerFixtureConfig() : null;
-    const packageRoot = installedPackageRoot();
+    const packageRoot = realDocker ? null : installedPackageRoot();
+    const nativeBinary = realDocker ? integrationBinary() : null;
     const directory = await mkdtemp(join(tmpdir(), "chapchoo-e2e-"));
     const ports = new Set<number>();
     let assembly: Assembly | null = null;
@@ -101,6 +110,7 @@ export class Assembly {
         adminWeb,
         packageRoot,
         docker,
+        nativeBinary,
       );
       await assembly.start();
       return assembly;
@@ -195,7 +205,7 @@ export class Assembly {
       CHAPCHOO_SECRET_KEY: `${secret()}=`,
     };
     const rust = join(repository, "rust");
-    if (!this.packageRoot) {
+    if (!this.packageRoot && !this.nativeBinary) {
       await this.owner.run(
         "Product binary build",
         "cargo",
@@ -205,9 +215,11 @@ export class Assembly {
         300_000,
       );
     }
-    const binary = this.packageRoot
-      ? join(this.packageRoot, "chapchoo")
-      : join(rust, "target/debug/chapchoo");
+    const binary =
+      this.nativeBinary ??
+      (this.packageRoot
+        ? join(this.packageRoot, "chapchoo")
+        : join(rust, "target/debug/chapchoo"));
     await this.owner.run(
       "Product schema preparation",
       binary,
@@ -241,7 +253,7 @@ export class Assembly {
         "client,control",
         "--listen",
         `${this.docker ? "0.0.0.0" : "127.0.0.1"}:${this.generalPort}`,
-        ...(this.packageRoot
+        ...(this.packageRoot && !this.docker
           ? [
               "--web",
               "both",
@@ -269,13 +281,13 @@ export class Assembly {
       },
     );
     await this.product.ready(
-      this.packageRoot
+      this.packageRoot && !this.docker
         ? /Selected components are ready/
         : /Selected backend service groups are ready/,
       60_000,
     );
     this.productReady = true;
-    if (this.packageRoot) {
+    if (this.packageRoot || this.docker) {
       return;
     }
     for (const [name, url, backendPort] of [
@@ -387,15 +399,20 @@ export class Assembly {
       },
     );
   }
-  async startDockerProvider(): Promise<void> {
+  get generalRpcEndpoint(): string {
+    return `127.0.0.1:${this.generalPort}`;
+  }
+  async startDockerProvider(): Promise<OwnedChild> {
     if (!this.docker) {
       throw new Error("Real Docker Assembly was not explicitly selected");
     }
     await this.docker.prepare(this.generalPort);
-    const binary = this.packageRoot
-      ? join(this.packageRoot, "chapchoo")
-      : join(repository, "rust/target/debug/chapchoo");
-    this.owner.start(
+    const binary =
+      this.nativeBinary ??
+      (this.packageRoot
+        ? join(this.packageRoot, "chapchoo")
+        : join(repository, "rust/target/debug/chapchoo"));
+    return this.owner.start(
       "Native Docker Computer Provider",
       binary,
       ["docker-provider"],

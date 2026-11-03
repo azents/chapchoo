@@ -2,7 +2,6 @@ import { lstat, realpath, rm, unlink } from "node:fs/promises";
 import { dirname, resolve, sep } from "node:path";
 import { privateOutputRoot, runnerOutput } from "./config/index.js";
 import { safeMessage, sanitize } from "@chapchoo/testenv/safety";
-import { nativeEvidence } from "./nativeEvidence.js";
 import type {
   FullConfig,
   FullResult,
@@ -69,18 +68,6 @@ export default class SafeReporter implements Reporter {
     // Do not publish inline buffers or artifact paths through reporter forwarding.
     result.attachments.splice(0);
     process.stdout.write(`${result.status}: ${sanitize(test.title)}\n`);
-    for (const annotation of test.annotations.filter(
-      (value) => value.type === "native-docker",
-    )) {
-      const evidence = nativeEvidence(annotation.description ?? "");
-      if (!evidence) {
-        this.privacyFailed = true;
-      } else if (result.status === "passed") {
-        process.stdout.write(
-          `Native Docker evidence: ${JSON.stringify(evidence)}\n`,
-        );
-      }
-    }
     if (result.status !== "passed" && result.status !== "skipped") {
       for (const error of result.errors) {
         this.onError(error);

@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdtempSync,
+  mkdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -7,6 +13,7 @@ import {
   installedPackageRoot,
   safeEnvironment,
   dockerFixtureConfig,
+  integrationBinary,
 } from "./index.ts";
 
 void test("child environments omit backend, mail and Node preload authority", () => {
@@ -65,9 +72,9 @@ void test("explicit package prerequisites never fall back to source execution", 
 
 void test("real Docker prerequisites cannot implicitly authorize a daemon or accept a regular file", () => {
   const keys = [
-    "CHAPCHOO_E2E_DOCKER_AUTHORIZED",
-    "CHAPCHOO_E2E_DOCKER_SOCKET",
-    "CHAPCHOO_E2E_DOCKER_IMAGE",
+    "CHAPCHOO_INTEGRATION_DOCKER_AUTHORIZED",
+    "CHAPCHOO_INTEGRATION_DOCKER_SOCKET",
+    "CHAPCHOO_INTEGRATION_DOCKER_IMAGE",
   ];
   const saved = new Map(keys.map((key) => [key, process.env[key]]));
   const root = mkdtempSync(join(tmpdir(), "chapchoo-docker-prerequisite-"));
@@ -76,15 +83,15 @@ void test("real Docker prerequisites cannot implicitly authorize a daemon or acc
       delete process.env[key];
     }
     assert.throws(dockerFixtureConfig, /authorized disposable socket/);
-    process.env.CHAPCHOO_E2E_DOCKER_AUTHORIZED = "disposable";
-    process.env.CHAPCHOO_E2E_DOCKER_IMAGE = "current-built:fixture";
-    process.env.CHAPCHOO_E2E_DOCKER_SOCKET = "relative.sock";
+    process.env.CHAPCHOO_INTEGRATION_DOCKER_AUTHORIZED = "disposable";
+    process.env.CHAPCHOO_INTEGRATION_DOCKER_IMAGE = "current-built:fixture";
+    process.env.CHAPCHOO_INTEGRATION_DOCKER_SOCKET = "relative.sock";
     assert.throws(dockerFixtureConfig, /authorized disposable socket/);
     const regular = join(root, "not-a-socket");
     writeFileSync(regular, "fixture");
-    process.env.CHAPCHOO_E2E_DOCKER_SOCKET = regular;
+    process.env.CHAPCHOO_INTEGRATION_DOCKER_SOCKET = regular;
     assert.throws(dockerFixtureConfig, /authorized disposable socket/);
-    process.env.CHAPCHOO_E2E_DOCKER_SOCKET = join(
+    process.env.CHAPCHOO_INTEGRATION_DOCKER_SOCKET = join(
       root,
       "unavailable-private-endpoint",
     );
@@ -103,6 +110,30 @@ void test("real Docker prerequisites cannot implicitly authorize a daemon or acc
       } else {
         process.env[key] = value;
       }
+    }
+  }
+});
+
+void test("native integration artifact selection never borrows a web package or replaces a bad explicit binary", () => {
+  const saved = process.env.CHAPCHOO_INTEGRATION_BINARY;
+  const root = mkdtempSync(join(tmpdir(), "chapchoo-native-binary-"));
+  try {
+    delete process.env.CHAPCHOO_INTEGRATION_BINARY;
+    assert.equal(integrationBinary(), null);
+    process.env.CHAPCHOO_INTEGRATION_BINARY = "relative-binary";
+    assert.throws(integrationBinary, /absolute existing built executable/);
+    const binary = join(root, "chapchoo");
+    writeFileSync(binary, "synthetic executable fixture");
+    process.env.CHAPCHOO_INTEGRATION_BINARY = binary;
+    assert.throws(integrationBinary, /absolute existing built executable/);
+    chmodSync(binary, 0o755);
+    assert.equal(integrationBinary(), binary);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    if (saved === void 0) {
+      delete process.env.CHAPCHOO_INTEGRATION_BINARY;
+    } else {
+      process.env.CHAPCHOO_INTEGRATION_BINARY = saved;
     }
   }
 });

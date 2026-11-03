@@ -216,6 +216,31 @@ importers:
         specifier: ^8.67.0
         version: 8.72.1(eslint@10.13.0)(typescript@6.0.3)
 
+  typescript/apps/integration:
+    dependencies:
+      '@chapchoo/rpc-client':
+        specifier: workspace:*
+        version: link:../../packages/rpc-client
+      '@chapchoo/testenv':
+        specifier: workspace:*
+        version: link:../../../testenv/chapchoo
+      '@grpc/grpc-js':
+        specifier: 1.14.6
+        version: 1.14.6
+    devDependencies:
+      '@types/node':
+        specifier: ^24.13.3
+        version: 24.19.2
+      eslint:
+        specifier: ^10.8.1
+        version: 10.13.0
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      typescript-eslint:
+        specifier: ^8.67.0
+        version: 8.72.1(eslint@10.13.0)(typescript@6.0.3)
+
   typescript/apps/web:
     dependencies:
       '@chapchoo/ui':

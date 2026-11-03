@@ -58,6 +58,25 @@ export function buildEnvironment(): NodeJS.ProcessEnv {
   return result;
 }
 
+/** A selected native artifact never falls back to a source build. */
+export function integrationBinary(): string | null {
+  const value = process.env.CHAPCHOO_INTEGRATION_BINARY;
+  if (value === void 0) {
+    return null;
+  }
+  try {
+    const file = statSync(value);
+    if (!isAbsolute(value) || !file.isFile() || (file.mode & 0o111) === 0) {
+      throw new Error("Invalid binary");
+    }
+    return realpathSync(value);
+  } catch {
+    throw new Error(
+      "Native integration requires an absolute existing built executable",
+    );
+  }
+}
+
 export interface DockerFixtureConfig {
   socket: string;
   image: string;
@@ -66,11 +85,12 @@ export interface DockerFixtureConfig {
 
 /** Opt-in authorizes only an operator-selected disposable fixture daemon. */
 export function dockerFixtureConfig(): DockerFixtureConfig {
-  const socket = process.env.CHAPCHOO_E2E_DOCKER_SOCKET;
-  const image = process.env.CHAPCHOO_E2E_DOCKER_IMAGE;
-  const controlHost = process.env.CHAPCHOO_E2E_DOCKER_CONTROL_HOST ?? null;
+  const socket = process.env.CHAPCHOO_INTEGRATION_DOCKER_SOCKET;
+  const image = process.env.CHAPCHOO_INTEGRATION_DOCKER_IMAGE;
+  const controlHost =
+    process.env.CHAPCHOO_INTEGRATION_DOCKER_CONTROL_HOST ?? null;
   if (
-    process.env.CHAPCHOO_E2E_DOCKER_AUTHORIZED !== "disposable" ||
+    process.env.CHAPCHOO_INTEGRATION_DOCKER_AUTHORIZED !== "disposable" ||
     !socket ||
     !isAbsolute(socket) ||
     !image ||

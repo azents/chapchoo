@@ -50,6 +50,8 @@ fn main() -> ExitCode {
             tracing::error!(
                 source_depth = depth,
                 configuration = ?error.downcast_ref::<config::ConfigError>(),
+                native_docker = ?error.downcast_ref::<chapchoo_docker::Error>().map(ToString::to_string),
+                control_rpc = ?error.downcast_ref::<tonic::Status>().map(tonic::Status::code),
                 backtrace = %Backtrace::force_capture(),
                 "Chapchoo command failed; verify configuration and service prerequisites"
             );
