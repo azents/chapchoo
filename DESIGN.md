@@ -242,7 +242,50 @@ family while allowing role-specific differences. Simple line icons should have
 consistent weight and clear meaning. The exact icon library and logo remain open;
 the study's temporary star/wordmark is not a finalized brand mark.
 
+Navigation uses the common `NavigationIcon` SVG frame: a 24-unit view box,
+20px leading icons and 16px trailing chevrons (expressed with `rem()`), consistent
+1.65-unit rounded strokes, and non-shrinking block layout. Align each icon frame
+to the control's vertical center rather than a text baseline. Use a dedicated
+icon section with the shared small gap; never use font glyphs as chevrons, arrows
+or add icons. Selection remains background/text plus accessible current state,
+without a decorative trailing tick. The icon is decorative; its containing
+control supplies the accessible name.
+
 ## Components
+
+### Clickable surfaces
+
+Use a native link for navigation and a native button for an action. A clickable
+row or banner is one whole target and one keyboard stop; do not nest links or
+buttons inside it. Keep the purpose visible through its label and, for a drill-in
+row, a trailing navigation chevron. An avatar or name inside that row activates
+the same destination as its whitespace.
+
+Existing Mantine buttons retain their shared theme. Custom rows and banners use
+common `InteractiveSurface`: transparent at rest, a quiet selected-surface tint
+on hover-capable pointers, and the existing warm accent-soft tone while pressed.
+The transient pressed state is not a persistent selection. Keyboard focus uses
+the existing two-pixel focus outline with three-pixel offset; never replace it
+with hover alone or hide it after a timer. Retain the native click/release event
+so dragging away can cancel; do not navigate on pointer-down. Native disabled
+buttons remain inert and have no hover/pressed treatment. Navigation links are
+not simulated disabled buttons.
+
+Use the existing 44px minimum target and spacing/radius tokens. Feedback changes
+color without scaling, lifting or ripple; a short background-color transition is
+removed for reduced motion. Touch does not require hover. Forced-colors mode
+retains a visible system-color focus outline. The default, hover, pressed,
+focus-visible and disabled examples live with the shared component; account
+profile banners use this same implementation in General and Admin.
+
+These choices adapt [Mantine's native custom-control model](https://mantine.dev/core/unstyled-button/),
+[WCAG focus visibility](https://www.w3.org/WAI/WCAG22/Understanding/focus-visible.html),
+[pointer cancellation](https://www.w3.org/WAI/WCAG22/Understanding/pointer-cancellation.html)
+and [target-size guidance](https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html).
+The 44px target exceeds WCAG 2.2 AA's 24px minimum; a two-pixel focus perimeter
+also follows the stronger [focus-appearance guidance](https://www.w3.org/WAI/WCAG22/Understanding/focus-appearance.html),
+without claiming complete AAA conformance. Hover styling is gated by the
+[primary input's hover capability](https://developer.mozilla.org/en-US/docs/Web/CSS/@media/hover).
 
 ### Drawers
 

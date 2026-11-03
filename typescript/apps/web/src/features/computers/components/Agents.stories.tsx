@@ -55,22 +55,8 @@ const meta = {
     copy: computerCopy("en-US"),
     stale: false,
     pending: false,
-    creationLocked: false,
     error: null,
-    name: "",
-    providerId: "",
-    providers: {
-      type: "loaded",
-      stale: false,
-      after: null,
-      nextAfter: null,
-      items: [{ id: "provider", name: "Community Kubernetes" }],
-    },
     confirmation: null,
-    onName: () => {},
-    onProvider: () => {},
-    onProviderPage: () => {},
-    onCreate: () => {},
     onAction: () => {},
     onConfirm: () => {},
     onCancel: () => {},
@@ -92,13 +78,6 @@ export const Empty: Story = {
       type: "list",
       after: "",
       page: { items: [], nextAfter: null },
-    },
-    providers: {
-      type: "loaded",
-      stale: false,
-      items: [],
-      after: null,
-      nextAfter: null,
     },
   },
 };
@@ -158,37 +137,6 @@ export const ForceRemoval: Story = {
           forceRemoveAvailable: true,
         },
       },
-    },
-  },
-};
-export const ProviderReadFailure: Story = {
-  args: { providers: { type: "error" } },
-};
-export const RetainedCreationForm: Story = {
-  args: {
-    name: "Research companion",
-    providerId: "provider",
-    providers: {
-      type: "loaded",
-      stale: true,
-      after: null,
-      nextAfter: null,
-      items: [{ id: "provider", name: "Community Kubernetes" }],
-    },
-  },
-};
-export const UnresolvedCreationWithoutProvider: Story = {
-  args: {
-    name: "Research companion",
-    providerId: "provider",
-    creationLocked: true,
-    error: computerCopy("en-US").lostSubmission,
-    providers: {
-      type: "loaded",
-      stale: false,
-      after: null,
-      nextAfter: null,
-      items: [],
     },
   },
 };

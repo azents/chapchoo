@@ -5,6 +5,8 @@ import { AppHeader, HeaderControlsContext } from "@chapchoo/ui/AppHeader";
 import { DisplayEntry, DisplayPanel } from "@chapchoo/ui/DisplaySettings";
 import { useState } from "react";
 import { Mascot } from "@chapchoo/ui/Mascot";
+import { NavigationIcon } from "@chapchoo/ui/NavigationIcon";
+import { InteractiveSurface } from "@chapchoo/ui/InteractiveSurface";
 import {
   Button,
   Chip,
@@ -89,12 +91,28 @@ export default function CommonUiPreview(): ReactElement {
         instant={1793428200000}
       />
       <Stack p="lg">
+        <InteractiveSurface href="#profile-example">
+          <Group justify="space-between">
+            <Text>Profile and account</Text>
+            <NavigationIcon name="forward" size="sm" />
+          </Group>
+        </InteractiveSurface>
+        <InteractiveSurface disabled>Unavailable action</InteractiveSurface>
         <Mascot size={72} />
         <EmptyFeedback
           title="Shared presentation example"
           message="The implementation is imported from @chapchoo/ui/Feedback. Changes to it belong in common UI."
         />
         <Group>
+          <Button variant="subtle" leftSection={<NavigationIcon name="back" />}>
+            Back
+          </Button>
+          <Button
+            variant="subtle"
+            rightSection={<NavigationIcon name="down" size="sm" />}
+          >
+            Workspace
+          </Button>
           <Button>Log in</Button>
           <Button variant="subtle" size="xs">
             Log out

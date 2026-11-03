@@ -28,9 +28,6 @@ export function useAgentsContainer({
   const { value: display } = useDisplay();
   const appearance = useAppearanceControl();
   const utils = trpc.useUtils();
-  const [name, setName] = useState("");
-  const [providerId, setProviderId] = useState("");
-  const [providerAfter, setProviderAfter] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<{
     action: OwnerAction | "force";
     requestId: string;
@@ -39,12 +36,6 @@ export function useAgentsContainer({
     { type: "ready" } | { type: "pending" } | { type: "error"; message: string }
   >({ type: "ready" });
   const busy = useRef(false);
-  const createRequest = useRef<{
-    requestId: string;
-    teamId: string;
-    name: string;
-    providerId: string;
-  } | null>(null);
   const listInput = {
     teamId: initial.teamId,
     ...(initial.type === "list" && initial.after
@@ -77,28 +68,6 @@ export function useAgentsContainer({
         query.state.data && pending(query.state.data) ? 5_000 : 15_000,
     },
   );
-  const providerChoices = trpc.computers.providers.useQuery(
-    providerAfter ? { after: providerAfter } : {},
-    {
-      enabled: enabled && initial.type === "list",
-      retry: false,
-      refetchInterval: 15_000,
-      refetchIntervalInBackground: false,
-      refetchOnWindowFocus: true,
-    },
-  );
-  const create = trpc.computers.create.useMutation({
-    retry: false,
-    onError: (error) => {
-      if (
-        error.data?.reason === "DOMAIN_REASON_INVALID_INPUT" ||
-        error.data?.reason === "DOMAIN_REASON_INVALID_TRANSITION" ||
-        error.data?.reason === "DOMAIN_REASON_PERMISSION_DENIED"
-      ) {
-        createRequest.current = null;
-      }
-    },
-  });
   const lifecycle = trpc.computers.lifecycle.useMutation({ retry: false });
   const force = trpc.computers.forceRemove.useMutation({ retry: false });
   const data: InitialAgents =
@@ -112,36 +81,6 @@ export function useAgentsContainer({
   }, [detail.error, agentsHref]);
   async function refresh(): Promise<void> {
     await utils.computers.invalidate();
-  }
-  async function submitCreate(): Promise<void> {
-    if (busy.current) {
-      return;
-    }
-    busy.current = true;
-    setSubmission({ type: "pending" });
-    const payload = createRequest.current ?? {
-      requestId: crypto.randomUUID(),
-      teamId: initial.teamId,
-      name: name.trim(),
-      providerId,
-    };
-    createRequest.current = payload;
-    try {
-      const result = await create.mutateAsync(payload);
-      if (result.type === "removed") {
-        setSubmission({ type: "error", message: copy.removed });
-        createRequest.current = null;
-        return;
-      }
-      void utils.computers.list.invalidate();
-      window.location.assign(
-        `${basePath}/agents/${encodeURIComponent(result.agent.id)}?team=${encodeURIComponent(result.agent.teamId)}`,
-      );
-    } catch {
-      setSubmission({ type: "error", message: copy.lostSubmission });
-    } finally {
-      busy.current = false;
-    }
   }
   async function submitAction(
     action: OwnerAction | "force",
@@ -194,42 +133,7 @@ export function useAgentsContainer({
     stale: initial.type === "list" ? list.isError : detail.isError,
     pending: submission.type === "pending",
     error: submission.type === "error" ? submission.message : null,
-    creationLocked: createRequest.current !== null,
-    name,
-    providerId,
-    providers: providerChoices.data
-      ? {
-          type: "loaded",
-          stale: providerChoices.isError,
-          items: providerChoices.data.items,
-          after: providerAfter,
-          nextAfter: providerChoices.data.nextAfter,
-        }
-      : providerChoices.isError
-        ? { type: "error" }
-        : { type: "loading" },
     confirmation: confirmation?.action ?? null,
-    onName: (value) => {
-      setName(value);
-      createRequest.current = null;
-    },
-    onProvider: (value) => {
-      setProviderId(value);
-      createRequest.current = null;
-    },
-    onProviderPage: (after) => {
-      if (
-        busy.current ||
-        (submission.type === "error" && createRequest.current !== null)
-      ) {
-        return;
-      }
-      setProviderAfter(after);
-      setProviderId("");
-    },
-    onCreate: () => {
-      void submitCreate();
-    },
     onAction: (value) => {
       if (data.type !== "detail") {
         return;

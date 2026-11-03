@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./InteractiveSurface": "./src/InteractiveSurface.tsx",
+    "./NavigationIcon": "./src/NavigationIcon.tsx",
     "./WorkspaceChrome": "./src/WorkspaceChrome.tsx",
     "./AppNavigation": "./src/AppNavigation.tsx",
     "./WorkspaceSelector": "./src/WorkspaceSelector.tsx",

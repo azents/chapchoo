@@ -11,8 +11,8 @@ import {
   Stack,
   Text,
   UnstyledButton,
-  rem,
 } from "@mantine/core";
+import { NavigationIcon } from "./NavigationIcon";
 import classes from "./WorkspaceSelector.module.css";
 import type { ReactElement } from "react";
 
@@ -43,41 +43,6 @@ export interface WorkspaceSelectorProps {
   onRetry: () => void;
   onSelect: (choice: WorkspaceChoice) => void;
 }
-export function WorkspaceIcon({
-  kind,
-}: {
-  kind: WorkspaceChoice["kind"];
-}): ReactElement {
-  return (
-    <svg
-      width={rem(20)}
-      height={rem(20)}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.65"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      {kind === "admin" ? (
-        <>
-          <path d="M12 3 4.5 6v5c0 5 3 8 7.5 10 4.5-2 7.5-5 7.5-10V6Z" />
-          <path d="m8.5 12 2.5 2.5 4.5-5" />
-        </>
-      ) : kind === "personal" ? (
-        <>
-          <path d="m3 11 9-8 9 8M5 10v11h14V10M9 21v-7h6v7" />
-        </>
-      ) : (
-        <>
-          <circle cx="9" cy="8" r="3" />
-          <path d="M2 21v-2a7 7 0 0 1 14 0v2M16 5a3 3 0 0 1 0 6M22 21v-2a7 7 0 0 0-4-6" />
-        </>
-      )}
-    </svg>
-  );
-}
 function Choice({
   choice,
   onSelect,
@@ -95,19 +60,10 @@ function Choice({
       onClick={() => onSelect(choice)}
     >
       <Group gap="sm" wrap="nowrap">
-        <WorkspaceIcon kind={choice.kind} />
+        <NavigationIcon name={choice.kind} />
         <Text size="sm" className={classes.label}>
           {choice.label}
         </Text>
-        {choice.selected ? (
-          <Text
-            component="span"
-            aria-hidden="true"
-            className={classes.trailing}
-          >
-            ✓
-          </Text>
-        ) : null}
       </Group>
     </UnstyledButton>
   );
@@ -119,8 +75,14 @@ export function WorkspaceChoices(props: WorkspaceSelectorProps): ReactElement {
   return (
     <Stack gap="xs">
       {props.mobile ? (
-        <Button variant="subtle" justify="flex-start" onClick={props.onClose}>
-          ‹ {props.copy.back}
+        <Button
+          variant="subtle"
+          justify="flex-start"
+          className={classes.back}
+          leftSection={<NavigationIcon name="back" />}
+          onClick={props.onClose}
+        >
+          {props.copy.back}
         </Button>
       ) : null}
       {personal.map((choice) => (
@@ -154,7 +116,7 @@ export function WorkspaceChoices(props: WorkspaceSelectorProps): ReactElement {
           <Button
             variant="subtle"
             justify="flex-start"
-            leftSection={<span aria-hidden="true">+</span>}
+            leftSection={<NavigationIcon name="add" />}
             onClick={props.onCreate}
           >
             {props.copy.create}
@@ -190,13 +152,11 @@ function banner(props: WorkspaceSelectorProps): ReactElement {
       }}
     >
       <Group gap="sm" wrap="nowrap">
-        {props.current ? <WorkspaceIcon kind={props.current.kind} /> : null}
+        {props.current ? <NavigationIcon name={props.current.kind} /> : null}
         <Text fw={600} size="sm" className={classes.label}>
           {props.current?.label ?? props.copy.choose}
         </Text>
-        <Text component="span" aria-hidden="true" className={classes.trailing}>
-          ⌄
-        </Text>
+        <NavigationIcon name="down" size="sm" className={classes.trailing} />
       </Group>
     </UnstyledButton>
   );

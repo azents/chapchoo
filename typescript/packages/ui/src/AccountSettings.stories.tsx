@@ -71,6 +71,7 @@ export const Visitor: Story = {
   },
 };
 export const FailedSave: Story = { args: { error: true } };
+export const Saved: Story = { args: { changed: true } };
 export const Mobile: Story = { args: { mobile: true } };
 
 function InteractiveSettings(props: AccountSettingsProps): ReactElement {

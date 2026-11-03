@@ -76,6 +76,10 @@ test("owner manages one Computer while Admin observes independent cleanup invent
     await owner.goto(`${assembly.generalUrl}/agents`);
     const listUrl = owner.url();
     await owner
+      .getByRole("link", { name: "Create Agent", exact: true })
+      .click();
+    await expect(owner).toHaveURL(/\/agents\/new\?team=[^&]+$/);
+    await owner
       .getByRole("textbox", { name: "Agent name", exact: true })
       .fill("Acceptance companion")
       .catch(() => {
@@ -159,7 +163,7 @@ test("owner manages one Computer while Admin observes independent cleanup invent
       timeout: 90_000,
     });
     await expect(
-      owner.getByText("No Agents yet.", { exact: true }),
+      owner.getByText("No Computers yet.", { exact: true }),
     ).toBeVisible();
     await expect(admin.getByText(/Cleanup confirmed/)).toBeVisible({
       timeout: 90_000,

@@ -1,10 +1,5 @@
 import type { ColorModeMenuProps } from "@chapchoo/ui/ColorModeMenu";
-import type {
-  AgentView,
-  OwnerAction,
-  Page,
-  ProviderChoice,
-} from "@chapchoo/web-core/computer";
+import type { AgentView, OwnerAction, Page } from "@chapchoo/web-core/computer";
 import type { ComputerCopy } from "@chapchoo/web-core/computer-messages";
 export type InitialAgents = (
   | { type: "list"; page: Page<AgentView>; after: string }
@@ -22,24 +17,7 @@ export interface AgentsProps extends AgentsInput {
   stale: boolean;
   pending: boolean;
   error: string | null;
-  creationLocked: boolean;
-  name: string;
-  providerId: string;
-  providers:
-    | { type: "loading" }
-    | { type: "error" }
-    | {
-        type: "loaded";
-        stale: boolean;
-        items: ProviderChoice[];
-        after: string | null;
-        nextAfter: string | null;
-      };
   confirmation: OwnerAction | "force" | null;
-  onName: (value: string) => void;
-  onProvider: (value: string) => void;
-  onProviderPage: (after: string | null) => void;
-  onCreate: () => void;
   onAction: (value: OwnerAction | "force") => void;
   onConfirm: () => void;
   onCancel: () => void;

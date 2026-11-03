@@ -2,7 +2,6 @@
 
 import {
   ActionIcon,
-  Anchor,
   Avatar,
   Button,
   Divider,
@@ -19,6 +18,8 @@ import {
   DisplaySaveFeedback,
 } from "./DisplaySettings";
 import classes from "./AccountSettings.module.css";
+import { InteractiveSurface } from "./InteractiveSurface";
+import { NavigationIcon } from "./NavigationIcon";
 import type { ColorModeMenuProps } from "./ColorModeMenu";
 import type { DisplayPanel } from "./DisplaySettings";
 import type { ComponentProps, ReactElement } from "react";
@@ -59,23 +60,27 @@ function SettingsContent(props: AccountSettingsProps): ReactElement {
     <Stack gap="lg">
       {props.identityLabel ? (
         <>
-          <Group wrap="nowrap" align="flex-start">
-            <Avatar radius="xl">
-              <UserIcon />
-            </Avatar>
-            <Stack gap="xs" className={classes.identity}>
-              <Text size="sm" fw={600}>
-                {props.identityLabel}
-              </Text>
-              <Anchor
-                size="sm"
-                href={props.profileHref}
-                onClick={props.onClose}
-              >
-                {props.profileLabel}
-              </Anchor>
-            </Stack>
-          </Group>
+          <InteractiveSurface
+            href={props.profileHref}
+            aria-label={props.profileLabel}
+            onClick={props.onClose}
+            className={classes.profile}
+          >
+            <Group wrap="nowrap" align="center">
+              <Avatar radius="xl">
+                <UserIcon />
+              </Avatar>
+              <Stack gap="xs" className={classes.identity}>
+                <Text size="sm" fw={600}>
+                  {props.identityLabel}
+                </Text>
+                <Text size="sm" c="var(--mantine-color-anchor)">
+                  {props.profileLabel}
+                </Text>
+              </Stack>
+              <NavigationIcon name="forward" size="sm" />
+            </Group>
+          </InteractiveSurface>
           <Divider />
         </>
       ) : null}
@@ -104,14 +109,11 @@ function SettingsContent(props: AccountSettingsProps): ReactElement {
         storageError={props.storageError}
         onRetry={props.onRetry}
       />
-      <Text size="xs" c="dimmed">
-        {props.copy.scope}
-      </Text>
-      <Text size="xs" c="dimmed" role="status">
-        {props.changed && !props.error && !props.disabled
-          ? props.copy.saved
-          : props.copy.immediate}
-      </Text>
+      {props.changed && !props.error && !props.disabled ? (
+        <Text size="xs" c="dimmed" role="status">
+          {props.copy.saved}
+        </Text>
+      ) : null}
       <Divider />
       {props.identityLabel ? (
         <Button variant="subtle" color="red" onClick={props.onLogout}>
