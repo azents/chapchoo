@@ -5,7 +5,7 @@ repos:
         name: Rust format, lint, test and dependency boundaries
         entry: bash scripts/check-rust.sh
         language: system
-        files: ^(rust/|scripts/check-rust\.|scripts/run-rust-tests\.py)
+        files: ^(rust/|scripts/check-rust\.|scripts/run-rust-tests\.py|scripts/tests/test_rust_tooling\.py)
         pass_filenames: false
       - id: rpc-contracts
         name: Generated RPC contracts and live Node/Rust interoperability

@@ -19,6 +19,15 @@ have explicit dependency boundaries and do not depend on persistence or RPC.
 Password hashing uses bounded blocking admission in the application service.
 Cancellation retains its permit until the started CPU worker actually completes.
 
+Semantic Rust guidance is indexed by `.claude/rules/rust-conventions.md`.
+Mechanical policy lives in the workspace lint tables and `rust/clippy.toml`;
+Rustfmt follows the pinned toolchain. The canonical gate also checks rustdoc,
+member lint inheritance and compile-only negative/positive policy probes.
+Those probes use cached dependencies offline after workspace Clippy and never
+execute the intentionally invalid fixture program. Research and the complete
+Python/TypeScript disposition are in
+`docs/chapchoo/design/rust-conventions-research-2026-11-04.md`.
+
 These primitives do not authorize a server-secret-key change or persist data.
 No actual installation secret belongs in source control, test fixtures or logs.
 

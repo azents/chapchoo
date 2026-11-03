@@ -9,6 +9,8 @@ if [[ "$actual" != "$expected" ]]; then
 fi
 cargo fmt --all -- --check
 cargo clippy --locked --workspace --all-targets --timings -- -D warnings
+python3 ../scripts/tests/test_rust_tooling.py
+RUSTDOCFLAGS="${RUSTDOCFLAGS:-} -D warnings" cargo doc --locked --workspace --no-deps --document-private-items
 python3 ../scripts/run-rust-tests.py
 cargo metadata --locked --format-version 1 --no-deps | python3 -c '
 import json, sys

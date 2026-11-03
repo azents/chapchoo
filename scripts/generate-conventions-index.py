@@ -43,6 +43,7 @@ SCOPE_CONFIG: dict[str, dict[str, str]] = {
     "global": {"index": "conventions.md"},
     "backend": {"index": "backend-conventions.md"},
     "python": {"index": "python-conventions.md"},
+    "rust": {"index": "rust-conventions.md"},
     "typescript": {"index": "typescript-conventions.md"},
     "web": {"index": "web-conventions.md"},
     "swift": {"index": "swift-conventions.md"},

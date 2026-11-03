@@ -12,6 +12,20 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class CiStructureTests(unittest.TestCase):
+    def test_rpc_typecheck_waits_for_its_source_generation(self) -> None:
+        result = subprocess.run(
+            ["pnpm", "exec", "turbo", "run", "typecheck", "--dry=json"],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        tasks = {task["taskId"]: task for task in json.loads(result.stdout)["tasks"]}
+        self.assertIn(
+            "@chapchoo/rpc-client#generate",
+            tasks["@chapchoo/rpc-client#typecheck"]["dependencies"],
+        )
+
     def test_rust_and_frontend_checks_have_one_ci_owner(self) -> None:
         workflow = (ROOT / ".github/workflows/ci.yaml").read_text()
         self.assertEqual(workflow.count("run: bash scripts/check-rust.sh"), 1)
