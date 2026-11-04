@@ -8,6 +8,7 @@ const provider = { id: "provider", name: "Community Kubernetes" };
 const image = { id: "image", internalName: "Corgi", assetKey: "03-corgi" };
 const initial: InitialAgentCreation = {
   teamId: "team",
+  teamHandle: "my",
   identity: "owner@example.invalid",
   providers: { items: [provider], nextAfter: null },
   images: { items: [image], nextAfter: null },
@@ -56,6 +57,7 @@ const meta = {
     onHandle: (): void => {},
     onImage: (): void => {},
     onPalette: (): void => {},
+    onRandomPalette: (): void => {},
     onImagePage: (): void => {},
     onCreate: (): void => {},
     onRefresh: (): void => {},

@@ -71,7 +71,7 @@ real Docker, browser journeys and live cluster rollout.
 ## Identity, account authority and durable state
 
 - [Repository-owned entity identity](domain/repository-identity.md) — UUIDv7 issuance, compact storage, opaque DTOs and explicit preserving cutover.
-- [Agent handles and saved profiles](domain/agent-profile.md) — immutable names, catalogue/palette choices, exact creation and uncertain-payload recovery.
+- [Agent handles and saved profiles](domain/agent-profile.md) — immutable handles, editable saved presentation, catalogue/palette choices and exact uncertain-creation recovery.
 - [Credential primitives](domain/credential-primitives.md) — email/password values, bearers, encryption and hashing.
 - [Account operations and mail](domain/account-operations.md) — password capacity, acceptance time and single-attempt delivery.
 - [Account RPC](domain/account-rpc.md) — service groups, per-call credentials, wire admission and errors.

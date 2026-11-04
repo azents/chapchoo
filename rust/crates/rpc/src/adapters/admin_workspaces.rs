@@ -10,6 +10,21 @@ pub struct AdminWorkspacesAdapter {
 
 #[tonic::async_trait]
 impl wire::admin_workspaces_server::AdminWorkspaces for AdminWorkspacesAdapter {
+    #[tracing::instrument(skip_all, fields(rpc = "check_admin_workspace_handle"))]
+    async fn check_handle(
+        &self,
+        request: Request<wire::TeamHandleRequest>,
+    ) -> Result<Response<wire::TeamHandleAvailability>, Status> {
+        self.context.admit()?;
+        let actor = input::actor(&request)?;
+        let available = self
+            .context
+            .service
+            .admin_workspace_handle_available(&actor, &request.into_inner().handle, input::now()?)
+            .await
+            .map_err(status)?;
+        Ok(Response::new(wire::TeamHandleAvailability { available }))
+    }
     #[tracing::instrument(skip_all, fields(rpc = "list_admin_workspaces"))]
     async fn list_teams(&self, request: Request<()>) -> Result<Response<wire::Teams>, Status> {
         self.context.admit()?;

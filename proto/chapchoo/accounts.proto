@@ -33,6 +33,8 @@ service AccountLifecycle {
 service TeamManagement {
   rpc ListTeams(google.protobuf.Empty) returns (Teams);
   rpc GetTeam(TeamRequest) returns (Team);
+  rpc ResolveHandle(TeamHandleRequest) returns (Team);
+  rpc CheckHandle(TeamHandleRequest) returns (TeamHandleAvailability);
   rpc CreateTeam(CreateTeamRequest) returns (Team);
   rpc UpdateTeam(UpdateTeamRequest) returns (Team);
   rpc ListMembers(TeamRequest) returns (Members);
@@ -46,6 +48,7 @@ service TeamManagement {
 // Admin-only current-user workspace selection, not global Team inventory.
 service AdminWorkspaces {
   rpc ListTeams(google.protobuf.Empty) returns (Teams);
+  rpc CheckHandle(TeamHandleRequest) returns (TeamHandleAvailability);
   rpc CreateTeam(CreateTeamRequest) returns (Team);
 }
 
@@ -201,6 +204,8 @@ message Team {
 }
 message Teams { repeated Team items = 1; }
 message TeamRequest { string team_id = 1; }
+message TeamHandleRequest { string handle = 1; }
+message TeamHandleAvailability { bool available = 1; }
 message CreateTeamRequest { string name = 1; string handle = 2; }
 message UpdateTeamRequest {
   string team_id = 1;

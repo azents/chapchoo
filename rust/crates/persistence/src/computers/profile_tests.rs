@@ -199,6 +199,7 @@ async fn exercise(store: Store) -> Result<(), TestError> {
     EntityId::from_dto(EntityKind::Computer, &first.computer.id)?;
     assert_eq!(first.handle, draft.profile.handle);
     assert_eq!(first.image_id, draft.profile.image_id);
+    assert_eq!(first.image_asset_key, images[0].asset_key);
     assert_eq!(first.palette_key, "sage");
     assert!(
         store
@@ -377,6 +378,7 @@ async fn exercise(store: Store) -> Result<(), TestError> {
     assert_eq!(saved.id, identical.id);
     assert_eq!(saved.computer.current_request_id, draft.request_id);
     assert_eq!(saved.image_id, images[1].id);
+    assert_eq!(saved.image_asset_key, images[1].asset_key);
     assert_eq!(saved.palette_key, "rose");
     assert_eq!(
         store.agents(&actor, &personal.id, None, 20, now).await?[0].name,

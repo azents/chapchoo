@@ -8,13 +8,13 @@ Server-rendered owner controls and redacted administrator inventory project back
 
 # Agent Computer Owner and Operator Web Contracts
 
-The General app exposes the private Agent list at
-`/agents?team=<Team ID>`, a separate creation form at
-`/agents/new?team=<Team ID>` and Computer detail at
-`/agents/<Agent ID>?team=<Team ID>`. The list uses Agent-oriented headings and
-empty copy. Agent names link to detail, and Computer power/operation observations
-are subordinate information in one Computer-status column, not an overall Agent
-health model. The list has no routine Refresh button; existing automatic observation
+The General app uses [canonical Team-qualified routes](workspace-navigation.md#canonical-routes-and-admission)
+for the private Agent list, separate creation form and Agent/Computer detail.
+The list uses Agent-oriented headings and
+empty copy. Profile image/name lead each saved-profile card; handle and Computer
+power/operation observations are subordinate, not an overall Agent health model.
+Cards use two columns on desktop and one on mobile with contained long names.
+The list has no routine Refresh button; existing automatic observation
 continues and a stale read exposes an explicit retry. Its Create Agent entry
 navigates to the dedicated form instead of embedding it. Every Agent has a required
 Team while retaining its individual owner. Account/team pages share the selected
@@ -35,11 +35,10 @@ membership and server-renders the initial bounded Provider-choice snapshot with
 the form. Subsequent Provider read failures preserve the entered draft and expose
 an explicit retry without claiming there are no eligible Providers.
 
-Listing and creation carry the required Team ID through the browser DTO,
+Listing and creation carry the resolved stable Team ID through the browser DTO,
 Team-qualified query key and generated RPC request. Detail admission resolves
-the actual owned record and rejects a mismatched URL Team. A Teamless entry
-canonicalizes before rendering; list entry uses the validated recent/personal
-context and detail entry derives its Team from the authoritative Agent. Pagination,
+the owned record by exact resolved Team and Agent handle. No Teamless or
+ID-query content entry is retained. Pagination,
 create-result navigation, force removal and normal disappearance retain that Team.
 Membership, individual ownership and lifecycle fences are revalidated by the
 backend; Team manager or installation Admin status does not widen private access.
@@ -82,6 +81,8 @@ alongside Team/name/Provider. Its authenticated SSR snapshot independently draws
 the initial image and palette once and hydrates those exact values. Bounded
 automatic handle candidates preserve manual edits and cancel stale resolutions;
 the backend still owns final uniqueness. See [profile contracts](agent-profile.md).
+Desktop places the live preview beside its fields; mobile stacks them. The
+explicit random-color action changes only the unlocked palette draft.
 
 Creation retains its complete draft on rejection or unavailability and
 navigates to the accepted Agent's detail. A pending/lost creation response retains
@@ -99,6 +100,12 @@ lifecycle Request ID when opened; polling cannot silently retarget that consent
 to a newer request. Cancel sends no mutation. Every write still revalidates current
 owner/session/expected request on the backend. A lost response is not rollback or
 permission to replay an external effect.
+
+Computer power and ordinary controls remain immediately visible. Detailed
+intent/phase/management/Connector/saved-environment/observation facts live in an
+initially collapsed diagnostic disclosure. Deletion and force removal sit in a
+separate destructive-action area, retaining the same backend eligibility and
+consent fences.
 
 Preparation retry is shown only when the backend's safe-retry projection permits
 it. It calls the dedicated owner RetryPreparation contract with a fresh Request ID

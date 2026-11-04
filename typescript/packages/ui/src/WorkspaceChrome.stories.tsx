@@ -12,14 +12,14 @@ const current = {
   key: "personal",
   kind: "personal" as const,
   label: "Your space",
-  href: "/agents?team=personal",
+  href: "/teams/my/agents",
   selected: true,
 };
 const items = [
   {
     key: "agents",
     label: "Agents",
-    href: "/agents?team=personal",
+    href: "/teams/my/agents",
     active: true,
   },
   { key: "invitations", label: "Invitations", href: "/invitations" },
@@ -49,6 +49,7 @@ const base: WorkspaceChromeProps = {
     close: "Close",
     teamName: "Team name",
     teamHandle: "Handle",
+    teamAddress: "Team address",
     cancel: "Cancel",
     create: "Create",
   },
@@ -60,14 +61,21 @@ const base: WorkspaceChromeProps = {
   creating: false,
   name: "",
   handle: "",
+  prospectiveAddress: null,
+  handleStatus: {
+    message: null,
+    description: "The handle cannot be changed after creation.",
+    available: true,
+  },
   error: null,
   choices: [
     current,
     {
       key: "design",
       kind: "team",
+      handle: "design",
       label: "Design team",
-      href: "/agents?team=design",
+      href: "/teams/design/agents",
       selected: false,
     },
   ],
@@ -99,7 +107,12 @@ type Story = StoryObj<typeof meta>;
 export const Personal: Story = {};
 export const Selector: Story = { args: { picker: true } };
 export const Creation: Story = {
-  args: { creating: true, name: "Design team", handle: "design" },
+  args: {
+    creating: true,
+    name: "Design team",
+    handle: "design",
+    prospectiveAddress: "/general/teams/design",
+  },
 };
 export const CreationError: Story = {
   args: {

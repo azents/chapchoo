@@ -190,6 +190,77 @@ fn domain_rpc_keeps_private_owner_authority_and_independent_admin_residual_inven
                 .into_inner(),
         )?;
         assert_eq!(created.id, replay.id);
+        assert!(!created.profile_image_asset_key.is_empty());
+        let scoped = wire::TeamAgentRequest {
+            team_id: team.id.clone(),
+            handle: created.handle.clone(),
+        };
+        assert_eq!(
+            agents
+                .get_in_team(auth(scoped.clone(), &user)?)
+                .await?
+                .into_inner()
+                .id,
+            created.id
+        );
+        for (scope, caller) in [
+            (scoped.clone(), &foreign),
+            (
+                wire::TeamAgentRequest {
+                    team_id: foreign_team.id.clone(),
+                    ..scoped
+                },
+                &user,
+            ),
+        ] {
+            assert_eq!(
+                agents
+                    .get_in_team(auth(scope, caller)?)
+                    .await
+                    .err()
+                    .ok_or("Scoped private access")?
+                    .code(),
+                Code::NotFound
+            );
+        }
+        let edit = wire::UpdateAgentProfileRequest {
+            agent_id: created.id.clone(),
+            name: "Saved profile".into(),
+            profile_image_id: created.profile_image_id.clone(),
+            palette_key: "rose".into(),
+        };
+        assert_eq!(
+            agents
+                .update_profile(auth(edit.clone(), &foreign)?)
+                .await
+                .err()
+                .ok_or("Foreign edit")?
+                .code(),
+            Code::NotFound
+        );
+        let saved = agents
+            .update_profile(auth(edit, &user)?)
+            .await?
+            .into_inner();
+        assert_eq!(saved.name, "Saved profile");
+        assert_eq!(saved.handle, created.handle);
+        assert_eq!(saved.palette_key, "rose");
+        let history = wire::CreationResultRequest {
+            request_id: creation.request_id.clone(),
+        };
+        assert!(
+            agents
+                .creation_result(auth(history.clone(), &foreign)?)
+                .await?
+                .into_inner()
+                .outcome
+                .is_none()
+        );
+        assert!(matches!(
+            agents.creation_result(auth(history.clone(), &user)?).await?.into_inner().outcome,
+            Some(wire::historical_creation_result::Outcome::Present(ref value))
+                if value.assigned_agent_id == created.id && value.team_id == team.id
+        ));
         let request = wire::AgentRequest {
             agent_id: created.id.clone(),
         };
@@ -406,6 +477,11 @@ fn domain_rpc_keeps_private_owner_authority_and_independent_admin_residual_inven
                 .into_inner()
                 .outcome,
             Some(wire::create_agent_result::Outcome::Removed(_))
+        ));
+        assert!(matches!(
+            agents.creation_result(auth(history, &user)?).await?.into_inner().outcome,
+            Some(wire::historical_creation_result::Outcome::Removed(ref value))
+                if value.assigned_agent_id == created.id
         ));
         assert!(
             agents

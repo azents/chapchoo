@@ -12,6 +12,7 @@ import {
   Modal,
   rem,
   Stack,
+  Text,
   TextInput,
 } from "@mantine/core";
 import type {
@@ -38,6 +39,7 @@ export interface WorkspaceChromeProps {
     close: string;
     teamName: string;
     teamHandle: string;
+    teamAddress: string;
     cancel: string;
     create: string;
   };
@@ -47,6 +49,12 @@ export interface WorkspaceChromeProps {
   creating: boolean;
   name: string;
   handle: string;
+  prospectiveAddress: string | null;
+  handleStatus: {
+    message: string | null;
+    description: string;
+    available: boolean;
+  };
   error: string | null;
   choices: WorkspaceChoice[];
   current: WorkspaceChoice | null;
@@ -204,12 +212,28 @@ export function WorkspaceChrome(props: WorkspaceChromeProps): ReactElement {
             />
             <TextInput
               label={props.copy.teamHandle}
+              description={props.handleStatus.description}
               value={props.handle}
               onChange={(event) => props.onHandle(event.currentTarget.value)}
               required
-              maxLength={80}
+              maxLength={16}
               disabled={props.busy}
             />
+            {props.handleStatus.message ? (
+              <Text size="sm" c="dimmed" role="status">
+                {props.handleStatus.message}
+              </Text>
+            ) : null}
+            {props.prospectiveAddress ? (
+              <Stack gap="xs">
+                <Text size="xs" c="dimmed">
+                  {props.copy.teamAddress}
+                </Text>
+                <Text size="sm" style={{ overflowWrap: "anywhere" }}>
+                  {props.prospectiveAddress}
+                </Text>
+              </Stack>
+            ) : null}
             {props.error ? (
               <Alert color="red" role="alert">
                 {props.error}
@@ -226,7 +250,7 @@ export function WorkspaceChrome(props: WorkspaceChromeProps): ReactElement {
               <Button
                 type="submit"
                 loading={props.busy}
-                disabled={!props.name.trim() || !props.handle.trim()}
+                disabled={!props.name.trim() || !props.handleStatus.available}
               >
                 {props.copy.create}
               </Button>

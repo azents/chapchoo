@@ -20,12 +20,18 @@ registered on Admin. Groups can run independently or as one deduplicated union
 on a single listener. Admin business calls
 recheck current server-administrator authority in the repository operation.
 
-AdminWorkspaces exposes only ListTeams and CreateTeam using the ordinary Team
+AdminWorkspaces exposes ListTeams, CheckHandle and CreateTeam using the ordinary Team
 messages. It lists the current administrator's accessible live Teams, not all
 installation Teams; creation grants the caller ordinary owner membership. The
 same storage transaction authenticates and checks current administrator status
 before the read or write. It grants no member management or private-Agent access.
 TeamManagement remains Client-only. Admin web uses its Admin backend exclusively.
+TeamManagement.ResolveHandle returns only a currently accessible live
+collaborative Team. Its CheckHandle authenticates the caller and returns a
+boolean without revealing existing Team ownership or membership. AdminWorkspaces
+availability additionally rechecks current installation-admin status in the same
+Repository operation. Availability is not reservation; final creation owns
+uniqueness.
 
 Protected calls carry exactly one `authorization: Bearer <opaque-token>`
 metadata value. Each call parses its own credential. Channels do not hold a

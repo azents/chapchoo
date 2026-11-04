@@ -160,6 +160,7 @@ test("Computer read failure preserves the last-known detail and disables control
     page.getByRole("heading", { name: "Research companion" }),
   ).toBeVisible();
   await expect(page.getByRole("status")).toContainText(copy.stale);
+  await page.getByRole("button", { name: copy.details, exact: true }).click();
   await expect(page.getByText(copy.lastKnown, { exact: false })).toBeVisible();
   await expect(
     page.getByRole("button", { name: copy.stop, exact: true }),
@@ -190,23 +191,21 @@ test("Empty Agent list keeps its Team-qualified creation entry", async ({
   await expect(page.getByText(copy.noAgents, { exact: true })).toBeVisible();
   await expect(
     page.getByRole("link", { name: copy.create, exact: true }),
-  ).toHaveAttribute("href", "/agents/new?team=team");
+  ).toHaveAttribute("href", "/teams/my/new-agent");
 });
-test("Agent identity is primary and stale list reads have explicit recovery", async ({
+test("saved profile cards lead with identity and stale reads have explicit recovery", async ({
   page,
 }) => {
   await page.goto(
     "/iframe.html?id=computers-agents--stale-list&viewMode=story",
   );
+  await expect(page.getByText("@research", { exact: true })).toBeVisible();
   await expect(
-    page.getByRole("columnheader", { name: copy.name, exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("columnheader", { name: copy.computerStatus, exact: true }),
+    page.locator('img[src="/design-assets/03-corgi-216.webp"]'),
   ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Research companion", exact: true }),
-  ).toHaveAttribute("href", "/agents/agent?team=team");
+  ).toHaveAttribute("href", "/teams/my/agents/research");
   await expect(
     page.getByRole("button", { name: copy.retryRead, exact: true }),
   ).toBeEnabled();

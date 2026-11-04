@@ -13,6 +13,7 @@ import {
   LoadingFeedback,
 } from "@chapchoo/ui/Feedback";
 import { EmailField } from "@chapchoo/ui/fields";
+import { agentsPath } from "@chapchoo/web-core/workspace";
 import {
   Alert,
   Anchor,
@@ -143,7 +144,16 @@ function WorkspaceContent(props: WorkspaceContentProps): ReactNode {
       title={team?.name ?? c.receivedInvitations}
       identityLabel={identity}
       navigation={[
-        { key: "agents", label: c.agents, href: `${props.basePath}/agents` },
+        {
+          key: "agents",
+          label: c.agents,
+          href: team
+            ? agentsPath(
+                props.basePath,
+                team.personal ? "my" : (team.handle ?? ""),
+              )
+            : `${props.basePath}/`,
+        },
         {
           key: "invitations",
           label: c.receivedInvitations,

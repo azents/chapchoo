@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./handle-draft": {
+      "types": "./dist/handle-draft.d.ts",
+      "default": "./dist/handle-draft.js"
+    },
     "./agent-profile": {
       "types": "./dist/agent-profile.d.ts",
       "default": "./dist/agent-profile.js"

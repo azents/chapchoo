@@ -3,9 +3,15 @@ import { useAuth } from "@chapchoo/web-core/auth-context";
 import { teamKind } from "@chapchoo/web-core/browser";
 import { computerCopy } from "@chapchoo/web-core/computer-messages";
 import { useDisplay } from "@chapchoo/web-core/display-context";
+import { validHandle } from "@chapchoo/web-core/handle";
+import { useHandleDraft } from "@chapchoo/web-core/handle-draft";
 import { initialQuery } from "@chapchoo/web-core/page-state";
-import { shellCopy } from "@chapchoo/web-core/shell-messages";
-import { workspacePreference } from "@chapchoo/web-core/workspace";
+import { shellCopy, teamHandleCopy } from "@chapchoo/web-core/shell-messages";
+import {
+  agentsPath,
+  teamPath,
+  workspacePreference,
+} from "@chapchoo/web-core/workspace";
 import { useMediaQuery } from "@mantine/hooks";
 import { usePathname } from "next/navigation";
 import { useRef, useState } from "react";
@@ -38,12 +44,22 @@ export function useNavigation({
   const [drawer, setDrawer] = useState(false),
     [picker, setPicker] = useState(false),
     [creating, setCreating] = useState(false);
-  const [name, setName] = useState(""),
-    [handle, setHandle] = useState("");
+  const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const pending = useRef(false);
   const utils = trpc.useUtils();
   const identity = auth.state.type === "AUTHENTICATED" ? auth.state.user : null;
+  const proposal = useHandleDraft(
+    "team",
+    creating ? (identity?.id ?? null) : null,
+    (candidate, signal) =>
+      utils.client.workspaces.handleAvailable.query(
+        { handle: candidate },
+        { signal },
+      ),
+  );
+  const handle = proposal.draft.candidate;
+  const handleCopy = teamHandleCopy(display.value.language);
   const query = trpc.workspaces.list.useQuery(void 0, {
     ...(initial.type === "ready" && initial.userId === identity?.id
       ? initialQuery({ items: initial.teams }, initial.renderedAt)
@@ -59,18 +75,21 @@ export function useNavigation({
     selected: true,
   };
   const choices: WorkspaceChoice[] = generalUrl
-    ? (query.data?.items ?? []).map((team) => ({
-        key: team.id,
-        kind: team.kind === teamKind.personal ? "personal" : "team",
-        label: team.kind === teamKind.personal ? copy.yourSpace : team.name,
-        href: `${generalUrl}/agents?team=${encodeURIComponent(team.id)}`,
-        selected: false,
-      }))
+    ? (query.data?.items ?? []).map((team): WorkspaceChoice => {
+        const common = {
+          key: team.id,
+          href: agentsPath(generalUrl, team),
+          selected: false,
+        };
+        return team.kind === teamKind.personal
+          ? { ...common, kind: "personal", label: copy.yourSpace }
+          : { ...common, kind: "team", label: team.name, handle: team.handle };
+      })
     : [];
   choices.push(current);
   const create = trpc.workspaces.create.useMutation({ retry: false });
   async function submit(): Promise<void> {
-    if (pending.current || !generalUrl) {
+    if (pending.current || !generalUrl || proposal.status !== "available") {
       return;
     }
     pending.current = true;
@@ -88,9 +107,7 @@ export function useNavigation({
           window.location.protocol === "https:",
         );
       }
-      window.location.assign(
-        `${generalUrl}/agents?team=${encodeURIComponent(team.id)}`,
-      );
+      window.location.assign(agentsPath(generalUrl, team));
     } catch (cause) {
       void utils.workspaces.list.invalidate();
       const reason =
@@ -108,6 +125,9 @@ export function useNavigation({
             ? copy.invalidTeam
             : copy.creationUncertain,
       );
+      if (reason === "DOMAIN_REASON_HANDLE_CONFLICT") {
+        proposal.recheck();
+      }
     } finally {
       pending.current = false;
     }
@@ -125,6 +145,13 @@ export function useNavigation({
     creating,
     name,
     handle,
+    prospectiveAddress:
+      generalUrl && validHandle(handle) ? teamPath(generalUrl, handle) : null,
+    handleStatus: {
+      description: handleCopy.permanent,
+      message: proposal.status === "idle" ? null : handleCopy[proposal.status],
+      available: proposal.status === "available",
+    },
     error,
     choices,
     current,
@@ -181,8 +208,17 @@ export function useNavigation({
         setCreating(false);
       }
     },
-    onName: setName,
-    onHandle: setHandle,
+    onName: (value) => {
+      if (!pending.current) {
+        setName(value);
+        proposal.rename(value);
+      }
+    },
+    onHandle: (value) => {
+      if (!pending.current) {
+        proposal.edit(value);
+      }
+    },
     onSubmit: () => void submit(),
     retry: () => void utils.workspaces.list.invalidate(),
     select: (choice) => {

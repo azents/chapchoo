@@ -76,6 +76,33 @@ positive pre-acceptance rejection for invalid input/transition, permission or
 handle conflict releases that payload. Authentication, transport, unknown and
 generic conflict failures are not evidence that the prior submission was absent.
 
+Frozen-request recovery first reads owner/request-only history. A present result
+returns the assigned identity and resolves the current saved Agent for
+navigation, independently of a changed historical payload encoding. A removed
+result cannot allocate a replacement. An absent observation is distinct from
+cancellation or rejection: the original frozen payload/Request ID remains
+unchanged if ordinary deduplicated acceptance is explicitly retried.
+
+## Saved presentation and editing
+
+List/detail/create/update projections carry the saved name, immutable handle,
+catalogue reference, selected logical asset key and palette. Repository reads
+join the selected asset directly, rather than having the browser scan the full
+catalogue. Shared presentation resolves bundled artwork beneath the current
+web mount; reads and navigation never choose new random values.
+The selected palette supplies coordinated theme-aware surface, foreground and
+emphasis colors on those profiles without changing workspace appearance.
+
+Detail renders the saved profile and opens an independent controlled edit
+draft in a desktop dialog or mobile bottom sheet. Name/image/palette changes
+update its preview; the handle is read-only. Catalogue pages are
+supplementary: failure retains the chosen reference and name/color draft, not
+a fabricated default. Save disables duplicate submission and submits the complete
+selection. Failure retains the draft; Cancel, close and Escape discard it
+without a mutation. Pending Save retains ownership and disables dismissal.
+Confirmed success uses the saved response and invalidates related list/detail
+queries. Background Computer observation does not overwrite in-progress edits.
+
 ## Connections
 
 - [Repository identity](repository-identity.md) — IDs are opaque and separate from handles, request keys and native witnesses.

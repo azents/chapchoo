@@ -80,6 +80,10 @@ test("creation dialog owns explicit cancel, pending admission and uncertain-outc
   await expect(
     dialog.getByRole("textbox", { name: "Handle", exact: true }),
   ).toHaveValue("design");
+  await expect(dialog.getByText("Team address", { exact: true })).toBeVisible();
+  await expect(
+    dialog.getByText("/general/teams/design", { exact: true }),
+  ).toBeVisible();
   await expect(
     dialog.getByRole("button", { name: "Cancel", exact: true }),
   ).toBeEnabled();
@@ -115,7 +119,7 @@ test("mobile picker overlays unchanged navigation with the existing companion", 
     dialog.getByRole("link", { name: "Your space", exact: true }),
   ).toBeVisible();
   await expect(
-    dialog.getByRole("link", { name: "Design team", exact: true }),
+    dialog.getByRole("link", { name: "Design team @design", exact: true }),
   ).toBeVisible();
   await expect(
     dialog.getByRole("button", { name: "Create team", exact: true }),
@@ -162,7 +166,7 @@ test.describe("touch workspace overlay", () => {
     await trigger.tap();
     await expect(trigger).toHaveAttribute("aria-expanded", "true");
     await expect(
-      drawer.getByRole("link", { name: "Design team", exact: true }),
+      drawer.getByRole("link", { name: "Design team @design", exact: true }),
     ).toBeVisible();
     expect(await navigation.innerText()).toBe(before);
     await trigger.tap();

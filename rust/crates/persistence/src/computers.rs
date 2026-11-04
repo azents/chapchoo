@@ -183,6 +183,7 @@ pub struct AgentSummary {
     pub name: String,
     pub handle: String,
     pub image_id: String,
+    pub image_asset_key: String,
     pub palette_key: String,
     pub computer: ComputerSummary,
 }
@@ -334,6 +335,8 @@ pub(crate) struct AgentComputerRow {
     #[diesel(sql_type = Nullable<IdentitySql>)]
     profile_image_id: Option<EntityId>,
     #[diesel(sql_type = Nullable<Text>)]
+    profile_asset_key: Option<String>,
+    #[diesel(sql_type = Nullable<Text>)]
     palette_key: Option<String>,
     #[diesel(sql_type = IdentitySql)]
     id: EntityId,
@@ -397,7 +400,7 @@ const COMPUTER_PROJECTION: &str = "c.id,c.owner_user_id,c.kind,c.provider_id,c.d
 
 fn agent_query() -> String {
     format!(
-        "SELECT a.id AS agent_id,a.team_id,a.name,a.handle,a.profile_image_id,a.palette_key,{COMPUTER_PROJECTION} JOIN agents a ON a.computer_id=c.id JOIN memberships am ON am.team_id=a.team_id AND am.user_id=a.owner_user_id"
+        "SELECT a.id AS agent_id,a.team_id,a.name,a.handle,a.profile_image_id,pi.asset_key AS profile_asset_key,a.palette_key,{COMPUTER_PROJECTION} JOIN agents a ON a.computer_id=c.id JOIN profile_images pi ON pi.id=a.profile_image_id JOIN memberships am ON am.team_id=a.team_id AND am.user_id=a.owner_user_id"
     )
 }
 
@@ -436,8 +439,12 @@ impl AgentComputerRow {
         let computer = self.computer_summary(now)?;
         let handle = self.handle.ok_or(StoreError::Integrity)?;
         let palette_key = self.palette_key.ok_or(StoreError::Integrity)?;
+        let image_asset_key = self.profile_asset_key.ok_or(StoreError::Integrity)?;
         Handle::parse(&handle).map_err(|_| StoreError::Integrity)?;
         AgentPalette::parse(&palette_key).map_err(|_| StoreError::Integrity)?;
+        if !crate::profile_catalogue::valid_asset_key(&image_asset_key) {
+            return Err(StoreError::Integrity);
+        }
         Ok(AgentSummary {
             id: self
                 .agent_id
@@ -454,6 +461,7 @@ impl AgentComputerRow {
                 .ok_or(StoreError::Integrity)?
                 .to_dto(EntityKind::ProfileImage),
             palette_key,
+            image_asset_key,
             computer,
         })
     }
@@ -615,7 +623,7 @@ impl Store {
             // Reuse the evidence projection without private live Agent data.
             // Residual Computers remain independently discoverable.
             let query = format!(
-                "SELECT NULL AS agent_id,NULL AS team_id,NULL AS name,NULL AS handle,NULL AS profile_image_id,NULL AS palette_key,{COMPUTER_PROJECTION}"
+                "SELECT NULL AS agent_id,NULL AS team_id,NULL AS name,NULL AS handle,NULL AS profile_image_id,NULL AS profile_asset_key,NULL AS palette_key,{COMPUTER_PROJECTION}"
             );
             let query = format!(
                 "{query} WHERE c.provider_id=? AND (? IS NULL OR c.id>?) ORDER BY c.id LIMIT ?"

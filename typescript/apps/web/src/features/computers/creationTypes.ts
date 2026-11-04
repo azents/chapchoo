@@ -11,6 +11,7 @@ import type { HandleDraft } from "@chapchoo/web-core/handle";
 
 export interface InitialAgentCreation {
   teamId: string;
+  teamHandle: string;
   identity: string;
   providers: Page<ProviderChoice>;
   images: Page<AgentProfileImage>;
@@ -64,6 +65,7 @@ export interface AgentCreationProps extends AgentCreationInput {
   onHandle: (value: string) => void;
   onImage: (value: string) => void;
   onPalette: (value: string) => void;
+  onRandomPalette: () => void;
   onImagePage: (after: string | null) => void;
   onCreate: () => void;
   onRefresh: () => void;

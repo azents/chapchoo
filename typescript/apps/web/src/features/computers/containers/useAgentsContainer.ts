@@ -1,15 +1,24 @@
 "use client";
 import { formatDisplayDate } from "@chapchoo/ui/displayFormatting";
+import { validAgentPalette } from "@chapchoo/web-core/agent-profile";
 import { useAuth } from "@chapchoo/web-core/auth-context";
 import { computerCopy } from "@chapchoo/web-core/computer-messages";
 import { useDisplay } from "@chapchoo/web-core/display-context";
 import { initialQuery } from "@chapchoo/web-core/page-state";
-import { useDocumentVisibility } from "@mantine/hooks";
+import { agentsPath } from "@chapchoo/web-core/workspace";
+import { useDocumentVisibility, useMediaQuery } from "@mantine/hooks";
 import { useLocale } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { useAppearanceControl } from "@/shared/appearance/useAppearanceControl";
 import { trpc } from "@/shared/rpc/client";
-import type { AgentsInput, AgentsProps, InitialAgents } from "../types";
+import { creationCopy } from "../creationCopy";
+import type {
+  AgentsInput,
+  AgentsProps,
+  InitialAgents,
+  ProfileDraft,
+  ProfileEditor,
+} from "../types";
 import type { AgentView, OwnerAction } from "@chapchoo/web-core/computer";
 
 function pending(agent: AgentView): boolean {
@@ -19,15 +28,30 @@ export function useAgentsContainer({
   initial,
   basePath,
 }: AgentsInput): AgentsProps {
-  const agentsHref = `${basePath}/agents?team=${encodeURIComponent(initial.teamId)}`;
+  const agentsHref = agentsPath(basePath, initial.teamHandle);
   const auth = useAuth();
+  const mobile = useMediaQuery("(max-width: 48em)");
   const visibility = useDocumentVisibility();
   const enabled =
     visibility === "visible" && auth.state.type === "AUTHENTICATED";
   const copy = computerCopy(useLocale());
+  const profileCopy = creationCopy(useLocale());
   const { value: display } = useDisplay();
   const appearance = useAppearanceControl();
   const utils = trpc.useUtils();
+  const [editor, setEditor] = useState<ProfileEditor>({ type: "closed" });
+  const [imageAfter, setImageAfter] = useState<string | null>(null);
+  const saving = useRef(false);
+  const images = trpc.computers.images.useQuery(
+    imageAfter ? { after: imageAfter } : {},
+    {
+      enabled: enabled && editor.type !== "closed",
+      retry: false,
+    },
+  );
+  const updateProfile = trpc.computers.updateProfile.useMutation({
+    retry: false,
+  });
   const [confirmation, setConfirmation] = useState<{
     action: OwnerAction | "force";
     requestId: string;
@@ -74,6 +98,47 @@ export function useAgentsContainer({
     initial.type === "list"
       ? { ...initial, page: list.data ?? initial.page }
       : { ...initial, agent: detail.data ?? initial.agent };
+  function editDraft(patch: Partial<ProfileDraft>): void {
+    if (saving.current) {
+      return;
+    }
+    setEditor((current) =>
+      current.type === "editing"
+        ? {
+            type: "editing",
+            draft: { ...current.draft, ...patch },
+            error: null,
+          }
+        : current,
+    );
+  }
+  async function saveProfile(): Promise<void> {
+    if (
+      saving.current ||
+      editor.type !== "editing" ||
+      !editor.draft.name.trim()
+    ) {
+      return;
+    }
+    saving.current = true;
+    const draft = editor.draft;
+    setEditor({ type: "saving", draft });
+    try {
+      const saved = await updateProfile.mutateAsync({
+        agentId,
+        name: draft.name.trim(),
+        profileImageId: draft.image.id,
+        paletteKey: draft.paletteKey,
+      });
+      utils.computers.get.setData({ agentId }, saved);
+      setEditor({ type: "closed" });
+      void utils.computers.invalidate();
+    } catch {
+      setEditor({ type: "editing", draft, error: profileCopy.saveFailed });
+    } finally {
+      saving.current = false;
+    }
+  }
   useEffect(() => {
     if (detail.error?.data?.reason === "DOMAIN_REASON_NOT_FOUND") {
       window.location.replace(agentsHref);
@@ -129,6 +194,48 @@ export function useAgentsContainer({
     basePath,
     data,
     copy,
+    profileCopy,
+    mobile,
+    editor,
+    images: images.data ?? { items: [], nextAfter: null },
+    imageAfter,
+    imagesUnavailable: images.isError || !images.data,
+    onEditProfile: () => {
+      if (data.type === "detail" && !saving.current) {
+        setEditor({
+          type: "editing",
+          draft: {
+            name: data.agent.name,
+            image: data.agent.profileImage,
+            paletteKey: data.agent.paletteKey,
+          },
+          error: null,
+        });
+      }
+    },
+    onProfileName: (name) => editDraft({ name }),
+    onProfileImage: (id) => {
+      const image = images.data?.items.find((item) => item.id === id);
+      if (image) {
+        editDraft({ image });
+      }
+    },
+    onProfilePalette: (paletteKey) => {
+      if (validAgentPalette(paletteKey)) {
+        editDraft({ paletteKey });
+      }
+    },
+    onImagePage: (after) => {
+      if (!saving.current) {
+        setImageAfter(after);
+      }
+    },
+    onSaveProfile: () => void saveProfile(),
+    onCancelProfile: () => {
+      if (!saving.current) {
+        setEditor({ type: "closed" });
+      }
+    },
     appearance,
     stale: initial.type === "list" ? list.isError : detail.isError,
     pending: submission.type === "pending",

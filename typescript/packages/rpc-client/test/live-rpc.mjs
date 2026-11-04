@@ -8,6 +8,7 @@ import {
   PersonalPreferencesClient,
   AccountLifecycleClient,
   TeamManagementClient,
+  AdminWorkspacesClient,
   InvitationManagementClient,
   InstallationClient,
   AccountGrantsClient,
@@ -119,6 +120,7 @@ async function main() {
   );
   const accountLifecycle = client(AccountLifecycleClient, generalEndpoint);
   const teams = client(TeamManagementClient, generalEndpoint);
+  const adminWorkspaces = client(AdminWorkspacesClient, adminEndpoint);
   const invitations = client(InvitationManagementClient, generalEndpoint);
   const installation = client(InstallationClient, adminEndpoint);
   const accountGrants = client(AccountGrantsClient, adminEndpoint);
@@ -287,6 +289,73 @@ async function main() {
   );
   check(team.kind === TeamKind.TEAM_KIND_COLLABORATIVE);
   check(team.callerRole === TeamRole.TEAM_ROLE_OWNER);
+  check(
+    (
+      await call(
+        adminWorkspaces,
+        "checkHandle",
+        { handle: team.handle },
+        administrator.token,
+      )
+    ).available === false,
+  );
+  await rejected(
+    () =>
+      call(
+        adminWorkspaces,
+        "checkHandle",
+        { handle: "available-team" },
+        member.token,
+      ),
+    status.PERMISSION_DENIED,
+    "DOMAIN_REASON_PERMISSION_DENIED",
+  );
+  check(
+    (
+      await call(
+        teams,
+        "resolveHandle",
+        { handle: team.handle },
+        administrator.token,
+      )
+    ).id === team.id,
+  );
+  check(
+    (
+      await call(
+        teams,
+        "checkHandle",
+        { handle: team.handle },
+        administrator.token,
+      )
+    ).available === false,
+  );
+  check(
+    (
+      await call(
+        teams,
+        "checkHandle",
+        { handle: "available-team" },
+        member.token,
+      )
+    ).available === true,
+  );
+  await rejected(
+    () => call(teams, "resolveHandle", { handle: team.handle }, member.token),
+    status.NOT_FOUND,
+    "DOMAIN_REASON_NOT_FOUND",
+  );
+  await rejected(
+    () =>
+      call(teams, "checkHandle", { handle: "Invalid" }, administrator.token),
+    status.INVALID_ARGUMENT,
+    "DOMAIN_REASON_INVALID_INPUT",
+  );
+  await rejected(
+    () => call(teams, "checkHandle", { handle: "valid-handle" }),
+    status.UNAUTHENTICATED,
+    "DOMAIN_REASON_INVALID_SESSION",
+  );
   check(
     (
       await call(

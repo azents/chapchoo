@@ -19,6 +19,7 @@ export interface ShellCopy {
   serverSettings: string;
   teamName: string;
   teamHandle: string;
+  teamAddress: string;
   cancel: string;
   close: string;
   create: string;
@@ -50,6 +51,7 @@ const en: ShellCopy = {
   serverSettings: "Server settings",
   teamName: "Team name",
   teamHandle: "Handle",
+  teamAddress: "Team address",
   cancel: "Cancel",
   close: "Close",
   create: "Create",
@@ -81,15 +83,16 @@ const ko: ShellCopy = {
   computerProviders: "Computer Provider",
   serverSettings: "서버 설정",
   teamName: "팀 이름",
-  teamHandle: "팀 ID",
+  teamHandle: "핸들",
+  teamAddress: "팀 주소",
   cancel: "취소",
   close: "닫기",
   create: "만들기",
   unavailable: "공간 목록을 불러오지 못했습니다. 다시 시도해 주세요.",
   retry: "다시 시도",
   back: "뒤로",
-  handleConflict: "이미 사용 중인 팀 ID입니다.",
-  invalidTeam: "팀 이름과 ID를 확인해 주세요.",
+  handleConflict: "이미 사용 중인 핸들입니다.",
+  invalidTeam: "팀 이름과 핸들을 확인해 주세요.",
   creationUncertain:
     "팀이 만들어졌는지 확인하지 못했습니다. 다시 만들기 전에 팀 목록을 확인해 주세요.",
 };
@@ -113,15 +116,16 @@ const ja: ShellCopy = {
   computerProviders: "Computer Provider",
   serverSettings: "サーバー設定",
   teamName: "チーム名",
-  teamHandle: "チームID",
+  teamHandle: "ハンドル",
+  teamAddress: "チームのアドレス",
   cancel: "キャンセル",
   close: "閉じる",
   create: "作成",
   unavailable: "ワークスペースを読み込めませんでした。もう一度お試しください。",
   retry: "再試行",
   back: "戻る",
-  handleConflict: "このチームIDはすでに使われています。",
-  invalidTeam: "チーム名とIDを確認してください。",
+  handleConflict: "このハンドルはすでに使われています。",
+  invalidTeam: "チーム名とハンドルを確認してください。",
   creationUncertain:
     "チームが作成されたか確認できませんでした。もう一度作成する前にチーム一覧を確認してください。",
 };
@@ -146,6 +150,7 @@ const fr: ShellCopy = {
   serverSettings: "Paramètres du serveur",
   teamName: "Nom de l’équipe",
   teamHandle: "Identifiant",
+  teamAddress: "Adresse de l’équipe",
   cancel: "Annuler",
   close: "Fermer",
   create: "Créer",
@@ -165,4 +170,66 @@ export function shellCopy(language: string): ShellCopy {
       : language.startsWith("fr")
         ? fr
         : en;
+}
+
+interface TeamHandleCopy {
+  permanent: string;
+  checking: string;
+  available: string;
+  invalid: string;
+  occupied: string;
+  exhausted: string;
+  unavailable: string;
+}
+export function teamHandleCopy(language: string): TeamHandleCopy {
+  const copy = shellCopy(language);
+  const common = { occupied: copy.handleConflict };
+  if (language.startsWith("ko"))
+    return {
+      ...common,
+      permanent: "핸들은 팀을 만든 뒤 변경할 수 없습니다.",
+      checking: "사용 가능 여부 확인 중…",
+      available: "사용 가능",
+      invalid:
+        "영문 소문자·숫자·하이픈으로 3~16자를 입력하고, 처음과 끝은 영문 또는 숫자로 작성해 주세요.",
+      exhausted:
+        "사용 가능한 핸들을 찾지 못했습니다. 다른 핸들을 입력해 주세요.",
+      unavailable:
+        "사용 가능 여부를 확인하지 못했습니다. 핸들을 수정해 다시 시도해 주세요.",
+    };
+  if (language.startsWith("ja"))
+    return {
+      ...common,
+      permanent: "作成後はハンドルを変更できません。",
+      checking: "使用できるか確認中…",
+      available: "使用できます",
+      invalid:
+        "小文字の英字・数字・ハイフンで3〜16文字を入力し、先頭と末尾は英字または数字にしてください。",
+      exhausted:
+        "使用できるハンドルが見つかりませんでした。別のハンドルを入力してください。",
+      unavailable:
+        "確認できませんでした。ハンドルを編集して再試行してください。",
+    };
+  if (language.startsWith("fr"))
+    return {
+      ...common,
+      permanent: "Cet identifiant ne peut plus être modifié après la création.",
+      checking: "Vérification de la disponibilité…",
+      available: "Disponible",
+      invalid:
+        "Utilisez 3 à 16 lettres minuscules, chiffres ou tirets, avec une lettre ou un chiffre à chaque extrémité.",
+      exhausted: "Aucun identifiant disponible trouvé. Saisissez-en un autre.",
+      unavailable:
+        "Vérification impossible. Modifiez l’identifiant pour réessayer.",
+    };
+  return {
+    ...common,
+    permanent: "The handle cannot be changed after creation.",
+    checking: "Checking availability…",
+    available: "Available",
+    invalid:
+      "Use 3–16 lowercase letters, digits or hyphens, with a letter or digit at each end.",
+    exhausted: "Could not find an available handle. Enter another one.",
+    unavailable: "Could not check availability. Edit the handle to try again.",
+  };
 }

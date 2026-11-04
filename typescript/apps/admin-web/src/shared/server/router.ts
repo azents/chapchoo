@@ -47,6 +47,24 @@ function issued(value: IssuedGrant): IssuedGrant {
 
 export const appRouter = router({
   workspaces: router({
+    handleAvailable: procedure
+      .input(z.object({ handle: z.string().refine(validHandle) }).strict())
+      .query(({ ctx, input }) =>
+        attempt(() =>
+          ctx.session.authenticated(
+            async (token) =>
+              (
+                await call(
+                  ctx.backend.adminWorkspaces.checkHandle.bind(
+                    ctx.backend.adminWorkspaces,
+                  ),
+                  input,
+                  token,
+                )
+              ).available,
+          ),
+        ),
+      ),
     list: procedure.query(({ ctx }) =>
       attempt(() =>
         ctx.session.authenticated(async (token) =>

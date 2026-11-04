@@ -6,22 +6,24 @@ const personal: WorkspaceChoice = {
   key: "personal",
   kind: "personal",
   label: "Your space",
-  href: "/agents?team=personal",
+  href: "/teams/my/agents",
   selected: true,
 };
 const teams: WorkspaceChoice[] = [
   {
     key: "design",
     kind: "team",
+    handle: "design",
     label: "Design team",
-    href: "/agents?team=design",
+    href: "/teams/design/agents",
     selected: false,
   },
   {
     key: "research",
     kind: "team",
+    handle: "research",
     label: "Research team",
-    href: "/agents?team=research",
+    href: "/teams/research/agents",
     selected: false,
   },
 ];

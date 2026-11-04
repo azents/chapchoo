@@ -128,6 +128,7 @@ impl ComputerServices {
             name: value.name,
             handle: value.handle,
             profile_image_id: value.image_id,
+            profile_image_asset_key: value.image_asset_key,
             palette_key: value.palette_key,
             computer: Some(self.computer(value.computer).await?),
         })
@@ -178,6 +179,82 @@ fn next(items: usize, limit: i64, last: Option<&str>) -> Option<String> {
 }
 #[tonic::async_trait]
 impl wire::agents_server::Agents for AgentsAdapter {
+    async fn get_in_team(
+        &self,
+        request: Request<wire::TeamAgentRequest>,
+    ) -> Result<Response<wire::Agent>, Status> {
+        self.0.admit()?;
+        let actor = input::actor(&request)?;
+        let value = request.into_inner();
+        let agent = self
+            .0
+            .service
+            .agent_in_team(
+                &actor,
+                &value.team_id,
+                &value.handle,
+                AcceptanceTime::System,
+            )
+            .await
+            .map_err(status)?;
+        Ok(Response::new(self.0.agent(agent).await?))
+    }
+    async fn update_profile(
+        &self,
+        request: Request<wire::UpdateAgentProfileRequest>,
+    ) -> Result<Response<wire::Agent>, Status> {
+        self.0.admit()?;
+        let actor = input::actor(&request)?;
+        let value = request.into_inner();
+        let agent = self
+            .0
+            .service
+            .update_agent_profile(
+                &actor,
+                &value.agent_id,
+                &chapchoo_service::UpdateAgentProfile {
+                    name: value.name,
+                    image_id: value.profile_image_id,
+                    palette_key: value.palette_key,
+                },
+                AcceptanceTime::System,
+            )
+            .await
+            .map_err(status)?;
+        Ok(Response::new(self.0.agent(agent).await?))
+    }
+    async fn creation_result(
+        &self,
+        request: Request<wire::CreationResultRequest>,
+    ) -> Result<Response<wire::HistoricalCreationResult>, Status> {
+        self.0.admit()?;
+        let actor = input::actor(&request)?;
+        let result = self
+            .0
+            .service
+            .agent_creation_result(
+                &actor,
+                &request.into_inner().request_id,
+                AcceptanceTime::System,
+            )
+            .await
+            .map_err(status)?;
+        let outcome = result.map(|value| match value {
+            chapchoo_service::AgentCreationResult::Present {
+                assigned_agent_id,
+                team_id,
+            } => wire::historical_creation_result::Outcome::Present(wire::PresentCreation {
+                assigned_agent_id,
+                team_id,
+            }),
+            chapchoo_service::AgentCreationResult::Removed { assigned_agent_id } => {
+                wire::historical_creation_result::Outcome::Removed(wire::RemovedCreation {
+                    assigned_agent_id,
+                })
+            }
+        });
+        Ok(Response::new(wire::HistoricalCreationResult { outcome }))
+    }
     async fn check_handle(
         &self,
         request: Request<wire::AgentHandleRequest>,

@@ -385,6 +385,33 @@ impl AccountsService {
     ) -> Result<TeamSummary, ServiceError> {
         Ok(self.store.team(actor, team_id, now).await?)
     }
+    pub async fn team_by_handle(
+        &self,
+        actor: &SecretDigest,
+        handle: &str,
+        now: i64,
+    ) -> Result<TeamSummary, ServiceError> {
+        Ok(self.store.team_by_handle(actor, handle, now).await?)
+    }
+    pub async fn team_handle_available(
+        &self,
+        actor: &SecretDigest,
+        handle: &str,
+        now: i64,
+    ) -> Result<bool, ServiceError> {
+        Ok(self.store.team_handle_available(actor, handle, now).await?)
+    }
+    pub async fn admin_workspace_handle_available(
+        &self,
+        actor: &SecretDigest,
+        handle: &str,
+        now: i64,
+    ) -> Result<bool, ServiceError> {
+        Ok(self
+            .store
+            .admin_workspace_handle_available(actor, handle, now)
+            .await?)
+    }
     pub async fn create_team(
         &self,
         actor: &SecretDigest,

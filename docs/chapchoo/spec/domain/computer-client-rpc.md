@@ -47,8 +47,18 @@ Every generated message and outcome oneof has field-free Debug output.
 - Agents.ListProfileImages returns authenticated bounded catalogue pages.
   Agents.CheckHandle requires an accessible Team and exact valid candidate,
   returns only availability and does not reserve the handle.
+- Agents.GetInTeam accepts a resolved Team ID and exact Agent handle. Current
+  membership and individual ownership are both required; global handle
+  uniqueness does not bypass the Team scope.
+- Agents.UpdateProfile accepts stable Agent ID and complete name/image/palette.
+  It changes saved presentation only, retains the immutable handle and performs
+  no native effect.
+- Agents.CreationResult reads the authenticated owner's original Request ID
+  without a mutation payload. It returns present assigned Agent/Team IDs,
+  a removed assigned ID, or an absent observation. The latter is not evidence
+  that an uncertain concurrent Create stopped.
 
-Agent DTOs carry the persisted handle, image ID and palette in addition to name,
+Agent DTOs carry the persisted handle, image ID, selected local asset key and palette in addition to name,
 Team and Computer. Missing final creation fields reject rather than invoking a
 server default or legacy mode. [Profile contracts](agent-profile.md) own grammar,
 uniqueness, catalogue validation and full-payload recovery.

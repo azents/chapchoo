@@ -2,7 +2,9 @@ import type * as Wire from "@chapchoo/rpc-client/computers";
 import type { Timestamp } from "@chapchoo/rpc-client/timestamp";
 import { invalidResponse } from "./errors.js";
 import { timestampMilliseconds, validTimestamp } from "./validation.js";
-import type { AgentProfileImage } from "./agent-profile.js";
+import { validAgentPalette } from "./agent-profile.js";
+import type { AgentPaletteKey, AgentProfileImage } from "./agent-profile.js";
+import { validHandle } from "./handle.js";
 export type { AgentPaletteKey, AgentProfileImage } from "./agent-profile.js";
 
 export type Power = "running" | "stopped" | "unknown";
@@ -165,6 +167,9 @@ export interface AgentView {
   id: string;
   teamId: string;
   name: string;
+  handle: string;
+  profileImage: Pick<AgentProfileImage, "id" | "assetKey">;
+  paletteKey: AgentPaletteKey;
   computer: ComputerView;
 }
 export interface ProviderChoice {
@@ -267,13 +272,25 @@ export function actionNumber(action: LifecycleAction): Wire.Action {
   }
 }
 export function agent(value: Wire.Agent): AgentView {
-  if (!value.computer || value.computer.actions.length > 4)
+  if (
+    !value.computer ||
+    value.computer.actions.length > 4 ||
+    !validHandle(value.handle) ||
+    !validAgentPalette(value.paletteKey) ||
+    !/^[a-z0-9][a-z0-9-]{0,127}(?![\s\S])/.test(value.profileImageAssetKey)
+  )
     return invalidResponse();
   const computer = value.computer;
   return {
     id: text(value.id),
     teamId: text(value.teamId),
     name: text(value.name),
+    handle: value.handle,
+    profileImage: {
+      id: text(value.profileImageId),
+      assetKey: value.profileImageAssetKey,
+    },
+    paletteKey: value.paletteKey,
     computer: {
       ...status(computer),
       requestId: text(computer.requestId),
@@ -355,4 +372,23 @@ export function creation(
     return { type: "accepted", agent: agent(value.agent) };
   if (value.removed && !value.agent) return { type: "removed" };
   return invalidResponse();
+}
+
+export type HistoricalCreation =
+  | { type: "notObserved" }
+  | { type: "present"; agentId: string; teamId: string }
+  | { type: "removed"; agentId: string };
+export function historicalCreation(
+  value: Wire.HistoricalCreationResult,
+): HistoricalCreation {
+  if (value.present && value.removed) return invalidResponse();
+  if (value.present)
+    return {
+      type: "present",
+      agentId: text(value.present.assignedAgentId),
+      teamId: text(value.present.teamId),
+    };
+  if (value.removed)
+    return { type: "removed", agentId: text(value.removed.assignedAgentId) };
+  return { type: "notObserved" };
 }

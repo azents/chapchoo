@@ -215,6 +215,14 @@ export interface TeamRequest {
   teamId: string;
 }
 
+export interface TeamHandleRequest {
+  handle: string;
+}
+
+export interface TeamHandleAvailability {
+  available: boolean;
+}
+
 export interface CreateTeamRequest {
   name: string;
   handle: string;
@@ -1859,6 +1867,116 @@ export const TeamRequest: MessageFns<TeamRequest> = {
   fromPartial<I extends Exact<DeepPartial<TeamRequest>, I>>(object: I): TeamRequest {
     const message = createBaseTeamRequest();
     message.teamId = object.teamId ?? "";
+    return message;
+  },
+};
+
+function createBaseTeamHandleRequest(): TeamHandleRequest {
+  return { handle: "" };
+}
+
+export const TeamHandleRequest: MessageFns<TeamHandleRequest> = {
+  encode(message: TeamHandleRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.handle !== "") {
+      writer.uint32(10).string(message.handle);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TeamHandleRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseTeamHandleRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.handle = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<TeamHandleRequest>, I>>(base?: I): TeamHandleRequest {
+    return TeamHandleRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<TeamHandleRequest>, I>>(object: I): TeamHandleRequest {
+    const message = createBaseTeamHandleRequest();
+    message.handle = object.handle ?? "";
+    return message;
+  },
+};
+
+function createBaseTeamHandleAvailability(): TeamHandleAvailability {
+  return { available: false };
+}
+
+export const TeamHandleAvailability: MessageFns<TeamHandleAvailability> = {
+  encode(message: TeamHandleAvailability, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.available !== false) {
+      writer.uint32(8).bool(message.available);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TeamHandleAvailability {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseTeamHandleAvailability();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.available = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<TeamHandleAvailability>, I>>(base?: I): TeamHandleAvailability {
+    return TeamHandleAvailability.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<TeamHandleAvailability>, I>>(object: I): TeamHandleAvailability {
+    const message = createBaseTeamHandleAvailability();
+    message.available = object.available ?? false;
     return message;
   },
 };
@@ -3510,6 +3628,25 @@ export const TeamManagementService = {
     responseSerialize: (value: Team): Buffer => Buffer.from(Team.encode(value).finish()),
     responseDeserialize: (value: Buffer): Team => Team.decode(value),
   },
+  resolveHandle: {
+    path: "/chapchoo.accounts.TeamManagement/ResolveHandle" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: TeamHandleRequest): Buffer => Buffer.from(TeamHandleRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): TeamHandleRequest => TeamHandleRequest.decode(value),
+    responseSerialize: (value: Team): Buffer => Buffer.from(Team.encode(value).finish()),
+    responseDeserialize: (value: Buffer): Team => Team.decode(value),
+  },
+  checkHandle: {
+    path: "/chapchoo.accounts.TeamManagement/CheckHandle" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: TeamHandleRequest): Buffer => Buffer.from(TeamHandleRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): TeamHandleRequest => TeamHandleRequest.decode(value),
+    responseSerialize: (value: TeamHandleAvailability): Buffer =>
+      Buffer.from(TeamHandleAvailability.encode(value).finish()),
+    responseDeserialize: (value: Buffer): TeamHandleAvailability => TeamHandleAvailability.decode(value),
+  },
   createTeam: {
     path: "/chapchoo.accounts.TeamManagement/CreateTeam" as const,
     requestStream: false as const,
@@ -3587,6 +3724,8 @@ export const TeamManagementService = {
 export interface TeamManagementServer extends UntypedServiceImplementation {
   listTeams: handleUnaryCall<Empty, Teams>;
   getTeam: handleUnaryCall<TeamRequest, Team>;
+  resolveHandle: handleUnaryCall<TeamHandleRequest, Team>;
+  checkHandle: handleUnaryCall<TeamHandleRequest, TeamHandleAvailability>;
   createTeam: handleUnaryCall<CreateTeamRequest, Team>;
   updateTeam: handleUnaryCall<UpdateTeamRequest, Team>;
   listMembers: handleUnaryCall<TeamRequest, Members>;
@@ -3621,6 +3760,36 @@ export interface TeamManagementClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: Team) => void,
+  ): ClientUnaryCall;
+  resolveHandle(
+    request: TeamHandleRequest,
+    callback: (error: ServiceError | null, response: Team) => void,
+  ): ClientUnaryCall;
+  resolveHandle(
+    request: TeamHandleRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: Team) => void,
+  ): ClientUnaryCall;
+  resolveHandle(
+    request: TeamHandleRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: Team) => void,
+  ): ClientUnaryCall;
+  checkHandle(
+    request: TeamHandleRequest,
+    callback: (error: ServiceError | null, response: TeamHandleAvailability) => void,
+  ): ClientUnaryCall;
+  checkHandle(
+    request: TeamHandleRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: TeamHandleAvailability) => void,
+  ): ClientUnaryCall;
+  checkHandle(
+    request: TeamHandleRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: TeamHandleAvailability) => void,
   ): ClientUnaryCall;
   createTeam(
     request: CreateTeamRequest,
@@ -3756,6 +3925,16 @@ export const AdminWorkspacesService = {
     responseSerialize: (value: Teams): Buffer => Buffer.from(Teams.encode(value).finish()),
     responseDeserialize: (value: Buffer): Teams => Teams.decode(value),
   },
+  checkHandle: {
+    path: "/chapchoo.accounts.AdminWorkspaces/CheckHandle" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: TeamHandleRequest): Buffer => Buffer.from(TeamHandleRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): TeamHandleRequest => TeamHandleRequest.decode(value),
+    responseSerialize: (value: TeamHandleAvailability): Buffer =>
+      Buffer.from(TeamHandleAvailability.encode(value).finish()),
+    responseDeserialize: (value: Buffer): TeamHandleAvailability => TeamHandleAvailability.decode(value),
+  },
   createTeam: {
     path: "/chapchoo.accounts.AdminWorkspaces/CreateTeam" as const,
     requestStream: false as const,
@@ -3769,6 +3948,7 @@ export const AdminWorkspacesService = {
 
 export interface AdminWorkspacesServer extends UntypedServiceImplementation {
   listTeams: handleUnaryCall<Empty, Teams>;
+  checkHandle: handleUnaryCall<TeamHandleRequest, TeamHandleAvailability>;
   createTeam: handleUnaryCall<CreateTeamRequest, Team>;
 }
 
@@ -3784,6 +3964,21 @@ export interface AdminWorkspacesClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: Teams) => void,
+  ): ClientUnaryCall;
+  checkHandle(
+    request: TeamHandleRequest,
+    callback: (error: ServiceError | null, response: TeamHandleAvailability) => void,
+  ): ClientUnaryCall;
+  checkHandle(
+    request: TeamHandleRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: TeamHandleAvailability) => void,
+  ): ClientUnaryCall;
+  checkHandle(
+    request: TeamHandleRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: TeamHandleAvailability) => void,
   ): ClientUnaryCall;
   createTeam(
     request: CreateTeamRequest,

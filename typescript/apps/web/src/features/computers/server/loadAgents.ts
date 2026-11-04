@@ -4,56 +4,41 @@ import { RpcFailure } from "@chapchoo/web-core/errors";
 import { call } from "@chapchoo/web-core/rpc";
 import { notFound, redirect } from "next/navigation";
 import { getConfig, getLoginRedirect } from "@/config";
-import { readNavigation } from "@/shared/navigation/server";
+import { resolveRouteTeam } from "@/shared/navigation/team";
 import { getBackend } from "@/shared/server/backend";
 import { readPageScope } from "@/shared/server/identity";
 import type { InitialAgents } from "../types";
 
 export async function loadAgents(
-  agentId: string,
+  agentHandle: string,
   after: string,
-  teamId: string,
+  teamHandle: string,
 ): Promise<InitialAgents> {
+  const { team: selected, identity } = await resolveRouteTeam(teamHandle);
+  const teamId = selected.id;
   const scope = await readPageScope();
-  const identity = await scope.identity();
-  if (!identity) {
-    redirect(getLoginRedirect());
-  }
-  if (teamId.length > 128) {
-    notFound();
-  }
   const config = getConfig();
   const backend = getBackend(config);
   try {
-    const common = { renderedAt: Date.now(), identity: identity.email };
-    if (agentId) {
+    const common = {
+      renderedAt: Date.now(),
+      identity: identity.email,
+      teamHandle,
+    };
+    if (agentHandle) {
       const current = await scope.read(async (token) =>
         agent(
           await call(
-            backend.agents.get.bind(backend.agents),
-            { agentId },
+            backend.agents.getInTeam.bind(backend.agents),
+            { teamId, handle: agentHandle },
             token,
           ),
         ),
       );
-      if (!teamId) {
-        redirect(
-          `${config.basePath}/agents/${encodeURIComponent(agentId)}?team=${encodeURIComponent(current.teamId)}`,
-        );
-      }
       if (current.teamId !== teamId) {
         notFound();
       }
       return { ...common, teamId, type: "detail", agent: current };
-    }
-    if (!teamId) {
-      const context = await readNavigation();
-      if (context.type !== "ready" || !context.preferred) {
-        notFound();
-      }
-      redirect(
-        `${config.basePath}/agents?team=${encodeURIComponent(context.preferred)}${after ? `&after=${encodeURIComponent(after)}` : ""}`,
-      );
     }
     return {
       ...common,
@@ -73,7 +58,8 @@ export async function loadAgents(
   } catch (error) {
     if (
       error instanceof RpcFailure &&
-      error.reason === "DOMAIN_REASON_NOT_FOUND"
+      (error.reason === "DOMAIN_REASON_NOT_FOUND" ||
+        error.reason === "DOMAIN_REASON_INVALID_INPUT")
     ) {
       notFound();
     }

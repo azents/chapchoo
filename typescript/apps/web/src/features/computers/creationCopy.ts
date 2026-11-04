@@ -5,6 +5,13 @@ export interface CreationCopy {
   permanent: string;
   image: string;
   palette: string;
+  edit: string;
+  save: string;
+  saveFailed: string;
+  currentImage: string;
+  close: string;
+  randomPalette: string;
+  preview: string;
   checking: string;
   available: string;
   invalid: string;
@@ -18,6 +25,13 @@ const english: CreationCopy = {
   permanent: "The handle cannot be changed after creation.",
   image: "Profile image",
   palette: "Color",
+  edit: "Edit profile",
+  save: "Save",
+  saveFailed: "Could not save the profile. Your changes are still here.",
+  currentImage: "Current image",
+  close: "Close",
+  randomPalette: "Random color",
+  preview: "Profile preview",
   checking: "Checking availability…",
   available: "Available",
   invalid:
@@ -39,6 +53,13 @@ const korean: CreationCopy = {
   permanent: "핸들은 생성한 뒤 변경할 수 없습니다.",
   image: "프로필 이미지",
   palette: "색상",
+  edit: "프로필 수정",
+  save: "저장",
+  saveFailed: "프로필을 저장하지 못했습니다. 수정한 내용은 그대로 유지됩니다.",
+  currentImage: "현재 이미지",
+  close: "닫기",
+  randomPalette: "색상 무작위 선택",
+  preview: "프로필 미리보기",
   checking: "사용 가능 여부 확인 중…",
   available: "사용 가능",
   invalid:
@@ -61,6 +82,13 @@ const japanese: CreationCopy = {
   permanent: "作成後はハンドルを変更できません。",
   image: "プロフィール画像",
   palette: "カラー",
+  edit: "プロフィールを編集",
+  save: "保存",
+  saveFailed: "保存できませんでした。編集内容は保持されています。",
+  currentImage: "現在の画像",
+  close: "閉じる",
+  randomPalette: "ランダムなカラー",
+  preview: "プロフィールのプレビュー",
   checking: "使用できるか確認中…",
   available: "使用できます",
   invalid:
@@ -83,6 +111,14 @@ const french: CreationCopy = {
   permanent: "Cet identifiant ne peut plus être modifié après la création.",
   image: "Image de profil",
   palette: "Couleur",
+  edit: "Modifier le profil",
+  save: "Enregistrer",
+  saveFailed:
+    "Le profil n’a pas pu être enregistré. Vos modifications sont conservées.",
+  currentImage: "Image actuelle",
+  close: "Fermer",
+  randomPalette: "Couleur aléatoire",
+  preview: "Aperçu du profil",
   checking: "Vérification de la disponibilité…",
   available: "Disponible",
   invalid:
