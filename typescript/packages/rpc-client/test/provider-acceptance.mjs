@@ -23,11 +23,11 @@ import {
   ProviderAuthenticationClient,
   ProviderKind,
 } from "../dist/generated/control.js";
-const [endpoint, providerId, proofFile, saFile, wrongAudienceFile] =
+const [endpoint, registrationKey, proofFile, saFile, wrongAudienceFile] =
   process.argv.slice(2);
 if (
   !/^(127\.0\.0\.1|localhost):\d+$/.test(endpoint ?? "") ||
-  !providerId ||
+  !registrationKey ||
   !proofFile
 ) {
   throw new Error("Explicit disposable acceptance inputs required");
@@ -95,7 +95,7 @@ async function denied(operation) {
 try {
   const auth = client(ProviderAuthenticationClient);
   const configuration = {
-    providerId,
+    providerId: registrationKey,
     name: "Acceptance",
     kind: ProviderKind.PROVIDER_KIND_KUBERNETES,
     capabilities: { create: true, start: true, stop: true, restart: true },
@@ -120,7 +120,8 @@ try {
       serviceAccountToken,
     });
     check(
-      recovered.token === good.token,
+      recovered.token === good.token &&
+        recovered.providerId === good.providerId,
       "Exchange recovery changed credential",
     );
     await denied(() =>
@@ -154,10 +155,23 @@ try {
   });
   const team = (await call(teams, "listTeams", {}, session.token)).items[0];
   check(team, "Personal team absent");
-  await poll(
+  const providers = await poll(
     () => call(catalog, "list", { limit: 20 }, session.token),
-    (result) => result.items.some((item) => item.id === providerId),
+    (result) => result.items.length > 0,
   );
+  check(
+    providers.items.length === 1,
+    "Isolated fixture must have one Provider",
+  );
+  const providerId = providers.items[0]?.id;
+  check(
+    providerId && providerId !== registrationKey,
+    "Canonical Provider identity absent",
+  );
+  const image = (
+    await call(agents, "listProfileImages", { limit: 20 }, session.token)
+  ).items[0];
+  check(image, "Profile catalogue item absent");
   const created = await call(
     agents,
     "create",
@@ -166,6 +180,9 @@ try {
       providerId,
       name: "Authentication acceptance",
       teamId: team.id,
+      handle: "auth-acceptance",
+      profileImageId: image.id,
+      paletteKey: "sage",
     },
     session.token,
   );

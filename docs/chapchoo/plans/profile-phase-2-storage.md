@@ -307,8 +307,16 @@ Remaining delivery:
    the returned identity exactly once before observing newly allocated resources;
    registration configuration keeps its separately named key. Native ownership
    checks and lifecycle assertions remain unchanged.
-3. Push fixture corrections with normal hooks and monitor the new-SHA matrix.
-4. Resolve any current CI/automatic review finding before final delivery.
+3. At `f971cb5`, the actual Docker journey passed create/Connector/stop/start/
+   restart/delete, original-volume data and empty-data continuity, exact cleanup
+   and unchanged canaries. The same job's later disposable Kubernetes
+   authentication acceptance still used the old configured-ID equality and
+   missing-profile Create payload. Its generated-RPC consumer now selects the
+   sole returned canonical Provider and catalogue item and submits final profile
+   values; registration configuration retains its separate key. Browser
+   acceptance passed independently. The entire job must pass on the new SHA.
+4. Push fixture corrections with normal hooks and monitor the new-SHA matrix.
+5. Resolve any current CI/automatic review finding before final delivery.
 
 No phase-2 release, merge, deployed preparation, native effect or rollout has
 been executed. Design delta: None.
