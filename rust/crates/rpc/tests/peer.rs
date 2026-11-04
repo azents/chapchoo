@@ -1,7 +1,9 @@
 mod support;
 
 use base64::{Engine, engine::general_purpose::URL_SAFE};
-use chapchoo_crypto::{BearerSecret, CredentialCipher, PasswordCost, RootKey, SystemOwnerVerifier};
+use chapchoo_crypto::{
+    BearerSecret, BootstrapProviderPermit, CredentialCipher, PasswordCost, RootKey,
+};
 use chapchoo_domain::{EmailAddress, Password};
 use chapchoo_persistence::{Store, prepare_sqlite};
 use chapchoo_protocol::control::{
@@ -48,13 +50,10 @@ fn memory_and_tcp_peer_handlers_revalidate_domain_and_exact_reconciler_authority
         URL_SAFE.encode([34; 32]),
     )?)?);
     prepare_sqlite(&path, &cipher)?;
-    let system = BearerSecret::generate()?;
     let setup = BearerSecret::generate()?;
-    let verifier =
-        SystemOwnerVerifier::new("system".into(), vec!["provider".into()], system.digest())?;
     tokio::runtime::Runtime::new()?.block_on(support::scope(async |fixture| {
         let store = Store::connect_sqlite(path, cipher).await?;
-        let app = Arc::new(ComputersService::new(store.clone(), Some(verifier)));
+        let app = Arc::new(ComputersService::new(store.clone()));
         let accounts = AccountsService::new(
             store,
             PasswordWork::new(1, PasswordCost::new(10)?)?,
@@ -74,22 +73,21 @@ fn memory_and_tcp_peer_handlers_revalidate_domain_and_exact_reconciler_authority
                 None,
             )
             .await?;
-        app.configure_system_provider(
-            &system,
-            "provider",
-            "Fixture",
-            ProviderCapabilities {
-                create: true,
-                start: true,
-                stop: true,
-                restart: true,
-            },
-            &chapchoo_domain::ProviderSubstrate::Kubernetes,
-            AcceptanceTime::System,
-        )
-        .await?;
+        let proof = BootstrapProviderPermit::new("provider".into())?.authenticated();
         let key = app
-            .rotate_system_provider_key(&system, "provider", "key", AcceptanceTime::System)
+            .exchange_bootstrap_provider(
+                &proof,
+                "Fixture",
+                ProviderCapabilities {
+                    create: true,
+                    start: true,
+                    stop: true,
+                    restart: true,
+                },
+                &chapchoo_domain::ProviderSubstrate::Kubernetes,
+                "key",
+                AcceptanceTime::System,
+            )
             .await?;
         let tcp = TcpListener::bind("127.0.0.1:0").await?;
         let endpoint = format!("http://{}", tcp.local_addr()?);

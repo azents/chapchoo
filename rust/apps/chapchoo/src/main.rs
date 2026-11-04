@@ -5,6 +5,8 @@ mod connector;
 mod control_plane;
 mod health;
 mod provider;
+mod provider_auth;
+mod provider_credential;
 mod runtime;
 #[cfg(test)]
 #[path = "../test_support.rs"]
@@ -95,7 +97,7 @@ async fn execute(cli: Cli) -> Result<(), AppError> {
             runtime::serve(config, options).await?;
         }
         Command::ComputerProvider(options) => {
-            let owner = config::provider_owner_key()?;
+            let owner = provider_auth::ProviderAuth::from_process()?;
             let stop = tokio_util::sync::CancellationToken::new();
             let mut signal = runtime::Termination::new()?;
             let task = provider::run(options, owner, stop.clone());
@@ -110,7 +112,7 @@ async fn execute(cli: Cli) -> Result<(), AppError> {
             }
         }
         Command::DockerProvider(options) => {
-            let owner = config::provider_owner_key()?;
+            let owner = provider_auth::ProviderAuth::from_process()?;
             let stop = tokio_util::sync::CancellationToken::new();
             let mut signal = runtime::Termination::new()?;
             let task = provider::run_docker(options, owner, stop.clone());
@@ -139,6 +141,7 @@ async fn execute(cli: Cli) -> Result<(), AppError> {
                 }
             }
         }
+        Command::ProviderCredential(options) => provider_credential::run(options).await?,
     }
     Ok(())
 }

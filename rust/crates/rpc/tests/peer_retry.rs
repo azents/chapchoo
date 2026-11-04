@@ -2,7 +2,7 @@
 mod support;
 
 use base64::{Engine, engine::general_purpose::URL_SAFE};
-use chapchoo_crypto::{BearerSecret, CredentialCipher, RootKey, SystemOwnerVerifier};
+use chapchoo_crypto::{BootstrapProviderPermit, CredentialCipher, RootKey};
 use chapchoo_persistence::{Store, prepare_sqlite};
 use chapchoo_protocol::control::{
     self as wire,
@@ -67,30 +67,25 @@ fn explicit_not_owner_is_the_only_bounded_retry_and_native_error_is_uncertain() 
         URL_SAFE.encode([35; 32]),
     )?)?);
     prepare_sqlite(&path, &cipher)?;
-    let owner = BearerSecret::generate()?;
-    let verifier =
-        SystemOwnerVerifier::new("system".into(), vec!["provider".into()], owner.digest())?;
     tokio::runtime::Runtime::new()?.block_on(support::scope(async |fixture| {
         let app = Arc::new(ComputersService::new(
             Store::connect_sqlite(path, cipher).await?,
-            Some(verifier),
         ));
-        app.configure_system_provider(
-            &owner,
-            "provider",
-            "Fixture",
-            ProviderCapabilities {
-                create: true,
-                start: true,
-                stop: true,
-                restart: true,
-            },
-            &chapchoo_domain::ProviderSubstrate::Kubernetes,
-            AcceptanceTime::System,
-        )
-        .await?;
+        let proof = BootstrapProviderPermit::new("provider".into())?.authenticated();
         let key = app
-            .rotate_system_provider_key(&owner, "provider", "key", AcceptanceTime::System)
+            .exchange_bootstrap_provider(
+                &proof,
+                "Fixture",
+                ProviderCapabilities {
+                    create: true,
+                    start: true,
+                    stop: true,
+                    restart: true,
+                },
+                &chapchoo_domain::ProviderSubstrate::Kubernetes,
+                "key",
+                AcceptanceTime::System,
+            )
             .await?;
         let control = app.register_control("http://127.0.0.1:1").await?;
         let prepared = app

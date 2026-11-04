@@ -2,7 +2,9 @@
 //! Native SDK stages and real daemon acceptance belong to the adapter layer.
 use super::*;
 use base64::{Engine, engine::general_purpose::URL_SAFE};
-use chapchoo_crypto::{BearerSecret, CredentialCipher, PasswordCost, RootKey, SystemOwnerVerifier};
+use chapchoo_crypto::{
+    BearerSecret, BootstrapProviderPermit, CredentialCipher, PasswordCost, RootKey,
+};
 use chapchoo_domain::{
     DockerDaemonId, DockerVolumeIdentity, EmailAddress, NativeIdentity, NativeScope, Password,
 };
@@ -123,31 +125,22 @@ async fn fixture_with_action(
     )?)?);
     prepare_sqlite(&path, &cipher)?;
     let store = Store::connect_sqlite(path, cipher).await?;
-    let owner = BearerSecret::generate()?;
-    let app = Arc::new(ComputersService::new(
-        store.clone(),
-        Some(SystemOwnerVerifier::new(
-            "system".into(),
-            vec!["provider".into()],
-            owner.digest(),
-        )?),
-    ));
-    app.configure_system_provider(
-        &owner,
-        "provider",
-        "Docker",
-        ProviderCapabilities {
-            create: true,
-            start: true,
-            stop: true,
-            restart: true,
-        },
-        &ProviderSubstrate::Docker(DockerDaemonId::parse("daemon:original".into())?),
-        AcceptanceTime::System,
-    )
-    .await?;
+    let app = Arc::new(ComputersService::new(store.clone()));
+    let proof = BootstrapProviderPermit::new("provider".into())?.authenticated();
     let key = app
-        .rotate_system_provider_key(&owner, "provider", "key", AcceptanceTime::System)
+        .exchange_bootstrap_provider(
+            &proof,
+            "Docker",
+            ProviderCapabilities {
+                create: true,
+                start: true,
+                stop: true,
+                restart: true,
+            },
+            &ProviderSubstrate::Docker(DockerDaemonId::parse("daemon:original".into())?),
+            "key",
+            AcceptanceTime::System,
+        )
         .await?;
     let control = app.register_control("http://127.0.0.1:1").await?;
     let services = ComponentConnectionServices::new(

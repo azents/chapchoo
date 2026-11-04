@@ -43,7 +43,7 @@ fn selectable_group_unions_deduplicate_shared_services_and_exclude_peers() -> Re
                 session_policy: SessionPolicy::default(),
             },
         )?));
-        let app = Arc::new(ComputersService::new(store, None));
+        let app = Arc::new(ComputersService::new(store));
         let computers = chapchoo_rpc::ComputerServices::new(app.clone());
         let connections = ComponentConnectionServices::new(
             app.clone(),

@@ -361,11 +361,19 @@ async fn native_control_journey_acks_allocations_and_preserves_original_volume_w
             )?)?);
             prepare_sqlite(&path, &cipher)?;
             let setup = BearerSecret::generate()?;
-            let owner = BearerSecret::generate()?;
-            let verifier =
-                SystemOwnerVerifier::new("owner".into(), vec!["provider".into()], owner.digest())?;
+            let owner = cipher.issue_provider_bootstrap("provider")?;
+            let proof = BootstrapProviderPermit::new("provider".into())?.authenticated();
+            let auth_config = chapchoo_rpc::ProviderBootstrapConfig {
+                secret_key_provider_ids: vec!["provider".into()],
+                ..Default::default()
+            };
+            let authenticator = Arc::new(chapchoo_rpc::ProviderAuthenticator::new(
+                auth_config,
+                cipher.clone(),
+                None,
+            )?);
             let store = Store::connect_sqlite(path, cipher).await?;
-            let app = Arc::new(ComputersService::new(store.clone(), Some(verifier)));
+            let app = Arc::new(ComputersService::new(store.clone()));
             let accounts = AccountsService::new(
                 store,
                 PasswordWork::new(1, PasswordCost::new(10)?)?,
@@ -416,7 +424,8 @@ async fn native_control_journey_acks_allocations_and_preserves_original_volume_w
                 app.clone(),
                 control.id.clone(),
                 connections.clone(),
-            );
+            )
+            .with_provider_authenticator(authenticator);
             let cleanup_app = app.clone();
             let cleanup_control = control.id.clone();
             let cleanup_connections = connections.clone();
@@ -446,24 +455,19 @@ async fn native_control_journey_acks_allocations_and_preserves_original_volume_w
                         let _ = stopped_peer.await;
                     }),
             );
-            app.configure_system_provider(
-                &owner,
-                "provider",
-                "Native fixture",
-                chapchoo_service::ProviderCapabilities {
-                    create: true,
-                    start: true,
-                    stop: true,
-                    restart: true,
-                },
-                &ProviderSubstrate::Docker(DockerDaemonId::parse("daemon:control-fixture".into())?),
-                AcceptanceTime::System,
-            )
-            .await?;
             let key = app
-                .rotate_system_provider_key(
-                    &owner,
-                    "provider",
+                .exchange_bootstrap_provider(
+                    &proof,
+                    "Fixture",
+                    chapchoo_service::ProviderCapabilities {
+                        create: true,
+                        start: true,
+                        stop: true,
+                        restart: true,
+                    },
+                    &ProviderSubstrate::Docker(DockerDaemonId::parse(
+                        "daemon:control-fixture".into(),
+                    )?),
                     "fixture-key",
                     AcceptanceTime::System,
                 )
@@ -471,7 +475,10 @@ async fn native_control_journey_acks_allocations_and_preserves_original_volume_w
             let component_key = wire::ComponentKey {
                 token: key.token.expose().into(),
                 issued_at: None,
-                expires_at: None,
+                expires_at: Some(prost_types::Timestamp {
+                    seconds: key.expires_at / 1000,
+                    nanos: 0,
+                }),
                 proactive_after: Some(prost_types::Timestamp {
                     seconds: key.proactive_after / 1000,
                     nanos: 0,
@@ -480,7 +487,8 @@ async fn native_control_journey_acks_allocations_and_preserves_original_volume_w
             let stop = CancellationToken::new();
             let stopping = stop.clone();
             let channel = super::super::endpoint(&endpoint)?.connect_lazy();
-            let reconnect_owner = BearerSecret::parse(owner.expose().into())?;
+            let reconnect_owner =
+                crate::provider_auth::ProviderAuth::fixture(owner.expose().into());
             let reconnect_key = component_key.clone();
             let reconnect_adapter = adapter.clone();
             let reconnect_endpoint = endpoint.clone();
@@ -488,8 +496,13 @@ async fn native_control_journey_acks_allocations_and_preserves_original_volume_w
                 stream_loop(
                     channel,
                     &endpoint,
-                    "provider",
-                    owner,
+                    crate::provider_auth::ProviderAuth::fixture(owner.expose().into()),
+                    crate::provider_auth::configuration(
+                        "provider",
+                        "Fixture",
+                        wire::ProviderKind::Docker,
+                        Some("daemon:control-fixture".into()),
+                    ),
                     component_key,
                     adapter,
                     stopping,
@@ -560,8 +573,13 @@ async fn native_control_journey_acks_allocations_and_preserves_original_volume_w
                     stream_loop(
                         channel,
                         &reconnect_endpoint,
-                        "provider",
                         reconnect_owner,
+                        crate::provider_auth::configuration(
+                            "provider",
+                            "Fixture",
+                            wire::ProviderKind::Docker,
+                            Some("daemon:control-fixture".into()),
+                        ),
                         reconnect_key,
                         reconnect_adapter,
                         stopping,

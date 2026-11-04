@@ -1,9 +1,11 @@
-{{- if .Values.computerProvider.enabled }}
-{{- $provider := .Values.computerProvider }}
+{{- if .Values.kubernetesProvider.enabled }}
+{{- $provider := .Values.kubernetesProvider }}
 {{- $name := include "chapchoo.fullname" . }}
-{{- $namespace := required "computerProvider.managedNamespace must explicitly select an existing managed namespace" $provider.managedNamespace }}
+{{- $namespace := include "chapchoo.providerNamespace" . }}
+{{- $image := include "chapchoo.providerImage" . | fromJson }}
+{{- $computerImage := include "chapchoo.computerImage" . | fromJson }}
 {{- $context := dict "root" . "component" "computer-provider" }}
-{{- $endpoint := default (printf "http://%s-control-grpc:50051" $name) $provider.controlEndpoint }}
+{{- $endpoint := default (printf "http://%s-control-grpc.%s.svc:50051" $name .Release.Namespace) $provider.controlEndpoint }}
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -71,21 +73,34 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      volumes:
+        - name: provider-auth
+          {{- if eq $provider.authentication.method "service-account" }}
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: credential
+                  audience: {{ $provider.authentication.audience | quote }}
+                  expirationSeconds: 3600
+          {{- else }}
+          secret:
+            secretName: {{ include "chapchoo.providerCredentialSecret" . }}
+            items: [{key: credential, path: credential}]
+          {{- end }}
       containers:
         - name: computer-provider
-          image: {{ include "chapchoo.image" $provider.image | quote }}
-          imagePullPolicy: {{ $provider.image.pullPolicy }}
+          image: {{ include "chapchoo.image" $image | quote }}
+          imagePullPolicy: {{ $image.pullPolicy }}
           args: [computer-provider, --in-cluster]
           env:
             - {name: CHAPCHOO_CONTROL_ENDPOINT, value: {{ $endpoint | quote }}}
-            - {name: CHAPCHOO_PROVIDER_ID, value: {{ $provider.id | quote }}}
-            - {name: CHAPCHOO_PROVIDER_NAME, value: {{ $provider.name | quote }}}
+            - {name: CHAPCHOO_PROVIDER_ID, value: {{ include "chapchoo.providerId" . | quote }}}
+            - {name: CHAPCHOO_PROVIDER_NAME, value: {{ default (printf "%s Kubernetes" $name) $provider.name | quote }}}
             - {name: CHAPCHOO_KUBERNETES_NAMESPACE, value: {{ $namespace | quote }}}
-            - name: CHAPCHOO_PROVIDER_OWNER_TOKEN
-              valueFrom:
-                secretKeyRef: {name: {{ .Values.systemOwner.existingSecret }}, key: {{ .Values.systemOwner.key }}}
-            - {name: CHAPCHOO_COMPUTER_IMAGE, value: {{ include "chapchoo.image" $provider.computerImage | quote }}}
-            - {name: CHAPCHOO_COMPUTER_IMAGE_PULL_POLICY, value: {{ $provider.computerImage.pullPolicy | quote }}}
+            - {name: CHAPCHOO_PROVIDER_AUTH_METHOD, value: {{ $provider.authentication.method | quote }}}
+            - {name: CHAPCHOO_PROVIDER_AUTH_FILE, value: /var/run/chapchoo/provider-auth/credential}
+            - {name: CHAPCHOO_COMPUTER_IMAGE, value: {{ include "chapchoo.image" $computerImage | quote }}}
+            - {name: CHAPCHOO_COMPUTER_IMAGE_PULL_POLICY, value: {{ $computerImage.pullPolicy | quote }}}
             - {name: CHAPCHOO_COMPUTER_SERVICE_ACCOUNT, value: {{ printf "%s-computer" $name | quote }}}
             {{- if $provider.storageClass }}
             - {name: CHAPCHOO_COMPUTER_STORAGE_CLASS, value: {{ $provider.storageClass | quote }}}
@@ -96,6 +111,8 @@ spec:
             - {name: CHAPCHOO_COMPUTER_MEMORY_REQUEST, value: {{ required "Computer memory request is required" $provider.computerResources.requests.memory | quote }}}
             - {name: CHAPCHOO_COMPUTER_CPU_LIMIT, value: {{ required "Computer CPU limit is required" $provider.computerResources.limits.cpu | quote }}}
             - {name: CHAPCHOO_COMPUTER_MEMORY_LIMIT, value: {{ required "Computer memory limit is required" $provider.computerResources.limits.memory | quote }}}
+          volumeMounts:
+            - {name: provider-auth, mountPath: /var/run/chapchoo/provider-auth, readOnly: true}
           resources:
             {{- toYaml $provider.resources | nindent 12 }}
           securityContext:

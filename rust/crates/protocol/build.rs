@@ -28,7 +28,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         "chapchoo.accounts.InvitationAction",
         "chapchoo.accounts.GrantKind",
         "chapchoo.accounts.DomainReason",
-        "chapchoo.control.OwnerAuthority",
         "chapchoo.control.ProviderKind",
         "chapchoo.control.ResourceKind",
         "chapchoo.control.ExecutionFact",

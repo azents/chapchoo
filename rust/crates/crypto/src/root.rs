@@ -15,6 +15,7 @@ type HmacSha256 = Hmac<Sha256>;
 const ENCRYPTION: &[u8] = b"chapchoo/credential-encryption";
 const CODES: &[u8] = b"chapchoo/email-code-verifier";
 const BINDING: &[u8] = b"chapchoo/installation-key-check";
+const PROVIDER_BOOTSTRAP: &[u8] = b"chapchoo/provider-bootstrap-authentication";
 const BINDING_CONTEXT: &[u8] = b"chapchoo/fixed-installation-root";
 
 /// Operator-provided root. No replacement, generation or implicit formatting API.
@@ -44,6 +45,7 @@ impl fmt::Debug for RootKey {
 
 /// One common immutable cryptographic capability for the backend installation.
 pub struct CredentialCipher {
+    pub(crate) provider_bootstrap: Zeroizing<[u8; 32]>,
     encryption: Zeroizing<[u8; 32]>,
     codes: Zeroizing<[u8; 32]>,
     binding: Zeroizing<[u8; 32]>,
@@ -59,6 +61,7 @@ impl CredentialCipher {
             Ok(key)
         };
         Ok(Self {
+            provider_bootstrap: derive(PROVIDER_BOOTSTRAP)?,
             encryption: derive(ENCRYPTION)?,
             codes: derive(CODES)?,
             binding: derive(BINDING)?,

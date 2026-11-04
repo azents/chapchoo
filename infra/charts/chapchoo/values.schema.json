@@ -201,94 +201,6 @@
         "resources"
       ]
     },
-    "systemOwner": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "providerIds": {
-          "type": "array",
-          "uniqueItems": true,
-          "items": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "existingSecret": {
-          "type": "string"
-        },
-        "key": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "required": [
-        "id",
-        "providerIds",
-        "existingSecret",
-        "key"
-      ]
-    },
-    "computerProvider": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "enabled": {
-          "type": "boolean"
-        },
-        "id": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        },
-        "managedNamespace": {
-          "type": "string"
-        },
-        "controlEndpoint": {
-          "type": "string"
-        },
-        "image": {
-          "$ref": "#/$defs/image"
-        },
-        "computerImage": {
-          "$ref": "#/$defs/image"
-        },
-        "resources": {
-          "$ref": "#/$defs/resources"
-        },
-        "computerResources": {
-          "$ref": "#/$defs/resources"
-        },
-        "storageClass": {
-          "type": "string"
-        },
-        "storageRequest": {
-          "type": "string",
-          "minLength": 1
-        },
-        "savedMount": {
-          "type": "string",
-          "pattern": "^/"
-        }
-      },
-      "required": [
-        "enabled",
-        "id",
-        "name",
-        "managedNamespace",
-        "controlEndpoint",
-        "image",
-        "computerImage",
-        "resources",
-        "computerResources",
-        "storageClass",
-        "storageRequest",
-        "savedMount"
-      ]
-    },
     "database": {
       "type": "object",
       "additionalProperties": false,
@@ -484,6 +396,99 @@
         "className",
         "general",
         "admin"
+      ]
+    },
+    "kubernetesProvider": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^$|^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "name": {
+          "type": "string"
+        },
+        "managedNamespace": {
+          "type": "string",
+          "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+          "maxLength": 63
+        },
+        "controlEndpoint": {
+          "type": "string"
+        },
+        "image": {
+          "$ref": "#/$defs/image"
+        },
+        "computerImage": {
+          "$ref": "#/$defs/image"
+        },
+        "resources": {
+          "$ref": "#/$defs/resources"
+        },
+        "computerResources": {
+          "$ref": "#/$defs/resources"
+        },
+        "storageClass": {
+          "type": "string"
+        },
+        "storageRequest": {
+          "type": "string",
+          "minLength": 1
+        },
+        "savedMount": {
+          "type": "string",
+          "pattern": "^/"
+        },
+        "createManagedNamespace": {
+          "type": "boolean"
+        },
+        "authentication": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "method": {
+              "enum": [
+                "service-account",
+                "secret-key"
+              ]
+            },
+            "audience": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 253
+            },
+            "existingCredentialSecret": {
+              "type": "string",
+              "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$",
+              "maxLength": 253
+            }
+          },
+          "required": [
+            "method",
+            "audience",
+            "existingCredentialSecret"
+          ]
+        }
+      },
+      "required": [
+        "enabled",
+        "id",
+        "name",
+        "managedNamespace",
+        "controlEndpoint",
+        "image",
+        "computerImage",
+        "resources",
+        "computerResources",
+        "storageClass",
+        "storageRequest",
+        "savedMount",
+        "authentication",
+        "createManagedNamespace"
       ]
     }
   },

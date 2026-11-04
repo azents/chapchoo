@@ -53,7 +53,6 @@ export class Assembly {
   readonly second: FixtureUser = fixtureUser("second");
   readonly resetPassword = `Aa1!${secret()}`;
   readonly setupProof = secret();
-  private readonly providerOwnerToken = secret();
   private kubernetes: SyntheticKubernetes | null = null;
   readonly docker: DockerFixture | null;
   readonly teamName = "Acceptance team";
@@ -228,6 +227,28 @@ export class Assembly {
       backendEnv,
       60_000,
     );
+    const bootstrapProviders = this.docker
+      ? ["fixture-provider", this.docker.provider]
+      : ["fixture-provider"];
+    for (const id of bootstrapProviders) {
+      await this.owner.run(
+        "Provider bootstrap credential issuance",
+        binary,
+        [
+          "provider-credential",
+          "--provider-id",
+          id,
+          "--output-file",
+          this.providerCredentialFile(id),
+        ],
+        repository,
+        {
+          ...safeEnvironment(),
+          CHAPCHOO_SECRET_KEY: backendEnv.CHAPCHOO_SECRET_KEY,
+        },
+        15_000,
+      );
+    }
     const adminBackend = this.owner.start(
       "Admin-only API server",
       binary,
@@ -272,11 +293,9 @@ export class Assembly {
         CHAPCHOO_ADMIN_WEB_URL: this.adminUrl,
         CHAPCHOO_GENERAL_BACKEND_URL: `http://127.0.0.1:${this.generalPort}`,
         CHAPCHOO_ADMIN_BACKEND_URL: `http://127.0.0.1:${this.adminPort}`,
-        CHAPCHOO_SYSTEM_OWNER_ID: "fixture-owner",
-        CHAPCHOO_SYSTEM_OWNER_PROVIDER_IDS: this.docker
-          ? `fixture-provider,${this.docker.provider}`
-          : "fixture-provider",
-        CHAPCHOO_SYSTEM_OWNER_TOKEN: this.providerOwnerToken,
+        CHAPCHOO_PROVIDER_BOOTSTRAP_CONFIG: JSON.stringify({
+          secretKeyProviderIds: bootstrapProviders,
+        }),
         RUST_LOG: "chapchoo=info",
       },
     );
@@ -324,6 +343,12 @@ export class Assembly {
       );
       await web.ready(/Ready in/, 60_000);
     }
+  }
+  private providerCredentialFile(id: string): string {
+    if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
+      throw new Error("Invalid fixture Provider identity");
+    }
+    return join(this.directory, `provider-${id}.credential`);
   }
   async initializeAdministrator(): Promise<void> {
     await seedAdministrator(
@@ -392,7 +417,9 @@ export class Assembly {
         CHAPCHOO_CONTROL_ENDPOINT: `http://127.0.0.1:${this.generalPort}`,
         CHAPCHOO_PROVIDER_ID: "fixture-provider",
         CHAPCHOO_PROVIDER_NAME: "Acceptance Kubernetes",
-        CHAPCHOO_PROVIDER_OWNER_TOKEN: this.providerOwnerToken,
+        CHAPCHOO_PROVIDER_AUTH_METHOD: "secret-key",
+        CHAPCHOO_PROVIDER_AUTH_FILE:
+          this.providerCredentialFile("fixture-provider"),
         CHAPCHOO_KUBERNETES_NAMESPACE: "fixture",
         CHAPCHOO_COMPUTER_IMAGE: "fixture/connector:acceptance",
         CHAPCHOO_COMPUTER_SERVICE_ACCOUNT: "fixture",
@@ -426,7 +453,10 @@ export class Assembly {
         CHAPCHOO_CONTAINER_CONTROL_ENDPOINT: this.docker.controlEndpoint,
         CHAPCHOO_PROVIDER_ID: this.docker.provider,
         CHAPCHOO_PROVIDER_NAME: "Acceptance Docker",
-        CHAPCHOO_PROVIDER_OWNER_TOKEN: this.providerOwnerToken,
+        CHAPCHOO_PROVIDER_AUTH_METHOD: "secret-key",
+        CHAPCHOO_PROVIDER_AUTH_FILE: this.providerCredentialFile(
+          this.docker.provider,
+        ),
         CHAPCHOO_DOCKER_HOST: pathToFileURL(
           this.docker.config.socket,
         ).href.replace(/^file:/, "unix:"),

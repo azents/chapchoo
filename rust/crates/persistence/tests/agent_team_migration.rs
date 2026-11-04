@@ -27,7 +27,7 @@ macro_rules! exercise_migration {
     ($connection:expr, $source:expr, $postgres:expr) => {{
         let connection = $connection;
         let pending = connection.pending_migrations($source)?;
-        assert_eq!(pending.len(), 6);
+        assert_eq!(pending.len(), 7);
         connection.run_migrations(&pending[..4])?;
         let hash = if $postgres { "decode(repeat('00',32),'hex')" } else { "zeroblob(32)" };
         connection.batch_execute(&format!("INSERT INTO users(id,email_key,delivery_email,password_hash,created_at,language,time_zone,region) VALUES('owner','owner@example.invalid','owner@example.invalid','synthetic',0,'en','UTC','en-US'); INSERT INTO computer_providers(id,owner_kind,system_owner_id,name,provider_kind,created_at) VALUES('provider','SYSTEM','system','Provider','KUBERNETES',0); INSERT INTO computers(id,owner_user_id,kind,provider_id,desired_state,current_request_id,current_payload_hash,current_action,current_phase,created_at) VALUES('computer','owner','CLOUD','provider','RUNNING','create',{hash},'CREATE','ACCEPTED',0); INSERT INTO agents(id,owner_user_id,name,computer_id,computer_kind,created_at) VALUES('agent','owner','Original','computer','CLOUD',0); INSERT INTO agent_creation_receipts(owner_user_id,request_id,payload_hash,assigned_agent_id) VALUES('owner','create',{hash},'agent')"))?;

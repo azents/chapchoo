@@ -27,6 +27,8 @@ pub(crate) struct ProviderRow {
     pub system_owner_id: Option<String>,
     #[diesel(sql_type = Nullable<Text>)]
     pub user_owner_id: Option<String>,
+    #[diesel(sql_type = Nullable<Text>)]
+    pub owner_team_id: Option<String>,
     #[diesel(sql_type = Text)]
     pub name: String,
     #[diesel(sql_type = Text)]
@@ -468,7 +470,7 @@ pub(crate) fn valid_id(value: &str) -> bool {
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b':'))
 }
-fn valid_name(value: &str) -> bool {
+pub(crate) fn valid_name(value: &str) -> bool {
     !value.trim().is_empty() && value.chars().count() <= 256 && !value.chars().any(char::is_control)
 }
 

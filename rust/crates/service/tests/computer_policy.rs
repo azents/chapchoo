@@ -36,6 +36,20 @@ fn invalid_component_policy_is_rejected_before_admission() {
             },
             ..base
         },
+        ComputerPolicy {
+            provider_keys: chapchoo_service::ComponentKeyPolicy {
+                validity_ms: 86_400_000,
+                ..base.provider_keys
+            },
+            ..base
+        },
+        ComputerPolicy {
+            provider_keys: chapchoo_service::ComponentKeyPolicy {
+                proactive_after_ms: 0,
+                ..base.provider_keys
+            },
+            ..base
+        },
     ];
     for policy in invalid {
         assert!(policy.validate().is_err());

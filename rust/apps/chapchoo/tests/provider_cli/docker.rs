@@ -48,6 +48,8 @@ async fn external_docker_provider_reaches_scoped_control_without_db_root_or_ambi
     let endpoint = format!("http://{}", listener.local_addr()?);
     let owner = BearerSecret::generate()?;
     let token = owner.expose().to_owned();
+    let credential_file=dir.path().join("provider-credential");
+    std::fs::write(&credential_file,&token)?;
     let (configured, mut received) = mpsc::channel(2);
     let stopped = fixture.shutdown();
     fixture.server(
@@ -65,7 +67,8 @@ async fn external_docker_provider_reaches_scoped_control_without_db_root_or_ambi
         let mut command = Command::new(env!("CARGO_BIN_EXE_chapchoo"));
         command
             .env_clear()
-            .env("CHAPCHOO_PROVIDER_OWNER_TOKEN", &token)
+            .env("CHAPCHOO_PROVIDER_AUTH_METHOD", "random-token")
+            .env("CHAPCHOO_PROVIDER_AUTH_FILE", &credential_file)
             .env("DOCKER_HOST", "invalid-ambient-host")
             .env("DOCKER_CONTEXT", "unavailable-ambient-context")
             .env("DOCKER_TLS_VERIFY", "1")

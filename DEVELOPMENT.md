@@ -75,26 +75,38 @@ listener. PeerRelay is never registered on the public component/client listener.
 The operator must enforce network isolation; no peer application credential or
 mandatory peer mTLS is introduced.
 
-To authorize system-owned Computer Provider metadata/key management, configure
-the complete `CHAPCHOO_SYSTEM_OWNER_ID`, comma-separated
-`CHAPCHOO_SYSTEM_OWNER_PROVIDER_IDS`, and `CHAPCHOO_SYSTEM_OWNER_TOKEN` set in
-Control. Generate the bearer as 32 random bytes encoded as unpadded URL-safe
-base64 (for example `python3 -c 'import secrets; print(secrets.token_urlsafe(32))'`).
-Supply it through your runtime secret manager/environment, never a CLI argument
-or tracked file. Provision the same bearer only to the scoped Computer Provider;
-it grants owner-level key management for those IDs. Preserve it until explicit
-operator rotation/revocation, and never publish its value in logs or reports.
+Bootstrap Provider admission uses `CHAPCHOO_PROVIDER_BOOTSTRAP_CONFIG`, a typed JSON
+policy with `serviceAccounts`, `secretKeyProviderIds` and `trustProviderIds`.
+Default Helm installation requires only explicit `kubernetesProvider.enabled: true`
+beyond the common installation prerequisites: it wires SA identity/audience and
+TokenReview permission, not a manually prepared common owner token.
+See [Provider authentication](docs/chapchoo/spec/domain/provider-authentication.md).
+
+For a deliberately selected protected-credential deployment, the server-side
+`provider-credential --provider-id <id> --output-file <new-private-path>` command
+loads the existing root key without DB access. Allow that ID in bootstrap policy
+and deliver only its protected output to the Provider. Helm automates Secret
+issuance when this method is explicitly selected. Never pass the proof/root as
+an argument, print it, or supply the root to an external Provider.
+
+`serve --standalone-docker` explicitly selects in-process Docker composition.
+It defaults to Provider-bound internal Trust without a credential file.
+Native image/daemon/outbound Control prerequisites remain required; Provider ID
+and name default to `standalone-docker` and `Standalone Docker`. Explicit bootstrap
+policy can prohibit Trust. Public TCP never receives this internal privilege.
+This is not Docker Provider Helm deployment support.
 
 Computer components run independently from the backend:
 
 - `chapchoo computer-provider` requires `CHAPCHOO_CONTROL_ENDPOINT`,
   `CHAPCHOO_PROVIDER_ID`, `CHAPCHOO_PROVIDER_NAME`,
-  `CHAPCHOO_PROVIDER_OWNER_TOKEN`, `CHAPCHOO_KUBERNETES_NAMESPACE`,
+  `CHAPCHOO_PROVIDER_AUTH_METHOD`, `CHAPCHOO_PROVIDER_AUTH_FILE`, `CHAPCHOO_KUBERNETES_NAMESPACE`,
   `CHAPCHOO_COMPUTER_IMAGE`, and `CHAPCHOO_COMPUTER_SERVICE_ACCOUNT`.
   Select either `--in-cluster` or `--kubeconfig <explicit-file>` (also
   `CHAPCHOO_KUBECONFIG`); there is no implicit current-cluster selection.
-  The Provider owner token is the scoped bearer provisioned above, not the
-  installation encryption root. Kubernetes credentials must have only the
+  Authentication method is `service-account`, `secret-key` or `random-token`;
+  its absolute bounded credential file is reread for reauthentication. The
+  installation root remains server-side. Kubernetes credentials must have only the
   designated namespace's managed Pod/PVC/Secret permissions, with Pod watch for
   termination evidence. Never provision production credentials for tests.
 - Runtime Computer policy uses `CHAPCHOO_COMPUTER_STORAGE_CLASS`,
@@ -107,7 +119,7 @@ Computer components run independently from the backend:
   uses the operator's default class; no class is provisioned by the process.
 - `chapchoo docker-provider` requires `CHAPCHOO_CONTROL_ENDPOINT`,
   `CHAPCHOO_PROVIDER_ID`, `CHAPCHOO_PROVIDER_NAME`,
-  `CHAPCHOO_PROVIDER_OWNER_TOKEN`, and `CHAPCHOO_COMPUTER_IMAGE`. It does not
+  `CHAPCHOO_PROVIDER_AUTH_METHOD`, `CHAPCHOO_PROVIDER_AUTH_FILE`, and `CHAPCHOO_COMPUTER_IMAGE`. It does not
   load backend DB/root configuration. Default Docker selection uses the
   executing account's CLI environment/context once; it never changes context or
   starts Docker Desktop. Linux workloads require the selected daemon's supported
@@ -185,7 +197,14 @@ It requires `ssh`, `sshd`, `ssh-keygen` and `id` on PATH and fails for missing
 prerequisites. It changes no account SSH configuration or system daemon. This
 proves mux policy/lifetime, not remote Engine or Mac/Desktop compatibility.
 
-Control policy is runtime-configurable: `CHAPCHOO_CONTROL_VALIDITY_MS` and
+Provider operational keys have fixed 15-minute validity with reauthentication
+from five minutes, retaining at most five minutes of prior-key overlap capped
+by original expiry. Failed verification never extends authority. Connector key
+policy remains separate. The common owner-bearer config/RPC has no compatibility
+alias; schema preparation invalidates old Provider keys without deleting native
+identity or Connector credential data.
+
+Control/Connector policy is runtime-configurable: `CHAPCHOO_CONTROL_VALIDITY_MS` and
 `CHAPCHOO_COMPONENT_VALIDITY_MS` default to 60000,
 `CHAPCHOO_CONTROL_HEARTBEAT_MS` to 20000,
 `CHAPCHOO_COMPONENT_KEY_VALIDITY_MS` to 86400000,

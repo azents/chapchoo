@@ -59,6 +59,14 @@ PostgreSQL alters the corresponding constrained native columns in place. Both
 engines test populated migration and rollback; schema down-migration refuses
 destructive native-data erasure.
 
+Migration 7 adds canonical TEAM Provider ownership with an exact Team FK and
+independent registration-credential storage. It preserves existing identity and
+native rows while invalidating old Provider operational current/previous keys,
+recovery and routes; Connector credentials remain separate. SQLite uses the same
+FK-enabled closed-graph preservation discipline. The
+[authentication contract](provider-authentication.md) defines scopes, token
+protection, Team tombstone collection and the breaking configuration boundary.
+
 ## Identities and Relationships
 
 Opaque IDs and exact request/connection identities are used; no increasing
@@ -76,14 +84,17 @@ erDiagram
   computers ||--o{ computer_resources : tracks
   computer_executions ||--o| connector_sessions : authenticates
   computer_providers ||--o| provider_keys : authenticates
+  computer_providers ||--o| provider_registration_credentials : enrolls
+  teams ||--o{ computer_providers : scopes
   control_instances ||--o{ provider_connections : routes
   control_instances ||--o{ connector_connections : routes
 ```
 
-- `computer_providers`: stable ID, SYSTEM/USER owner discriminant and exactly one
+- `computer_providers`: stable ID, SYSTEM/USER/TEAM owner discriminant and exactly one
   corresponding owner reference, name, immutable Kubernetes/Docker kind, optional
   bound Docker daemon and capabilities. The USER
-  relation references the existing account. Reconnection/key change does not
+  relation references the existing account; TEAM references `owner_team_id`.
+  Reconnection/key change does not
   allocate a different identity. There is no web enablement flag.
 - `computers`: owning User FK, kind/provider, durable desired state and only the
   current lifecycle Request ID/fingerprint/action/phase. Current execution points
@@ -125,6 +136,10 @@ erDiagram
   cascade only with actual Computer removal, not with Agent removal.
 - `provider_keys`: one current key record per Provider, current/previous digest,
   fixed overlap/expiry, revocation and protected current recovery material.
+- `provider_registration_credentials`: independent later-registration random
+  credential digest, root-protected current token material and revocation, bound
+  to canonical Provider ownership. It is not a second operational key table or
+  a complete user/team registration product.
 - `connector_sessions`: unique execution binding with a composite
   execution/Computer FK, original issuance Request ID
   and immutable binding fingerprint; reusable initial digest and

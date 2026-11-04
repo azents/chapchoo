@@ -3,7 +3,7 @@ mod docker;
 use super::*;
 use crate::test_support;
 use base64::{Engine, engine::general_purpose::URL_SAFE};
-use chapchoo_crypto::{CredentialCipher, PasswordCost, RootKey, SystemOwnerVerifier};
+use chapchoo_crypto::{BootstrapProviderPermit, CredentialCipher, PasswordCost, RootKey};
 use chapchoo_domain::Password;
 use chapchoo_persistence::{Store, prepare_sqlite};
 use chapchoo_rpc::{ComponentAuthenticationServices, ComponentConnectionServices};
@@ -59,11 +59,12 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
     )?)?);
     prepare_sqlite(&path, &cipher)?;
     let setup = BearerSecret::generate()?;
-    let owner = BearerSecret::generate()?;
-    let verifier =
-        SystemOwnerVerifier::new("owner".into(), vec!["provider".into()], owner.digest())?;
+    let owner = cipher.issue_provider_bootstrap("provider")?;
+    let proof = BootstrapProviderPermit::new("provider".into())?.authenticated();
+    let auth_config=chapchoo_rpc::ProviderBootstrapConfig { secret_key_provider_ids:vec!["provider".into()], ..Default::default() };
+    let authenticator=Arc::new(chapchoo_rpc::ProviderAuthenticator::new(auth_config,cipher.clone(),None)?);
     let store = Store::connect_sqlite(path, cipher).await?;
-    let app = Arc::new(ComputersService::new(store.clone(), Some(verifier)));
+    let app = Arc::new(ComputersService::new(store.clone()));
     let accounts = AccountsService::new(
         store,
         PasswordWork::new(1, PasswordCost::new(10)?)?,
@@ -98,7 +99,7 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
         control.id.clone(),
         Arc::new(std::sync::atomic::AtomicBool::new(true)),
     );
-    let authentication = ComponentAuthenticationServices::new(app.clone(), control.id.clone(), connections.clone());
+    let authentication = ComponentAuthenticationServices::new(app.clone(), control.id.clone(), connections.clone()).with_provider_authenticator(authenticator);
     let cleanup_app = app.clone();
     let cleanup_control = control.id.clone();
     let cleanup_connections = connections.clone();
@@ -302,28 +303,12 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
     )?;
     let stop = CancellationToken::new();
     let provider_stop = stop.clone();
-    app.configure_system_provider(
-        &owner,
-        "provider",
-        "Fixture",
-        chapchoo_service::ProviderCapabilities {
-            create: true,
-            start: true,
-            stop: true,
-            restart: true,
-        },
-        &chapchoo_domain::ProviderSubstrate::Kubernetes,
-        AcceptanceTime::System,
-    )
-    .await?;
-    let key = app
-        .rotate_system_provider_key(&owner, "provider", "fixture-key", AcceptanceTime::System)
-        .await?;
-    let provider_credential = key.token.digest();
+    let key = app.exchange_bootstrap_provider(&proof,"Fixture",chapchoo_service::ProviderCapabilities { create:true,start:true,stop:true,restart:true }, &chapchoo_domain::ProviderSubstrate::Kubernetes,"fixture-key",AcceptanceTime::System).await?;
+    let provider_credential=key.token.digest();
     let component_key = wire::ComponentKey {
         token: key.token.expose().into(),
         issued_at: None,
-        expires_at: None,
+        expires_at: Some(prost_types::Timestamp { seconds:key.expires_at/1000,nanos:0 }),
         proactive_after: Some(prost_types::Timestamp {
             seconds: key.proactive_after / 1000,
             nanos: 0,
@@ -335,8 +320,8 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
         stream_loop(
             channel,
             &provider_endpoint,
-            "provider",
-            owner,
+            crate::provider_auth::ProviderAuth::fixture(owner.expose().into()),
+            crate::provider_auth::configuration("provider","Fixture",wire::ProviderKind::Kubernetes,None),
             component_key,
             Arc::new(Adapter::Kubernetes(Arc::new(adapter))),
             provider_stop,

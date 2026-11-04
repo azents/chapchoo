@@ -1,7 +1,9 @@
 mod support;
 
 use base64::{Engine, engine::general_purpose::URL_SAFE};
-use chapchoo_crypto::{BearerSecret, CredentialCipher, PasswordCost, RootKey, SystemOwnerVerifier};
+use chapchoo_crypto::{
+    BearerSecret, BootstrapProviderPermit, CredentialCipher, PasswordCost, RootKey,
+};
 use chapchoo_domain::{EmailAddress, Password};
 use chapchoo_persistence::{Store, prepare_sqlite};
 use chapchoo_protocol::computers::{
@@ -66,9 +68,6 @@ fn domain_rpc_keeps_private_owner_authority_and_independent_admin_residual_inven
     )?)?);
     prepare_sqlite(&path, &cipher)?;
     let setup = BearerSecret::generate()?;
-    let owner = BearerSecret::generate()?;
-    let verifier =
-        SystemOwnerVerifier::new("system".into(), vec!["provider".into()], owner.digest())?;
     tokio::runtime::Runtime::new()?.block_on(support::scope(async |fixture| {
         let store = Store::connect_sqlite(path, cipher).await?;
         let accounts = AccountsService::new(
@@ -101,28 +100,27 @@ fn domain_rpc_keeps_private_owner_authority_and_independent_admin_residual_inven
             .list_teams(&user.digest(), AcceptanceTime::System.now()?)
             .await?
             .remove(0);
-        let app = Arc::new(ComputersService::new(store, Some(verifier)));
+        let app = Arc::new(ComputersService::new(store));
         assert!(
             app.register_control("https://control.example.invalid:50053")
                 .await
                 .is_err()
         );
-        app.configure_system_provider(
-            &owner,
-            "provider",
-            "Fixture",
-            ProviderCapabilities {
-                create: true,
-                start: true,
-                stop: true,
-                restart: true,
-            },
-            &chapchoo_domain::ProviderSubstrate::Kubernetes,
-            AcceptanceTime::System,
-        )
-        .await?;
+        let proof = BootstrapProviderPermit::new("provider".into())?.authenticated();
         let key = app
-            .rotate_system_provider_key(&owner, "provider", "key", AcceptanceTime::System)
+            .exchange_bootstrap_provider(
+                &proof,
+                "Fixture",
+                ProviderCapabilities {
+                    create: true,
+                    start: true,
+                    stop: true,
+                    restart: true,
+                },
+                &chapchoo_domain::ProviderSubstrate::Kubernetes,
+                "key",
+                AcceptanceTime::System,
+            )
             .await?;
         let control = app.register_control("http://127.0.0.1:1").await?;
         let prepared = app

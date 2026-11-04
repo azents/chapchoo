@@ -74,31 +74,32 @@
 {{- end -}}
 
 {{- define "chapchoo.validate" -}}
-{{- if or .Values.systemOwner.id .Values.systemOwner.providerIds .Values.systemOwner.existingSecret -}}
-{{- $_ := required "systemOwner.id is required for scoped authority" .Values.systemOwner.id -}}
-{{- $_ := required "systemOwner.existingSecret is required" .Values.systemOwner.existingSecret -}}
-{{- if empty .Values.systemOwner.providerIds -}}{{- fail "systemOwner.providerIds must scope the owner credential" -}}{{- end -}}
-{{- if and (not .Values.backend.enabled) (not .Values.computerProvider.enabled) -}}{{- fail "Scoped systemOwner configuration requires a Control or Computer Provider workload" -}}{{- end -}}
+{{- if .Values.kubernetesProvider.enabled -}}
+{{- $provider := .Values.kubernetesProvider -}}
+{{- $namespace := include "chapchoo.providerNamespace" . -}}
+{{- range $image := list $provider.image $provider.computerImage -}}
+{{- if and (empty $image.repository) (or $image.tag $image.digest) -}}{{- fail "An explicit Provider image tag or digest requires its repository; otherwise leave the complete image empty to inherit backend.image" -}}{{- end -}}
 {{- end -}}
-{{- if .Values.computerProvider.enabled -}}
-{{- $_ := required "computerProvider.id is required" .Values.computerProvider.id -}}
-{{- $_ := required "computerProvider.name is required" .Values.computerProvider.name -}}
-{{- if not (has .Values.computerProvider.id .Values.systemOwner.providerIds) -}}{{- fail "Computer Provider must be in the configured systemOwner scope" -}}{{- end -}}
-{{- $_ := required "Computer Provider requires the existing scoped owner Secret" .Values.systemOwner.existingSecret -}}
+{{- if eq $namespace .Release.Namespace -}}{{- fail "Kubernetes execution namespace must differ from the product credential namespace" -}}{{- end -}}
+{{- if and (not $provider.createManagedNamespace) (empty $provider.managedNamespace) -}}{{- fail "An existing managed namespace must be explicitly selected" -}}{{- end -}}
 {{- if not .Values.backend.enabled -}}
-{{- $_ := required "An external Control requires computerProvider.controlEndpoint" .Values.computerProvider.controlEndpoint -}}
+{{- $_ := required "An external Control requires kubernetesProvider.controlEndpoint and independently configured matching bootstrap trust" $provider.controlEndpoint -}}
 {{- end -}}
-{{- if .Values.computerProvider.controlEndpoint -}}
-{{- $parsed := urlParse .Values.computerProvider.controlEndpoint -}}
+{{- if $provider.controlEndpoint -}}
+{{- $parsed := urlParse $provider.controlEndpoint -}}
 {{- if or (not (has $parsed.scheme (list "http" "https"))) (empty $parsed.host) (not (empty $parsed.userinfo)) (not (empty $parsed.query)) (not (empty $parsed.fragment)) (not (has $parsed.path (list "" "/"))) -}}
-{{- fail "Computer Provider Control endpoint must be explicit http/https without credentials or path" -}}
+{{- fail "Kubernetes Provider Control endpoint must be explicit http/https without credentials or path" -}}
 {{- end -}}
+{{- end -}}
+{{- if and (eq $provider.authentication.method "service-account") $provider.authentication.existingCredentialSecret -}}{{- fail "A ServiceAccount token is projected, not read from an existing credential Secret" -}}{{- end -}}
+{{- if and (eq $provider.authentication.method "secret-key") (empty $provider.authentication.existingCredentialSecret) -}}
+{{- $_ := required "Protected credential issuance requires the existing root-key Secret" .Values.secretKey.existingSecret -}}
 {{- end -}}
 {{- end -}}
 {{- if not .Values.prerequisitesConfirmed -}}
 {{- fail "Set prerequisitesConfirmed only after external database, fixed-key/TLS/pull Secrets and trusted-network prerequisites already exist" -}}
 {{- end -}}
-{{- if not (or .Values.backend.enabled .Values.general.enabled .Values.admin.enabled .Values.computerProvider.enabled) -}}
+{{- if not (or .Values.backend.enabled .Values.general.enabled .Values.admin.enabled .Values.kubernetesProvider.enabled) -}}
 {{- fail "Select at least one backend, web or Computer Provider component" -}}
 {{- end -}}
 {{- if .Values.backend.enabled -}}
@@ -176,4 +177,34 @@
 {{- fail "General and Admin gRPC edge hosts must be distinct; Admin can remain unexposed" -}}
 {{- end -}}
 {{- end -}}
+{{- end -}}
+
+{{- define "chapchoo.providerId" -}}
+{{- default (printf "%s-kubernetes" (include "chapchoo.fullname" .)) .Values.kubernetesProvider.id -}}
+{{- end -}}
+
+{{- define "chapchoo.providerNamespace" -}}
+{{- default (printf "%s-computers" (include "chapchoo.fullname" .)) .Values.kubernetesProvider.managedNamespace -}}
+{{- end -}}
+
+{{- define "chapchoo.providerCredentialSecret" -}}
+{{- default (printf "%s-provider-credential" (include "chapchoo.fullname" .)) .Values.kubernetesProvider.authentication.existingCredentialSecret -}}
+{{- end -}}
+
+{{- define "chapchoo.providerImage" -}}
+{{- if .Values.kubernetesProvider.image.repository -}}{{- toJson .Values.kubernetesProvider.image -}}{{- else -}}{{- toJson .Values.backend.image -}}{{- end -}}
+{{- end -}}
+
+{{- define "chapchoo.computerImage" -}}
+{{- if .Values.kubernetesProvider.computerImage.repository -}}{{- toJson .Values.kubernetesProvider.computerImage -}}{{- else -}}{{- toJson .Values.backend.image -}}{{- end -}}
+{{- end -}}
+
+{{- define "chapchoo.providerBootstrap" -}}
+{{- $accounts := list -}}{{- $ids := list -}}
+{{- if eq .Values.kubernetesProvider.authentication.method "service-account" -}}
+{{- $accounts = append $accounts (dict "providerId" (include "chapchoo.providerId" .) "namespace" .Release.Namespace "serviceAccount" (printf "%s-provider" (include "chapchoo.fullname" .)) "audience" .Values.kubernetesProvider.authentication.audience) -}}
+{{- else -}}
+{{- $ids = append $ids (include "chapchoo.providerId" .) -}}
+{{- end -}}
+{{- dict "serviceAccounts" $accounts "secretKeyProviderIds" $ids "trustProviderIds" (list) | toJson -}}
 {{- end -}}

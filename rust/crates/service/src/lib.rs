@@ -6,9 +6,7 @@ mod password;
 mod service;
 mod time;
 
-pub use chapchoo_crypto::{
-    BearerSecret, EmailCode, PasswordCost, SecretDigest, SystemOwnerVerifier,
-};
+pub use chapchoo_crypto::{BearerSecret, EmailCode, PasswordCost, SecretDigest};
 pub use chapchoo_domain::{
     DisplaySettings, DockerDaemonId, EmailAddress, MembershipRole, Password, ProviderKind,
     ProviderSubstrate, TeamKind, TeamRole,

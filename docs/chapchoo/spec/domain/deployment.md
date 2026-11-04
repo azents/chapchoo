@@ -43,19 +43,32 @@ General `/` and Admin `/admin` on one host.
 The peer ingress NetworkPolicy permits only this release's backend server
 workloads on 50053; actual CNI denial/enforcement is a live release gate, not a
 rendering result. Component/public gRPC remains a separate authenticated boundary.
-A scoped existing system-owner Secret is provisioned only to Control and the
-selected Computer Provider, not webs, separate Client/Admin or execution Pods.
+There is no required shared system-owner Secret. Explicit
+`kubernetesProvider.enabled: true` defaults to a chart-wired ServiceAccount
+binding and dedicated authentication-audience token. Only Control-containing
+workloads receive TokenReview authority and its API token; the Provider retains
+its separate native namespace permissions.
 
 The optional Computer Provider is independent of Control replicas, defaults to
-one replica/Recreate, and uses the binary-only image with explicit runtime image,
-resource/storage and namespace policy. Its managed namespace must already exist
-and be explicitly selected. Namespaced Role/Binding grants Pod get/list/watch/
+one replica/Recreate, and inherits the backend binary image by default.
+Provider identity/name, image/resource/storage policy and a separate managed
+namespace have coherent defaults. The default namespace is created with
+Helm keep/Argo prune-delete protection; an explicitly selected preexisting
+namespace remains an advanced deployment responsibility. Namespaced Role/Binding grants Pod get/list/watch/
 create/delete and PVC/Secret get/create/delete, with a distinct token-free
 execution ServiceAccount. No product DB/root environment is provisioned to this
 process. Namespace Secret get still grants visibility to all Secrets in that
 namespace; operators must isolate managed resources from backend credentials.
 Default replica count is not quiescence proof. Bootstrap credentials are created
 through the actual Provider's acknowledged resource flow, not Helm templates.
+
+Selecting protected bootstrap authentication instead of the SA default creates
+a finite server-side issuer Job using the already supplied root Secret. Its
+idempotent installer creates/validates a retained immutable Provider credential
+Secret and never exposes the root to the Provider. Default SA and disabled
+Providers do not render this issuer. Docker Provider Helm deployment and
+network Trust are not provided. See [Provider authentication](provider-authentication.md)
+and the chart README for advanced external-Control prerequisites.
 
 See [Computer Control RPC](computer-control-rpc.md),
 [Kubernetes boundaries](computer-kubernetes.md) and
@@ -77,7 +90,7 @@ token, never the DB/root key. It gets the one named Secret, creates if absent,
 validates/reuses existing or concurrently created material and never overwrites.
 RBAC grants named get and namespace Secret create, not list/update/patch/delete;
 create cannot be restricted to one resourceName by Kubernetes RBAC. Backend/web
-pods and schema prepare retain no token; the Computer Provider uses its own
+pods without Control and schema prepare retain no API token; the Computer Provider uses its own
 namespaced authority described above. Secret values do not appear in rendered
 manifests/logs and survive hook/release deletion. Explicit existing setup Secret
 configuration skips bootstrap. The backend image includes a pinned official

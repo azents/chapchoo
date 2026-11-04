@@ -37,15 +37,22 @@ Bundled General/Admin web clients require their independent
 inferred from a selected group or another client's endpoint. Operators can
 explicitly configure equal URLs for a combined deployment.
 
-System-owner configuration is optional but complete when present:
-`CHAPCHOO_SYSTEM_OWNER_ID`, comma-separated `CHAPCHOO_SYSTEM_OWNER_PROVIDER_IDS`
-and `CHAPCHOO_SYSTEM_OWNER_TOKEN`. The configured bearer is verified against its
-exact provider scope. ConfigureSystemProvider updates only owner-authorized
-Provider metadata/capabilities and immutable substrate/daemon binding; it
-allocates no Computer or native resource. Kubernetes and Docker Providers may
-run outside the installation under a trusted third party. Their authenticated
-Control boundary, not product database access, performs server-owned mutations.
-Neither executable Provider receives database/root-key configuration.
+`ProviderAuthentication.Exchange` validates the explicitly selected evidence
+against captured bootstrap policy or a database-owned registration credential.
+It resolves canonical Provider/owner scope and atomically creates missing permitted
+bootstrap metadata with scoped operational-key issuance. Existing metadata and
+native binding cannot be overwritten by reauthentication. SA verification is
+external to DB transactions; current stored random-token status is checked inside
+the owning exchange transaction. The old shared system-owner bearer and
+ConfigureSystemProvider RPC are removed. Existing RotateKey/RevokeKey operations
+are user-account-authorized management, not a SYSTEM bearer path.
+
+Kubernetes and Docker Providers may run externally. Their authenticated Control
+boundary, not product database access, performs server-owned mutations. Standalone
+has a distinct private Provider-bound authentication adapter, not Trust on the
+public component or existing peer listener. See
+[Provider authentication](provider-authentication.md). Neither executable Provider
+receives database/root-key configuration.
 
 Provider credentials cannot act as owner credentials. Connector bootstrap keys
 can only exchange for operational keys. Operational Connector authority is bound

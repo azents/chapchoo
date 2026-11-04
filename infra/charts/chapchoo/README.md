@@ -1,10 +1,12 @@
 # Chapchoo Helm chart
 
 This chart packages account and Agent/Computer services, two independent web
-surfaces, Control and an optional Computer Provider. It provisions no database,
-namespace, fixed server key, certificates, secret provider or ingress controller.
-A dedicated hook generates only the first-admin setup proof when no existing
-Secret is selected. Rendering is not live application or security evidence.
+surfaces, Control and an explicitly enabled Kubernetes Computer Provider. It
+provisions no database, fixed server key, certificates, secret provider or ingress
+controller. An enabled Provider owns a separate, retained execution namespace by
+default. Dedicated hooks prepare first-admin proof and, only when selected,
+protected Provider authentication credentials. Rendering is not live application
+or security evidence.
 
 ## Prerequisites and explicit values
 
@@ -24,7 +26,7 @@ The offline suite uses Helm 4.2.4. Before deployment, provide:
 5. Trusted internal routing, suitable CNI enforcement and operator-owned database,
    component/public traffic and encryption policy. The chart's peer NetworkPolicy
    is useful only when actually enforced. It installs no mesh or native backend TLS.
-6. Referenced pull, TLS, owner-token and optional mail Secrets before workloads
+6. Referenced pull, TLS and optional mail Secrets before workloads
    need them. Secret values do not belong in values files or chat.
 
 `prerequisitesConfirmed: true` is an operator acknowledgement, not a cluster lookup.
@@ -40,7 +42,7 @@ prerequisites; provision them independently before full application sync.
 | `backend.topology: separate` | Independent Client, Admin and Control Deployments                                                                                    |
 | `general.enabled`            | Independent `serve --groups --web general` Deployment                                                                                |
 | `admin.enabled`              | Independent `serve --groups --web admin` Deployment                                                                                  |
-| `computerProvider.enabled`   | Independent `computer-provider --in-cluster` Deployment                                                                              |
+| `kubernetesProvider.enabled`   | Independent `computer-provider --in-cluster` Deployment                                                                              |
 | `backend.enabled: false`     | No local backend/preparation Job; selected webs need explicit `backendUrl`, and a selected Provider needs explicit `controlEndpoint` |
 
 Both backend topologies use PostgreSQL and the original fixed key; no SQLite
@@ -75,39 +77,105 @@ remains a separate authenticated boundary. An allowed compromised server remains
 inside the explicit trusted-network boundary. Rendering alone does not prove CNI
 enforcement, denied untrusted traffic or end-to-end TLS.
 
-`systemOwner.id`, `providerIds`, `existingSecret` and `key` select deployment-
-provisioned owner authority. Generate 32 random bytes as unpadded URL-safe Base64,
-for example `python3 -c 'import secrets; print(secrets.token_urlsafe(32))'`.
-Privately enter that result in the deployment's secret manager and materialize
-the referenced Secret before startup. Never put the value in arguments, values,
-logs or chat. It grants metadata/key management for exactly the listed Provider
-IDs. Preserve it until explicit operator rotation/revocation. Only Control and
-the designated Computer Provider receive it, not separate Client/Admin pods,
-webs, execution Pods or preparation.
+### Explicit Kubernetes enablement and defaults
 
-Enable `computerProvider` with explicit logical `id`/`name`, process `image`,
-`computerImage` and scoped owner configuration. The existing backend image can
-run either component command. `managedNamespace` must explicitly select an existing
-namespace. Isolate it from backend/owner credential Secrets: namespaced Secret get
-permission includes every Secret in that namespace, so sharing a credential
-namespace grants that additional visibility. The chart does not infer or create
-a safe namespace. The Provider gets only namespaced Pod
-get/list/watch/create/delete and PVC/Secret get/create/delete. It receives no
-product DB/root key. Its default one replica and Recreate strategy are operational
-policy, not authority or quiescence proof.
+Kubernetes Provider support is **off by default**. After the ordinary database,
+root-key, backend image and public-URL prerequisites are configured, opt in with:
 
-Execution Pods use a distinct ServiceAccount with API token automount disabled.
-Image/pull policy, CPU/memory Requests/Limits, storage class/capacity and saved
-mount remain runtime policy. Omitted StorageClass uses the operator's existing
-default; the chart provisions no class or storage. Stop/restart preserve the
-original dedicated PVC; missing/unverified original storage never authorizes
-replacement. Actual Provider bootstrap issues Connector credentials after
-resource UID acknowledgements, rather than rendering secrets in Helm.
+```yaml
+kubernetesProvider:
+  enabled: true
+```
 
-For external Control, set `computerProvider.controlEndpoint` and configure the
-same system-owner scope/credential at that Control independently. Component
-TLS/exposure remains operator-owned. A Running Provider pod does not prove an
-authenticated connection, execution readiness, PVC preservation or cleanup.
+No owner token or additional mandatory Provider fields are needed. The chart
+supplies a stable release-derived Provider ID/name, Provider SA, authentication
+audience/permit mapping, execution namespace, token-free Computer SA, runtime
+resource defaults and inherited backend image for both Provider and Computer
+Connector. A compatible backend image must contain the Provider and credential
+commands. The image digest is not independently duplicated or selected by tag.
+Override `id` when retaining a Provider identity from an existing deployment;
+changing the ID does not transfer its existing Computers or native bindings.
+
+The generated `<fullname>-computers` namespace is separate from product
+credentials. It has Helm `keep` and Argo `Prune=false,Delete=false` protection.
+Deleting/disabling a Provider, uninstalling a release or changing its configured
+namespace must not be interpreted as permission to delete saved Computer data.
+An advanced `managedNamespace` with `createManagedNamespace: false` selects an
+already existing isolated namespace; the product namespace is rejected. Operators
+own eventual authorized cleanup of retained namespaces and their data.
+
+### Default ServiceAccount authentication
+
+The Provider receives a projected token with audience `chapchoo-provider-auth`.
+Control receives the exact bootstrap mapping from its trusted local cluster,
+namespace/SA name and expected audience to the Provider ID. It validates the
+presented token through TokenReview before admission and operational-token
+exchange. Recreating the same SA name permits fresh valid tokens; it does not
+make the deleted object's token valid. Permitted namespace administrators who
+can recreate/use that SA are inside this deployment trust boundary.
+
+Only Control-containing workloads get the `tokenreviews.create` ClusterRole and
+an API-audience credential. Separate Client/Admin/web workloads do not. A combined
+backend shares Control's process authority. The Provider's native Kubernetes API
+credential remains separate from its dedicated authentication-audience token.
+Provider runtime gets neither product DB configuration nor the installation root.
+
+Provider operational credentials are valid for 15 minutes with proactive
+re-authentication after five minutes. TokenReview failure or unavailability grants
+no new credential and never selects a weaker method or extends existing expiry.
+Already-issued operational authority can survive until its existing expiry.
+
+The Provider gets namespaced Pod get/list/watch/create/delete and PVC/Secret
+get/create/delete only in its managed execution namespace. Namespaced Secret get
+can read every Secret there, so never put database/root/authentication/pull
+credentials in that namespace. Execution Pods use a distinct SA with API token
+automount disabled. Namespace separation is not proof of network/VM isolation.
+
+### Advanced protected authentication
+
+Select `kubernetesProvider.authentication.method: secret-key` only deliberately.
+Control then receives an allowed Provider-ID bootstrap rule instead of an SA
+binding. A finite pre-install/pre-upgrade and Argo PreSync Job invokes the trusted
+server-side `provider-credential` command from `backend.image` using the existing
+root Secret. It
+creates or validates one dedicated Secret field `credential` and never prints or
+overwrites credential material. The Provider mounts only that output Secret,
+**not the root Secret**. Default SA authentication renders no issuer Job.
+
+Issuer SA/Role/Binding precede the Job at hook wave/weight -30; the Job runs at
+-20, before preparation (-10) and normal Provider startup. Its authority is named
+Secret get and namespace Secret create. Kubernetes cannot name-limit create;
+that finite trusted server-side capability is an explicit operational boundary.
+Successful hooks are cleaned up; failures remain for diagnosis and have no
+automatic Job restart/retry. The generated credential itself is retained outside
+disposable hook ownership and reused on upgrade. A mismatching/corrupt existing
+credential fails explicitly instead of rotating it. Reissuing a credential is
+not revocation of older valid credentials for that ID. Remove its bootstrap
+allowed ID to deny further exchange.
+
+An advanced `authentication.existingCredentialSecret` skips issuer automation and
+mounts a privately provisioned `credential` field. Do not put the value into Helm
+values. This override is not valid for projected SA authentication.
+
+### Native resources and external Control
+
+Computer execution Pods do not receive product image-pull credentials. Their
+image must be publicly pullable or already available under the operator's existing
+cluster policy; this chart does not copy product pull Secrets into execution.
+StorageClass omission uses an existing cluster default; the chart provisions no
+StorageClass or storage backend. Requested capacity is not proof of a hard quota.
+Stop/restart preserve the original dedicated PVC; missing/unverified original
+storage never authorizes replacement. Native resource UID acknowledgements,
+not Helm, authorize runtime Connector bootstrap issuance. A Running Provider Pod
+is not proof of authenticated connectivity or storage correctness.
+
+For a Provider-only installation, set `backend.enabled: false`, an explicit
+`kubernetesProvider.controlEndpoint`, and a compatible Provider/Computer image
+(or the backend image used as their default). Install matching trust on the
+external Control independently: this chart cannot configure an unrelated server.
+An external Kubernetes execution substrate may use another permitted authentication
+method. There is no network Trust choice or Docker Provider Deployment in this
+chart. Component TLS/exposure remains operator-owned.
 
 ## Public origins, prefixes and TLS edges
 
@@ -154,15 +222,21 @@ setup; consumed DB state prevents reopening initialization.
 
 `secretKey.existingSecret/key` configure `CHAPCHOO_SECRET_KEY`; preserve the
 original 32-byte Base64 value, including padding. This is neither key replacement
-nor a new migration facility. Backend/web/preparation pods mount no API token;
-Computer Provider and setup bootstrap have their own narrow authority.
+nor a new migration facility. Web and preparation pods mount no API token. Control has explicit review
+credentials only for enabled SA authentication; Provider, credential issuance and
+setup bootstrap have their own narrow authority.
 
 Use **full Argo CD application sync**: selective sync skips hooks. The reference
 has no automatic sync/prune, namespace creation, retry loop or
 `ApplyOutOfSyncOnly`. Replace every example destination/revision/image before use.
 Kustomize patches replace `helm.valuesObject` wholesale; retain complete explicit
 prerequisites. A hook does not stop old writers. Coordinate contract/schema
-cutover; mixed-old/new compatibility and zero downtime are not promised. A
+cutover. Upgrading from the previous owner-bearer authentication requires stopping
+all old Control/Provider owners before schema preparation, invalidating old
+Provider operational authority and reconnecting the same identities with the new
+configuration. Preserve Connector credentials and original data; transport
+reconnect is not credential re-enrollment. A rolling mixed-old/new rollout and
+zero downtime are not supported for this transition. A
 committed migration survives later failure, and image rollback is not DB rollback.
 
 ## Health and shutdown

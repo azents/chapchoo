@@ -8,8 +8,8 @@ External trusted Providers own native IO, while authenticated server operations 
 
 ## Computer Provider process and acknowledged evidence
 
-The Provider is an external process, including when run by a trusted third party.
-It does not load backend DB configuration, connect to the product DB or receive
+A distributed Provider is an external process, including when run by a trusted
+third party. Its native adapter does not load backend DB configuration, connect to the product DB or receive
 the installation encryption root. Its product operations use authenticated
 Control RPC; storage transactions belong to the server. The single executable
 also contains backend commands, but their DB initialization is not shared with
@@ -23,12 +23,20 @@ third-party onboarding acceptance.
 
 `chapchoo computer-provider` selects explicit in-cluster credentials or an
 explicit kubeconfig path, not ambient cluster discovery. It accepts runtime
-namespace/image/storage/resources/ServiceAccount policy and a scoped owner token
-through `CHAPCHOO_PROVIDER_OWNER_TOKEN`, never a credential CLI argument.
-It owner-authenticates stable metadata configuration and communication-key
-issuance, opens its own authenticated stream and maintains heartbeats separately
-from lifecycle work. Proactive owner-authorized key renewal preserves its
-absolute schedule across reconnects. Provider keys cannot self-rotate.
+namespace/image/storage/resources/ServiceAccount policy and explicit
+`CHAPCHOO_PROVIDER_AUTH_METHOD` plus `CHAPCHOO_PROVIDER_AUTH_FILE`.
+The selected SA/protected/random-token file is reread for each authentication.
+`ProviderAuthentication.Exchange` verifies evidence and issues a scoped operational
+key; it does not reset existing DB-owned metadata. Renewal starts at five minutes
+for a 15-minute Provider key, never by self-rotating an operational credential.
+Uncertain exchange responses retain their exact Request ID. Failed reauthentication
+does not extend original expiry or select another authentication method.
+
+`serve --standalone-docker` instead composes the selected Docker adapter with a
+Provider-bound private memory endpoint. Default Trust is available only there;
+public TCP requests cannot select it. No separate shared credential file is needed
+for this internal path. See [Provider authentication](provider-authentication.md)
+for trust, ownership, credential and bootstrap-policy boundaries.
 
 One `Effects` owner survives stream replacement and caller cancellation. A
 started SDK task retains the lifecycle permit until it actually ends, including

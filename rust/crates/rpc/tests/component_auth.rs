@@ -1,7 +1,9 @@
 mod support;
 
 use base64::{Engine, engine::general_purpose::URL_SAFE};
-use chapchoo_crypto::{BearerSecret, CredentialCipher, PasswordCost, RootKey, SystemOwnerVerifier};
+use chapchoo_crypto::{
+    BearerSecret, BootstrapProviderPermit, CredentialCipher, PasswordCost, RootKey,
+};
 use chapchoo_domain::{EmailAddress, Password};
 use chapchoo_persistence::{Store, prepare_sqlite};
 use chapchoo_protocol::control::{
@@ -12,7 +14,7 @@ use chapchoo_protocol::control::{
 use chapchoo_rpc::{ComponentAuthenticationServices, ComponentConnectionServices};
 use chapchoo_service::{
     AcceptanceTime, AccountsConfig, AccountsService, ComputersService, CreationOutcome,
-    PasswordWork, ProviderCapabilities, ProviderSource, SessionPolicy,
+    PasswordWork, ProviderSource, SessionPolicy,
 };
 use std::sync::{
     Arc,
@@ -64,11 +66,24 @@ async fn open_connector(
     };
     Ok((sender, stream, connected))
 }
-fn owner_request(request: &str) -> wire::ProviderKeyRequest {
-    wire::ProviderKeyRequest {
-        provider_id: "provider".into(),
+fn exchange_request(request: &str, proof: &str) -> wire::ProviderAuthenticationRequest {
+    wire::ProviderAuthenticationRequest {
+        configuration: Some(wire::ProviderConfiguration {
+            provider_id: "provider".into(),
+            name: "Fixture".into(),
+            capabilities: Some(wire::ProviderCapabilities {
+                create: true,
+                start: true,
+                stop: true,
+                restart: true,
+            }),
+            kind: wire::ProviderKind::Kubernetes as i32,
+            docker_daemon_id: None,
+        }),
         request_id: request.into(),
-        authority: wire::OwnerAuthority::System as i32,
+        evidence: Some(
+            wire::provider_authentication_request::Evidence::BootstrapCredential(proof.into()),
+        ),
     }
 }
 
@@ -81,33 +96,14 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
         URL_SAFE.encode([9; 32]),
     )?)?);
     prepare_sqlite(&path, &cipher)?;
-    let owner = BearerSecret::generate()?;
+    let owner = cipher.issue_provider_bootstrap("provider")?;
     let setup = BearerSecret::generate()?;
-    let verifier = SystemOwnerVerifier::new(
-        "system-owner".into(),
-        vec!["provider".into()],
-        owner.digest(),
-    )?;
     tokio::runtime::Runtime::new()?.block_on(support::scope(async |fixture| {
-        let store = Store::connect_sqlite(path, cipher).await?;
-        let app = Arc::new(ComputersService::new(store.clone(), Some(verifier)));
+        let store = Store::connect_sqlite(path, cipher.clone()).await?;
+        let app = Arc::new(ComputersService::new(store.clone()));
         let listener = TcpListener::bind("127.0.0.1:0").await?;
         let endpoint = format!("http://{}", listener.local_addr()?);
         let control = app.register_control(&endpoint).await?;
-        app.configure_system_provider(
-            &owner,
-            "provider",
-            "Fixture",
-            ProviderCapabilities {
-                create: true,
-                start: true,
-                stop: true,
-                restart: true,
-            },
-            &chapchoo_domain::ProviderSubstrate::Kubernetes,
-            AcceptanceTime::System,
-        )
-        .await?;
         let admission = Arc::new(AtomicBool::new(true));
         let connections =
             ComponentConnectionServices::new(app.clone(), control.id.clone(), admission.clone());
@@ -116,7 +112,15 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
             control.id.clone(),
             connections.clone(),
         )
-        .with_admission(admission.clone());
+        .with_admission(admission.clone())
+        .with_provider_authenticator(Arc::new(chapchoo_rpc::ProviderAuthenticator::new(
+            chapchoo_rpc::ProviderBootstrapConfig {
+                secret_key_provider_ids: vec!["provider".into()],
+                ..Default::default()
+            },
+            cipher.clone(),
+            None,
+        )?));
         let stopped = fixture.shutdown();
         fixture.server(
             Server::builder()
@@ -131,35 +135,53 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
         let mut connector = ConnectorAuthenticationClient::connect(endpoint.clone()).await?;
         let mut connection_client = ConnectorConnectionClient::connect(endpoint).await?;
         let first = provider
-            .rotate_key(authenticated(owner_request("issue"), owner.expose())?)
+            .exchange(exchange_request("issue", owner.expose()))
             .await?
             .into_inner();
         let repeated = provider
-            .rotate_key(authenticated(owner_request("issue"), owner.expose())?)
+            .exchange(exchange_request("issue", owner.expose()))
             .await?
             .into_inner();
         assert!(first.token == repeated.token);
         assert_eq!(first.expires_at, repeated.expires_at);
         assert_eq!(
             provider
-                .rotate_key(authenticated(owner_request("self-rotate"), &first.token)?)
+                .exchange(exchange_request("self-rotate", &first.token))
                 .await
                 .err()
                 .ok_or("Expected owner-role rejection")?
                 .code(),
             Code::PermissionDenied
         );
-        let mut invalid = owner_request("invalid-role");
-        invalid.authority = i32::MAX;
+        let mut invalid = exchange_request("wrong-id", owner.expose());
+        if let Some(config) = invalid.configuration.as_mut() {
+            config.provider_id = "foreign-provider".into();
+        }
         assert_eq!(
             provider
-                .rotate_key(authenticated(invalid, owner.expose())?)
+                .exchange(invalid)
                 .await
                 .err()
-                .ok_or("Expected invalid authority rejection")?
+                .ok_or("Expected scope rejection")?
                 .code(),
-            Code::InvalidArgument
+            Code::PermissionDenied
         );
+        let mut missing = exchange_request("no-proof", owner.expose());
+        missing.evidence = None;
+        assert_eq!(
+            provider
+                .exchange(missing)
+                .await
+                .err()
+                .ok_or("Expected public Trust rejection")?
+                .code(),
+            Code::PermissionDenied
+        );
+        let expiry = first.expires_at.as_ref().ok_or("Missing expiry")?;
+        let issued = first.issued_at.as_ref().ok_or("Missing issuance")?;
+        let refresh = first.proactive_after.as_ref().ok_or("Missing renewal")?;
+        assert_eq!(expiry.seconds - issued.seconds, 900);
+        assert_eq!(refresh.seconds - issued.seconds, 300);
         let token = BearerSecret::parse(first.token.clone())?;
         // A controlled admitted-route fixture supplies stream ownership. This
         // test verifies credential RPC, not the pending component stream adapter.
@@ -178,7 +200,7 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
             )?)
             .await?;
         let accounts = AccountsService::new(
-            store,
+            store.clone(),
             PasswordWork::new(1, PasswordCost::new(10)?)?,
             None,
             AccountsConfig {
@@ -196,6 +218,37 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
                 None,
             )
             .await?;
+        // Account key-management authority remains scoped to USER-owned Providers.
+        assert_eq!(
+            provider
+                .rotate_key(authenticated(
+                    wire::ProviderKeyRequest {
+                        provider_id: "provider".into(),
+                        request_id: "account-cannot-manage-system".into(),
+                    },
+                    user.token.expose()
+                )?)
+                .await
+                .err()
+                .ok_or("Account adopted system Provider")?
+                .code(),
+            Code::PermissionDenied,
+        );
+        assert_eq!(
+            provider
+                .revoke_key(authenticated(
+                    wire::ProviderKeyRequest {
+                        provider_id: "provider".into(),
+                        request_id: "component-cannot-revoke".into(),
+                    },
+                    &first.token
+                )?)
+                .await
+                .err()
+                .ok_or("Operational token gained owner rights")?
+                .code(),
+            Code::Unauthenticated,
+        );
         let created = app
             .create_cloud_agent(
                 &user.token.digest(),
@@ -296,8 +349,14 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
                 &exchanged.token,
             )?)
             .await?;
-        provider
-            .revoke_key(authenticated(owner_request("revoke"), owner.expose())?)
+        let proof = BootstrapProviderPermit::new("provider".into())?.authenticated();
+        store
+            .revoke_provider_key(
+                chapchoo_persistence::ProviderOwner::System(&proof),
+                "provider",
+                "revoke",
+                AcceptanceTime::System.now()?,
+            )
             .await?;
         // Operational Connector refresh is independent of Provider authority.
         let refreshed = connector
@@ -380,7 +439,7 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
                 .ready
         );
         let replacement = provider
-            .rotate_key(authenticated(owner_request("replacement"), owner.expose())?)
+            .exchange(exchange_request("replacement", owner.expose()))
             .await?
             .into_inner();
         let replacement_token = BearerSecret::parse(replacement.token.clone())?;
@@ -427,13 +486,140 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
         admission.store(false, Ordering::Release);
         assert_eq!(
             provider
-                .rotate_key(authenticated(owner_request("drained"), owner.expose())?)
+                .exchange(exchange_request("drained", owner.expose()))
                 .await
                 .err()
                 .ok_or("Expected admission rejection")?
                 .code(),
             Code::Unavailable
         );
+        app.drain_control(&control.id).await?;
+        connections.drain().await?;
+        app.withdraw_drained_control_connections(&control.id)
+            .await?;
+        Ok::<(), TestError>(())
+    }))
+}
+
+#[test]
+fn standalone_trust_is_private_bound_and_prohibitable() -> Result<(), TestError> {
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("internal-trust.sqlite");
+    let cipher = Arc::new(CredentialCipher::new(RootKey::parse(
+        URL_SAFE.encode([19; 32]),
+    )?)?);
+    prepare_sqlite(&path, &cipher)?;
+    tokio::runtime::Runtime::new()?.block_on(support::scope(async |fixture| {
+        let store = Store::connect_sqlite(path, cipher.clone()).await?;
+        let app = Arc::new(ComputersService::new(store));
+        let listener = TcpListener::bind("127.0.0.1:0").await?;
+        let endpoint = format!("http://{}", listener.local_addr()?);
+        let control = app.register_control(&endpoint).await?;
+        let connections = ComponentConnectionServices::new(
+            app.clone(),
+            control.id.clone(),
+            Arc::new(AtomicBool::new(true)),
+        );
+        let auth = Arc::new(chapchoo_rpc::ProviderAuthenticator::new(
+            chapchoo_rpc::ProviderBootstrapConfig {
+                trust_provider_ids: vec!["provider".into()],
+                ..Default::default()
+            },
+            cipher.clone(),
+            None,
+        )?);
+        let services = ComponentAuthenticationServices::new(
+            app.clone(),
+            control.id.clone(),
+            connections.clone(),
+        )
+        .with_provider_authenticator(auth);
+        let stopped = fixture.shutdown();
+        fixture.server(
+            Server::builder()
+                .add_service(services.provider_server())
+                .serve_with_incoming_shutdown(TcpListenerStream::new(listener), async {
+                    let _ = stopped.await;
+                }),
+        );
+        let (channel, incoming) = chapchoo_rpc::memory_transport();
+        let stopped = fixture.shutdown();
+        fixture.server(
+            Server::builder()
+                .add_service(services.internal_provider_server("provider".into()))
+                .serve_with_incoming_shutdown(incoming, async {
+                    let _ = stopped.await;
+                }),
+        );
+        let mut public = ProviderAuthenticationClient::connect(endpoint).await?;
+        let mut internal = ProviderAuthenticationClient::new(channel);
+        let request = |id: &str, request_id: &str| {
+            let mut request = exchange_request(request_id, "unused");
+            request.evidence = None;
+            if let Some(config) = request.configuration.as_mut() {
+                config.provider_id = id.to_owned();
+            }
+            request
+        };
+        assert_eq!(
+            public
+                .exchange(request("provider", "public"))
+                .await
+                .err()
+                .ok_or("Public Trust admitted")?
+                .code(),
+            Code::PermissionDenied
+        );
+        let first = internal
+            .exchange(request("provider", "internal"))
+            .await?
+            .into_inner();
+        let recovered = internal
+            .exchange(request("provider", "internal"))
+            .await?
+            .into_inner();
+        assert_eq!(first.token, recovered.token);
+        assert_eq!(first.expires_at, recovered.expires_at);
+        assert_eq!(
+            internal
+                .exchange(request("foreign", "wrong-id"))
+                .await
+                .err()
+                .ok_or("Internal channel changed identity")?
+                .code(),
+            Code::PermissionDenied
+        );
+        let deny =
+            ComponentAuthenticationServices::new(
+                app.clone(),
+                control.id.clone(),
+                connections.clone(),
+            )
+            .with_provider_authenticator(Arc::new(
+                chapchoo_rpc::ProviderAuthenticator::new(Default::default(), cipher, None)?,
+            ));
+        let (channel, incoming) = chapchoo_rpc::memory_transport();
+        let stopped = fixture.shutdown();
+        fixture.server(
+            Server::builder()
+                .add_service(deny.internal_provider_server("provider".into()))
+                .serve_with_incoming_shutdown(incoming, async {
+                    let _ = stopped.await;
+                }),
+        );
+        let mut prohibited = ProviderAuthenticationClient::new(channel);
+        assert_eq!(
+            prohibited
+                .exchange(request("provider", "prohibited"))
+                .await
+                .err()
+                .ok_or("Prohibited Trust admitted")?
+                .code(),
+            Code::PermissionDenied
+        );
+        drop(public);
+        drop(internal);
+        drop(prohibited);
         app.drain_control(&control.id).await?;
         connections.drain().await?;
         app.withdraw_drained_control_connections(&control.id)

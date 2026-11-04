@@ -1,13 +1,8 @@
 //! Scoped component credential adapters. Peer methods are not registered here.
-use crate::{
-    ingress as input,
-    mapping::timestamp,
-    status::{reject, status},
-};
+use crate::{ingress as input, mapping::timestamp, status::status};
 use chapchoo_protocol::control as wire;
 use chapchoo_service::{
-    AcceptanceTime, ComponentKeyResult, ComputersService, ConnectorSource, DomainReason,
-    ProviderSource,
+    AcceptanceTime, ComponentKeyResult, ComputersService, ConnectorSource, ProviderSource,
 };
 use std::sync::{
     Arc,
@@ -21,6 +16,8 @@ struct Context {
     control_id: String,
     admission: Arc<AtomicBool>,
     connections: crate::ComponentConnectionServices,
+    authenticator: Option<Arc<crate::ProviderAuthenticator>>,
+    internal_provider: Option<String>,
 }
 impl Context {
     fn admit(&self) -> Result<(), Status> {
@@ -47,12 +44,32 @@ impl ComponentAuthenticationServices {
                 control_id,
                 admission: Arc::new(AtomicBool::new(true)),
                 connections,
+                authenticator: None,
+                internal_provider: None,
             },
         }
     }
     pub fn with_admission(mut self, admission: Arc<AtomicBool>) -> Self {
         self.context.admission = admission;
         self
+    }
+    pub fn with_provider_authenticator(
+        mut self,
+        authenticator: Arc<crate::ProviderAuthenticator>,
+    ) -> Self {
+        self.context.authenticator = Some(authenticator);
+        self
+    }
+    /// Only a private memory listener receives this adapter, never the TCP routes factory.
+    pub fn internal_provider_server(
+        &self,
+        provider_id: String,
+    ) -> wire::provider_authentication_server::ProviderAuthenticationServer<
+        ProviderAuthenticationAdapter,
+    > {
+        let mut internal = self.clone();
+        internal.context.internal_provider = Some(provider_id);
+        internal.provider_server()
     }
     pub fn provider_server(
         &self,
@@ -95,17 +112,83 @@ fn key(value: ComponentKeyResult) -> Result<wire::ComponentKey, Status> {
         proactive_after: Some(timestamp(value.proactive_after)?),
     })
 }
-fn owner_authority(value: i32) -> Result<wire::OwnerAuthority, Status> {
-    match wire::OwnerAuthority::try_from(value) {
-        Ok(wire::OwnerAuthority::System) => Ok(wire::OwnerAuthority::System),
-        Ok(wire::OwnerAuthority::User) => Ok(wire::OwnerAuthority::User),
-        _ => Err(reject(DomainReason::InvalidInput)),
-    }
-}
 #[tonic::async_trait]
 impl wire::provider_authentication_server::ProviderAuthentication
     for ProviderAuthenticationAdapter
 {
+    #[tracing::instrument(skip_all, fields(rpc = "exchange_provider_credentials"))]
+    async fn exchange(
+        &self,
+        request: Request<wire::ProviderAuthenticationRequest>,
+    ) -> Result<Response<wire::ComponentKey>, Status> {
+        self.context.admit()?;
+        let auth = self.context.authenticator.as_ref().ok_or_else(|| {
+            Status::permission_denied("Provider authentication is not configured")
+        })?;
+        let value = request.into_inner();
+        let config = value
+            .configuration
+            .ok_or_else(|| Status::invalid_argument("Provider configuration is required"))?;
+        let capabilities = config
+            .capabilities
+            .ok_or_else(|| Status::invalid_argument("Provider capabilities are required"))?;
+        let substrate = match (
+            wire::ProviderKind::try_from(config.kind),
+            config.docker_daemon_id,
+        ) {
+            (Ok(wire::ProviderKind::Kubernetes), None) => {
+                chapchoo_service::ProviderSubstrate::Kubernetes
+            }
+            (Ok(wire::ProviderKind::Docker), Some(daemon)) => {
+                chapchoo_service::ProviderSubstrate::Docker(
+                    chapchoo_service::DockerDaemonId::parse(daemon)
+                        .map_err(|_| Status::invalid_argument("Invalid Docker identity"))?,
+                )
+            }
+            _ => return Err(Status::invalid_argument("Invalid Provider substrate")),
+        };
+        let result = match auth
+            .authenticate(
+                &config.provider_id,
+                value.evidence,
+                self.context.internal_provider.as_deref(),
+            )
+            .await?
+        {
+            crate::provider_authentication::AuthenticatedProvider::Bootstrap(proof) => {
+                self.context
+                    .service
+                    .exchange_bootstrap_provider(
+                        &proof,
+                        &config.name,
+                        chapchoo_service::ProviderCapabilities {
+                            create: capabilities.create,
+                            start: capabilities.start,
+                            stop: capabilities.stop,
+                            restart: capabilities.restart,
+                        },
+                        &substrate,
+                        &value.request_id,
+                        AcceptanceTime::System,
+                    )
+                    .await
+            }
+            crate::provider_authentication::AuthenticatedProvider::Registration(credential) => {
+                self.context
+                    .service
+                    .exchange_registered_provider(
+                        &config.provider_id,
+                        &credential.digest(),
+                        &substrate,
+                        &value.request_id,
+                        AcceptanceTime::System,
+                    )
+                    .await
+            }
+        }
+        .map_err(status)?;
+        Ok(Response::new(key(result)?))
+    }
     #[tracing::instrument(skip_all, fields(rpc = "report_provider_evidence"))]
     async fn report(&self, request: Request<wire::ProviderReport>) -> Result<Response<()>, Status> {
         self.context.admit()?;
@@ -143,56 +226,6 @@ impl wire::provider_authentication_server::ProviderAuthentication
                 .await
                 .map_err(status)?;
         }
-        Ok(Response::new(()))
-    }
-    #[tracing::instrument(skip_all, fields(rpc = "configure_system_provider"))]
-    async fn configure_system_provider(
-        &self,
-        request: Request<wire::ProviderConfiguration>,
-    ) -> Result<Response<()>, Status> {
-        self.context.admit()?;
-        let credential = input::authorization(&request)?;
-        let value = request.into_inner();
-        let capabilities = value
-            .capabilities
-            .ok_or_else(|| Status::invalid_argument("Provider capabilities are required"))?;
-        let substrate = match (
-            wire::ProviderKind::try_from(value.kind),
-            value.docker_daemon_id,
-        ) {
-            (Ok(wire::ProviderKind::Kubernetes), None) => {
-                chapchoo_service::ProviderSubstrate::Kubernetes
-            }
-            (Ok(wire::ProviderKind::Docker), Some(daemon)) => {
-                chapchoo_service::ProviderSubstrate::Docker(
-                    chapchoo_service::DockerDaemonId::parse(daemon).map_err(|_| {
-                        Status::invalid_argument("Docker daemon identity is invalid")
-                    })?,
-                )
-            }
-            _ => {
-                return Err(Status::invalid_argument(
-                    "Provider substrate and binding are invalid",
-                ));
-            }
-        };
-        self.context
-            .service
-            .configure_system_provider(
-                &credential,
-                &value.provider_id,
-                &value.name,
-                chapchoo_service::ProviderCapabilities {
-                    create: capabilities.create,
-                    start: capabilities.start,
-                    stop: capabilities.stop,
-                    restart: capabilities.restart,
-                },
-                &substrate,
-                AcceptanceTime::System,
-            )
-            .await
-            .map_err(status)?;
         Ok(Response::new(()))
     }
     #[tracing::instrument(skip_all, fields(rpc = "check_provider_command"))]
@@ -303,32 +336,17 @@ impl wire::provider_authentication_server::ProviderAuthentication
         self.context.admit()?;
         let credential = input::authorization(&request)?;
         let value = request.into_inner();
-        let result = match owner_authority(value.authority)? {
-            wire::OwnerAuthority::System => {
-                self.context
-                    .service
-                    .rotate_system_provider_key(
-                        &credential,
-                        &value.provider_id,
-                        &value.request_id,
-                        AcceptanceTime::System,
-                    )
-                    .await
-            }
-            wire::OwnerAuthority::User => {
-                self.context
-                    .service
-                    .rotate_user_provider_key(
-                        &credential.digest(),
-                        &value.provider_id,
-                        &value.request_id,
-                        AcceptanceTime::System,
-                    )
-                    .await
-            }
-            wire::OwnerAuthority::Unspecified => return Err(reject(DomainReason::InvalidInput)),
-        }
-        .map_err(status)?;
+        let result = self
+            .context
+            .service
+            .rotate_user_provider_key(
+                &credential.digest(),
+                &value.provider_id,
+                &value.request_id,
+                AcceptanceTime::System,
+            )
+            .await
+            .map_err(status)?;
         Ok(Response::new(key(result)?))
     }
     #[tracing::instrument(skip_all, fields(rpc = "revoke_provider_key"))]
@@ -339,32 +357,16 @@ impl wire::provider_authentication_server::ProviderAuthentication
         self.context.admit()?;
         let credential = input::authorization(&request)?;
         let value = request.into_inner();
-        match owner_authority(value.authority)? {
-            wire::OwnerAuthority::System => {
-                self.context
-                    .service
-                    .revoke_system_provider_key(
-                        &credential,
-                        &value.provider_id,
-                        &value.request_id,
-                        AcceptanceTime::System,
-                    )
-                    .await
-            }
-            wire::OwnerAuthority::User => {
-                self.context
-                    .service
-                    .revoke_user_provider_key(
-                        &credential.digest(),
-                        &value.provider_id,
-                        &value.request_id,
-                        AcceptanceTime::System,
-                    )
-                    .await
-            }
-            wire::OwnerAuthority::Unspecified => return Err(reject(DomainReason::InvalidInput)),
-        }
-        .map_err(status)?;
+        self.context
+            .service
+            .revoke_user_provider_key(
+                &credential.digest(),
+                &value.provider_id,
+                &value.request_id,
+                AcceptanceTime::System,
+            )
+            .await
+            .map_err(status)?;
         Ok(Response::new(()))
     }
     #[tracing::instrument(skip_all, fields(rpc = "issue_connector_session"))]
