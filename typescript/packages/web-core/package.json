@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./handle": {
+      "types": "./dist/handle.d.ts",
+      "default": "./dist/handle.js"
+    },
     "./workspace": {
       "types": "./dist/workspace.d.ts",
       "default": "./dist/workspace.js"
@@ -104,6 +108,7 @@
     "format:check": "prettier --check 'src/**/*.ts' 'test/**/*.mjs' '*.mjs' 'package.json'"
   },
   "dependencies": {
+    "any-ascii": "0.3.3",
     "@chapchoo/rpc-client": "workspace:*",
     "@grpc/grpc-js": "1.14.6",
     "@mantine/hooks": "^9.7.4",
