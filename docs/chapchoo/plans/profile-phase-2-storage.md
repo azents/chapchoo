@@ -294,8 +294,14 @@ Post-PR CI checkpoint:
 
 Remaining delivery:
 
-1. Push the fixture correction with normal hooks and monitor the new-SHA matrix.
-2. Resolve any current CI/automatic review finding before final delivery.
+1. Account browser CI at `e331565` also rejected its Team fixture: the original
+   22-character handle (28 with the administrator suffix) violated the same
+   final-input contract and used base64url characters outside its grammar.
+   The shared fixture now uses `ac-` plus six hexadecimal characters, leaving
+   room for the existing `-admin` suffix without rewriting product input.
+   Computer browser acceptance passed independently on that run.
+2. Push fixture corrections with normal hooks and monitor the new-SHA matrix.
+3. Resolve any current CI/automatic review finding before final delivery.
 
 No phase-2 release, merge, deployed preparation, native effect or rollout has
 been executed. Design delta: None.

@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { access, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -56,7 +57,7 @@ export class Assembly {
   private kubernetes: SyntheticKubernetes | null = null;
   readonly docker: DockerFixture | null;
   readonly teamName = "Acceptance team";
-  readonly teamHandle = `acceptance-${secret().slice(0, 12).toLowerCase()}`;
+  readonly teamHandle = `ac-${randomBytes(3).toString("hex")}`;
   readonly generalUrl: string;
   readonly adminUrl: string;
   private readonly owner: ProcessOwner;
