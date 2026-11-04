@@ -42,6 +42,10 @@ waiter is not cancellation of a physical effect.
 
 ### What survives restart, reconnect or removal?
 
+[Repository identity](domain/repository-identity.md) separates opaque product IDs
+from native allocation witnesses; its
+[operator procedure](domain/repository-identity.md#operator-procedure-for-the-identity-cutover)
+defines the coordinated stopped boundary, paired backup and explicit preparation.
 [Computer schema](domain/computer-storage.md) records exact native identities and
 independent cleanup obligations. [Connector credentials](domain/connector-credentials.md)
 belong to one execution; its [process](domain/connector-process.md) reports

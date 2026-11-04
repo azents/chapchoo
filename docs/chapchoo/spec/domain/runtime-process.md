@@ -98,6 +98,7 @@ it does not assert rollback of already committed work.
 
 ## Connections
 
+- [Identity-cutover operator procedure](repository-identity.md#operator-procedure-for-the-identity-cutover) — coordinated maintenance owns quiescence, original saved-resource evidence and paired backup; process shutdown alone proves none of those.
 - [Account RPC boundaries](account-rpc.md) — Account transport owns service admission, caller credentials and validated wire outcomes. Business transactions and process lifetime have separate owners.
 - [Linux artifacts and image assembly](account-delivery.md) — Build owners produce deployment-neutral inputs; packaging validates and assembles those exact artifacts without rebuilding them.
 - [Helm and Argo deployment boundaries](deployment.md) — The public chart composes workloads and explicit prerequisites; offline rendering does not prove a live rollout or substrate cleanup.

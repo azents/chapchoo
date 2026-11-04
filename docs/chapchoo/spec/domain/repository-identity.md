@@ -83,17 +83,117 @@ mixed-format runtime compatibility. [Preparation](account-storage.md) owns the
 binding/readiness boundary. No automatic deployed maintenance or rollback is
 implied by a successful code/test change.
 
+## Operator procedure for the identity cutover
+
+This procedure requires a separately approved maintenance window and an operator
+with database, original-root and native-resource authority. It is not executed by
+`serve`, a readiness probe or this document. Backend, both webs, Providers and
+execution-local Connectors form one compatible release boundary.
+
+### Establish a safe stopped boundary
+
+1. Record the deployed source/artifact set, database engine and location,
+   configured Provider registration keys and native targets. Securely inventory
+   accepted request IDs, lifecycle phases, original saved-resource names/UIDs and
+   allocation witnesses. Resolve ownership ambiguity before proceeding; neither
+   canonical ID equality nor a configuration key authorizes adopting a resource.
+2. Block new user mutations at the deployment's admission boundary. Retain only
+   authorized maintenance access while settling existing operations through their
+   original request and source-qualified evidence. An empty historical-result read
+   is not proof that an uncertain Create stopped. Preserve its frozen request and
+   payload; do not issue a replacement.
+3. Use the existing [Stop/retirement contract](computer-lifecycle.md) to retire old
+   execution processes while preserving their saved environments. Record confirmed
+   retirement and original saved-volume/PVC identity. Agent/Delete/force-removal
+   is not a maintenance shortcut. If a physical effect is uncertain or retirement
+   cannot be proved, stop the cutover rather than relabel, recreate or replay it.
+4. Stop background dispatch and all old backend, web, Provider and Connector
+   processes using deployment-owned supervision; prevent automatic restart.
+   Graceful signals withdraw [foreground admission](runtime-process.md) and join
+   owned work. Provider cancellation has a 120-second budget and Connector
+   cancellation 15 seconds; expiry is failure, not native-retirement evidence.
+   Verify no old writer, dispatcher or execution-local process remains. There is
+   no built-in global maintenance/drain switch; stopping a Provider alone does
+   not establish the preceding physical boundary.
+
+### Preserve a recoverable checkpoint and prepare
+
+5. With writers stopped, take an engine-consistent database backup using the
+   deployment's established backup tool, and securely retain the **exact original
+   installation root** as the paired recovery input. SQLite requires a consistent
+   database snapshot, including committed WAL state when present, not a blind
+   live-file copy. PostgreSQL requires a restorable engine-consistent backup.
+   Record and verify the backup's recovery procedure in an isolated approved
+   environment. Saved native environments remain at their original identities;
+   retain their independent backup/retention policy. A DB backup alone does not
+   snapshot a volume or undo native work. Keep keys, credential-bearing config,
+   backups and inventory outside source control and public logs.
+6. Select the coordinated new executable and securely supply exactly one of
+   `CHAPCHOO_SQLITE_PATH` or `CHAPCHOO_POSTGRES_URL`, plus `CHAPCHOO_SECRET_KEY`
+   containing the original 32-byte root as padded URL-safe base64. Preserve the
+   configured Provider registration keys and native targets. Check the machine's
+   ordinary locale/time zone if initial display defaults/backfill are needed.
+   Run **once**, with no old process admitted:
+
+   ```sh
+   chapchoo prepare
+   ```
+
+   For an isolated source development environment the equivalent is
+   `cd rust && cargo run --locked -p chapchoo -- prepare`; it is not a
+   production build or deployment command. Preparation owns its DB lock and
+   transaction, not ingress shutdown, backups, native retirement or deployment.
+7. Require successful completion. Start only matching new backend components,
+   still behind the mutation boundary, with the same DB/root/configuration.
+   For example, `chapchoo serve --groups client,admin,control` selects backend
+   groups; retain deployment-specific listener, peer, web and TLS settings.
+   Require read-only schema/key readiness before admitting matching webs and
+   Providers. Reconnect under returned canonical identities; a configured
+   registration key is not the canonical Provider ID.
+8. Authenticate in the new web, resolve personal `my` and collaborative handles,
+   inspect saved profiles/relationships and read known historical creation results.
+   Check the current Provider's original saved-resource witness and verified
+   environment before authorizing replacement execution. New execution uses
+   matching Connector code and newly issued execution-bound inputs, never an
+   old container's embedded session ID. Prove original saved-data continuity
+   through the normal lifecycle before reopening normal mutations/dispatch.
+   Merely healthy processes or a successful DB transaction are insufficient.
+
+### Failure and recovery boundaries
+
+- **Failed preparation:** keep admission closed, confirm the invocation has ended,
+  inspect the cause and correct only the authorized input/integrity issue.
+  Its DB transaction rolls back; explicitly retry `prepare` with the original
+  root after correction. Do not remove binding/history, discard unknown dependency
+  tables/triggers or reset credentials to make it pass.
+- **Unknown preparation outcome:** verify process termination and database
+  readiness/history before choosing retry or recovery. A disconnected shell is
+  not proof of rollback.
+- **Successful preparation:** no destructive down migration or old-binary
+  startup is supported against the converted DB. Keep a failed new release
+  isolated for diagnosis or obtain separate approval to restore the paired
+  database/root checkpoint and matching old release. Account for every
+  post-checkpoint accepted write before restoration; it may otherwise be lost.
+- **Any recovery:** restoring the DB does not resurrect retired processes or undo
+  native effects. Reconcile exact original native identities and uncertainty
+  against the restored schema before resuming; never automatically repeat an
+  uncertain operation. Mixed-format processes and saved-environment recreation
+  are not recovery modes.
+
 ## Connections
 
 - [Account schema and preparation](account-storage.md) — binding, atomic backfill and read-only startup.
 - [Computer schema](computer-storage.md) — references, native identities and independent cleanup receipts.
 - [Agent handles and profiles](agent-profile.md) — human-facing names and saved presentation values.
 - [Control directory](computer-directory.md) — Repository-issued process/connection identities still require exact captured-owner admission.
+- [Foreground process ownership](runtime-process.md) — readiness and owned shutdown do not perform operator maintenance or prove native retirement.
 
 ## References
 
 - [`entity_id.rs`](../../../../rust/crates/persistence/src/entity_id.rs)
 - [`identity_transition.rs`](../../../../rust/crates/persistence/src/identity_transition.rs)
 - [`profile_preparation.rs`](../../../../rust/crates/persistence/src/profile_preparation.rs)
+- [`operator composition`](../../../../rust/apps/chapchoo/src/main.rs)
+- [`database/root configuration`](../../../../rust/apps/chapchoo/src/config.rs)
 - [`migration 9`](../../../../rust/crates/persistence/migrations)
 - [`profile-261104/Design`](../../design/profile-261104-agent-identity.md)

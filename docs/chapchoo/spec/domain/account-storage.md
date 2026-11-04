@@ -78,6 +78,8 @@ preparation machine, not an edited installation default; missing language/region
 use installation defaults. Repreparation preserves established values.
 Invocation atomicity does not promise rollback of earlier deployed releases.
 
+The [identity-cutover operator procedure](repository-identity.md#operator-procedure-for-the-identity-cutover)
+owns coordinated quiescence, paired backup, explicit preparation and recovery.
 The operator preserves the database and original root together. Runtime
 application startup invokes only readiness, not preparation. A
 changed root, absent history or incorrect migration set does not authorize
