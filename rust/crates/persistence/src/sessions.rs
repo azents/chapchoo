@@ -1,9 +1,10 @@
 use chapchoo_crypto::{BearerSecret, RecoveryEnvelope, SecretDigest};
-use diesel::sql_types::{BigInt, Binary, Nullable, Text};
+use diesel::sql_types::{BigInt, Binary, Nullable};
 use diesel_async::RunQueryDsl;
 
 use crate::{
     Store, StoreError, UserSummary, VerifiedCredential,
+    entity_id::{EntityId, EntityKind, IdentitySql},
     models::{UserRow, authenticate},
     store::{Dialect, operation},
 };
@@ -114,7 +115,6 @@ mod policy_tests {
 
 #[derive(Debug)]
 pub struct NewSession {
-    pub id: String,
     pub token: BearerSecret,
 }
 
@@ -129,8 +129,8 @@ pub struct SessionResult {
 
 #[derive(diesel::QueryableByName)]
 pub(crate) struct SessionRow {
-    #[diesel(sql_type = Text)]
-    pub id: String,
+    #[diesel(sql_type = IdentitySql)]
+    pub id: EntityId,
     #[diesel(sql_type = Binary)]
     pub current_hash: Vec<u8>,
     #[diesel(sql_type = Nullable<Binary>)]
@@ -188,15 +188,19 @@ macro_rules! insert_session {
         let new = $new;
         let user = $user;
         let now = $now;
+        use $crate::entity_id::{EntityId, EntityKind, IdentitySql};
+        let session_id = EntityId::generate(now)?;
+        let user_id = EntityId::from_dto(EntityKind::User, &user.id)?;
         let (expires_at, cap) = $policy.expiry(now, now, None)?;
-        let envelope = $cipher.protect_latest(&new.id, &new.token)?;
+        let envelope =
+            $cipher.protect_latest(&session_id.to_dto(EntityKind::AuthSession), &new.token)?;
         diesel::sql_query($dialect.query(
             "INSERT INTO auth_sessions(id,user_id,current_hash,recovery_nonce,recovery_ciphertext,
              created_at,rotated_at,expires_at,absolute_expires_at)
              VALUES(?,?,?,?,?,?,?,?,?)",
         ))
-        .bind::<Text, _>(&new.id)
-        .bind::<Text, _>(&user.id)
+        .bind::<IdentitySql, _>(session_id)
+        .bind::<IdentitySql, _>(user_id)
         .bind::<Binary, _>(new.token.digest().as_bytes().as_slice())
         .bind::<Binary, _>(envelope.nonce().as_slice())
         .bind::<Binary, _>(envelope.ciphertext())
@@ -230,7 +234,7 @@ impl Store {
         operation!(self, |connection, dialect| {
             let verified = &verified.snapshot;
             let rows = diesel::sql_query(dialect.query(dialect.user_lock()))
-                .bind::<Text, _>(&verified.user.id)
+                .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::User, &verified.user.id)?)
                 .load::<UserRow>(connection)
                 .await?;
             let [current] = rows.as_slice() else {
@@ -271,7 +275,7 @@ impl Store {
                 }
             };
             let rows = diesel::sql_query(dialect.query(sql))
-                .bind::<Text, _>(&user.id)
+                .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::User, &user.id)?)
                 .bind::<Binary, _>(presented.digest().as_bytes().as_slice())
                 .bind::<Binary, _>(presented.digest().as_bytes().as_slice())
                 .load::<SessionRow>(connection)
@@ -291,7 +295,9 @@ impl Store {
                     policy.expiry(session.created_at, now, session.absolute_expires_at)?;
                 if elapsed >= policy.rotation_ms {
                     let latest = BearerSecret::generate()?;
-                    let envelope = self.cipher.protect_latest(&session.id, &latest)?;
+                    let envelope = self
+                        .cipher
+                        .protect_latest(&session.id.to_dto(EntityKind::AuthSession), &latest)?;
                     let overlap_end = now
                         .checked_add(policy.overlap_ms)
                         .ok_or(StoreError::Integrity)?;
@@ -307,7 +313,7 @@ impl Store {
                     .bind::<BigInt, _>(now)
                     .bind::<BigInt, _>(expires_at)
                     .bind::<Nullable<BigInt>, _>(cap)
-                    .bind::<Text, _>(&session.id)
+                    .bind::<IdentitySql, _>(session.id)
                     .execute(connection)
                     .await?;
                     return Ok(SessionResult {
@@ -328,9 +334,11 @@ impl Store {
                 .map_err(|_| StoreError::Integrity)?;
             let envelope =
                 RecoveryEnvelope::from_parts(nonce, session.recovery_ciphertext.clone())?;
-            let token = self
-                .cipher
-                .recover_latest(&session.id, &current, &envelope)?;
+            let token = self.cipher.recover_latest(
+                &session.id.to_dto(EntityKind::AuthSession),
+                &current,
+                &envelope,
+            )?;
             Ok(SessionResult {
                 user,
                 token,
@@ -348,7 +356,7 @@ impl Store {
                 "UPDATE auth_sessions SET revoked_at=? WHERE user_id=? AND (current_hash=? OR previous_hash=?) AND revoked_at IS NULL",
             ))
             .bind::<BigInt, _>(now)
-            .bind::<Text, _>(&user.id)
+            .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::User, &user.id)?)
             .bind::<Binary, _>(token.as_bytes().as_slice())
             .bind::<Binary, _>(token.as_bytes().as_slice())
             .execute(connection)

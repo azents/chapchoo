@@ -45,7 +45,6 @@ export function useWorkspaceContainer({
   const auth = useAuth();
   const utils = trpc.useUtils();
   const [name, setName] = useState("");
-  const [handle, setHandle] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [confirmation, setConfirmation] = useState<TeamAction | null>(null);
   const [submission, setSubmission] = useState<Submission>({ type: "READY" });
@@ -255,21 +254,17 @@ export function useWorkspaceContainer({
       ? { identityLabel: auth.state.user.email }
       : {}),
     name,
-    handle,
     inviteEmail,
     confirmation,
     onName: setName,
-    onHandle: setHandle,
     onInviteEmail: setInviteEmail,
     onRename: () => {
       void execute(async () => {
         await update.mutateAsync({
           teamId,
           ...(name ? { name } : {}),
-          ...(handle ? { handle } : {}),
         });
         setName("");
-        setHandle("");
       });
     },
     onInvite: () => {

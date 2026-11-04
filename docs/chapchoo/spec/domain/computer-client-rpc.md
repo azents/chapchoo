@@ -15,7 +15,8 @@ Every generated message and outcome oneof has field-free Debug output.
 
 ## Owner operations
 
-- Agents.Create accepts a required Team ID, Request ID, Provider ID and name. The atomic creation
+- Agents.Create accepts required Team, Request and Provider IDs, name, final
+  handle, catalogue image ID and palette. The atomic creation
   receipt returns the original Agent on replay or its removed-creation outcome;
   replay after removal never creates a new Agent/Computer.
 - Agents.List/Get and Computers.Get expose only the authenticated owner's private
@@ -43,6 +44,14 @@ Every generated message and outcome oneof has field-free Debug output.
   resources and terminal cleanup intent. Creation deduplication survives.
 - ProviderCatalog.List returns authenticated creation choices, not credentials,
   ownership internals or management inventory.
+- Agents.ListProfileImages returns authenticated bounded catalogue pages.
+  Agents.CheckHandle requires an accessible Team and exact valid candidate,
+  returns only availability and does not reserve the handle.
+
+Agent DTOs carry the persisted handle, image ID and palette in addition to name,
+Team and Computer. Missing final creation fields reject rather than invoking a
+server default or legacy mode. [Profile contracts](agent-profile.md) own grammar,
+uniqueness, catalogue validation and full-payload recovery.
 
 The Computer response separates desired intent, current lifecycle, current power,
 last-known power, management connectivity, Connector connectivity, saved
@@ -90,6 +99,8 @@ acceptance; those remain separate integration gates.
 
 ## Connections
 
+- [Agent handles and saved profiles](agent-profile.md) — immutable handles, final creation fields and bounded catalogue/availability.
+- [Repository identity](repository-identity.md) — typed opaque IDs cross RPC without consumer-side decoding.
 - [Private Agent ownership and Team deletion](agent-ownership.md) — Team membership selects context while individual ownership remains the private Agent boundary. Context deletion accepts cleanup intent, not completed native deletion.
 - [Computer lifecycle admission and Provider keys](computer-lifecycle.md) — Owner requests commit durable intent under current authority. Component evidence and external completion determine what may happen next.
 - [Computer owner and operator web](computer-web.md) — Server-rendered owner controls and redacted administrator inventory project backend authority rather than creating browser lifecycle state.

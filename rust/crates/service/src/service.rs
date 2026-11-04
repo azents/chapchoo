@@ -165,7 +165,6 @@ impl AccountsService {
     ) -> Result<CodeChallenge, ServiceError> {
         let mailer = self.mailer()?;
         let draft = NewChallenge {
-            id: id()?,
             email: email.clone(),
             binding: secret()?,
             code: EmailCode::generate().map_err(ServiceError::infrastructure)?,
@@ -395,15 +394,7 @@ impl AccountsService {
     ) -> Result<TeamSummary, ServiceError> {
         Ok(self
             .store
-            .create_team(
-                actor,
-                &CreateTeam {
-                    id: id()?,
-                    name,
-                    handle,
-                },
-                now,
-            )
+            .create_team(actor, &CreateTeam { name, handle }, now)
             .await?)
     }
     pub async fn list_admin_workspaces(
@@ -422,15 +413,7 @@ impl AccountsService {
     ) -> Result<TeamSummary, ServiceError> {
         Ok(self
             .store
-            .create_admin_workspace(
-                actor,
-                &CreateTeam {
-                    id: id()?,
-                    name,
-                    handle,
-                },
-                now,
-            )
+            .create_admin_workspace(actor, &CreateTeam { name, handle }, now)
             .await?)
     }
     pub async fn update_team(
@@ -520,7 +503,6 @@ impl AccountsService {
             .as_ref()
             .map(|proof| -> Result<TeamSignupGrant, ServiceError> {
                 Ok(TeamSignupGrant {
-                    id: id()?,
                     proof: proof.digest(),
                     expires_at: expiry(now, 7 * DAY)?,
                 })
@@ -531,7 +513,6 @@ impl AccountsService {
             .invite_member(
                 actor,
                 &InviteMember {
-                    id: id()?,
                     team_id: team_id.to_owned(),
                     recipient: email.clone(),
                     signup,
@@ -716,43 +697,27 @@ impl AccountsService {
 fn secret() -> Result<BearerSecret, ServiceError> {
     BearerSecret::generate().map_err(ServiceError::infrastructure)
 }
-fn id() -> Result<String, ServiceError> {
-    Ok(secret()?
-        .digest()
-        .as_bytes()
-        .iter()
-        .map(|value| format!("{value:02x}"))
-        .collect())
-}
 fn expiry(now: i64, duration: i64) -> Result<i64, ServiceError> {
     now.checked_add(duration)
         .ok_or_else(|| ServiceError::domain(DomainReason::InvalidInput))
 }
 fn grant(proof: &BearerSecret, expires_at: i64) -> Result<GrantDraft, ServiceError> {
     Ok(GrantDraft {
-        id: id()?,
         proof: proof.digest(),
         expires_at,
     })
 }
 fn new_session() -> Result<NewSession, ServiceError> {
-    Ok(NewSession {
-        id: id()?,
-        token: secret()?,
-    })
+    Ok(NewSession { token: secret()? })
 }
 fn account(
     email: EmailAddress,
     password: PasswordHash,
     display: Option<DisplayPatch>,
 ) -> Result<NewAccount, ServiceError> {
-    let personal_team_id = id()?;
     Ok(NewAccount {
-        user_id: id()?,
         email,
         password,
-        personal_handle: format!("personal-{personal_team_id}"),
-        personal_team_id,
         session: new_session()?,
         display,
     })

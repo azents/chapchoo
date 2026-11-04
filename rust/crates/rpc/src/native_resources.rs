@@ -1,7 +1,7 @@
 //! Normalize existing Kubernetes fields and explicit Docker payloads at wire ingress.
 use chapchoo_domain::{
     DockerContainerId, DockerDaemonId, DockerVolumeIdentity, KubernetesUid, ManagedResourceKind,
-    NativeIdentity, NativeReservation, NativeScope, ProviderKind,
+    NativeAllocationWitness, NativeIdentity, NativeReservation, NativeScope, ProviderKind,
 };
 use chapchoo_protocol::{computers as inventory, control as wire};
 use chapchoo_service::{ManagedResource, ResourceEvidence};
@@ -69,6 +69,7 @@ fn volume_to_wire(value: &DockerVolumeIdentity) -> wire::DockerVolumeIdentity {
 }
 
 pub(crate) struct DecodedResource {
+    pub allocation: NativeAllocationWitness,
     pub native: NativeReservation,
     pub identity: Option<NativeIdentity>,
     pub execution_id: Option<String>,
@@ -77,6 +78,19 @@ pub(crate) struct DecodedResource {
 
 pub(crate) fn decode(value: &wire::ManagedResource) -> Result<DecodedResource, Status> {
     let kind = kind(value.kind)?;
+    let source = value.allocation.as_ref().ok_or_else(invalid)?;
+    let allocation = NativeAllocationWitness::new(
+        source.computer_id.clone(),
+        source.provider_id.clone(),
+        source.execution_id.clone(),
+    )
+    .map_err(|_| invalid())?;
+    if allocation.execution().is_some() != value.execution_id.is_some()
+        || (kind.role() == chapchoo_domain::ResourceRole::SavedEnvironment)
+            != value.execution_id.is_none()
+    {
+        return Err(invalid());
+    }
     let (scope, identity) = match (kind, &value.native) {
         (
             ManagedResourceKind::Pod
@@ -137,6 +151,7 @@ pub(crate) fn decode(value: &wire::ManagedResource) -> Result<DecodedResource, S
         _ => return Err(invalid()),
     };
     Ok(DecodedResource {
+        allocation,
         native: NativeReservation::new(kind, scope, value.name.clone()).map_err(|_| invalid())?,
         identity,
         execution_id: value.execution_id.clone(),
@@ -171,6 +186,11 @@ pub(crate) fn encode(value: &ManagedResource) -> wire::ManagedResource {
         )),
     };
     wire::ManagedResource {
+        allocation: Some(wire::NativeAllocationWitness {
+            computer_id: value.allocation().computer().into(),
+            provider_id: value.allocation().provider().into(),
+            execution_id: value.allocation().execution().map(str::to_owned),
+        }),
         kind: wire_kind(value.kind()),
         namespace: if value.kind().provider_kind() == ProviderKind::Kubernetes {
             scope.as_str().to_owned()

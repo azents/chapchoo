@@ -16,6 +16,9 @@ import type { Timestamp } from "@chapchoo/rpc-client/timestamp";
 import { invalidResponse } from "./errors.js";
 import { displayPart } from "./display.js";
 import type { DisplayValue } from "./display.js";
+import { teamKind } from "./browser.js";
+import type { Team as BrowserTeam } from "./browser.js";
+import { validHandle } from "./handle.js";
 
 export function display(value: unknown): DisplayValue {
   if (!value || typeof value !== "object") return invalidResponse();
@@ -90,22 +93,30 @@ export function session(
     createdAt: value.createdAt,
   };
 }
-export function team(value: Team): Team {
+export function team(value: Team): BrowserTeam {
   if (
     !required(value.id) ||
     !required(value.name) ||
-    !required(value.handle) ||
     !required(value.ownerUserId) ||
     ![1, 2].includes(value.kind) ||
     ![1, 2, 3].includes(value.callerRole)
   ) {
     return invalidResponse();
   }
-  return value;
+  if (value.kind === teamKind.personal && value.handle === undefined) {
+    return { ...value, kind: teamKind.personal, handle: null };
+  }
+  if (
+    value.kind === teamKind.collaborative &&
+    typeof value.handle === "string" &&
+    validHandle(value.handle)
+  ) {
+    return { ...value, kind: teamKind.collaborative, handle: value.handle };
+  }
+  return invalidResponse();
 }
-export function teams(value: Teams): Teams {
-  value.items.forEach(team);
-  return value;
+export function teams(value: Teams): { items: BrowserTeam[] } {
+  return { items: value.items.map(team) };
 }
 export function member(value: Member): Member {
   if (

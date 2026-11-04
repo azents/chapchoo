@@ -19,10 +19,14 @@ milliseconds in BIGINT columns, supplied by the application acceptance boundary.
 
 ## Keys and Relationships
 
+Product identities use the shared [Repository identity contract](repository-identity.md):
+Repository-issued UUIDv7, PostgreSQL UUID/SQLite BLOB16 storage and opaque typed
+DTO projections. Handles and credential material are separate contracts.
+
 | Table                    | Identity and constraints                                                                                                                 | References and deletion behavior                                                                                                                                           |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | installation_key_binding | Singleton 1; 32-byte derived key check                                                                                                   | No root key stored; persistent across restart/migration                                                                                                                    |
-| users                    | Stable text ID; unique canonical email key; protected password hash; boolean server-admin assignment; complete language/time-zone/region | Retained account identity; no deletion capability implemented                                                                                                              |
+| users                    | Repository-owned compact ID; unique canonical email key; protected password hash; boolean server-admin assignment; complete language/time-zone/region | Retained account identity; no deletion capability implemented                                                                                                              |
 | display_defaults         | Singleton 1; complete language/time-zone/region                                                                                          | Installation fallback and account-creation defaults, distinct from personal settings                                                                                       |
 | teams                    | Stable ID; unique live-Team handle; one owner; unique personal Team per owner; nullable collaborative-only deletion request time         | Owner references users; composite same-Team owner membership is deferred NO ACTION; Agent references block physical deletion until cleanup                                 |
 | memberships              | Composite Team/User primary key; Manager/Member only                                                                                     | Team deletion cascades memberships; User deletion is constrained                                                                                                           |
@@ -37,6 +41,10 @@ Foreign keys and schema checks do not replace the business acceptance
 transactions. In particular, personal Team kind/owner consistency, permission
 checks and atomic consumption are repository obligations rather than guarantees
 of any arbitrary manual SQL statement.
+
+Only collaborative Teams have public handles; personal handles are nullable.
+Collaborative handles are immutable, and Team settings update name only. See
+[handles and profiles](agent-profile.md) for the exact grammar and namespaces.
 
 ## Preparation, Binding and Readiness
 
@@ -56,6 +64,11 @@ of any arbitrary manual SQL statement.
   key check, exact expected migration set, complete singleton and absence of
   incomplete user display markers, without creating schema metadata.
 
+Readiness also validates compact identity/profile rows and the initialized
+catalogue. The [migration-9 identity cutover](repository-identity.md) authenticates
+and preserves existing credential/native evidence inside the preparation
+transaction; it is not a startup fallback or automatic mixed-format admission.
+
 Display defaults initialize once from the first successful preparation machine:
 its IANA time zone and supported environment locale, with English/en-US for an
 unsupported locale. Undetectable/invalid machine time zones fail preparation when
@@ -72,6 +85,7 @@ adopting a new key, deleting data or creating the first administrator.
 
 ## Connections
 
+- [Repository-owned identity](repository-identity.md) — shared issuance, opaque DTOs, compact storage and original-root preserving cutover.
 - [Account and Team transaction contracts](account-transactions.md) — Account, session, membership and invitation state changes complete under current database authority before external delivery.
 - [Credential primitives](credential-primitives.md) — Reusable domain and crypto values protect representation and secrecy; service and persistence owners supply admission, expiry and installation binding.
 - [Computer schema and native identities](computer-storage.md) — Durable Computer state records authority, exact resource identity and cleanup obligations; schema records do not themselves perform external effects.

@@ -7,11 +7,11 @@ import "google/protobuf/timestamp.proto";
 
 // Component-facing listeners authenticate bearer metadata independently of peers.
 service ProviderAuthentication {
-  rpc Exchange(ProviderAuthenticationRequest) returns (ComponentKey);
+  rpc Exchange(ProviderAuthenticationRequest) returns (ProviderCredentials);
   rpc Report(ProviderReport) returns (google.protobuf.Empty);
   rpc CheckCommand(ProviderCommandCheck) returns (ProviderCommandAdmission);
   rpc CheckConnection(ProviderConnectionCheck) returns (google.protobuf.Empty);
-  rpc RotateKey(ProviderKeyRequest) returns (ComponentKey);
+  rpc RotateKey(ProviderKeyRequest) returns (ProviderCredentials);
   rpc RevokeKey(ProviderKeyRequest) returns (google.protobuf.Empty);
   rpc IssueConnectorSession(ConnectorSessionRequest) returns (ConnectorSession);
   rpc RevokeConnectorSession(RevokeConnectorSessionRequest) returns (google.protobuf.Empty);
@@ -90,7 +90,7 @@ enum ProviderKind {
   PROVIDER_KIND_DOCKER = 2;
 }
 message ProviderConfiguration {
-  string provider_id = 1;
+  string registration_key = 1;
   string name = 2;
   ProviderCapabilities capabilities = 3;
   ProviderKind kind = 4;
@@ -106,6 +106,10 @@ message ComponentKey {
   google.protobuf.Timestamp issued_at = 2;
   google.protobuf.Timestamp expires_at = 3;
   google.protobuf.Timestamp proactive_after = 4;
+}
+message ProviderCredentials {
+  string provider_id = 1;
+  ComponentKey key = 2;
 }
 message ConnectorSessionRequest {
   string provider_id = 1;
@@ -185,6 +189,11 @@ message DockerVolumeNative {
   string daemon_id = 1;
   DockerVolumeIdentity identity = 2;
 }
+message NativeAllocationWitness {
+  string computer_id = 1;
+  string provider_id = 2;
+  optional string execution_id = 3;
+}
 message ManagedResource {
   ResourceKind kind = 1;
   string namespace = 2;
@@ -200,6 +209,8 @@ message ManagedResource {
     DockerContainerNative docker_container = 7;
     DockerVolumeNative docker_volume = 8;
   }
+  // Exact committed annotation/label authority; never inferred from current IDs.
+  NativeAllocationWitness allocation = 9;
 }
 message OwnedPresent {
   string uid = 1;

@@ -7,10 +7,10 @@ import type {
   InvitationAction,
   MembershipRole,
   GrantKind,
+  Team as WireTeam,
 } from "@chapchoo/rpc-client/accounts";
 export type {
   User,
-  Team,
   Member,
   Invitation,
   Grant,
@@ -19,6 +19,11 @@ export type {
   LoginMethods,
   CodeChallenge,
 } from "@chapchoo/rpc-client/accounts";
+export type Team = Omit<WireTeam, "kind" | "handle"> &
+  (
+    | { kind: TeamKind.TEAM_KIND_PERSONAL; handle: null }
+    | { kind: TeamKind.TEAM_KIND_COLLABORATIVE; handle: string }
+  );
 export type WireReason = Exclude<
   keyof typeof DomainReason,
   "UNRECOGNIZED" | "DOMAIN_REASON_UNSPECIFIED"

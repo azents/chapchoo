@@ -16,22 +16,18 @@ use std::{error::Error, sync::Arc};
 type TestError = Box<dyn Error + Send + Sync>;
 const NOW: i64 = 1_000_000;
 
-fn account(id: &str, email: &str, password: &str) -> Result<NewAccount, TestError> {
+fn account(email: &str, password: &str) -> Result<NewAccount, TestError> {
     Ok(NewAccount {
-        user_id: id.to_owned(),
         email: EmailAddress::parse(email)?,
         password: PasswordHasher::new(PasswordCost::new(10)?)
             .hash(&Password::parse(password.to_owned())?)?,
-        personal_team_id: format!("personal-{id}"),
-        personal_handle: format!("personal-{id}"),
-        session: new_session(&format!("session-{id}"))?,
+        session: new_session()?,
         display: None,
     })
 }
 
-fn new_session(id: &str) -> Result<NewSession, TestError> {
+fn new_session() -> Result<NewSession, TestError> {
     Ok(NewSession {
-        id: id.to_owned(),
         token: BearerSecret::generate()?,
     })
 }
@@ -39,7 +35,7 @@ fn new_session(id: &str) -> Result<NewSession, TestError> {
 async fn exercise(store: Store) -> Result<(), TestError> {
     let policy = SessionPolicy::default();
     let setup = BearerSecret::generate()?;
-    let admin_draft = account("admin", "Admin@Example.Invalid", "Aa1!admin")?;
+    let admin_draft = account("Admin@Example.Invalid", "Aa1!admin")?;
     assert!(store.setup_available().await?);
     assert!(matches!(
         store
@@ -84,12 +80,11 @@ async fn exercise(store: Store) -> Result<(), TestError> {
     );
     let proof = BearerSecret::generate()?;
     let email = EmailAddress::parse(" Member@Example.Invalid ")?;
-    store
+    let signup = store
         .issue_signup_grant(
             &admin.token.digest(),
             &email,
             &GrantDraft {
-                id: "grant-signup".to_owned(),
                 proof: proof.digest(),
                 expires_at: NOW + 86_400_000,
             },
@@ -102,7 +97,7 @@ async fn exercise(store: Store) -> Result<(), TestError> {
             .await?
             .is_some()
     );
-    let mut member_draft = account("member", "member@example.invalid", "Aa1!member")?;
+    let mut member_draft = account("member@example.invalid", "Aa1!member")?;
     member_draft.display = Some(DisplayPatch::parse(
         Some("ko".to_owned()),
         Some("Asia/Tokyo".to_owned()),
@@ -112,14 +107,14 @@ async fn exercise(store: Store) -> Result<(), TestError> {
         store
             .revoke_grant(
                 &admin.token.digest(),
-                "grant-signup",
+                &signup.id,
                 GrantKind::PasswordReset,
                 NOW,
             )
             .await,
         Err(StoreError::NotFound)
     ));
-    let mismatched = account("wrong-recipient", "other@example.invalid", "Aa1!other")?;
+    let mismatched = account("other@example.invalid", "Aa1!other")?;
     assert!(matches!(
         store
             .redeem_signup(&proof.digest(), &mismatched, NOW, policy)
@@ -168,14 +163,13 @@ async fn exercise(store: Store) -> Result<(), TestError> {
             &admin.token.digest(),
             &email,
             &GrantDraft {
-                id: "duplicate-email".to_owned(),
                 proof: duplicate.digest(),
                 expires_at: NOW + 1000,
             },
             NOW,
         )
         .await?;
-    let duplicate_draft = account("duplicate-user", "member@example.invalid", "Aa1!duplicate")?;
+    let duplicate_draft = account("member@example.invalid", "Aa1!duplicate")?;
     assert!(matches!(
         store
             .redeem_signup(&duplicate.digest(), &duplicate_draft, NOW, policy)
@@ -207,7 +201,6 @@ async fn exercise(store: Store) -> Result<(), TestError> {
                 &member.token.digest(),
                 &email,
                 &GrantDraft {
-                    id: "forbidden".to_owned(),
                     proof: BearerSecret::generate()?.digest(),
                     expires_at: NOW + 1000
                 },
@@ -220,19 +213,19 @@ async fn exercise(store: Store) -> Result<(), TestError> {
     // Configured-mail issuance has no administrator issuer. Failure in session
     // insertion must roll back the user, personal context and grant consumption.
     let mail_proof = BearerSecret::generate()?;
-    let mut mail_account = account("mail-user", "mail@example.invalid", "Cc3!mail")?;
+    let mut mail_account = account("mail@example.invalid", "Cc3!mail")?;
     store
         .issue_email_signup_grant(
             &mail_account.email,
             &GrantDraft {
-                id: "mail-grant".to_owned(),
                 proof: mail_proof.digest(),
                 expires_at: NOW + 86_400_000,
             },
             NOW,
         )
         .await?;
-    mail_account.session.id = admin_draft.session.id.clone();
+    mail_account.session.token =
+        BearerSecret::parse(admin_draft.session.token.expose().to_owned())?;
     assert!(matches!(
         store
             .redeem_signup(&mail_proof.digest(), &mail_account, NOW, policy)
@@ -251,7 +244,7 @@ async fn exercise(store: Store) -> Result<(), TestError> {
             .await?
             .is_some()
     );
-    mail_account.session.id = "mail-user-session".to_owned();
+    mail_account.session.token = BearerSecret::generate()?;
     let mail_user = store
         .redeem_signup(&mail_proof.digest(), &mail_account, NOW, policy)
         .await?;
@@ -264,15 +257,14 @@ async fn exercise(store: Store) -> Result<(), TestError> {
             &admin.token.digest(),
             &race_email,
             &GrantDraft {
-                id: "race-grant".to_owned(),
                 proof: race_proof.digest(),
                 expires_at: NOW + 10000,
             },
             NOW,
         )
         .await?;
-    let first_account = account("signup-race-a", race_email.delivery(), "Dd4!race")?;
-    let second_account = account("signup-race-b", race_email.delivery(), "Dd4!race")?;
+    let first_account = account(race_email.delivery(), "Dd4!race")?;
+    let second_account = account(race_email.delivery(), "Dd4!race")?;
     let barrier = tokio::sync::Barrier::new(2);
     let first = async {
         barrier.wait().await;
@@ -288,13 +280,14 @@ async fn exercise(store: Store) -> Result<(), TestError> {
     };
     let (first, second) = tokio::join!(first, second);
     assert_eq!(usize::from(first.is_ok()) + usize::from(second.is_ok()), 1);
+    let accepted = first.or(second)?;
     let winning_id = store
         .password_snapshot(&race_email)
         .await?
         .ok_or("Missing signup race winner")?
         .user
         .id;
-    assert!(winning_id == "signup-race-a" || winning_id == "signup-race-b");
+    assert_eq!(winning_id, accepted.user.id);
 
     // Race the same initial token: every caller must receive one committed value.
     let rotation_at = NOW + policy.rotation_ms;
@@ -352,7 +345,6 @@ async fn exercise(store: Store) -> Result<(), TestError> {
             &admin.token.digest(),
             &email,
             &GrantDraft {
-                id: "reset-a".to_owned(),
                 proof: reset.digest(),
                 expires_at: rotation_at + 86_400_000,
             },
@@ -366,7 +358,7 @@ async fn exercise(store: Store) -> Result<(), TestError> {
         .verify("Aa1!member", &PasswordHasher::default())?;
     let reset_hash = PasswordHasher::new(PasswordCost::new(10)?)
         .hash(&Password::parse("Bb2!changed".to_owned())?)?;
-    let racing_session = new_session("racing-login")?;
+    let racing_session = new_session()?;
     let barrier = Arc::new(tokio::sync::Barrier::new(2));
     let first = async {
         barrier.wait().await;
@@ -409,14 +401,9 @@ async fn exercise(store: Store) -> Result<(), TestError> {
     assert!(!PasswordHasher::default().verify("Aa1!member", &snapshot.password)?);
     let verified = snapshot.verify("Bb2!changed", &PasswordHasher::default())?;
     let fresh = store
-        .accept_password_login(
-            &verified,
-            &new_session("fresh-login")?,
-            rotation_at + 3,
-            policy,
-        )
+        .accept_password_login(&verified, &new_session()?, rotation_at + 3, policy)
         .await?;
-    assert_eq!(fresh.user.id, "member");
+    assert_eq!(fresh.user.id, member.user.id);
     assert_eq!(
         store
             .teams(&fresh.token.digest(), rotation_at + 3)
@@ -435,12 +422,11 @@ async fn exercise(store: Store) -> Result<(), TestError> {
     ));
 
     // Email verification is single-use and never unrestricted signup.
-    for (id, target, registered) in [
-        ("known-code", "member@example.invalid", true),
-        ("unknown-code", "unknown@example.invalid", false),
+    for (target, registered) in [
+        ("member@example.invalid", true),
+        ("unknown@example.invalid", false),
     ] {
         let draft = NewChallenge {
-            id: id.to_owned(),
             email: EmailAddress::parse(target)?,
             binding: BearerSecret::generate()?,
             code: EmailCode::parse("Ab12cd".to_owned())?,
@@ -453,7 +439,7 @@ async fn exercise(store: Store) -> Result<(), TestError> {
                     &draft.email,
                     &draft.binding,
                     &EmailCode::parse("WRONG1".to_owned())?,
-                    &new_session(&format!("{id}-wrong"))?,
+                    &new_session()?,
                     rotation_at + 1,
                     policy
                 )
@@ -465,7 +451,7 @@ async fn exercise(store: Store) -> Result<(), TestError> {
                 &draft.email,
                 &draft.binding,
                 &EmailCode::parse("aB12cD".to_owned())?,
-                &new_session(&format!("{id}-correct"))?,
+                &new_session()?,
                 rotation_at + 2,
                 policy,
             )
@@ -473,7 +459,7 @@ async fn exercise(store: Store) -> Result<(), TestError> {
         match outcome {
             EmailLoginOutcome::Authenticated(value) => {
                 assert!(registered);
-                assert_eq!(value.user.id, "member");
+                assert_eq!(value.user.id, member.user.id);
             }
             EmailLoginOutcome::RegistrationRequired => assert!(!registered),
         }
@@ -483,7 +469,7 @@ async fn exercise(store: Store) -> Result<(), TestError> {
                     &draft.email,
                     &draft.binding,
                     &draft.code,
-                    &new_session(&format!("{id}-repeat"))?,
+                    &new_session()?,
                     rotation_at + 3,
                     policy
                 )
@@ -493,7 +479,7 @@ async fn exercise(store: Store) -> Result<(), TestError> {
     }
     let promoted = store.grant_administrator(&email).await?;
     assert!(promoted.is_admin);
-    assert_eq!(promoted.id, "member");
+    assert_eq!(promoted.id, member.user.id);
     assert!(
         store
             .grant_administrator(&EmailAddress::parse("absent@example.invalid")?)

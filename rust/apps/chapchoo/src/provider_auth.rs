@@ -122,13 +122,13 @@ pub fn authenticator(
 }
 
 pub fn configuration(
-    provider: &str,
+    registration_key: &str,
     name: &str,
     kind: wire::ProviderKind,
     daemon: Option<String>,
 ) -> wire::ProviderConfiguration {
     wire::ProviderConfiguration {
-        provider_id: provider.into(),
+        registration_key: registration_key.into(),
         name: name.into(),
         kind: kind as i32,
         docker_daemon_id: daemon,
@@ -225,6 +225,8 @@ mod tests {
                 })
                 .await?
                 .into_inner();
+            assert_ne!(key.provider_id, "local");
+            let key = key.key.ok_or("No operational credential")?;
             assert_eq!(
                 key.expires_at.as_ref().ok_or("No expiry")?.seconds
                     - key.issued_at.as_ref().ok_or("No issue time")?.seconds,

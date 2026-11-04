@@ -1,6 +1,7 @@
 use crate::{
     Store, StoreError,
     computers::{ProviderCapabilities, ProviderIdentity, ProviderRow, provider_lock, valid_id},
+    entity_id::{EntityId, EntityKind, IdentitySql},
     models::authenticate,
     store::operation,
 };
@@ -80,10 +81,10 @@ struct RegistrationCredentialRow {
 struct RegistrationOwnerRow {
     #[diesel(sql_type=Text)]
     owner_kind: String,
-    #[diesel(sql_type=Nullable<Text>)]
-    user_owner_id: Option<String>,
-    #[diesel(sql_type=Nullable<Text>)]
-    owner_team_id: Option<String>,
+    #[diesel(sql_type=Nullable<IdentitySql>)]
+    user_owner_id: Option<EntityId>,
+    #[diesel(sql_type=Nullable<IdentitySql>)]
+    owner_team_id: Option<EntityId>,
 }
 #[derive(diesel::QueryableByName)]
 struct RegistrationTeamRow {
@@ -92,8 +93,8 @@ struct RegistrationTeamRow {
 }
 #[derive(diesel::QueryableByName)]
 struct OwnerIdRow {
-    #[diesel(sql_type=Text)]
-    id: String,
+    #[diesel(sql_type=IdentitySql)]
+    id: EntityId,
 }
 
 pub struct ComponentKeyDraft {
@@ -146,6 +147,14 @@ pub struct ComponentKeyResult {
     pub expires_at: i64,
     pub proactive_after: i64,
 }
+/// A registration key remains an operator input; only Repository assigns the
+/// canonical Provider identity returned alongside its operational credential.
+#[derive(Debug)]
+pub struct ProviderCredentialResult {
+    pub provider_id: String,
+    pub key: ComponentKeyResult,
+}
+
 impl fmt::Debug for ComponentKeyResult {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("ComponentKeyResult([REDACTED])")
@@ -209,18 +218,59 @@ pub(crate) fn key_matches(
     Ok(digest.matches_digest(presented))
 }
 
+// Configured registration keys are accepted only in this operator admission
+// lane. Ordinary owner/operational methods use complete canonical Provider IDs.
+macro_rules! provider_target {
+    ($connection:expr,$dialect:expr,$authority:expr,$input:expr,$now:expr) => {{
+        match $authority {
+            ProviderOwner::User(_) => EntityId::from_dto(EntityKind::Provider, $input)?,
+            authority => {
+                match authority {
+                    ProviderOwner::System(proof) | ProviderOwner::Bootstrap { proof, .. }
+                        if proof.provider_id() != $input => return Err(StoreError::Forbidden),
+                    _ => {}
+                }
+                let existing_id = diesel::sql_query($dialect.query("SELECT id FROM computer_providers WHERE registration_key=?"))
+                    .bind::<Text,_>($input).get_result::<OwnerIdRow>($connection).await.optional()?;
+                if existing_id.is_none()
+                    && let ProviderOwner::Bootstrap { proof, name, capabilities, substrate } = authority {
+                    if !crate::computers::valid_name(name) {
+                        return Err(StoreError::InvalidInput);
+                    }
+                    let assigned = EntityId::generate($now)?;
+                    diesel::sql_query($dialect.query("INSERT INTO computer_providers(id,registration_key,owner_kind,system_owner_id,name,provider_kind,docker_daemon_id,can_create,can_start,can_stop,can_restart,created_at) VALUES(?,?,'SYSTEM',?,?,?,?,?,?,?,?,?) ON CONFLICT(registration_key) DO NOTHING"))
+                        .bind::<IdentitySql,_>(assigned).bind::<Text,_>($input)
+                        .bind::<Text,_>(proof.owner_id()).bind::<Text,_>(*name)
+                        .bind::<Text,_>(substrate.kind().as_str()).bind::<Nullable<Text>,_>(substrate.docker_daemon_id())
+                        .bind::<diesel::sql_types::Bool,_>(capabilities.create)
+                        .bind::<diesel::sql_types::Bool,_>(capabilities.start)
+                        .bind::<diesel::sql_types::Bool,_>(capabilities.stop)
+                        .bind::<diesel::sql_types::Bool,_>(capabilities.restart)
+                        .bind::<BigInt,_>($now).execute($connection).await?;
+                }
+                diesel::sql_query($dialect.query("SELECT id FROM computer_providers WHERE registration_key=?"))
+                    .bind::<Text,_>($input).get_result::<OwnerIdRow>($connection).await.optional()?
+                    .ok_or(if matches!(authority, ProviderOwner::Registration { .. }) {
+                        StoreError::Unauthenticated
+                    } else { StoreError::NotFound })?.id
+            }
+        }
+    }};
+}
+
 macro_rules! provider_owner {
     ($connection:expr,$dialect:expr,$authority:expr,$provider_id:expr,$now:expr,$cipher:expr) => {{
+        let target_id = provider_target!($connection, $dialect, $authority, $provider_id, $now);
         if let ProviderOwner::Registration { .. } = $authority {
             let owner = diesel::sql_query($dialect.query("SELECT owner_kind,user_owner_id,owner_team_id FROM computer_providers WHERE id=?"))
-                .bind::<Text,_>($provider_id).get_result::<RegistrationOwnerRow>($connection)
+                .bind::<IdentitySql,_>(target_id).get_result::<RegistrationOwnerRow>($connection)
                 .await.optional()?.ok_or(StoreError::Unauthenticated)?;
             if let Some(team) = owner.owner_team_id {
                 let sql = match $dialect {
                     crate::store::Dialect::Postgres => "SELECT deletion_requested_at FROM teams WHERE id=? FOR UPDATE",
                     crate::store::Dialect::Sqlite => "SELECT deletion_requested_at FROM teams WHERE id=?",
                 };
-                let team = diesel::sql_query($dialect.query(sql)).bind::<Text,_>(team)
+                let team = diesel::sql_query($dialect.query(sql)).bind::<IdentitySql,_>(team)
                     .get_result::<RegistrationTeamRow>($connection).await.optional()?
                     .ok_or(StoreError::Unauthenticated)?;
                 if owner.owner_kind != "TEAM" || team.deletion_requested_at.is_some() {
@@ -231,10 +281,10 @@ macro_rules! provider_owner {
                     crate::store::Dialect::Postgres => "SELECT id FROM users WHERE id=? FOR UPDATE",
                     crate::store::Dialect::Sqlite => "SELECT id FROM users WHERE id=?",
                 };
-                let user = diesel::sql_query($dialect.query(sql)).bind::<Text,_>(user)
+                let locked = diesel::sql_query($dialect.query(sql)).bind::<IdentitySql,_>(user)
                     .get_result::<OwnerIdRow>($connection).await.optional()?
                     .ok_or(StoreError::Unauthenticated)?;
-                if owner.owner_kind != "USER" || user.id.is_empty() {
+                if owner.owner_kind != "USER" || locked.id != user {
                     return Err(StoreError::Unauthenticated);
                 }
             } else if owner.owner_kind != "SYSTEM" {
@@ -257,21 +307,8 @@ macro_rules! provider_owner {
             }
             ProviderOwner::Registration { .. } => None,
         };
-        if let ProviderOwner::Bootstrap { proof, name, capabilities, substrate } = $authority {
-            if !crate::computers::valid_name(name) {
-                return Err(StoreError::InvalidInput);
-            }
-            diesel::sql_query($dialect.query("INSERT INTO computer_providers(id,owner_kind,system_owner_id,name,provider_kind,docker_daemon_id,can_create,can_start,can_stop,can_restart,created_at) VALUES(?,'SYSTEM',?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING"))
-                .bind::<Text,_>($provider_id).bind::<Text,_>(proof.owner_id()).bind::<Text,_>(*name)
-                .bind::<Text,_>(substrate.kind().as_str()).bind::<Nullable<Text>,_>(substrate.docker_daemon_id())
-                .bind::<diesel::sql_types::Bool,_>(capabilities.create)
-                .bind::<diesel::sql_types::Bool,_>(capabilities.start)
-                .bind::<diesel::sql_types::Bool,_>(capabilities.stop)
-                .bind::<diesel::sql_types::Bool,_>(capabilities.restart)
-                .bind::<BigInt,_>($now).execute($connection).await?;
-        }
         let provider = diesel::sql_query($dialect.query(provider_lock($dialect)))
-            .bind::<Text, _>($provider_id)
+            .bind::<IdentitySql, _>(target_id)
             .get_result::<ProviderRow>($connection)
             .await
             .optional()?
@@ -284,18 +321,19 @@ macro_rules! provider_owner {
             ProviderOwner::User(_) => {
                 provider.owner_kind == "USER"
                     && actor.as_ref().is_some_and(|user| {
-                        provider.user_owner_id.as_deref() == Some(user.id.as_str())
+                        provider.user_owner_id.map(|id|id.to_dto(EntityKind::User)).as_ref() == Some(&user.id)
                     })
             }
-            ProviderOwner::Bootstrap { substrate, .. } => {
+            ProviderOwner::Bootstrap { proof, substrate, .. } => {
                 if provider.owner_kind != "SYSTEM" || provider.provider_kind != substrate.kind().as_str()
+                    || provider.system_owner_id.as_deref() != Some(proof.owner_id())
                     || provider.docker_daemon_id.as_deref().is_some_and(|bound|Some(bound)!=substrate.docker_daemon_id()) {
                     return Err(StoreError::Forbidden);
                 }
                 if provider.docker_daemon_id.is_none() && substrate.docker_daemon_id().is_some() {
                     diesel::sql_query($dialect.query("UPDATE computer_providers SET docker_daemon_id=? WHERE id=?"))
                         .bind::<Nullable<Text>,_>(substrate.docker_daemon_id())
-                        .bind::<Text,_>($provider_id).execute($connection).await?;
+                        .bind::<IdentitySql,_>(target_id).execute($connection).await?;
                 }
                 true
             }
@@ -305,17 +343,19 @@ macro_rules! provider_owner {
                     return Err(StoreError::Forbidden);
                 }
                 let stored = diesel::sql_query($dialect.query("SELECT credential_hash,revoked_at,recovery_nonce,recovery_ciphertext FROM provider_registration_credentials WHERE provider_id=?"))
-                    .bind::<Text,_>($provider_id)
+                    .bind::<IdentitySql,_>(target_id)
                     .get_result::<RegistrationCredentialRow>($connection).await.optional()?;
                 match stored {
                     Some(row) if row.revoked_at.is_none() && key_matches(Some(&row.credential_hash), digest)? => {
+                        let user = provider.user_owner_id.map(|id|id.to_dto(EntityKind::User));
+                        let team = provider.owner_team_id.map(|id|id.to_dto(EntityKind::Team));
                         let owner = match provider.owner_kind.as_str() {
                             "SYSTEM" => ProviderRegistrationOwner::System(provider.system_owner_id.as_deref().ok_or(StoreError::Integrity)?),
-                            "USER" => ProviderRegistrationOwner::User(provider.user_owner_id.as_deref().ok_or(StoreError::Integrity)?),
-                            "TEAM" => ProviderRegistrationOwner::Team(provider.owner_team_id.as_deref().ok_or(StoreError::Integrity)?),
+                            "USER" => ProviderRegistrationOwner::User(user.as_deref().ok_or(StoreError::Integrity)?),
+                            "TEAM" => ProviderRegistrationOwner::Team(team.as_deref().ok_or(StoreError::Integrity)?),
                             _ => return Err(StoreError::Integrity),
                         };
-                        let context = provider_registration_context($provider_id, owner)?;
+                        let context = provider_registration_context(&target_id.to_dto(EntityKind::Provider), owner)?;
                         let _verified = recover_key($cipher, &context, &row.credential_hash,
                             Some(&row.recovery_nonce),Some(&row.recovery_ciphertext))?;
                         true
@@ -333,16 +373,20 @@ macro_rules! provider_owner {
 
 macro_rules! authenticate_provider {
     ($connection:expr,$dialect:expr,$provider_id:expr,$digest:expr,$now:expr) => {{
+        let target_id = $crate::entity_id::EntityId::from_dto(
+            $crate::entity_id::EntityKind::Provider,
+            $provider_id,
+        )?;
         let provider =
             diesel::sql_query($dialect.query($crate::computers::provider_lock($dialect)))
-                .bind::<diesel::sql_types::Text, _>($provider_id)
+                .bind::<$crate::entity_id::IdentitySql, _>(target_id)
                 .get_result::<$crate::computers::ProviderRow>($connection)
                 .await
                 .optional()?
                 .ok_or($crate::StoreError::Unauthenticated)?;
         let key =
             diesel::sql_query($dialect.query("SELECT * FROM provider_keys WHERE provider_id=?"))
-                .bind::<diesel::sql_types::Text, _>($provider_id)
+                .bind::<$crate::entity_id::IdentitySql, _>(target_id)
                 .get_result::<$crate::component_keys::ProviderKeyRow>($connection)
                 .await
                 .optional()?
@@ -380,7 +424,7 @@ impl Store {
         draft: &ComponentKeyDraft,
         policy: ComponentKeyPolicy,
         now: i64,
-    ) -> Result<ComponentKeyResult, StoreError> {
+    ) -> Result<ProviderCredentialResult, StoreError> {
         if !valid_id(provider_id) || !valid_id(&draft.request_id) {
             return Err(StoreError::InvalidInput);
         }
@@ -421,10 +465,8 @@ impl Store {
             ),
             _ => payload_fingerprint("provider-key-rotation", &[provider_id.as_bytes()]),
         };
-        let context = format!("computer-provider:{provider_id}");
-        let envelope = self.cipher.protect_latest(&context, &draft.token)?;
         operation!(self, |connection, dialect| {
-            let _provider = provider_owner!(
+            let provider = provider_owner!(
                 connection,
                 dialect,
                 &authority,
@@ -432,21 +474,25 @@ impl Store {
                 now,
                 &self.cipher
             );
+            let provider_id = provider.id;
+            let canonical_id = provider_id.to_dto(EntityKind::Provider);
+            let context = format!("computer-provider:{canonical_id}");
+            let envelope = self.cipher.protect_latest(&context, &draft.token)?;
             diesel::sql_query(dialect.query(
                 "DELETE FROM provider_key_requests WHERE provider_id=? AND retry_expires_at<=?",
             ))
-            .bind::<Text, _>(provider_id)
+            .bind::<IdentitySql, _>(provider_id)
             .bind::<BigInt, _>(now)
             .execute(connection)
             .await?;
             let existing =
                 diesel::sql_query(dialect.query("SELECT * FROM provider_keys WHERE provider_id=?"))
-                    .bind::<Text, _>(provider_id)
+                    .bind::<IdentitySql, _>(provider_id)
                     .get_result::<ProviderKeyRow>(connection)
                     .await
                     .optional()?;
             let receipt=diesel::sql_query(dialect.query("SELECT payload_hash,result_hash FROM provider_key_requests WHERE provider_id=? AND request_id=?"))
-                .bind::<Text,_>(provider_id).bind::<Text,_>(&draft.request_id).get_result::<KeyRequestRow>(connection).await.optional()?;
+                .bind::<IdentitySql,_>(provider_id).bind::<Text,_>(&draft.request_id).get_result::<KeyRequestRow>(connection).await.optional()?;
             if let Some(receipt) = receipt {
                 if receipt.payload_hash != fingerprint {
                     return Err(StoreError::Conflict);
@@ -471,11 +517,14 @@ impl Store {
                     .checked_add(policy.proactive_after_ms)
                     .ok_or(StoreError::Integrity)?
                     .min(current.expires_at);
-                return Ok(ComponentKeyResult {
-                    token,
-                    issued_at: current.issued_at,
-                    expires_at: current.expires_at,
-                    proactive_after: refresh,
+                return Ok(ProviderCredentialResult {
+                    provider_id: canonical_id,
+                    key: ComponentKeyResult {
+                        token,
+                        issued_at: current.issued_at,
+                        expires_at: current.expires_at,
+                        proactive_after: refresh,
+                    },
                 });
             }
             let (previous, overlap) = match &existing {
@@ -499,15 +548,18 @@ impl Store {
                 return Err(StoreError::InvalidInput);
             }
             diesel::sql_query(dialect.query("INSERT INTO provider_keys(provider_id,current_hash,previous_hash,previous_valid_until,issued_at,expires_at,current_request_id,recovery_nonce,recovery_ciphertext) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(provider_id) DO UPDATE SET current_hash=excluded.current_hash,previous_hash=excluded.previous_hash,previous_valid_until=excluded.previous_valid_until,issued_at=excluded.issued_at,expires_at=excluded.expires_at,revoked_at=NULL,current_request_id=excluded.current_request_id,recovery_nonce=excluded.recovery_nonce,recovery_ciphertext=excluded.recovery_ciphertext"))
-                .bind::<Text,_>(provider_id).bind::<Binary,_>(digest.as_bytes().as_slice()).bind::<Nullable<Binary>,_>(previous).bind::<Nullable<BigInt>,_>(overlap)
+                .bind::<IdentitySql,_>(provider_id).bind::<Binary,_>(digest.as_bytes().as_slice()).bind::<Nullable<Binary>,_>(previous).bind::<Nullable<BigInt>,_>(overlap)
                 .bind::<BigInt,_>(now).bind::<BigInt,_>(expires_at).bind::<Text,_>(&draft.request_id).bind::<Binary,_>(envelope.nonce().as_slice()).bind::<Binary,_>(envelope.ciphertext()).execute(connection).await?;
             diesel::sql_query(dialect.query("INSERT INTO provider_key_requests(provider_id,request_id,payload_hash,result_hash,retry_expires_at) VALUES(?,?,?,?,?)"))
-                .bind::<Text,_>(provider_id).bind::<Text,_>(&draft.request_id).bind::<Binary,_>(fingerprint.as_slice()).bind::<Binary,_>(digest.as_bytes().as_slice()).bind::<BigInt,_>(request.retry_expires_at()).execute(connection).await?;
-            Ok(ComponentKeyResult {
-                token: BearerSecret::parse(draft.token.expose().to_owned())?,
-                issued_at: now,
-                expires_at,
-                proactive_after,
+                .bind::<IdentitySql,_>(provider_id).bind::<Text,_>(&draft.request_id).bind::<Binary,_>(fingerprint.as_slice()).bind::<Binary,_>(digest.as_bytes().as_slice()).bind::<BigInt,_>(request.retry_expires_at()).execute(connection).await?;
+            Ok(ProviderCredentialResult {
+                provider_id: canonical_id,
+                key: ComponentKeyResult {
+                    token: BearerSecret::parse(draft.token.expose().to_owned())?,
+                    issued_at: now,
+                    expires_at,
+                    proactive_after,
+                },
             })
         })
     }
@@ -525,7 +577,7 @@ impl Store {
         let request = provider_request(request_id, now)?;
         let fingerprint = payload_fingerprint("provider-key-revocation", &[provider_id.as_bytes()]);
         operation!(self, |connection, dialect| {
-            let _provider = provider_owner!(
+            let provider = provider_owner!(
                 connection,
                 dialect,
                 &authority,
@@ -533,34 +585,35 @@ impl Store {
                 now,
                 &self.cipher
             );
+            let provider_id = provider.id;
             diesel::sql_query(dialect.query(
                 "DELETE FROM provider_key_requests WHERE provider_id=? AND retry_expires_at<=?",
             ))
-            .bind::<Text, _>(provider_id)
+            .bind::<IdentitySql, _>(provider_id)
             .bind::<BigInt, _>(now)
             .execute(connection)
             .await?;
             let current =
                 diesel::sql_query(dialect.query("SELECT * FROM provider_keys WHERE provider_id=?"))
-                    .bind::<Text, _>(provider_id)
+                    .bind::<IdentitySql, _>(provider_id)
                     .get_result::<ProviderKeyRow>(connection)
                     .await
                     .optional()?
                     .ok_or(StoreError::NotFound)?;
             if let Some(prior)=diesel::sql_query(dialect.query("SELECT payload_hash,result_hash FROM provider_key_requests WHERE provider_id=? AND request_id=?"))
-                .bind::<Text,_>(provider_id).bind::<Text,_>(request_id).get_result::<KeyRequestRow>(connection).await.optional()? {
+                .bind::<IdentitySql,_>(provider_id).bind::<Text,_>(request_id).get_result::<KeyRequestRow>(connection).await.optional()? {
                 if prior.payload_hash!=fingerprint { return Err(StoreError::Conflict); }
                 if prior.result_hash!=current.current_hash || current.revoked_at.is_none() { return Err(StoreError::InvalidTransition); }
                 return Ok(());
             }
             diesel::sql_query(dialect.query("UPDATE provider_keys SET revoked_at=COALESCE(revoked_at,?),previous_hash=NULL,previous_valid_until=NULL,recovery_nonce=NULL,recovery_ciphertext=NULL WHERE provider_id=?"))
-                .bind::<BigInt,_>(now).bind::<Text,_>(provider_id).execute(connection).await?;
+                .bind::<BigInt,_>(now).bind::<IdentitySql,_>(provider_id).execute(connection).await?;
             diesel::sql_query(dialect.query("INSERT INTO provider_key_requests(provider_id,request_id,payload_hash,result_hash,retry_expires_at) VALUES(?,?,?,?,?)"))
-                .bind::<Text,_>(provider_id).bind::<Text,_>(request_id).bind::<Binary,_>(fingerprint.as_slice()).bind::<Binary,_>(&current.current_hash).bind::<BigInt,_>(request.retry_expires_at()).execute(connection).await?;
+                .bind::<IdentitySql,_>(provider_id).bind::<Text,_>(request_id).bind::<Binary,_>(fingerprint.as_slice()).bind::<Binary,_>(&current.current_hash).bind::<BigInt,_>(request.retry_expires_at()).execute(connection).await?;
             diesel::sql_query(
                 dialect.query("DELETE FROM provider_connections WHERE provider_id=?"),
             )
-            .bind::<Text, _>(provider_id)
+            .bind::<IdentitySql, _>(provider_id)
             .execute(connection)
             .await?;
             Ok(())
@@ -578,10 +631,13 @@ impl Store {
             let provider = authenticate_provider!(connection, dialect, provider_id, digest, now);
             let substrate = provider.substrate()?;
             Ok(ProviderIdentity {
-                id: provider.id,
+                id: provider.id.to_dto(EntityKind::Provider),
                 name: provider.name,
                 substrate,
             })
         })
     }
 }
+
+#[cfg(test)]
+mod tests;

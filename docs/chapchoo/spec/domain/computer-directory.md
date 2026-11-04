@@ -16,7 +16,7 @@ recovery, explicit preparation and cleanup ownership are described in
 
 ## Registration and Current Ownership
 
-The application service generates an opaque process ID for each Control
+Repository registration issues an opaque process ID for each Control
 registration. Reusing an endpoint does not reuse process identity. The persisted
 registration includes the reachable endpoint, draining flag and renewal/expiry.
 The service rejects wildcard advertised addresses, credentials, query/fragment,
@@ -33,7 +33,7 @@ remove a successor owned by a different Control. Registration and route expiry
 already deny authority independently of physical row removal.
 
 Every component admission captures its current owner tuple before preparing the
-local stream. `PreparedComponentConnection` contains a service-generated new
+local stream. `PreparedComponentConnection` contains a Repository-issued new
 Connection ID, captured expected owner and authenticated target/credential digest;
 its fields cannot be constructed from request assertions. Only after the local
 stream is ready does admission compare that exact captured tuple under the target

@@ -7,7 +7,8 @@ use chapchoo_persistence::{
     ConnectorSessionResult, ConnectorSource, ControlRegistration, CreateCloudAgent,
     CreationOutcome, DirectoryPolicy, ExecutionDraft, ExecutionReservation, ExecutionResources,
     LifecycleRequest, ManagedComputer, ManagedResource, ProviderCapabilities, ProviderChoice,
-    ProviderIdentity, ProviderOwner, ProviderSource, ResolvedRoute, ResourceReport, Store,
+    ProviderCredentialResult, ProviderIdentity, ProviderOwner, ProviderSource, ResolvedRoute,
+    ResourceReport, Store,
 };
 use std::fmt;
 use url::Url;
@@ -129,7 +130,7 @@ impl ComputersService {
         }
         Ok(self
             .store
-            .register_control(&opaque_id()?, parsed.as_str(), self.policy.directory)
+            .register_control(parsed.as_str(), self.policy.directory)
             .await?)
     }
     pub async fn renew_control(&self, id: &str) -> Result<ControlRegistration, ServiceError> {
@@ -150,17 +151,14 @@ impl ComputersService {
         credential: &SecretDigest,
         control_id: &str,
     ) -> Result<PreparedComponentConnection, ServiceError> {
-        let expected = self
+        let prepared = self
             .store
-            .provider_connection_owner(provider_id, credential)
+            .prepare_provider_connection(provider_id, credential, control_id)
             .await?;
         Ok(PreparedComponentConnection {
             target: ConnectionTarget::Provider(provider_id.into()),
-            expected,
-            owner: ConnectionOwner {
-                control_id: control_id.into(),
-                connection_id: opaque_id()?,
-            },
+            expected: prepared.expected,
+            owner: prepared.owner,
             credential: credential.clone(),
         })
     }
@@ -170,17 +168,14 @@ impl ComputersService {
         credential: &SecretDigest,
         control_id: &str,
     ) -> Result<PreparedComponentConnection, ServiceError> {
-        let expected = self
+        let prepared = self
             .store
-            .connector_connection_owner(session_id, credential)
+            .prepare_connector_connection(session_id, credential, control_id)
             .await?;
         Ok(PreparedComponentConnection {
             target: ConnectionTarget::Connector(session_id.into()),
-            expected,
-            owner: ConnectionOwner {
-                control_id: control_id.into(),
-                connection_id: opaque_id()?,
-            },
+            expected: prepared.expected,
+            owner: prepared.owner,
             credential: credential.clone(),
         })
     }
@@ -390,7 +385,7 @@ impl ComputersService {
         substrate: &ProviderSubstrate,
         request_id: &str,
         clock: AcceptanceTime,
-    ) -> Result<ComponentKeyResult, ServiceError> {
+    ) -> Result<ProviderCredentialResult, ServiceError> {
         let draft = key_draft(request_id)?;
         Ok(self
             .store
@@ -415,7 +410,7 @@ impl ComputersService {
         substrate: &ProviderSubstrate,
         request_id: &str,
         clock: AcceptanceTime,
-    ) -> Result<ComponentKeyResult, ServiceError> {
+    ) -> Result<ProviderCredentialResult, ServiceError> {
         let draft = key_draft(request_id)?;
         Ok(self
             .store
@@ -438,7 +433,7 @@ impl ComputersService {
         provider_id: &str,
         request_id: &str,
         clock: AcceptanceTime,
-    ) -> Result<ComponentKeyResult, ServiceError> {
+    ) -> Result<ProviderCredentialResult, ServiceError> {
         let draft = key_draft(request_id)?;
         Ok(self
             .store
@@ -494,25 +489,40 @@ impl ComputersService {
     pub async fn create_cloud_agent(
         &self,
         actor: &SecretDigest,
-        team_id: &str,
-        request_id: &str,
-        provider_id: &str,
-        name: &str,
+        draft: &CreateCloudAgent,
         clock: AcceptanceTime,
     ) -> Result<CreationOutcome, ServiceError> {
-        let draft = CreateCloudAgent {
-            agent_id: opaque_id()?,
-            team_id: team_id.into(),
-            computer_id: opaque_id()?,
-            request_id: request_id.into(),
-            provider_id: provider_id.into(),
-            name: name.into(),
-        };
         Ok(self
             .store
-            .create_cloud_agent(actor, &draft, clock.now()?)
+            .create_cloud_agent(actor, draft, clock.now()?)
             .await?)
     }
+    pub async fn agent_handle_available(
+        &self,
+        actor: &SecretDigest,
+        team_id: &str,
+        candidate: &str,
+        clock: AcceptanceTime,
+    ) -> Result<bool, ServiceError> {
+        Ok(self
+            .store
+            .agent_handle_available(actor, team_id, candidate, clock.now()?)
+            .await?)
+    }
+
+    pub async fn agent_profile_images(
+        &self,
+        actor: &SecretDigest,
+        after: Option<&str>,
+        limit: i64,
+        clock: AcceptanceTime,
+    ) -> Result<Vec<crate::AgentProfileImage>, ServiceError> {
+        Ok(self
+            .store
+            .agent_profile_images(actor, after, limit, clock.now()?)
+            .await?)
+    }
+
     pub async fn agent(
         &self,
         actor: &SecretDigest,
@@ -586,7 +596,6 @@ impl ComputersService {
         clock: AcceptanceTime,
     ) -> Result<ConnectorSessionResult, ServiceError> {
         let draft = ConnectorSessionDraft {
-            id: opaque_id()?,
             request_id: request_id.into(),
             initial_key: secret()?,
         };
@@ -603,7 +612,6 @@ impl ComputersService {
         clock: AcceptanceTime,
     ) -> Result<ConnectorSessionResult, ServiceError> {
         let draft = ConnectorSessionDraft {
-            id: opaque_id()?,
             request_id: request_id.into(),
             initial_key: secret()?,
         };
@@ -701,22 +709,22 @@ impl ComputersService {
         scope: ComputerRequest<'_>,
         native_scope: &NativeScope,
     ) -> Result<ExecutionReservation, ServiceError> {
-        let id = opaque_id()?;
-        let saved_name = format!("computer-{}", opaque_id()?);
+        let suffix = native_name_suffix()?;
+        let saved_name = format!("computer-{}", native_name_suffix()?);
         let native = match native_scope {
             NativeScope::KubernetesNamespace(namespace) => ExecutionResources::Kubernetes {
                 namespace: namespace.clone(),
-                pod_name: format!("computer-{id}"),
-                bootstrap_secret_name: format!("connector-{id}"),
+                pod_name: format!("computer-{suffix}"),
+                bootstrap_secret_name: format!("connector-{suffix}"),
                 saved_pvc_name: saved_name,
             },
             NativeScope::DockerDaemon(daemon) => ExecutionResources::Docker {
                 daemon: daemon.clone(),
-                container_name: format!("computer-{id}"),
+                container_name: format!("computer-{suffix}"),
                 saved_volume_name: saved_name,
             },
         };
-        let draft = ExecutionDraft { id, native };
+        let draft = ExecutionDraft { native };
         Ok(self.store.reserve_execution(source, scope, &draft).await?)
     }
     pub async fn claim_execution_dispatch(
@@ -898,11 +906,12 @@ impl ComputersService {
 fn secret() -> Result<BearerSecret, ServiceError> {
     BearerSecret::generate().map_err(ServiceError::infrastructure)
 }
-fn opaque_id() -> Result<String, ServiceError> {
+fn native_name_suffix() -> Result<String, ServiceError> {
     Ok(secret()?
         .digest()
         .as_bytes()
         .iter()
+        .take(16)
         .map(|byte| format!("{byte:02x}"))
         .collect())
 }

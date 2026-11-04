@@ -57,13 +57,14 @@ test("owner manages one Computer while Admin observes independent cleanup invent
   test.setTimeout(300_000);
   await assembly.initializeAdministrator();
   await assembly.startComputerProvider();
+  // Match account defaults; display-detection interaction belongs to account flows.
   const context = await browser.newContext({
     locale: "en-US",
-    timezoneId: "Asia/Seoul",
+    timezoneId: "UTC",
   });
   const operator = await browser.newContext({
     locale: "en-US",
-    timezoneId: "Asia/Seoul",
+    timezoneId: "UTC",
   });
   try {
     const owner = await context.newPage();

@@ -207,6 +207,7 @@ pub(crate) fn validate_call(
 fn resource_matches(resource: &wire::ManagedResource, saved: &ManagedResource) -> bool {
     crate::native_resources::decode(resource).is_ok_and(|decoded| {
         saved.absence_confirmed_at.is_some() == decoded.absence_confirmed
+            && saved.allocation() == &decoded.allocation
             && saved.native() == &decoded.native
             && saved.identity() == decoded.identity.as_ref()
             && saved.execution_id == decoded.execution_id

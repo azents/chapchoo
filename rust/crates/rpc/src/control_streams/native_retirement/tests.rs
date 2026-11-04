@@ -47,6 +47,7 @@ struct Fixture {
     context: wire::ComputerContext,
     credential: SecretDigest,
     token: BearerSecret,
+    provider_id: String,
 }
 
 impl Fixture {
@@ -153,8 +154,13 @@ async fn fixture_with_action(
         control.id.clone(),
         Arc::new(AtomicBool::new(true)),
     );
-    let (mut entry, receivers) =
-        crate::control_streams::tests::entry(&services.inner, key.token.digest(), None).await?;
+    let (mut entry, receivers) = crate::control_streams::tests::entry(
+        &services.inner,
+        &key.provider_id,
+        key.key.token.digest(),
+        None,
+    )
+    .await?;
     Arc::get_mut(&mut entry)
         .ok_or("Entry already shared")?
         .policy = Some(ProviderPolicy {
@@ -189,10 +195,21 @@ async fn fixture_with_action(
     let chapchoo_service::CreationOutcome::Present(agent) = app
         .create_cloud_agent(
             &user.token.digest(),
-            &team.id,
-            "create",
-            "provider",
-            "Native",
+            &chapchoo_service::CreateCloudAgent {
+                team_id: team.id.clone(),
+                request_id: "create".into(),
+                provider_id: key.provider_id.clone(),
+                name: "Native".into(),
+                profile: chapchoo_service::CreateAgentProfile {
+                    handle: "retirement-agent".into(),
+                    image_id: app
+                        .agent_profile_images(&user.token.digest(), None, 1, AcceptanceTime::System)
+                        .await?[0]
+                        .id
+                        .clone(),
+                    palette_key: "sage".into(),
+                },
+            },
             AcceptanceTime::System,
         )
         .await?
@@ -269,8 +286,9 @@ async fn fixture_with_action(
             request_id: if action.is_some() { "delete" } else { "create" }.into(),
             execution_id: execution.execution_id,
         },
-        credential: key.token.digest(),
-        token: key.token,
+        credential: key.key.token.digest(),
+        token: key.key.token,
+        provider_id: key.provider_id,
     })
 }
 
@@ -441,10 +459,11 @@ async fn stop_restart_and_terminal_early_paths_all_use_the_same_native_gate() ->
                     instance_id: services.inner.instance_id.clone(),
                     connection_id: f.entry.prepared.owner().connection_id.clone(),
                 };
+                let provider_id = f.provider_id.clone();
                 let convergence = owned.call(async move {
                     services
                         .converge_provider(
-                            "provider",
+                            &provider_id,
                             &owner,
                             &context,
                             Instant::now() + RESPONSE_BUDGET,
@@ -616,9 +635,13 @@ async fn reconnect_loses_mutation_correlation_and_allows_only_observation() -> R
             owned.abort(&pending);
             assert!(pending.await.is_err());
             let old_entry = f.entry.clone();
-            let (replacement, receiver) =
-                crate::control_streams::tests::entry(&f.services.inner, f.credential.clone(), None)
-                    .await?;
+            let (replacement, receiver) = crate::control_streams::tests::entry(
+                &f.services.inner,
+                &f.provider_id,
+                f.credential.clone(),
+                None,
+            )
+            .await?;
             f.services.inner.activate(replacement.clone()).await?;
             f.entry = replacement;
             f.receivers = receiver;
@@ -871,7 +894,7 @@ async fn waiter_deadline_preserves_only_the_exact_live_task_until_native_settlem
                 let check = || -> Result<tonic::Request<wire::ProviderCommandCheck>, Error> {
                     let mut request = tonic::Request::new(wire::ProviderCommandCheck {
                         source: Some(wire::ProviderConnectionCheck {
-                            provider_id: "provider".into(),
+                            provider_id: f.provider_id.clone(),
                             instance_id: f.services.inner.instance_id.clone(),
                             connection_id: f.entry.prepared.owner().connection_id.clone(),
                         }),

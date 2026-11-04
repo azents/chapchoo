@@ -114,7 +114,7 @@ async fn control_group_has_components_and_separate_network_peer_listener() -> Re
         );
         let mut provider = ProviderAuthenticationClient::connect(public_url).await?;
         let configuration = control::ProviderConfiguration {
-            provider_id: "provider".into(),
+            registration_key: "provider".into(),
             name: "Fixture".into(),
             kind: control::ProviderKind::Kubernetes as i32,
             docker_daemon_id: None,
@@ -141,7 +141,7 @@ async fn control_group_has_components_and_separate_network_peer_listener() -> Re
             .exchange(authenticated(configuration.clone(), "register"))
             .await?;
         let mut foreign = configuration;
-        foreign.provider_id = "unscoped-provider".into();
+        foreign.registration_key = "unscoped-provider".into();
         assert_eq!(
             provider
                 .exchange(authenticated(foreign, "foreign"))

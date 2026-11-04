@@ -103,20 +103,31 @@ impl Docker {
     pub(crate) fn labels(
         &self,
         context: &wire::ComputerContext,
-        execution: bool,
+        resource: &wire::ManagedResource,
     ) -> Result<HashMap<String, String>, Error> {
+        let source = resource.allocation.as_ref().ok_or(Error::Ownership)?;
+        let source = chapchoo_domain::NativeAllocationWitness::new(
+            source.computer_id.clone(),
+            source.provider_id.clone(),
+            source.execution_id.clone(),
+        )
+        .map_err(|_| Error::Ownership)?;
         if context.computer_id.is_empty()
             || context.request_id.is_empty()
-            || (execution && context.execution_id.is_empty())
+            || source.execution().is_some() != resource.execution_id.is_some()
+            || resource
+                .execution_id
+                .as_ref()
+                .is_some_and(|execution| execution != &context.execution_id || execution.is_empty())
         {
             return Err(Error::Ownership);
         }
         let mut labels = HashMap::from([
-            (PROVIDER.into(), self.provider.clone()),
-            (COMPUTER.into(), context.computer_id.clone()),
+            (PROVIDER.into(), source.provider().to_owned()),
+            (COMPUTER.into(), source.computer().to_owned()),
         ]);
-        if execution {
-            labels.insert(EXECUTION.into(), context.execution_id.clone());
+        if let Some(execution) = source.execution() {
+            labels.insert(EXECUTION.into(), execution.to_owned());
         }
         Ok(labels)
     }
@@ -162,7 +173,7 @@ impl Docker {
                 Error::Ownership
             });
         }
-        if volume.name != reserved.name || volume.labels != self.labels(context, false)? {
+        if volume.name != reserved.name || volume.labels != self.labels(context, reserved)? {
             return Err(Error::Ownership);
         }
         let identity = DockerVolumeIdentity::local(
@@ -201,7 +212,7 @@ impl Docker {
         resource: &wire::ManagedResource,
     ) -> Result<Observation, Error> {
         let target = self.volume_target(resource)?;
-        self.labels(context, false)?;
+        self.labels(context, resource)?;
         self.verify_daemon().await?;
         match tokio::time::timeout(
             Duration::from_secs(10),
@@ -239,7 +250,7 @@ impl Docker {
         initial_allocation: bool,
     ) -> Result<PreparedVolume, Error> {
         let target = self.volume_target(resource)?;
-        let labels = self.labels(context, false)?;
+        let labels = self.labels(context, resource)?;
         self.verify_daemon().await?;
         match tokio::time::timeout(
             Duration::from_secs(10),

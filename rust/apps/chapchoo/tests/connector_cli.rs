@@ -80,20 +80,30 @@ async fn connector_process_exchanges_connects_and_observes_independently_of_prov
         let endpoint = format!("http://{}", listener.local_addr()?);
         let control = app.register_control(&endpoint).await?;
         let prepared = app
-            .prepare_provider_connection("provider", &key.token.digest(), &control.id)
+            .prepare_provider_connection(&key.provider_id, &key.key.token.digest(), &control.id)
             .await?;
         app.admit_component_connection(&prepared).await?;
+        let images = app
+            .agent_profile_images(&user.token.digest(), None, 1, AcceptanceTime::System)
+            .await?;
         let CreationOutcome::Present(agent) = app
             .create_cloud_agent(
                 &user.token.digest(),
-                &accounts
-                    .list_teams(&user.token.digest(), AcceptanceTime::System.now()?)
-                    .await?
-                    .remove(0)
-                    .id,
-                "create",
-                "provider",
-                "Fixture",
+                &chapchoo_service::CreateCloudAgent {
+                    team_id: accounts
+                        .list_teams(&user.token.digest(), AcceptanceTime::System.now()?)
+                        .await?
+                        .remove(0)
+                        .id,
+                    request_id: "create".into(),
+                    provider_id: key.provider_id.clone(),
+                    name: "Fixture".into(),
+                    profile: chapchoo_service::CreateAgentProfile {
+                        handle: "connector-agent".into(),
+                        image_id: images[0].id.clone(),
+                        palette_key: "sage".into(),
+                    },
+                },
                 AcceptanceTime::System,
             )
             .await?
@@ -101,10 +111,10 @@ async fn connector_process_exchanges_connects_and_observes_independently_of_prov
             return Err("Missing Agent".into());
         };
         let source = ProviderSource {
-            provider_id: "provider",
+            provider_id: &key.provider_id,
             control_id: &control.id,
             connection_id: &prepared.owner().connection_id,
-            credential: &key.token.digest(),
+            credential: &key.key.token.digest(),
         };
         let scope = ComputerRequest {
             computer_id: &agent.computer.id,

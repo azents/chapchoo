@@ -131,6 +131,11 @@ fn reserved(allocated: bool) -> wire::ManagedResource {
         name: "saved-original".into(),
         uid: None,
         execution_id: None,
+        allocation: Some(wire::NativeAllocationWitness {
+            computer_id: "computer".into(),
+            provider_id: "provider".into(),
+            execution_id: None,
+        }),
         absence_confirmed: false,
         native: Some(Native::DockerVolume(wire::DockerVolumeNative {
             daemon_id: "daemon:fixture".into(),
@@ -149,6 +154,47 @@ fn response(status: u16, bytes: Vec<u8>) -> Result<Response<Full<Bytes>>, TestEr
         .status(status)
         .header("content-type", "application/json")
         .body(Full::new(Bytes::from(bytes)))?)
+}
+#[tokio::test]
+async fn original_labels_survive_current_context_and_invalid_witness_cannot_create()
+-> Result<(), TestError> {
+    Fixture::run(async |fixture| {
+        let docker = fixture.connect().await?;
+        fixture.state.lock().map_err(|_| "Fixture lock")?.volume = Some(volume());
+        let mut current = context();
+        current.computer_id = "canonical-computer".into();
+        current.execution_id = "canonical-execution".into();
+        let original = reserved(true);
+        assert_eq!(
+            docker.observe_volume(&current, &original).await?.presence,
+            Presence::Present
+        );
+        for invalid in 0..4 {
+            let mut value = reserved(false);
+            match invalid {
+                0 => value.allocation = None,
+                1 => value
+                    .allocation
+                    .as_mut()
+                    .ok_or("Witness")?
+                    .provider_id
+                    .clear(),
+                2 => value.allocation.as_mut().ok_or("Witness")?.computer_id = "../invalid".into(),
+                _ => {
+                    value.allocation.as_mut().ok_or("Witness")?.execution_id =
+                        Some("unexpected".into())
+                }
+            }
+            assert!(matches!(
+                docker.ensure_volume(&current, &value, true).await,
+                Err(Error::Ownership)
+            ));
+        }
+        let state = fixture.state.lock().map_err(|_| "Fixture lock")?;
+        assert_eq!((state.creates, state.removes), (0, 0));
+        Ok(())
+    })
+    .await
 }
 fn message(status: u16) -> Result<Response<Full<Bytes>>, TestError> {
     response(status, br#"{"message":"fixture native outcome"}"#.to_vec())
@@ -478,7 +524,6 @@ impl Fixture {
     async fn connect_policy(&self, image_policy: ImagePolicy) -> Result<Arc<Docker>, TestError> {
         let adapter = Arc::new(
             Docker::connect(
-                "provider".into(),
                 Selection {
                     api_version: None,
                     endpoint: Endpoint::Tcp {
@@ -785,6 +830,11 @@ async fn container_create_rejection_retains_native_cause_without_another_submiss
             kind: wire::ResourceKind::DockerContainer as i32,
             name: "execution-candidate".into(),
             execution_id: Some("execution".into()),
+            allocation: Some(wire::NativeAllocationWitness {
+                computer_id: "computer".into(),
+                provider_id: "provider".into(),
+                execution_id: Some("execution".into()),
+            }),
             native: Some(Native::DockerContainer(wire::DockerContainerNative {
                 daemon_id: "daemon:fixture".into(),
                 container_id: None,

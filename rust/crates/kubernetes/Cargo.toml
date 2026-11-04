@@ -10,6 +10,7 @@ publish.workspace = true
 kube.workspace = true
 k8s-openapi.workspace = true
 chapchoo-protocol.workspace = true
+chapchoo-domain.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 futures-util.workspace = true

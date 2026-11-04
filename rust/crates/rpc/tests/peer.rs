@@ -140,7 +140,7 @@ fn memory_and_tcp_peer_handlers_revalidate_domain_and_exact_reconciler_authority
         sender
             .send(wire::ProviderFrame {
                 payload: Some(wire::provider_frame::Payload::Hello(wire::ProviderHello {
-                    provider_id: "provider".into(),
+                    provider_id: key.provider_id.clone(),
                     namespace: "fixture".into(),
                     connector_endpoint: "http://127.0.0.1:1".into(),
                     kind: wire::ProviderKind::Kubernetes as i32,
@@ -151,7 +151,7 @@ fn memory_and_tcp_peer_handlers_revalidate_domain_and_exact_reconciler_authority
         let mut request = Request::new(ReceiverStream::new(receiver));
         request.metadata_mut().insert(
             "authorization",
-            format!("Bearer {}", key.token.expose()).parse()?,
+            format!("Bearer {}", key.key.token.expose()).parse()?,
         );
         let mut stream = component.open(request).await?.into_inner();
         let Some(wire::control_frame::Payload::Connected(connected)) =
@@ -162,14 +162,30 @@ fn memory_and_tcp_peer_handlers_revalidate_domain_and_exact_reconciler_authority
         let CreationOutcome::Present(agent) = app
             .create_cloud_agent(
                 &user.token.digest(),
-                &accounts
-                    .list_teams(&user.token.digest(), AcceptanceTime::System.now()?)
-                    .await?
-                    .remove(0)
-                    .id,
-                "create",
-                "provider",
-                "Fixture",
+                &chapchoo_service::CreateCloudAgent {
+                    team_id: accounts
+                        .list_teams(&user.token.digest(), AcceptanceTime::System.now()?)
+                        .await?
+                        .remove(0)
+                        .id,
+                    request_id: "create".into(),
+                    provider_id: key.provider_id.clone(),
+                    name: "Fixture".into(),
+                    profile: chapchoo_service::CreateAgentProfile {
+                        handle: "peer-agent".into(),
+                        image_id: app
+                            .agent_profile_images(
+                                &user.token.digest(),
+                                None,
+                                1,
+                                AcceptanceTime::System,
+                            )
+                            .await?[0]
+                            .id
+                            .clone(),
+                        palette_key: "sage".into(),
+                    },
+                },
                 AcceptanceTime::System,
             )
             .await?
@@ -182,10 +198,10 @@ fn memory_and_tcp_peer_handlers_revalidate_domain_and_exact_reconciler_authority
             execution_id: String::new(),
         };
         let source = ProviderSource {
-            provider_id: "provider",
+            provider_id: &key.provider_id,
             control_id: &control.id,
             connection_id: &connected.connection_id,
-            credential: &key.token.digest(),
+            credential: &key.key.token.digest(),
         };
         let execution = app
             .reserve_execution(
@@ -211,6 +227,11 @@ fn memory_and_tcp_peer_handlers_revalidate_domain_and_exact_reconciler_authority
                 name: r.native().name().into(),
                 uid: r.kubernetes_uid().map(str::to_owned),
                 execution_id: r.execution_id.clone(),
+                allocation: Some(wire::NativeAllocationWitness {
+                    computer_id: r.allocation().computer().into(),
+                    provider_id: r.allocation().provider().into(),
+                    execution_id: r.allocation().execution().map(str::to_owned),
+                }),
                 absence_confirmed: r.absence_confirmed_at.is_some(),
                 native: None,
             })
@@ -232,7 +253,7 @@ fn memory_and_tcp_peer_handlers_revalidate_domain_and_exact_reconciler_authority
             )),
         };
         let invocation = wire::ProviderInvocation {
-            provider_id: "provider".into(),
+            provider_id: key.provider_id.clone(),
             owner: Some(owner.clone()),
             authority: Some(wire::PeerAuthority {
                 context: Some(wire::peer_authority::Context::User(wire::UserAuthority {
@@ -246,7 +267,7 @@ fn memory_and_tcp_peer_handlers_revalidate_domain_and_exact_reconciler_authority
         );
         let check_value = wire::ProviderCommandCheck {
             source: Some(wire::ProviderConnectionCheck {
-                provider_id: "provider".into(),
+                provider_id: key.provider_id.clone(),
                 instance_id: control.id.clone(),
                 connection_id: connected.connection_id.clone(),
             }),
@@ -256,7 +277,7 @@ fn memory_and_tcp_peer_handlers_revalidate_domain_and_exact_reconciler_authority
             let mut request = Request::new(value);
             request.metadata_mut().insert(
                 "authorization",
-                format!("Bearer {}", key.token.expose()).parse()?,
+                format!("Bearer {}", key.key.token.expose()).parse()?,
             );
             Ok(request)
         };
@@ -454,7 +475,7 @@ fn memory_and_tcp_peer_handlers_revalidate_domain_and_exact_reconciler_authority
             .ok_or("PVC reservation")?;
         let report = wire::ProviderReport {
             source: Some(wire::ProviderConnectionCheck {
-                provider_id: "provider".into(),
+                provider_id: key.provider_id.clone(),
                 instance_id: control.id.clone(),
                 connection_id: connected.connection_id.clone(),
             }),
@@ -466,6 +487,11 @@ fn memory_and_tcp_peer_handlers_revalidate_domain_and_exact_reconciler_authority
                     name: pvc.native().name().into(),
                     uid: Some("acknowledged-uid".into()),
                     execution_id: None,
+                    allocation: Some(wire::NativeAllocationWitness {
+                        computer_id: pvc.allocation().computer().into(),
+                        provider_id: pvc.allocation().provider().into(),
+                        execution_id: None,
+                    }),
                     absence_confirmed: false,
                     native: None,
                 }),
@@ -483,7 +509,7 @@ fn memory_and_tcp_peer_handlers_revalidate_domain_and_exact_reconciler_authority
             let mut request = Request::new(value);
             request.metadata_mut().insert(
                 "authorization",
-                format!("Bearer {}", key.token.expose()).parse()?,
+                format!("Bearer {}", key.key.token.expose()).parse()?,
             );
             Ok(request)
         };

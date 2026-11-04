@@ -1,4 +1,6 @@
 //! Both-engine native reservation/evidence and conservative retirement admission.
+#[path = "support/legacy.rs"]
+mod legacy;
 mod support;
 use base64::{Engine, engine::general_purpose::URL_SAFE};
 use chapchoo_crypto::{BearerSecret, CredentialCipher, RootKey};
@@ -75,7 +77,6 @@ fn seed(
 
 fn draft(id: &str, daemon: &str) -> Result<ExecutionDraft, Error> {
     Ok(ExecutionDraft {
-        id: id.into(),
         native: ExecutionResources::Docker {
             daemon: DockerDaemonId::parse(daemon.into())?,
             container_name: format!("container-{id}"),
@@ -90,15 +91,27 @@ async fn exercise(
     provider: BearerSecret,
     scoped_delete: bool,
 ) -> Result<(), Error> {
+    let team = store
+        .team_by_handle(&user.digest(), "scope", now()?)
+        .await?;
+    let agent = store
+        .agents(&user.digest(), &team.id, None, 1, now()?)
+        .await?
+        .remove(0);
+    let provider_id = agent.computer.provider_id.as_deref().ok_or("Provider")?;
+    let route = store
+        .resolve_provider_route(provider_id)
+        .await?
+        .ok_or("Provider route")?;
     let digest = provider.digest();
     let source = ProviderSource {
-        provider_id: "docker",
-        control_id: "control",
-        connection_id: "route",
+        provider_id,
+        control_id: &route.component.control_id,
+        connection_id: &route.component.connection_id,
         credential: &digest,
     };
     let scope = ComputerRequest {
-        computer_id: "computer",
+        computer_id: &agent.computer.id,
         request_id: "create",
     };
     assert!(matches!(
@@ -108,8 +121,9 @@ async fn exercise(
         Err(StoreError::Conflict)
     ));
     let reserved = store
-        .reserve_execution(&source, scope, &draft("first", "daemon:original")?)
+        .reserve_execution(&source, scope, &draft("original", "daemon:original")?)
         .await?;
+    let first = reserved.execution_id.as_str();
     assert_eq!(reserved.resources.len(), 2);
     assert!(
         reserved
@@ -133,13 +147,13 @@ async fn exercise(
         .clone();
     assert!(
         store
-            .claim_execution_dispatch(&source, scope, "first")
+            .claim_execution_dispatch(&source, scope, first)
             .await?
     );
-    store.mark_start_dispatched(&source, scope, "first").await?;
+    store.mark_start_dispatched(&source, scope, first).await?;
     assert!(
         store
-            .provider_delivery_snapshot(&source, scope, Some("first"))
+            .provider_delivery_snapshot(&source, scope, Some(first))
             .await?
             .execution
             .ok_or("Missing exact execution")?
@@ -157,10 +171,9 @@ async fn exercise(
         ]),
     )?);
     let full_id = NativeIdentity::DockerContainer(DockerContainerId::parse("a".repeat(64))?);
-    for (native, execution, identity) in [
-        (&saved, None, &volume),
-        (&container, Some("first"), &full_id),
-    ] {
+    for (native, execution, identity) in
+        [(&saved, None, &volume), (&container, Some(first), &full_id)]
+    {
         store
             .report_resource(
                 &source,
@@ -174,12 +187,12 @@ async fn exercise(
             .await?;
     }
     store
-        .report_execution_running(&source, scope, "first")
+        .report_execution_running(&source, scope, first)
         .await?;
     let foreign = NativeIdentity::DockerContainer(DockerContainerId::parse("b".repeat(64))?);
     assert!(
         store
-            .provider_delivery_snapshot(&source, scope, Some("first"))
+            .provider_delivery_snapshot(&source, scope, Some(first))
             .await?
             .execution
             .ok_or("Missing exact execution")?
@@ -193,7 +206,7 @@ async fn exercise(
                 scope,
                 ResourceReport {
                     native: &container,
-                    execution_id: Some("first"),
+                    execution_id: Some(first),
                     evidence: ResourceEvidence::OwnedPresent { identity: &foreign },
                 }
             )
@@ -227,19 +240,19 @@ async fn exercise(
         "Ordinary running intent cannot claim retirement"
     );
     let admission = store
-        .claim_native_retirement(&source, scope, Some("first"))
+        .claim_native_retirement(&source, scope, Some(first))
         .await?
         .ok_or("Terminal claim absent")?;
     assert_eq!(admission.previous_phase(), "COMPLETED");
     assert!(
         store
-            .claim_native_retirement(&source, scope, Some("first"))
+            .claim_native_retirement(&source, scope, Some(first))
             .await?
             .is_none()
     );
     assert!(
         store
-            .report_execution_running(&source, scope, "first")
+            .report_execution_running(&source, scope, first)
             .await
             .is_err(),
         "A late Running observation cannot clear admitted native retirement"
@@ -249,44 +262,44 @@ async fn exercise(
         .release_unstarted_native_retirement(&source, &admission)
         .await?;
     store
-        .report_execution_running(&source, scope, "first")
+        .report_execution_running(&source, scope, first)
         .await?;
     let _accepted = store
-        .claim_native_retirement(&source, scope, Some("first"))
+        .claim_native_retirement(&source, scope, Some(first))
         .await?
         .ok_or("Missing admission")?;
     // A user-relevant Blocked diagnostic is not definitive native NotStarted.
     // It cannot clear retirement and make late Running or a new Delete replay it.
     store
-        .report_lifecycle_issue(&source, scope, Some("first"), LifecyclePhase::Blocked)
+        .report_lifecycle_issue(&source, scope, Some(first), LifecyclePhase::Blocked)
         .await?;
     let current = store
         .managed_computers(&source, None, 20)
         .await?
         .into_iter()
-        .find(|computer| computer.id == "computer")
+        .find(|computer| computer.id == agent.computer.id)
         .ok_or("Missing admitted native Computer")?;
     assert_eq!(current.current_phase, "UNCERTAIN");
     assert!(
         store
-            .report_execution_running(&source, scope, "first")
+            .report_execution_running(&source, scope, first)
             .await
             .is_err()
     );
     assert!(
         store
-            .claim_native_retirement(&source, scope, Some("first"))
+            .claim_native_retirement(&source, scope, Some(first))
             .await?
             .is_none()
     );
     // A new Delete must retain uncertainty from possibly accepted prior effects.
     let delete_request = if scoped_delete {
-        store.delete_team(&user.digest(), "scope", now()?).await?;
+        store.delete_team(&user.digest(), &team.id, now()?).await?;
         let current = store
             .managed_computers(&source, None, 20)
             .await?
             .into_iter()
-            .find(|c| c.id == "computer")
+            .find(|c| c.id == agent.computer.id)
             .ok_or("Missing scoped cleanup")?;
         assert_eq!(current.current_phase, "UNCERTAIN");
         current.current_request_id
@@ -294,7 +307,7 @@ async fn exercise(
         let deleted = store
             .request_lifecycle(
                 &user.digest(),
-                "agent",
+                &agent.id,
                 &LifecycleRequest {
                     request_id: "delete".into(),
                     expected_request_id: "create".into(),
@@ -307,7 +320,7 @@ async fn exercise(
         "delete".into()
     };
     let deleting = ComputerRequest {
-        computer_id: "computer",
+        computer_id: &agent.computer.id,
         request_id: &delete_request,
     };
     assert!(
@@ -329,14 +342,14 @@ async fn exercise(
             deleting,
             ResourceReport {
                 native: &container,
-                execution_id: Some("first"),
+                execution_id: Some(first),
                 evidence: ResourceEvidence::DefinitivelyAbsent {
                     expected_identity: Some(&full_id),
                 },
             },
         )
         .await?;
-    store.retire_execution(&source, deleting, "first").await?;
+    store.retire_execution(&source, deleting, first).await?;
     assert!(
         store
             .confirm_computer_cleanup(&source, deleting)
@@ -420,12 +433,13 @@ fn sqlite_run(scoped_delete: bool) -> Result<(), Error> {
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("native.sqlite");
     let cipher = cipher()?;
-    prepare_sqlite(&path, &cipher)?;
     let user = BearerSecret::generate()?;
     let provider = BearerSecret::generate()?;
     let mut connection = diesel::SqliteConnection::establish(path.to_str().ok_or("Invalid path")?)?;
     connection.batch_execute("PRAGMA foreign_keys=ON")?;
+    legacy::sqlite(&mut connection, &cipher)?;
     connection.batch_execute(&seed(&cipher, &user, &provider, false)?)?;
+    prepare_sqlite(&path, &cipher)?;
     tokio::runtime::Runtime::new()?.block_on(async {
         exercise(
             Store::connect_sqlite(path, cipher).await?,
@@ -459,11 +473,12 @@ fn postgres_run(scoped_delete: bool) -> Result<(), Error> {
     let url = format!("{base}{separator}options=-csearch_path%3D{schema}");
     let result = (|| {
         let cipher = cipher()?;
-        prepare_postgres(&url, &cipher)?;
         let user = BearerSecret::generate()?;
         let provider = BearerSecret::generate()?;
         let mut connection = AsyncConnectionWrapper::<AsyncPgConnection>::establish(&url)?;
+        legacy::postgres(&mut connection, &cipher)?;
         connection.batch_execute(&seed(&cipher, &user, &provider, true)?)?;
+        prepare_postgres(&url, &cipher)?;
         tokio::runtime::Runtime::new()?.block_on(async {
             exercise(
                 Store::connect_postgres(url, cipher).await?,

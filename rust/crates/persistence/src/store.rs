@@ -246,6 +246,9 @@ mod tests {
     }
 
     async fn verify_cancellation(store: Store) -> Result<(), TestError> {
+        use crate::entity_id::{EntityId, IdentitySql};
+        let cancelled_id = EntityId::generate(1000)?;
+        let subsequent_id = EntityId::generate(1001)?;
         operation!(store, |connection, dialect| {
             diesel::sql_query(
                 dialect.query("CREATE TEMP TABLE cancellation_owner_marker(n BIGINT)"),
@@ -260,8 +263,9 @@ mod tests {
                 operation!(store, |connection, dialect| {
                     diesel::sql_query(dialect.query(
                         "INSERT INTO login_challenges(id,email_key,binding_hash,code_verifier,issued_at,expires_at)
-                         VALUES('cancelled','fixture@example.invalid',?,?,0,1000)",
+                         VALUES(?,'fixture@example.invalid',?,?,0,1000)",
                     ))
+                    .bind::<IdentitySql,_>(cancelled_id)
                     .bind::<diesel::sql_types::Binary,_>([1_u8;32].as_slice())
                     .bind::<diesel::sql_types::Binary,_>([2_u8;32].as_slice())
                     .execute(connection).await?;
@@ -293,15 +297,17 @@ mod tests {
                 "Cancelled connection must not return to the pool"
             );
             let count = diesel::sql_query(
-                dialect.query("SELECT count(*) AS n FROM login_challenges WHERE id='cancelled'"),
+                dialect.query("SELECT count(*) AS n FROM login_challenges WHERE id=?"),
             )
+            .bind::<IdentitySql, _>(cancelled_id)
             .get_result::<Count>(connection)
             .await?
             .n;
             diesel::sql_query(dialect.query(
                 "INSERT INTO login_challenges(id,email_key,binding_hash,code_verifier,issued_at,expires_at)
-                 VALUES('after-cancel','fixture@example.invalid',?,?,0,1000)",
+                 VALUES(?,'fixture@example.invalid',?,?,0,1000)",
             ))
+            .bind::<IdentitySql,_>(subsequent_id)
             .bind::<diesel::sql_types::Binary,_>([3_u8;32].as_slice())
             .bind::<diesel::sql_types::Binary,_>([4_u8;32].as_slice())
             .execute(connection).await?;
@@ -331,6 +337,9 @@ mod tests {
 
     #[test]
     fn cancelled_postgres_operation_retires_owned_lease() -> Result<(), TestError> {
+        let _fixture_guard = crate::preparation::POSTGRES_PREPARATION_TEST_LOCK
+            .lock()
+            .map_err(|_| "PostgreSQL preparation test lock poisoned")?;
         let base = std::env::var("CHAPCHOO_TEST_POSTGRES_URL")?;
         let mut control =
             <AsyncConnectionWrapper<AsyncPgConnection> as Connection>::establish(&base)?;

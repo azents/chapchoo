@@ -2,6 +2,8 @@ import type * as Wire from "@chapchoo/rpc-client/computers";
 import type { Timestamp } from "@chapchoo/rpc-client/timestamp";
 import { invalidResponse } from "./errors.js";
 import { timestampMilliseconds, validTimestamp } from "./validation.js";
+import type { AgentProfileImage } from "./agent-profile.js";
+export type { AgentPaletteKey, AgentProfileImage } from "./agent-profile.js";
 
 export type Power = "running" | "stopped" | "unknown";
 export type Connection = "connected" | "disconnected" | "unknown";
@@ -168,6 +170,22 @@ export interface AgentView {
 export interface ProviderChoice {
   id: string;
   name: string;
+}
+export function profileImages(
+  value: Wire.AgentProfileImages,
+): Page<AgentProfileImage> {
+  return page(
+    value.items.map((image) => {
+      if (!/^[a-z0-9][a-z0-9-]{0,127}(?![\s\S])/.test(image.assetKey))
+        return invalidResponse();
+      return {
+        id: text(image.id),
+        internalName: text(image.internalName),
+        assetKey: image.assetKey,
+      };
+    }),
+    value.nextAfter,
+  );
 }
 export interface ProviderView extends ProviderChoice {
   kind: "kubernetes" | "docker";

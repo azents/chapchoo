@@ -71,10 +71,7 @@ impl wire::team_management_server::TeamManagement for TeamsAdapter {
         let actor = input::actor(&request)?;
         let value = request.into_inner();
         input::id(&value.team_id)?;
-        let patch = TeamPatch {
-            name: value.name,
-            handle: value.handle,
-        };
+        let patch = TeamPatch { name: value.name };
         let result = self
             .context
             .service

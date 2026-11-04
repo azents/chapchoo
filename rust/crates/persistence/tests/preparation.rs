@@ -55,27 +55,29 @@ fn sqlite_preparation_and_read_only_admission() -> Result<(), Box<dyn Error + Se
     connection.batch_execute("PRAGMA foreign_keys=ON")?;
     // The composite owner FK is deferred, but rejects an ownerless commit.
     connection.batch_execute(
-        "INSERT INTO users(id,email_key,delivery_email,password_hash,is_admin,created_at,language,time_zone,region) VALUES('user-a','a@example.invalid','a@example.invalid','synthetic',0,0,'en','UTC','en-US')",
+        "INSERT INTO users(id,email_key,delivery_email,password_hash,is_admin,created_at,language,time_zone,region) VALUES(X'01900000000070008000000000000001','a@example.invalid','a@example.invalid','synthetic',0,0,'en','UTC','en-US')",
     )?;
     assert!(
         connection
             .transaction::<_, diesel::result::Error, _>(|connection| {
                 connection.batch_execute(
-                    "INSERT INTO teams(id,kind,name,handle,owner_user_id,created_at) VALUES('team-a','COLLABORATIVE','Team','team-a','user-a',0)",
+                    "INSERT INTO teams(id,kind,name,handle,owner_user_id,created_at) VALUES(X'01900000000070008000000000000002','COLLABORATIVE','Team','team-a',X'01900000000070008000000000000001',0)",
                 )
             })
             .is_err()
     );
     connection.transaction::<_, diesel::result::Error, _>(|connection| {
         connection.batch_execute(
-            "INSERT INTO teams(id,kind,name,handle,owner_user_id,created_at) VALUES('team-a','COLLABORATIVE','Team','team-a','user-a',0);
-             INSERT INTO memberships VALUES('team-a','user-a','MEMBER')",
+            "INSERT INTO teams(id,kind,name,handle,owner_user_id,created_at) VALUES(X'01900000000070008000000000000002','COLLABORATIVE','Team','team-a',X'01900000000070008000000000000001',0);
+             INSERT INTO memberships VALUES(X'01900000000070008000000000000002',X'01900000000070008000000000000001','MEMBER')",
         )
     })?;
     assert!(
         connection
             .transaction::<_, diesel::result::Error, _>(|connection| {
-                connection.batch_execute("DELETE FROM memberships WHERE team_id='team-a'")
+                connection.batch_execute(
+                    "DELETE FROM memberships WHERE team_id=X'01900000000070008000000000000002'",
+                )
             })
             .is_err()
     );
@@ -99,8 +101,9 @@ fn explicit_sqlite_preparation_resumes_before_first_key_binding()
     let path = directory.path().join("first-binding.sqlite");
     let mut connection =
         diesel::SqliteConnection::establish(path.to_str().ok_or("Invalid fixture path")?)?;
+    let pending = connection.pending_migrations(SQLITE_MIGRATIONS)?;
     connection
-        .run_pending_migrations(SQLITE_MIGRATIONS)
+        .run_migrations(&pending[..8])
         .map_err(|error| format!("Fixture migration failed: {error}"))?;
     drop(connection);
     let original = cipher(1)?;
@@ -150,21 +153,21 @@ fn postgres_preparation_in_schema(url: &str) -> Result<(), Box<dyn Error + Send 
     ));
     let mut connection = AsyncConnectionWrapper::<AsyncPgConnection>::establish(url)?;
     connection.batch_execute(
-        "INSERT INTO users(id,email_key,delivery_email,password_hash,is_admin,created_at,language,time_zone,region) VALUES('user-a','a@example.invalid','a@example.invalid','synthetic',FALSE,0,'en','UTC','en-US')",
+        "INSERT INTO users(id,email_key,delivery_email,password_hash,is_admin,created_at,language,time_zone,region) VALUES('01900000000070008000000000000001'::uuid,'a@example.invalid','a@example.invalid','synthetic',FALSE,0,'en','UTC','en-US')",
     )?;
     assert!(
         connection
             .transaction::<_, diesel::result::Error, _>(|connection| {
                 connection.batch_execute(
-                    "INSERT INTO teams(id,kind,name,handle,owner_user_id,created_at) VALUES('team-a','COLLABORATIVE','Team','team-a','user-a',0)",
+                    "INSERT INTO teams(id,kind,name,handle,owner_user_id,created_at) VALUES('01900000000070008000000000000002'::uuid,'COLLABORATIVE','Team','team-a','01900000000070008000000000000001'::uuid,0)",
                 )
             })
             .is_err()
     );
     connection.transaction::<_, diesel::result::Error, _>(|connection| {
         connection.batch_execute(
-            "INSERT INTO teams(id,kind,name,handle,owner_user_id,created_at) VALUES('team-a','COLLABORATIVE','Team','team-a','user-a',0);
-             INSERT INTO memberships VALUES('team-a','user-a','MEMBER')",
+            "INSERT INTO teams(id,kind,name,handle,owner_user_id,created_at) VALUES('01900000000070008000000000000002'::uuid,'COLLABORATIVE','Team','team-a','01900000000070008000000000000001'::uuid,0);
+             INSERT INTO memberships VALUES('01900000000070008000000000000002'::uuid,'01900000000070008000000000000001'::uuid,'MEMBER')",
         )
     })?;
     assert!(

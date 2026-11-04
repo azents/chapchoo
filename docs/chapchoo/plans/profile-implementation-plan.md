@@ -30,11 +30,16 @@ phase. No automatic merge or deployment. Shared title prefix:
    DB adapters, catalogue/profile/handle storage, repository-generated IDs,
    historical receipt and native witness preservation, crypto rewrap and complete
    PostgreSQL/SQLite preserving preparation. Update Service/private projections
-   and native allocation-name boundaries. Activation waits for matching contracts.
+   and native allocation-name boundaries. Include the minimum M1/M2/M6
+   wire/client dependencies required by complete acceptance: nullable immutable
+   Teams, canonical Provider authentication results, paged profile catalogue,
+   final creation fields and their existing single-screen form consumers.
+   Do not preserve a hidden old-input mode to defer these dependencies.
 3. **Public contracts and scoped web behavior** (M1..M6, M12): generated wire/Node
    contracts, DTO validation, authoritative availability and profile update,
    team/null/immutable handle and exact Team+handle reads, General/Admin routing,
-   selector, single-screen creation, profile/list/detail and locale copy/stories.
+   selector, Team-qualified single-screen creation routing, profile/list/detail
+   and remaining locale copy/stories.
 4. **Integrated preservation and evidence** (M8..M12): minimal existing/new browser
    journeys, both-engine populated migration and actual RPC, native saved-resource
    continuity tests, maintenance operator procedure, visual verification, Spec
@@ -74,6 +79,14 @@ Design; local reversible details remain root-owned.
 
 ## Checkpoint
 
-Phase 1 starting. No product implementation previously existed. Approved baseline
-is pinned to source 7ba03553; existing untracked source experiments in the original
-checkout are protected. No migration or resource effect has run.
+Phase 1 is open as PR #71 at 9a6a549 with green CI and no Codex findings.
+Phase 2 is committed at `61b1a36` after the full preserving transition,
+compact runtime/native boundaries and minimum creation consumers. The complete
+Rust gate, actual Node/Rust RPC on both engines, whole TypeScript checks and the
+assembled Computer browser journey pass. The single integrated review found one
+SQLite NUL grammar gap; direct SQL regressions and the same reviewer's focused
+confirmation resolved it. Normal commit hooks pass. Its stacked PR is the next
+delivery action before phase 3 begins.
+The approved baseline is pinned to source 7ba03553; existing unrelated source
+experiments remain protected. Only isolated fixture preparation has executed;
+no deployed migration, native resource effect, merge or deployment has run.

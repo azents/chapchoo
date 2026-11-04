@@ -98,7 +98,7 @@ async fn external_docker_provider_reaches_scoped_control_without_db_root_or_ambi
         let configured = tokio::time::timeout(Duration::from_secs(10), received.recv())
             .await?
             .ok_or("Docker Provider did not reach Control")?;
-        assert_eq!(configured.provider_id, "external-docker");
+        assert_eq!(configured.registration_key, "external-docker");
         assert_eq!(configured.kind, wire::ProviderKind::Docker as i32);
         assert_eq!(
             configured.docker_daemon_id.as_deref(),

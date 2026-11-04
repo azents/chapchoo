@@ -1,12 +1,18 @@
 import { computerCopy } from "@chapchoo/web-core/computer-messages";
+import { creationCopy } from "../creationCopy";
 import { AgentCreation } from "./AgentCreation";
+import type { InitialAgentCreation } from "../creationTypes";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 
 const provider = { id: "provider", name: "Community Kubernetes" };
-const initial = {
+const image = { id: "image", internalName: "Corgi", assetKey: "03-corgi" };
+const initial: InitialAgentCreation = {
   teamId: "team",
   identity: "owner@example.invalid",
   providers: { items: [provider], nextAfter: null },
+  images: { items: [image], nextAfter: null },
+  initialImage: image,
+  initialPalette: "sage",
   renderedAt: 1793577600000,
 };
 const meta = {
@@ -17,11 +23,26 @@ const meta = {
     basePath: "",
     access: "authorized",
     copy: computerCopy("en-US"),
+    profileCopy: creationCopy("en-US"),
     pending: false,
     error: null,
     creationLocked: false,
     name: "Research companion",
     providerId: "provider",
+    handle: {
+      draft: {
+        source: "automatic",
+        kind: "agent",
+        base: "research-companion",
+        candidate: "research-compani",
+      },
+      status: "available",
+    },
+    image,
+    paletteKey: "sage",
+    images: initial.images,
+    imageAfter: null,
+    imagesUnavailable: false,
     providers: {
       type: "loaded",
       items: [provider],
@@ -32,6 +53,10 @@ const meta = {
     onName: (): void => {},
     onProvider: (): void => {},
     onProviderPage: (): void => {},
+    onHandle: (): void => {},
+    onImage: (): void => {},
+    onPalette: (): void => {},
+    onImagePage: (): void => {},
     onCreate: (): void => {},
     onRefresh: (): void => {},
     onLogout: (): void => {},
@@ -81,9 +106,29 @@ export const UnresolvedCreationWithoutProvider: Story = {
   },
 };
 export const Pending: Story = { args: { pending: true, creationLocked: true } };
+export const CheckingHandle: Story = {
+  args: {
+    handle: {
+      draft: { source: "manual", candidate: "my-agent" },
+      status: "checking",
+    },
+  },
+};
+export const OccupiedHandle: Story = {
+  args: {
+    handle: {
+      draft: { source: "manual", candidate: "my-agent" },
+      status: "occupied",
+    },
+  },
+};
+export const CatalogueUnavailable: Story = {
+  args: { imagesUnavailable: true },
+};
 export const Japanese: Story = {
   args: {
     copy: computerCopy("ja-JP"),
+    profileCopy: creationCopy("ja-JP"),
     providers: Empty.args?.providers,
     name: "",
     providerId: "",
@@ -92,6 +137,7 @@ export const Japanese: Story = {
 export const French: Story = {
   args: {
     copy: computerCopy("fr-FR"),
+    profileCopy: creationCopy("fr-FR"),
     providers: Empty.args?.providers,
     name: "",
     providerId: "",
@@ -100,6 +146,7 @@ export const French: Story = {
 export const Korean: Story = {
   args: {
     copy: computerCopy("ko-KR"),
+    profileCopy: creationCopy("ko-KR"),
     providers: Empty.args?.providers,
     name: "",
     providerId: "",

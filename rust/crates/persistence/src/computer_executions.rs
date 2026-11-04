@@ -8,6 +8,7 @@ use crate::{
     component_keys::{authenticate_provider, key_matches},
     computers::valid_id,
     directory::database_now as db_now,
+    entity_id::{EntityId, EntityKind, IdentitySql},
     store::{Dialect, operation},
 };
 use chapchoo_crypto::SecretDigest;
@@ -58,7 +59,6 @@ pub(crate) fn validate_native_inventory(
 
 #[derive(Debug)]
 pub struct ExecutionDraft {
-    pub id: String,
     pub native: ExecutionResources,
 }
 
@@ -147,32 +147,71 @@ impl NativeRetirementAdmission {
     }
 }
 
-#[derive(Debug, Clone, diesel::QueryableByName)]
+#[derive(Debug, Clone)]
 pub struct ManagedComputer {
-    #[diesel(sql_type=Text)]
     pub id: String,
-    #[diesel(sql_type=Text)]
     pub current_request_id: String,
-    #[diesel(sql_type=Text)]
     pub current_action: String,
-    #[diesel(sql_type=Text)]
     pub current_phase: String,
-    #[diesel(sql_type=Nullable<BigInt>)]
     pub prepare_admitted_at: Option<i64>,
-    #[diesel(sql_type=Text)]
     pub desired_state: String,
-    #[diesel(sql_type=Nullable<Text>)]
     pub current_execution_id: Option<String>,
-    #[diesel(sql_type=Nullable<Text>)]
     pub expected_old_execution_id: Option<String>,
-    #[diesel(sql_type=Text)]
     pub saved_environment: String,
-    #[diesel(sql_type=Nullable<Text>)]
     pub environment_source_connection_id: Option<String>,
-    #[diesel(sql_type=Nullable<BigInt>)]
     pub agent_removed_at: Option<i64>,
-    #[diesel(sql_type=Nullable<BigInt>)]
     pub cleanup_completed_at: Option<i64>,
+}
+#[derive(diesel::QueryableByName)]
+pub(crate) struct ManagedComputerRow {
+    #[diesel(sql_type=IdentitySql)]
+    id: EntityId,
+    #[diesel(sql_type=Text)]
+    current_request_id: String,
+    #[diesel(sql_type=Text)]
+    current_action: String,
+    #[diesel(sql_type=Text)]
+    current_phase: String,
+    #[diesel(sql_type=Nullable<BigInt>)]
+    prepare_admitted_at: Option<i64>,
+    #[diesel(sql_type=Text)]
+    desired_state: String,
+    #[diesel(sql_type=Nullable<IdentitySql>)]
+    current_execution_id: Option<EntityId>,
+    #[diesel(sql_type=Nullable<IdentitySql>)]
+    expected_old_execution_id: Option<EntityId>,
+    #[diesel(sql_type=Text)]
+    saved_environment: String,
+    #[diesel(sql_type=Nullable<IdentitySql>)]
+    environment_source_connection_id: Option<EntityId>,
+    #[diesel(sql_type=Nullable<BigInt>)]
+    agent_removed_at: Option<i64>,
+    #[diesel(sql_type=Nullable<BigInt>)]
+    cleanup_completed_at: Option<i64>,
+}
+impl From<ManagedComputerRow> for ManagedComputer {
+    fn from(row: ManagedComputerRow) -> Self {
+        Self {
+            id: row.id.to_dto(EntityKind::Computer),
+            current_request_id: row.current_request_id,
+            current_action: row.current_action,
+            current_phase: row.current_phase,
+            prepare_admitted_at: row.prepare_admitted_at,
+            desired_state: row.desired_state,
+            current_execution_id: row
+                .current_execution_id
+                .map(|id| id.to_dto(EntityKind::Execution)),
+            expected_old_execution_id: row
+                .expected_old_execution_id
+                .map(|id| id.to_dto(EntityKind::Execution)),
+            saved_environment: row.saved_environment,
+            environment_source_connection_id: row
+                .environment_source_connection_id
+                .map(|id| id.to_dto(EntityKind::Connection)),
+            agent_removed_at: row.agent_removed_at,
+            cleanup_completed_at: row.cleanup_completed_at,
+        }
+    }
 }
 
 #[derive(diesel::QueryableByName)]
@@ -236,9 +275,13 @@ macro_rules! current_source {
             Dialect::Sqlite => "SELECT * FROM provider_connections WHERE provider_id=?",
         };
         let route = diesel::sql_query($dialect.query(route_query))
-            .bind::<Text, _>(source.provider_id)
-            .get_result::<$crate::ComponentRoute>($connection)
+            .bind::<$crate::entity_id::IdentitySql, _>($crate::entity_id::EntityId::from_dto(
+                $crate::entity_id::EntityKind::Provider,
+                source.provider_id,
+            )?)
+            .get_result::<$crate::directory::ComponentRouteRow>($connection)
             .await
+            .map($crate::ComponentRoute::from)
             .optional()?
             .ok_or(StoreError::Unauthenticated)?;
         if route.control_id != source.control_id
@@ -252,9 +295,13 @@ macro_rules! current_source {
             Dialect::Sqlite => "SELECT * FROM control_instances WHERE id=?",
         };
         let control = diesel::sql_query($dialect.query(control_query))
-            .bind::<Text, _>(source.control_id)
-            .get_result::<$crate::ControlRegistration>($connection)
+            .bind::<$crate::entity_id::IdentitySql, _>($crate::entity_id::EntityId::from_dto(
+                $crate::entity_id::EntityKind::ControlInstance,
+                source.control_id,
+            )?)
+            .get_result::<$crate::directory::ControlRow>($connection)
             .await
+            .map($crate::ControlRegistration::from)
             .optional()?
             .ok_or(StoreError::Unauthenticated)?;
         let now = $crate::directory::database_now!($connection, $dialect);
@@ -275,10 +322,17 @@ pub(crate) use current_source;
 macro_rules! current_computer {
     ($connection:expr,$dialect:expr,$source:expr,$scope:expr) => {{
         let row = diesel::sql_query($dialect.query(computer_lock($dialect)))
-            .bind::<Text, _>($scope.computer_id)
-            .bind::<Text, _>($source.provider_id)
-            .get_result::<ManagedComputer>($connection)
+            .bind::<IdentitySql, _>(EntityId::from_dto(
+                EntityKind::Computer,
+                $scope.computer_id,
+            )?)
+            .bind::<IdentitySql, _>(EntityId::from_dto(
+                EntityKind::Provider,
+                $source.provider_id,
+            )?)
+            .get_result::<ManagedComputerRow>($connection)
             .await
+            .map(ManagedComputer::from)
             .optional()?
             .ok_or(StoreError::NotFound)?;
         if row.current_request_id != $scope.request_id {
@@ -292,16 +346,16 @@ macro_rules! current_computer {
 macro_rules! inventory {
     ($connection:expr,$dialect:expr,$computer:expr) => {{
         diesel::sql_query($dialect.query("SELECT * FROM computer_resources WHERE computer_id=? ORDER BY resource_kind,native_scope,name"))
-            .bind::<Text,_>($computer).load::<ResourceRow>($connection).await?
+            .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Computer,$computer)?).load::<ResourceRow>($connection).await?
             .into_iter().map(ManagedResource::try_from).collect::<Result<Vec<_>,StoreError>>()?
     }};
 }
 macro_rules! revoke_execution {
     ($connection:expr,$dialect:expr,$execution:expr,$now:expr) => {{
         diesel::sql_query($dialect.query("DELETE FROM connector_connections WHERE session_id IN (SELECT id FROM connector_sessions WHERE execution_id=?)"))
-            .bind::<Text,_>($execution).execute($connection).await?;
+            .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Execution,$execution)?).execute($connection).await?;
         diesel::sql_query($dialect.query("UPDATE connector_sessions SET revoked_at=COALESCE(revoked_at,?),initial_nonce=NULL,initial_ciphertext=NULL,current_hash=NULL,previous_hash=NULL,previous_valid_until=NULL,issued_at=NULL,expires_at=NULL,current_request_id=NULL,recovery_nonce=NULL,recovery_ciphertext=NULL WHERE execution_id=?"))
-            .bind::<BigInt,_>($now).bind::<Text,_>($execution).execute($connection).await?;
+            .bind::<BigInt,_>($now).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Execution,$execution)?).execute($connection).await?;
     }};
 }
 
@@ -328,7 +382,7 @@ impl Store {
                 return Err(StoreError::InvalidTransition);
             }
             let live = diesel::sql_query(dialect.query("SELECT count(*) AS n FROM computer_executions WHERE computer_id=? AND retired_at IS NULL"))
-                .bind::<Text,_>(scope.computer_id).get_result::<Count>(connection).await?;
+                .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Computer,scope.computer_id)?).get_result::<Count>(connection).await?;
             if live.n != 0 {
                 return Err(StoreError::InvalidTransition);
             }
@@ -388,7 +442,7 @@ impl Store {
             let changed = diesel::sql_query(dialect.query(
                 "UPDATE computers SET current_phase='UNCERTAIN',expected_old_execution_id=CASE WHEN ? THEN current_execution_id ELSE expected_old_execution_id END WHERE id=? AND current_request_id=? AND current_phase=?",
             ))
-                .bind::<Bool,_>(terminal).bind::<Text,_>(scope.computer_id)
+                .bind::<Bool,_>(terminal).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Computer,scope.computer_id)?)
                 .bind::<Text,_>(scope.request_id).bind::<Text,_>(&current.current_phase)
                 .execute(connection).await?;
             if changed != 1 {
@@ -438,8 +492,8 @@ impl Store {
             diesel::sql_query(dialect.query(
                 "UPDATE computers SET current_phase=?,expected_old_execution_id=? WHERE id=? AND current_request_id=? AND current_phase='UNCERTAIN'",
             )).bind::<Text,_>(&admission.previous_phase)
-                .bind::<Nullable<Text>,_>(&admission.previous_expected_old)
-                .bind::<Text,_>(scope.computer_id).bind::<Text,_>(scope.request_id)
+                .bind::<Nullable<IdentitySql>,_>(admission.previous_expected_old.as_deref().map(|id|EntityId::from_dto(EntityKind::Execution,id)).transpose()?)
+                .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Computer,scope.computer_id)?).bind::<Text,_>(scope.request_id)
                 .execute(connection).await?;
             Ok(())
         })
@@ -466,7 +520,7 @@ impl Store {
             }
             let now = db_now!(connection, dialect);
             Ok(diesel::sql_query(dialect.query("UPDATE computers SET prepare_admitted_at=? WHERE id=? AND current_request_id=? AND current_execution_id=? AND prepare_admitted_at IS NULL"))
-                .bind::<BigInt,_>(now).bind::<Text,_>(scope.computer_id).bind::<Text,_>(scope.request_id).bind::<Text,_>(execution).execute(connection).await?==1)
+                .bind::<BigInt,_>(now).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Computer,scope.computer_id)?).bind::<Text,_>(scope.request_id).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Execution,execution)?).execute(connection).await?==1)
         })
     }
     /// Clear only a claim whose call was definitely rejected before enqueue.
@@ -483,7 +537,7 @@ impl Store {
             let _ = current_source!(connection, dialect, source);
             let _ = current_computer!(connection, dialect, source, scope);
             diesel::sql_query(dialect.query("UPDATE computers SET prepare_admitted_at=NULL WHERE id=? AND current_request_id=? AND current_execution_id=? AND current_phase='STARTING' AND initial_start_dispatch_at IS NULL"))
-                .bind::<Text,_>(scope.computer_id).bind::<Text,_>(scope.request_id).bind::<Text,_>(execution).execute(connection).await?;
+                .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Computer,scope.computer_id)?).bind::<Text,_>(scope.request_id).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Execution,execution)?).execute(connection).await?;
             Ok(())
         })
     }
@@ -517,7 +571,7 @@ impl Store {
                 return Err(StoreError::InvalidTransition);
             }
             diesel::sql_query(dialect.query("UPDATE computers SET current_phase='BLOCKED',prepare_admitted_at=NULL WHERE id=? AND current_request_id=? AND current_execution_id=?"))
-                .bind::<Text,_>(scope.computer_id).bind::<Text,_>(scope.request_id).bind::<Text,_>(execution).execute(connection).await?;
+                .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Computer,scope.computer_id)?).bind::<Text,_>(scope.request_id).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Execution,execution)?).execute(connection).await?;
             Ok(())
         })
     }
@@ -529,9 +583,13 @@ impl Store {
         operation!(self, |connection, dialect| {
             Ok(
                 diesel::sql_query(dialect.query("SELECT * FROM computers WHERE id=?"))
-                    .bind::<Text, _>(&identity.computer_id)
-                    .get_result::<ManagedComputer>(connection)
-                    .await?,
+                    .bind::<IdentitySql, _>(EntityId::from_dto(
+                        EntityKind::Computer,
+                        &identity.computer_id,
+                    )?)
+                    .get_result::<ManagedComputerRow>(connection)
+                    .await
+                    .map(ManagedComputer::from)?,
             )
         })
     }
@@ -555,9 +613,13 @@ impl Store {
                 return Err(StoreError::Conflict);
             }
             let computer = diesel::sql_query(dialect.query("SELECT * FROM computers WHERE id=?"))
-                .bind::<Text, _>(scope.computer_id)
-                .get_result::<crate::DeliveryComputer>(connection)
-                .await?;
+                .bind::<IdentitySql, _>(EntityId::from_dto(
+                    EntityKind::Computer,
+                    scope.computer_id,
+                )?)
+                .get_result::<crate::delivery::DeliveryComputerRow>(connection)
+                .await
+                .map(crate::DeliveryComputer::from)?;
             if computer.cleanup_completed_at.is_some() {
                 return Err(StoreError::Conflict);
             }
@@ -567,10 +629,14 @@ impl Store {
                         diesel::sql_query(dialect.query(
                             "SELECT * FROM computer_executions WHERE id=? AND computer_id=?",
                         ))
-                        .bind::<Text, _>(id)
-                        .bind::<Text, _>(scope.computer_id)
-                        .get_result::<crate::DeliveryExecution>(connection)
+                        .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::Execution, id)?)
+                        .bind::<IdentitySql, _>(EntityId::from_dto(
+                            EntityKind::Computer,
+                            scope.computer_id,
+                        )?)
+                        .get_result::<crate::delivery::DeliveryExecutionRow>(connection)
                         .await
+                        .map(crate::DeliveryExecution::from)
                         .optional()?
                         .ok_or(StoreError::NotFound)?,
                     )
@@ -609,9 +675,6 @@ impl Store {
     ) -> Result<ExecutionReservation, StoreError> {
         validate_source(source)?;
         validate_scope(scope)?;
-        if !valid_id(&draft.id) {
-            return Err(StoreError::InvalidInput);
-        }
         let native_scope = draft.scope()?;
         let reservations = draft.reservations(&native_scope)?;
         operation!(self, |connection, dialect| {
@@ -634,8 +697,11 @@ impl Store {
                 let execution = diesel::sql_query(
                     dialect.query("SELECT * FROM computer_executions WHERE id=? AND computer_id=?"),
                 )
-                .bind::<Text, _>(&execution_id)
-                .bind::<Text, _>(scope.computer_id)
+                .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::Execution, &execution_id)?)
+                .bind::<IdentitySql, _>(EntityId::from_dto(
+                    EntityKind::Computer,
+                    scope.computer_id,
+                )?)
                 .get_result::<Execution>(connection)
                 .await?;
                 if execution.retired_at.is_some() {
@@ -665,7 +731,7 @@ impl Store {
                             && r.source_connection_id.as_deref() == Some(source.connection_id)
                     }));
             let prior_running = diesel::sql_query(dialect.query("SELECT count(*) AS n FROM computer_executions WHERE computer_id=? AND running_confirmed_at IS NOT NULL"))
-                .bind::<Text,_>(scope.computer_id).get_result::<Count>(connection).await?;
+                .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Computer,scope.computer_id)?).get_result::<Count>(connection).await?;
             let initial = current.current_action == "CREATE" && prior_running.n == 0;
             if (initial && !provider.can_create) || (!initial && !provider.can_start) {
                 return Err(StoreError::InvalidTransition);
@@ -683,21 +749,26 @@ impl Store {
                 let execution = diesel::sql_query(
                     dialect.query("SELECT * FROM computer_executions WHERE id=? AND computer_id=?"),
                 )
-                .bind::<Text, _>(&old)
-                .bind::<Text, _>(scope.computer_id)
+                .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::Execution, &old)?)
+                .bind::<IdentitySql, _>(EntityId::from_dto(
+                    EntityKind::Computer,
+                    scope.computer_id,
+                )?)
                 .get_result::<Execution>(connection)
                 .await?;
                 if execution.retired_at.is_none() {
                     return Err(StoreError::InvalidTransition);
                 }
             }
+            let assigned = EntityId::generate(now)?;
+            let assigned_dto = assigned.to_dto(EntityKind::Execution);
             diesel::sql_query(
                 dialect.query(
                     "INSERT INTO computer_executions(id,computer_id,initial_allocation,created_at) VALUES(?,?,?,?)",
                 ),
             )
-            .bind::<Text, _>(&draft.id)
-            .bind::<Text, _>(scope.computer_id)
+            .bind::<IdentitySql, _>(assigned)
+            .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::Computer,scope.computer_id)?)
             .bind::<Bool, _>(initial)
             .bind::<BigInt, _>(now)
             .execute(connection)
@@ -707,14 +778,17 @@ impl Store {
                 if saved_role && saved.is_some() {
                     continue;
                 }
-                let execution = (!saved_role).then_some(draft.id.as_str());
-                diesel::sql_query(dialect.query("INSERT INTO computer_resources(computer_id,provider_id,resource_kind,native_scope_kind,native_scope,name,execution_id,presence) VALUES(?,?,?,?,?,?,?,'UNKNOWN')"))
-                    .bind::<Text,_>(scope.computer_id).bind::<Text,_>(source.provider_id).bind::<Text,_>(native.kind().as_str()).bind::<Text,_>(native.scope().kind_str()).bind::<Text,_>(native.scope().as_str()).bind::<Text,_>(native.name()).bind::<Nullable<Text>,_>(execution).execute(connection).await?;
+                let execution = (!saved_role).then_some(assigned);
+                let allocation_execution = (!saved_role).then_some(assigned_dto.as_str());
+                diesel::sql_query(dialect.query("INSERT INTO computer_resources(computer_id,provider_id,resource_kind,native_scope_kind,native_scope,name,execution_id,presence,allocation_computer_id,allocation_provider_id,allocation_execution_id) VALUES(?,?,?,?,?,?,?,'UNKNOWN',?,?,?)"))
+                    .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Computer,scope.computer_id)?).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Provider,source.provider_id)?)
+                    .bind::<Text,_>(native.kind().as_str()).bind::<Text,_>(native.scope().kind_str()).bind::<Text,_>(native.scope().as_str()).bind::<Text,_>(native.name())
+                    .bind::<Nullable<IdentitySql>,_>(execution).bind::<Text,_>(scope.computer_id).bind::<Text,_>(source.provider_id).bind::<Nullable<Text>,_>(allocation_execution).execute(connection).await?;
             }
             diesel::sql_query(dialect.query("UPDATE computers SET current_execution_id=?,current_phase='STARTING',observed_power='UNKNOWN',power_source_connection_id=NULL,power_source_execution_id=NULL,prepare_admitted_at=NULL,initial_start_dispatch_at=NULL WHERE id=?"))
-                .bind::<Text,_>(&draft.id).bind::<Text,_>(scope.computer_id).execute(connection).await?;
+                .bind::<IdentitySql,_>(assigned).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Computer,scope.computer_id)?).execute(connection).await?;
             Ok(ExecutionReservation {
-                execution_id: draft.id.clone(),
+                execution_id: assigned_dto,
                 initial_allocation: initial,
                 resources: inventory!(connection, dialect, scope.computer_id),
             })
@@ -746,7 +820,7 @@ impl Store {
                 return Err(StoreError::Conflict);
             }
             let resource: ManagedResource = diesel::sql_query(dialect.query("SELECT * FROM computer_resources WHERE computer_id=? AND resource_kind=? AND native_scope_kind=? AND native_scope=? AND name=?"))
-                .bind::<Text,_>(scope.computer_id).bind::<Text,_>(report.native.kind().as_str()).bind::<Text,_>(report.native.scope().kind_str()).bind::<Text,_>(report.native.scope().as_str()).bind::<Text,_>(report.native.name()).get_result::<ResourceRow>(connection).await.optional()?.ok_or(StoreError::NotFound)?.try_into()?;
+                .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Computer,scope.computer_id)?).bind::<Text,_>(report.native.kind().as_str()).bind::<Text,_>(report.native.scope().kind_str()).bind::<Text,_>(report.native.scope().as_str()).bind::<Text,_>(report.native.name()).get_result::<ResourceRow>(connection).await.optional()?.ok_or(StoreError::NotFound)?.try_into()?;
             if resource.execution_id.as_deref() != report.execution_id {
                 return Err(StoreError::Conflict);
             }
@@ -767,8 +841,14 @@ impl Store {
                         let state = diesel::sql_query(dialect.query(
                             "SELECT * FROM computer_executions WHERE id=? AND computer_id=?",
                         ))
-                        .bind::<Text, _>(execution)
-                        .bind::<Text, _>(scope.computer_id)
+                        .bind::<IdentitySql, _>(EntityId::from_dto(
+                            EntityKind::Execution,
+                            execution,
+                        )?)
+                        .bind::<IdentitySql, _>(EntityId::from_dto(
+                            EntityKind::Computer,
+                            scope.computer_id,
+                        )?)
                         .get_result::<Execution>(connection)
                         .await?;
                         if state.retired_at.is_some() {
@@ -788,10 +868,10 @@ impl Store {
             let columns = identity_columns(identity)?;
             diesel::sql_query(dialect.query("UPDATE computer_resources SET resource_uid=COALESCE(resource_uid,?),docker_container_id=COALESCE(docker_container_id,?),docker_volume_metadata=COALESCE(docker_volume_metadata,?),presence=?,observed_at=?,source_connection_id=?,absence_confirmed_at=CASE WHEN ? THEN NULL ELSE COALESCE(absence_confirmed_at,?) END WHERE computer_id=? AND resource_kind=? AND native_scope_kind=? AND native_scope=? AND name=?"))
                 .bind::<Nullable<Text>,_>(columns.uid).bind::<Nullable<Text>,_>(columns.container_id).bind::<Nullable<Text>,_>(columns.volume_metadata)
-                .bind::<Text,_>(presence).bind::<BigInt,_>(now).bind::<Text,_>(source.connection_id)
+                .bind::<Text,_>(presence).bind::<BigInt,_>(now).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Connection,source.connection_id)?)
                 .bind::<Bool,_>(resource.identity.is_none() && presence=="PRESENT")
                 .bind::<Nullable<BigInt>,_>(if presence == "ABSENT" { Some(now) } else { None })
-                .bind::<Text,_>(scope.computer_id).bind::<Text,_>(report.native.kind().as_str()).bind::<Text,_>(report.native.scope().kind_str()).bind::<Text,_>(report.native.scope().as_str()).bind::<Text,_>(report.native.name()).execute(connection).await?;
+                .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Computer,scope.computer_id)?).bind::<Text,_>(report.native.kind().as_str()).bind::<Text,_>(report.native.scope().kind_str()).bind::<Text,_>(report.native.scope().as_str()).bind::<Text,_>(report.native.name()).execute(connection).await?;
             if report.native.kind().role() == ResourceRole::SavedEnvironment {
                 let saved = match presence {
                     "PRESENT" => "VERIFIED",
@@ -799,7 +879,7 @@ impl Store {
                     _ => "UNKNOWN",
                 };
                 diesel::sql_query(dialect.query("UPDATE computers SET saved_environment=?,environment_source_connection_id=?,environment_observed_at=? WHERE id=?"))
-                    .bind::<Text,_>(saved).bind::<Text,_>(source.connection_id).bind::<BigInt,_>(now).bind::<Text,_>(scope.computer_id).execute(connection).await?;
+                    .bind::<Text,_>(saved).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Connection,source.connection_id)?).bind::<BigInt,_>(now).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Computer,scope.computer_id)?).execute(connection).await?;
             }
             Ok(())
         })
@@ -830,8 +910,8 @@ impl Store {
             let execution = diesel::sql_query(
                 dialect.query("SELECT * FROM computer_executions WHERE id=? AND computer_id=?"),
             )
-            .bind::<Text, _>(execution_id)
-            .bind::<Text, _>(scope.computer_id)
+            .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::Execution, execution_id)?)
+            .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::Computer, scope.computer_id)?)
             .get_result::<Execution>(connection)
             .await?;
             if execution.retired_at.is_some() {
@@ -842,7 +922,7 @@ impl Store {
                 return Err(StoreError::InvalidTransition);
             }
             diesel::sql_query(dialect.query("UPDATE computers SET initial_start_dispatch_at=COALESCE(initial_start_dispatch_at,?) WHERE id=?"))
-                .bind::<BigInt,_>(now).bind::<Text,_>(scope.computer_id).execute(connection).await?;
+                .bind::<BigInt,_>(now).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Computer,scope.computer_id)?).execute(connection).await?;
             Ok(())
         })
     }
@@ -889,9 +969,9 @@ impl Store {
                 }
             }
             diesel::sql_query(dialect.query("UPDATE computer_executions SET running_confirmed_at=COALESCE(running_confirmed_at,?) WHERE id=? AND computer_id=?"))
-                .bind::<BigInt,_>(now).bind::<Text,_>(execution_id).bind::<Text,_>(scope.computer_id).execute(connection).await?;
+                .bind::<BigInt,_>(now).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Execution,execution_id)?).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Computer,scope.computer_id)?).execute(connection).await?;
             diesel::sql_query(dialect.query("UPDATE computers SET current_phase='COMPLETED',observed_power='RUNNING',power_observed_at=?,power_source_connection_id=?,power_source_execution_id=? WHERE id=?"))
-                .bind::<BigInt,_>(now).bind::<Text,_>(source.connection_id).bind::<Text,_>(execution_id).bind::<Text,_>(scope.computer_id).execute(connection).await?;
+                .bind::<BigInt,_>(now).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Connection,source.connection_id)?).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Execution,execution_id)?).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Computer,scope.computer_id)?).execute(connection).await?;
             Ok(())
         })
     }
@@ -919,8 +999,14 @@ impl Store {
                         diesel::sql_query(dialect.query(
                             "SELECT * FROM computer_executions WHERE id=? AND computer_id=?",
                         ))
-                        .bind::<Text, _>(execution_id)
-                        .bind::<Text, _>(scope.computer_id)
+                        .bind::<IdentitySql, _>(EntityId::from_dto(
+                            EntityKind::Execution,
+                            execution_id,
+                        )?)
+                        .bind::<IdentitySql, _>(EntityId::from_dto(
+                            EntityKind::Computer,
+                            scope.computer_id,
+                        )?)
                         .get_result::<Execution>(connection)
                         .await?;
                     if previous.retired_at.is_some() {
@@ -940,8 +1026,8 @@ impl Store {
                         // Reconnect must freshly establish stopped power. This
                         // replay changes no lifecycle phase or dispatch interval.
                         diesel::sql_query(dialect.query("UPDATE computers SET observed_power='STOPPED',power_observed_at=?,power_source_connection_id=?,power_source_execution_id=NULL WHERE id=?"))
-                            .bind::<BigInt,_>(now).bind::<Text,_>(source.connection_id)
-                            .bind::<Text,_>(scope.computer_id).execute(connection).await?;
+                            .bind::<BigInt,_>(now).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Connection,source.connection_id)?)
+                            .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Computer,scope.computer_id)?).execute(connection).await?;
                         return Ok(());
                     }
                 }
@@ -961,12 +1047,12 @@ impl Store {
             let execution = diesel::sql_query(
                 dialect.query("SELECT * FROM computer_executions WHERE id=? AND computer_id=?"),
             )
-            .bind::<Text, _>(execution_id)
-            .bind::<Text, _>(scope.computer_id)
+            .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::Execution, execution_id)?)
+            .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::Computer, scope.computer_id)?)
             .get_result::<Execution>(connection)
             .await?;
             diesel::sql_query(dialect.query("UPDATE computer_executions SET retired_at=COALESCE(retired_at,?) WHERE id=? AND computer_id=?"))
-                .bind::<BigInt,_>(now).bind::<Text,_>(execution_id).bind::<Text,_>(scope.computer_id).execute(connection).await?;
+                .bind::<BigInt,_>(now).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Execution,execution_id)?).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Computer,scope.computer_id)?).execute(connection).await?;
             let phase = match current.desired_state.as_str() {
                 "DELETING" if current.current_phase == "UNCERTAIN" => "UNCERTAIN",
                 "DELETING" => "DELETING",
@@ -975,9 +1061,9 @@ impl Store {
                 _ => return Err(StoreError::Integrity),
             };
             diesel::sql_query(dialect.query("UPDATE computers SET current_execution_id=NULL,expected_old_execution_id=?,current_phase=?,initial_start_dispatch_at=CASE WHEN ? THEN NULL ELSE initial_start_dispatch_at END,observed_power='STOPPED',power_observed_at=?,power_source_connection_id=?,power_source_execution_id=NULL WHERE id=?"))
-                .bind::<Text,_>(execution_id).bind::<Text,_>(phase)
+                .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Execution,execution_id)?).bind::<Text,_>(phase)
                 .bind::<Bool,_>(execution.running_confirmed_at.is_some() && current.desired_state=="RUNNING")
-                .bind::<BigInt,_>(now).bind::<Text,_>(source.connection_id).bind::<Text,_>(scope.computer_id).execute(connection).await?;
+                .bind::<BigInt,_>(now).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Connection,source.connection_id)?).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Computer,scope.computer_id)?).execute(connection).await?;
             Ok(())
         })
     }
@@ -1018,7 +1104,7 @@ impl Store {
                     phase.as_str()
                 },
             )
-            .bind::<Text, _>(scope.computer_id)
+            .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::Computer, scope.computer_id)?)
             .execute(connection)
             .await?;
             Ok(())
@@ -1039,14 +1125,15 @@ impl Store {
             let _ = current_source!(connection, dialect, source);
             Ok(diesel::sql_query(
                 dialect.query(
-                    "SELECT * FROM computers WHERE provider_id=? AND id>? ORDER BY id LIMIT ?",
+                    "SELECT * FROM computers WHERE provider_id=? AND (? IS NULL OR id>?) ORDER BY id LIMIT ?",
                 ),
             )
-            .bind::<Text, _>(source.provider_id)
-            .bind::<Text, _>(after.unwrap_or(""))
+            .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::Provider,source.provider_id)?)
+            .bind::<Nullable<IdentitySql>, _>(after.map(|id|EntityId::from_dto(EntityKind::Computer,id)).transpose()?)
+            .bind::<Nullable<IdentitySql>, _>(after.map(|id|EntityId::from_dto(EntityKind::Computer,id)).transpose()?)
             .bind::<BigInt, _>(limit)
-            .load::<ManagedComputer>(connection)
-            .await?)
+            .load::<ManagedComputerRow>(connection)
+            .await?.into_iter().map(ManagedComputer::from).collect())
         })
     }
 
@@ -1084,7 +1171,7 @@ impl Store {
                 return Ok(());
             }
             let live = diesel::sql_query(dialect.query("SELECT count(*) AS n FROM computer_executions WHERE computer_id=? AND retired_at IS NULL"))
-                .bind::<Text,_>(scope.computer_id).get_result::<Count>(connection).await?;
+                .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Computer,scope.computer_id)?).get_result::<Count>(connection).await?;
             if live.n != 0 {
                 return Err(StoreError::InvalidTransition);
             }
@@ -1097,9 +1184,12 @@ impl Store {
                 return Err(StoreError::InvalidTransition);
             }
             diesel::sql_query(dialect.query("UPDATE computers SET removed_agent_id=COALESCE(removed_agent_id,(SELECT id FROM agents WHERE computer_id=computers.id)),agent_removed_at=COALESCE(agent_removed_at,?),cleanup_completed_at=?,current_phase='COMPLETED' WHERE id=?"))
-                .bind::<BigInt,_>(now).bind::<BigInt,_>(now).bind::<Text,_>(scope.computer_id).execute(connection).await?;
+                .bind::<BigInt,_>(now).bind::<BigInt,_>(now).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Computer,scope.computer_id)?).execute(connection).await?;
             diesel::sql_query(dialect.query("DELETE FROM agents WHERE computer_id=?"))
-                .bind::<Text, _>(scope.computer_id)
+                .bind::<IdentitySql, _>(EntityId::from_dto(
+                    EntityKind::Computer,
+                    scope.computer_id,
+                )?)
                 .execute(connection)
                 .await?;
             Ok(())
@@ -1121,14 +1211,17 @@ impl Store {
             let (_, now) = current_source!(connection, dialect, source);
             let threshold = now.checked_sub(86_400_000).ok_or(StoreError::Integrity)?;
             let candidates = diesel::sql_query(dialect.query("SELECT * FROM computers WHERE provider_id=? AND desired_state='DELETING' AND agent_removed_at IS NOT NULL AND cleanup_completed_at<=? AND current_execution_id IS NULL AND NOT EXISTS(SELECT 1 FROM computer_resources r WHERE r.computer_id=computers.id AND r.presence<>'ABSENT') AND NOT EXISTS(SELECT 1 FROM computer_executions e WHERE e.computer_id=computers.id AND e.retired_at IS NULL) ORDER BY id LIMIT ?"))
-                .bind::<Text,_>(source.provider_id).bind::<BigInt,_>(threshold).bind::<BigInt,_>(limit).load::<ManagedComputer>(connection).await?;
+                .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Provider,source.provider_id)?).bind::<BigInt,_>(threshold).bind::<BigInt,_>(limit).load::<ManagedComputerRow>(connection).await?;
             let mut count = 0;
             for row in candidates {
                 count += diesel::sql_query(
                     dialect.query("DELETE FROM computers WHERE id=? AND provider_id=?"),
                 )
-                .bind::<Text, _>(&row.id)
-                .bind::<Text, _>(source.provider_id)
+                .bind::<IdentitySql, _>(row.id)
+                .bind::<IdentitySql, _>(EntityId::from_dto(
+                    EntityKind::Provider,
+                    source.provider_id,
+                )?)
                 .execute(connection)
                 .await?;
             }

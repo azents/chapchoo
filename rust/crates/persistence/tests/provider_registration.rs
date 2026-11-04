@@ -1,4 +1,6 @@
 //! Scoped later-registration capability, without adding an onboarding API.
+#[path = "support/legacy.rs"]
+mod legacy;
 mod support;
 use base64::{Engine, engine::general_purpose::URL_SAFE};
 use chapchoo_crypto::{BearerSecret, CredentialCipher, RootKey};
@@ -17,7 +19,7 @@ struct ReceiptCounts {
     #[diesel(sql_type = BigInt)]
     other: i64,
 }
-const COUNTS: &str = "SELECT (SELECT COUNT(*) FROM provider_key_requests WHERE provider_id='server-provider') AS own, (SELECT COUNT(*) FROM provider_key_requests WHERE provider_id<>'server-provider') AS other";
+const COUNTS: &str = "SELECT (SELECT COUNT(*) FROM provider_key_requests r JOIN computer_providers p ON p.id=r.provider_id WHERE p.registration_key='server-provider') AS own, (SELECT COUNT(*) FROM provider_key_requests r JOIN computer_providers p ON p.id=r.provider_id WHERE p.registration_key<>'server-provider') AS other";
 
 async fn retention(
     store: &Store,
@@ -44,7 +46,7 @@ async fn retention(
     // Deletion is rolled back when a later key-mutation invariant rejects.
     let failed = ComponentKeyDraft {
         request_id: "901000:failed".into(),
-        token: original.token,
+        token: original.key.token,
     };
     assert!(
         store
@@ -90,9 +92,10 @@ async fn retention(
             901_001,
         )
         .await?;
-    assert_eq!(fresh.token.expose(), retry.token.expose());
-    assert_eq!(fresh.issued_at, retry.issued_at);
-    assert_eq!(fresh.expires_at, retry.expires_at);
+    assert_eq!(fresh.provider_id, retry.provider_id);
+    assert_eq!(fresh.key.token.expose(), retry.key.token.expose());
+    assert_eq!(fresh.key.issued_at, retry.key.issued_at);
+    assert_eq!(fresh.key.expires_at, retry.key.expires_at);
     // A future creation timestamp cannot be used to extend retention arbitrarily.
     assert!(matches!(
         store
@@ -192,9 +195,9 @@ async fn exercise(store: &Store, credentials: &[BearerSecret]) -> Result<(), Err
         let key = store
             .rotate_provider_key(registered(&digest), id, &draft, policy, 1000)
             .await?;
-        assert_eq!(key.expires_at, 901_000);
-        assert_eq!(key.proactive_after, 301_000);
-        assert_ne!(key.token.expose(), credentials[index].expose());
+        assert_eq!(key.key.expires_at, 901_000);
+        assert_eq!(key.key.proactive_after, 301_000);
+        assert_ne!(key.key.token.expose(), credentials[index].expose());
         let retry = ComponentKeyDraft {
             request_id: "1000:exchange-one".into(),
             token: BearerSecret::generate()?,
@@ -202,8 +205,9 @@ async fn exercise(store: &Store, credentials: &[BearerSecret]) -> Result<(), Err
         let recovered = store
             .rotate_provider_key(registered(&digest), id, &retry, policy, 2000)
             .await?;
-        assert_eq!(key.token.expose(), recovered.token.expose());
-        assert_eq!(key.expires_at, recovered.expires_at);
+        assert_eq!(key.provider_id, recovered.provider_id);
+        assert_eq!(key.key.token.expose(), recovered.key.token.expose());
+        assert_eq!(key.key.expires_at, recovered.key.expires_at);
         let foreign = credentials[(index + 1) % credentials.len()].digest();
         assert!(
             store
@@ -213,7 +217,13 @@ async fn exercise(store: &Store, credentials: &[BearerSecret]) -> Result<(), Err
         );
         assert!(
             store
-                .rotate_provider_key(registered(&key.token.digest()), id, &retry, policy, 2000)
+                .rotate_provider_key(
+                    registered(&key.key.token.digest()),
+                    id,
+                    &retry,
+                    policy,
+                    2000
+                )
                 .await
                 .is_err()
         );
@@ -227,18 +237,19 @@ fn sqlite_server_user_team_exchange_and_revocation() -> Result<(), Error> {
     let cipher = Arc::new(CredentialCipher::new(RootKey::parse(
         URL_SAFE.encode([21; 32]),
     )?)?);
-    chapchoo_persistence::prepare_sqlite(&path, &cipher)?;
     let credentials = (0..3)
         .map(|_| BearerSecret::generate())
         .collect::<Result<Vec<_>, _>>()?;
     let mut connection = diesel::SqliteConnection::establish(path.to_str().ok_or("Invalid path")?)?;
     connection.batch_execute("PRAGMA foreign_keys=ON")?;
+    legacy::sqlite(&mut connection, &cipher)?;
     connection.batch_execute(&seed(&cipher, &credentials, false)?)?;
+    chapchoo_persistence::prepare_sqlite(&path, &cipher)?;
     tokio::runtime::Runtime::new()?.block_on(async {
         let store=Store::connect_sqlite(path,cipher).await?;
         exercise(&store,&credentials).await?;
         retention(&store,&credentials[0],|count|check_counts!(&mut connection,count)).await?;
-        connection.batch_execute("UPDATE provider_registration_credentials SET revoked_at=2000 WHERE provider_id='server-provider'; UPDATE teams SET deletion_requested_at=2000 WHERE id='auth-team'")?;
+        connection.batch_execute("UPDATE provider_registration_credentials SET revoked_at=2000 WHERE provider_id=(SELECT id FROM computer_providers WHERE registration_key='server-provider'); UPDATE teams SET deletion_requested_at=2000 WHERE handle='auth-team'")?;
         for (id,index) in [("server-provider",0),("team-provider",2)] {
             assert!(store.rotate_provider_key(registered(&credentials[index].digest()),id,&ComponentKeyDraft{request_id:"3000:denied".into(),token:BearerSecret::generate()?},ComponentKeyPolicy::default(),3000).await.is_err());
         }
@@ -262,17 +273,18 @@ fn postgres_server_user_team_exchange_and_revocation() -> Result<(), Error> {
         let cipher = Arc::new(CredentialCipher::new(RootKey::parse(
             URL_SAFE.encode([21; 32]),
         )?)?);
-        chapchoo_persistence::prepare_postgres(&url, &cipher)?;
         let credentials = (0..3)
             .map(|_| BearerSecret::generate())
             .collect::<Result<Vec<_>, _>>()?;
         let mut connection = AsyncConnectionWrapper::<AsyncPgConnection>::establish(&url)?;
+        legacy::postgres(&mut connection, &cipher)?;
         connection.batch_execute(&seed(&cipher, &credentials, true)?)?;
+        chapchoo_persistence::prepare_postgres(&url, &cipher)?;
         tokio::runtime::Runtime::new()?.block_on(async {
             let store=Store::connect_postgres(url,cipher).await?;
             exercise(&store,&credentials).await?;
             retention(&store,&credentials[0],|count|check_counts!(&mut connection,count)).await?;
-            tokio::task::block_in_place(||connection.batch_execute("UPDATE provider_registration_credentials SET revoked_at=2000 WHERE provider_id='server-provider'; UPDATE teams SET deletion_requested_at=2000 WHERE id='auth-team'"))?;
+            tokio::task::block_in_place(||connection.batch_execute("UPDATE provider_registration_credentials SET revoked_at=2000 WHERE provider_id=(SELECT id FROM computer_providers WHERE registration_key='server-provider'); UPDATE teams SET deletion_requested_at=2000 WHERE handle='auth-team'"))?;
             for (id,index) in [("server-provider",0),("team-provider",2)] {
                 assert!(store.rotate_provider_key(registered(&credentials[index].digest()),id,&ComponentKeyDraft{request_id:"3000:denied".into(),token:BearerSecret::generate()?},ComponentKeyPolicy::default(),3000).await.is_err());
             }

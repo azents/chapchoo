@@ -202,7 +202,7 @@ export interface Team {
   id: string;
   kind: TeamKind;
   name: string;
-  handle: string;
+  handle?: string | undefined;
   ownerUserId: string;
   callerRole: TeamRole;
 }
@@ -223,7 +223,6 @@ export interface CreateTeamRequest {
 export interface UpdateTeamRequest {
   teamId: string;
   name?: string | undefined;
-  handle?: string | undefined;
 }
 
 export interface Member {
@@ -1640,7 +1639,7 @@ export const InitializeRequest: MessageFns<InitializeRequest> = {
 };
 
 function createBaseTeam(): Team {
-  return { id: "", kind: 0, name: "", handle: "", ownerUserId: "", callerRole: 0 };
+  return { id: "", kind: 0, name: "", handle: undefined, ownerUserId: "", callerRole: 0 };
 }
 
 export const Team: MessageFns<Team> = {
@@ -1654,7 +1653,7 @@ export const Team: MessageFns<Team> = {
     if (message.name !== "") {
       writer.uint32(26).string(message.name);
     }
-    if (message.handle !== "") {
+    if (message.handle !== undefined) {
       writer.uint32(34).string(message.handle);
     }
     if (message.ownerUserId !== "") {
@@ -1747,7 +1746,7 @@ export const Team: MessageFns<Team> = {
     message.id = object.id ?? "";
     message.kind = object.kind ?? 0;
     message.name = object.name ?? "";
-    message.handle = object.handle ?? "";
+    message.handle = object.handle ?? undefined;
     message.ownerUserId = object.ownerUserId ?? "";
     message.callerRole = object.callerRole ?? 0;
     return message;
@@ -1932,7 +1931,7 @@ export const CreateTeamRequest: MessageFns<CreateTeamRequest> = {
 };
 
 function createBaseUpdateTeamRequest(): UpdateTeamRequest {
-  return { teamId: "", name: undefined, handle: undefined };
+  return { teamId: "", name: undefined };
 }
 
 export const UpdateTeamRequest: MessageFns<UpdateTeamRequest> = {
@@ -1942,9 +1941,6 @@ export const UpdateTeamRequest: MessageFns<UpdateTeamRequest> = {
     }
     if (message.name !== undefined) {
       writer.uint32(18).string(message.name);
-    }
-    if (message.handle !== undefined) {
-      writer.uint32(26).string(message.handle);
     }
     return writer;
   },
@@ -1978,14 +1974,6 @@ export const UpdateTeamRequest: MessageFns<UpdateTeamRequest> = {
             message.name = reader.string();
             continue;
           }
-          case 3: {
-            if (tag !== 26) {
-              break;
-            }
-
-            message.handle = reader.string();
-            continue;
-          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2005,7 +1993,6 @@ export const UpdateTeamRequest: MessageFns<UpdateTeamRequest> = {
     const message = createBaseUpdateTeamRequest();
     message.teamId = object.teamId ?? "";
     message.name = object.name ?? undefined;
-    message.handle = object.handle ?? undefined;
     return message;
   },
 };

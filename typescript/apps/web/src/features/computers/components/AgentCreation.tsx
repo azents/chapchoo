@@ -1,22 +1,42 @@
 "use client";
 import { ApplicationShell } from "@chapchoo/ui/ApplicationShell";
 import { PageFailure } from "@chapchoo/ui/PageFailure";
+import { agentPaletteKeys } from "@chapchoo/web-core/agent-profile";
 import {
   Alert,
   Anchor,
   Button,
   Group,
+  Image,
   Loader,
+  Paper,
+  rem,
   Select,
   Stack,
   Text,
   TextInput,
 } from "@mantine/core";
 import type { AgentCreationProps } from "../creationTypes";
+import type { AgentPaletteKey } from "@chapchoo/web-core/computer";
 import type { ReactElement } from "react";
 
+const paletteSurface: Record<AgentPaletteKey, string> = {
+  butter: "var(--chapchoo-color-accentSoft)",
+  sage: "var(--chapchoo-color-selected)",
+  apricot: "var(--mantine-color-orange-light)",
+  teal: "var(--mantine-color-teal-light)",
+  lilac: "var(--mantine-color-grape-light)",
+  rose: "var(--mantine-color-pink-light)",
+};
 export function AgentCreation(props: AgentCreationProps): ReactElement {
   const { copy: c } = props;
+  const p = props.profileCopy;
+  const locked = props.pending || props.creationLocked;
+  const imageOptions = props.images.items.some(
+    (image) => image.id === props.image.id,
+  )
+    ? props.images.items
+    : [props.image, ...props.images.items];
   const listHref = `${props.basePath}/agents?team=${encodeURIComponent(props.initial.teamId)}`;
   if (props.access !== "authorized") {
     return (
@@ -55,6 +75,21 @@ export function AgentCreation(props: AgentCreationProps): ReactElement {
           props.onCreate();
         }}
       >
+        <Paper
+          p="md"
+          radius="lg"
+          bg={paletteSurface[props.paletteKey]}
+          w="fit-content"
+        >
+          <Image
+            w={rem(96)}
+            h={rem(96)}
+            fit="contain"
+            alt=""
+            aria-hidden="true"
+            src={`${props.basePath}/design-assets/${props.image.assetKey}-216.webp`}
+          />
+        </Paper>
         <TextInput
           label={c.name}
           value={props.name}
@@ -63,6 +98,110 @@ export function AgentCreation(props: AgentCreationProps): ReactElement {
           maxLength={120}
           disabled={props.pending || props.creationLocked}
         />
+        <TextInput
+          label={p.handle}
+          description={p.permanent}
+          value={props.handle.draft.candidate}
+          maxLength={16}
+          required
+          disabled={locked}
+          onChange={(event) => props.onHandle(event.currentTarget.value)}
+          error={
+            props.handle.status === "invalid"
+              ? p.invalid
+              : props.handle.status === "occupied"
+                ? p.occupied
+                : props.handle.status === "exhausted"
+                  ? p.exhausted
+                  : props.handle.status === "unavailable"
+                    ? p.unavailable
+                    : null
+          }
+        />
+        <Text size="sm" c="dimmed" aria-live="polite">
+          {props.handle.status === "checking"
+            ? p.checking
+            : props.handle.status === "available"
+              ? p.available
+              : null}
+        </Text>
+        {props.handle.status === "unavailable" ? (
+          <Button
+            type="button"
+            variant="subtle"
+            onClick={props.onRefresh}
+            disabled={locked}
+          >
+            {c.retryRead}
+          </Button>
+        ) : null}
+        <Select
+          label={p.image}
+          value={props.image.id}
+          data={imageOptions.map((image) => ({
+            value: image.id,
+            label: image.internalName,
+          }))}
+          onChange={(value) => {
+            if (value) {
+              props.onImage(value);
+            }
+          }}
+          required
+          disabled={locked || props.imagesUnavailable}
+        />
+        <Group role="group" aria-label={p.image}>
+          {props.imageAfter ? (
+            <Button
+              type="button"
+              variant="subtle"
+              disabled={locked}
+              onClick={() => props.onImagePage(null)}
+            >
+              {c.first}
+            </Button>
+          ) : null}
+          {props.images.nextAfter ? (
+            <Button
+              type="button"
+              variant="subtle"
+              disabled={locked}
+              onClick={() => props.onImagePage(props.images.nextAfter)}
+            >
+              {c.next}
+            </Button>
+          ) : null}
+        </Group>
+        <Select
+          label={p.palette}
+          value={props.paletteKey}
+          data={agentPaletteKeys.map((key) => ({
+            value: key,
+            label: p.palettes[key],
+          }))}
+          onChange={(value) => {
+            if (value) {
+              props.onPalette(value);
+            }
+          }}
+          required
+          disabled={locked}
+        />
+        {props.imagesUnavailable ? (
+          <Alert color="yellow" role="alert">
+            <Stack gap="sm">
+              <Text>{c.unavailable}</Text>
+              <Button
+                type="button"
+                variant="subtle"
+                onClick={props.onRefresh}
+                disabled={props.pending}
+              >
+                {c.retry}
+              </Button>
+            </Stack>
+          </Alert>
+        ) : null}
         <Select
           label={c.provider}
           placeholder={c.chooseProvider}
@@ -142,6 +281,8 @@ export function AgentCreation(props: AgentCreationProps): ReactElement {
             disabled={
               !props.creationLocked &&
               (!props.name.trim() ||
+                props.handle.status !== "available" ||
+                props.imagesUnavailable ||
                 !props.providerId ||
                 props.providers.type !== "loaded" ||
                 props.providers.stale ||

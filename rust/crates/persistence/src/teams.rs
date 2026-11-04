@@ -1,13 +1,14 @@
 use chapchoo_crypto::SecretDigest;
-use chapchoo_domain::{EmailAddress, MembershipRole, TeamKind, TeamRole};
+use chapchoo_domain::{EmailAddress, Handle, MembershipRole, TeamKind, TeamRole};
 use diesel::{
-    QueryableByName,
+    OptionalExtension, QueryableByName,
     sql_types::{BigInt, Binary, Nullable, Text},
 };
 use diesel_async::RunQueryDsl;
 
 use crate::{
     Store, StoreError,
+    entity_id::{EntityId, EntityKind, IdentitySql},
     models::authenticate,
     store::{Dialect, operation},
 };
@@ -17,7 +18,7 @@ pub struct TeamSummary {
     pub id: String,
     pub kind: TeamKind,
     pub name: String,
-    pub handle: String,
+    pub handle: Option<String>,
     pub owner_user_id: String,
     pub caller_role: TeamRole,
     pub created_at: i64,
@@ -52,7 +53,6 @@ pub struct InvitationSummary {
 
 #[derive(Debug)]
 pub struct CreateTeam {
-    pub id: String,
     pub name: String,
     pub handle: String,
 }
@@ -60,20 +60,17 @@ pub struct CreateTeam {
 #[derive(Debug, Default)]
 pub struct TeamPatch {
     pub name: Option<String>,
-    pub handle: Option<String>,
 }
 
 /// Prepared only for the configured-mail branch; no plaintext proof is persisted.
 #[derive(Debug)]
 pub struct TeamSignupGrant {
-    pub id: String,
     pub proof: SecretDigest,
     pub expires_at: i64,
 }
 
 #[derive(Debug)]
 pub struct InviteMember {
-    pub id: String,
     pub team_id: String,
     pub recipient: EmailAddress,
     pub signup: Option<TeamSignupGrant>,
@@ -88,16 +85,16 @@ pub struct InvitationResult {
 
 #[derive(Debug, diesel::QueryableByName)]
 struct TeamRow {
-    #[diesel(sql_type = Text)]
-    id: String,
+    #[diesel(sql_type = IdentitySql)]
+    id: EntityId,
     #[diesel(sql_type = Text)]
     kind: String,
     #[diesel(sql_type = Text)]
     name: String,
-    #[diesel(sql_type = Text)]
-    handle: String,
-    #[diesel(sql_type = Text)]
-    owner_user_id: String,
+    #[diesel(sql_type = Nullable<Text>)]
+    handle: Option<String>,
+    #[diesel(sql_type = IdentitySql)]
+    owner_user_id: EntityId,
     #[diesel(sql_type = BigInt)]
     created_at: i64,
 }
@@ -122,15 +119,22 @@ impl TeamRow {
     fn summary(
         &self,
         stored_role: MembershipRole,
-        user_id: &str,
+        user_id: &EntityId,
     ) -> Result<TeamSummary, StoreError> {
+        match (self.kind()?, self.handle.as_deref()) {
+            (TeamKind::Personal, None) => {}
+            (TeamKind::Collaborative, Some(handle)) => {
+                Handle::parse(handle).map_err(|_| StoreError::Integrity)?;
+            }
+            _ => return Err(StoreError::Integrity),
+        }
         Ok(TeamSummary {
-            id: self.id.clone(),
+            id: self.id.to_dto(EntityKind::Team),
             kind: self.kind()?,
             name: self.name.clone(),
             handle: self.handle.clone(),
-            owner_user_id: self.owner_user_id.clone(),
-            caller_role: TeamRole::effective(stored_role, self.owner_user_id == user_id),
+            owner_user_id: self.owner_user_id.to_dto(EntityKind::User),
+            caller_role: TeamRole::effective(stored_role, self.owner_user_id == *user_id),
             created_at: self.created_at,
         })
     }
@@ -154,8 +158,8 @@ impl MembershipRow {
 
 #[derive(Debug, diesel::QueryableByName)]
 struct MemberRow {
-    #[diesel(sql_type = Text)]
-    user_id: String,
+    #[diesel(sql_type = IdentitySql)]
+    user_id: EntityId,
     #[diesel(sql_type = Text)]
     delivery_email: String,
     #[diesel(sql_type = Text)]
@@ -172,18 +176,18 @@ struct TeamMembershipRow {
 
 #[derive(Debug, diesel::QueryableByName)]
 struct InvitationRow {
-    #[diesel(sql_type = Text)]
-    id: String,
-    #[diesel(sql_type = Text)]
-    team_id: String,
+    #[diesel(sql_type = IdentitySql)]
+    id: EntityId,
+    #[diesel(sql_type = IdentitySql)]
+    team_id: EntityId,
     #[diesel(sql_type = Text)]
     team_name: String,
-    #[diesel(sql_type = Text)]
-    team_handle: String,
+    #[diesel(sql_type = Nullable<Text>)]
+    team_handle: Option<String>,
     #[diesel(sql_type = Text)]
     recipient_delivery_email: String,
-    #[diesel(sql_type = Text)]
-    invited_by: String,
+    #[diesel(sql_type = IdentitySql)]
+    invited_by: EntityId,
     #[diesel(sql_type = Text)]
     status: String,
     #[diesel(sql_type = BigInt)]
@@ -204,13 +208,13 @@ impl InvitationRow {
             return Err(StoreError::Integrity);
         }
         Ok(InvitationSummary {
-            id: self.id,
-            team_id: self.team_id,
+            id: self.id.to_dto(EntityKind::Invitation),
+            team_id: self.team_id.to_dto(EntityKind::Team),
             team_name: self.team_name,
-            team_handle: self.team_handle,
+            team_handle: self.team_handle.ok_or(StoreError::Integrity)?,
             recipient_email: EmailAddress::parse(&self.recipient_delivery_email)
                 .map_err(|_| StoreError::Integrity)?,
-            invited_by: self.invited_by,
+            invited_by: self.invited_by.to_dto(EntityKind::User),
             status,
             created_at: self.created_at,
             processed_at: self.processed_at,
@@ -220,8 +224,8 @@ impl InvitationRow {
 
 #[derive(Debug, diesel::QueryableByName)]
 struct IdRow {
-    #[diesel(sql_type = Text)]
-    id: String,
+    #[diesel(sql_type = IdentitySql)]
+    id: EntityId,
 }
 
 const TEAM_COLUMNS: &str = "SELECT id,CAST(kind AS TEXT) AS kind,name,handle,owner_user_id,created_at FROM teams WHERE id=? AND deletion_requested_at IS NULL";
@@ -252,7 +256,7 @@ macro_rules! team {
             Dialect::Sqlite => TEAM_COLUMNS.to_owned(),
         };
         let mut rows = diesel::sql_query($dialect.query(&sql))
-            .bind::<Text, _>($id)
+            .bind::<IdentitySql, _>(*$id)
             .load::<TeamRow>($connection)
             .await?;
         if rows.len() != 1 {
@@ -267,8 +271,8 @@ macro_rules! membership {
         let mut rows = diesel::sql_query($dialect.query(
             "SELECT user_id,CAST(role AS TEXT) AS role FROM memberships WHERE team_id=? AND user_id=?",
         ))
-        .bind::<Text, _>($team)
-        .bind::<Text, _>($user)
+        .bind::<IdentitySql, _>(*$team)
+        .bind::<IdentitySql, _>(*$user)
         .load::<MembershipRow>($connection)
         .await?;
         rows.pop()
@@ -279,10 +283,7 @@ macro_rules! caller {
     ($connection:expr, $dialect:expr, $team:expr, $user:expr) => {{
         let member =
             membership!($connection, $dialect, &$team.id, $user).ok_or(StoreError::NotFound)?;
-        TeamRole::effective(
-            member.role()?,
-            $team.owner_user_id.as_str() == ($user).as_str(),
-        )
+        TeamRole::effective(member.role()?, $team.owner_user_id == *$user)
     }};
 }
 
@@ -302,6 +303,46 @@ fn require_owner(role: TeamRole) -> Result<(), StoreError> {
 }
 
 impl Store {
+    pub async fn team_handle_available(
+        &self,
+        actor: &SecretDigest,
+        handle: &str,
+        now: i64,
+    ) -> Result<bool, StoreError> {
+        Handle::parse(handle).map_err(|_| StoreError::InvalidInput)?;
+        operation!(self, |connection, dialect| {
+            let _user = authenticate!(connection, dialect, actor, now);
+            let row = diesel::sql_query(dialect.query(
+                "SELECT id FROM teams WHERE kind='COLLABORATIVE' AND handle=? AND deletion_requested_at IS NULL",
+            )).bind::<Text,_>(handle).get_result::<IdRow>(connection).await.optional()?;
+            Ok(row.is_none())
+        })
+    }
+
+    pub async fn team_by_handle(
+        &self,
+        actor: &SecretDigest,
+        handle: &str,
+        now: i64,
+    ) -> Result<TeamSummary, StoreError> {
+        Handle::parse(handle).map_err(|_| StoreError::InvalidInput)?;
+        operation!(self, |connection, dialect| {
+            let user = authenticate!(connection, dialect, actor, now);
+            let user_id = EntityId::from_dto(EntityKind::User, &user.id)?;
+            let row = diesel::sql_query(dialect.query(
+                "SELECT t.id,CAST(t.kind AS TEXT) AS kind,t.name,t.handle,t.owner_user_id,t.created_at,CAST(m.role AS TEXT) AS caller_stored_role
+                 FROM teams t JOIN memberships m ON m.team_id=t.id
+                 WHERE t.kind='COLLABORATIVE' AND t.handle=? AND t.deletion_requested_at IS NULL AND m.user_id=?",
+            )).bind::<Text,_>(handle).bind::<IdentitySql,_>(user_id)
+                .get_result::<TeamMembershipRow>(connection).await.optional()?.ok_or(StoreError::NotFound)?;
+            let stored = MembershipRow {
+                role: row.caller_stored_role,
+            }
+            .role()?;
+            row.team.summary(stored, &user_id)
+        })
+    }
+
     pub async fn create_team(
         &self,
         actor: &SecretDigest,
@@ -327,19 +368,20 @@ impl Store {
         now: i64,
         admin: bool,
     ) -> Result<TeamSummary, StoreError> {
-        required(&create.id)?;
         required(&create.name)?;
-        required(&create.handle)?;
+        Handle::parse(&create.handle).map_err(|_| StoreError::InvalidInput)?;
         operation!(self, |connection, dialect| {
             let user = authenticate!(connection, dialect, actor, now);
+            let user_id = EntityId::from_dto(EntityKind::User, &user.id)?;
             if admin && !user.is_admin {
                 return Err(StoreError::Forbidden);
             }
+            let team_id = EntityId::generate(now)?;
             diesel::sql_query(dialect.query("INSERT INTO teams(id,kind,name,handle,owner_user_id,created_at) VALUES(?,'COLLABORATIVE',?,?,?,?)"))
-                .bind::<Text, _>(&create.id)
+                .bind::<IdentitySql, _>(team_id)
                 .bind::<Text, _>(&create.name)
                 .bind::<Text, _>(&create.handle)
-                .bind::<Text, _>(&user.id)
+                .bind::<IdentitySql, _>(user_id)
                 .bind::<BigInt, _>(now)
                 .execute(connection).await.map_err(|error| StoreError::unique_field(
                     error, "teams_handle_key", "teams.handle", StoreError::HandleConflict
@@ -347,13 +389,13 @@ impl Store {
             diesel::sql_query(
                 dialect.query("INSERT INTO memberships(team_id,user_id,role) VALUES(?,?,'MEMBER')"),
             )
-            .bind::<Text, _>(&create.id)
-            .bind::<Text, _>(&user.id)
+            .bind::<IdentitySql, _>(team_id)
+            .bind::<IdentitySql, _>(user_id)
             .execute(connection)
             .await
             .map_err(conflict)?;
-            let team = team!(connection, dialect, &create.id);
-            team.summary(MembershipRole::Member, &user.id)
+            let team = team!(connection, dialect, &team_id);
+            team.summary(MembershipRole::Member, &user_id)
         })
     }
 
@@ -365,10 +407,15 @@ impl Store {
     ) -> Result<TeamSummary, StoreError> {
         operation!(self, |connection, dialect| {
             let user = authenticate!(connection, dialect, actor, now);
-            let team = team!(connection, dialect, team_id);
+            let user_id = EntityId::from_dto(EntityKind::User, &user.id)?;
+            let team = team!(
+                connection,
+                dialect,
+                &EntityId::from_dto(EntityKind::Team, team_id)?
+            );
             let member =
-                membership!(connection, dialect, &team.id, &user.id).ok_or(StoreError::NotFound)?;
-            team.summary(member.role()?, &user.id)
+                membership!(connection, dialect, &team.id, &user_id).ok_or(StoreError::NotFound)?;
+            team.summary(member.role()?, &user_id)
         })
     }
 
@@ -396,18 +443,19 @@ impl Store {
     ) -> Result<Vec<TeamSummary>, StoreError> {
         operation!(self, |connection, dialect| {
             let user = authenticate!(connection, dialect, actor, now);
+            let user_id = EntityId::from_dto(EntityKind::User, &user.id)?;
             if admin && !user.is_admin {
                 return Err(StoreError::Forbidden);
             }
             let rows = diesel::sql_query(dialect.query("SELECT t.id,CAST(t.kind AS TEXT) AS kind,t.name,t.handle,t.owner_user_id,t.created_at,CAST(m.role AS TEXT) AS caller_stored_role FROM teams t JOIN memberships m ON m.team_id=t.id WHERE m.user_id=? AND t.deletion_requested_at IS NULL ORDER BY t.created_at,t.id"))
-                .bind::<Text, _>(&user.id).load::<TeamMembershipRow>(connection).await?;
+                .bind::<IdentitySql, _>(user_id).load::<TeamMembershipRow>(connection).await?;
             rows.into_iter()
                 .map(|row| {
                     let stored = MembershipRow {
                         role: row.caller_stored_role,
                     }
                     .role()?;
-                    row.team.summary(stored, &user.id)
+                    row.team.summary(stored, &user_id)
                 })
                 .collect()
         })
@@ -423,42 +471,28 @@ impl Store {
         if let Some(value) = &patch.name {
             required(value)?;
         }
-        if let Some(value) = &patch.handle {
-            required(value)?;
-        }
         operation!(self, |connection, dialect| {
             let user = authenticate!(connection, dialect, actor, now);
-            let mut team = team!(connection, dialect, team_id);
-            let role = caller!(connection, dialect, team, &user.id);
+            let user_id = EntityId::from_dto(EntityKind::User, &user.id)?;
+            let mut team = team!(
+                connection,
+                dialect,
+                &EntityId::from_dto(EntityKind::Team, team_id)?
+            );
+            let role = caller!(connection, dialect, team, &user_id);
             require_manager(role)?;
             team.collaborative()?;
             if let Some(name) = &patch.name {
                 diesel::sql_query(dialect.query("UPDATE teams SET name=? WHERE id=?"))
                     .bind::<Text, _>(name)
-                    .bind::<Text, _>(&team.id)
+                    .bind::<IdentitySql, _>(team.id)
                     .execute(connection)
                     .await?;
                 team.name = name.clone();
             }
-            if let Some(handle) = &patch.handle {
-                diesel::sql_query(dialect.query("UPDATE teams SET handle=? WHERE id=?"))
-                    .bind::<Text, _>(handle)
-                    .bind::<Text, _>(&team.id)
-                    .execute(connection)
-                    .await
-                    .map_err(|error| {
-                        StoreError::unique_field(
-                            error,
-                            "teams_handle_key",
-                            "teams.handle",
-                            StoreError::HandleConflict,
-                        )
-                    })?;
-                team.handle = handle.clone();
-            }
-            let member = membership!(connection, dialect, &team.id, &user.id)
+            let member = membership!(connection, dialect, &team.id, &user_id)
                 .ok_or(StoreError::Integrity)?;
-            team.summary(member.role()?, &user.id)
+            team.summary(member.role()?, &user_id)
         })
     }
 
@@ -470,17 +504,22 @@ impl Store {
     ) -> Result<Vec<MemberSummary>, StoreError> {
         operation!(self, |connection, dialect| {
             let user = authenticate!(connection, dialect, actor, now);
-            let team = team!(connection, dialect, team_id);
-            let _role = caller!(connection, dialect, team, &user.id);
+            let user_id = EntityId::from_dto(EntityKind::User, &user.id)?;
+            let team = team!(
+                connection,
+                dialect,
+                &EntityId::from_dto(EntityKind::Team, team_id)?
+            );
+            let _role = caller!(connection, dialect, team, &user_id);
             let members = diesel::sql_query(dialect.query("SELECT m.user_id,u.delivery_email,CAST(m.role AS TEXT) AS role FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.team_id=? ORDER BY u.created_at,u.id"))
-                .bind::<Text, _>(&team.id).load::<MemberRow>(connection).await?;
+                .bind::<IdentitySql, _>(team.id).load::<MemberRow>(connection).await?;
             members
                 .into_iter()
                 .map(|member| {
                     let stored = MembershipRow { role: member.role }.role()?;
                     Ok(MemberSummary {
                         role: TeamRole::effective(stored, member.user_id == team.owner_user_id),
-                        user_id: member.user_id,
+                        user_id: member.user_id.to_dto(EntityKind::User),
                         email: EmailAddress::parse(&member.delivery_email)
                             .map_err(|_| StoreError::Integrity)?,
                     })
@@ -495,11 +534,15 @@ impl Store {
         invite: &InviteMember,
         now: i64,
     ) -> Result<InvitationResult, StoreError> {
-        required(&invite.id)?;
         operation!(self, |connection, dialect| {
             let user = authenticate!(connection, dialect, actor, now);
-            let team = team!(connection, dialect, &invite.team_id);
-            require_manager(caller!(connection, dialect, team, &user.id))?;
+            let user_id = EntityId::from_dto(EntityKind::User, &user.id)?;
+            let team = team!(
+                connection,
+                dialect,
+                &EntityId::from_dto(EntityKind::Team, &invite.team_id)?
+            );
+            require_manager(caller!(connection, dialect, team, &user_id))?;
             team.collaborative()?;
             let recipients =
                 diesel::sql_query(dialect.query("SELECT id FROM users WHERE email_key=?"))
@@ -515,27 +558,28 @@ impl Store {
             if recipients.is_empty()
                 && let Some(signup) = &invite.signup
             {
-                required(&signup.id)?;
                 if signup.expires_at <= now {
                     return Err(StoreError::InvalidProof);
                 }
+                let signup_id = EntityId::generate(now)?;
                 diesel::sql_query(dialect.query("INSERT INTO grants(id,kind,secret_hash,email_key,delivery_email,user_id,issued_by,issued_at,expires_at) VALUES(?,'SIGNUP',?,?,?,NULL,?,?,?)"))
-                        .bind::<Text, _>(&signup.id).bind::<Binary, _>(signup.proof.as_bytes().as_slice())
+                        .bind::<IdentitySql, _>(signup_id).bind::<Binary, _>(signup.proof.as_bytes().as_slice())
                         .bind::<Text, _>(invite.recipient.lookup_key()).bind::<Text, _>(invite.recipient.delivery())
-                        .bind::<Text, _>(&user.id).bind::<BigInt, _>(now).bind::<BigInt, _>(signup.expires_at)
+                        .bind::<IdentitySql, _>(user_id).bind::<BigInt, _>(now).bind::<BigInt, _>(signup.expires_at)
                         .execute(connection).await.map_err(conflict)?;
-                issued_signup_grant_id = Some(signup.id.clone());
+                issued_signup_grant_id = Some(signup_id.to_dto(EntityKind::Grant));
             }
+            let invitation_id = EntityId::generate(now)?;
             diesel::sql_query(dialect.query("INSERT INTO invitations(id,team_id,recipient_email_key,recipient_delivery_email,invited_by,status,created_at,processed_at) VALUES(?,?,?,?,?,'PENDING',?,NULL)"))
-                .bind::<Text, _>(&invite.id).bind::<Text, _>(&team.id)
+                .bind::<IdentitySql, _>(invitation_id).bind::<IdentitySql, _>(team.id)
                 .bind::<Text, _>(invite.recipient.lookup_key()).bind::<Text, _>(invite.recipient.delivery())
-                .bind::<Text, _>(&user.id).bind::<BigInt, _>(now).execute(connection).await.map_err(conflict)?;
+                .bind::<IdentitySql, _>(user_id).bind::<BigInt, _>(now).execute(connection).await.map_err(conflict)?;
             Ok(InvitationResult {
                 invitation: InvitationSummary {
-                    id: invite.id.clone(),
-                    team_id: team.id,
+                    id: invitation_id.to_dto(EntityKind::Invitation),
+                    team_id: team.id.to_dto(EntityKind::Team),
                     team_name: team.name,
-                    team_handle: team.handle,
+                    team_handle: team.handle.ok_or(StoreError::Integrity)?,
                     recipient_email: invite.recipient.clone(),
                     invited_by: user.id,
                     status: InvitationStatus::Pending,
@@ -573,12 +617,17 @@ impl Store {
     ) -> Result<Vec<InvitationSummary>, StoreError> {
         operation!(self, |connection, dialect| {
             let user = authenticate!(connection, dialect, actor, now);
-            let team = team!(connection, dialect, team_id);
-            require_manager(caller!(connection, dialect, team, &user.id))?;
+            let user_id = EntityId::from_dto(EntityKind::User, &user.id)?;
+            let team = team!(
+                connection,
+                dialect,
+                &EntityId::from_dto(EntityKind::Team, team_id)?
+            );
+            require_manager(caller!(connection, dialect, team, &user_id))?;
             team.collaborative()?;
             let sql = format!("{INVITATION_COLUMNS} WHERE i.team_id=? ORDER BY i.created_at,i.id");
             let rows = diesel::sql_query(dialect.query(&sql))
-                .bind::<Text, _>(&team.id)
+                .bind::<IdentitySql, _>(team.id)
                 .load::<InvitationRow>(connection)
                 .await?;
             rows.into_iter().map(InvitationRow::summary).collect()
@@ -592,13 +641,15 @@ impl Store {
         accept: bool,
         now: i64,
     ) -> Result<InvitationSummary, StoreError> {
+        let invitation_id = EntityId::from_dto(EntityKind::Invitation, invitation_id)?;
         operation!(self, |connection, dialect| {
             let user = authenticate!(connection, dialect, actor, now);
+            let user_id = EntityId::from_dto(EntityKind::User, &user.id)?;
             // Discover the target without locking an invitation before its Team.
             let targets = diesel::sql_query(dialect.query(
                 "SELECT team_id AS id FROM invitations WHERE id=? AND recipient_email_key=?",
             ))
-            .bind::<Text, _>(invitation_id)
+            .bind::<IdentitySql, _>(invitation_id)
             .bind::<Text, _>(user.email.lookup_key())
             .load::<IdRow>(connection)
             .await?;
@@ -607,7 +658,7 @@ impl Store {
             team.collaborative()?;
             let sql = format!("{INVITATION_COLUMNS} WHERE i.id=? AND i.recipient_email_key=?");
             let mut rows = diesel::sql_query(dialect.query(&sql))
-                .bind::<Text, _>(invitation_id)
+                .bind::<IdentitySql, _>(invitation_id)
                 .bind::<Text, _>(user.email.lookup_key())
                 .load::<InvitationRow>(connection)
                 .await?;
@@ -616,7 +667,7 @@ impl Store {
                 return Err(StoreError::AlreadyProcessed);
             }
             if accept {
-                if membership!(connection, dialect, &team.id, &user.id).is_some() {
+                if membership!(connection, dialect, &team.id, &user_id).is_some() {
                     return Err(StoreError::AlreadyMember);
                 }
                 diesel::sql_query(
@@ -624,8 +675,8 @@ impl Store {
                         "INSERT INTO memberships(team_id,user_id,role) VALUES(?,?,'MEMBER')",
                     ),
                 )
-                .bind::<Text, _>(&team.id)
-                .bind::<Text, _>(&user.id)
+                .bind::<IdentitySql, _>(team.id)
+                .bind::<IdentitySql, _>(user_id)
                 .execute(connection)
                 .await
                 .map_err(conflict)?;
@@ -637,7 +688,7 @@ impl Store {
             };
             let changed = diesel::sql_query(dialect.query(update))
                 .bind::<BigInt, _>(now)
-                .bind::<Text, _>(invitation_id)
+                .bind::<IdentitySql, _>(invitation_id)
                 .bind::<Text, _>(user.email.lookup_key())
                 .execute(connection)
                 .await?;
@@ -663,15 +714,21 @@ impl Store {
         role: MembershipRole,
         now: i64,
     ) -> Result<(), StoreError> {
+        let target_user_id = EntityId::from_dto(EntityKind::User, target_user_id)?;
         operation!(self, |connection, dialect| {
             let user = authenticate!(connection, dialect, actor, now);
-            let team = team!(connection, dialect, team_id);
-            require_owner(caller!(connection, dialect, team, &user.id))?;
+            let user_id = EntityId::from_dto(EntityKind::User, &user.id)?;
+            let team = team!(
+                connection,
+                dialect,
+                &EntityId::from_dto(EntityKind::Team, team_id)?
+            );
+            require_owner(caller!(connection, dialect, team, &user_id))?;
             team.collaborative()?;
             if target_user_id == team.owner_user_id {
                 return Err(StoreError::InvalidTransition);
             }
-            membership!(connection, dialect, &team.id, target_user_id)
+            membership!(connection, dialect, &team.id, &target_user_id)
                 .ok_or(StoreError::NotFound)?;
             let sql = match role {
                 MembershipRole::Manager => {
@@ -682,8 +739,8 @@ impl Store {
                 }
             };
             diesel::sql_query(dialect.query(sql))
-                .bind::<Text, _>(&team.id)
-                .bind::<Text, _>(target_user_id)
+                .bind::<IdentitySql, _>(team.id)
+                .bind::<IdentitySql, _>(target_user_id)
                 .execute(connection)
                 .await?;
             Ok(())
@@ -697,31 +754,37 @@ impl Store {
         target_user_id: &str,
         now: i64,
     ) -> Result<TeamSummary, StoreError> {
+        let target_user_id = EntityId::from_dto(EntityKind::User, target_user_id)?;
         operation!(self, |connection, dialect| {
             let user = authenticate!(connection, dialect, actor, now);
-            let mut team = team!(connection, dialect, team_id);
-            require_owner(caller!(connection, dialect, team, &user.id))?;
+            let user_id = EntityId::from_dto(EntityKind::User, &user.id)?;
+            let mut team = team!(
+                connection,
+                dialect,
+                &EntityId::from_dto(EntityKind::Team, team_id)?
+            );
+            require_owner(caller!(connection, dialect, team, &user_id))?;
             team.collaborative()?;
             if target_user_id == team.owner_user_id {
                 return Err(StoreError::InvalidTransition);
             }
-            membership!(connection, dialect, &team.id, target_user_id)
+            membership!(connection, dialect, &team.id, &target_user_id)
                 .ok_or(StoreError::NotFound)?;
             diesel::sql_query(dialect.query("UPDATE teams SET owner_user_id=? WHERE id=?"))
-                .bind::<Text, _>(target_user_id)
-                .bind::<Text, _>(&team.id)
+                .bind::<IdentitySql, _>(target_user_id)
+                .bind::<IdentitySql, _>(team.id)
                 .execute(connection)
                 .await?;
             diesel::sql_query(
                 dialect
                     .query("UPDATE memberships SET role='MANAGER' WHERE team_id=? AND user_id=?"),
             )
-            .bind::<Text, _>(&team.id)
-            .bind::<Text, _>(&user.id)
+            .bind::<IdentitySql, _>(team.id)
+            .bind::<IdentitySql, _>(user_id)
             .execute(connection)
             .await?;
-            team.owner_user_id = target_user_id.to_owned();
-            team.summary(MembershipRole::Manager, &user.id)
+            team.owner_user_id = target_user_id;
+            team.summary(MembershipRole::Manager, &user_id)
         })
     }
 
@@ -732,12 +795,18 @@ impl Store {
         target_user_id: &str,
         now: i64,
     ) -> Result<(), StoreError> {
+        let target_user_id = EntityId::from_dto(EntityKind::User, target_user_id)?;
         operation!(self, |connection, dialect| {
             let user = authenticate!(connection, dialect, actor, now);
-            let team = team!(connection, dialect, team_id);
-            require_manager(caller!(connection, dialect, team, &user.id))?;
+            let user_id = EntityId::from_dto(EntityKind::User, &user.id)?;
+            let team = team!(
+                connection,
+                dialect,
+                &EntityId::from_dto(EntityKind::Team, team_id)?
+            );
+            require_manager(caller!(connection, dialect, team, &user_id))?;
             team.collaborative()?;
-            let target = membership!(connection, dialect, &team.id, target_user_id)
+            let target = membership!(connection, dialect, &team.id, &target_user_id)
                 .ok_or(StoreError::NotFound)?;
             if target_user_id == team.owner_user_id || target.role()? != MembershipRole::Member {
                 return Err(StoreError::Forbidden);
@@ -752,8 +821,8 @@ impl Store {
             diesel::sql_query(
                 dialect.query("DELETE FROM memberships WHERE team_id=? AND user_id=?"),
             )
-            .bind::<Text, _>(&team.id)
-            .bind::<Text, _>(target_user_id)
+            .bind::<IdentitySql, _>(team.id)
+            .bind::<IdentitySql, _>(target_user_id)
             .execute(connection)
             .await?;
             Ok(())
@@ -768,8 +837,13 @@ impl Store {
     ) -> Result<(), StoreError> {
         operation!(self, |connection, dialect| {
             let user = authenticate!(connection, dialect, actor, now);
-            let team = team!(connection, dialect, team_id);
-            let role = caller!(connection, dialect, team, &user.id);
+            let user_id = EntityId::from_dto(EntityKind::User, &user.id)?;
+            let team = team!(
+                connection,
+                dialect,
+                &EntityId::from_dto(EntityKind::Team, team_id)?
+            );
+            let role = caller!(connection, dialect, team, &user_id);
             team.collaborative()?;
             if role == TeamRole::Owner {
                 return Err(StoreError::OwnerTransferRequired);
@@ -778,14 +852,14 @@ impl Store {
                 connection,
                 dialect,
                 &team.id,
-                Some(user.id.as_str()),
+                Some(user_id),
                 now
             );
             diesel::sql_query(
                 dialect.query("DELETE FROM memberships WHERE team_id=? AND user_id=?"),
             )
-            .bind::<Text, _>(&team.id)
-            .bind::<Text, _>(&user.id)
+            .bind::<IdentitySql, _>(team.id)
+            .bind::<IdentitySql, _>(user_id)
             .execute(connection)
             .await?;
             Ok(())
@@ -800,6 +874,7 @@ impl Store {
     ) -> Result<(), StoreError> {
         operation!(self, |connection, dialect| {
             let user = authenticate!(connection, dialect, actor, now);
+            let user_id = EntityId::from_dto(EntityKind::User, &user.id)?;
             // Only deletion can revisit a pending Team. Retained membership and
             // owner checks still apply before retrying post-commit collection.
             let query = "SELECT id,CAST(kind AS TEXT) AS kind,name,handle,owner_user_id,created_at FROM teams WHERE id=?";
@@ -809,21 +884,21 @@ impl Store {
             };
             let team = diesel::OptionalExtension::optional(
                 diesel::sql_query(dialect.query(&query))
-                    .bind::<Text, _>(team_id)
+                    .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::Team, team_id)?)
                     .get_result::<TeamRow>(connection)
                     .await,
             )?
             .ok_or(StoreError::NotFound)?;
-            require_owner(caller!(connection, dialect, team, &user.id))?;
+            require_owner(caller!(connection, dialect, team, &user_id))?;
             team.collaborative()?;
             crate::agent_cleanup::delete_team_agents!(connection, dialect, &team.id, None, now);
             diesel::sql_query(dialect.query("UPDATE teams SET deletion_requested_at=COALESCE(deletion_requested_at,?) WHERE id=?"))
                 .bind::<BigInt, _>(now)
-                .bind::<Text, _>(&team.id)
+                .bind::<IdentitySql, _>(team.id)
                 .execute(connection)
                 .await?;
             diesel::sql_query(dialect.query("DELETE FROM invitations WHERE team_id=?"))
-                .bind::<Text, _>(&team.id)
+                .bind::<IdentitySql, _>(team.id)
                 .execute(connection)
                 .await?;
             Ok(())

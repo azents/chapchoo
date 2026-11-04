@@ -60,7 +60,7 @@ export interface WorkspaceData {
   team: null | {
     id: string;
     name: string;
-    handle: string;
+    handle: string | null;
     personal: boolean;
     role: "OWNER" | "MANAGER" | "MEMBER";
     members: MemberView[];
@@ -85,11 +85,9 @@ export interface WorkspaceProps {
   };
   submission: Submission;
   name: string;
-  handle: string;
   inviteEmail: string;
   confirmation: TeamAction | null;
   onName: (value: string) => void;
-  onHandle: (value: string) => void;
   onInviteEmail: (value: string) => void;
   onRename: () => void;
   onInvite: () => void;

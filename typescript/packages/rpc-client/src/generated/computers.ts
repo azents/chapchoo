@@ -111,6 +111,26 @@ export interface Page {
   limit: number;
 }
 
+export interface AgentProfileImage {
+  id: string;
+  internalName: string;
+  assetKey: string;
+}
+
+export interface AgentProfileImages {
+  items: AgentProfileImage[];
+  nextAfter?: string | undefined;
+}
+
+export interface AgentHandleRequest {
+  teamId: string;
+  candidate: string;
+}
+
+export interface HandleAvailability {
+  available: boolean;
+}
+
 export interface AgentListRequest {
   teamId: string;
   page: Page | undefined;
@@ -125,6 +145,9 @@ export interface CreateAgentRequest {
   providerId: string;
   name: string;
   teamId: string;
+  handle: string;
+  profileImageId: string;
+  paletteKey: string;
 }
 
 export interface CreateAgentResult {
@@ -141,6 +164,9 @@ export interface Agent {
   name: string;
   computer: Computer | undefined;
   teamId: string;
+  handle: string;
+  profileImageId: string;
+  paletteKey: string;
 }
 
 export interface AgentList {
@@ -350,6 +376,274 @@ export const Page: MessageFns<Page> = {
   },
 };
 
+function createBaseAgentProfileImage(): AgentProfileImage {
+  return { id: "", internalName: "", assetKey: "" };
+}
+
+export const AgentProfileImage: MessageFns<AgentProfileImage> = {
+  encode(message: AgentProfileImage, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    if (message.internalName !== "") {
+      writer.uint32(18).string(message.internalName);
+    }
+    if (message.assetKey !== "") {
+      writer.uint32(26).string(message.assetKey);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AgentProfileImage {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseAgentProfileImage();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.internalName = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.assetKey = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<AgentProfileImage>, I>>(base?: I): AgentProfileImage {
+    return AgentProfileImage.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AgentProfileImage>, I>>(object: I): AgentProfileImage {
+    const message = createBaseAgentProfileImage();
+    message.id = object.id ?? "";
+    message.internalName = object.internalName ?? "";
+    message.assetKey = object.assetKey ?? "";
+    return message;
+  },
+};
+
+function createBaseAgentProfileImages(): AgentProfileImages {
+  return { items: [], nextAfter: undefined };
+}
+
+export const AgentProfileImages: MessageFns<AgentProfileImages> = {
+  encode(message: AgentProfileImages, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.items) {
+      AgentProfileImage.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.nextAfter !== undefined) {
+      writer.uint32(18).string(message.nextAfter);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AgentProfileImages {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseAgentProfileImages();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.items.push(AgentProfileImage.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.nextAfter = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<AgentProfileImages>, I>>(base?: I): AgentProfileImages {
+    return AgentProfileImages.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AgentProfileImages>, I>>(object: I): AgentProfileImages {
+    const message = createBaseAgentProfileImages();
+    message.items = object.items?.map((e) => AgentProfileImage.fromPartial(e)) || [];
+    message.nextAfter = object.nextAfter ?? undefined;
+    return message;
+  },
+};
+
+function createBaseAgentHandleRequest(): AgentHandleRequest {
+  return { teamId: "", candidate: "" };
+}
+
+export const AgentHandleRequest: MessageFns<AgentHandleRequest> = {
+  encode(message: AgentHandleRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.teamId !== "") {
+      writer.uint32(10).string(message.teamId);
+    }
+    if (message.candidate !== "") {
+      writer.uint32(18).string(message.candidate);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AgentHandleRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseAgentHandleRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.teamId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.candidate = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<AgentHandleRequest>, I>>(base?: I): AgentHandleRequest {
+    return AgentHandleRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AgentHandleRequest>, I>>(object: I): AgentHandleRequest {
+    const message = createBaseAgentHandleRequest();
+    message.teamId = object.teamId ?? "";
+    message.candidate = object.candidate ?? "";
+    return message;
+  },
+};
+
+function createBaseHandleAvailability(): HandleAvailability {
+  return { available: false };
+}
+
+export const HandleAvailability: MessageFns<HandleAvailability> = {
+  encode(message: HandleAvailability, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.available !== false) {
+      writer.uint32(8).bool(message.available);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): HandleAvailability {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseHandleAvailability();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.available = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<HandleAvailability>, I>>(base?: I): HandleAvailability {
+    return HandleAvailability.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<HandleAvailability>, I>>(object: I): HandleAvailability {
+    const message = createBaseHandleAvailability();
+    message.available = object.available ?? false;
+    return message;
+  },
+};
+
 function createBaseAgentListRequest(): AgentListRequest {
   return { teamId: "", page: undefined };
 }
@@ -473,7 +767,7 @@ export const AgentRequest: MessageFns<AgentRequest> = {
 };
 
 function createBaseCreateAgentRequest(): CreateAgentRequest {
-  return { requestId: "", providerId: "", name: "", teamId: "" };
+  return { requestId: "", providerId: "", name: "", teamId: "", handle: "", profileImageId: "", paletteKey: "" };
 }
 
 export const CreateAgentRequest: MessageFns<CreateAgentRequest> = {
@@ -489,6 +783,15 @@ export const CreateAgentRequest: MessageFns<CreateAgentRequest> = {
     }
     if (message.teamId !== "") {
       writer.uint32(34).string(message.teamId);
+    }
+    if (message.handle !== "") {
+      writer.uint32(42).string(message.handle);
+    }
+    if (message.profileImageId !== "") {
+      writer.uint32(50).string(message.profileImageId);
+    }
+    if (message.paletteKey !== "") {
+      writer.uint32(58).string(message.paletteKey);
     }
     return writer;
   },
@@ -538,6 +841,30 @@ export const CreateAgentRequest: MessageFns<CreateAgentRequest> = {
             message.teamId = reader.string();
             continue;
           }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.handle = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.profileImageId = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.paletteKey = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -559,6 +886,9 @@ export const CreateAgentRequest: MessageFns<CreateAgentRequest> = {
     message.providerId = object.providerId ?? "";
     message.name = object.name ?? "";
     message.teamId = object.teamId ?? "";
+    message.handle = object.handle ?? "";
+    message.profileImageId = object.profileImageId ?? "";
+    message.paletteKey = object.paletteKey ?? "";
     return message;
   },
 };
@@ -688,7 +1018,7 @@ export const RemovedCreation: MessageFns<RemovedCreation> = {
 };
 
 function createBaseAgent(): Agent {
-  return { id: "", name: "", computer: undefined, teamId: "" };
+  return { id: "", name: "", computer: undefined, teamId: "", handle: "", profileImageId: "", paletteKey: "" };
 }
 
 export const Agent: MessageFns<Agent> = {
@@ -704,6 +1034,15 @@ export const Agent: MessageFns<Agent> = {
     }
     if (message.teamId !== "") {
       writer.uint32(34).string(message.teamId);
+    }
+    if (message.handle !== "") {
+      writer.uint32(42).string(message.handle);
+    }
+    if (message.profileImageId !== "") {
+      writer.uint32(50).string(message.profileImageId);
+    }
+    if (message.paletteKey !== "") {
+      writer.uint32(58).string(message.paletteKey);
     }
     return writer;
   },
@@ -753,6 +1092,30 @@ export const Agent: MessageFns<Agent> = {
             message.teamId = reader.string();
             continue;
           }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.handle = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.profileImageId = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.paletteKey = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -776,6 +1139,9 @@ export const Agent: MessageFns<Agent> = {
       ? Computer.fromPartial(object.computer)
       : undefined;
     message.teamId = object.teamId ?? "";
+    message.handle = object.handle ?? "";
+    message.profileImageId = object.profileImageId ?? "";
+    message.paletteKey = object.paletteKey ?? "";
     return message;
   },
 };
@@ -2585,6 +2951,24 @@ export const ResourceInventory: MessageFns<ResourceInventory> = {
 
 export type AgentsService = typeof AgentsService;
 export const AgentsService = {
+  listProfileImages: {
+    path: "/chapchoo.computers.Agents/ListProfileImages" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: Page): Buffer => Buffer.from(Page.encode(value).finish()),
+    requestDeserialize: (value: Buffer): Page => Page.decode(value),
+    responseSerialize: (value: AgentProfileImages): Buffer => Buffer.from(AgentProfileImages.encode(value).finish()),
+    responseDeserialize: (value: Buffer): AgentProfileImages => AgentProfileImages.decode(value),
+  },
+  checkHandle: {
+    path: "/chapchoo.computers.Agents/CheckHandle" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: AgentHandleRequest): Buffer => Buffer.from(AgentHandleRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): AgentHandleRequest => AgentHandleRequest.decode(value),
+    responseSerialize: (value: HandleAvailability): Buffer => Buffer.from(HandleAvailability.encode(value).finish()),
+    responseDeserialize: (value: Buffer): HandleAvailability => HandleAvailability.decode(value),
+  },
   create: {
     path: "/chapchoo.computers.Agents/Create" as const,
     requestStream: false as const,
@@ -2624,6 +3008,8 @@ export const AgentsService = {
 } as const;
 
 export interface AgentsServer extends UntypedServiceImplementation {
+  listProfileImages: handleUnaryCall<Page, AgentProfileImages>;
+  checkHandle: handleUnaryCall<AgentHandleRequest, HandleAvailability>;
   create: handleUnaryCall<CreateAgentRequest, CreateAgentResult>;
   list: handleUnaryCall<AgentListRequest, AgentList>;
   get: handleUnaryCall<AgentRequest, Agent>;
@@ -2631,6 +3017,36 @@ export interface AgentsServer extends UntypedServiceImplementation {
 }
 
 export interface AgentsClient extends Client {
+  listProfileImages(
+    request: Page,
+    callback: (error: ServiceError | null, response: AgentProfileImages) => void,
+  ): ClientUnaryCall;
+  listProfileImages(
+    request: Page,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: AgentProfileImages) => void,
+  ): ClientUnaryCall;
+  listProfileImages(
+    request: Page,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: AgentProfileImages) => void,
+  ): ClientUnaryCall;
+  checkHandle(
+    request: AgentHandleRequest,
+    callback: (error: ServiceError | null, response: HandleAvailability) => void,
+  ): ClientUnaryCall;
+  checkHandle(
+    request: AgentHandleRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: HandleAvailability) => void,
+  ): ClientUnaryCall;
+  checkHandle(
+    request: AgentHandleRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: HandleAvailability) => void,
+  ): ClientUnaryCall;
   create(
     request: CreateAgentRequest,
     callback: (error: ServiceError | null, response: CreateAgentResult) => void,

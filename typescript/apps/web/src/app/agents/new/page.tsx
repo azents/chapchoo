@@ -9,10 +9,12 @@ export default async function Page({
   searchParams: Promise<{ team?: string | string[] }>;
 }): Promise<ReactElement> {
   const { team } = await searchParams;
+  const initial = await loadAgentCreation(typeof team === "string" ? team : "");
   return (
     <AgentCreationPage
       basePath={getPublicConfig().publicBasePath}
-      initial={await loadAgentCreation(typeof team === "string" ? team : "")}
+      key={initial.teamId}
+      initial={initial}
     />
   );
 }

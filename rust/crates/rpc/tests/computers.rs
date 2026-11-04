@@ -129,7 +129,7 @@ fn domain_rpc_keeps_private_owner_authority_and_independent_admin_residual_inven
             .await?;
         let control = app.register_control("http://127.0.0.1:1").await?;
         let prepared = app
-            .prepare_provider_connection("provider", &key.token.digest(), &control.id)
+            .prepare_provider_connection(&key.provider_id, &key.key.token.digest(), &control.id)
             .await?;
         app.admit_component_connection(&prepared).await?;
         let admission = Arc::new(AtomicBool::new(true));
@@ -167,8 +167,15 @@ fn domain_rpc_keeps_private_owner_authority_and_independent_admin_residual_inven
         let creation = wire::CreateAgentRequest {
             team_id: team.id.clone(),
             request_id: "create".into(),
-            provider_id: "provider".into(),
+            provider_id: key.provider_id.clone(),
             name: "Private Agent name".into(),
+            handle: "private-agent".into(),
+            profile_image_id: app
+                .agent_profile_images(&user.digest(), None, 1, AcceptanceTime::System)
+                .await?[0]
+                .id
+                .clone(),
+            palette_key: "sage".into(),
         };
         let created = agent(
             agents
@@ -249,10 +256,10 @@ fn domain_rpc_keeps_private_owner_authority_and_independent_admin_residual_inven
             request_id: "create",
         };
         let source = ProviderSource {
-            provider_id: "provider",
+            provider_id: &key.provider_id,
             control_id: &control.id,
             connection_id: &prepared.owner().connection_id,
-            credential: &key.token.digest(),
+            credential: &key.key.token.digest(),
         };
         let execution = app
             .reserve_execution(
@@ -312,7 +319,7 @@ fn domain_rpc_keeps_private_owner_authority_and_independent_admin_residual_inven
         let list = inventory
             .list_computers(auth(
                 wire::InventoryRequest {
-                    provider_id: "provider".into(),
+                    provider_id: key.provider_id.clone(),
                     page: None,
                 },
                 &admin,
@@ -383,7 +390,7 @@ fn domain_rpc_keeps_private_owner_authority_and_independent_admin_residual_inven
         let residual = inventory
             .list_computers(auth(
                 wire::InventoryRequest {
-                    provider_id: "provider".into(),
+                    provider_id: key.provider_id.clone(),
                     page: None,
                 },
                 &admin,

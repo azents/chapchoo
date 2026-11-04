@@ -25,6 +25,10 @@ Every present resource must match reserved namespace/name, original UID when
 allocated and exact Provider/Computer/applicable execution annotations. Annotations
 rather than labels carry opaque IDs that can exceed the Kubernetes label-value
 limit. A foreign same-name UID/ownership mismatch is not adoption authority.
+The annotation values come from the required committed
+[allocation witness](computer-storage.md), not current canonical context IDs or a
+configured Provider key. Missing, malformed or resource-role-mismatched witnesses
+reject before native reads or effects. Correlation IDs remain independently exact.
 Managed objects have no controller ownerReferences; the saved PVC is independent
 of standalone Pod deletion.
 

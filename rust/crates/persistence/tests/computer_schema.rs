@@ -19,18 +19,122 @@ fn cipher(byte: u8) -> Result<CredentialCipher, TestError> {
     )?)?)
 }
 
-fn provider_sql(id: &str) -> String {
+fn provider_sql(id: &str, postgres: bool) -> String {
     // Only static fixture identifiers reach this helper.
-    format!(
-        "INSERT INTO computer_providers(id,owner_kind,system_owner_id,name,provider_kind,created_at) VALUES('{id}','SYSTEM','owner','Fixture','KUBERNETES',0)"
+    compact_fixture_sql(
+        &format!(
+            "INSERT INTO computer_providers(id,registration_key,owner_kind,system_owner_id,name,provider_kind,created_at) VALUES('{id}','registration-{id}','SYSTEM','owner','Fixture','KUBERNETES',0)"
+        ),
+        postgres,
     )
+}
+
+/// Native SQL fixtures exercise schema constraints; no DTO codec is exposed.
+fn compact_fixture_sql(source: &str, postgres: bool) -> String {
+    let mut sql = source.to_owned();
+    if sql.starts_with("INSERT INTO agents(") {
+        let handle = source
+            .split("VALUES('")
+            .nth(1)
+            .and_then(|part| part.split('\'').next())
+            .unwrap_or("invalid-fixture");
+        let handle = format!("s-{}", handle.chars().take(12).collect::<String>());
+        sql = sql.replace(
+            "created_at) VALUES(",
+            "created_at,handle,profile_image_id,palette_key) VALUES(",
+        );
+        if let Some(end) = sql.rfind(')') {
+            sql.insert_str(
+                end,
+                &format!(
+                    ", '{handle}', (SELECT id FROM profile_images ORDER BY id LIMIT 1), 'sage'"
+                ),
+            );
+        }
+    }
+    if sql.starts_with("INSERT INTO computer_resources(") {
+        sql = sql.replace("presence) VALUES(", "presence,allocation_computer_id,allocation_provider_id,allocation_execution_id) VALUES(");
+        let execution = if source.contains("'POD'") {
+            "'native-execution'"
+        } else {
+            "NULL"
+        };
+        if let Some(end) = sql.rfind(')') {
+            sql.insert_str(
+                end,
+                &format!(", 'native-computer', 'native-provider', {execution}"),
+            );
+        }
+    }
+    for user in ["a", "b"] {
+        sql = sql.replace(&format!("'Personal','personal-{user}'"), "'Personal',NULL");
+    }
+    let labels = [
+        "provider-a",
+        "provider-b",
+        "root-guard",
+        "user-a",
+        "user-b",
+        "personal-a",
+        "personal-b",
+        "cloud",
+        "local",
+        "cloud-agent",
+        "cloud-duplicate",
+        "local-one",
+        "local-two",
+        "foreign-owner",
+        "wrong-kind",
+        "replacement-agent",
+        "execution-a",
+        "wrong-session",
+        "bound-session",
+        "control",
+        "foreign-route",
+        "owned-route",
+    ];
+    for (number, label) in (1_u8..).zip(labels) {
+        let mut bytes = [0_u8; 16];
+        bytes[0] = 1;
+        bytes[6] = 0x70;
+        bytes[8] = 0x80;
+        bytes[15] = number;
+        let literal = if postgres {
+            format!("'{}'::uuid", uuid::Uuid::from_bytes(bytes))
+        } else {
+            format!(
+                "X'{}'",
+                bytes
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>()
+            )
+        };
+        sql = sql.replace(&format!("'{label}'"), &literal);
+    }
+    sql
+}
+
+struct CompactFixture<'a, C> {
+    connection: &'a mut C,
+    postgres: bool,
+}
+impl<C: SimpleConnection> SimpleConnection for CompactFixture<'_, C> {
+    fn batch_execute(&mut self, query: &str) -> diesel::QueryResult<()> {
+        self.connection
+            .batch_execute(&compact_fixture_sql(query, self.postgres))
+    }
 }
 
 fn exercise_constraints(
     connection: &mut impl SimpleConnection,
     postgres: bool,
 ) -> Result<(), TestError> {
-    connection.batch_execute(&provider_sql("provider-a"))?;
+    let connection = &mut CompactFixture {
+        connection,
+        postgres,
+    };
+    connection.batch_execute(&provider_sql("provider-a", postgres))?;
     let hash = if postgres {
         "decode(repeat('00',32),'hex')"
     } else {
@@ -72,7 +176,7 @@ fn exercise_constraints(
     assert!(connection.batch_execute("INSERT INTO computer_resources(computer_id,provider_id,resource_kind,native_scope,name,presence) VALUES('cloud','provider-a','PVC','fixture','empty-replacement','PRESENT')").is_err());
     // The same Provider resource cannot be assigned to a second Computer.
     assert!(connection.batch_execute("INSERT INTO computer_resources(computer_id,provider_id,resource_kind,native_scope,name,presence) VALUES('local','provider-a','PVC','fixture','saved','UNKNOWN')").is_err());
-    connection.batch_execute(&provider_sql("provider-b"))?;
+    connection.batch_execute(&provider_sql("provider-b", postgres))?;
     assert!(connection.batch_execute("INSERT INTO computer_resources(computer_id,provider_id,resource_kind,native_scope,name,presence) VALUES('local','provider-b','PVC','fixture','wrong-provider','UNKNOWN')").is_err());
     assert!(
         connection
@@ -85,6 +189,7 @@ fn exercise_constraints(
 
 #[test]
 fn sqlite_computer_constraints_and_provider_only_root_guard() -> Result<(), TestError> {
+    let postgres = false;
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("computers.sqlite");
     let original = cipher(1)?;
@@ -92,13 +197,16 @@ fn sqlite_computer_constraints_and_provider_only_root_guard() -> Result<(), Test
     let mut connection =
         diesel::SqliteConnection::establish(path.to_str().ok_or("Invalid fixture path")?)?;
     connection.batch_execute("PRAGMA foreign_keys=ON")?;
-    connection.batch_execute(&provider_sql("root-guard"))?;
+    connection.batch_execute(&provider_sql("root-guard", postgres))?;
     connection.batch_execute("DELETE FROM installation_key_binding")?;
     assert!(matches!(
         prepare_sqlite(&path, &cipher(2)?),
         Err(PreparationError::MissingBinding)
     ));
-    connection.batch_execute("DELETE FROM computer_providers WHERE id='root-guard'")?;
+    connection.batch_execute(&compact_fixture_sql(
+        "DELETE FROM computer_providers WHERE id='root-guard'",
+        postgres,
+    ))?;
     prepare_sqlite(&path, &original)?;
     exercise_constraints(&mut connection, false)?;
     assert!(connection.revert_last_migration(SQLITE_MIGRATIONS).is_err());
@@ -131,16 +239,20 @@ fn postgres_computer_constraints_and_provider_only_root_guard() -> Result<(), Te
 }
 
 fn postgres_in_schema(url: &str) -> Result<(), TestError> {
+    let postgres = true;
     let original = cipher(1)?;
     prepare_postgres(url, &original)?;
     let mut connection = AsyncConnectionWrapper::<AsyncPgConnection>::establish(url)?;
-    connection.batch_execute(&provider_sql("root-guard"))?;
+    connection.batch_execute(&provider_sql("root-guard", postgres))?;
     connection.batch_execute("DELETE FROM installation_key_binding")?;
     assert!(matches!(
         prepare_postgres(url, &cipher(2)?),
         Err(PreparationError::MissingBinding)
     ));
-    connection.batch_execute("DELETE FROM computer_providers WHERE id='root-guard'")?;
+    connection.batch_execute(&compact_fixture_sql(
+        "DELETE FROM computer_providers WHERE id='root-guard'",
+        postgres,
+    ))?;
     prepare_postgres(url, &original)?;
     let actual = diesel::sql_query("SELECT count(*) AS n FROM pg_constraint WHERE conname='current_execution_belongs_to_computer' AND conrelid='computers'::regclass AND contype='f' AND condeferrable").get_result::<Count>(&mut connection)?;
     assert_eq!(actual.n, 1);

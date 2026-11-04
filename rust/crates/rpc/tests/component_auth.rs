@@ -77,7 +77,7 @@ fn exchange_request(
         .as_millis();
     Ok(wire::ProviderAuthenticationRequest {
         configuration: Some(wire::ProviderConfiguration {
-            provider_id: "provider".into(),
+            registration_key: "provider".into(),
             name: "Fixture".into(),
             capabilities: Some(wire::ProviderCapabilities {
                 create: true,
@@ -150,6 +150,10 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
             .exchange(exchange_request("issue", owner.expose())?)
             .await?
             .into_inner();
+        assert_eq!(first.provider_id, repeated.provider_id);
+        let provider_id = first.provider_id;
+        let first = first.key.ok_or("Missing Provider key")?;
+        let repeated = repeated.key.ok_or("Missing recovered Provider key")?;
         assert!(first.token == repeated.token);
         assert_eq!(first.expires_at, repeated.expires_at);
         assert_eq!(
@@ -163,7 +167,7 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
         );
         let mut invalid = exchange_request("wrong-id", owner.expose())?;
         if let Some(config) = invalid.configuration.as_mut() {
-            config.provider_id = "foreign-provider".into();
+            config.registration_key = "foreign-provider".into();
         }
         assert_eq!(
             provider
@@ -194,13 +198,13 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
         // A controlled admitted-route fixture supplies stream ownership. This
         // test verifies credential RPC, not the pending component stream adapter.
         let prepared = app
-            .prepare_provider_connection("provider", &token.digest(), &control.id)
+            .prepare_provider_connection(&provider_id, &token.digest(), &control.id)
             .await?;
         app.admit_component_connection(&prepared).await?;
         provider
             .check_connection(authenticated(
                 wire::ProviderConnectionCheck {
-                    provider_id: "provider".into(),
+                    provider_id: provider_id.clone(),
                     instance_id: control.id.clone(),
                     connection_id: prepared.owner().connection_id.clone(),
                 },
@@ -231,7 +235,7 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
             provider
                 .rotate_key(authenticated(
                     wire::ProviderKeyRequest {
-                        provider_id: "provider".into(),
+                        provider_id: provider_id.clone(),
                         request_id: format!(
                             "{}:account-cannot-manage-system",
                             AcceptanceTime::System.now()?
@@ -249,7 +253,7 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
             provider
                 .revoke_key(authenticated(
                     wire::ProviderKeyRequest {
-                        provider_id: "provider".into(),
+                        provider_id: provider_id.clone(),
                         request_id: format!(
                             "{}:component-cannot-revoke",
                             AcceptanceTime::System.now()?
@@ -266,14 +270,30 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
         let created = app
             .create_cloud_agent(
                 &user.token.digest(),
-                &accounts
-                    .list_teams(&user.token.digest(), AcceptanceTime::System.now()?)
-                    .await?
-                    .remove(0)
-                    .id,
-                "create",
-                "provider",
-                "Fixture",
+                &chapchoo_service::CreateCloudAgent {
+                    team_id: accounts
+                        .list_teams(&user.token.digest(), AcceptanceTime::System.now()?)
+                        .await?
+                        .remove(0)
+                        .id,
+                    request_id: "create".into(),
+                    provider_id: provider_id.clone(),
+                    name: "Fixture".into(),
+                    profile: chapchoo_service::CreateAgentProfile {
+                        handle: "auth-agent".into(),
+                        image_id: app
+                            .agent_profile_images(
+                                &user.token.digest(),
+                                None,
+                                1,
+                                AcceptanceTime::System,
+                            )
+                            .await?[0]
+                            .id
+                            .clone(),
+                        palette_key: "sage".into(),
+                    },
+                },
                 AcceptanceTime::System,
             )
             .await?;
@@ -281,7 +301,7 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
             return Err("Expected created Agent".into());
         };
         let source = ProviderSource {
-            provider_id: "provider",
+            provider_id: &provider_id,
             control_id: &control.id,
             connection_id: &prepared.owner().connection_id,
             credential: &token.digest(),
@@ -299,7 +319,7 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
         let bootstrap = provider
             .issue_connector_session(authenticated(
                 wire::ConnectorSessionRequest {
-                    provider_id: "provider".into(),
+                    provider_id: provider_id.clone(),
                     execution_id: execution.execution_id,
                     request_id: "session".into(),
                     connection_id: prepared.owner().connection_id.clone(),
@@ -456,16 +476,18 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
             .exchange(exchange_request("replacement", owner.expose())?)
             .await?
             .into_inner();
+        assert_eq!(replacement.provider_id, provider_id);
+        let replacement = replacement.key.ok_or("Missing replacement key")?;
         let replacement_token = BearerSecret::parse(replacement.token.clone())?;
         let replacement_connection = app
-            .prepare_provider_connection("provider", &replacement_token.digest(), &control.id)
+            .prepare_provider_connection(&provider_id, &replacement_token.digest(), &control.id)
             .await?;
         app.admit_component_connection(&replacement_connection)
             .await?;
         provider
             .revoke_connector_session(authenticated(
                 wire::RevokeConnectorSessionRequest {
-                    provider_id: "provider".into(),
+                    provider_id: provider_id.clone(),
                     session_id: bootstrap.session_id.clone(),
                     request_id: "revoke-session".into(),
                     connection_id: replacement_connection.owner().connection_id.clone(),
@@ -571,7 +593,7 @@ fn standalone_trust_is_private_bound_and_prohibitable() -> Result<(), TestError>
             let mut request = exchange_request(request_id, "unused")?;
             request.evidence = None;
             if let Some(config) = request.configuration.as_mut() {
-                config.provider_id = id.to_owned();
+                config.registration_key = id.to_owned();
             }
             Ok::<_, TestError>(request)
         };
@@ -592,6 +614,9 @@ fn standalone_trust_is_private_bound_and_prohibitable() -> Result<(), TestError>
             .exchange(request("provider", "internal")?)
             .await?
             .into_inner();
+        assert_eq!(first.provider_id, recovered.provider_id);
+        let first = first.key.ok_or("Missing first key")?;
+        let recovered = recovered.key.ok_or("Missing recovered key")?;
         assert_eq!(first.token, recovered.token);
         assert_eq!(first.expires_at, recovered.expires_at);
         assert_eq!(

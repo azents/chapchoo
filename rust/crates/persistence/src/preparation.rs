@@ -10,7 +10,7 @@ use std::{error::Error, fs::OpenOptions, path::Path};
 
 pub const SQLITE_MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/sqlite");
 pub const POSTGRES_MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/postgres");
-const VERSIONS: [&str; 8] = [
+const VERSIONS: [&str; 9] = [
     "00000000000001",
     "00000000000002",
     "00000000000003",
@@ -19,8 +19,11 @@ const VERSIONS: [&str; 8] = [
     "00000000000006",
     "00000000000007",
     "00000000000008",
+    "00000000000009",
 ];
 const PG_LOCK: i64 = 1_960_261_029;
+#[cfg(test)]
+pub(crate) static POSTGRES_PREPARATION_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 const PRODUCT_ROWS: &str = "SELECT
     (SELECT count(*) FROM users) +
     (SELECT count(*) FROM teams) +
@@ -58,6 +61,8 @@ fn prepared_product_query() -> String {
 
 #[derive(Debug, thiserror::Error)]
 pub enum PreparationError {
+    #[error("Preserving identity and profile preparation failed")]
+    Transition(#[source] Box<crate::StoreError>),
     #[error("Database preparation is already running")]
     Busy,
     #[error("Database connection failed")]
@@ -85,9 +90,41 @@ impl From<diesel::result::Error> for PreparationError {
 }
 
 #[derive(diesel::QueryableByName)]
-struct Count {
+pub(crate) struct Count {
     #[diesel(sql_type = BigInt)]
-    n: i64,
+    pub n: i64,
+}
+
+impl From<crate::StoreError> for PreparationError {
+    fn from(value: crate::StoreError) -> Self {
+        Self::Transition(Box::new(value))
+    }
+}
+
+// The forward migration consumes transaction-local assignments. A migration is
+// marked applied only after all crypto/profile staging and schema work succeeds.
+macro_rules! prepare_migrations {
+    ($connection:expr, $source:expr, $postgres:expr, $cipher:expr) => {{
+        let pending = $connection
+            .pending_migrations($source)
+            .map_err(PreparationError::Migration)?;
+        for migration in pending {
+            let transition = migration.name().version().to_string() == "00000000000009";
+            if transition {
+                crate::profile_preparation::stage_transition!($connection, $postgres, $cipher);
+            }
+            $connection
+                .run_migration(&*migration)
+                .map_err(PreparationError::Migration)?;
+            if transition {
+                $connection.batch_execute(crate::profile_preparation::DROP_STAGING)?;
+            }
+        }
+        verify_versions(
+            diesel::sql_query("SELECT version FROM __diesel_schema_migrations ORDER BY version")
+                .load($connection)?,
+        )?;
+    }};
 }
 
 #[derive(diesel::QueryableByName)]
@@ -242,9 +279,7 @@ pub fn prepare_sqlite(path: &Path, cipher: &CredentialCipher) -> Result<(), Prep
     }
     let environment = chapchoo_domain::DisplaySettings::from_environment();
     connection.immediate_transaction::<_, PreparationError, _>(|connection| {
-        connection
-            .run_pending_migrations(SQLITE_MIGRATIONS)
-            .map_err(PreparationError::Migration)?;
+        prepare_migrations!(connection, SQLITE_MIGRATIONS, false, cipher);
         if !already_bound {
             if diesel::sql_query(prepared_product_query())
                 .get_result::<Count>(connection)?
@@ -261,6 +296,8 @@ pub fn prepare_sqlite(path: &Path, cipher: &CredentialCipher) -> Result<(), Prep
             .execute(connection)?;
         }
         initialize_display!(connection, false, environment);
+        crate::profile_catalogue::seed_catalogue!(connection, false);
+        crate::profile_catalogue::verify_profiles!(connection, false);
         verify_display!(connection);
         sqlite_binding(connection, cipher)?;
         Ok(())
@@ -293,6 +330,7 @@ pub fn sqlite_ready(path: &Path, cipher: &CredentialCipher) -> Result<(), Prepar
             .load(&mut connection)?,
     )?;
     verify_display!(&mut connection);
+    crate::profile_catalogue::verify_profiles!(&mut connection, false);
     Ok(())
 }
 
@@ -343,9 +381,7 @@ pub fn prepare_postgres(url: &str, cipher: &CredentialCipher) -> Result<(), Prep
     }
     let environment = chapchoo_domain::DisplaySettings::from_environment();
     connection.transaction::<_, PreparationError, _>(|connection| {
-        connection
-            .run_pending_migrations(POSTGRES_MIGRATIONS)
-            .map_err(PreparationError::Migration)?;
+        prepare_migrations!(connection, POSTGRES_MIGRATIONS, true, cipher);
         if !already_bound {
             if diesel::sql_query(prepared_product_query())
                 .get_result::<Count>(connection)?
@@ -362,6 +398,8 @@ pub fn prepare_postgres(url: &str, cipher: &CredentialCipher) -> Result<(), Prep
             .execute(connection)?;
         }
         initialize_display!(connection, true, environment);
+        crate::profile_catalogue::seed_catalogue!(connection, true);
+        crate::profile_catalogue::verify_profiles!(connection, true);
         verify_display!(connection);
         pg_binding(connection, cipher)?;
         Ok(())
@@ -385,6 +423,7 @@ pub fn postgres_ready(url: &str, cipher: &CredentialCipher) -> Result<(), Prepar
             .load(&mut connection)?,
     )?;
     verify_display!(&mut connection);
+    crate::profile_catalogue::verify_profiles!(&mut connection, true);
     connection.batch_execute("COMMIT")?;
     Ok(())
 }
