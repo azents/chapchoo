@@ -140,7 +140,12 @@ fn delayed_admission_cannot_displace_a_new_provider_or_connector() -> Result<(),
                     restart: true,
                 },
                 &chapchoo_domain::ProviderSubstrate::Kubernetes,
-                "key",
+                &format!(
+                    "{}:key",
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)?
+                        .as_millis()
+                ),
                 AcceptanceTime::System,
             )
             .await?;

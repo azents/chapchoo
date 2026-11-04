@@ -8,7 +8,7 @@ use chapchoo_crypto::{
     BearerSecret, CredentialCipher, RecoveryEnvelope, SecretDigest, VerifiedSystemOwner,
     payload_fingerprint,
 };
-use chapchoo_domain::ProviderSubstrate;
+use chapchoo_domain::{InvalidProviderKeyRequest, ProviderKeyRequestId, ProviderSubstrate};
 use diesel::{
     OptionalExtension,
     sql_types::{BigInt, Binary, Nullable, Text},
@@ -363,6 +363,15 @@ macro_rules! authenticate_provider {
 
 pub(crate) use authenticate_provider;
 
+fn provider_request(value: &str, now: i64) -> Result<ProviderKeyRequestId, StoreError> {
+    let request = ProviderKeyRequestId::parse(value).map_err(|_| StoreError::InvalidInput)?;
+    request.admit_at(now).map_err(|error| match error {
+        InvalidProviderKeyRequest::Expired => StoreError::InvalidTransition,
+        _ => StoreError::InvalidInput,
+    })?;
+    Ok(request)
+}
+
 impl Store {
     pub async fn rotate_provider_key(
         &self,
@@ -375,6 +384,7 @@ impl Store {
         if !valid_id(provider_id) || !valid_id(&draft.request_id) {
             return Err(StoreError::InvalidInput);
         }
+        let request = provider_request(&draft.request_id, now)?;
         let (expires_at, proactive_after) = policy.times(now)?;
         let fingerprint = match &authority {
             ProviderOwner::Bootstrap {
@@ -422,6 +432,13 @@ impl Store {
                 now,
                 &self.cipher
             );
+            diesel::sql_query(dialect.query(
+                "DELETE FROM provider_key_requests WHERE provider_id=? AND retry_expires_at<=?",
+            ))
+            .bind::<Text, _>(provider_id)
+            .bind::<BigInt, _>(now)
+            .execute(connection)
+            .await?;
             let existing =
                 diesel::sql_query(dialect.query("SELECT * FROM provider_keys WHERE provider_id=?"))
                     .bind::<Text, _>(provider_id)
@@ -484,8 +501,8 @@ impl Store {
             diesel::sql_query(dialect.query("INSERT INTO provider_keys(provider_id,current_hash,previous_hash,previous_valid_until,issued_at,expires_at,current_request_id,recovery_nonce,recovery_ciphertext) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(provider_id) DO UPDATE SET current_hash=excluded.current_hash,previous_hash=excluded.previous_hash,previous_valid_until=excluded.previous_valid_until,issued_at=excluded.issued_at,expires_at=excluded.expires_at,revoked_at=NULL,current_request_id=excluded.current_request_id,recovery_nonce=excluded.recovery_nonce,recovery_ciphertext=excluded.recovery_ciphertext"))
                 .bind::<Text,_>(provider_id).bind::<Binary,_>(digest.as_bytes().as_slice()).bind::<Nullable<Binary>,_>(previous).bind::<Nullable<BigInt>,_>(overlap)
                 .bind::<BigInt,_>(now).bind::<BigInt,_>(expires_at).bind::<Text,_>(&draft.request_id).bind::<Binary,_>(envelope.nonce().as_slice()).bind::<Binary,_>(envelope.ciphertext()).execute(connection).await?;
-            diesel::sql_query(dialect.query("INSERT INTO provider_key_requests(provider_id,request_id,payload_hash,result_hash) VALUES(?,?,?,?)"))
-                .bind::<Text,_>(provider_id).bind::<Text,_>(&draft.request_id).bind::<Binary,_>(fingerprint.as_slice()).bind::<Binary,_>(digest.as_bytes().as_slice()).execute(connection).await?;
+            diesel::sql_query(dialect.query("INSERT INTO provider_key_requests(provider_id,request_id,payload_hash,result_hash,retry_expires_at) VALUES(?,?,?,?,?)"))
+                .bind::<Text,_>(provider_id).bind::<Text,_>(&draft.request_id).bind::<Binary,_>(fingerprint.as_slice()).bind::<Binary,_>(digest.as_bytes().as_slice()).bind::<BigInt,_>(request.retry_expires_at()).execute(connection).await?;
             Ok(ComponentKeyResult {
                 token: BearerSecret::parse(draft.token.expose().to_owned())?,
                 issued_at: now,
@@ -505,6 +522,7 @@ impl Store {
         if !valid_id(provider_id) || !valid_id(request_id) {
             return Err(StoreError::InvalidInput);
         }
+        let request = provider_request(request_id, now)?;
         let fingerprint = payload_fingerprint("provider-key-revocation", &[provider_id.as_bytes()]);
         operation!(self, |connection, dialect| {
             let _provider = provider_owner!(
@@ -515,6 +533,13 @@ impl Store {
                 now,
                 &self.cipher
             );
+            diesel::sql_query(dialect.query(
+                "DELETE FROM provider_key_requests WHERE provider_id=? AND retry_expires_at<=?",
+            ))
+            .bind::<Text, _>(provider_id)
+            .bind::<BigInt, _>(now)
+            .execute(connection)
+            .await?;
             let current =
                 diesel::sql_query(dialect.query("SELECT * FROM provider_keys WHERE provider_id=?"))
                     .bind::<Text, _>(provider_id)
@@ -530,8 +555,8 @@ impl Store {
             }
             diesel::sql_query(dialect.query("UPDATE provider_keys SET revoked_at=COALESCE(revoked_at,?),previous_hash=NULL,previous_valid_until=NULL,recovery_nonce=NULL,recovery_ciphertext=NULL WHERE provider_id=?"))
                 .bind::<BigInt,_>(now).bind::<Text,_>(provider_id).execute(connection).await?;
-            diesel::sql_query(dialect.query("INSERT INTO provider_key_requests(provider_id,request_id,payload_hash,result_hash) VALUES(?,?,?,?)"))
-                .bind::<Text,_>(provider_id).bind::<Text,_>(request_id).bind::<Binary,_>(fingerprint.as_slice()).bind::<Binary,_>(&current.current_hash).execute(connection).await?;
+            diesel::sql_query(dialect.query("INSERT INTO provider_key_requests(provider_id,request_id,payload_hash,result_hash,retry_expires_at) VALUES(?,?,?,?,?)"))
+                .bind::<Text,_>(provider_id).bind::<Text,_>(request_id).bind::<Binary,_>(fingerprint.as_slice()).bind::<Binary,_>(&current.current_hash).bind::<BigInt,_>(request.retry_expires_at()).execute(connection).await?;
             diesel::sql_query(
                 dialect.query("DELETE FROM provider_connections WHERE provider_id=?"),
             )

@@ -61,7 +61,12 @@ fn generated_connection_admission_context_cannot_steal_a_winner() -> Result<(), 
                     restart: true,
                 },
                 &chapchoo_domain::ProviderSubstrate::Kubernetes,
-                "key",
+                &format!(
+                    "{}:key",
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)?
+                        .as_millis()
+                ),
                 AcceptanceTime::System,
             )
             .await?;
@@ -152,7 +157,7 @@ fn bootstrap_exchange_recovers_exact_result_and_preserves_connector_policy() -> 
                 "Fixture",
                 caps,
                 &substrate,
-                "issue",
+                "1000:issue",
                 AcceptanceTime::Fixed(1000),
             )
             .await?;
@@ -162,7 +167,7 @@ fn bootstrap_exchange_recovers_exact_result_and_preserves_connector_policy() -> 
                 "Fixture",
                 caps,
                 &substrate,
-                "issue",
+                "1000:issue",
                 AcceptanceTime::Fixed(2000),
             )
             .await?;
@@ -179,7 +184,7 @@ fn bootstrap_exchange_recovers_exact_result_and_preserves_connector_policy() -> 
                 "Other",
                 caps,
                 &substrate,
-                "issue",
+                "1000:issue",
                 AcceptanceTime::Fixed(2000)
             )
             .await
@@ -203,7 +208,7 @@ fn bootstrap_exchange_recovers_exact_result_and_preserves_connector_policy() -> 
                 "allowed-provider",
                 &key.token.digest(),
                 &substrate,
-                "self-renew",
+                "2000:self-renew",
                 AcceptanceTime::Fixed(2000)
             )
             .await
@@ -229,7 +234,7 @@ fn bootstrap_exchange_recovers_exact_result_and_preserves_connector_policy() -> 
                 ..caps
             },
             &substrate,
-            "next",
+            "3000:next",
             AcceptanceTime::Fixed(3000),
         )
         .await?;
@@ -241,7 +246,7 @@ fn bootstrap_exchange_recovers_exact_result_and_preserves_connector_policy() -> 
             .revoke_provider_key(
                 chapchoo_persistence::ProviderOwner::System(&proof),
                 "allowed-provider",
-                "revoke",
+                "4000:revoke",
                 4000,
             )
             .await?;
@@ -251,7 +256,7 @@ fn bootstrap_exchange_recovers_exact_result_and_preserves_connector_policy() -> 
                 "Fixture",
                 caps,
                 &substrate,
-                "next",
+                "3000:next",
                 AcceptanceTime::Fixed(5000)
             )
             .await

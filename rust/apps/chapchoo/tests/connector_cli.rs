@@ -67,7 +67,12 @@ async fn connector_process_exchanges_connects_and_observes_independently_of_prov
                 "Fixture",
                 capabilities,
                 &substrate,
-                "key",
+                &format!(
+                    "{}:key",
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)?
+                        .as_millis()
+                ),
                 AcceptanceTime::System,
             )
             .await?;
@@ -184,7 +189,7 @@ async fn connector_process_exchanges_connects_and_observes_independently_of_prov
                     substrate: &substrate,
                 },
                 "provider",
-                "revoke",
+                &format!("{}:revoke", AcceptanceTime::System.now()?),
                 AcceptanceTime::System.now()?,
             )
             .await?;

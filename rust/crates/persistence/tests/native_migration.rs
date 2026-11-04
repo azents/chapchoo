@@ -109,7 +109,7 @@ macro_rules! exercise {
         let connection = $connection;
         let postgres = $postgres;
         let pending = connection.pending_migrations($source)?;
-        assert_eq!(pending.len(), 7);
+        assert_eq!(pending.len(), 8);
         connection.run_migrations(&pending[..5])?;
         connection.batch_execute(&fixture(postgres))?;
         let mut originals = Vec::new();

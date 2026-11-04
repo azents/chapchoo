@@ -85,7 +85,12 @@ fn memory_and_tcp_peer_handlers_revalidate_domain_and_exact_reconciler_authority
                     restart: true,
                 },
                 &chapchoo_domain::ProviderSubstrate::Kubernetes,
-                "key",
+                &format!(
+                    "{}:key",
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)?
+                        .as_millis()
+                ),
                 AcceptanceTime::System,
             )
             .await?;

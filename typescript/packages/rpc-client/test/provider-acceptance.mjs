@@ -105,9 +105,10 @@ try {
   );
   if (saFile) {
     const serviceAccountToken = (await readFile(saFile, "utf8")).trim();
+    const exchangeId = `${Date.now()}:reviewed-acceptance`;
     const good = await call(auth, "exchange", {
       configuration,
-      requestId: "reviewed-acceptance",
+      requestId: exchangeId,
       serviceAccountToken,
     });
     const expiry =
@@ -115,7 +116,7 @@ try {
     check(expiry === 900, "Provider key validity is not fifteen minutes");
     const recovered = await call(auth, "exchange", {
       configuration,
-      requestId: "reviewed-acceptance",
+      requestId: exchangeId,
       serviceAccountToken,
     });
     check(

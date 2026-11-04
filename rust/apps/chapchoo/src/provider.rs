@@ -125,6 +125,15 @@ fn id() -> Result<String, AppError> {
         .map(|b| format!("{b:02x}"))
         .collect())
 }
+fn key_request_id() -> Result<String, AppError> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_millis()
+        .try_into()?;
+    Ok(chapchoo_domain::ProviderKeyRequestId::new(now, &id()?)?
+        .as_str()
+        .to_owned())
+}
 fn endpoint(value: &str) -> Result<Endpoint, AppError> {
     let parsed = url::Url::parse(value)?;
     if parsed.scheme() != "http"
@@ -268,7 +277,7 @@ async fn run_connection(
         .max_encoding_message_size(64 * 1024);
     let configuration =
         crate::provider_auth::configuration(provider, name, adapter.kind(), adapter.daemon());
-    let request_id = id()?;
+    let request_id = key_request_id()?;
     let key = exchange(&mut auth, &owner, &configuration, &request_id, &stop).await?;
     stream_loop(
         channel,
@@ -295,7 +304,7 @@ async fn stream_loop(
     let mut renewal = refresh_at(key.proactive_after.as_ref())?;
     let mut expiry = refresh_at(key.expires_at.as_ref())?;
     let mut key = BearerSecret::parse(key.token)?;
-    let mut pending_request = id()?;
+    let mut pending_request: Option<String> = None;
     let mut authentication_failure: Option<AppError> = None;
     own_effects(async |effects| loop {
         if stop.is_cancelled() { break Ok(()); }
@@ -308,12 +317,14 @@ async fn stream_loop(
         if result.as_ref().err().is_some_and(|error| error.downcast_ref::<effects::EffectError>().is_some()) { break result; }
         if stop.is_cancelled() { break Ok(()); }
         if tokio::time::Instant::now() >= renewal || result.as_ref().err().is_some_and(|error| error.downcast_ref::<Status>().is_some_and(|s| matches!(s.code(),tonic::Code::Unauthenticated | tonic::Code::PermissionDenied))) {
-            match exchange_once(&mut auth, &owner, &configuration, &pending_request).await {
+            if pending_request.is_none() { pending_request = Some(key_request_id()?); }
+            let request_id = pending_request.as_deref().ok_or("Provider exchange request missing")?;
+            match exchange_once(&mut auth, &owner, &configuration, request_id).await {
                 Ok(replacement) => {
                     renewal = refresh_at(replacement.proactive_after.as_ref())?;
                     expiry = refresh_at(replacement.expires_at.as_ref())?;
                     key = BearerSecret::parse(replacement.token)?;
-                    pending_request = id()?;
+                    pending_request = None;
                     authentication_failure = None;
                 }
                 Err(error) => {
