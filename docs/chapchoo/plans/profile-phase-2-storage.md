@@ -300,8 +300,15 @@ Remaining delivery:
    The shared fixture now uses `ac-` plus six hexadecimal characters, leaving
    room for the existing `-admin` suffix without rewriting product input.
    Computer browser acceptance passed independently on that run.
-2. Push fixture corrections with normal hooks and monitor the new-SHA matrix.
-3. Resolve any current CI/automatic review finding before final delivery.
+2. At `709e3ed`, all browser acceptance, Rust/validation and both-architecture
+   artifacts passed. Real Docker reached successful creation and Connector
+   readiness, then its SDK fixture searched labels using the registration key
+   instead of the canonical Provider identity. The fixture now explicitly binds
+   the returned identity exactly once before observing newly allocated resources;
+   registration configuration keeps its separately named key. Native ownership
+   checks and lifecycle assertions remain unchanged.
+3. Push fixture corrections with normal hooks and monitor the new-SHA matrix.
+4. Resolve any current CI/automatic review finding before final delivery.
 
 No phase-2 release, merge, deployed preparation, native effect or rollout has
 been executed. Design delta: None.

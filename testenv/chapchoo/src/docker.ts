@@ -43,7 +43,8 @@ function labelsMatch(
 
 /** Owns native prerequisites and test-only file IO, not product lifecycle logic. */
 export class DockerFixture {
-  readonly provider = `docker-${secret().slice(0, 16).toLowerCase()}`;
+  readonly registrationKey = `docker-${secret().slice(0, 16).toLowerCase()}`;
+  private canonicalProvider: string | null = null;
   private readonly run = `chapchoo-e2e-${secret().slice(0, 16).toLowerCase()}`;
   private readonly sdk: Docker;
   private daemon = "";
@@ -72,7 +73,26 @@ export class DockerFixture {
     return { "chapchoo.test/run": this.run };
   }
   private get productLabels(): string[] {
-    return [`chapchoo.io/provider=${this.provider}`];
+    return [`chapchoo.io/provider=${this.providerId}`];
+  }
+  /** Bind the identity returned by registration before observing new allocations. */
+  bindProvider(providerId: string): void {
+    if (
+      !providerId ||
+      providerId.length > 128 ||
+      this.canonicalProvider !== null
+    ) {
+      throw new Error(
+        "Canonical fixture Provider identity must be bound exactly once",
+      );
+    }
+    this.canonicalProvider = providerId;
+  }
+  private get providerId(): string {
+    if (this.canonicalProvider === null) {
+      throw new Error("Canonical fixture Provider identity is not bound");
+    }
+    return this.canonicalProvider;
   }
   private async verifyDaemon(): Promise<void> {
     const info: unknown = await native(() => this.sdk.info());
@@ -207,7 +227,7 @@ export class DockerFixture {
     if (
       saved.Driver !== "local" ||
       saved.Scope !== "local" ||
-      !labelsMatch(saved.Labels, { "chapchoo.io/provider": this.provider })
+      !labelsMatch(saved.Labels, { "chapchoo.io/provider": this.providerId })
     ) {
       throw new Error("Original volume ownership is unverified");
     }
@@ -240,7 +260,7 @@ export class DockerFixture {
       mount.Target !== "/workspace" ||
       inspected.Mounts.length !== 1 ||
       !labelsMatch(inspected.Config.Labels, {
-        "chapchoo.io/provider": this.provider,
+        "chapchoo.io/provider": this.providerId,
       }) ||
       saved.Driver !== "local" ||
       saved.Scope !== "local"
@@ -280,7 +300,7 @@ export class DockerFixture {
     );
     if (
       !labelsMatch(inspected.Config.Labels, {
-        "chapchoo.io/provider": this.provider,
+        "chapchoo.io/provider": this.providerId,
       }) ||
       inspected.Id !== target.container ||
       inspected.Mounts[0]?.Name !== target.volume

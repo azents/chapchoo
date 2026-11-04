@@ -229,7 +229,7 @@ export class Assembly {
       60_000,
     );
     const bootstrapProviders = this.docker
-      ? ["fixture-provider", this.docker.provider]
+      ? ["fixture-provider", this.docker.registrationKey]
       : ["fixture-provider"];
     for (const id of bootstrapProviders) {
       await this.owner.run(
@@ -452,11 +452,11 @@ export class Assembly {
           : {}),
         CHAPCHOO_CONTROL_ENDPOINT: `http://127.0.0.1:${this.generalPort}`,
         CHAPCHOO_CONTAINER_CONTROL_ENDPOINT: this.docker.controlEndpoint,
-        CHAPCHOO_PROVIDER_ID: this.docker.provider,
+        CHAPCHOO_PROVIDER_ID: this.docker.registrationKey,
         CHAPCHOO_PROVIDER_NAME: "Acceptance Docker",
         CHAPCHOO_PROVIDER_AUTH_METHOD: "secret-key",
         CHAPCHOO_PROVIDER_AUTH_FILE: this.providerCredentialFile(
-          this.docker.provider,
+          this.docker.registrationKey,
         ),
         CHAPCHOO_DOCKER_HOST: pathToFileURL(
           this.docker.config.socket,

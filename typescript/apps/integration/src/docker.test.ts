@@ -135,7 +135,8 @@ void test(
         );
         const providerId = available.items[0]?.id;
         assert.ok(providerId, "Canonical Provider identity is required");
-        assert.notEqual(providerId, docker.provider);
+        assert.notEqual(providerId, docker.registrationKey);
+        docker.bindProvider(providerId);
         console.info("Native Docker step: create and connect");
         const image = (
           await call(
