@@ -26,6 +26,21 @@ spec:
         {{- include "chapchoo.selector" $context | fromJson | toYaml | nindent 8 }}
     spec:
       automountServiceAccountToken: false
+      {{- if and $control $.Values.kubernetesProvider.enabled (eq $.Values.kubernetesProvider.authentication.method "service-account") }}
+      serviceAccountName: {{ include "chapchoo.fullname" $ }}-control
+      volumes:
+        - name: kubernetes-api
+          projected:
+            sources:
+              - serviceAccountToken: {path: token, expirationSeconds: 3600}
+              - configMap:
+                  name: kube-root-ca.crt
+                  items: [{key: ca.crt, path: ca.crt}]
+              - downwardAPI:
+                  items:
+                    - path: namespace
+                      fieldRef: {fieldPath: metadata.namespace}
+      {{- end }}
       terminationGracePeriodSeconds: {{ $.Values.terminationGracePeriodSeconds }}
       {{- with $.Values.imagePullSecrets }}
       imagePullSecrets:
@@ -55,18 +70,15 @@ spec:
               value: "0.0.0.0:50053"
             - name: CHAPCHOO_PEER_ADVERTISE
               value: {{ $.Values.backend.peerAdvertise | quote }}
-            {{- if $.Values.systemOwner.existingSecret }}
-            - name: CHAPCHOO_SYSTEM_OWNER_ID
-              value: {{ $.Values.systemOwner.id | quote }}
-            - name: CHAPCHOO_SYSTEM_OWNER_PROVIDER_IDS
-              value: {{ join "," $.Values.systemOwner.providerIds | quote }}
-            - name: CHAPCHOO_SYSTEM_OWNER_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: {{ $.Values.systemOwner.existingSecret }}
-                  key: {{ $.Values.systemOwner.key }}
+            {{- if $.Values.kubernetesProvider.enabled }}
+            - name: CHAPCHOO_PROVIDER_BOOTSTRAP_CONFIG
+              value: {{ include "chapchoo.providerBootstrap" $ | quote }}
             {{- end }}
             {{- end }}
+          {{- if and $control $.Values.kubernetesProvider.enabled (eq $.Values.kubernetesProvider.authentication.method "service-account") }}
+          volumeMounts:
+            - {name: kubernetes-api, mountPath: /var/run/secrets/kubernetes.io/serviceaccount, readOnly: true}
+          {{- end }}
           startupProbe:
             grpc: {port: 50051, service: chapchoo.liveness}
             periodSeconds: 3

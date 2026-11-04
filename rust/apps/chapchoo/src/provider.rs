@@ -6,7 +6,28 @@ mod docker_worker;
 mod effects;
 pub async fn run_docker(
     options: crate::config::DockerProviderOptions,
-    owner: BearerSecret,
+    owner: crate::provider_auth::ProviderAuth,
+    stop: CancellationToken,
+) -> Result<(), AppError> {
+    run_docker_selected(options, owner, None, stop).await
+}
+pub(crate) async fn run_standalone_docker(
+    options: crate::config::DockerProviderOptions,
+    channel: Channel,
+    stop: CancellationToken,
+) -> Result<(), AppError> {
+    run_docker_selected(
+        options,
+        crate::provider_auth::ProviderAuth::Internal,
+        Some(channel),
+        stop,
+    )
+    .await
+}
+async fn run_docker_selected(
+    options: crate::config::DockerProviderOptions,
+    owner: crate::provider_auth::ProviderAuth,
+    channel: Option<Channel>,
     stop: CancellationToken,
 ) -> Result<(), AppError> {
     let explicit = options
@@ -49,6 +70,20 @@ pub async fn run_docker(
         },
     )
     .await?;
+    if let Some(channel) = channel {
+        let adapter = Arc::new(adapter);
+        let result = run_connection(
+            channel,
+            connector_endpoint,
+            &options.provider_id,
+            &options.name,
+            owner,
+            Arc::new(Adapter::Docker(adapter.clone())),
+            stop,
+        )
+        .await;
+        return crate::completion::complete(result, adapter.drain().await.map_err(Into::into));
+    }
     run_docker_with_adapter(
         &options.endpoint,
         connector_endpoint,
@@ -139,7 +174,7 @@ impl Adapter {
 }
 pub async fn run(
     options: ProviderOptions,
-    owner: BearerSecret,
+    owner: crate::provider_auth::ProviderAuth,
     stop: CancellationToken,
 ) -> Result<(), AppError> {
     let config = chapchoo_kubernetes::Config {
@@ -176,7 +211,7 @@ pub(crate) async fn run_with_adapter(
     endpoint_url: &str,
     provider: &str,
     name: &str,
-    owner: BearerSecret,
+    owner: crate::provider_auth::ProviderAuth,
     adapter: Arc<Kubernetes>,
     stop: CancellationToken,
 ) -> Result<(), AppError> {
@@ -197,7 +232,7 @@ pub(crate) async fn run_docker_with_adapter(
     connector_endpoint: &str,
     provider: &str,
     name: &str,
-    owner: BearerSecret,
+    owner: crate::provider_auth::ProviderAuth,
     adapter: Arc<chapchoo_docker::Docker>,
     stop: CancellationToken,
 ) -> Result<(), AppError> {
@@ -223,7 +258,7 @@ async fn run_connection(
     connector_endpoint: &str,
     provider: &str,
     name: &str,
-    owner: BearerSecret,
+    owner: crate::provider_auth::ProviderAuth,
     adapter: Arc<Adapter>,
     stop: CancellationToken,
 ) -> Result<(), AppError> {
@@ -231,38 +266,15 @@ async fn run_connection(
     let mut auth = ProviderAuthenticationClient::new(channel.clone())
         .max_decoding_message_size(64 * 1024)
         .max_encoding_message_size(64 * 1024);
-    auth.configure_system_provider(request(
-        wire::ProviderConfiguration {
-            provider_id: provider.into(),
-            name: name.into(),
-            kind: adapter.kind() as i32,
-            docker_daemon_id: adapter.daemon(),
-            capabilities: Some(wire::ProviderCapabilities {
-                create: true,
-                start: true,
-                stop: true,
-                restart: true,
-            }),
-        },
-        &owner,
-    )?)
-    .await?;
-    let key = auth
-        .rotate_key(request(
-            wire::ProviderKeyRequest {
-                provider_id: provider.into(),
-                request_id: id()?,
-                authority: wire::OwnerAuthority::System as i32,
-            },
-            &owner,
-        )?)
-        .await?
-        .into_inner();
+    let configuration =
+        crate::provider_auth::configuration(provider, name, adapter.kind(), adapter.daemon());
+    let request_id = id()?;
+    let key = exchange(&mut auth, &owner, &configuration, &request_id, &stop).await?;
     stream_loop(
         channel,
         connector_endpoint,
-        provider,
         owner,
+        configuration,
         key,
         adapter,
         stop,
@@ -272,69 +284,93 @@ async fn run_connection(
 async fn stream_loop(
     channel: Channel,
     connector_endpoint: &str,
-    provider: &str,
-    owner: BearerSecret,
+    owner: crate::provider_auth::ProviderAuth,
+    configuration: wire::ProviderConfiguration,
     key: wire::ComponentKey,
     adapter: Arc<Adapter>,
     stop: CancellationToken,
 ) -> Result<(), AppError> {
+    let provider = configuration.provider_id.as_str();
     let mut auth = ProviderAuthenticationClient::new(channel.clone());
     let mut renewal = refresh_at(key.proactive_after.as_ref())?;
+    let mut expiry = refresh_at(key.expires_at.as_ref())?;
     let mut key = BearerSecret::parse(key.token)?;
+    let mut pending_request = id()?;
+    let mut authentication_failure: Option<AppError> = None;
     own_effects(async |effects| loop {
-        if stop.is_cancelled() {
-            break Ok(());
-        }
+        if stop.is_cancelled() { break Ok(()); }
         effects.reap_completed()?;
-        let result = tokio::select! {result=connected(
-            channel.clone(),
-            provider,
-            connector_endpoint,
-            &key,
-            adapter.clone(),
-            effects,
-            &stop,
-        )=>result,_=tokio::time::sleep_until(renewal)=>Err(Box::new(Status::unauthenticated("Scheduled Provider key renewal")) as AppError)};
-        // A consumed owned-worker failure is not a reconnectable stream error.
-        // Return it through the completion boundary instead of discarding it.
-        if result.as_ref().err().is_some_and(|error| {
-            error.downcast_ref::<effects::EffectError>().is_some()
-        }) {
-            break result;
-        }
-        if stop.is_cancelled() {
-            break Ok(());
-        }
-        if let Err(error) = &result
-            && error.downcast_ref::<Status>().is_some_and(|s| {
-                matches!(
-                    s.code(),
-                    tonic::Code::Unauthenticated | tonic::Code::PermissionDenied
-                )
-            })
-        {
-            // Recover only under configured owner authority, never self-rotate.
-            match auth
-                .rotate_key(request(
-                    wire::ProviderKeyRequest {
-                        provider_id: provider.into(),
-                        request_id: id()?,
-                        authority: wire::OwnerAuthority::System as i32,
-                    },
-                    &owner,
-                )?)
-                .await
-            {
-                Ok(result) => {
-                    let result = result.into_inner();
-                    renewal = refresh_at(result.proactive_after.as_ref())?;
-                    key = BearerSecret::parse(result.token)?;
+        let result = tokio::select! {
+            result=connected(channel.clone(), provider, connector_endpoint, &key, adapter.clone(), effects, &stop)=>result,
+            _=tokio::time::sleep_until(renewal)=>Err(Box::new(Status::unauthenticated("Scheduled Provider reauthentication")) as AppError),
+            _=tokio::time::sleep_until(expiry)=>break Err(authentication_failure.take().unwrap_or_else(||"Provider operational credential expired".into())),
+        };
+        if result.as_ref().err().is_some_and(|error| error.downcast_ref::<effects::EffectError>().is_some()) { break result; }
+        if stop.is_cancelled() { break Ok(()); }
+        if tokio::time::Instant::now() >= renewal || result.as_ref().err().is_some_and(|error| error.downcast_ref::<Status>().is_some_and(|s| matches!(s.code(),tonic::Code::Unauthenticated | tonic::Code::PermissionDenied))) {
+            match exchange_once(&mut auth, &owner, &configuration, &pending_request).await {
+                Ok(replacement) => {
+                    renewal = refresh_at(replacement.proactive_after.as_ref())?;
+                    expiry = refresh_at(replacement.expires_at.as_ref())?;
+                    key = BearerSecret::parse(replacement.token)?;
+                    pending_request = id()?;
+                    authentication_failure = None;
                 }
-                Err(error) => break Err(Box::new(error) as AppError),
+                Err(error) => {
+                    let code = error.downcast_ref::<Status>().map(Status::code);
+                    tracing::warn!(?code, "Provider reauthentication failed; original credential expiry is unchanged");
+                    if tokio::time::Instant::now() >= expiry { break Err(error); }
+                    authentication_failure = Some(error);
+                    renewal = (tokio::time::Instant::now()+Duration::from_secs(5)).min(expiry);
+                }
             }
         }
         tokio::select! {_=stop.cancelled()=>break Ok(()),_=tokio::time::sleep(Duration::from_secs(1))=>{}}
     }).await
+}
+
+async fn exchange_once(
+    auth: &mut ProviderAuthenticationClient<Channel>,
+    source: &crate::provider_auth::ProviderAuth,
+    configuration: &wire::ProviderConfiguration,
+    request_id: &str,
+) -> Result<wire::ComponentKey, AppError> {
+    let mut request = Request::new(wire::ProviderAuthenticationRequest {
+        configuration: Some(configuration.clone()),
+        request_id: request_id.to_owned(),
+        evidence: source.evidence().await?,
+    });
+    request.set_timeout(Duration::from_secs(10));
+    Ok(auth.exchange(request).await?.into_inner())
+}
+async fn exchange(
+    auth: &mut ProviderAuthenticationClient<Channel>,
+    source: &crate::provider_auth::ProviderAuth,
+    configuration: &wire::ProviderConfiguration,
+    request_id: &str,
+    stop: &CancellationToken,
+) -> Result<wire::ComponentKey, AppError> {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
+    loop {
+        match exchange_once(auth, source, configuration, request_id).await {
+            Ok(key) => return Ok(key),
+            Err(error) => {
+                let retry = error.downcast_ref::<Status>().is_some_and(|s| {
+                    matches!(
+                        s.code(),
+                        tonic::Code::Unavailable
+                            | tonic::Code::DeadlineExceeded
+                            | tonic::Code::Unknown
+                            | tonic::Code::ResourceExhausted
+                    )
+                });
+                if !retry || tokio::time::Instant::now() >= deadline {
+                    return Err(error);
+                }
+            }
+        }
+        tokio::select! { _=stop.cancelled()=>return Err("Provider startup cancelled".into()), _=tokio::time::sleep(Duration::from_secs(1))=>{} }
+    }
 }
 
 async fn own_effects(

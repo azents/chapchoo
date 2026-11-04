@@ -41,8 +41,9 @@ deleting Request ID cannot erase a possibly accepted native effect and create
 fresh dispatch permission. Connector revocation and terminal cleanup intent
 still commit; force removal does not clear that uncertainty.
 
-Provider key rotation/issuance requires verified system-owner scope or the current
-owning User session, never the Provider communication key. Each credential mutation
+Provider key issuance requires verified bootstrap evidence, a currently permitted
+scoped registration credential, or the existing owning User session management
+authority, never the Provider communication key. Each credential mutation
 has a target-scoped Request ID/fingerprint receipt. Exact current-result retry
 recovers the same encrypted key and original expiry; superseded/revoked/expired
 results cannot be recovered. Fresh rotation retains only the immediately previous
@@ -53,8 +54,11 @@ Explicit revocation has no overlap, discards protected recovery and withdraws th
 Provider route. Its receipt makes retry safe; replay of an old revocation after a
 new owner-authorized issuance cannot revoke the new key. Owner-authorized fresh
 issuance can restore communication authority after revocation, but a new component
-connection is still needed. Key defaults are 24h validity, proactive owner rotation
-from 12h, and at most 5m prior-key overlap. No root or old-secret archive is exposed.
+connection is still needed. Provider keys have 15-minute validity and proactive
+reauthentication from five minutes, with at most five minutes of prior-key overlap.
+The separate Connector policy retains 24h/12h defaults. No root or old-secret
+archive is exposed. [Provider authentication](provider-authentication.md) owns the
+evidence/source fingerprint and bootstrap withdrawal contract.
 
 ## Docker retirement authority
 

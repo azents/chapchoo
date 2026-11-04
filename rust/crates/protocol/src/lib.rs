@@ -123,6 +123,8 @@ pub mod control {
     }
     redacted_debug!(
         ProviderKeyRequest,
+        ProviderAuthenticationRequest,
+        provider_authentication_request::Evidence,
         ProviderConnectionCheck,
         ConnectorConnectionCheck,
         ProviderCommandCheck,

@@ -610,96 +610,355 @@ class ChartContractsTest(unittest.TestCase):
         for ingress in self.kind(documents, "Ingress"):
             self.assertNotIn("-peer", json.dumps(ingress))
 
-    def test_computer_provider_has_separate_scoped_authority_and_namespace_rbac(
+    def test_kubernetes_provider_opt_in_supplies_complete_sa_defaults(self) -> None:
+        for topology, controls in (
+            ("combined", ["combined"]),
+            ("separate", ["control"]),
+        ):
+            with self.subTest(topology=topology):
+                documents = self.render(
+                    {
+                        "kubernetesProvider": {"enabled": True},
+                        "backend": {"topology": topology},
+                    }
+                )
+                deployment = self.component(documents, "computer-provider")
+                pod = deployment["spec"]["template"]["spec"]
+                container = pod["containers"][0]
+                env = self.environment(container)
+                backend = self.component(documents, f"backend-{controls[0]}")
+                control_pod = backend["spec"]["template"]["spec"]
+                control_env = self.environment(control_pod["containers"][0])
+                self.assertEqual(deployment["spec"]["strategy"], {"type": "Recreate"})
+                self.assertEqual(
+                    container["args"], ["computer-provider", "--in-cluster"]
+                )
+                self.assertEqual(
+                    container["image"], control_pod["containers"][0]["image"]
+                )
+                self.assertEqual(
+                    env["CHAPCHOO_COMPUTER_IMAGE"]["value"], container["image"]
+                )
+                self.assertEqual(
+                    env["CHAPCHOO_PROVIDER_AUTH_METHOD"]["value"], "service-account"
+                )
+                self.assertEqual(
+                    env["CHAPCHOO_PROVIDER_AUTH_FILE"]["value"],
+                    "/var/run/chapchoo/provider-auth/credential",
+                )
+                self.assertEqual(
+                    env["CHAPCHOO_CONTROL_ENDPOINT"]["value"],
+                    "http://contract-chapchoo-control-grpc.contract.svc:50051",
+                )
+                token = pod["volumes"][0]["projected"]["sources"][0][
+                    "serviceAccountToken"
+                ]
+                self.assertEqual(token["audience"], "chapchoo-provider-auth")
+                binding = json.loads(
+                    control_env["CHAPCHOO_PROVIDER_BOOTSTRAP_CONFIG"]["value"]
+                )
+                self.assertEqual(
+                    binding,
+                    {
+                        "serviceAccounts": [
+                            {
+                                "providerId": "contract-chapchoo-kubernetes",
+                                "namespace": "contract",
+                                "serviceAccount": "contract-chapchoo-provider",
+                                "audience": token["audience"],
+                            }
+                        ],
+                        "secretKeyProviderIds": [],
+                        "trustProviderIds": [],
+                    },
+                )
+                self.assertEqual(
+                    control_pod["serviceAccountName"], "contract-chapchoo-control"
+                )
+                self.assertFalse(control_pod["automountServiceAccountToken"])
+                self.assertEqual(
+                    control_pod["volumes"][0]["projected"]["sources"][0],
+                    {
+                        "serviceAccountToken": {
+                            "path": "token",
+                            "expirationSeconds": 3600,
+                        }
+                    },
+                )
+                review = self.kind(documents, "ClusterRole")[0]
+                self.assertEqual(
+                    review["rules"],
+                    [
+                        {
+                            "apiGroups": ["authentication.k8s.io"],
+                            "resources": ["tokenreviews"],
+                            "verbs": ["create"],
+                        }
+                    ],
+                )
+                review_binding = self.kind(documents, "ClusterRoleBinding")[0]
+                self.assertEqual(
+                    review_binding["subjects"],
+                    [
+                        {
+                            "kind": "ServiceAccount",
+                            "name": "contract-chapchoo-control",
+                            "namespace": "contract",
+                        }
+                    ],
+                )
+                namespace = self.kind(documents, "Namespace")[0]
+                self.assertEqual(
+                    namespace["metadata"]["name"], "contract-chapchoo-computers"
+                )
+                self.assertEqual(
+                    namespace["metadata"]["annotations"],
+                    {
+                        "helm.sh/resource-policy": "keep",
+                        "argocd.argoproj.io/sync-options": "Prune=false,Delete=false",
+                    },
+                )
+                role = self.kind(documents, "Role")[0]
+                self.assertEqual(
+                    role["metadata"]["namespace"], namespace["metadata"]["name"]
+                )
+                self.assertEqual(
+                    role["rules"],
+                    [
+                        {
+                            "apiGroups": [""],
+                            "resources": ["pods"],
+                            "verbs": ["get", "list", "watch", "create", "delete"],
+                        },
+                        {
+                            "apiGroups": [""],
+                            "resources": ["persistentvolumeclaims", "secrets"],
+                            "verbs": ["get", "create", "delete"],
+                        },
+                    ],
+                )
+                computer = next(
+                    d
+                    for d in self.kind(documents, "ServiceAccount")
+                    if d["metadata"]["name"].endswith("-computer")
+                )
+                self.assertFalse(computer["automountServiceAccountToken"])
+                self.assertNotIn("CHAPCHOO_SECRET_KEY", env)
+                self.assertNotIn("CHAPCHOO_POSTGRES_URL", env)
+                self.assertEqual(len(self.kind(documents, "Job")), 1)
+                if topology == "separate":
+                    for group in ("client", "admin"):
+                        other = self.component(documents, f"backend-{group}")
+                        other_pod = other["spec"]["template"]["spec"]
+                        self.assertNotIn("serviceAccountName", other_pod)
+                        self.assertNotIn(
+                            "CHAPCHOO_PROVIDER_BOOTSTRAP_CONFIG",
+                            self.environment(other_pod["containers"][0]),
+                        )
+
+    def test_kubernetes_provider_disabled_by_default_and_advanced_overrides(
         self,
     ) -> None:
-        owner = {
-            "id": "operator",
-            "providerIds": ["managed"],
-            "existingSecret": "fixture-owner",
-        }
+        defaults = self.render()
+        self.assertFalse(self.kind(defaults, "Namespace"))
+        self.assertFalse(self.kind(defaults, "ClusterRole"))
+        self.assertEqual(len(self.kind(defaults, "Deployment")), 3)
         provider = {
             "enabled": True,
-            "id": "managed",
-            "name": "Managed Kubernetes",
+            "id": "custom",
+            "name": "Custom Kubernetes",
             "managedNamespace": "execution",
-            "image": {
-                "repository": "registry.example.invalid/chapchoo/backend",
-                "tag": "offline-contract",
-            },
+            "createManagedNamespace": False,
+            "authentication": {"audience": "custom-audience"},
             "computerImage": {
-                "repository": "registry.example.invalid/chapchoo/connector",
-                "tag": "offline-contract",
+                "repository": "registry.example.invalid/connector",
+                "tag": "explicit",
             },
         }
-        documents = self.render(
-            {
-                "systemOwner": owner,
-                "computerProvider": provider,
-                "backend": {"topology": "separate"},
-            }
-        )
-        deployment = self.component(documents, "computer-provider")
-        self.assertEqual(deployment["spec"]["replicas"], 1)
-        self.assertEqual(deployment["spec"]["strategy"], {"type": "Recreate"})
-        container = deployment["spec"]["template"]["spec"]["containers"][0]
-        self.assertEqual(container["args"], ["computer-provider", "--in-cluster"])
+        documents = self.render({"kubernetesProvider": provider})
+        self.assertFalse(self.kind(documents, "Namespace"))
+        container = self.component(documents, "computer-provider")["spec"]["template"][
+            "spec"
+        ]["containers"][0]
         env = self.environment(container)
+        self.assertEqual(env["CHAPCHOO_PROVIDER_ID"]["value"], "custom")
+        self.assertEqual(env["CHAPCHOO_PROVIDER_NAME"]["value"], "Custom Kubernetes")
         self.assertEqual(env["CHAPCHOO_KUBERNETES_NAMESPACE"]["value"], "execution")
         self.assertEqual(
-            env["CHAPCHOO_PROVIDER_OWNER_TOKEN"]["valueFrom"]["secretKeyRef"]["name"],
-            "fixture-owner",
+            env["CHAPCHOO_COMPUTER_IMAGE"]["value"],
+            "registry.example.invalid/connector:explicit",
         )
-        self.assertNotIn("CHAPCHOO_SECRET_KEY", env)
-        self.assertNotIn("CHAPCHOO_POSTGRES_URL", env)
-        role = next(
-            item
-            for item in self.kind(documents, "Role")
-            if item["metadata"]["name"].endswith("-provider")
+        for unsafe in (
+            {"managedNamespace": "contract"},
+            {"createManagedNamespace": False},
+            {"authentication": {"method": "trust"}},
+            {"authentication": {"existingCredentialSecret": "arbitrary-token"}},
+            {"image": {"tag": "partial"}},
+            {"computerImage": {"digest": "sha256:" + "a" * 64}},
+        ):
+            with self.subTest(unsafe=unsafe):
+                self.assertNotEqual(
+                    self.template(
+                        {"kubernetesProvider": {"enabled": True, **unsafe}}
+                    ).returncode,
+                    0,
+                )
+
+    def test_provider_images_inherit_the_complete_backend_digest(self) -> None:
+        digest = "sha256:" + "a" * 64
+        documents = self.render(
+            {
+                "backend": {"image": {"digest": digest}},
+                "kubernetesProvider": {"enabled": True},
+            }
         )
-        self.assertEqual(role["metadata"]["namespace"], "execution")
+        container = self.component(documents, "computer-provider")["spec"]["template"][
+            "spec"
+        ]["containers"][0]
         self.assertEqual(
-            role["rules"],
-            [
+            container["image"], "registry.example.invalid/chapchoo/backend@" + digest
+        )
+        self.assertEqual(
+            self.environment(container)["CHAPCHOO_COMPUTER_IMAGE"]["value"],
+            container["image"],
+        )
+
+    def test_protected_auth_issuer_is_finite_root_only_and_precedes_provider(
+        self,
+    ) -> None:
+        overrides = {
+            "kubernetesProvider": {
+                "enabled": True,
+                "authentication": {"method": "secret-key"},
+            }
+        }
+        for upgrade in (False, True):
+            documents = self.render(overrides, upgrade=upgrade)
+            issuer = next(
+                d
+                for d in self.kind(documents, "Job")
+                if d["metadata"]["name"].endswith("-provider-credential")
+            )
+            pod = issuer["spec"]["template"]["spec"]
+            container = pod["containers"][0]
+            self.assertEqual(
+                container["args"],
+                [
+                    "provider-credential",
+                    "--provider-id",
+                    "contract-chapchoo-kubernetes",
+                    "--secret-name",
+                    "contract-chapchoo-provider-credential",
+                    "--namespace",
+                    "contract",
+                    "--in-cluster",
+                ],
+            )
+            env = self.environment(container)
+            self.assertEqual(set(env), {"CHAPCHOO_SECRET_KEY"})
+            self.assertEqual(
+                env["CHAPCHOO_SECRET_KEY"]["valueFrom"]["secretKeyRef"],
+                {"name": "fixture-secret-key", "key": "secret-key"},
+            )
+            self.assertEqual(issuer["spec"]["backoffLimit"], 0)
+            self.assertEqual(pod["restartPolicy"], "Never")
+            self.assertLess(
+                int(issuer["metadata"]["annotations"]["argocd.argoproj.io/sync-wave"]),
+                0,
+            )
+            self.assertEqual(
+                issuer["metadata"]["annotations"]["helm.sh/hook"],
+                "pre-install,pre-upgrade",
+            )
+            role = next(
+                d
+                for d in self.kind(documents, "Role")
+                if d["metadata"]["name"].endswith("-provider-credential")
+            )
+            self.assertEqual(
+                role["rules"],
+                [
+                    {
+                        "apiGroups": [""],
+                        "resources": ["secrets"],
+                        "resourceNames": ["contract-chapchoo-provider-credential"],
+                        "verbs": ["get"],
+                    },
+                    {"apiGroups": [""], "resources": ["secrets"], "verbs": ["create"]},
+                ],
+            )
+            provider_pod = self.component(documents, "computer-provider")["spec"][
+                "template"
+            ]["spec"]
+            self.assertEqual(
+                provider_pod["volumes"][0]["secret"]["secretName"],
+                "contract-chapchoo-provider-credential",
+            )
+            self.assertNotIn("fixture-secret-key", json.dumps(provider_pod))
+            self.assertFalse(self.kind(documents, "ClusterRole"))
+            control = self.component(documents, "backend-combined")["spec"]["template"][
+                "spec"
+            ]
+            permit = json.loads(
+                self.environment(control["containers"][0])[
+                    "CHAPCHOO_PROVIDER_BOOTSTRAP_CONFIG"
+                ]["value"]
+            )
+            self.assertEqual(
+                permit,
                 {
-                    "apiGroups": [""],
-                    "resources": ["pods"],
-                    "verbs": ["get", "list", "watch", "create", "delete"],
+                    "serviceAccounts": [],
+                    "secretKeyProviderIds": ["contract-chapchoo-kubernetes"],
+                    "trustProviderIds": [],
                 },
-                {
-                    "apiGroups": [""],
-                    "resources": ["persistentvolumeclaims", "secrets"],
-                    "verbs": ["get", "create", "delete"],
-                },
-            ],
-        )
-        execution = next(
-            item
-            for item in self.kind(documents, "ServiceAccount")
-            if item["metadata"]["name"].endswith("-computer")
-        )
-        self.assertFalse(execution["automountServiceAccountToken"])
-        self.assertEqual(execution["metadata"]["namespace"], "execution")
-        for group in ("client", "admin"):
-            other = self.component(documents, f"backend-{group}")
-            self.assertNotIn("fixture-owner", json.dumps(other))
-        self.assertNotEqual(
-            self.template(
-                {
-                    "systemOwner": owner,
-                    "computerProvider": {**provider, "id": "unscoped"},
+            )
+            self.assertFalse(control["automountServiceAccountToken"])
+            self.assertNotIn("serviceAccountName", control)
+        existing = self.render(
+            {
+                "kubernetesProvider": {
+                    "enabled": True,
+                    "authentication": {
+                        "method": "secret-key",
+                        "existingCredentialSecret": "preissued",
+                    },
                 }
-            ).returncode,
-            0,
+            }
         )
-        self.assertNotEqual(
-            self.template(
-                {
-                    "systemOwner": owner,
-                    "computerProvider": {**provider, "managedNamespace": ""},
-                }
-            ).returncode,
-            0,
+        self.assertEqual(len(self.kind(existing, "Job")), 1)
+        self.assertEqual(
+            self.component(existing, "computer-provider")["spec"]["template"]["spec"][
+                "volumes"
+            ][0]["secret"]["secretName"],
+            "preissued",
+        )
+
+    def test_external_control_requires_explicit_endpoint_and_independent_trust(
+        self,
+    ) -> None:
+        overrides = {
+            "backend": {"enabled": False},
+            "general": {"enabled": False},
+            "admin": {"enabled": False},
+            "webIngress": {"enabled": False},
+            "grpcIngress": {"enabled": False},
+            "kubernetesProvider": {"enabled": True},
+        }
+        self.assertNotEqual(self.template(overrides).returncode, 0)
+        overrides["kubernetesProvider"]["controlEndpoint"] = (
+            "http://control.example.invalid:50051"
+        )
+        documents = self.render(overrides)
+        self.assertFalse(self.kind(documents, "ClusterRole"))
+        self.assertFalse(self.kind(documents, "Job"))
+        env = self.environment(
+            self.component(documents, "computer-provider")["spec"]["template"]["spec"][
+                "containers"
+            ][0]
+        )
+        self.assertEqual(
+            env["CHAPCHOO_CONTROL_ENDPOINT"]["value"],
+            "http://control.example.invalid:50051",
         )
 
     def test_argocd_example_is_a_full_sync_reference_not_a_secret_provider(

@@ -58,12 +58,13 @@ missing-map rollback. The migrated PostgreSQL catalog verifies the required
 
 Every owner read/mutation executes within the existing complete DB operation and
 revalidates the account session after its User lock. Foreign private Agents return
-not-found. Provider registration accepts a `VerifiedSystemOwner`, which can only
-be constructed by a configured verifier checking both credential digest and an
-explicit allowed Provider identity. An asserted owner name or Provider key is not
-that proof. Existing Provider ownership cannot be overwritten by another owner.
-This verifier neither generates configuration credentials nor treats the
-installation encryption root as authentication.
+not-found. Bootstrap Provider registration accepts a scope-bound grant produced
+after the selected evidence is verified against server bootstrap policy.
+An asserted owner name or operational Provider key is not that proof. Existing
+USER/TEAM ownership cannot be adopted by bootstrap, and SYSTEM labels/native
+bindings are preserved. Later registration-token capability resolves canonical
+ownership from the Provider row rather than caller assertions. See
+[Provider authentication](provider-authentication.md).
 
 Cloud creation locks the current owner and selected Team, checks membership and
 its owner-scoped creation receipt,
@@ -89,9 +90,10 @@ Debug for owner verifier/proof, private rows, drafts and projections is redacted
 
 `ComputersService` generates Agent, Computer, execution and session IDs and all
 new component credentials server-side. Caller Request IDs remain stable for
-deduplication. Its system-owner verifier is supplied by trusted composition, not
-constructed from request owner assertions. System metadata/key methods verify
-configured credential and Provider scope; component keys cannot self-rotate.
+deduplication. Bootstrap authentication adapters and their immutable permit policy
+are supplied by trusted composition, not request owner assertions. Initial exchange
+can create missing bootstrap metadata; subsequent exchange validates identity and
+preserves DB-owned settings. Component keys cannot self-rotate.
 User-owner methods use current account authority. Store validation and locked
 admission remain authoritative for every generated draft.
 

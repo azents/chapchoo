@@ -29,6 +29,8 @@ accepts [lifecycle intent](domain/computer-lifecycle.md), not completed deletion
 
 ### Who may perform a Computer effect, and what proves completion?
 
+Providers first establish [authentication and owner scope](domain/provider-authentication.md)
+through explicit distributed evidence or Standalone's private internal Trust.
 The [directory](domain/computer-directory.md) finds a current owner, while
 [Control](domain/computer-control-rpc.md) revalidates streams and exact calls.
 [Reconciliation](domain/reconciliation.md) chooses current work;
@@ -85,6 +87,7 @@ real Docker, browser journeys and live cluster rollout.
 - [Control streams and calls](domain/computer-control-rpc.md) — component/peer separation, bounded queues and call lifetime.
 - [Native retirement correlation](domain/native-retirement.md) — exact live manifests, uncertain continuation and unsent suffixes.
 - [Provider process](domain/provider-process.md) — DB-free native work, acknowledgements and retained effects.
+- [Provider authentication](domain/provider-authentication.md) — bootstrap policy, SA review, protected/random credentials and internal Trust.
 - [Connector process](domain/connector-process.md) — execution-local connectivity and shutdown.
 - [Convergence and restoration](domain/reconciliation.md) — owner precedence, observation and authorized successors.
 - [Peer delivery](domain/peer-delivery.md) — generated memory/network transport, routing and retry limits.

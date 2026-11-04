@@ -22,6 +22,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+pub mod authentication;
+
 const PROVIDER: &str = "chapchoo.io/provider";
 const COMPUTER: &str = "chapchoo.io/computer";
 const EXECUTION: &str = "chapchoo.io/execution";

@@ -1,10 +1,7 @@
 use base64::{Engine, engine::general_purpose::URL_SAFE};
-use chapchoo_crypto::{CredentialCipher, RootKey};
+use chapchoo_crypto::{BootstrapProviderPermit, CredentialCipher, RootKey};
 use chapchoo_persistence::{Store, prepare_sqlite};
-use chapchoo_service::{
-    AcceptanceTime, BearerSecret, ComputersService, DomainReason, ProviderCapabilities,
-    SystemOwnerVerifier,
-};
+use chapchoo_service::{AcceptanceTime, ComputersService, DomainReason, ProviderCapabilities};
 use std::{error::Error, sync::Arc};
 type TestError = Box<dyn Error + Send + Sync>;
 
@@ -16,9 +13,6 @@ fn generated_connection_admission_context_cannot_steal_a_winner() -> Result<(), 
         URL_SAFE.encode([8; 32]),
     )?)?);
     prepare_sqlite(&path, &cipher)?;
-    let owner = BearerSecret::generate()?;
-    let verifier =
-        SystemOwnerVerifier::new("owner".into(), vec!["provider".into()], owner.digest())?;
     tokio::runtime::Runtime::new()?.block_on(async {
         let store = Store::connect_sqlite(path, cipher).await?;
         let policy = chapchoo_service::ComputerPolicy {
@@ -33,8 +27,9 @@ fn generated_connection_admission_context_cannot_steal_a_winner() -> Result<(), 
                 overlap_ms: 60_000,
             },
             start_delayed_ms: 600_000,
+            ..Default::default()
         };
-        let app = ComputersService::new(store, Some(verifier)).with_policy(policy)?;
+        let app = ComputersService::new(store).with_policy(policy)?;
         for endpoint in [
             "http://0.0.0.0:5000",
             "http://[::]:5000",
@@ -54,27 +49,29 @@ fn generated_connection_admission_context_cannot_steal_a_winner() -> Result<(), 
         let first_control = app.register_control("http://127.0.0.1:1").await?;
         let second_control = app.register_control("http://127.0.0.1:1").await?;
         assert_ne!(first_control.id, second_control.id);
-        app.configure_system_provider(
-            &owner,
-            "provider",
-            "Fixture",
-            ProviderCapabilities {
-                create: true,
-                start: true,
-                stop: true,
-                restart: true,
-            },
-            &chapchoo_domain::ProviderSubstrate::Kubernetes,
-            AcceptanceTime::System,
-        )
-        .await?;
+        let proof = BootstrapProviderPermit::new("provider".into())?.authenticated();
         let key = app
-            .rotate_system_provider_key(&owner, "provider", "key", AcceptanceTime::System)
+            .exchange_bootstrap_provider(
+                &proof,
+                "Fixture",
+                ProviderCapabilities {
+                    create: true,
+                    start: true,
+                    stop: true,
+                    restart: true,
+                },
+                &chapchoo_domain::ProviderSubstrate::Kubernetes,
+                "key",
+                AcceptanceTime::System,
+            )
             .await?;
-        assert_eq!(key.expires_at - key.issued_at, policy.keys.validity_ms);
+        assert_eq!(
+            key.expires_at - key.issued_at,
+            policy.provider_keys.validity_ms
+        );
         assert_eq!(
             key.proactive_after - key.issued_at,
-            policy.keys.proactive_after_ms
+            policy.provider_keys.proactive_after_ms
         );
         let first = app
             .prepare_provider_connection("provider", &key.token.digest(), &first_control.id)
@@ -130,126 +127,137 @@ fn generated_connection_admission_context_cannot_steal_a_winner() -> Result<(), 
 }
 
 #[test]
-fn configured_owner_scope_and_generated_key_recovery_are_composed() -> Result<(), TestError> {
+fn bootstrap_exchange_recovers_exact_result_and_preserves_connector_policy() -> Result<(), TestError>
+{
     let directory = tempfile::tempdir()?;
-    let path = directory.path().join("computer-service.sqlite");
+    let path = directory.path().join("exchange-service.sqlite");
     let cipher = Arc::new(CredentialCipher::new(RootKey::parse(
         URL_SAFE.encode([7; 32]),
     )?)?);
     prepare_sqlite(&path, &cipher)?;
-    let owner = BearerSecret::generate()?;
-    let wrong = BearerSecret::generate()?;
-    let verifier = SystemOwnerVerifier::new(
-        "configured-owner".into(),
-        vec!["allowed-provider".into()],
-        owner.digest(),
-    )?;
     tokio::runtime::Runtime::new()?.block_on(async {
         let store = Store::connect_sqlite(path, cipher).await?;
-        let unconfigured = ComputersService::new(store.clone(), None);
-        let app = ComputersService::new(store, Some(verifier));
-        let clock = AcceptanceTime::Fixed(1000);
-        let capabilities = ProviderCapabilities {
+        let app = ComputersService::new(store.clone());
+        let proof = BootstrapProviderPermit::new("allowed-provider".into())?.authenticated();
+        let caps = ProviderCapabilities {
             create: true,
             start: true,
             stop: true,
             restart: true,
         };
-        for (service, credential, provider) in [
-            (&unconfigured, &owner, "allowed-provider"),
-            (&app, &wrong, "allowed-provider"),
-            (&app, &owner, "asserted-provider"),
-        ] {
-            assert_eq!(
-                service
-                    .configure_system_provider(
-                        credential,
-                        provider,
-                        "Fixture",
-                        capabilities,
-                        &chapchoo_domain::ProviderSubstrate::Kubernetes,
-                        clock
-                    )
-                    .await
-                    .err()
-                    .map(|e| e.reason()),
-                Some(DomainReason::PermissionDenied)
-            );
-        }
-        app.configure_system_provider(
-            &owner,
-            "allowed-provider",
-            "Fixture",
-            capabilities,
-            &chapchoo_domain::ProviderSubstrate::Kubernetes,
-            clock,
-        )
-        .await?;
+        let substrate = chapchoo_domain::ProviderSubstrate::Kubernetes;
         let key = app
-            .rotate_system_provider_key(&owner, "allowed-provider", "key-one", clock)
+            .exchange_bootstrap_provider(
+                &proof,
+                "Fixture",
+                caps,
+                &substrate,
+                "issue",
+                AcceptanceTime::Fixed(1000),
+            )
             .await?;
         let recovered = app
-            .rotate_system_provider_key(
-                &owner,
-                "allowed-provider",
-                "key-one",
+            .exchange_bootstrap_provider(
+                &proof,
+                "Fixture",
+                caps,
+                &substrate,
+                "issue",
                 AcceptanceTime::Fixed(2000),
             )
             .await?;
-        assert!(key.token.expose() == recovered.token.expose());
-        assert_eq!(key.expires_at, 86_401_000);
+        assert_eq!(key.token.expose(), recovered.token.expose());
+        assert_eq!(key.expires_at, 901_000);
+        assert_eq!(key.proactive_after, 301_000);
         assert_eq!(key.expires_at, recovered.expires_at);
-        assert_eq!(key.proactive_after, 43_201_000);
+        assert_eq!(app.policy().keys.validity_ms, 86_400_000);
+        assert_eq!(app.policy().keys.proactive_after_ms, 43_200_000);
+        // Changing the canonical exchange intent cannot recover a previous result.
         assert_eq!(
-            app.provider_identity("allowed-provider", &key.token.digest(), clock)
-                .await?
-                .id,
-            "allowed-provider"
+            app.exchange_bootstrap_provider(
+                &proof,
+                "Other",
+                caps,
+                &substrate,
+                "issue",
+                AcceptanceTime::Fixed(2000)
+            )
+            .await
+            .err()
+            .map(|e| e.reason()),
+            Some(DomainReason::Conflict)
         );
-        // A component key is not the configured owner proof, even for its own Provider.
         assert_eq!(
-            app.rotate_system_provider_key(&key.token, "allowed-provider", "self-rotation", clock)
-                .await
-                .err()
-                .map(|e| e.reason()),
-            Some(DomainReason::PermissionDenied)
-        );
-        assert_eq!(
-            app.rotate_user_provider_key(
+            app.provider_identity(
+                "foreign-provider",
                 &key.token.digest(),
-                "allowed-provider",
-                "wrong-role",
-                clock
+                AcceptanceTime::Fixed(2000)
             )
             .await
             .err()
             .map(|e| e.reason()),
             Some(DomainReason::InvalidSession)
         );
-        assert!(!format!("{app:?} {key:?} {recovered:?}").contains(key.token.expose()));
-        app.revoke_system_provider_key(&owner, "allowed-provider", "revoke-one", clock)
+        assert_eq!(
+            app.exchange_registered_provider(
+                "allowed-provider",
+                &key.token.digest(),
+                &substrate,
+                "self-renew",
+                AcceptanceTime::Fixed(2000)
+            )
+            .await
+            .err()
+            .map(|e| e.reason()),
+            Some(DomainReason::PermissionDenied)
+        );
+        assert!(
+            app.provider_identity(
+                "allowed-provider",
+                &key.token.digest(),
+                AcceptanceTime::Fixed(901_000)
+            )
+            .await
+            .is_err()
+        );
+        // Metadata belongs to the DB after initial bootstrap, not startup claims.
+        app.exchange_bootstrap_provider(
+            &proof,
+            "Claimed replacement",
+            ProviderCapabilities {
+                create: false,
+                ..caps
+            },
+            &substrate,
+            "next",
+            AcceptanceTime::Fixed(3000),
+        )
+        .await?;
+        let inventory = store
+            .provider_key_identity("allowed-provider", &recovered.token.digest(), 3001)
             .await?;
-        assert_eq!(
-            app.provider_identity("allowed-provider", &key.token.digest(), clock)
-                .await
-                .err()
-                .map(|e| e.reason()),
-            Some(DomainReason::InvalidSession)
+        assert_eq!(inventory.name, "Fixture");
+        store
+            .revoke_provider_key(
+                chapchoo_persistence::ProviderOwner::System(&proof),
+                "allowed-provider",
+                "revoke",
+                4000,
+            )
+            .await?;
+        assert!(
+            app.exchange_bootstrap_provider(
+                &proof,
+                "Fixture",
+                caps,
+                &substrate,
+                "next",
+                AcceptanceTime::Fixed(5000)
+            )
+            .await
+            .is_err()
         );
-        assert_eq!(
-            app.rotate_system_provider_key(&owner, "allowed-provider", "key-one", clock)
-                .await
-                .err()
-                .map(|e| e.reason()),
-            Some(DomainReason::InvalidTransition)
-        );
-        assert_eq!(
-            app.rotate_system_provider_key(&owner, "allowed-provider", "bad request", clock)
-                .await
-                .err()
-                .map(|e| e.reason()),
-            Some(DomainReason::InvalidInput)
-        );
+        assert!(!format!("{app:?} {key:?} {recovered:?}").contains(key.token.expose()));
         Ok::<(), TestError>(())
     })
 }

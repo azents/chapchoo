@@ -1,5 +1,5 @@
 use crate::{AcceptanceTime, DomainReason, ServiceError};
-use chapchoo_crypto::{BearerSecret, SecretDigest, SystemOwnerVerifier, VerifiedSystemOwner};
+use chapchoo_crypto::{BearerSecret, SecretDigest, VerifiedSystemOwner};
 use chapchoo_domain::{LifecyclePhase, NativeScope, ProviderSubstrate};
 use chapchoo_persistence::{
     AgentRemoval, AgentSummary, ComponentKeyDraft, ComponentKeyPolicy, ComponentKeyResult,
@@ -9,7 +9,7 @@ use chapchoo_persistence::{
     LifecycleRequest, ManagedComputer, ManagedResource, ProviderCapabilities, ProviderChoice,
     ProviderIdentity, ProviderOwner, ProviderSource, ResolvedRoute, ResourceReport, Store,
 };
-use std::{fmt, sync::Arc};
+use std::fmt;
 use url::Url;
 
 /// Captured before local stream preparation. Only the service constructs this
@@ -40,6 +40,7 @@ impl fmt::Debug for PreparedComponentConnection {
 pub struct ComputerPolicy {
     pub directory: DirectoryPolicy,
     pub keys: ComponentKeyPolicy,
+    pub provider_keys: ComponentKeyPolicy,
     pub heartbeat_ms: u32,
     pub start_delayed_ms: i64,
 }
@@ -48,6 +49,11 @@ impl Default for ComputerPolicy {
         Self {
             directory: DirectoryPolicy::default(),
             keys: ComponentKeyPolicy::default(),
+            provider_keys: ComponentKeyPolicy {
+                validity_ms: 900_000,
+                proactive_after_ms: 300_000,
+                overlap_ms: 300_000,
+            },
             heartbeat_ms: 20_000,
             start_delayed_ms: 300_000,
         }
@@ -64,6 +70,9 @@ impl ComputerPolicy {
             || self.keys.proactive_after_ms <= 0
             || self.keys.proactive_after_ms >= self.keys.validity_ms
             || !(0..=300_000).contains(&self.keys.overlap_ms)
+            || self.provider_keys.validity_ms != 900_000
+            || self.provider_keys.proactive_after_ms != 300_000
+            || !(0..=300_000).contains(&self.provider_keys.overlap_ms)
             || self.start_delayed_ms <= 0
         {
             return Err(ServiceError::domain(DomainReason::InvalidInput));
@@ -71,12 +80,11 @@ impl ComputerPolicy {
         Ok(self)
     }
 }
-/// Transport-independent application boundary. Only the composition root supplies
-/// the configured system-owner verifier; requests cannot assert an owner identity.
+/// Transport-independent application boundary. Authentication adapters supply verified
+/// bootstrap grants; requests cannot assert an owner identity.
 #[derive(Clone)]
 pub struct ComputersService {
     store: Store,
-    system_owner: Option<Arc<SystemOwnerVerifier>>,
     policy: ComputerPolicy,
 }
 impl fmt::Debug for ComputersService {
@@ -85,10 +93,9 @@ impl fmt::Debug for ComputersService {
     }
 }
 impl ComputersService {
-    pub fn new(store: Store, system_owner: Option<SystemOwnerVerifier>) -> Self {
+    pub fn new(store: Store) -> Self {
         Self {
             store,
-            system_owner: system_owner.map(Arc::new),
             policy: ComputerPolicy::default(),
         }
     }
@@ -375,71 +382,56 @@ impl ComputersService {
             .await?)
     }
 
-    fn system_proof(
+    pub async fn exchange_bootstrap_provider(
         &self,
-        provider_id: &str,
-        credential: &BearerSecret,
-    ) -> Result<VerifiedSystemOwner, ServiceError> {
-        self.system_owner
-            .as_ref()
-            .ok_or_else(|| ServiceError::domain(DomainReason::PermissionDenied))?
-            .verify(provider_id, credential)
-            .map_err(|_| ServiceError::domain(DomainReason::PermissionDenied))
-    }
-
-    pub async fn configure_system_provider(
-        &self,
-        credential: &BearerSecret,
-        provider_id: &str,
+        proof: &VerifiedSystemOwner,
         name: &str,
         capabilities: ProviderCapabilities,
         substrate: &ProviderSubstrate,
-        clock: AcceptanceTime,
-    ) -> Result<(), ServiceError> {
-        let proof = self.system_proof(provider_id, credential)?;
-        Ok(self
-            .store
-            .configure_system_provider(&proof, name, capabilities, substrate, clock.now()?)
-            .await?)
-    }
-    pub async fn rotate_system_provider_key(
-        &self,
-        credential: &BearerSecret,
-        provider_id: &str,
         request_id: &str,
         clock: AcceptanceTime,
     ) -> Result<ComponentKeyResult, ServiceError> {
-        let proof = self.system_proof(provider_id, credential)?;
         let draft = key_draft(request_id)?;
         Ok(self
             .store
             .rotate_provider_key(
-                ProviderOwner::System(&proof),
-                provider_id,
+                ProviderOwner::Bootstrap {
+                    proof,
+                    name,
+                    capabilities,
+                    substrate,
+                },
+                proof.provider_id(),
                 &draft,
-                self.policy.keys,
+                self.policy.provider_keys,
                 clock.now()?,
             )
             .await?)
     }
-    pub async fn revoke_system_provider_key(
+    pub async fn exchange_registered_provider(
         &self,
-        credential: &BearerSecret,
         provider_id: &str,
+        credential: &SecretDigest,
+        substrate: &ProviderSubstrate,
         request_id: &str,
         clock: AcceptanceTime,
-    ) -> Result<(), ServiceError> {
-        let proof = self.system_proof(provider_id, credential)?;
+    ) -> Result<ComponentKeyResult, ServiceError> {
+        let draft = key_draft(request_id)?;
         Ok(self
             .store
-            .revoke_provider_key(
-                ProviderOwner::System(&proof),
+            .rotate_provider_key(
+                ProviderOwner::Registration {
+                    credential,
+                    substrate,
+                },
                 provider_id,
-                request_id,
+                &draft,
+                self.policy.provider_keys,
                 clock.now()?,
             )
             .await?)
     }
+
     pub async fn rotate_user_provider_key(
         &self,
         actor: &SecretDigest,
@@ -454,7 +446,7 @@ impl ComputersService {
                 ProviderOwner::User(actor),
                 provider_id,
                 &draft,
-                self.policy.keys,
+                self.policy.provider_keys,
                 clock.now()?,
             )
             .await?)

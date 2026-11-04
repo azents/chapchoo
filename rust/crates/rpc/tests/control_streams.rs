@@ -1,7 +1,7 @@
 mod support;
 
 use base64::{Engine, engine::general_purpose::URL_SAFE};
-use chapchoo_crypto::{BearerSecret, CredentialCipher, RootKey, SystemOwnerVerifier};
+use chapchoo_crypto::{BootstrapProviderPermit, CredentialCipher, RootKey};
 use chapchoo_persistence::{Store, prepare_sqlite};
 use chapchoo_protocol::control::{
     self as wire, peer_relay_client::PeerRelayClient,
@@ -109,31 +109,26 @@ fn two_control_replacement_cancellation_and_late_replies_preserve_current_stream
         URL_SAFE.encode([10; 32]),
     )?)?);
     prepare_sqlite(&path, &cipher)?;
-    let owner = BearerSecret::generate()?;
-    let verifier =
-        SystemOwnerVerifier::new("owner".into(), vec!["provider".into()], owner.digest())?;
     tokio::runtime::Runtime::new()?.block_on(support::scope(async |fixture| {
         fixture.shutdown_budget(Duration::from_secs(5));
         let app = Arc::new(ComputersService::new(
             Store::connect_sqlite(path, cipher).await?,
-            Some(verifier),
         ));
-        app.configure_system_provider(
-            &owner,
-            "provider",
-            "Fixture",
-            ProviderCapabilities {
-                create: true,
-                start: true,
-                stop: true,
-                restart: true,
-            },
-            &chapchoo_domain::ProviderSubstrate::Kubernetes,
-            AcceptanceTime::System,
-        )
-        .await?;
+        let proof = BootstrapProviderPermit::new("provider".into())?.authenticated();
         let key = app
-            .rotate_system_provider_key(&owner, "provider", "key", AcceptanceTime::System)
+            .exchange_bootstrap_provider(
+                &proof,
+                "Fixture",
+                ProviderCapabilities {
+                    create: true,
+                    start: true,
+                    stop: true,
+                    restart: true,
+                },
+                &chapchoo_domain::ProviderSubstrate::Kubernetes,
+                "key",
+                AcceptanceTime::System,
+            )
             .await?;
         let a = TcpListener::bind("127.0.0.1:0").await?;
         let b = TcpListener::bind("127.0.0.1:0").await?;

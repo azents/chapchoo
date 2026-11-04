@@ -1,7 +1,7 @@
 //! The server owns immutable native binding; external Providers use scoped RPC.
 mod support;
 use base64::{Engine, engine::general_purpose::URL_SAFE};
-use chapchoo_crypto::{BearerSecret, CredentialCipher, RootKey, SystemOwnerVerifier};
+use chapchoo_crypto::{BearerSecret, BootstrapProviderPermit, CredentialCipher, RootKey};
 use chapchoo_domain::{DockerDaemonId, ProviderSubstrate};
 use chapchoo_persistence::{
     ProviderCapabilities, Store, StoreError, prepare_postgres, prepare_sqlite,
@@ -18,20 +18,30 @@ fn cipher() -> Result<Arc<CredentialCipher>, Error> {
     )?)?))
 }
 
+const FOREIGN_OWNER_FIXTURE: &str = "INSERT INTO users(id,email_key,delivery_email,password_hash,created_at,language,time_zone,region) VALUES('foreign-user','foreign@example.invalid','foreign@example.invalid','synthetic',0,'en','UTC','en-US');
+INSERT INTO computer_providers(id,owner_kind,user_owner_id,name,provider_kind,created_at) VALUES('foreign-provider','USER','foreign-user','Foreign','KUBERNETES',0);";
+
 async fn exercise(store: Store) -> Result<(), Error> {
-    let token = BearerSecret::generate()?;
-    let verifier = SystemOwnerVerifier::new(
-        "system".into(),
-        vec!["docker".into(), "race".into()],
-        token.digest(),
-    )?;
-    let proof = verifier.verify("docker", &token)?;
+    let proof = BootstrapProviderPermit::new("docker".into())?.authenticated();
     let caps = ProviderCapabilities {
         create: true,
         start: true,
         stop: true,
         restart: true,
     };
+    let foreign = BootstrapProviderPermit::new("foreign-provider".into())?.authenticated();
+    assert!(matches!(
+        store
+            .configure_system_provider(
+                &foreign,
+                "Cannot adopt",
+                caps,
+                &ProviderSubstrate::Kubernetes,
+                1
+            )
+            .await,
+        Err(StoreError::Forbidden)
+    ));
     let original = ProviderSubstrate::Docker(DockerDaemonId::parse("daemon:original".into())?);
     let substituted =
         ProviderSubstrate::Docker(DockerDaemonId::parse("daemon:replacement".into())?);
@@ -53,26 +63,12 @@ async fn exercise(store: Store) -> Result<(), Error> {
             .await,
         Err(StoreError::Conflict)
     ));
-    let other_token = BearerSecret::generate()?;
-    let other_owner = SystemOwnerVerifier::new(
-        "other-system".into(),
-        vec!["docker".into()],
-        other_token.digest(),
-    )?;
-    let wrong_owner = other_owner.verify("docker", &other_token)?;
-    assert!(matches!(
-        store
-            .configure_system_provider(&wrong_owner, "Wrong owner", caps, &original, 5)
-            .await,
-        Err(StoreError::Forbidden)
-    ));
-    assert!(verifier.verify("outside-scope", &token).is_err());
-    // No failed substitution or owner operation can clear the original binding.
+    // No failed substitution can clear the original binding.
     store
         .configure_system_provider(&proof, "Original retained", caps, &original, 6)
         .await?;
 
-    let race_proof = verifier.verify("race", &token)?;
+    let race_proof = BootstrapProviderPermit::new("race".into())?.authenticated();
     let (a, b) = tokio::join!(
         store.configure_system_provider(&race_proof, "Candidate A", caps, &original, 7),
         store.configure_system_provider(&race_proof, "Candidate B", caps, &substituted, 7),
@@ -110,6 +106,8 @@ fn sqlite_native_binding_is_scoped_immutable_and_race_safe() -> Result<(), Error
     let path = directory.path().join("binding.sqlite");
     let cipher = cipher()?;
     prepare_sqlite(&path, &cipher)?;
+    diesel::SqliteConnection::establish(path.to_str().ok_or("Non-UTF8 fixture path")?)?
+        .batch_execute(FOREIGN_OWNER_FIXTURE)?;
     tokio::runtime::Runtime::new()?.block_on(async {
         let store = Store::connect_sqlite(path, cipher).await?;
         exercise(store).await
@@ -131,6 +129,8 @@ fn postgres_native_binding_is_scoped_immutable_and_race_safe() -> Result<(), Err
     let result = (|| {
         let cipher = cipher()?;
         prepare_postgres(&url, &cipher)?;
+        AsyncConnectionWrapper::<AsyncPgConnection>::establish(&url)?
+            .batch_execute(FOREIGN_OWNER_FIXTURE)?;
         tokio::runtime::Runtime::new()?.block_on(async {
             let store = Store::connect_postgres(url, cipher).await?;
             exercise(store).await

@@ -1,7 +1,9 @@
 //! Deterministic regression for durable admission followed by delayed activation.
 use super::*;
 use base64::{Engine, engine::general_purpose::URL_SAFE};
-use chapchoo_crypto::{BearerSecret, CredentialCipher, PasswordCost, RootKey, SystemOwnerVerifier};
+use chapchoo_crypto::{
+    BearerSecret, BootstrapProviderPermit, CredentialCipher, PasswordCost, RootKey,
+};
 use chapchoo_domain::{EmailAddress, Password};
 use chapchoo_persistence::{Store, prepare_sqlite};
 use chapchoo_service::{
@@ -20,7 +22,7 @@ async fn drain_waits_for_later_owned_work_after_an_earlier_worker_fails() -> Res
     )?)?);
     prepare_sqlite(&path, &cipher)?;
     let store = Store::connect_sqlite(path, cipher).await?;
-    let service = Arc::new(ComputersService::new(store, None));
+    let service = Arc::new(ComputersService::new(store));
     let admission = Arc::new(AtomicBool::new(true));
     let services = ComponentConnectionServices::new(service, "draining".into(), admission.clone());
     let (cancelled, cancellation) = oneshot::channel::<()>();
@@ -125,19 +127,11 @@ fn delayed_admission_cannot_displace_a_new_provider_or_connector() -> Result<(),
     prepare_sqlite(&path, &cipher)?;
     tokio::runtime::Runtime::new()?.block_on(async {
         let store = Store::connect_sqlite(path, cipher).await?;
-        let owner = BearerSecret::generate()?;
-        let service = Arc::new(ComputersService::new(
-            store.clone(),
-            Some(SystemOwnerVerifier::new(
-                "system".into(),
-                vec!["provider".into()],
-                owner.digest(),
-            )?),
-        ));
-        service
-            .configure_system_provider(
-                &owner,
-                "provider",
+        let service = Arc::new(ComputersService::new(store.clone()));
+        let proof = BootstrapProviderPermit::new("provider".into())?.authenticated();
+        let key = service
+            .exchange_bootstrap_provider(
+                &proof,
                 "Fixture",
                 ProviderCapabilities {
                     create: true,
@@ -146,11 +140,9 @@ fn delayed_admission_cannot_displace_a_new_provider_or_connector() -> Result<(),
                     restart: true,
                 },
                 &chapchoo_domain::ProviderSubstrate::Kubernetes,
+                "key",
                 AcceptanceTime::System,
             )
-            .await?;
-        let key = service
-            .rotate_system_provider_key(&owner, "provider", "key", AcceptanceTime::System)
             .await?;
         let control = service.register_control("http://127.0.0.1:1").await?;
         let services = ComponentConnectionServices::new(

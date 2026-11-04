@@ -1,6 +1,8 @@
 #![cfg(unix)]
 use base64::{Engine, engine::general_purpose::URL_SAFE};
-use chapchoo_crypto::{BearerSecret, CredentialCipher, PasswordCost, RootKey, SystemOwnerVerifier};
+use chapchoo_crypto::{
+    BearerSecret, BootstrapProviderPermit, CredentialCipher, PasswordCost, RootKey,
+};
 use chapchoo_domain::{EmailAddress, Password};
 use chapchoo_persistence::{Store, prepare_sqlite};
 use chapchoo_protocol::control as wire;
@@ -30,9 +32,7 @@ async fn connector_process_exchanges_connects_and_observes_independently_of_prov
         )?)?);
         prepare_sqlite(&path, &cipher)?;
         let setup = BearerSecret::generate()?;
-        let owner = BearerSecret::generate()?;
-        let verifier =
-            SystemOwnerVerifier::new("system".into(), vec!["provider".into()], owner.digest())?;
+        let proof = BootstrapProviderPermit::new("provider".into())?.authenticated();
         let store = Store::connect_sqlite(path, cipher).await?;
         let accounts = AccountsService::new(
             store.clone(),
@@ -53,23 +53,23 @@ async fn connector_process_exchanges_connects_and_observes_independently_of_prov
                 None,
             )
             .await?;
-        let app = Arc::new(ComputersService::new(store, Some(verifier)));
-        app.configure_system_provider(
-            &owner,
-            "provider",
-            "Fixture",
-            ProviderCapabilities {
-                create: true,
-                start: true,
-                stop: true,
-                restart: true,
-            },
-            &chapchoo_domain::ProviderSubstrate::Kubernetes,
-            AcceptanceTime::System,
-        )
-        .await?;
+        let app = Arc::new(ComputersService::new(store.clone()));
+        let capabilities = ProviderCapabilities {
+            create: true,
+            start: true,
+            stop: true,
+            restart: true,
+        };
+        let substrate = chapchoo_domain::ProviderSubstrate::Kubernetes;
         let key = app
-            .rotate_system_provider_key(&owner, "provider", "key", AcceptanceTime::System)
+            .exchange_bootstrap_provider(
+                &proof,
+                "Fixture",
+                capabilities,
+                &substrate,
+                "key",
+                AcceptanceTime::System,
+            )
             .await?;
         let listener = TcpListener::bind("127.0.0.1:0").await?;
         let endpoint = format!("http://{}", listener.local_addr()?);
@@ -175,7 +175,18 @@ async fn connector_process_exchanges_connects_and_observes_independently_of_prov
             }
         })
         .await??;
-        app.revoke_system_provider_key(&owner, "provider", "revoke", AcceptanceTime::System)
+        store
+            .revoke_provider_key(
+                chapchoo_persistence::ProviderOwner::Bootstrap {
+                    proof: &proof,
+                    name: "Fixture",
+                    capabilities,
+                    substrate: &substrate,
+                },
+                "provider",
+                "revoke",
+                AcceptanceTime::System.now()?,
+            )
             .await?;
         let result = connections
             .invoke_connector(

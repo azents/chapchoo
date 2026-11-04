@@ -10,13 +10,14 @@ use std::{error::Error, fs::OpenOptions, path::Path};
 
 pub const SQLITE_MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/sqlite");
 pub const POSTGRES_MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/postgres");
-const VERSIONS: [&str; 6] = [
+const VERSIONS: [&str; 7] = [
     "00000000000001",
     "00000000000002",
     "00000000000003",
     "00000000000004",
     "00000000000005",
     "00000000000006",
+    "00000000000007",
 ];
 const PG_LOCK: i64 = 1_960_261_029;
 const PRODUCT_ROWS: &str = "SELECT
@@ -35,6 +36,7 @@ fn prepared_product_query() -> String {
         "computer_providers",
         "provider_keys",
         "provider_key_requests",
+        "provider_registration_credentials",
         "computers",
         "agents",
         "agent_creation_receipts",

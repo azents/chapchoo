@@ -22,6 +22,7 @@ pub use accounts::{GrantDraft, GrantKind, GrantSummary, NewAccount, ProofPreview
 pub use challenges::{EmailLoginOutcome, NewChallenge};
 pub use component_keys::{
     ComponentKeyDraft, ComponentKeyPolicy, ComponentKeyResult, ProviderOwner,
+    ProviderRegistrationOwner, provider_registration_context,
 };
 pub use computer_executions::{
     ComputerRequest, ExecutionDraft, ExecutionReservation, ExecutionResources, ManagedComputer,

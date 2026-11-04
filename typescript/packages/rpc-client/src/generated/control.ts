@@ -27,13 +27,6 @@ export const protobufPackage = "chapchoo.control";
 
 export const protobufFileName = "control.proto";
 
-export enum OwnerAuthority {
-  OWNER_AUTHORITY_UNSPECIFIED = 0,
-  OWNER_AUTHORITY_SYSTEM = 1,
-  OWNER_AUTHORITY_USER = 2,
-  UNRECOGNIZED = -1,
-}
-
 export enum ProviderKind {
   PROVIDER_KIND_UNSPECIFIED = 0,
   PROVIDER_KIND_KUBERNETES = 1,
@@ -87,6 +80,15 @@ export enum ForwardingOutcome {
   FORWARDING_OUTCOME_OVERLOADED = 4,
   FORWARDING_OUTCOME_UNCERTAIN = 5,
   UNRECOGNIZED = -1,
+}
+
+/** Evidence is verified against server policy, never an asserted owner. */
+export interface ProviderAuthenticationRequest {
+  configuration: ProviderConfiguration | undefined;
+  requestId: string;
+  serviceAccountToken?: string | undefined;
+  bootstrapCredential?: string | undefined;
+  registrationToken?: string | undefined;
 }
 
 export interface ProviderConnectionCheck {
@@ -147,7 +149,6 @@ export interface ProviderConfiguration {
 export interface ProviderKeyRequest {
   providerId: string;
   requestId: string;
-  authority: OwnerAuthority;
 }
 
 export interface ComponentKey {
@@ -481,6 +482,119 @@ export interface ConnectorInvocationResult {
   outcome: ForwardingOutcome;
   result: ConnectorResult | undefined;
 }
+
+function createBaseProviderAuthenticationRequest(): ProviderAuthenticationRequest {
+  return {
+    configuration: undefined,
+    requestId: "",
+    serviceAccountToken: undefined,
+    bootstrapCredential: undefined,
+    registrationToken: undefined,
+  };
+}
+
+export const ProviderAuthenticationRequest: MessageFns<ProviderAuthenticationRequest> = {
+  encode(message: ProviderAuthenticationRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.configuration !== undefined) {
+      ProviderConfiguration.encode(message.configuration, writer.uint32(10).fork()).join();
+    }
+    if (message.requestId !== "") {
+      writer.uint32(18).string(message.requestId);
+    }
+    if (message.serviceAccountToken !== undefined) {
+      writer.uint32(26).string(message.serviceAccountToken);
+    }
+    if (message.bootstrapCredential !== undefined) {
+      writer.uint32(34).string(message.bootstrapCredential);
+    }
+    if (message.registrationToken !== undefined) {
+      writer.uint32(42).string(message.registrationToken);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ProviderAuthenticationRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseProviderAuthenticationRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.configuration = ProviderConfiguration.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.requestId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.serviceAccountToken = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.bootstrapCredential = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.registrationToken = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ProviderAuthenticationRequest>, I>>(base?: I): ProviderAuthenticationRequest {
+    return ProviderAuthenticationRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ProviderAuthenticationRequest>, I>>(
+    object: I,
+  ): ProviderAuthenticationRequest {
+    const message = createBaseProviderAuthenticationRequest();
+    message.configuration = (object.configuration !== undefined && object.configuration !== null)
+      ? ProviderConfiguration.fromPartial(object.configuration)
+      : undefined;
+    message.requestId = object.requestId ?? "";
+    message.serviceAccountToken = object.serviceAccountToken ?? undefined;
+    message.bootstrapCredential = object.bootstrapCredential ?? undefined;
+    message.registrationToken = object.registrationToken ?? undefined;
+    return message;
+  },
+};
 
 function createBaseProviderConnectionCheck(): ProviderConnectionCheck {
   return { providerId: "", instanceId: "", connectionId: "" };
@@ -1153,7 +1267,7 @@ export const ProviderConfiguration: MessageFns<ProviderConfiguration> = {
 };
 
 function createBaseProviderKeyRequest(): ProviderKeyRequest {
-  return { providerId: "", requestId: "", authority: 0 };
+  return { providerId: "", requestId: "" };
 }
 
 export const ProviderKeyRequest: MessageFns<ProviderKeyRequest> = {
@@ -1163,9 +1277,6 @@ export const ProviderKeyRequest: MessageFns<ProviderKeyRequest> = {
     }
     if (message.requestId !== "") {
       writer.uint32(18).string(message.requestId);
-    }
-    if (message.authority !== 0) {
-      writer.uint32(24).int32(message.authority);
     }
     return writer;
   },
@@ -1199,14 +1310,6 @@ export const ProviderKeyRequest: MessageFns<ProviderKeyRequest> = {
             message.requestId = reader.string();
             continue;
           }
-          case 3: {
-            if (tag !== 24) {
-              break;
-            }
-
-            message.authority = reader.int32() as any;
-            continue;
-          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1226,7 +1329,6 @@ export const ProviderKeyRequest: MessageFns<ProviderKeyRequest> = {
     const message = createBaseProviderKeyRequest();
     message.providerId = object.providerId ?? "";
     message.requestId = object.requestId ?? "";
-    message.authority = object.authority ?? 0;
     return message;
   },
 };
@@ -5333,22 +5435,22 @@ export const ConnectorInvocationResult: MessageFns<ConnectorInvocationResult> = 
 /** Component-facing listeners authenticate bearer metadata independently of peers. */
 export type ProviderAuthenticationService = typeof ProviderAuthenticationService;
 export const ProviderAuthenticationService = {
+  exchange: {
+    path: "/chapchoo.control.ProviderAuthentication/Exchange" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ProviderAuthenticationRequest): Buffer =>
+      Buffer.from(ProviderAuthenticationRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ProviderAuthenticationRequest => ProviderAuthenticationRequest.decode(value),
+    responseSerialize: (value: ComponentKey): Buffer => Buffer.from(ComponentKey.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ComponentKey => ComponentKey.decode(value),
+  },
   report: {
     path: "/chapchoo.control.ProviderAuthentication/Report" as const,
     requestStream: false as const,
     responseStream: false as const,
     requestSerialize: (value: ProviderReport): Buffer => Buffer.from(ProviderReport.encode(value).finish()),
     requestDeserialize: (value: Buffer): ProviderReport => ProviderReport.decode(value),
-    responseSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
-    responseDeserialize: (value: Buffer): Empty => Empty.decode(value),
-  },
-  configureSystemProvider: {
-    path: "/chapchoo.control.ProviderAuthentication/ConfigureSystemProvider" as const,
-    requestStream: false as const,
-    responseStream: false as const,
-    requestSerialize: (value: ProviderConfiguration): Buffer =>
-      Buffer.from(ProviderConfiguration.encode(value).finish()),
-    requestDeserialize: (value: Buffer): ProviderConfiguration => ProviderConfiguration.decode(value),
     responseSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
     responseDeserialize: (value: Buffer): Empty => Empty.decode(value),
   },
@@ -5413,8 +5515,8 @@ export const ProviderAuthenticationService = {
 } as const;
 
 export interface ProviderAuthenticationServer extends UntypedServiceImplementation {
+  exchange: handleUnaryCall<ProviderAuthenticationRequest, ComponentKey>;
   report: handleUnaryCall<ProviderReport, Empty>;
-  configureSystemProvider: handleUnaryCall<ProviderConfiguration, Empty>;
   checkCommand: handleUnaryCall<ProviderCommandCheck, ProviderCommandAdmission>;
   checkConnection: handleUnaryCall<ProviderConnectionCheck, Empty>;
   rotateKey: handleUnaryCall<ProviderKeyRequest, ComponentKey>;
@@ -5424,6 +5526,21 @@ export interface ProviderAuthenticationServer extends UntypedServiceImplementati
 }
 
 export interface ProviderAuthenticationClient extends Client {
+  exchange(
+    request: ProviderAuthenticationRequest,
+    callback: (error: ServiceError | null, response: ComponentKey) => void,
+  ): ClientUnaryCall;
+  exchange(
+    request: ProviderAuthenticationRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ComponentKey) => void,
+  ): ClientUnaryCall;
+  exchange(
+    request: ProviderAuthenticationRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ComponentKey) => void,
+  ): ClientUnaryCall;
   report(request: ProviderReport, callback: (error: ServiceError | null, response: Empty) => void): ClientUnaryCall;
   report(
     request: ProviderReport,
@@ -5432,21 +5549,6 @@ export interface ProviderAuthenticationClient extends Client {
   ): ClientUnaryCall;
   report(
     request: ProviderReport,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: Empty) => void,
-  ): ClientUnaryCall;
-  configureSystemProvider(
-    request: ProviderConfiguration,
-    callback: (error: ServiceError | null, response: Empty) => void,
-  ): ClientUnaryCall;
-  configureSystemProvider(
-    request: ProviderConfiguration,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: Empty) => void,
-  ): ClientUnaryCall;
-  configureSystemProvider(
-    request: ProviderConfiguration,
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: Empty) => void,

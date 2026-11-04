@@ -3,7 +3,7 @@ mod support;
 mod tasks;
 
 use base64::{Engine, engine::general_purpose::URL_SAFE};
-use chapchoo_crypto::{BearerSecret, CredentialCipher, RootKey, SystemOwnerVerifier};
+use chapchoo_crypto::{BearerSecret, BootstrapProviderPermit, CredentialCipher, RootKey};
 use chapchoo_domain::{DesiredState, LifecycleAction, ObservedPower};
 use chapchoo_persistence::{
     AgentRemoval, ComponentKeyDraft, ComponentKeyPolicy, ConnectorSessionDraft, CreateCloudAgent,
@@ -41,7 +41,7 @@ fn seed(
     }
     sql.push_str("UPDATE users SET is_admin=TRUE WHERE id='user-0';");
     let protected = cipher.protect_latest("provider:provider", provider)?;
-    sql.push_str(&format!("INSERT INTO computer_providers(id,owner_kind,system_owner_id,name,provider_kind,can_create,can_start,can_stop,can_restart,created_at) VALUES('provider','SYSTEM','system-owner','Fixture','KUBERNETES',TRUE,TRUE,TRUE,TRUE,0); INSERT INTO provider_keys(provider_id,current_hash,issued_at,expires_at,current_request_id,recovery_nonce,recovery_ciphertext) VALUES('provider',{},0,10000000,'key-request',{},{}); INSERT INTO control_instances(id,endpoint,renewed_at,expires_at) VALUES('control','http://127.0.0.1:1',0,10000000); INSERT INTO provider_connections(provider_id,control_id,connection_id,credential_hash,expires_at) VALUES('provider','control','connection',{},10000000);",binary(provider.digest().as_bytes()),binary(protected.nonce()),binary(protected.ciphertext()),binary(provider.digest().as_bytes())));
+    sql.push_str(&format!("INSERT INTO computer_providers(id,owner_kind,system_owner_id,name,provider_kind,can_create,can_start,can_stop,can_restart,created_at) VALUES('provider','SYSTEM','installation','Fixture','KUBERNETES',TRUE,TRUE,TRUE,TRUE,0); INSERT INTO provider_keys(provider_id,current_hash,issued_at,expires_at,current_request_id,recovery_nonce,recovery_ciphertext) VALUES('provider',{},0,10000000,'key-request',{},{}); INSERT INTO control_instances(id,endpoint,renewed_at,expires_at) VALUES('control','http://127.0.0.1:1',0,10000000); INSERT INTO provider_connections(provider_id,control_id,connection_id,credential_hash,expires_at) VALUES('provider','control','connection',{},10000000);",binary(provider.digest().as_bytes()),binary(protected.nonce()),binary(protected.ciphertext()),binary(provider.digest().as_bytes())));
     for (id, power, source, environment) in [
         ("running", "RUNNING", "connection", "VERIFIED"),
         ("stale", "RUNNING", "old-connection", "VERIFIED"),
@@ -126,13 +126,7 @@ async fn exercise(store: Store, users: &[BearerSecret]) -> Result<(), TestError>
             .iter()
             .all(|row| !row.residual && row.cleanup_completed_at.is_none())
     );
-    let config_key = BearerSecret::generate()?;
-    let verifier = SystemOwnerVerifier::new(
-        "system-owner".into(),
-        vec!["provider".into()],
-        config_key.digest(),
-    )?;
-    let proof = verifier.verify("provider", &config_key)?;
+    let proof = BootstrapProviderPermit::new("provider".into())?.authenticated();
     let caps = ProviderCapabilities {
         create: true,
         start: true,
@@ -148,24 +142,6 @@ async fn exercise(store: Store, users: &[BearerSecret]) -> Result<(), TestError>
             NOW,
         )
         .await?;
-    let wrong = SystemOwnerVerifier::new(
-        "other-owner".into(),
-        vec!["provider".into()],
-        config_key.digest(),
-    )?
-    .verify("provider", &config_key)?;
-    assert!(matches!(
-        store
-            .configure_system_provider(
-                &wrong,
-                "Hijacked",
-                caps,
-                &chapchoo_domain::ProviderSubstrate::Kubernetes,
-                NOW
-            )
-            .await,
-        Err(StoreError::Forbidden)
-    ));
     assert_eq!(
         store.available_providers(&owner, None, 10, NOW).await?[0].name,
         "Configured"

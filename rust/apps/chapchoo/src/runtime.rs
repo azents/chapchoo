@@ -30,6 +30,9 @@ pub async fn serve(config: Option<BackendConfig>, options: ServeOptions) -> Resu
         return Err(ConfigError::NoComponents.into());
     }
     let groups = ServiceGroups::new(options.groups.iter().map(|group| group.domain()));
+    if options.standalone_docker && !groups.contains(ServiceGroup::Control) {
+        return Err(ConfigError::NoComponents.into());
+    }
     if options.peer_listen == Some(options.listen) {
         return Err(ConfigError::SameListener.into());
     }
@@ -175,7 +178,7 @@ async fn start_backends(
     tasks: &mut BackendTasks,
     control: &mut Option<ControlPlane>,
 ) -> Result<(), AppError> {
-    let application = ApplicationConfig::load()?;
+    let mut application = ApplicationConfig::load()?;
     let store = config.connect().await?;
     let mailer: Option<Arc<dyn Mailer>> = match application.mail {
         Some(mail) => Some(Arc::new(chapchoo_mail::SmtpMailer::new(
@@ -201,13 +204,27 @@ async fn start_backends(
         None
     };
     let groups = ServiceGroups::new(options.groups.iter().map(|group| group.domain()));
-    let app = Arc::new(
-        ComputersService::new(store, application.system_owner)
-            .with_policy(application.computers)?,
-    );
+    let app = Arc::new(ComputersService::new(store).with_policy(application.computers)?);
     let computers = ComputerServices::new(app.clone()).with_admission(admission.clone());
     if groups.contains(ServiceGroup::Control) {
-        let (plane, incoming) = ControlPlane::new(
+        let standalone = if options.standalone_docker {
+            let endpoint = format!("http://{}", listener.local_addr()?);
+            let docker = crate::config::standalone_docker_options(&endpoint)?;
+            if std::env::var_os("CHAPCHOO_PROVIDER_BOOTSTRAP_CONFIG").is_none() {
+                application
+                    .provider_bootstrap
+                    .trust_provider_ids
+                    .push(docker.provider_id.clone());
+            }
+            Some(docker)
+        } else {
+            None
+        };
+        let authenticator = crate::provider_auth::authenticator(
+            application.provider_bootstrap,
+            config.cipher.clone(),
+        )?;
+        let (mut plane, incoming) = ControlPlane::new(
             app,
             options
                 .peer_advertise
@@ -216,6 +233,30 @@ async fn start_backends(
             admission.clone(),
         )
         .await?;
+        plane.authentication = plane
+            .authentication
+            .clone()
+            .with_provider_authenticator(authenticator);
+        if let Some(docker) = standalone {
+            let (channel, provider_incoming) = chapchoo_rpc::memory_transport();
+            let auth = plane
+                .authentication
+                .internal_provider_server(docker.provider_id.clone());
+            let connections = plane.connections.provider_server();
+            let shutdown = stop.clone();
+            tasks.spawn(async move {
+                Server::builder()
+                    .add_service(auth)
+                    .add_service(connections)
+                    .serve_with_incoming_shutdown(provider_incoming, shutdown.cancelled_owned())
+                    .await?;
+                Ok(())
+            });
+            let shutdown = stop.clone();
+            tasks.spawn(async move {
+                crate::provider::run_standalone_docker(docker, channel, shutdown).await
+            });
+        }
         *control = Some(plane);
         let plane = control.as_ref().ok_or(ConfigError::ComponentExit)?;
         let peer = plane.peer.clone();

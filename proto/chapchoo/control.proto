@@ -7,14 +7,24 @@ import "google/protobuf/timestamp.proto";
 
 // Component-facing listeners authenticate bearer metadata independently of peers.
 service ProviderAuthentication {
+  rpc Exchange(ProviderAuthenticationRequest) returns (ComponentKey);
   rpc Report(ProviderReport) returns (google.protobuf.Empty);
-  rpc ConfigureSystemProvider(ProviderConfiguration) returns (google.protobuf.Empty);
   rpc CheckCommand(ProviderCommandCheck) returns (ProviderCommandAdmission);
   rpc CheckConnection(ProviderConnectionCheck) returns (google.protobuf.Empty);
   rpc RotateKey(ProviderKeyRequest) returns (ComponentKey);
   rpc RevokeKey(ProviderKeyRequest) returns (google.protobuf.Empty);
   rpc IssueConnectorSession(ConnectorSessionRequest) returns (ConnectorSession);
   rpc RevokeConnectorSession(RevokeConnectorSessionRequest) returns (google.protobuf.Empty);
+}
+// Evidence is verified against server policy, never an asserted owner.
+message ProviderAuthenticationRequest {
+  ProviderConfiguration configuration = 1;
+  string request_id = 2;
+  oneof evidence {
+    string service_account_token = 3;
+    string bootstrap_credential = 4;
+    string registration_token = 5;
+  }
 }
 service ConnectorAuthentication {
   rpc CheckCommand(ConnectorCommandCheck) returns (google.protobuf.Empty);
@@ -37,11 +47,6 @@ service PeerRelay {
   rpc InvokeConnector(ConnectorInvocation) returns (ConnectorInvocationResult);
 }
 
-enum OwnerAuthority {
-  OWNER_AUTHORITY_UNSPECIFIED = 0;
-  OWNER_AUTHORITY_SYSTEM = 1;
-  OWNER_AUTHORITY_USER = 2;
-}
 message ProviderConnectionCheck {
   string provider_id = 1;
   string instance_id = 2;
@@ -95,7 +100,6 @@ message ProviderConfiguration {
 message ProviderKeyRequest {
   string provider_id = 1;
   string request_id = 2;
-  OwnerAuthority authority = 3;
 }
 message ComponentKey {
   string token = 1;

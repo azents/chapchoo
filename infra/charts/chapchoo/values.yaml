@@ -1,5 +1,6 @@
 # No database, credentials, certificate, ingress controller or secret provider is
-# provisioned by this chart. Confirm prerequisites before a full deployment.
+# provisioned by this chart. Optional Provider bootstrap owns its isolated namespace.
+# Confirm prerequisites before a full deployment.
 prerequisitesConfirmed: false
 fullnameOverride: ""
 imagePullSecrets: []
@@ -19,17 +20,20 @@ backend:
   resources:
     requests: {cpu: 100m, memory: 128Mi}
     limits: {cpu: "1", memory: 512Mi}
-systemOwner:
-  id: ""
-  providerIds: []
-  existingSecret: ""
-  key: owner-token
-computerProvider:
+# Kubernetes is an explicit opt-in; all Provider-specific fields have defaults.
+kubernetesProvider:
   enabled: false
   id: ""
   name: ""
   managedNamespace: ""
+  createManagedNamespace: true
   controlEndpoint: ""
+  authentication:
+    method: service-account
+    audience: chapchoo-provider-auth
+    # Advanced protected-credential deployments may select an existing credential.
+    existingCredentialSecret: ""
+  # Empty repository inherits the complete selected backend image.
   image: {repository: "", tag: "", digest: "", pullPolicy: IfNotPresent}
   resources:
     requests: {cpu: 100m, memory: 128Mi}

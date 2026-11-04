@@ -37,7 +37,7 @@ allowed = {
     "chapchoo-rpc": {
         "chapchoo-crypto", "chapchoo-domain", "chapchoo-protocol", "chapchoo-service",
         "prost-types", "prost", "tonic", "tracing", "zeroize", "chapchoo-persistence",
-        "base64", "tempfile", "tokio", "tokio-stream", "tower", "hyper-util", "url",
+        "base64", "tempfile", "tokio", "tokio-stream", "tower", "hyper-util", "url", "serde",
     },
     "chapchoo-mail": {
         "chapchoo-service", "lettre", "tokio", "chapchoo-domain", "rcgen", "tokio-rustls",
@@ -55,7 +55,7 @@ allowed = {
         "chapchoo-rpc", "chapchoo-mail", "chapchoo-kubernetes", "chapchoo-docker", "clap", "tokio", "tokio-stream", "tokio-util",
         "tonic", "tonic-health", "tracing", "tracing-subscriber", "thiserror", "zeroize",
         "url", "base64", "tempfile", "chapchoo-protocol", "prost-types", "nix",
-        "kube", "tower", "http", "http-body-util", "serde_json",
+        "kube", "k8s-openapi", "tower", "http", "http-body-util", "serde_json",
     },
 }
 for name, dependencies in allowed.items():

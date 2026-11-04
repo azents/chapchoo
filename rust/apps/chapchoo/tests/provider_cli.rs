@@ -24,23 +24,23 @@ struct ControlBoundary {
 
 #[tonic::async_trait]
 impl ProviderAuthentication for ControlBoundary {
-    async fn configure_system_provider(
+    async fn exchange(
         &self,
-        request: Request<wire::ProviderConfiguration>,
-    ) -> Result<Response<()>, Status> {
-        let expected = format!("Bearer {}", self.owner.expose());
-        if request
-            .metadata()
-            .get("authorization")
-            .and_then(|v| v.to_str().ok())
-            != Some(&expected)
+        request: Request<wire::ProviderAuthenticationRequest>,
+    ) -> Result<Response<wire::ComponentKey>, Status> {
+        let value = request.into_inner();
+        if !matches!(&value.evidence,Some(wire::provider_authentication_request::Evidence::RegistrationToken(token)) if token==self.owner.expose())
         {
             return Err(Status::unauthenticated(
                 "Provider owner authentication required",
             ));
         }
         self.configured
-            .send(request.into_inner())
+            .send(
+                value
+                    .configuration
+                    .ok_or_else(|| Status::invalid_argument("Provider configuration missing"))?,
+            )
             .await
             .map_err(|_| Status::unavailable("Fixture receiver closed"))?;
         // A deliberate RPC denial ends the child before any native resource work.
@@ -126,6 +126,8 @@ users:
         let endpoint = format!("http://{}", listener.local_addr()?);
         let owner = BearerSecret::generate()?;
         let child_token = owner.expose().to_owned();
+        let credential_file = dir.path().join("provider-credential");
+        std::fs::write(&credential_file, &child_token)?;
         let (configured, mut received) = mpsc::channel(2);
         let stopped = fixture.shutdown();
         fixture.server(
@@ -143,7 +145,8 @@ users:
             let mut command = Command::new(env!("CARGO_BIN_EXE_chapchoo"));
             command
                 .env_clear()
-                .env("CHAPCHOO_PROVIDER_OWNER_TOKEN", &child_token)
+                .env("CHAPCHOO_PROVIDER_AUTH_METHOD", "random-token")
+                .env("CHAPCHOO_PROVIDER_AUTH_FILE", &credential_file)
                 .arg("computer-provider")
                 .arg("--endpoint")
                 .arg(&endpoint)

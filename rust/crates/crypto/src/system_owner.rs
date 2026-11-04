@@ -1,58 +1,52 @@
-use crate::{BearerSecret, CryptoError, SecretDigest};
+use crate::CryptoError;
 use std::fmt;
 
-/// A configured verifier for one system owner and an explicit Provider scope.
-/// This is unrelated to the installation encryption root and component keys.
-pub struct SystemOwnerVerifier {
-    owner_id: String,
-    providers: Vec<String>,
-    verifier: SecretDigest,
-}
-
-impl SystemOwnerVerifier {
-    pub fn new(
-        owner_id: String,
-        providers: Vec<String>,
-        verifier: SecretDigest,
-    ) -> Result<Self, CryptoError> {
-        if !valid_identity(&owner_id)
-            || providers.is_empty()
-            || providers.iter().any(|id| !valid_identity(id))
-        {
-            return Err(CryptoError::InvalidContext);
-        }
-        let mut unique = providers;
-        unique.sort();
-        unique.dedup();
-        Ok(Self {
-            owner_id,
-            providers: unique,
-            verifier,
-        })
-    }
-
-    /// Returns a request-local proof of the configured owner/Provider binding.
-    pub fn verify(
-        &self,
-        provider_id: &str,
-        credential: &BearerSecret,
-    ) -> Result<VerifiedSystemOwner, CryptoError> {
-        let valid_credential = self.verifier.matches(credential);
-        let in_scope = self.providers.iter().any(|id| id == provider_id);
-        if !valid_credential || !in_scope {
-            return Err(CryptoError::InvalidToken);
-        }
-        Ok(VerifiedSystemOwner {
-            owner_id: self.owner_id.clone(),
-            provider_id: provider_id.to_owned(),
-        })
-    }
-}
-
-/// Constructible only by verification, never from a caller's asserted owner ID.
+/// Request-local proof supplied by a trusted, authenticated bootstrap adapter.
 pub struct VerifiedSystemOwner {
     owner_id: String,
     provider_id: String,
+    source: BootstrapAuthenticationSource,
+}
+
+#[derive(Debug, Clone)]
+pub enum BootstrapAuthenticationSource {
+    Internal,
+    SecretKey,
+    ServiceAccount {
+        namespace: String,
+        service_account: String,
+        audience: String,
+    },
+}
+
+/// Captured only from server bootstrap configuration, never a wire request.
+#[derive(Debug, Clone)]
+pub struct BootstrapProviderPermit {
+    provider_id: String,
+}
+impl BootstrapProviderPermit {
+    pub fn new(provider_id: String) -> Result<Self, CryptoError> {
+        if !valid_identity(&provider_id) {
+            return Err(CryptoError::InvalidContext);
+        }
+        Ok(Self { provider_id })
+    }
+
+    /// Called by the configured adapter after its evidence has been verified.
+    pub fn authenticated(&self) -> VerifiedSystemOwner {
+        self.authenticated_with_source(BootstrapAuthenticationSource::Internal)
+    }
+
+    pub fn authenticated_with_source(
+        &self,
+        source: BootstrapAuthenticationSource,
+    ) -> VerifiedSystemOwner {
+        VerifiedSystemOwner {
+            owner_id: "installation".to_owned(),
+            provider_id: self.provider_id.clone(),
+            source,
+        }
+    }
 }
 
 impl VerifiedSystemOwner {
@@ -62,13 +56,30 @@ impl VerifiedSystemOwner {
     pub fn provider_id(&self) -> &str {
         &self.provider_id
     }
-}
-
-impl fmt::Debug for SystemOwnerVerifier {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("SystemOwnerVerifier([REDACTED])")
+    pub fn authentication_fingerprint(&self) -> [u8; 32] {
+        match &self.source {
+            BootstrapAuthenticationSource::Internal => {
+                crate::payload_fingerprint("provider-auth-internal", &[])
+            }
+            BootstrapAuthenticationSource::SecretKey => {
+                crate::payload_fingerprint("provider-auth-secret-key", &[])
+            }
+            BootstrapAuthenticationSource::ServiceAccount {
+                namespace,
+                service_account,
+                audience,
+            } => crate::payload_fingerprint(
+                "provider-auth-service-account",
+                &[
+                    namespace.as_bytes(),
+                    service_account.as_bytes(),
+                    audience.as_bytes(),
+                ],
+            ),
+        }
     }
 }
+
 impl fmt::Debug for VerifiedSystemOwner {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("VerifiedSystemOwner([REDACTED])")
@@ -88,32 +99,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_matching_credential_and_explicit_provider_scope_produce_a_proof()
-    -> Result<(), CryptoError> {
-        let credential = BearerSecret::generate()?;
-        let different = BearerSecret::generate()?;
-        let verifier = SystemOwnerVerifier::new(
-            "system-owner".into(),
-            vec!["provider-a".into()],
-            credential.digest(),
-        )?;
-        let proof = verifier.verify("provider-a", &credential)?;
-        assert_eq!(proof.owner_id(), "system-owner");
+    fn captured_permit_has_one_valid_identity_and_redacted_proof() -> Result<(), CryptoError> {
+        let permit = BootstrapProviderPermit::new("provider-a".into())?;
+        let proof = permit.authenticated();
         assert_eq!(proof.provider_id(), "provider-a");
-        assert!(verifier.verify("provider-b", &credential).is_err());
-        assert!(verifier.verify("provider-a", &different).is_err());
-        assert!(!format!("{verifier:?} {proof:?}").contains(credential.expose()));
+        assert_eq!(proof.owner_id(), "installation");
         assert_eq!(format!("{proof:?}"), "VerifiedSystemOwner([REDACTED])");
-        Ok(())
-    }
-
-    #[test]
-    fn empty_or_ambiguous_configured_scope_is_rejected() -> Result<(), CryptoError> {
-        let digest = BearerSecret::generate()?.digest();
-        for providers in [vec![], vec!["*".into()], vec!["provider\nassertion".into()]] {
-            assert!(SystemOwnerVerifier::new("owner".into(), providers, digest.clone()).is_err());
+        for invalid in ["", "*", "provider\n"] {
+            assert!(BootstrapProviderPermit::new(invalid.to_owned()).is_err());
         }
-        assert!(SystemOwnerVerifier::new(String::new(), vec!["provider".into()], digest).is_err());
         Ok(())
     }
 }

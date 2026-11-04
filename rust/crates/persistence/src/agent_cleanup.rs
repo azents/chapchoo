@@ -95,12 +95,35 @@ macro_rules! delete_team_agents {
             .load::<$crate::agent_cleanup::ScopedAgent>($connection).await?;
         // Keep the same Team -> Provider -> Computer ordering as direct Agent
         // operations; reconciliation can never observe a half-admitted deletion.
-        let providers: std::collections::BTreeSet<_> = initial.iter()
-            .filter_map(|row| row.provider_id.as_deref()).collect();
-        for provider in providers {
+        let mut providers: std::collections::BTreeSet<String> = initial.iter()
+            .filter_map(|row| row.provider_id.clone()).collect();
+        let owned_providers = if owner.is_none() {
+            diesel::sql_query($dialect.query("SELECT id,owner_kind,system_owner_id,user_owner_id,owner_team_id,name,provider_kind,docker_daemon_id,can_create,can_start,can_stop,can_restart FROM computer_providers WHERE owner_kind='TEAM' AND owner_team_id=? ORDER BY id"))
+                .bind::<diesel::sql_types::Text,_>(team)
+                .load::<$crate::computers::ProviderRow>($connection).await?
+        } else {
+            Vec::new()
+        };
+        providers.extend(owned_providers.iter().map(|provider| provider.id.clone()));
+        for provider in &providers {
             diesel::sql_query($dialect.query($crate::computers::provider_lock($dialect)))
                 .bind::<diesel::sql_types::Text,_>(provider)
                 .get_result::<$crate::computers::ProviderRow>($connection).await?;
+        }
+        // Team deletion withdraws its credentials without transferring native
+        // resource ownership or pretending external cleanup has completed.
+        for provider in owned_providers {
+            diesel::sql_query($dialect.query("UPDATE provider_registration_credentials SET revoked_at=COALESCE(revoked_at,?) WHERE provider_id=?"))
+                .bind::<diesel::sql_types::BigInt,_>($now)
+                .bind::<diesel::sql_types::Text,_>(&provider.id)
+                .execute($connection).await?;
+            diesel::sql_query($dialect.query("UPDATE provider_keys SET revoked_at=COALESCE(revoked_at,?),previous_hash=NULL,previous_valid_until=NULL,recovery_nonce=NULL,recovery_ciphertext=NULL WHERE provider_id=?"))
+                .bind::<diesel::sql_types::BigInt,_>($now)
+                .bind::<diesel::sql_types::Text,_>(&provider.id)
+                .execute($connection).await?;
+            diesel::sql_query($dialect.query("DELETE FROM provider_connections WHERE provider_id=?"))
+                .bind::<diesel::sql_types::Text,_>(&provider.id)
+                .execute($connection).await?;
         }
         for initial in initial {
             let mut query = format!("{} WHERE a.id=? AND a.team_id=?", $crate::agent_cleanup::SCOPED_AGENTS);
@@ -139,9 +162,11 @@ pub(crate) use delete_team_agents;
 
 macro_rules! purge_deleted_teams {
     ($connection:expr, $dialect:expr) => {{
-        // Operational tombstones exist only while external Agent cleanup owns
-        // their FK references. They are not selectable archives or restore data.
-        diesel::sql_query($dialect.query("DELETE FROM teams WHERE deletion_requested_at IS NOT NULL AND NOT EXISTS (SELECT 1 FROM agents WHERE agents.team_id=teams.id)"))
+        // Retain exact Team/Provider identities while native resources or
+        // Computers reference them. Empty Providers have no cleanup authority.
+        diesel::sql_query($dialect.query("DELETE FROM computer_providers WHERE owner_kind='TEAM' AND owner_team_id IN (SELECT id FROM teams WHERE deletion_requested_at IS NOT NULL) AND NOT EXISTS (SELECT 1 FROM computers WHERE computers.provider_id=computer_providers.id) AND NOT EXISTS (SELECT 1 FROM computer_resources WHERE computer_resources.provider_id=computer_providers.id)"))
+            .execute($connection).await?;
+        diesel::sql_query($dialect.query("DELETE FROM teams WHERE deletion_requested_at IS NOT NULL AND NOT EXISTS (SELECT 1 FROM agents WHERE agents.team_id=teams.id) AND NOT EXISTS (SELECT 1 FROM computer_providers WHERE computer_providers.owner_team_id=teams.id)"))
             .execute($connection).await?;
     }};
 }

@@ -1,0 +1,45 @@
+{{- if .Values.kubernetesProvider.enabled }}
+{{- $name := include "chapchoo.fullname" . }}
+{{- if .Values.kubernetesProvider.createManagedNamespace }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ include "chapchoo.providerNamespace" . }}
+  annotations:
+    helm.sh/resource-policy: keep
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+  labels:
+    app.kubernetes.io/part-of: {{ $name }}
+{{- end }}
+{{- if and .Values.backend.enabled (eq .Values.kubernetesProvider.authentication.method "service-account") }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}-control
+  namespace: {{ .Release.Namespace }}
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Namespace }}-{{ $name }}-token-review
+rules:
+  - apiGroups: [authentication.k8s.io]
+    resources: [tokenreviews]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Namespace }}-{{ $name }}-token-review
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Release.Namespace }}-{{ $name }}-token-review
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}-control
+    namespace: {{ .Release.Namespace }}
+{{- end }}
+{{- end }}

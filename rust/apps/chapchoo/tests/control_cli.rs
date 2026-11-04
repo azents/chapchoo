@@ -1,6 +1,6 @@
 #![cfg(unix)]
 use base64::{Engine, engine::general_purpose::URL_SAFE};
-use chapchoo_crypto::BearerSecret;
+use chapchoo_crypto::{CredentialCipher, RootKey};
 use chapchoo_protocol::{
     accounts::authentication_client::AuthenticationClient,
     control::{
@@ -36,12 +36,14 @@ async fn control_group_has_components_and_separate_network_peer_listener() -> Re
         let public_addr = public.local_addr()?;
         let peer_addr = peer.local_addr()?;
         drop((public, peer));
-        let owner = BearerSecret::generate()?;
+        let owner = CredentialCipher::new(RootKey::parse(URL_SAFE.encode([1; 32]))?)?
+            .issue_provider_bootstrap("provider")?;
         let child = fixture.child(
             command()
-                .env("CHAPCHOO_SYSTEM_OWNER_ID", "fixture-owner")
-                .env("CHAPCHOO_SYSTEM_OWNER_PROVIDER_IDS", "provider")
-                .env("CHAPCHOO_SYSTEM_OWNER_TOKEN", owner.expose())
+                .env(
+                    "CHAPCHOO_PROVIDER_BOOTSTRAP_CONFIG",
+                    r#"{"secretKeyProviderIds":["provider"]}"#,
+                )
                 .args([
                     "serve",
                     "--groups",
@@ -123,23 +125,23 @@ async fn control_group_has_components_and_separate_network_peer_listener() -> Re
                 restart: true,
             }),
         };
-        let authenticated =
-            |value| -> Result<tonic::Request<control::ProviderConfiguration>, Error> {
-                let mut r = tonic::Request::new(value);
-                r.metadata_mut().insert(
-                    "authorization",
-                    format!("Bearer {}", owner.expose()).parse()?,
-                );
-                Ok(r)
-            };
+        let authenticated = |value, request_id: &str| control::ProviderAuthenticationRequest {
+            configuration: Some(value),
+            request_id: request_id.into(),
+            evidence: Some(
+                control::provider_authentication_request::Evidence::BootstrapCredential(
+                    owner.expose().to_owned(),
+                ),
+            ),
+        };
         provider
-            .configure_system_provider(authenticated(configuration.clone())?)
+            .exchange(authenticated(configuration.clone(), "register"))
             .await?;
         let mut foreign = configuration;
         foreign.provider_id = "unscoped-provider".into();
         assert_eq!(
             provider
-                .configure_system_provider(authenticated(foreign)?)
+                .exchange(authenticated(foreign, "foreign"))
                 .await
                 .err()
                 .ok_or("Unscoped Provider accepted")?

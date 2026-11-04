@@ -42,6 +42,25 @@ pub enum Command {
     ComputerProvider(ProviderOptions),
     /// Run a Docker Computer Provider using the selected daemon, without DB authority.
     DockerProvider(DockerProviderOptions),
+    /// Mint or install an identity-bound bootstrap credential using server root authority.
+    ProviderCredential(ProviderCredentialOptions),
+}
+#[derive(Debug, Args)]
+pub struct ProviderCredentialOptions {
+    #[arg(long)]
+    pub provider_id: String,
+    #[arg(long, conflicts_with = "output_file", requires_all = ["namespace", "in_cluster"])]
+    pub secret_name: Option<String>,
+    #[arg(long, requires = "secret_name")]
+    pub namespace: Option<String>,
+    #[arg(long, requires = "secret_name")]
+    pub in_cluster: bool,
+    #[arg(
+        long,
+        conflicts_with = "secret_name",
+        required_unless_present = "secret_name"
+    )]
+    pub output_file: Option<PathBuf>,
 }
 #[derive(Debug, Args)]
 pub struct DockerProviderOptions {
@@ -152,10 +171,6 @@ pub struct ProviderOptions {
     )]
     pub kubeconfig: Option<PathBuf>,
 }
-pub fn provider_owner_key() -> Result<BearerSecret, ConfigError> {
-    BearerSecret::parse(required("CHAPCHOO_PROVIDER_OWNER_TOKEN")?)
-        .map_err(|_| ConfigError::Variable("CHAPCHOO_PROVIDER_OWNER_TOKEN"))
-}
 #[derive(Debug, Args)]
 pub struct ConnectorOptions {
     #[arg(long, env = "CHAPCHOO_CONTROL_ENDPOINT")]
@@ -193,6 +208,9 @@ pub enum WebSelection {
 
 #[derive(Debug, Args)]
 pub struct ServeOptions {
+    /// Explicit local Docker Provider composition. Its auth endpoint never opens a socket.
+    #[arg(long)]
+    pub standalone_docker: bool,
     /// Select a service union; use --groups with no values for web-only operation.
     #[arg(long, value_enum, value_delimiter=',', num_args=0.., default_values=["client","admin","control"])]
     pub groups: Vec<BackendGroup>,
@@ -216,6 +234,27 @@ pub struct ServeOptions {
         default_value = "127.0.0.1:3004"
     )]
     pub admin_web_listen: SocketAddr,
+}
+
+pub fn standalone_docker_options(endpoint: &str) -> Result<DockerProviderOptions, AppError> {
+    let id = optional("CHAPCHOO_PROVIDER_ID")?.unwrap_or_else(|| "standalone-docker".to_owned());
+    let name =
+        optional("CHAPCHOO_PROVIDER_NAME")?.unwrap_or_else(|| "Standalone Docker".to_owned());
+    match Cli::try_parse_from([
+        "chapchoo",
+        "docker-provider",
+        "--endpoint",
+        endpoint,
+        "--provider-id",
+        &id,
+        "--name",
+        &name,
+    ])?
+    .command
+    {
+        Command::DockerProvider(options) => Ok(options),
+        _ => Err(ConfigError::NoComponents.into()),
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -606,7 +645,7 @@ pub struct ApplicationConfig {
     pub accounts: chapchoo_service::AccountsConfig,
     pub password_capacity: usize,
     pub mail: Option<MailConfig>,
-    pub system_owner: Option<chapchoo_crypto::SystemOwnerVerifier>,
+    pub provider_bootstrap: chapchoo_rpc::ProviderBootstrapConfig,
     pub computers: chapchoo_service::ComputerPolicy,
 }
 
@@ -719,20 +758,14 @@ impl ApplicationConfig {
             heartbeat_ms: u32::try_from(milliseconds("CHAPCHOO_CONTROL_HEARTBEAT_MS", 20_000)?)
                 .map_err(|_| ConfigError::Variable("CHAPCHOO_CONTROL_HEARTBEAT_MS"))?,
             start_delayed_ms: milliseconds("CHAPCHOO_START_DELAYED_MS", 300_000)?,
+            provider_keys: chapchoo_service::ComputerPolicy::default().provider_keys,
         }
         .validate()?;
-        let system_owner=match (
-            optional("CHAPCHOO_SYSTEM_OWNER_ID")?,
-            optional("CHAPCHOO_SYSTEM_OWNER_PROVIDER_IDS")?,
-            optional("CHAPCHOO_SYSTEM_OWNER_TOKEN")?,
-        ) {
-            (None,None,None)=>None,
-            (Some(id),Some(providers),Some(token))=>{
-                let token=BearerSecret::parse(token).map_err(|_|ConfigError::Variable("CHAPCHOO_SYSTEM_OWNER_TOKEN"))?;
-                Some(chapchoo_crypto::SystemOwnerVerifier::new(id,providers.split(',').map(|id|id.trim().to_owned()).collect(),token.digest()).map_err(|_|ConfigError::Variable("CHAPCHOO_SYSTEM_OWNER_PROVIDER_IDS"))?)
-            }
-            _=>return Err(ConfigError::Variable("CHAPCHOO_SYSTEM_OWNER_ID / CHAPCHOO_SYSTEM_OWNER_PROVIDER_IDS / CHAPCHOO_SYSTEM_OWNER_TOKEN").into()),
-        };
+        let provider_bootstrap = optional("CHAPCHOO_PROVIDER_BOOTSTRAP_CONFIG")?
+            .map(|value| serde_json::from_str(&value))
+            .transpose()
+            .map_err(|_| ConfigError::Variable("CHAPCHOO_PROVIDER_BOOTSTRAP_CONFIG"))?
+            .unwrap_or_default();
         let validity_ms = duration("CHAPCHOO_SESSION_VALIDITY_DAYS", Some(180))?
             .ok_or(ConfigError::Variable("CHAPCHOO_SESSION_VALIDITY_DAYS"))?;
         Ok(Self {
@@ -748,7 +781,7 @@ impl ApplicationConfig {
             },
             password_capacity,
             mail,
-            system_owner,
+            provider_bootstrap,
             computers,
         })
     }

@@ -21,6 +21,9 @@ spec:
           image:
             repository: registry.example.invalid/chapchoo/backend
             tag: REPLACE_WITH_APPROVED_COMMIT
+        # Explicit opt-in; identities, isolated namespace and SA auth use chart defaults.
+        kubernetesProvider:
+          enabled: true
         database:
           existingSecret: prereq-postgres
         secretKey:

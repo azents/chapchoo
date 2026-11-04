@@ -11,6 +11,7 @@ mod mapping;
 mod memory;
 mod native_resources;
 mod peer;
+mod provider_authentication;
 mod reports;
 mod status;
 
@@ -22,4 +23,7 @@ pub use delivery::PeerDelivery;
 pub use groups::{ServiceGroup, ServiceGroups};
 pub use memory::{MemoryIncoming, memory_transport};
 pub use peer::PeerServices;
+pub use provider_authentication::{
+    ProviderAuthenticator, ProviderBootstrapConfig, ReviewedServiceAccount, ServiceAccountReviewer,
+};
 pub use status::DOMAIN_REASON_METADATA;
