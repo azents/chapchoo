@@ -74,21 +74,23 @@ impl CatalogueRow {
         if self.item_type != "AGENT"
             || self.source_kind != "BUILTIN"
             || self.internal_name.is_empty()
-            || self.asset_key.len() > 128
-            || self
-                .asset_key
-                .as_bytes()
-                .first()
-                .is_none_or(|byte| !byte.is_ascii_lowercase() && !byte.is_ascii_digit())
-            || !self
-                .asset_key
-                .bytes()
-                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+            || !valid_asset_key(&self.asset_key)
         {
             return Err(StoreError::Integrity);
         }
         Ok(())
     }
+}
+
+pub(crate) fn valid_asset_key(value: &str) -> bool {
+    value.len() <= 128
+        && value
+            .as_bytes()
+            .first()
+            .is_some_and(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
 }
 
 #[derive(diesel::QueryableByName)]

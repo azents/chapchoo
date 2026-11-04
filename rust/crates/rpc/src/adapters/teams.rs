@@ -45,6 +45,38 @@ impl wire::team_management_server::TeamManagement for TeamsAdapter {
         Ok(Response::new(output::team(result)))
     }
 
+    #[tracing::instrument(skip_all, fields(rpc = "resolve_team_handle"))]
+    async fn resolve_handle(
+        &self,
+        request: Request<wire::TeamHandleRequest>,
+    ) -> Result<Response<wire::Team>, Status> {
+        self.context.admit()?;
+        let actor = input::actor(&request)?;
+        let result = self
+            .context
+            .service
+            .team_by_handle(&actor, &request.into_inner().handle, input::now()?)
+            .await
+            .map_err(status)?;
+        Ok(Response::new(output::team(result)))
+    }
+
+    #[tracing::instrument(skip_all, fields(rpc = "check_team_handle"))]
+    async fn check_handle(
+        &self,
+        request: Request<wire::TeamHandleRequest>,
+    ) -> Result<Response<wire::TeamHandleAvailability>, Status> {
+        self.context.admit()?;
+        let actor = input::actor(&request)?;
+        let available = self
+            .context
+            .service
+            .team_handle_available(&actor, &request.into_inner().handle, input::now()?)
+            .await
+            .map_err(status)?;
+        Ok(Response::new(wire::TeamHandleAvailability { available }))
+    }
+
     #[tracing::instrument(skip_all, fields(rpc = "create_team"))]
     async fn create_team(
         &self,

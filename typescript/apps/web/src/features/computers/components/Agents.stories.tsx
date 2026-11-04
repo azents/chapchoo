@@ -4,6 +4,7 @@ import { WorkspaceChrome } from "@chapchoo/ui/WorkspaceChrome";
 import { computerCopy } from "@chapchoo/web-core/computer-messages";
 import { shellCopy } from "@chapchoo/web-core/shell-messages";
 import { useState } from "react";
+import { creationCopy } from "../creationCopy";
 import { Agents } from "./Agents";
 import type { AgentsProps, InitialAgents } from "../types";
 import type { AgentView } from "@chapchoo/web-core/computer";
@@ -14,6 +15,9 @@ const agent: AgentView = {
   id: "agent",
   teamId: "team",
   name: "Research companion",
+  handle: "research",
+  profileImage: { id: "image", assetKey: "03-corgi" },
+  paletteKey: "sage",
   computer: {
     intent: "running",
     requestId: "request",
@@ -38,6 +42,7 @@ const agent: AgentView = {
 const initial: InitialAgents = {
   type: "list",
   teamId: "team",
+  teamHandle: "my",
   page: { items: [agent], nextAfter: null },
   after: "",
   identity: "owner@example.invalid",
@@ -46,6 +51,7 @@ const initial: InitialAgents = {
 const detail: InitialAgents = {
   type: "detail",
   teamId: agent.teamId,
+  teamHandle: "my",
   agent,
   identity: initial.identity,
   renderedAt: initial.renderedAt,
@@ -59,6 +65,19 @@ const meta = {
     data: initial,
     basePath: "",
     copy: computerCopy("en-US"),
+    profileCopy: creationCopy("en-US"),
+    mobile: false,
+    editor: { type: "closed" },
+    images: { items: [], nextAfter: null },
+    imageAfter: null,
+    imagesUnavailable: false,
+    onEditProfile: () => {},
+    onProfileName: () => {},
+    onProfileImage: () => {},
+    onProfilePalette: () => {},
+    onImagePage: () => {},
+    onSaveProfile: () => {},
+    onCancelProfile: () => {},
     stale: false,
     pending: false,
     error: null,
@@ -74,6 +93,28 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const AgentList: Story = {};
+export const ProfileCards: Story = {
+  args: {
+    data: {
+      ...initial,
+      type: "list",
+      after: "",
+      page: {
+        items: [
+          agent,
+          {
+            ...agent,
+            id: "another-agent",
+            name: "A long-running research companion with a descriptive display name",
+            handle: "another-agent",
+            paletteKey: "rose",
+          },
+        ],
+        nextAfter: null,
+      },
+    },
+  },
+};
 export const StaleList: Story = { args: { stale: true } };
 export const SignedOut: Story = {
   args: { access: "signedOut", initial: detail, data: detail },
@@ -99,7 +140,7 @@ function FeedbackChrome({
     key: "personal",
     kind: "personal" as const,
     label: c.yourSpace,
-    href: "/agents?team=team",
+    href: "/teams/my/agents",
     selected: true,
   };
   return (
@@ -113,6 +154,12 @@ function FeedbackChrome({
       creating={false}
       name=""
       handle=""
+      prospectiveAddress={null}
+      handleStatus={{
+        message: null,
+        description: "핸들은 팀을 만든 뒤 변경할 수 없습니다.",
+        available: false,
+      }}
       error={null}
       status="ready"
       busy={false}
@@ -122,8 +169,9 @@ function FeedbackChrome({
         {
           key: "research",
           kind: "team",
+          handle: "research",
           label: "리서치 팀",
-          href: "/agents?team=research",
+          href: "/teams/research/agents",
           selected: false,
         },
         {
@@ -139,7 +187,7 @@ function FeedbackChrome({
         {
           key: "agents",
           label: c.agents,
-          href: "/agents?team=team",
+          href: "/teams/my/agents",
           active: true,
         },
         { key: "invitations", label: c.invitations, href: "/invitations" },
@@ -215,7 +263,7 @@ function FeedbackChrome({
           />
         }
       >
-        <Agents {...props} />
+        <Agents {...props} mobile={mobile} />
       </HeaderControlsContext.Provider>
     </WorkspaceChrome>
   );

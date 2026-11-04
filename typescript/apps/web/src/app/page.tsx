@@ -1,3 +1,4 @@
+import { agentsPath } from "@chapchoo/web-core/workspace";
 import { redirect } from "next/navigation";
 import { getPublicConfig } from "@/config";
 import { getLoginRedirect } from "@/config";
@@ -14,7 +15,11 @@ export default async function Home(): Promise<never> {
   if (!navigation.preferred) {
     throw new Error("Personal context is unavailable");
   }
-  redirect(
-    `${getPublicConfig().publicBasePath}/agents?team=${encodeURIComponent(navigation.preferred)}`,
+  const selected = navigation.teams.find(
+    (team) => team.id === navigation.preferred,
   );
+  if (!selected) {
+    throw new Error("Personal context is unavailable");
+  }
+  redirect(agentsPath(getPublicConfig().publicBasePath, selected));
 }

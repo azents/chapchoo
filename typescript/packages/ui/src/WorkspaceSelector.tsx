@@ -16,13 +16,12 @@ import { DropdownButton } from "./DropdownButton";
 import classes from "./WorkspaceSelector.module.css";
 import type { ReactElement, Ref } from "react";
 
-export interface WorkspaceChoice {
+export type WorkspaceChoice = {
   key: string;
-  kind: "personal" | "team" | "admin";
   label: string;
   href: string;
   selected: boolean;
-}
+} & ({ kind: "team"; handle: string } | { kind: "personal" | "admin" });
 export interface WorkspaceSelectorProps {
   current: WorkspaceChoice | null;
   choices: readonly WorkspaceChoice[];
@@ -62,9 +61,14 @@ function Choice({
     >
       <Group gap="sm" wrap="nowrap">
         <NavigationIcon name={choice.kind} />
-        <Text size="sm" className={classes.label}>
-          {choice.label}
-        </Text>
+        <Stack gap={0} className={classes.label}>
+          <Text size="sm">{choice.label}</Text>
+          {choice.kind === "team" ? (
+            <Text size="xs" c="dimmed">
+              @{choice.handle}
+            </Text>
+          ) : null}
+        </Stack>
       </Group>
     </UnstyledButton>
   );
@@ -143,9 +147,16 @@ export function WorkspaceSelector(props: WorkspaceSelectorProps): ReactElement {
       label={
         <Group gap="sm" wrap="nowrap">
           {props.current ? <NavigationIcon name={props.current.kind} /> : null}
-          <Text fw={600} size="sm" className={classes.triggerLabel}>
-            {props.current?.label ?? props.copy.choose}
-          </Text>
+          <Stack gap={0} style={{ minWidth: 0 }}>
+            <Text fw={600} size="sm" className={classes.triggerLabel}>
+              {props.current?.label ?? props.copy.choose}
+            </Text>
+            {props.current?.kind === "team" ? (
+              <Text size="xs" c="dimmed">
+                @{props.current.handle}
+              </Text>
+            ) : null}
+          </Stack>
           <NavigationIcon name="down" size="sm" className={classes.trailing} />
         </Group>
       }

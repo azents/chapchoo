@@ -116,6 +116,22 @@ export const appRouter = router({
       ),
   }),
   teams: router({
+    handleAvailable: procedure
+      .input(z.object({ handle }).strict())
+      .query(({ ctx, input }) =>
+        attempt(() =>
+          ctx.session.authenticated(
+            async (token) =>
+              (
+                await call(
+                  ctx.backend.teams.checkHandle.bind(ctx.backend.teams),
+                  input,
+                  token,
+                )
+              ).available,
+          ),
+        ),
+      ),
     list: procedure.query(({ ctx }) =>
       attempt(() =>
         ctx.session.authenticated(async (token) =>

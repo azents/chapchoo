@@ -3,11 +3,19 @@ import { useAuth } from "@chapchoo/web-core/auth-context";
 import { teamKind } from "@chapchoo/web-core/browser";
 import { computerCopy } from "@chapchoo/web-core/computer-messages";
 import { useDisplay } from "@chapchoo/web-core/display-context";
+import { validHandle } from "@chapchoo/web-core/handle";
+import { useHandleDraft } from "@chapchoo/web-core/handle-draft";
 import { initialQuery } from "@chapchoo/web-core/page-state";
-import { shellCopy } from "@chapchoo/web-core/shell-messages";
-import { workspacePreference } from "@chapchoo/web-core/workspace";
+import { shellCopy, teamHandleCopy } from "@chapchoo/web-core/shell-messages";
+import {
+  agentsPath,
+  routeTeamHandle,
+  teamPath,
+  teamRouteKey,
+  workspacePreference,
+} from "@chapchoo/web-core/workspace";
 import { useMediaQuery } from "@mantine/hooks";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/shared/rpc/client";
 import type { InitialNavigation } from "./types";
@@ -31,17 +39,26 @@ export function useNavigation({
   const display = useDisplay();
   const copy = shellCopy(display.value.language);
   const pathname = usePathname();
-  const search = useSearchParams();
   const mobile = useMediaQuery("(max-width: 48em)");
   const [drawer, setDrawer] = useState(false);
   const [picker, setPicker] = useState(false);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
-  const [handle, setHandle] = useState("");
   const [error, setError] = useState<string | null>(null);
   const pending = useRef(false);
   const utils = trpc.useUtils();
   const identity = auth.state.type === "AUTHENTICATED" ? auth.state.user : null;
+  const proposal = useHandleDraft(
+    "team",
+    creating ? (identity?.id ?? null) : null,
+    (candidate, signal) =>
+      utils.client.teams.handleAvailable.query(
+        { handle: candidate },
+        { signal },
+      ),
+  );
+  const handle = proposal.draft.candidate;
+  const handleCopy = teamHandleCopy(display.value.language);
   const query = trpc.teams.list.useQuery(void 0, {
     ...(initial.type === "ready" && initial.userId === identity?.id
       ? initialQuery({ items: initial.teams }, initial.renderedAt)
@@ -52,36 +69,34 @@ export function useNavigation({
   const route = pathname.startsWith(basePath + "/")
     ? pathname.slice(basePath.length)
     : pathname;
-  const routeTeam = /^\/teams\/([^/]+)$/.exec(route)?.[1];
-  const selectedId = routeTeam
-    ? decodeURIComponent(routeTeam)
-    : (search.get("team") ??
-      (initial.type === "ready" ? initial.preferred : null));
+  const routeTeam = routeTeamHandle(route);
   const contexts = query.data?.items ?? [];
   const selected =
-    contexts.find((team) => team.id === selectedId) ??
-    contexts.find((team) => team.kind === teamKind.personal) ??
-    null;
+    (routeTeam
+      ? contexts.find((team) => teamRouteKey(team) === routeTeam)
+      : (contexts.find(
+          (team) =>
+            team.id === (initial.type === "ready" ? initial.preferred : null),
+        ) ?? contexts.find((team) => team.kind === teamKind.personal))) ?? null;
   useEffect(() => {
-    if (
-      identity &&
-      selected &&
-      (search.get("team") === selected.id || routeTeam === selected.id)
-    ) {
+    if (identity && selected && routeTeam === teamRouteKey(selected)) {
       document.cookie = workspacePreference(
         identity.id,
         selected.id,
         window.location.protocol === "https:",
       );
     }
-  }, [identity, selected, routeTeam, search]);
-  const choices: WorkspaceChoice[] = contexts.map((team) => ({
-    key: team.id,
-    kind: team.kind === teamKind.personal ? "personal" : "team",
-    label: team.kind === teamKind.personal ? copy.yourSpace : team.name,
-    href: `${basePath}/agents?team=${encodeURIComponent(team.id)}`,
-    selected: team.id === selected?.id,
-  }));
+  }, [identity, selected, routeTeam]);
+  const choices: WorkspaceChoice[] = contexts.map((team): WorkspaceChoice => {
+    const common = {
+      key: team.id,
+      href: agentsPath(basePath, team),
+      selected: team.id === selected?.id,
+    };
+    return team.kind === teamKind.personal
+      ? { ...common, kind: "personal", label: copy.yourSpace }
+      : { ...common, kind: "team", label: team.name, handle: team.handle };
+  });
   const current = choices.find((choice) => choice.selected) ?? null;
   if (identity?.isAdmin && adminUrl) {
     choices.push({
@@ -92,18 +107,17 @@ export function useNavigation({
       selected: false,
     });
   }
-  const suffix = selected ? `?team=${encodeURIComponent(selected.id)}` : "";
   const items: NavigationItem[] = [
     {
       key: "agents",
       label: copy.agents,
-      href: `${basePath}/agents${suffix}`,
-      active: route.startsWith("/agents"),
+      href: selected ? agentsPath(basePath, selected) : `${basePath}/`,
+      active: /^\/teams\/[^/]+\/(?:agents|new-agent)(?:\/|$)/.test(route),
     },
     {
       key: "invitations",
       label: copy.invitations,
-      href: `${basePath}/invitations${suffix}`,
+      href: `${basePath}/invitations`,
       active: route === "/invitations",
     },
     ...(selected?.kind === teamKind.collaborative
@@ -111,15 +125,15 @@ export function useNavigation({
           {
             key: "team",
             label: copy.teamSettings,
-            href: `${basePath}/teams/${encodeURIComponent(selected.id)}`,
-            active: route.startsWith("/teams/"),
+            href: teamPath(basePath, selected),
+            active: /^\/teams\/[^/]+$/.test(route),
           },
         ]
       : []),
   ];
   const create = trpc.teams.create.useMutation({ retry: false });
   async function submit(): Promise<void> {
-    if (pending.current) {
+    if (pending.current || proposal.status !== "available") {
       return;
     }
     pending.current = true;
@@ -137,9 +151,7 @@ export function useNavigation({
           window.location.protocol === "https:",
         );
       }
-      window.location.assign(
-        `${basePath}/agents?team=${encodeURIComponent(team.id)}`,
-      );
+      window.location.assign(agentsPath(basePath, team));
     } catch (cause) {
       void utils.teams.list.invalidate();
       // No automatic retry: the ordinary create endpoint has no receipt contract.
@@ -158,6 +170,9 @@ export function useNavigation({
             ? copy.invalidTeam
             : copy.creationUncertain,
       );
+      if (reason === "DOMAIN_REASON_HANDLE_CONFLICT") {
+        proposal.recheck();
+      }
     } finally {
       pending.current = false;
     }
@@ -174,6 +189,12 @@ export function useNavigation({
     creating,
     name,
     handle,
+    prospectiveAddress: validHandle(handle) ? teamPath(basePath, handle) : null,
+    handleStatus: {
+      description: handleCopy.permanent,
+      message: proposal.status === "idle" ? null : handleCopy[proposal.status],
+      available: proposal.status === "available",
+    },
     error,
     choices,
     current,
@@ -202,8 +223,17 @@ export function useNavigation({
         setCreating(false);
       }
     },
-    onName: setName,
-    onHandle: setHandle,
+    onName: (value) => {
+      if (!pending.current) {
+        setName(value);
+        proposal.rename(value);
+      }
+    },
+    onHandle: (value) => {
+      if (!pending.current) {
+        proposal.edit(value);
+      }
+    },
     onSubmit: () => void submit(),
     retry: () => void utils.teams.list.invalidate(),
     select: (choice) => {
@@ -231,6 +261,12 @@ export interface NavigationModel {
   creating: boolean;
   name: string;
   handle: string;
+  prospectiveAddress: string | null;
+  handleStatus: {
+    message: string | null;
+    description: string;
+    available: boolean;
+  };
   error: string | null;
   choices: WorkspaceChoice[];
   current: WorkspaceChoice | null;

@@ -220,6 +220,12 @@ test.describe("Assembled account and team acceptance", () => {
     await creation
       .getByRole("textbox", { name: "Handle", exact: true })
       .fill(`${assembly.teamHandle}-admin`);
+    await expect(
+      creation.getByText(
+        `${assembly.generalUrl}/teams/${assembly.teamHandle}-admin`,
+        { exact: true },
+      ),
+    ).toBeVisible();
     await creation.getByRole("button", { name: "Create", exact: true }).click();
     await expect(
       administrator.getByRole("heading", { name: "Agents", exact: true }),
@@ -239,7 +245,7 @@ test.describe("Assembled account and team acceptance", () => {
     await expect(
       sharedGeneral.getByRole("heading", { name: "Agents", exact: true }),
     ).toBeVisible();
-    await expect(sharedGeneral).toHaveURL(/\/agents\?team=[^&]+$/);
+    await expect(sharedGeneral).toHaveURL(/\/teams\/[a-z0-9-]+\/agents$/);
     await administrator
       .getByRole("textbox", { name: "Recipient email", exact: true })
       .fill(assembly.member.email);
@@ -324,6 +330,15 @@ test.describe("Assembled account and team acceptance", () => {
     await creation
       .getByRole("textbox", { name: "Handle", exact: true })
       .fill(assembly.teamHandle);
+    const generalMount = new URL(assembly.generalUrl).pathname.replace(
+      /\/$/,
+      "",
+    );
+    await expect(
+      creation.getByText(`${generalMount}/teams/${assembly.teamHandle}`, {
+        exact: true,
+      }),
+    ).toBeVisible();
     await creation.getByRole("button", { name: "Create", exact: true }).click();
     await expect(creation).not.toBeVisible();
     await expect(
@@ -331,6 +346,11 @@ test.describe("Assembled account and team acceptance", () => {
         .locator("aside")
         .getByRole("button", { name: "Switch workspace", exact: true }),
     ).toContainText(assembly.teamName);
+    await expect(
+      member
+        .locator("aside")
+        .getByRole("button", { name: "Switch workspace", exact: true }),
+    ).toContainText(`@${assembly.teamHandle}`);
     const agentUrl = member.url();
     await member
       .locator("aside")
@@ -366,7 +386,10 @@ test.describe("Assembled account and team acceptance", () => {
       .getByRole("button", { name: "Switch workspace", exact: true })
       .click();
     await second
-      .getByRole("link", { name: assembly.teamName, exact: true })
+      .getByRole("link", {
+        name: `${assembly.teamName} @${assembly.teamHandle}`,
+        exact: true,
+      })
       .click();
     await expect(second).toHaveURL(agentUrl);
     await second

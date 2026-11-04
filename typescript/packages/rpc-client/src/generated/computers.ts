@@ -140,6 +140,33 @@ export interface AgentRequest {
   agentId: string;
 }
 
+export interface TeamAgentRequest {
+  teamId: string;
+  handle: string;
+}
+
+export interface UpdateAgentProfileRequest {
+  agentId: string;
+  name: string;
+  profileImageId: string;
+  paletteKey: string;
+}
+
+export interface CreationResultRequest {
+  requestId: string;
+}
+
+/** Read-only history. An absent outcome does not prove an uncertain Create stopped. */
+export interface HistoricalCreationResult {
+  present?: PresentCreation | undefined;
+  removed?: RemovedCreation | undefined;
+}
+
+export interface PresentCreation {
+  assignedAgentId: string;
+  teamId: string;
+}
+
 export interface CreateAgentRequest {
   requestId: string;
   providerId: string;
@@ -167,6 +194,7 @@ export interface Agent {
   handle: string;
   profileImageId: string;
   paletteKey: string;
+  profileImageAssetKey: string;
 }
 
 export interface AgentList {
@@ -766,6 +794,357 @@ export const AgentRequest: MessageFns<AgentRequest> = {
   },
 };
 
+function createBaseTeamAgentRequest(): TeamAgentRequest {
+  return { teamId: "", handle: "" };
+}
+
+export const TeamAgentRequest: MessageFns<TeamAgentRequest> = {
+  encode(message: TeamAgentRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.teamId !== "") {
+      writer.uint32(10).string(message.teamId);
+    }
+    if (message.handle !== "") {
+      writer.uint32(18).string(message.handle);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TeamAgentRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseTeamAgentRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.teamId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.handle = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<TeamAgentRequest>, I>>(base?: I): TeamAgentRequest {
+    return TeamAgentRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<TeamAgentRequest>, I>>(object: I): TeamAgentRequest {
+    const message = createBaseTeamAgentRequest();
+    message.teamId = object.teamId ?? "";
+    message.handle = object.handle ?? "";
+    return message;
+  },
+};
+
+function createBaseUpdateAgentProfileRequest(): UpdateAgentProfileRequest {
+  return { agentId: "", name: "", profileImageId: "", paletteKey: "" };
+}
+
+export const UpdateAgentProfileRequest: MessageFns<UpdateAgentProfileRequest> = {
+  encode(message: UpdateAgentProfileRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.agentId !== "") {
+      writer.uint32(10).string(message.agentId);
+    }
+    if (message.name !== "") {
+      writer.uint32(18).string(message.name);
+    }
+    if (message.profileImageId !== "") {
+      writer.uint32(26).string(message.profileImageId);
+    }
+    if (message.paletteKey !== "") {
+      writer.uint32(34).string(message.paletteKey);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UpdateAgentProfileRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseUpdateAgentProfileRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.agentId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.name = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.profileImageId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.paletteKey = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<UpdateAgentProfileRequest>, I>>(base?: I): UpdateAgentProfileRequest {
+    return UpdateAgentProfileRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<UpdateAgentProfileRequest>, I>>(object: I): UpdateAgentProfileRequest {
+    const message = createBaseUpdateAgentProfileRequest();
+    message.agentId = object.agentId ?? "";
+    message.name = object.name ?? "";
+    message.profileImageId = object.profileImageId ?? "";
+    message.paletteKey = object.paletteKey ?? "";
+    return message;
+  },
+};
+
+function createBaseCreationResultRequest(): CreationResultRequest {
+  return { requestId: "" };
+}
+
+export const CreationResultRequest: MessageFns<CreationResultRequest> = {
+  encode(message: CreationResultRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.requestId !== "") {
+      writer.uint32(10).string(message.requestId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CreationResultRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseCreationResultRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.requestId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<CreationResultRequest>, I>>(base?: I): CreationResultRequest {
+    return CreationResultRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<CreationResultRequest>, I>>(object: I): CreationResultRequest {
+    const message = createBaseCreationResultRequest();
+    message.requestId = object.requestId ?? "";
+    return message;
+  },
+};
+
+function createBaseHistoricalCreationResult(): HistoricalCreationResult {
+  return { present: undefined, removed: undefined };
+}
+
+export const HistoricalCreationResult: MessageFns<HistoricalCreationResult> = {
+  encode(message: HistoricalCreationResult, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.present !== undefined) {
+      PresentCreation.encode(message.present, writer.uint32(10).fork()).join();
+    }
+    if (message.removed !== undefined) {
+      RemovedCreation.encode(message.removed, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): HistoricalCreationResult {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseHistoricalCreationResult();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.present = PresentCreation.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.removed = RemovedCreation.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<HistoricalCreationResult>, I>>(base?: I): HistoricalCreationResult {
+    return HistoricalCreationResult.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<HistoricalCreationResult>, I>>(object: I): HistoricalCreationResult {
+    const message = createBaseHistoricalCreationResult();
+    message.present = (object.present !== undefined && object.present !== null)
+      ? PresentCreation.fromPartial(object.present)
+      : undefined;
+    message.removed = (object.removed !== undefined && object.removed !== null)
+      ? RemovedCreation.fromPartial(object.removed)
+      : undefined;
+    return message;
+  },
+};
+
+function createBasePresentCreation(): PresentCreation {
+  return { assignedAgentId: "", teamId: "" };
+}
+
+export const PresentCreation: MessageFns<PresentCreation> = {
+  encode(message: PresentCreation, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.assignedAgentId !== "") {
+      writer.uint32(10).string(message.assignedAgentId);
+    }
+    if (message.teamId !== "") {
+      writer.uint32(18).string(message.teamId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): PresentCreation {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBasePresentCreation();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.assignedAgentId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.teamId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<PresentCreation>, I>>(base?: I): PresentCreation {
+    return PresentCreation.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<PresentCreation>, I>>(object: I): PresentCreation {
+    const message = createBasePresentCreation();
+    message.assignedAgentId = object.assignedAgentId ?? "";
+    message.teamId = object.teamId ?? "";
+    return message;
+  },
+};
+
 function createBaseCreateAgentRequest(): CreateAgentRequest {
   return { requestId: "", providerId: "", name: "", teamId: "", handle: "", profileImageId: "", paletteKey: "" };
 }
@@ -1018,7 +1397,16 @@ export const RemovedCreation: MessageFns<RemovedCreation> = {
 };
 
 function createBaseAgent(): Agent {
-  return { id: "", name: "", computer: undefined, teamId: "", handle: "", profileImageId: "", paletteKey: "" };
+  return {
+    id: "",
+    name: "",
+    computer: undefined,
+    teamId: "",
+    handle: "",
+    profileImageId: "",
+    paletteKey: "",
+    profileImageAssetKey: "",
+  };
 }
 
 export const Agent: MessageFns<Agent> = {
@@ -1043,6 +1431,9 @@ export const Agent: MessageFns<Agent> = {
     }
     if (message.paletteKey !== "") {
       writer.uint32(58).string(message.paletteKey);
+    }
+    if (message.profileImageAssetKey !== "") {
+      writer.uint32(66).string(message.profileImageAssetKey);
     }
     return writer;
   },
@@ -1116,6 +1507,14 @@ export const Agent: MessageFns<Agent> = {
             message.paletteKey = reader.string();
             continue;
           }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.profileImageAssetKey = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1142,6 +1541,7 @@ export const Agent: MessageFns<Agent> = {
     message.handle = object.handle ?? "";
     message.profileImageId = object.profileImageId ?? "";
     message.paletteKey = object.paletteKey ?? "";
+    message.profileImageAssetKey = object.profileImageAssetKey ?? "";
     return message;
   },
 };
@@ -2996,6 +3396,36 @@ export const AgentsService = {
     responseSerialize: (value: Agent): Buffer => Buffer.from(Agent.encode(value).finish()),
     responseDeserialize: (value: Buffer): Agent => Agent.decode(value),
   },
+  getInTeam: {
+    path: "/chapchoo.computers.Agents/GetInTeam" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: TeamAgentRequest): Buffer => Buffer.from(TeamAgentRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): TeamAgentRequest => TeamAgentRequest.decode(value),
+    responseSerialize: (value: Agent): Buffer => Buffer.from(Agent.encode(value).finish()),
+    responseDeserialize: (value: Buffer): Agent => Agent.decode(value),
+  },
+  updateProfile: {
+    path: "/chapchoo.computers.Agents/UpdateProfile" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: UpdateAgentProfileRequest): Buffer =>
+      Buffer.from(UpdateAgentProfileRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): UpdateAgentProfileRequest => UpdateAgentProfileRequest.decode(value),
+    responseSerialize: (value: Agent): Buffer => Buffer.from(Agent.encode(value).finish()),
+    responseDeserialize: (value: Buffer): Agent => Agent.decode(value),
+  },
+  creationResult: {
+    path: "/chapchoo.computers.Agents/CreationResult" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: CreationResultRequest): Buffer =>
+      Buffer.from(CreationResultRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): CreationResultRequest => CreationResultRequest.decode(value),
+    responseSerialize: (value: HistoricalCreationResult): Buffer =>
+      Buffer.from(HistoricalCreationResult.encode(value).finish()),
+    responseDeserialize: (value: Buffer): HistoricalCreationResult => HistoricalCreationResult.decode(value),
+  },
   forceRemove: {
     path: "/chapchoo.computers.Agents/ForceRemove" as const,
     requestStream: false as const,
@@ -3013,6 +3443,9 @@ export interface AgentsServer extends UntypedServiceImplementation {
   create: handleUnaryCall<CreateAgentRequest, CreateAgentResult>;
   list: handleUnaryCall<AgentListRequest, AgentList>;
   get: handleUnaryCall<AgentRequest, Agent>;
+  getInTeam: handleUnaryCall<TeamAgentRequest, Agent>;
+  updateProfile: handleUnaryCall<UpdateAgentProfileRequest, Agent>;
+  creationResult: handleUnaryCall<CreationResultRequest, HistoricalCreationResult>;
   forceRemove: handleUnaryCall<ForceRemoveRequest, Empty>;
 }
 
@@ -3085,6 +3518,51 @@ export interface AgentsClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: Agent) => void,
+  ): ClientUnaryCall;
+  getInTeam(
+    request: TeamAgentRequest,
+    callback: (error: ServiceError | null, response: Agent) => void,
+  ): ClientUnaryCall;
+  getInTeam(
+    request: TeamAgentRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: Agent) => void,
+  ): ClientUnaryCall;
+  getInTeam(
+    request: TeamAgentRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: Agent) => void,
+  ): ClientUnaryCall;
+  updateProfile(
+    request: UpdateAgentProfileRequest,
+    callback: (error: ServiceError | null, response: Agent) => void,
+  ): ClientUnaryCall;
+  updateProfile(
+    request: UpdateAgentProfileRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: Agent) => void,
+  ): ClientUnaryCall;
+  updateProfile(
+    request: UpdateAgentProfileRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: Agent) => void,
+  ): ClientUnaryCall;
+  creationResult(
+    request: CreationResultRequest,
+    callback: (error: ServiceError | null, response: HistoricalCreationResult) => void,
+  ): ClientUnaryCall;
+  creationResult(
+    request: CreationResultRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: HistoricalCreationResult) => void,
+  ): ClientUnaryCall;
+  creationResult(
+    request: CreationResultRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: HistoricalCreationResult) => void,
   ): ClientUnaryCall;
   forceRemove(
     request: ForceRemoveRequest,

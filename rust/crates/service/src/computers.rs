@@ -510,6 +510,41 @@ impl ComputersService {
             .await?)
     }
 
+    pub async fn agent_in_team(
+        &self,
+        actor: &SecretDigest,
+        team_id: &str,
+        handle: &str,
+        clock: AcceptanceTime,
+    ) -> Result<AgentSummary, ServiceError> {
+        Ok(self
+            .store
+            .agent_in_team(actor, team_id, handle, clock.now()?)
+            .await?)
+    }
+    pub async fn update_agent_profile(
+        &self,
+        actor: &SecretDigest,
+        agent_id: &str,
+        profile: &crate::UpdateAgentProfile,
+        clock: AcceptanceTime,
+    ) -> Result<AgentSummary, ServiceError> {
+        Ok(self
+            .store
+            .update_agent_profile(actor, agent_id, profile, clock.now()?)
+            .await?)
+    }
+    pub async fn agent_creation_result(
+        &self,
+        actor: &SecretDigest,
+        request_id: &str,
+        clock: AcceptanceTime,
+    ) -> Result<Option<crate::AgentCreationResult>, ServiceError> {
+        Ok(self
+            .store
+            .agent_creation_result(actor, request_id, clock.now()?)
+            .await?)
+    }
     pub async fn agent_profile_images(
         &self,
         actor: &SecretDigest,

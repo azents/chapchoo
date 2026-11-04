@@ -5,6 +5,7 @@ import {
   agents,
   actionNumber,
   creation,
+  historicalCreation,
   inventory,
   providers,
   resources,
@@ -34,8 +35,54 @@ const computer = {
   startDelayed: false,
   preparationRetryAvailable: false,
 };
-const wire = { id: "agent", teamId: "team", name: "Companion", computer };
+const wire = {
+  id: "agent",
+  teamId: "team",
+  name: "Companion",
+  computer,
+  handle: "companion",
+  profileImageId: "image",
+  profileImageAssetKey: "03-corgi",
+  paletteKey: "sage",
+};
 
+test("saved profile decoding preserves opaque references and rejects unsafe presentation", () => {
+  const saved = agent(wire);
+  assert.equal(saved.handle, "companion");
+  assert.deepEqual(saved.profileImage, { id: "image", assetKey: "03-corgi" });
+  assert.equal(saved.paletteKey, "sage");
+  for (const bad of [
+    { handle: "Invalid" },
+    { handle: "a\n" },
+    { profileImageId: "" },
+    { profileImageAssetKey: "../secret" },
+    { profileImageAssetKey: "03-corgi\n" },
+    { paletteKey: "unknown" },
+  ])
+    assert.throws(() => agent({ ...wire, ...bad }));
+});
+test("read-only historical results distinguish absent observation from accepted and removed", () => {
+  assert.deepEqual(historicalCreation({}), { type: "notObserved" });
+  assert.deepEqual(
+    historicalCreation({
+      present: { assignedAgentId: "opaque-agent", teamId: "opaque-team" },
+    }),
+    { type: "present", agentId: "opaque-agent", teamId: "opaque-team" },
+  );
+  assert.deepEqual(
+    historicalCreation({ removed: { assignedAgentId: "opaque-agent" } }),
+    { type: "removed", agentId: "opaque-agent" },
+  );
+  assert.throws(() =>
+    historicalCreation({ present: { assignedAgentId: "", teamId: "team" } }),
+  );
+  assert.throws(() =>
+    historicalCreation({
+      present: { assignedAgentId: "agent", teamId: "team" },
+      removed: { assignedAgentId: "agent" },
+    }),
+  );
+});
 test("profile catalogue projects opaque IDs and safe logical assets in bounded pages", () => {
   assert.deepEqual(
     profileImages({

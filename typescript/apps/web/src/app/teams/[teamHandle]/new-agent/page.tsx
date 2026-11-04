@@ -4,17 +4,16 @@ import { loadAgentCreation } from "@/features/computers/server/loadAgentCreation
 import type { ReactElement } from "react";
 
 export default async function Page({
-  searchParams,
+  params,
 }: {
-  searchParams: Promise<{ team?: string | string[] }>;
+  params: Promise<{ teamHandle: string }>;
 }): Promise<ReactElement> {
-  const { team } = await searchParams;
-  const initial = await loadAgentCreation(typeof team === "string" ? team : "");
+  const { teamHandle } = await params;
   return (
     <AgentCreationPage
       basePath={getPublicConfig().publicBasePath}
-      key={initial.teamId}
-      initial={initial}
+      key={teamHandle}
+      initial={await loadAgentCreation(teamHandle)}
     />
   );
 }

@@ -1,5 +1,8 @@
 "use client";
-import { validAgentPalette } from "@chapchoo/web-core/agent-profile";
+import {
+  randomAgentPalette,
+  validAgentPalette,
+} from "@chapchoo/web-core/agent-profile";
 import { useAuth } from "@chapchoo/web-core/auth-context";
 import { computerCopy } from "@chapchoo/web-core/computer-messages";
 import {
@@ -8,6 +11,7 @@ import {
   resolveHandle,
 } from "@chapchoo/web-core/handle";
 import { initialQuery } from "@chapchoo/web-core/page-state";
+import { agentPath } from "@chapchoo/web-core/workspace";
 import { useDocumentVisibility } from "@mantine/hooks";
 import { useLocale } from "next-intl";
 import { useEffect, useRef, useState } from "react";
@@ -148,6 +152,7 @@ export function useAgentCreation({
     setSubmission({ type: "pending" });
     checking.current?.abort();
     try {
+      const recovering = request.current.locked;
       const payload = request.current.capture(
         {
           teamId: initial.teamId,
@@ -159,6 +164,26 @@ export function useAgentCreation({
         },
         () => crypto.randomUUID(),
       );
+      if (recovering) {
+        const history = await client.computers.creationResult.query({
+          requestId: payload.requestId,
+        });
+        if (history.type === "removed") {
+          request.current.removed();
+          setSubmission({ type: "error", message: copy.removed });
+          return;
+        }
+        if (history.type === "present") {
+          const saved = await client.computers.get.query({
+            agentId: history.agentId,
+          });
+          const team = await client.teams.get.query({ teamId: saved.teamId });
+          window.location.assign(agentPath(basePath, team, saved.handle));
+          return;
+        }
+        // No observation is not a cancellation proof. Keep the same frozen
+        // payload and Request ID; Repository acceptance still owns deduplication.
+      }
       const result = await create.mutateAsync(payload);
       if (result.type === "removed") {
         request.current.removed();
@@ -167,7 +192,7 @@ export function useAgentCreation({
       }
       void utils.computers.list.invalidate();
       window.location.assign(
-        `${basePath}/agents/${encodeURIComponent(result.agent.id)}?team=${encodeURIComponent(result.agent.teamId)}`,
+        agentPath(basePath, initial.teamHandle, result.agent.handle),
       );
     } catch {
       setSubmission({
@@ -260,6 +285,15 @@ export function useAgentCreation({
     onPalette: (value) => {
       if (editable() && validAgentPalette(value)) {
         setPalette(value);
+      }
+    },
+    onRandomPalette: () => {
+      if (editable()) {
+        try {
+          setPalette(randomAgentPalette());
+        } catch {
+          setSubmission({ type: "error", message: copy.unavailable });
+        }
       }
     },
     onImagePage: (value) => {

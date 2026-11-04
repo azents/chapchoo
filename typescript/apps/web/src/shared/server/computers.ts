@@ -7,6 +7,7 @@ import {
   agents,
   choices,
   creation,
+  historicalCreation,
   profileImages,
 } from "@chapchoo/web-core/computer";
 import { validHandle } from "@chapchoo/web-core/handle";
@@ -122,6 +123,45 @@ export const computersRouter = router({
           creation(
             await call(
               ctx.backend.agents.create.bind(ctx.backend.agents),
+              input,
+              token,
+            ),
+          ),
+        ),
+      ),
+    ),
+  updateProfile: procedure
+    .input(
+      z
+        .object({
+          agentId: id,
+          name: z.string().trim().min(1).max(120),
+          profileImageId: id,
+          paletteKey: z.enum(agentPaletteKeys),
+        })
+        .strict(),
+    )
+    .mutation(({ ctx, input }) =>
+      attempt(() =>
+        ctx.session.authenticated(async (token) =>
+          agent(
+            await call(
+              ctx.backend.agents.updateProfile.bind(ctx.backend.agents),
+              input,
+              token,
+            ),
+          ),
+        ),
+      ),
+    ),
+  creationResult: procedure
+    .input(z.object({ requestId: id }).strict())
+    .query(({ ctx, input }) =>
+      attempt(() =>
+        ctx.session.authenticated(async (token) =>
+          historicalCreation(
+            await call(
+              ctx.backend.agents.creationResult.bind(ctx.backend.agents),
               input,
               token,
             ),

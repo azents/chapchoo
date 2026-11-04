@@ -74,12 +74,12 @@ test("owner manages one Computer while Admin observes independent cleanup invent
       assembly.administrator.email,
       assembly.administrator.password,
     );
-    await owner.goto(`${assembly.generalUrl}/agents`);
+    await owner.goto(`${assembly.generalUrl}/teams/my/agents`);
     const listUrl = owner.url();
     await owner
       .getByRole("link", { name: "Create Agent", exact: true })
       .click();
-    await expect(owner).toHaveURL(/\/agents\/new\?team=[^&]+$/);
+    await expect(owner).toHaveURL(/\/teams\/my\/new-agent$/);
     await owner
       .getByRole("textbox", { name: "Agent name", exact: true })
       .fill("Acceptance companion")
@@ -99,8 +99,22 @@ test("owner manages one Computer while Admin observes independent cleanup invent
       owner.getByRole("heading", { name: "Acceptance companion", exact: true }),
     ).toBeVisible();
     await fact(owner, "Computer power", "Running");
+    await owner
+      .getByRole("button", { name: "Computer details", exact: true })
+      .click();
     await fact(owner, "Computer Connector", "Connected");
     const detailUrl = owner.url();
+    await expect(owner).toHaveURL(/\/teams\/my\/agents\/[a-z0-9-]+$/);
+    await owner
+      .getByRole("button", { name: "Edit profile", exact: true })
+      .click();
+    await owner
+      .getByRole("textbox", { name: "Agent name", exact: true })
+      .fill("Saved companion");
+    await owner.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(
+      owner.getByRole("heading", { name: "Saved companion", exact: true }),
+    ).toBeVisible();
     const document = await context.newPage();
     await document.route("**/*", (route) =>
       route.request().resourceType() === "script"
@@ -110,7 +124,7 @@ test("owner manages one Computer while Admin observes independent cleanup invent
     await document.goto(detailUrl);
     await expect(
       document.getByRole("heading", {
-        name: "Acceptance companion",
+        name: "Saved companion",
         exact: true,
       }),
     ).toBeVisible();
@@ -142,7 +156,7 @@ test("owner manages one Computer while Admin observes independent cleanup invent
       admin.getByRole("main").getByText("Read-only inventory", { exact: true }),
     ).toBeVisible();
     await expect(
-      admin.getByText("Acceptance companion", { exact: true }),
+      admin.getByText("Saved companion", { exact: true }),
     ).toHaveCount(0);
     const inventoryUrl = admin.url();
     await admin

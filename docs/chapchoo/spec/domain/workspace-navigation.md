@@ -10,7 +10,7 @@ Navigation selects an accessible context without granting access to another owne
 
 General `/` validates current identity and the current accessible Team list, then
 redirects to that user's remembered accessible Team or existing personal Team at
-`/agents?team=<Team ID>`. A missing personal context or unavailable required list
+the canonical Team Agent list. A missing personal context or unavailable required list
 is an error, not an invented Team. Host-root `chapchoo-workspace` stores only
 the public User/Team IDs for 30 days, SameSite=Lax and Secure on HTTPS. This
 JavaScript-readable preference is untrusted, scoped to its User and checked
@@ -47,7 +47,7 @@ navigation context without mutating or selecting. Successful ordinary creation s
 Team after the server response. Validation/pending/uncertain errors retain their
 actual outcome; there is no automatic creation retry. Received invitation
 acceptance is reachable at `/invitations` and server-renders its required list.
-Existing `/teams/<ID>` membership/role/ownership operations remain reachable.
+Membership/role/ownership operations remain reachable through Team settings.
 Leave, kick and Team-delete confirmations disclose Agent and saved Computer-data
 deletion, without introducing archive or automatic rehoming.
 
@@ -59,7 +59,7 @@ separate back-to-app row. The same left mobile Drawer and overlay picker apply.
 
 Admin Node communicates only with its configured Admin API. The narrow
 AdminWorkspaces service lists the current administrator's accessible Teams and
-creates an ordinary caller-owned Team; full TeamManagement stays Client-only.
+checks handle availability and creates an ordinary caller-owned Team; full TeamManagement stays Client-only.
 Selecting a Team or confirmed creation navigates the browser to General, where
 ordinary admission independently runs. Both logos point to General entry and
 therefore resume its validated recent context. Public peer web URLs are optional
@@ -67,6 +67,37 @@ validated runtime navigation metadata; they are not backend targets, inferred
 paths or compiled deployment hosts. Without a configured General destination,
 Admin renders a non-link brand and unavailable workspace selection rather than
 inventing a destination or submitting an unusable creation.
+
+## Canonical routes and admission
+
+General content uses `/teams/{teamHandle}` for Team settings,
+`/teams/{teamHandle}/agents` for the private list,
+`/teams/{teamHandle}/new-agent` for creation and
+`/teams/{teamHandle}/agents/{agentHandle}` for detail. Personal equivalents use
+the authenticated `my` alias; it cannot collide with a valid Team handle.
+Agent handle `new` remains valid because creation has a separate path.
+
+Admission authenticates before resolving personal association or an accessible
+live collaborative handle. Detail then requires the individually owned Agent in
+that exact Team. Wrong Team and foreign private targets remain not-found.
+Selector context matches the route by handle but carries stable Team IDs for
+preferences and query keys. Shared mount-aware builders generate General links
+for both apps, including Admin's configured General peer URL. The root remains
+the remembered/personal resume entry. Obsolete ID routes and `?team=ID` content
+selection have no redirect or compatibility lookup.
+
+Both creation surfaces propose a handle from the name using the bounded
+[candidate contract](agent-profile.md#final-creation-and-client-candidates).
+Collaborative choices show the display name and saved handle together; personal
+context shows its name without an invented handle. The current valid creation
+candidate also displays its prospective canonical Team address. General uses
+its current mount and Admin uses the configured General destination, never its
+own Admin path. The preview does not navigate or create membership.
+Manual edits survive later name changes; cancelled or superseded checks cannot
+validate another draft. Current availability is advisory and the creation
+transaction owns final uniqueness. The modal retains name/handle on failure,
+shows permanent-handle guidance and availability, and never automatically
+replays ordinary Team creation.
 
 ## Connections
 

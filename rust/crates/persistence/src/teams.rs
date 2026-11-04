@@ -309,9 +309,33 @@ impl Store {
         handle: &str,
         now: i64,
     ) -> Result<bool, StoreError> {
+        self.team_handle_available_scoped(actor, handle, now, false)
+            .await
+    }
+
+    pub async fn admin_workspace_handle_available(
+        &self,
+        actor: &SecretDigest,
+        handle: &str,
+        now: i64,
+    ) -> Result<bool, StoreError> {
+        self.team_handle_available_scoped(actor, handle, now, true)
+            .await
+    }
+
+    async fn team_handle_available_scoped(
+        &self,
+        actor: &SecretDigest,
+        handle: &str,
+        now: i64,
+        admin: bool,
+    ) -> Result<bool, StoreError> {
         Handle::parse(handle).map_err(|_| StoreError::InvalidInput)?;
         operation!(self, |connection, dialect| {
-            let _user = authenticate!(connection, dialect, actor, now);
+            let user = authenticate!(connection, dialect, actor, now);
+            if admin && !user.is_admin {
+                return Err(StoreError::Forbidden);
+            }
             let row = diesel::sql_query(dialect.query(
                 "SELECT id FROM teams WHERE kind='COLLABORATIVE' AND handle=? AND deletion_requested_at IS NULL",
             )).bind::<Text,_>(handle).get_result::<IdRow>(connection).await.optional()?;
