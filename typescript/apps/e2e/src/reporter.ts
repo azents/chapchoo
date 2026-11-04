@@ -79,7 +79,7 @@ export default class SafeReporter implements Reporter {
       `Failure: ${safeMessage(error.message ?? "Test runner failed")}\n`,
     );
     const location = error.stack?.match(
-      /\/e2e\/src\/(accounts\.spec\.ts|fixture\.ts):(\d+):(\d+)/,
+      /\/e2e\/src\/(accounts\.spec\.ts|computers\.spec\.ts|fixture\.ts):(\d+):(\d+)/,
     );
     if (location) {
       process.stderr.write(

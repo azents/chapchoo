@@ -320,8 +320,17 @@ Remaining delivery:
    field and `ProviderCredentials.key` envelope for token/expiry/recovery checks.
    The actual adapter and generated contract were compared directly; no product
    auth or native assertion is relaxed.
-5. Push fixture corrections with normal hooks and monitor the new-SHA matrix.
-6. Resolve any current CI/automatic review finding before final delivery.
+5. At `71b0198`, the complete native job passed real Docker and disposable
+   Kubernetes SA/TokenReview/create/Connector/stop/start/delete acceptance.
+   Browser accounts/Team/session flows passed but Computer creation intermittently
+   timed out before mutation. Focused reproduction and a credential-free screen
+   capture proved the fixture's Seoul browser time zone triggered a legitimate
+   UTC-account display suggestion over the enabled Create button. Computer
+   contexts now match fixture account defaults (UTC); display interactions remain
+   covered by account flows. No force click, hidden UI or longer timeout is used.
+   The safe source-location whitelist also includes the Computer test filename.
+6. Push fixture corrections with normal hooks and monitor the new-SHA matrix.
+7. Resolve any current CI/automatic review finding before final delivery.
 
 No phase-2 release, merge, deployed preparation, native effect or rollout has
 been executed. Design delta: None.
