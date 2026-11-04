@@ -45,14 +45,14 @@ repos:
       - id: validate-chapchoo-docs-frontmatter
         name: Validate chapchoo docs frontmatter
         language: python
-        entry: python scripts/docs_catalog.py validate
-        files: ^(docs/chapchoo/.*\.md|scripts/docs_catalog\.py)$
+        entry: python scripts/validate_docs.py
+        files: ^(docs/chapchoo/.*\.md|scripts/validate_docs\.py)$
         pass_filenames: false
-      - id: test-chapchoo-docs-catalog
-        name: Test chapchoo docs catalog
+      - id: test-chapchoo-docs-validation
+        name: Test chapchoo document metadata validation
         language: python
-        entry: python -m unittest scripts.tests.test_docs_catalog
-        files: ^(scripts/docs_catalog\.py|scripts/tests/test_docs_catalog\.py|docs/chapchoo/AGENTS\.md)$
+        entry: python -m unittest scripts.tests.test_validate_docs
+        files: ^(scripts/validate_docs\.py|scripts/tests/test_validate_docs\.py|docs/chapchoo/AGENTS\.md)$
         pass_filenames: false
       - id: generate-conventions-index
         name: Regenerate .claude/rules/*-conventions.md tables from convention bodies

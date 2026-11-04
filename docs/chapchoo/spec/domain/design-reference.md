@@ -1,18 +1,10 @@
 ---
-title: "Design Reference Workspace"
-created: 2026-10-30
-tags: [design-reference, frontend, developer-tooling]
-spec_type: domain
-domain: design-reference
-code_paths:
-  - typescript/packages/design-reference
-  - typescript/scripts/design-boundaries.mjs
-  - typescript/scripts/design-boundaries.test.mjs
-  - package.json
-  - .github/workflows/ci.yaml
-last_verified_at: 2026-10-31
-spec_version: 1
+title: "Design reference ownership"
 ---
+
+# Design reference ownership
+
+Reference Storybook is a design workspace; approved concepts and rendered examples are not automatically promoted product implementations.
 
 # Design Reference Workspace
 
@@ -101,3 +93,16 @@ relevant dimensions; builds do not establish visual approval or native behavior.
 The [package guide](../../../../typescript/packages/design-reference/README.md)
 and scoped Agent instructions describe authoring, review, selective promotion
 and coexistence of general references with web-specific implementations.
+
+## Connections
+
+- [General and Admin web ownership](account-web.md) — General and installation Admin are independent server-rendered applications with shared presentation, not interchangeable authority or API surfaces.
+- [Mascot playback and interaction](mascot-motion.md) — Shared mascot playback owns gesture timing, visibility and explicit replay while preserving the surrounding product layout.
+- [Web appearance lifecycle](appearance.md) — Appearance owns system/light/dark resolution and initial paint; it is independent of account language, time zone and regional format.
+- [Verification layers and release evidence](acceptance.md) — Each test layer establishes a specific owned contract. Synthetic SDK bytes, real Engine acceptance, browser journeys and live cluster rollout are different evidence.
+
+## References
+
+- [`typescript/packages/design-reference/README.md`](../../../../typescript/packages/design-reference/README.md)
+- [`typescript/scripts/design-boundaries.mjs`](../../../../typescript/scripts/design-boundaries.mjs)
+- [`DESIGN.md`](../../../../DESIGN.md)

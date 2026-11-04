@@ -1,23 +1,10 @@
 ---
-title: "Computer Docker Native Adapter and Provider"
-created: 2026-11-03
-tags: [computer, docker, runtime, security]
-spec_type: domain
-domain: computer-docker
-code_paths:
-  - rust/crates/docker/src
-  - rust/crates/docker/tests
-  - rust/apps/chapchoo/src/provider.rs
-  - rust/apps/chapchoo/src/provider/control.rs
-  - rust/apps/chapchoo/src/provider/docker_worker.rs
-  - rust/apps/chapchoo/src/provider/effects.rs
-  - rust/apps/chapchoo/src/config.rs
-  - rust/apps/chapchoo/src/main.rs
-  - rust/apps/chapchoo/tests/provider_cli.rs
-  - rust/apps/chapchoo/tests/provider_cli/docker.rs
-last_verified_at: 2026-11-04
-spec_version: 1
+title: "Docker connection, volume and container contracts"
 ---
+
+# Docker connection, volume and container contracts
+
+The Docker adapter owns one selected source and exact native resources, with uncertainty distinct from absence or confirmed cleanup.
 
 # Computer Docker Native Adapter and Provider
 
@@ -214,3 +201,17 @@ Missing required prerequisites fail; no synthetic fallback or skip counts as a
 real lifecycle pass. A workflow or cross-platform archive alone does not establish
 an executed Linux, native Desktop or remote transport result. Executed Linux
 acceptance does not imply verified native Desktop or remote transport behavior.
+
+## Connections
+
+- [Provider process and allocation acknowledgements](provider-process.md) — External trusted Providers own native IO, while authenticated server operations own durable mutations and evidence acknowledgements.
+- [Docker retirement and exact-call correlation](native-retirement.md) — A live manifest qualifies continuation of one possibly accepted native call; lost correlation never becomes replay authority.
+- [Execution reservation, evidence and cleanup](execution-evidence.md) — Reservations precede effects; current-source observations qualify power, retirement and resource absence without granting ambiguous replay.
+- [Verification layers and release evidence](acceptance.md) — Each test layer establishes a specific owned contract. Synthetic SDK bytes, real Engine acceptance, browser journeys and live cluster rollout are different evidence.
+
+## References
+
+- [`rust/crates/docker/src/lib.rs`](../../../../rust/crates/docker/src/lib.rs)
+- [`rust/crates/docker/src/connection.rs`](../../../../rust/crates/docker/src/connection.rs)
+- [`rust/crates/docker/src/transport.rs`](../../../../rust/crates/docker/src/transport.rs)
+- [`rust/crates/docker/tests/volumes.rs`](../../../../rust/crates/docker/tests/volumes.rs)

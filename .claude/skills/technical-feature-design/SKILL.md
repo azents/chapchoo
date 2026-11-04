@@ -76,7 +76,8 @@ Both modes keep the complete material-decision map and accepted choices visible 
 
 Before the first requirement or design question:
 
-1. read applicable Living Specs;
+1. start at `docs/chapchoo/spec/index.md`, follow relevant owning pages and
+   connections, and use `docs/chapchoo/spec/AGENTS.md` for semantic discovery;
 2. inspect relevant code, contracts, tests, fixtures, generated surfaces, and configuration;
 3. identify current behavior, terminology, ownership, lifecycle, and boundaries;
 4. distinguish current behavior from the requested outcome; and

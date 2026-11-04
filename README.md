@@ -41,6 +41,10 @@ configuration, not private infrastructure. Source/synthetic acceptance and live
 Kubernetes/storage/CNI/TLS gates are distinct; no merge or deployment is implied
 by a passing local test.
 
+Current implemented contracts are maintained in the
+[Chapchoo Spec Wiki](docs/chapchoo/spec/index.md). Start with a question and follow
+the owning pages; development snapshots remain independent references.
+
 ## Provenance
 
 Repository-local skills, coding conventions, Claude/Codex hooks, documentation

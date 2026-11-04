@@ -1,16 +1,10 @@
 ---
-title: "Computer Kubernetes Adapter Boundaries"
-created: 2026-11-02
-tags: [computer, kubernetes, security, lifecycle]
-spec_type: domain
-domain: computer
-code_paths:
-  - rust/crates/kubernetes/src/lib.rs
-  - rust/apps/chapchoo/src/provider/effects.rs
-  - rust/crates/kubernetes/tests/adapter.rs
-last_verified_at: 2026-11-04
-spec_version: 1
+title: "Kubernetes resource and retirement contracts"
 ---
+
+# Kubernetes resource and retirement contracts
+
+Supported Kubernetes SDK operations validate original resource identities and ordered terminal evidence, without equating a delete response with retirement.
 
 # Computer Kubernetes Adapter Boundaries
 
@@ -109,3 +103,15 @@ and unknown versus terminal-qualified Pod absence. An explicit task barrier chec
 that losing a waiter cannot release a still-running SDK effect permit.
 These are adapter contract tests, not live retirement/network-policy/storage
 release-gate evidence.
+
+## Connections
+
+- [Provider process and allocation acknowledgements](provider-process.md) — External trusted Providers own native IO, while authenticated server operations own durable mutations and evidence acknowledgements.
+- [Execution reservation, evidence and cleanup](execution-evidence.md) — Reservations precede effects; current-source observations qualify power, retirement and resource absence without granting ambiguous replay.
+- [Owner-scoped convergence and restoration](reconciliation.md) — Current Connector owners take precedence; reconciliation observes exact resources and advances only authorized, known-unsent work.
+- [Helm and Argo deployment boundaries](deployment.md) — The public chart composes workloads and explicit prerequisites; offline rendering does not prove a live rollout or substrate cleanup.
+
+## References
+
+- [`rust/crates/kubernetes/src/lib.rs`](../../../../rust/crates/kubernetes/src/lib.rs)
+- [`rust/crates/kubernetes/tests/adapter.rs`](../../../../rust/crates/kubernetes/tests/adapter.rs)

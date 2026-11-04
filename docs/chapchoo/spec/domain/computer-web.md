@@ -1,26 +1,10 @@
 ---
-title: "Agent Computer Owner and Operator Web Contracts"
-created: 2026-11-02
-tags: [agent, computer, frontend, authorization, inventory]
-spec_type: domain
-domain: computer
-code_paths:
-  - typescript/apps/web/src/features/computers
-  - typescript/apps/web/src/app/agents
-  - typescript/apps/web/src/shared/server/computers.ts
-  - typescript/apps/admin-web/src/features/computers
-  - typescript/apps/admin-web/src/app/computer-providers
-  - typescript/apps/admin-web/src/app/computers
-  - typescript/apps/admin-web/src/shared/server/computers.ts
-  - typescript/apps/admin-web/src/shared/server/resourceInput.ts
-  - typescript/apps/admin-web/src/shared/server/resourceInput.test.mts
-  - typescript/packages/web-core/src/computer.ts
-  - typescript/packages/web-core/src/computer-messages.ts
-  - typescript/packages/web-core/src/rpc.ts
-  - typescript/apps/e2e/src/computers.spec.ts
-last_verified_at: 2026-11-03
-spec_version: 1
+title: "Computer owner and operator web"
 ---
+
+# Computer owner and operator web
+
+Server-rendered owner controls and redacted administrator inventory project backend authority rather than creating browser lifecycle state.
 
 # Agent Computer Owner and Operator Web Contracts
 
@@ -181,3 +165,17 @@ Real Docker resource/lifecycle validation belongs to the separate browser-free
 integration app through public RPC and actual Control/Provider/Connector. It does
 not duplicate the existing owner UI browser journey. Detailed native DTO/copy
 remains owner-layer coverage.
+
+## Connections
+
+- [Computer owner and installation inventory RPC](computer-client-rpc.md) — Owner operations and redacted installation inventory are separate capabilities over current account authority.
+- [Computer lifecycle admission and Provider keys](computer-lifecycle.md) — Owner requests commit durable intent under current authority. Component evidence and external completion determine what may happen next.
+- [Primary rendering and URL-owned state](web-rendering.md) — Server admission supplies primary content and stable selections; client queries own subsequent interactions rather than a second initial truth.
+- [Workspace context and navigation](workspace-navigation.md) — Navigation selects an accessible context without granting access to another owner’s private Agents.
+- [Web authentication, request ownership and cookies](web-session.md) — Node request contexts and browser authentication have independent lifetimes. Cookie disposition is not an ordinary business operation’s success flag.
+
+## References
+
+- [`typescript/apps/web/src`](../../../../typescript/apps/web/src)
+- [`typescript/apps/admin-web/src`](../../../../typescript/apps/admin-web/src)
+- [`typescript/packages/web-core/src`](../../../../typescript/packages/web-core/src)

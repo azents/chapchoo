@@ -1,25 +1,16 @@
 ---
-title: "Computer Control Directory Authority"
-created: 2026-11-02
-tags: [computer, control, grpc, database, security]
-spec_type: domain
-domain: computer-directory
-code_paths:
-  - rust/crates/persistence/src/directory.rs
-  - rust/crates/persistence/src/connector_keys.rs
-  - rust/crates/persistence/src/computer_executions.rs
-  - rust/crates/service/src/computers.rs
-  - rust/crates/persistence/tests/computer_executions.rs
-  - rust/crates/service/tests/computers.rs
-last_verified_at: 2026-11-03
-spec_version: 1
+title: "Control directory authority"
 ---
+
+# Control directory authority
+
+The durable directory chooses current component owners and excludes expired, revoked or draining authority. Listener and native effect lifetime are separate owners.
 
 # Computer Control Directory Authority
 
 These are application/storage operations, not evidence of an active component
 listener, peer server, Kubernetes adapter or deployed Control. Runtime activation
-and generated transport remain separate work. Table relationships, credential
+and generated transport have separate contracts. Table relationships, credential
 recovery, explicit preparation and cleanup ownership are described in
 [Computer storage](computer-storage.md).
 
@@ -121,3 +112,16 @@ fixtures cover generated opaque IDs, private prepared admission, losing-context
 conflict, endpoint validation and verification without implicit lease renewal.
 This does not establish two-Control network routing, component streams, memory
 transport equivalence, Kubernetes effects or browser lifecycle behavior.
+
+## Connections
+
+- [Computer schema and native identities](computer-storage.md) — Durable Computer state records authority, exact resource identity and cleanup obligations; schema records do not themselves perform external effects.
+- [Control admission, streams and calls](computer-control-rpc.md) — Control separates public component authority from trusted peer delivery. Streams and exact-call correlation do not form a durable transport log.
+- [Execution-bound Connector credentials](connector-credentials.md) — A Connector session belongs to one execution. Bootstrap recovery, operational refresh and revocation have different permissions and retained results.
+- [Owner-scoped convergence and restoration](reconciliation.md) — Current Connector owners take precedence; reconciliation observes exact resources and advances only authorized, known-unsent work.
+
+## References
+
+- [`rust/crates/persistence/src/directory.rs`](../../../../rust/crates/persistence/src/directory.rs)
+- [`rust/crates/persistence/src/connector_keys.rs`](../../../../rust/crates/persistence/src/connector_keys.rs)
+- [`rust/crates/service/src/computers.rs`](../../../../rust/crates/service/src/computers.rs)

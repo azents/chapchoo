@@ -118,16 +118,16 @@ jobs:
           SKIP: rust-quality,ts-format,ts-lint,ts-typecheck
         run: uvx pre-commit run --all-files
       - run: uv run --locked --project .codex python -m unittest discover -s .codex/hooks -p '*_test.py'
-      - run: python -m unittest scripts.tests.test_docs_catalog
+      - run: python -m unittest scripts.tests.test_validate_docs
       - run: python -m unittest scripts.tests.test_ci_structure scripts.tests.test_build_artifacts
-      - run: python scripts/docs_catalog.py validate
+      - run: python scripts/validate_docs.py
       - name: Validate inherited skill packages and helper tests
         run: |
           for skill in .claude/skills/*; do
             uv run --locked --project .codex python .claude/skills/skill-creator/scripts/quick_validate.py "$skill"
           done
           python -m unittest discover -s .claude/skills/ci-optimization/scripts -p '*_test.py'
-          for skill in convention-audit living-spec-audit skill-creator; do
+          for skill in convention-audit skill-creator; do
             uv run --locked --project .codex --with 'pytest==9.1.1' python -m pytest ".claude/skills/$skill/scripts" -q
           done
       - run: pnpm run format:check && pnpm run lint && pnpm run typecheck
