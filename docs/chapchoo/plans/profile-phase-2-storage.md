@@ -315,8 +315,13 @@ Remaining delivery:
    sole returned canonical Provider and catalogue item and submits final profile
    values; registration configuration retains its separate key. Browser
    acceptance passed independently. The entire job must pass on the new SHA.
-4. Push fixture corrections with normal hooks and monitor the new-SHA matrix.
-5. Resolve any current CI/automatic review finding before final delivery.
+4. At `162fc55`, real Docker and browser acceptance passed again. The cluster
+   consumer also had to adopt the generated `registrationKey` configuration
+   field and `ProviderCredentials.key` envelope for token/expiry/recovery checks.
+   The actual adapter and generated contract were compared directly; no product
+   auth or native assertion is relaxed.
+5. Push fixture corrections with normal hooks and monitor the new-SHA matrix.
+6. Resolve any current CI/automatic review finding before final delivery.
 
 No phase-2 release, merge, deployed preparation, native effect or rollout has
 been executed. Design delta: None.

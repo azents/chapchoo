@@ -95,7 +95,7 @@ async function denied(operation) {
 try {
   const auth = client(ProviderAuthenticationClient);
   const configuration = {
-    providerId: registrationKey,
+    registrationKey,
     name: "Acceptance",
     kind: ProviderKind.PROVIDER_KIND_KUBERNETES,
     capabilities: { create: true, start: true, stop: true, restart: true },
@@ -111,8 +111,12 @@ try {
       requestId: exchangeId,
       serviceAccountToken,
     });
+    check(
+      good.key?.issuedAt && good.key?.expiresAt && good.key?.token,
+      "Provider credential envelope absent",
+    );
     const expiry =
-      Number(good.expiresAt.seconds) - Number(good.issuedAt.seconds);
+      Number(good.key.expiresAt.seconds) - Number(good.key.issuedAt.seconds);
     check(expiry === 900, "Provider key validity is not fifteen minutes");
     const recovered = await call(auth, "exchange", {
       configuration,
@@ -120,13 +124,16 @@ try {
       serviceAccountToken,
     });
     check(
-      recovered.token === good.token &&
+      recovered.key?.token === good.key.token &&
         recovered.providerId === good.providerId,
       "Exchange recovery changed credential",
     );
     await denied(() =>
       call(auth, "exchange", {
-        configuration: { ...configuration, providerId: "unpermitted-provider" },
+        configuration: {
+          ...configuration,
+          registrationKey: "unpermitted-provider",
+        },
         requestId: "foreign-id",
         serviceAccountToken,
       }),
