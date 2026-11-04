@@ -28,7 +28,10 @@ The current contract is owned by the [Spec Wiki](../spec/index.md).
 - Integrated RPC/web: [PR #73](https://github.com/azents/chapchoo/pull/73), source
   `1efb13fc6e618321070ccd57efdcbeb7d609b31f`.
   [CI run 41923208218](https://github.com/azents/chapchoo/actions/runs/41923208218)
-  is the exact-source CI record. Codex completed at that SHA without findings.
+  passed the complete matrix at that exact source, including Rust, validation,
+  both architectures' web/binary/packages, all assembled browser journeys and
+  actual Docker/disposable Kubernetes execution. Codex completed at that SHA
+  without findings.
 - This final phase changes documentation only. Unchanged implementation evidence
   is reused rather than relabeled as a newly executed deployed migration.
   Final-phase CI/review results are recorded on its PR, not predicted here.
