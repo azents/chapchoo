@@ -1,6 +1,7 @@
 ---
 title: "Provider exchange history retention requirements"
 created: 2026-11-04
+implemented: 2026-11-04
 tags: [provider, authentication, retention]
 document_role: primary
 document_type: requirements

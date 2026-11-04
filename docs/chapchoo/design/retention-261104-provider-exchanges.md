@@ -1,6 +1,7 @@
 ---
 title: "Provider exchange history retention design"
 created: 2026-11-04
+implemented: 2026-11-04
 tags: [provider, authentication, retention]
 document_role: primary
 document_type: design
@@ -52,7 +53,8 @@ exchange is needed, not five minutes before its first send.
 Migration 8 replaces the receipt table and adds the expiry index on SQLite and
 PostgreSQL. Existing opaque receipts cannot be admitted by the replacement
 contract; current keys and all other tables are preserved. Rolling back schema
-cannot restore removed receipts. Prefer forward rollout; old callers fail closed.
+cannot restore removed receipts, so down migration refuses rather than enabling
+old callers without replay protection. Prefer forward rollout; old callers fail closed.
 Clock skew beyond one minute is an operator configuration error, not a fallback
 to unrestricted IDs. Retention bounds history duration, not authenticated traffic.
 
