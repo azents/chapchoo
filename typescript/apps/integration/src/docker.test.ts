@@ -152,7 +152,7 @@ void test(
             providerId,
             name: "Native integration",
             teamId: team.id,
-            handle: "native-integration",
+            handle: "native-agent",
             profileImageId: image.id,
             paletteKey: "sage",
           },

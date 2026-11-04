@@ -281,10 +281,21 @@ Independent integrated review:
   suites successfully. The same reviewer confirmed the focused correction
   resolves the sole finding, with no remaining concrete correction issue.
 
+Post-PR CI checkpoint:
+
+- PR #72 at `e331565` passed native x86_64/aarch64 web, binary and package builds,
+  Rust and validation. Codex completed without findings. Browser CI is separate.
+- The required real-Docker job reached registration then rejected the test's
+  Create RPC with INVALID_ARGUMENT before allocation. Its literal final handle
+  `native-integration` has 18 characters, violating the already accepted 3–16
+  contract. The fixture now submits `native-agent`; product validation is not
+  relaxed. This correction is delivered on this phase branch and its new SHA
+  must pass the actual native job. No local Engine pass is fabricated.
+
 Remaining delivery:
 
-1. Commit the reviewed correction with normal hooks.
-2. Open the stacked phase PR and verify fresh-SHA CI before final delivery.
+1. Push the fixture correction with normal hooks and monitor the new-SHA matrix.
+2. Resolve any current CI/automatic review finding before final delivery.
 
 No phase-2 release, merge, deployed preparation, native effect or rollout has
 been executed. Design delta: None.
