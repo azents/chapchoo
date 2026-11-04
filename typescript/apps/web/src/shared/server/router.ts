@@ -1,6 +1,7 @@
 import "server-only";
 import { attempt } from "@chapchoo/web-core/boundary";
 import { displayPatchPayload } from "@chapchoo/web-core/display";
+import { validHandle } from "@chapchoo/web-core/handle";
 import { call } from "@chapchoo/web-core/rpc";
 import {
   invitation,
@@ -23,7 +24,7 @@ const id = z.string().min(1).max(128);
 const teamInput = z.object({ teamId: id }).strict();
 const memberInput = z.object({ teamId: id, userId: id }).strict();
 const name = z.string().min(1).max(120);
-const handle = z.string().min(1).max(80);
+const handle = z.string().min(3).max(16).refine(validHandle);
 
 export const appRouter = router({
   computers: computersRouter,
@@ -164,7 +165,6 @@ export const appRouter = router({
           .object({
             teamId: id,
             name: name.optional(),
-            handle: handle.optional(),
           })
           .strict(),
       )
@@ -177,7 +177,6 @@ export const appRouter = router({
                 {
                   teamId: input.teamId,
                   name: input.name,
-                  handle: input.handle,
                 },
                 token,
               ),

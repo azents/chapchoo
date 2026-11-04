@@ -2,7 +2,8 @@
 use crate::{ingress as input, mapping::timestamp, status::status};
 use chapchoo_protocol::control as wire;
 use chapchoo_service::{
-    AcceptanceTime, ComponentKeyResult, ComputersService, ConnectorSource, ProviderSource,
+    AcceptanceTime, ComponentKeyResult, ComputersService, ConnectorSource,
+    ProviderCredentialResult, ProviderSource,
 };
 use std::sync::{
     Arc,
@@ -104,6 +105,15 @@ pub struct ProviderAuthenticationAdapter {
 pub struct ConnectorAuthenticationAdapter {
     context: Context,
 }
+fn provider_credentials(
+    value: ProviderCredentialResult,
+) -> Result<wire::ProviderCredentials, Status> {
+    Ok(wire::ProviderCredentials {
+        provider_id: value.provider_id,
+        key: Some(key(value.key)?),
+    })
+}
+
 fn key(value: ComponentKeyResult) -> Result<wire::ComponentKey, Status> {
     Ok(wire::ComponentKey {
         token: value.token.expose().to_owned(),
@@ -120,7 +130,7 @@ impl wire::provider_authentication_server::ProviderAuthentication
     async fn exchange(
         &self,
         request: Request<wire::ProviderAuthenticationRequest>,
-    ) -> Result<Response<wire::ComponentKey>, Status> {
+    ) -> Result<Response<wire::ProviderCredentials>, Status> {
         self.context.admit()?;
         let auth = self.context.authenticator.as_ref().ok_or_else(|| {
             Status::permission_denied("Provider authentication is not configured")
@@ -149,7 +159,7 @@ impl wire::provider_authentication_server::ProviderAuthentication
         };
         let result = match auth
             .authenticate(
-                &config.provider_id,
+                &config.registration_key,
                 value.evidence,
                 self.context.internal_provider.as_deref(),
             )
@@ -177,7 +187,7 @@ impl wire::provider_authentication_server::ProviderAuthentication
                 self.context
                     .service
                     .exchange_registered_provider(
-                        &config.provider_id,
+                        &config.registration_key,
                         &credential.digest(),
                         &substrate,
                         &value.request_id,
@@ -187,7 +197,7 @@ impl wire::provider_authentication_server::ProviderAuthentication
             }
         }
         .map_err(status)?;
-        Ok(Response::new(key(result)?))
+        Ok(Response::new(provider_credentials(result)?))
     }
     #[tracing::instrument(skip_all, fields(rpc = "report_provider_evidence"))]
     async fn report(&self, request: Request<wire::ProviderReport>) -> Result<Response<()>, Status> {
@@ -332,7 +342,7 @@ impl wire::provider_authentication_server::ProviderAuthentication
     async fn rotate_key(
         &self,
         request: Request<wire::ProviderKeyRequest>,
-    ) -> Result<Response<wire::ComponentKey>, Status> {
+    ) -> Result<Response<wire::ProviderCredentials>, Status> {
         self.context.admit()?;
         let credential = input::authorization(&request)?;
         let value = request.into_inner();
@@ -347,7 +357,7 @@ impl wire::provider_authentication_server::ProviderAuthentication
             )
             .await
             .map_err(status)?;
-        Ok(Response::new(key(result)?))
+        Ok(Response::new(provider_credentials(result)?))
     }
     #[tracing::instrument(skip_all, fields(rpc = "revoke_provider_key"))]
     async fn revoke_key(

@@ -3,7 +3,10 @@ use chapchoo_domain::{DisplaySettings, EmailAddress};
 use diesel::sql_types::{BigInt, Bool, Text};
 use std::fmt;
 
-use crate::StoreError;
+use crate::{
+    StoreError,
+    entity_id::{EntityId, EntityKind, IdentitySql},
+};
 
 #[derive(Debug)]
 pub struct UserSummary {
@@ -41,8 +44,8 @@ impl CredentialSnapshot {
 
 #[derive(diesel::QueryableByName)]
 pub(crate) struct UserRow {
-    #[diesel(sql_type = Text)]
-    pub id: String,
+    #[diesel(sql_type = IdentitySql)]
+    pub id: EntityId,
     #[diesel(sql_type = Text)]
     pub email_key: String,
     #[diesel(sql_type = Text)]
@@ -74,7 +77,7 @@ impl UserRow {
             return Err(StoreError::Integrity);
         }
         Ok(UserSummary {
-            id: self.id.clone(),
+            id: self.id.to_dto(EntityKind::User),
             email,
             is_admin: self.is_admin,
             created_at: self.created_at,
@@ -94,8 +97,8 @@ impl UserRow {
 
 #[derive(Debug, diesel::QueryableByName)]
 pub(crate) struct UserId {
-    #[diesel(sql_type = Text)]
-    pub user_id: String,
+    #[diesel(sql_type = IdentitySql)]
+    pub user_id: EntityId,
 }
 
 // Authentication is revalidated after taking the User lock. This keeps the same
@@ -121,7 +124,7 @@ macro_rules! authenticate {
             return Err($crate::StoreError::Unauthenticated);
         };
         let users = diesel::sql_query($dialect.query($dialect.user_lock()))
-            .bind::<diesel::sql_types::Text, _>(&identity.user_id)
+            .bind::<$crate::entity_id::IdentitySql, _>(identity.user_id)
             .load::<$crate::models::UserRow>($connection)
             .await?;
         let [user] = users.as_slice() else {
@@ -133,7 +136,7 @@ macro_rules! authenticate {
              WHERE user_id=? AND revoked_at IS NULL AND expires_at>? AND
              (current_hash=? OR (previous_hash=? AND previous_valid_until>?))",
         ))
-        .bind::<diesel::sql_types::Text, _>(&user.id)
+        .bind::<$crate::entity_id::IdentitySql, _>(user.id)
         .bind::<diesel::sql_types::BigInt, _>(now)
         .bind::<diesel::sql_types::Binary, _>(digest.as_bytes().as_slice())
         .bind::<diesel::sql_types::Binary, _>(digest.as_bytes().as_slice())
@@ -148,3 +151,6 @@ macro_rules! authenticate {
 }
 
 pub(crate) use authenticate;
+
+#[cfg(test)]
+mod tests;

@@ -8,8 +8,10 @@ import {
   inventory,
   providers,
   resources,
+  profileImages,
 } from "../dist/computer.js";
 import { computerCopy } from "../dist/computer-messages.js";
+import { validAgentPalette } from "../dist/agent-profile.js";
 
 const computer = {
   id: "computer",
@@ -33,6 +35,48 @@ const computer = {
   preparationRetryAvailable: false,
 };
 const wire = { id: "agent", teamId: "team", name: "Companion", computer };
+
+test("profile catalogue projects opaque IDs and safe logical assets in bounded pages", () => {
+  assert.deepEqual(
+    profileImages({
+      items: [
+        { id: "opaque-image", internalName: "Corgi", assetKey: "03-corgi" },
+      ],
+      nextAfter: "opaque-image",
+    }),
+    {
+      items: [
+        { id: "opaque-image", internalName: "Corgi", assetKey: "03-corgi" },
+      ],
+      nextAfter: "opaque-image",
+    },
+  );
+  for (const assetKey of [
+    "../secret",
+    "https://external.invalid/image",
+    "file/name",
+    "03-corgi\n",
+    "",
+  ]) {
+    assert.throws(() =>
+      profileImages({
+        items: [{ id: "image", internalName: "Name", assetKey }],
+      }),
+    );
+  }
+  assert.throws(() =>
+    profileImages({
+      items: Array.from({ length: 21 }, () => ({
+        id: "image",
+        internalName: "Name",
+        assetKey: "03-corgi",
+      })),
+    }),
+  );
+  assert.equal(validAgentPalette("sage"), true);
+  assert.equal(validAgentPalette("Sage"), false);
+  assert.equal(validAgentPalette("unknown"), false);
+});
 
 test("Computer DTO preserves unknown power separately from last-known evidence", () => {
   const result = agent(wire);

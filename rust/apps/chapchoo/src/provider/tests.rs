@@ -286,7 +286,6 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
     });
     let adapter = Kubernetes::new(
         Client::new(service, "fixture"),
-        "provider".into(),
         chapchoo_kubernetes::Config {
             namespace: "fixture".into(),
             image: "computer:fixture".into(),
@@ -304,6 +303,8 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
     let stop = CancellationToken::new();
     let provider_stop = stop.clone();
     let key = app.exchange_bootstrap_provider(&proof,"Fixture",chapchoo_service::ProviderCapabilities { create:true,start:true,stop:true,restart:true }, &chapchoo_domain::ProviderSubstrate::Kubernetes,&key_request_id()?,AcceptanceTime::System).await?;
+    let assigned_provider = key.provider_id;
+    let key = key.key;
     let provider_credential=key.token.digest();
     let component_key = wire::ComponentKey {
         token: key.token.expose().into(),
@@ -313,6 +314,10 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
             seconds: key.proactive_after / 1000,
             nanos: 0,
         }),
+    };
+    let component_key = wire::ProviderCredentials {
+        provider_id: assigned_provider.clone(),
+        key: Some(component_key),
     };
     let channel = super::endpoint(&endpoint)?.connect_lazy();
     let provider_endpoint = endpoint.clone();
@@ -330,20 +335,28 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
     });
     let route = tokio::time::timeout(Duration::from_secs(10), async {
         loop {
-            if let Some(route) = app.resolve_provider_route("provider").await? {
+            if let Some(route) = app.resolve_provider_route(&assigned_provider).await? {
                 return Ok::<_, AppError>(route);
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     })
     .await??;
+    let images = app.agent_profile_images(&user.token.digest(), None, 1, AcceptanceTime::System).await?;
     let CreationOutcome::Present(agent) = app
         .create_cloud_agent(
             &user.token.digest(),
-            &team.id,
-            "create",
-            "provider",
-            "Fixture",
+            &chapchoo_service::CreateCloudAgent {
+                team_id: team.id.clone(),
+                request_id: "create".into(),
+                provider_id: assigned_provider.clone(),
+                name: "Fixture".into(),
+                profile: chapchoo_service::CreateAgentProfile {
+                    handle: "fixture-agent".into(),
+                    image_id: images[0].id.clone(),
+                    palette_key: "sage".into(),
+                },
+            },
             AcceptanceTime::System,
         )
         .await?
@@ -357,10 +370,17 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
     let CreationOutcome::Present(unstarted) = app
         .create_cloud_agent(
             &user.token.digest(),
-            &team.id,
-            "never-started",
-            "provider",
-            "Unstarted fixture",
+            &chapchoo_service::CreateCloudAgent {
+                team_id: team.id.clone(),
+                request_id: "never-started".into(),
+                provider_id: assigned_provider.clone(),
+                name: "Unstarted fixture".into(),
+                profile: chapchoo_service::CreateAgentProfile {
+                    handle: "unstarted-agent".into(),
+                    image_id: images[0].id.clone(),
+                    palette_key: "sage".into(),
+                },
+            },
             AcceptanceTime::System,
         )
         .await?
@@ -368,7 +388,7 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
         return Err("Unstarted Agent missing".into());
     };
     let unstarted_source = chapchoo_service::ProviderSource {
-        provider_id: "provider",
+        provider_id: &assigned_provider,
         control_id: &route.component.control_id,
         connection_id: &route.component.connection_id,
         credential: &provider_credential,
@@ -461,7 +481,7 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
         )
         .await?;
     let source = chapchoo_service::ProviderSource {
-        provider_id: "provider",
+        provider_id: &assigned_provider,
         control_id: &route.component.control_id,
         connection_id: &route.component.connection_id,
         credential: &provider_credential,

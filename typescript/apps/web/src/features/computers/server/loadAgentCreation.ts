@@ -1,5 +1,6 @@
 import "server-only";
-import { choices } from "@chapchoo/web-core/computer";
+import { randomInt } from "node:crypto";
+import { choices, profileImages } from "@chapchoo/web-core/computer";
 import { RpcFailure } from "@chapchoo/web-core/errors";
 import { call } from "@chapchoo/web-core/rpc";
 import { team } from "@chapchoo/web-core/validation";
@@ -8,6 +9,7 @@ import { getConfig, getLoginRedirect } from "@/config";
 import { readNavigation } from "@/shared/navigation/server";
 import { getBackend } from "@/shared/server/backend";
 import { readPageScope } from "@/shared/server/identity";
+import { initialProfile } from "../creationDefaults";
 import type { InitialAgentCreation } from "../creationTypes";
 
 export async function loadAgentCreation(
@@ -51,10 +53,23 @@ export async function loadAgentCreation(
         ),
       ),
     );
+    const images = await scope.read(async (token) =>
+      profileImages(
+        await call(
+          backend.agents.listProfileImages.bind(backend.agents),
+          { limit: 20 },
+          token,
+        ),
+      ),
+    );
+    // Presentation-only draft shared by SSR and hydration, never a create default.
+    const selection = initialProfile(images.items, (bound) => randomInt(bound));
     return {
       teamId,
       identity: identity.email,
       providers,
+      images,
+      ...selection,
       renderedAt: Date.now(),
     };
   } catch (error) {

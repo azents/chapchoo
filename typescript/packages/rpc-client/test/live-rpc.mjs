@@ -1,6 +1,7 @@
 import process from "node:process";
 
 import { credentials, Metadata, status } from "@grpc/grpc-js";
+import { AgentsClient } from "../dist/generated/computers.js";
 
 import {
   AuthenticationClient,
@@ -122,6 +123,7 @@ async function main() {
   const installation = client(InstallationClient, adminEndpoint);
   const accountGrants = client(AccountGrantsClient, adminEndpoint);
   const displayDefaults = client(DisplayDefaultsClient, adminEndpoint);
+  const agents = client(AgentsClient, generalEndpoint);
 
   for (const auth of [authGeneral, authAdmin]) {
     const methods = await call(auth, "methods", {});
@@ -165,6 +167,76 @@ async function main() {
   check(preferences.display?.language === "fr");
   const identity = await call(authGeneral, "identity", {}, administrator.token);
   check(identity.id === administrator.user.id && identity.isAdmin === true);
+  await rejected(
+    () => call(agents, "listProfileImages", { limit: 2 }),
+    status.UNAUTHENTICATED,
+    "DOMAIN_REASON_INVALID_SESSION",
+  );
+  const catalogue = await call(
+    agents,
+    "listProfileImages",
+    { limit: 20 },
+    administrator.token,
+  );
+  check(catalogue.items.length === 6 && catalogue.nextAfter === undefined);
+  check(new Set(catalogue.items.map((image) => image.id)).size === 6);
+  check(
+    catalogue.items.every(
+      (image) =>
+        image.id.length > 0 &&
+        image.internalName.length > 0 &&
+        image.assetKey.length > 0,
+    ),
+  );
+  const imagePage = await call(
+    agents,
+    "listProfileImages",
+    { limit: 2 },
+    administrator.token,
+  );
+  check(
+    imagePage.items.length === 2 &&
+      imagePage.nextAfter === imagePage.items[1].id,
+  );
+  const nextImagePage = await call(
+    agents,
+    "listProfileImages",
+    {
+      limit: 2,
+      after: imagePage.nextAfter,
+    },
+    administrator.token,
+  );
+  check(
+    nextImagePage.items.length === 2 &&
+      nextImagePage.items[0].id === catalogue.items[2].id,
+  );
+  const endImages = await call(
+    agents,
+    "listProfileImages",
+    {
+      limit: 2,
+      after: catalogue.items[5].id,
+    },
+    administrator.token,
+  );
+  check(endImages.items.length === 0 && endImages.nextAfter === undefined);
+  await rejected(
+    () => call(agents, "listProfileImages", { limit: 21 }, administrator.token),
+    status.INVALID_ARGUMENT,
+    null,
+  );
+  await rejected(
+    () =>
+      call(
+        agents,
+        "listProfileImages",
+        { limit: 2, after: identity.id },
+        administrator.token,
+      ),
+    status.INVALID_ARGUMENT,
+    "DOMAIN_REASON_INVALID_INPUT",
+  );
 
   const issued = await call(
     accountGrants,
@@ -215,6 +287,41 @@ async function main() {
   );
   check(team.kind === TeamKind.TEAM_KIND_COLLABORATIVE);
   check(team.callerRole === TeamRole.TEAM_ROLE_OWNER);
+  check(
+    (
+      await call(
+        agents,
+        "checkHandle",
+        {
+          teamId: team.id,
+          candidate: "live-agent",
+        },
+        administrator.token,
+      )
+    ).available === true,
+  );
+  await rejected(
+    () =>
+      call(
+        agents,
+        "checkHandle",
+        { teamId: team.id, candidate: "live-agent" },
+        member.token,
+      ),
+    status.NOT_FOUND,
+    "DOMAIN_REASON_NOT_FOUND",
+  );
+  await rejected(
+    () =>
+      call(
+        agents,
+        "checkHandle",
+        { teamId: team.id, candidate: " Invalid" },
+        administrator.token,
+      ),
+    status.INVALID_ARGUMENT,
+    "DOMAIN_REASON_INVALID_INPUT",
+  );
   const teamList = await call(teams, "listTeams", {}, administrator.token);
   check(teamList.items.some((item) => item.id === team.id));
   const updated = await call(

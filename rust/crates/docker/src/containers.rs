@@ -163,6 +163,7 @@ impl Docker {
         context: &wire::ComputerContext,
         value: &'a wire::ManagedResource,
     ) -> Result<&'a wire::DockerContainerNative, Error> {
+        self.labels(context, value)?;
         let Some(Native::DockerContainer(native)) = &value.native else {
             return Err(Error::Ownership);
         };
@@ -273,7 +274,7 @@ impl Docker {
         if resource.absence_confirmed {
             return Err(Error::Ownership);
         }
-        let mut profile = self.container_profile(context, saved, bootstrap, populate)?;
+        let mut profile = self.container_profile(context, resource, saved, bootstrap, populate)?;
         // Create by the validated immutable digest, not a tag which can change
         // between image preparation and native submission.
         profile.image = Some(image.digest.clone());

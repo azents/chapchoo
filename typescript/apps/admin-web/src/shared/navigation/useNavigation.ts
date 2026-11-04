@@ -78,7 +78,7 @@ export function useNavigation({
     try {
       const team = await create.mutateAsync({
         name: name.trim(),
-        handle: handle.trim(),
+        handle,
       });
       void utils.workspaces.invalidate();
       if (identity) {

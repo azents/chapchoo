@@ -113,7 +113,6 @@ impl fmt::Debug for Config {
 #[derive(Clone)]
 pub struct Kubernetes {
     client: Client,
-    provider: String,
     config: Config,
     terminal: Arc<Mutex<BTreeMap<String, TerminalWitness>>>,
 }
@@ -126,38 +125,29 @@ impl Kubernetes {
     pub fn namespace(&self) -> &str {
         &self.config.namespace
     }
-    pub fn in_cluster(provider: String, config: Config) -> Result<Self, Error> {
+    pub fn in_cluster(config: Config) -> Result<Self, Error> {
         let client = kube::Config::incluster().map_err(|_| Error::Configuration)?;
-        Self::from_client_config(client, provider, config)
+        Self::from_client_config(client, config)
     }
-    pub async fn from_kubeconfig(
-        path: &std::path::Path,
-        provider: String,
-        config: Config,
-    ) -> Result<Self, Error> {
+    pub async fn from_kubeconfig(path: &std::path::Path, config: Config) -> Result<Self, Error> {
         let file = kube::config::Kubeconfig::read_from(path).map_err(|_| Error::Configuration)?;
         let client =
             kube::Config::from_custom_kubeconfig(file, &kube::config::KubeConfigOptions::default())
                 .await
                 .map_err(|_| Error::Configuration)?;
-        Self::from_client_config(client, provider, config)
+        Self::from_client_config(client, config)
     }
     /// Caller selects explicit in-cluster/kubeconfig credentials. Disable the
     /// SDK's default server retry layer before building any effect-capable client.
-    pub fn from_client_config(
-        mut client: kube::Config,
-        provider: String,
-        config: Config,
-    ) -> Result<Self, Error> {
+    pub fn from_client_config(mut client: kube::Config, config: Config) -> Result<Self, Error> {
         client.default_retry = false;
         client.connect_timeout = Some(std::time::Duration::from_secs(5));
         client.read_timeout = Some(std::time::Duration::from_secs(30));
         client.write_timeout = Some(std::time::Duration::from_secs(30));
-        Self::new(Client::try_from(client)?, provider, config)
+        Self::new(Client::try_from(client)?, config)
     }
-    pub fn new(client: Client, provider: String, config: Config) -> Result<Self, Error> {
-        if provider.is_empty()
-            || config.namespace.is_empty()
+    pub fn new(client: Client, config: Config) -> Result<Self, Error> {
+        if config.namespace.is_empty()
             || config.image.is_empty()
             || config.storage_request.is_empty()
             || !config.saved_mount.starts_with('/')
@@ -179,36 +169,45 @@ impl Kubernetes {
         }
         Ok(Self {
             client,
-            provider,
             config,
             terminal: Arc::new(Mutex::new(BTreeMap::new())),
         })
     }
     fn annotations(
         &self,
-        computer: &wire::ComputerContext,
         resource: &wire::ManagedResource,
-    ) -> BTreeMap<String, String> {
-        let mut annotations = BTreeMap::from([
-            (PROVIDER.into(), self.provider.clone()),
-            (COMPUTER.into(), computer.computer_id.clone()),
-        ]);
-        if let Some(execution) = &resource.execution_id {
-            annotations.insert(EXECUTION.into(), execution.clone());
+    ) -> Result<BTreeMap<String, String>, Error> {
+        let source = resource.allocation.as_ref().ok_or(Error::Ownership)?;
+        let source = chapchoo_domain::NativeAllocationWitness::new(
+            source.computer_id.clone(),
+            source.provider_id.clone(),
+            source.execution_id.clone(),
+        )
+        .map_err(|_| Error::Ownership)?;
+        if source.execution().is_some() != resource.execution_id.is_some() {
+            return Err(Error::Ownership);
         }
-        annotations
+        let mut annotations = BTreeMap::from([
+            (PROVIDER.into(), source.provider().to_owned()),
+            (COMPUTER.into(), source.computer().to_owned()),
+        ]);
+        if let Some(execution) = source.execution() {
+            annotations.insert(EXECUTION.into(), execution.to_owned());
+        }
+        Ok(annotations)
     }
     fn metadata(
         &self,
         computer: &wire::ComputerContext,
         resource: &wire::ManagedResource,
-    ) -> ObjectMeta {
-        ObjectMeta {
+    ) -> Result<ObjectMeta, Error> {
+        let _ = self.target(computer, resource)?;
+        Ok(ObjectMeta {
             name: Some(resource.name.clone()),
             namespace: Some(resource.namespace.clone()),
-            annotations: Some(self.annotations(computer, resource)),
+            annotations: Some(self.annotations(resource)?),
             ..Default::default()
-        }
+        })
     }
     fn validate(
         &self,
@@ -216,6 +215,7 @@ impl Kubernetes {
         resource: &wire::ManagedResource,
         metadata: &ObjectMeta,
     ) -> Result<String, Error> {
+        let _ = self.target(computer, resource)?;
         if resource.namespace != self.config.namespace
             || metadata.namespace.as_deref() != Some(&resource.namespace)
             || metadata.name.as_deref() != Some(&resource.name)
@@ -236,7 +236,7 @@ impl Kubernetes {
         }
         let annotations = metadata.annotations.as_ref().ok_or(Error::Ownership)?;
         if self
-            .annotations(computer, resource)
+            .annotations(resource)?
             .iter()
             .any(|(key, value)| annotations.get(key) != Some(value))
         {
@@ -259,6 +259,7 @@ impl Kubernetes {
         computer: &wire::ComputerContext,
         resource: &wire::ManagedResource,
     ) -> Result<ResourceKind, Error> {
+        let _ = self.annotations(resource)?;
         if computer.computer_id.is_empty()
             || resource.native.is_some()
             || resource.namespace != self.config.namespace
@@ -381,7 +382,7 @@ impl Kubernetes {
             return Err(Error::MissingEnvironment);
         }
         let pvc = PersistentVolumeClaim {
-            metadata: self.metadata(computer, resource),
+            metadata: self.metadata(computer, resource)?,
             spec: Some(PersistentVolumeClaimSpec {
                 access_modes: Some(vec!["ReadWriteOnce".into()]),
                 storage_class_name: self.config.storage_class.clone(),
@@ -449,7 +450,7 @@ impl Kubernetes {
                     return Err(Error::Ownership);
                 }
                 let secret = Secret {
-                    metadata: self.metadata(computer, resource),
+                    metadata: self.metadata(computer, resource)?,
                     data: Some(data.clone()),
                     immutable: Some(true),
                     type_: Some("Opaque".into()),
@@ -520,7 +521,7 @@ impl Kubernetes {
         })
         .collect();
         let created = Pod {
-            metadata: self.metadata(computer, pod),
+            metadata: self.metadata(computer, pod)?,
             spec: Some(PodSpec {
                 service_account_name: Some(self.config.service_account.clone()),
                 automount_service_account_token: Some(false),

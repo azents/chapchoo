@@ -126,6 +126,9 @@ impl ComputerServices {
             id: value.id,
             team_id: value.team_id,
             name: value.name,
+            handle: value.handle,
+            profile_image_id: value.image_id,
+            palette_key: value.palette_key,
             computer: Some(self.computer(value.computer).await?),
         })
     }
@@ -175,6 +178,62 @@ fn next(items: usize, limit: i64, last: Option<&str>) -> Option<String> {
 }
 #[tonic::async_trait]
 impl wire::agents_server::Agents for AgentsAdapter {
+    async fn check_handle(
+        &self,
+        request: Request<wire::AgentHandleRequest>,
+    ) -> Result<Response<wire::HandleAvailability>, Status> {
+        self.0.admit()?;
+        let actor = input::actor(&request)?;
+        let value = request.into_inner();
+        let available = self
+            .0
+            .service
+            .agent_handle_available(
+                &actor,
+                &value.team_id,
+                &value.candidate,
+                AcceptanceTime::System,
+            )
+            .await
+            .map_err(status)?;
+        Ok(Response::new(wire::HandleAvailability { available }))
+    }
+    async fn list_profile_images(
+        &self,
+        request: Request<wire::Page>,
+    ) -> Result<Response<wire::AgentProfileImages>, Status> {
+        self.0.admit()?;
+        let actor = input::actor(&request)?;
+        let value = request.into_inner();
+        let limit = page(&value)?;
+        let images = self
+            .0
+            .service
+            .agent_profile_images(
+                &actor,
+                value.after.as_deref(),
+                limit,
+                AcceptanceTime::System,
+            )
+            .await
+            .map_err(status)?;
+        let next_after = next(
+            images.len(),
+            limit,
+            images.last().map(|image| image.id.as_str()),
+        );
+        Ok(Response::new(wire::AgentProfileImages {
+            items: images
+                .into_iter()
+                .map(|image| wire::AgentProfileImage {
+                    id: image.id,
+                    internal_name: image.internal_name,
+                    asset_key: image.asset_key,
+                })
+                .collect(),
+            next_after,
+        }))
+    }
     async fn create(
         &self,
         request: Request<wire::CreateAgentRequest>,
@@ -190,17 +249,24 @@ impl wire::agents_server::Agents for AgentsAdapter {
             .service
             .create_cloud_agent(
                 &actor,
-                &value.team_id,
-                &value.request_id,
-                &value.provider_id,
-                &value.name,
+                &chapchoo_service::CreateCloudAgent {
+                    team_id: value.team_id,
+                    request_id: value.request_id,
+                    provider_id: value.provider_id,
+                    name: value.name,
+                    profile: chapchoo_service::CreateAgentProfile {
+                        handle: value.handle,
+                        image_id: value.profile_image_id,
+                        palette_key: value.palette_key,
+                    },
+                },
                 AcceptanceTime::System,
             )
             .await
             .map_err(status)?
         {
             CreationOutcome::Present(agent) => {
-                wire::create_agent_result::Outcome::Agent(self.0.agent(agent).await?)
+                wire::create_agent_result::Outcome::Agent(self.0.agent(*agent).await?)
             }
             CreationOutcome::Removed { assigned_agent_id } => {
                 wire::create_agent_result::Outcome::Removed(wire::RemovedCreation {

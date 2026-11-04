@@ -70,6 +70,8 @@ fn generated_connection_admission_context_cannot_steal_a_winner() -> Result<(), 
                 AcceptanceTime::System,
             )
             .await?;
+        let provider_id = key.provider_id;
+        let key = key.key;
         assert_eq!(
             key.expires_at - key.issued_at,
             policy.provider_keys.validity_ms
@@ -79,10 +81,10 @@ fn generated_connection_admission_context_cannot_steal_a_winner() -> Result<(), 
             policy.provider_keys.proactive_after_ms
         );
         let first = app
-            .prepare_provider_connection("provider", &key.token.digest(), &first_control.id)
+            .prepare_provider_connection(&provider_id, &key.token.digest(), &first_control.id)
             .await?;
         let second = app
-            .prepare_provider_connection("provider", &key.token.digest(), &second_control.id)
+            .prepare_provider_connection(&provider_id, &key.token.digest(), &second_control.id)
             .await?;
         assert_ne!(first.owner().connection_id, second.owner().connection_id);
         let admitted = app.admit_component_connection(&first).await?;
@@ -96,7 +98,7 @@ fn generated_connection_admission_context_cannot_steal_a_winner() -> Result<(), 
         );
         app.verify_component_connection(&first).await?;
         assert_eq!(
-            app.resolve_provider_route("provider")
+            app.resolve_provider_route(&provider_id)
                 .await?
                 .ok_or("Missing admitted route")?
                 .component
@@ -106,7 +108,7 @@ fn generated_connection_admission_context_cannot_steal_a_winner() -> Result<(), 
         );
         app.renew_component_connection(&first).await?;
         let replacement = app
-            .prepare_provider_connection("provider", &key.token.digest(), &second_control.id)
+            .prepare_provider_connection(&provider_id, &key.token.digest(), &second_control.id)
             .await?;
         app.admit_component_connection(&replacement).await?;
         assert!(app.verify_component_connection(&first).await.is_err());
@@ -126,7 +128,7 @@ fn generated_connection_admission_context_cannot_steal_a_winner() -> Result<(), 
                 .await?,
             1
         );
-        assert!(app.resolve_provider_route("provider").await?.is_none());
+        assert!(app.resolve_provider_route(&provider_id).await?.is_none());
         Ok::<(), TestError>(())
     })
 }
@@ -171,6 +173,10 @@ fn bootstrap_exchange_recovers_exact_result_and_preserves_connector_policy() -> 
                 AcceptanceTime::Fixed(2000),
             )
             .await?;
+        assert_eq!(key.provider_id, recovered.provider_id);
+        let provider_id = key.provider_id;
+        let key = key.key;
+        let recovered = recovered.key;
         assert_eq!(key.token.expose(), recovered.token.expose());
         assert_eq!(key.expires_at, 901_000);
         assert_eq!(key.proactive_after, 301_000);
@@ -192,9 +198,21 @@ fn bootstrap_exchange_recovers_exact_result_and_preserves_connector_policy() -> 
             .map(|e| e.reason()),
             Some(DomainReason::Conflict)
         );
+        let foreign_proof =
+            BootstrapProviderPermit::new("foreign-provider".into())?.authenticated();
+        let foreign = app
+            .exchange_bootstrap_provider(
+                &foreign_proof,
+                "Foreign",
+                caps,
+                &substrate,
+                "1000:foreign",
+                AcceptanceTime::Fixed(1000),
+            )
+            .await?;
         assert_eq!(
             app.provider_identity(
-                "foreign-provider",
+                &foreign.provider_id,
                 &key.token.digest(),
                 AcceptanceTime::Fixed(2000)
             )
@@ -218,7 +236,7 @@ fn bootstrap_exchange_recovers_exact_result_and_preserves_connector_policy() -> 
         );
         assert!(
             app.provider_identity(
-                "allowed-provider",
+                &provider_id,
                 &key.token.digest(),
                 AcceptanceTime::Fixed(901_000)
             )
@@ -239,7 +257,7 @@ fn bootstrap_exchange_recovers_exact_result_and_preserves_connector_policy() -> 
         )
         .await?;
         let inventory = store
-            .provider_key_identity("allowed-provider", &recovered.token.digest(), 3001)
+            .provider_key_identity(&provider_id, &recovered.token.digest(), 3001)
             .await?;
         assert_eq!(inventory.name, "Fixture");
         store

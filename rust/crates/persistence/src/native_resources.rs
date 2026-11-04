@@ -1,9 +1,13 @@
 //! Typed native row ingress. Serialized volume metadata is confined to this boundary.
 
-use crate::StoreError;
+use crate::{
+    StoreError,
+    entity_id::{EntityId, EntityKind, IdentitySql},
+};
 use chapchoo_domain::{
-    DockerContainerId, DockerVolumeIdentity, KubernetesUid, ManagedResourceKind, NativeIdentity,
-    NativeReservation, NativeScope, ResourcePresence, ResourceRole,
+    DockerContainerId, DockerVolumeIdentity, KubernetesUid, ManagedResourceKind,
+    NativeAllocationWitness, NativeIdentity, NativeReservation, NativeScope, ResourcePresence,
+    ResourceRole,
 };
 use diesel::sql_types::{BigInt, Nullable, Text};
 use std::{collections::BTreeMap, fmt};
@@ -24,16 +28,22 @@ pub(crate) struct ResourceRow {
     docker_container_id: Option<String>,
     #[diesel(sql_type = Nullable<Text>)]
     docker_volume_metadata: Option<String>,
-    #[diesel(sql_type = Nullable<Text>)]
-    execution_id: Option<String>,
+    #[diesel(sql_type = Nullable<IdentitySql>)]
+    execution_id: Option<EntityId>,
     #[diesel(sql_type = Text)]
     presence: String,
     #[diesel(sql_type = Nullable<BigInt>)]
     observed_at: Option<i64>,
     #[diesel(sql_type = Nullable<BigInt>)]
     absence_confirmed_at: Option<i64>,
+    #[diesel(sql_type = Nullable<IdentitySql>)]
+    source_connection_id: Option<EntityId>,
+    #[diesel(sql_type = Text)]
+    allocation_computer_id: String,
+    #[diesel(sql_type = Text)]
+    allocation_provider_id: String,
     #[diesel(sql_type = Nullable<Text>)]
-    source_connection_id: Option<String>,
+    allocation_execution_id: Option<String>,
 }
 
 impl fmt::Debug for ResourceRow {
@@ -46,6 +56,7 @@ impl fmt::Debug for ResourceRow {
 pub struct ManagedResource {
     pub(crate) native: NativeReservation,
     pub(crate) identity: Option<NativeIdentity>,
+    pub(crate) allocation: NativeAllocationWitness,
     pub execution_id: Option<String>,
     pub presence: ResourcePresence,
     pub observed_at: Option<i64>,
@@ -54,6 +65,9 @@ pub struct ManagedResource {
 }
 
 impl ManagedResource {
+    pub fn allocation(&self) -> &NativeAllocationWitness {
+        &self.allocation
+    }
     pub fn native(&self) -> &NativeReservation {
         &self.native
     }
@@ -87,6 +101,15 @@ impl TryFrom<ResourceRow> for ManagedResource {
         let native =
             NativeReservation::new(kind, scope, row.name).map_err(|_| StoreError::Integrity)?;
         if (kind.role() == ResourceRole::SavedEnvironment) != row.execution_id.is_none() {
+            return Err(StoreError::Integrity);
+        }
+        let allocation = NativeAllocationWitness::new(
+            row.allocation_computer_id,
+            row.allocation_provider_id,
+            row.allocation_execution_id,
+        )
+        .map_err(|_| StoreError::Integrity)?;
+        if row.execution_id.is_some() != allocation.execution().is_some() {
             return Err(StoreError::Integrity);
         }
         let identity = match kind {
@@ -140,11 +163,14 @@ impl TryFrom<ResourceRow> for ManagedResource {
         Ok(Self {
             native,
             identity,
-            execution_id: row.execution_id,
+            allocation,
+            execution_id: row.execution_id.map(|id| id.to_dto(EntityKind::Execution)),
             presence,
             observed_at: row.observed_at,
             absence_confirmed_at: row.absence_confirmed_at,
-            source_connection_id: row.source_connection_id,
+            source_connection_id: row
+                .source_connection_id
+                .map(|id| id.to_dto(EntityKind::Connection)),
         })
     }
 }
@@ -282,8 +308,8 @@ mod tests {
         Ok(())
     }
 
-    fn candidate() -> ResourceRow {
-        ResourceRow {
+    fn candidate() -> Result<ResourceRow, StoreError> {
+        Ok(ResourceRow {
             resource_kind: "DOCKER_CONTAINER".into(),
             native_scope_kind: "DOCKER_DAEMON".into(),
             native_scope: "daemon:original".into(),
@@ -291,33 +317,51 @@ mod tests {
             resource_uid: None,
             docker_container_id: None,
             docker_volume_metadata: None,
-            execution_id: Some("execution".into()),
+            execution_id: Some(EntityId::generate(1000)?),
             presence: "UNKNOWN".into(),
             observed_at: None,
             absence_confirmed_at: None,
             source_connection_id: None,
-        }
+            allocation_computer_id: "original-computer".into(),
+            allocation_provider_id: "original-provider".into(),
+            allocation_execution_id: Some("original-execution".into()),
+        })
     }
 
     #[test]
     fn native_row_decoder_rejects_mixed_or_unallocated_present_evidence() -> Result<(), Error> {
-        assert!(ManagedResource::try_from(candidate())?.identity.is_none());
-        let mut row = candidate();
+        let original = ManagedResource::try_from(candidate()?)?;
+        assert!(original.identity.is_none());
+        assert_eq!(
+            original.allocation().execution(),
+            Some("original-execution")
+        );
+        assert_ne!(
+            original.execution_id.as_deref(),
+            original.allocation().execution()
+        );
+        let mut row = candidate()?;
+        row.allocation_execution_id = None;
+        assert!(ManagedResource::try_from(row).is_err());
+        let mut row = candidate()?;
+        row.allocation_provider_id.clear();
+        assert!(ManagedResource::try_from(row).is_err());
+        let mut row = candidate()?;
         row.resource_uid = Some("not-a-container-id".into());
         assert!(ManagedResource::try_from(row).is_err());
-        let mut row = candidate();
+        let mut row = candidate()?;
         row.presence = "PRESENT".into();
         assert!(ManagedResource::try_from(row).is_err());
-        let mut row = candidate();
+        let mut row = candidate()?;
         row.native_scope_kind = "KUBERNETES_NAMESPACE".into();
         assert!(ManagedResource::try_from(row).is_err());
-        let mut row = candidate();
+        let mut row = candidate()?;
         row.execution_id = None;
         assert!(ManagedResource::try_from(row).is_err());
-        let mut row = candidate();
+        let mut row = candidate()?;
         row.resource_kind = "UNSPECIFIED".into();
         assert!(ManagedResource::try_from(row).is_err());
-        let mut row = candidate();
+        let mut row = candidate()?;
         row.docker_container_id = Some("a".repeat(64));
         row.presence = "PRESENT".into();
         let allocated = ManagedResource::try_from(row)?;

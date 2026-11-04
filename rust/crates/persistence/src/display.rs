@@ -1,5 +1,6 @@
 use crate::{
     Store, StoreError, UserSummary,
+    entity_id::{EntityId, EntityKind, IdentitySql},
     models::{UserRow, authenticate},
     store::operation,
 };
@@ -63,7 +64,7 @@ impl Store {
                 .bind::<Text, _>(display.language())
                 .bind::<Text, _>(display.time_zone())
                 .bind::<Text, _>(display.region())
-                .bind::<Text, _>(&user.id)
+                .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::User, &user.id)?)
                 .get_result::<UserRow>(connection)
                 .await?;
             row.summary()

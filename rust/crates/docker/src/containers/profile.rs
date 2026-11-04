@@ -79,18 +79,20 @@ impl Docker {
     pub(crate) fn container_profile(
         &self,
         context: &wire::ComputerContext,
+        resource: &wire::ManagedResource,
         saved: &wire::ManagedResource,
         bootstrap: &Bootstrap<'_>,
         populate: bool,
     ) -> Result<ContainerCreateBody, Error> {
         self.volume_target(saved)?;
+        self.labels(context, saved)?;
         Ok(ContainerCreateBody {
             image: Some(self.config.image.clone()),
             user: Some("10001:10001".into()),
             entrypoint: Some(vec!["/opt/chapchoo/chapchoo".into()]),
             cmd: Some(vec!["computer-connector".into()]),
             env: Some(bootstrap.environment()?),
-            labels: Some(self.labels(context, true)?),
+            labels: Some(self.labels(context, resource)?),
             stop_signal: Some("SIGTERM".into()),
             stop_timeout: Some(30),
             host_config: Some(HostConfig {
@@ -154,7 +156,7 @@ impl Docker {
                         .as_deref()
                         .is_some_and(|expected| expected != image)
             })
-            || config.labels.as_ref() != Some(&self.labels(context, true)?)
+            || config.labels.as_ref() != Some(&self.labels(context, resource)?)
             || config.image.as_deref() != value.image.as_deref()
             || config.user.as_deref() != Some("10001:10001")
             || config.entrypoint.as_deref() != Some(&["/opt/chapchoo/chapchoo".into()])

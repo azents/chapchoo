@@ -24,6 +24,11 @@ async fn capacity_rejects_before_container_submission_and_reuses_only_a_settled_
                 name: "execution-candidate".into(),
                 uid: None,
                 execution_id: Some(context.execution_id.clone()),
+                allocation: Some(wire::NativeAllocationWitness {
+                    computer_id: "computer".into(),
+                    provider_id: "provider".into(),
+                    execution_id: Some(context.execution_id.clone()),
+                }),
                 absence_confirmed: false,
                 native: Some(Native::DockerContainer(wire::DockerContainerNative {
                     daemon_id: "daemon:fixture".into(),

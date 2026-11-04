@@ -19,9 +19,13 @@ lock, exact current Request ID and current authority are rechecked.
 
 `reserve_execution` commits the candidate execution and substrate-native resource
 names before external creation: Pod/Secret/PVC for Kubernetes, container/original
-saved volume for Docker. A recovered
-current candidate is returned even if the service prepared different draft IDs
-and names. Uncertain/blocked preparation does not replace that candidate.
+saved volume for Docker. Repository issues the execution identity inside that
+reservation; the Service prepares independent native names, not proposed IDs.
+A recovered current candidate is returned even if the Service prepared different
+names. Uncertain/blocked preparation does not replace that candidate.
+Each reservation also commits its exact native allocation witness. Existing
+saved-resource witnesses are never overwritten from current DTO identities;
+[native storage](computer-storage.md) owns that distinction.
 Resource reservation collisions roll back the entire operation. A successor
 requires prior-execution retirement and current-connection evidence of the
 original saved resource with its accepted native identity. First allocation may resume only with

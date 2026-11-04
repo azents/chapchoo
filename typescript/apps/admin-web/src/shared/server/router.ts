@@ -2,6 +2,7 @@ import "server-only";
 import { attempt } from "@chapchoo/web-core/boundary";
 import { displayPatchPayload } from "@chapchoo/web-core/display";
 import { invalidResponse } from "@chapchoo/web-core/errors";
+import { validHandle } from "@chapchoo/web-core/handle";
 import { call } from "@chapchoo/web-core/rpc";
 import {
   display,
@@ -66,7 +67,7 @@ export const appRouter = router({
         z
           .object({
             name: z.string().trim().min(1).max(120),
-            handle: z.string().trim().min(1).max(80),
+            handle: z.string().min(3).max(16).refine(validHandle),
           })
           .strict(),
       )

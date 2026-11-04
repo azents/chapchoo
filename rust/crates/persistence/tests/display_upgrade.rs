@@ -36,33 +36,43 @@ fn cipher() -> Result<CredentialCipher, TestError> {
     )?)?)
 }
 const LEGACY_USER: &str = "INSERT INTO users(id,email_key,delivery_email,password_hash,is_admin,created_at) VALUES('legacy','legacy@example.invalid','legacy@example.invalid','synthetic',FALSE,0)";
-const PENDING_USER: &str = "INSERT INTO users(id,email_key,delivery_email,password_hash,is_admin,created_at) VALUES('pending','pending@example.invalid','pending@example.invalid','synthetic',FALSE,0)";
+fn pending_user(postgres: bool) -> String {
+    // Native SQL fixture for interrupted display backfill, not a public DTO.
+    let id = if postgres {
+        "'01900000000070008000000000000042'::uuid"
+    } else {
+        "X'01900000000070008000000000000042'"
+    };
+    format!(
+        "INSERT INTO users(id,email_key,delivery_email,password_hash,is_admin,created_at) VALUES({id},'pending@example.invalid','pending@example.invalid','synthetic',FALSE,0)"
+    )
+}
 fn assert_environment(row: &Settings, env: &DisplaySettings) {
     assert_eq!(row.language, env.language());
     assert_eq!(row.time_zone, env.time_zone());
     assert_eq!(row.region, env.region());
 }
 macro_rules! assert_upgrade_data {
-    ($connection:expr, $environment:expr, $changed_zone:expr, $prepare:expr, $ready:expr) => {{
-        let row = diesel::sql_query("SELECT language,time_zone,region FROM users WHERE id='legacy'").get_result::<Settings>($connection)?;
+    ($connection:expr, $environment:expr, $changed_zone:expr, $prepare:expr, $ready:expr, $postgres:expr) => {{
+        let row = diesel::sql_query("SELECT language,time_zone,region FROM users WHERE email_key='legacy@example.invalid'").get_result::<Settings>($connection)?;
         assert_environment(&row, $environment);
         let defaults = diesel::sql_query("SELECT language,time_zone,region FROM display_defaults WHERE singleton=1").get_result::<Settings>($connection)?;
         assert_environment(&defaults, $environment);
         $connection.batch_execute(&format!("UPDATE display_defaults SET language='fr',time_zone='{}',region='fr-FR' WHERE singleton=1", $changed_zone))?;
-        $connection.batch_execute(PENDING_USER)?;
+        $connection.batch_execute(&pending_user($postgres))?;
         assert!($ready.is_err());
         $prepare?;
         $ready?;
-        let legacy = diesel::sql_query("SELECT language,time_zone,region FROM users WHERE id='legacy'").get_result::<Settings>($connection)?;
+        let legacy = diesel::sql_query("SELECT language,time_zone,region FROM users WHERE email_key='legacy@example.invalid'").get_result::<Settings>($connection)?;
         assert_environment(&legacy, $environment);
-        let pending = diesel::sql_query("SELECT language,time_zone,region FROM users WHERE id='pending'").get_result::<Settings>($connection)?;
+        let pending = diesel::sql_query("SELECT language,time_zone,region FROM users WHERE email_key='pending@example.invalid'").get_result::<Settings>($connection)?;
         assert_eq!(pending.language, "fr");
         assert_eq!(pending.region, "fr-FR");
         assert_eq!(pending.time_zone, $environment.time_zone());
         let defaults = diesel::sql_query("SELECT language,time_zone,region FROM display_defaults WHERE singleton=1").get_result::<Settings>($connection)?;
         assert_eq!(defaults.language, "fr"); assert_eq!(defaults.region, "fr-FR"); assert_eq!(defaults.time_zone, $changed_zone);
         $prepare?;
-        let after = diesel::sql_query("SELECT language,time_zone,region FROM users WHERE id='pending'").get_result::<Settings>($connection)?;
+        let after = diesel::sql_query("SELECT language,time_zone,region FROM users WHERE email_key='pending@example.invalid'").get_result::<Settings>($connection)?;
         assert_eq!(after.time_zone, pending.time_zone);
     }};
 }
@@ -110,7 +120,8 @@ fn sqlite_populated_upgrade_is_atomic_and_preserves_default_and_backfill_authori
         &environment,
         changed_zone,
         prepare_sqlite(&path, &cipher),
-        sqlite_ready(&path, &cipher)
+        sqlite_ready(&path, &cipher),
+        false
     );
     Ok(())
 }
@@ -175,7 +186,8 @@ fn postgres_upgrade(url: &str) -> Result<(), TestError> {
         &environment,
         changed_zone,
         prepare_postgres(url, &cipher),
-        postgres_ready(url, &cipher)
+        postgres_ready(url, &cipher),
+        true
     );
     Ok(())
 }

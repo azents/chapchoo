@@ -5,6 +5,7 @@ use diesel_async::RunQueryDsl;
 
 use crate::{
     NewSession, SessionPolicy, SessionResult, Store, StoreError, UserSummary,
+    entity_id::{EntityId, EntityKind, IdentitySql},
     models::{UserRow, authenticate},
     sessions::insert_session,
     store::{Dialect, operation},
@@ -12,11 +13,8 @@ use crate::{
 
 #[derive(Debug)]
 pub struct NewAccount {
-    pub user_id: String,
     pub email: EmailAddress,
     pub password: PasswordHash,
-    pub personal_team_id: String,
-    pub personal_handle: String,
     pub session: NewSession,
     pub display: Option<DisplayPatch>,
 }
@@ -38,7 +36,6 @@ impl GrantKind {
 
 #[derive(Debug)]
 pub struct GrantDraft {
-    pub id: String,
     pub proof: SecretDigest,
     pub expires_at: i64,
 }
@@ -74,16 +71,16 @@ struct Setup {
 
 #[derive(diesel::QueryableByName)]
 struct GrantRow {
-    #[diesel(sql_type = Text)]
-    id: String,
+    #[diesel(sql_type = IdentitySql)]
+    id: EntityId,
     #[diesel(sql_type = Text)]
     kind: String,
     #[diesel(sql_type = Text)]
     email_key: String,
     #[diesel(sql_type = Text)]
     delivery_email: String,
-    #[diesel(sql_type = Nullable<Text>)]
-    user_id: Option<String>,
+    #[diesel(sql_type = Nullable<IdentitySql>)]
+    user_id: Option<EntityId>,
     #[diesel(sql_type = BigInt)]
     issued_at: i64,
     #[diesel(sql_type = BigInt)]
@@ -112,7 +109,7 @@ impl GrantRow {
             return Err(StoreError::Integrity);
         }
         Ok(GrantSummary {
-            id: self.id.clone(),
+            id: self.id.to_dto(EntityKind::Grant),
             kind,
             email,
             issued_at: self.issued_at,
@@ -130,12 +127,8 @@ impl GrantRow {
 macro_rules! new_account {
     ($connection:expr, $dialect:expr, $draft:expr, $admin:expr, $now:expr) => {{
         let draft = $draft;
-        if draft.user_id.is_empty()
-            || draft.personal_team_id.is_empty()
-            || draft.personal_handle.is_empty()
-        {
-            return Err(StoreError::Integrity);
-        }
+        let user_id = EntityId::generate($now)?;
+        let personal_team_id = EntityId::generate($now)?;
         let defaults = $crate::display::read_defaults!($connection, $dialect);
         let display = match draft.display.as_ref() {
             Some(patch) => patch.resolve(&defaults).map_err(|_| StoreError::InvalidInput)?,
@@ -145,7 +138,7 @@ macro_rules! new_account {
             "INSERT INTO users(id,email_key,delivery_email,password_hash,is_admin,created_at,language,time_zone,region)
              VALUES(?,?,?,?,?,?,?,?,?)",
         ))
-        .bind::<Text, _>(&draft.user_id)
+        .bind::<IdentitySql, _>(user_id)
         .bind::<Text, _>(draft.email.lookup_key())
         .bind::<Text, _>(draft.email.delivery())
         .bind::<Text, _>(draft.password.encoded())
@@ -166,30 +159,29 @@ macro_rules! new_account {
         })?;
         diesel::sql_query($dialect.query(
             "INSERT INTO teams(id,kind,name,handle,owner_user_id,created_at)
-             VALUES(?,'PERSONAL','Personal',?,?,?)",
+             VALUES(?,'PERSONAL','Personal',NULL,?,?)",
         ))
-        .bind::<Text, _>(&draft.personal_team_id)
-        .bind::<Text, _>(&draft.personal_handle)
-        .bind::<Text, _>(&draft.user_id)
+        .bind::<IdentitySql, _>(personal_team_id)
+        .bind::<IdentitySql, _>(user_id)
         .bind::<BigInt, _>($now)
         .execute($connection)
         .await?;
         diesel::sql_query(
             $dialect.query("INSERT INTO memberships(team_id,user_id,role) VALUES(?,?,'MEMBER')"),
         )
-        .bind::<Text, _>(&draft.personal_team_id)
-        .bind::<Text, _>(&draft.user_id)
+        .bind::<IdentitySql, _>(personal_team_id)
+        .bind::<IdentitySql, _>(user_id)
         .execute($connection)
         .await?;
         diesel::sql_query(
             $dialect.query("INSERT INTO personal_contexts(user_id,team_id) VALUES(?,?)"),
         )
-        .bind::<Text, _>(&draft.user_id)
-        .bind::<Text, _>(&draft.personal_team_id)
+        .bind::<IdentitySql, _>(user_id)
+        .bind::<IdentitySql, _>(personal_team_id)
         .execute($connection)
         .await?;
         UserSummary {
-            id: draft.user_id.clone(),
+            id: user_id.to_dto(EntityKind::User),
             email: draft.email.clone(),
             is_admin: $admin,
             created_at: $now,
@@ -232,7 +224,7 @@ impl Store {
                 "INSERT INTO grants(id,kind,secret_hash,email_key,delivery_email,issued_by,issued_at,expires_at)
                  VALUES(?,'SIGNUP',?,?,?,NULL,?,?)",
             ))
-            .bind::<Text, _>(&draft.id)
+            .bind::<IdentitySql, _>(EntityId::generate(now)?)
             .bind::<Binary, _>(draft.proof.as_bytes().as_slice())
             .bind::<Text, _>(email.lookup_key())
             .bind::<Text, _>(email.delivery())
@@ -331,20 +323,21 @@ impl Store {
             if draft.expires_at <= now {
                 return Err(StoreError::InvalidProof);
             }
+            let grant_id = EntityId::generate(now)?;
             diesel::sql_query(dialect.query(
                 "INSERT INTO grants(id,kind,secret_hash,email_key,delivery_email,issued_by,issued_at,expires_at)
                  VALUES(?,'SIGNUP',?,?,?,?,?,?)",
             ))
-            .bind::<Text,_>(&draft.id)
+            .bind::<IdentitySql,_>(grant_id)
             .bind::<Binary,_>(draft.proof.as_bytes().as_slice())
             .bind::<Text,_>(email.lookup_key())
             .bind::<Text,_>(email.delivery())
-            .bind::<Text,_>(&user.id)
+            .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::User,&user.id)?)
             .bind::<BigInt,_>(now)
             .bind::<BigInt,_>(draft.expires_at)
             .execute(connection).await?;
             Ok(GrantSummary {
-                id: draft.id.clone(),
+                id: grant_id.to_dto(EntityKind::Grant),
                 kind: GrantKind::Signup,
                 email: email.clone(),
                 issued_at: now,
@@ -376,7 +369,7 @@ impl Store {
             let user = new_account!(connection, dialect, draft, false, now);
             let changed = diesel::sql_query(dialect.query(
                 "UPDATE grants SET consumed_at=? WHERE id=? AND consumed_at IS NULL AND revoked_at IS NULL AND expires_at>?",
-            )).bind::<BigInt,_>(now).bind::<Text,_>(&grant.id).bind::<BigInt,_>(now).execute(connection).await?;
+            )).bind::<BigInt,_>(now).bind::<IdentitySql,_>(grant.id).bind::<BigInt,_>(now).execute(connection).await?;
             if changed != 1 {
                 return Err(StoreError::InvalidProof);
             }
@@ -457,16 +450,17 @@ impl Store {
             let [user] = users.as_slice() else {
                 return Err(StoreError::NotFound);
             };
+            let grant_id = EntityId::generate(now)?;
             diesel::sql_query(dialect.query(
                 "INSERT INTO grants(id,kind,secret_hash,email_key,delivery_email,user_id,issued_by,issued_at,expires_at)
                  VALUES(?,'PASSWORD_RESET',?,?,?,?,?,?,?)",
             ))
-            .bind::<Text,_>(&draft.id).bind::<Binary,_>(draft.proof.as_bytes().as_slice())
+            .bind::<IdentitySql,_>(grant_id).bind::<Binary,_>(draft.proof.as_bytes().as_slice())
             .bind::<Text,_>(&user.email_key).bind::<Text,_>(&user.delivery_email)
-            .bind::<Text,_>(&user.id).bind::<Text,_>(&actor.id).bind::<BigInt,_>(now)
+            .bind::<IdentitySql,_>(user.id).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::User,&actor.id)?).bind::<BigInt,_>(now)
             .bind::<BigInt,_>(draft.expires_at).execute(connection).await?;
             Ok(GrantSummary {
-                id: draft.id.clone(),
+                id: grant_id.to_dto(EntityKind::Grant),
                 kind: GrantKind::PasswordReset,
                 email: user.summary()?.email,
                 issued_at: now,
@@ -492,7 +486,7 @@ impl Store {
             };
             let target = grant.user_id.as_ref().ok_or(StoreError::InvalidProof)?;
             let users = diesel::sql_query(dialect.query(dialect.user_lock()))
-                .bind::<Text, _>(target)
+                .bind::<IdentitySql, _>(*target)
                 .load::<UserRow>(connection)
                 .await?;
             if users.len() != 1 {
@@ -510,20 +504,20 @@ impl Store {
             }
             let count = diesel::sql_query(dialect.query(
                 "UPDATE grants SET consumed_at=? WHERE id=? AND consumed_at IS NULL AND revoked_at IS NULL AND expires_at>?",
-            )).bind::<BigInt,_>(now).bind::<Text,_>(&grant.id).bind::<BigInt,_>(now).execute(connection).await?;
+            )).bind::<BigInt,_>(now).bind::<IdentitySql,_>(grant.id).bind::<BigInt,_>(now).execute(connection).await?;
             if count != 1 {
                 return Err(StoreError::InvalidProof);
             }
             diesel::sql_query(dialect.query("UPDATE users SET password_hash=? WHERE id=?"))
                 .bind::<Text, _>(password.encoded())
-                .bind::<Text, _>(target)
+                .bind::<IdentitySql, _>(*target)
                 .execute(connection)
                 .await?;
             diesel::sql_query(dialect.query(
                 "UPDATE auth_sessions SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL",
             ))
             .bind::<BigInt, _>(now)
-            .bind::<Text, _>(target)
+            .bind::<IdentitySql, _>(*target)
             .execute(connection)
             .await?;
             Ok(())
@@ -588,7 +582,7 @@ impl Store {
                 kind.sql()
             )))
             .bind::<BigInt, _>(now)
-            .bind::<Text, _>(id)
+            .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::Grant, id)?)
             .execute(connection)
             .await?;
             if count == 0 {

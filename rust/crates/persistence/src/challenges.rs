@@ -5,6 +5,7 @@ use diesel_async::RunQueryDsl;
 
 use crate::{
     NewSession, SessionPolicy, SessionResult, Store, StoreError,
+    entity_id::{EntityId, IdentitySql},
     models::UserRow,
     sessions::insert_session,
     store::{Dialect, operation},
@@ -12,7 +13,6 @@ use crate::{
 
 #[derive(Debug)]
 pub struct NewChallenge {
-    pub id: String,
     pub email: EmailAddress,
     pub binding: BearerSecret,
     pub code: EmailCode,
@@ -27,8 +27,8 @@ pub enum EmailLoginOutcome {
 
 #[derive(diesel::QueryableByName)]
 struct ChallengeRow {
-    #[diesel(sql_type = Text)]
-    id: String,
+    #[diesel(sql_type = IdentitySql)]
+    id: EntityId,
     #[diesel(sql_type = Binary)]
     code_verifier: Vec<u8>,
     #[diesel(sql_type = BigInt)]
@@ -65,7 +65,7 @@ impl Store {
                 "INSERT INTO login_challenges(id,email_key,binding_hash,code_verifier,issued_at,expires_at)
                  VALUES(?,?,?,?,?,?)",
             ))
-            .bind::<Text,_>(&draft.id).bind::<Text,_>(draft.email.lookup_key())
+            .bind::<IdentitySql,_>(EntityId::generate(now)?).bind::<Text,_>(draft.email.lookup_key())
             .bind::<Binary,_>(draft.binding.digest().as_bytes().as_slice())
             .bind::<Binary,_>(verifier.as_bytes().as_slice())
             .bind::<BigInt,_>(now).bind::<BigInt,_>(draft.expires_at)
@@ -122,7 +122,7 @@ impl Store {
             }
             let changed = diesel::sql_query(dialect.query(
                 "UPDATE login_challenges SET consumed_at=? WHERE id=? AND consumed_at IS NULL AND expires_at>?",
-            )).bind::<BigInt,_>(now).bind::<Text,_>(&challenge.id).bind::<BigInt,_>(now)
+            )).bind::<BigInt,_>(now).bind::<IdentitySql,_>(challenge.id).bind::<BigInt,_>(now)
                 .execute(connection).await?;
             if changed != 1 {
                 return Err(StoreError::InvalidProof);

@@ -3,11 +3,11 @@ mod support;
 mod tasks;
 
 use base64::{Engine, engine::general_purpose::URL_SAFE};
-use chapchoo_crypto::{BearerSecret, CredentialCipher, RootKey};
-use chapchoo_domain::{EmailAddress, MembershipRole, TeamKind, TeamRole};
+use chapchoo_crypto::{BearerSecret, CredentialCipher, PasswordCost, PasswordHasher, RootKey};
+use chapchoo_domain::{EmailAddress, MembershipRole, Password, TeamKind, TeamRole};
 use chapchoo_persistence::{
-    CreateTeam, InvitationStatus, InviteMember, Store, StoreError, TeamPatch, TeamSignupGrant,
-    prepare_postgres, prepare_sqlite,
+    CreateTeam, GrantDraft, InvitationStatus, InviteMember, NewAccount, NewSession, SessionPolicy,
+    Store, StoreError, TeamPatch, TeamSignupGrant, prepare_postgres, prepare_sqlite,
 };
 use diesel::{Connection, RunQueryDsl, connection::SimpleConnection, sql_types::BigInt};
 use diesel_async::{AsyncPgConnection, async_connection_wrapper::AsyncConnectionWrapper};
@@ -26,48 +26,72 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|value| format!("{value:02x}")).collect()
 }
 
-fn seed_sql(
-    cipher: &CredentialCipher,
-    tokens: &[BearerSecret],
-    postgres: bool,
-) -> Result<String, TestError> {
-    let mut sql = String::from("BEGIN;");
-    for (index, token) in tokens.iter().enumerate() {
-        let user = format!("user-{index}");
-        let personal = format!("personal-{index}");
-        let session = format!("session-{index}");
-        let envelope = cipher.protect_latest(&session, token)?;
-        let binary = |bytes: &[u8]| {
-            if postgres {
-                format!("decode('{}','hex')", hex(bytes))
-            } else {
-                format!("X'{}'", hex(bytes))
-            }
+async fn seed(store: &Store, tokens: &[BearerSecret]) -> Result<(), TestError> {
+    let policy = SessionPolicy::default();
+    for index in [3, 0, 1, 2] {
+        let proof = BearerSecret::generate()?;
+        let email = EmailAddress::parse(&format!("User{index}@Example.Invalid"))?;
+        let draft = NewAccount {
+            email: email.clone(),
+            password: PasswordHasher::new(PasswordCost::new(10)?)
+                .hash(&Password::parse("Aa1!fixture".to_owned())?)?,
+            session: NewSession {
+                token: BearerSecret::parse(tokens[index].expose().to_owned())?,
+            },
+            display: None,
         };
-        sql.push_str(&format!(
-            "INSERT INTO users(id,email_key,delivery_email,password_hash,is_admin,created_at,language,time_zone,region) VALUES('{user}','user{index}@example.invalid','User{index}@Example.Invalid','synthetic',{},0,'en','UTC','en-US');
-             INSERT INTO teams(id,kind,name,handle,owner_user_id,created_at) VALUES('{personal}','PERSONAL','Personal','{personal}','{user}',0);
-             INSERT INTO memberships VALUES('{personal}','{user}','MEMBER');
-             INSERT INTO personal_contexts VALUES('{user}','{personal}');
-             INSERT INTO auth_sessions(id,user_id,current_hash,recovery_nonce,recovery_ciphertext,created_at,rotated_at,expires_at) VALUES('{session}','{user}',{},{},{},0,0,10000000);",
-            match (postgres, index == 3) { (true, true) => "TRUE", (true, false) => "FALSE", (false, true) => "1", (false, false) => "0" }, binary(token.digest().as_bytes()), binary(envelope.nonce()), binary(envelope.ciphertext()),
-        ));
+        if index == 3 {
+            store
+                .initialize_admin(&proof.digest(), &proof, &draft, NOW, policy)
+                .await?;
+        } else {
+            store
+                .issue_email_signup_grant(
+                    &email,
+                    &GrantDraft {
+                        proof: proof.digest(),
+                        expires_at: NOW + 10000,
+                    },
+                    NOW,
+                )
+                .await?;
+            store
+                .redeem_signup(&proof.digest(), &draft, NOW, policy)
+                .await?;
+        }
     }
-    sql.push_str("COMMIT;");
-    Ok(sql)
+    Ok(())
 }
 
-async fn exercise(store: Store, tokens: &[BearerSecret]) -> Result<(), TestError> {
+async fn exercise(
+    store: &Store,
+    tokens: &[BearerSecret],
+    connection: &mut impl SimpleConnection,
+    postgres: bool,
+) -> Result<(), TestError> {
     let owner = tokens[0].digest();
     let manager = tokens[1].digest();
     let member = tokens[2].digest();
     let stranger = tokens[3].digest();
+    let mut users = Vec::new();
+    let mut personals = Vec::new();
+    for token in tokens {
+        let actor = token.digest();
+        users.push(store.current_identity(&actor, NOW).await?.id);
+        let personal = store
+            .teams(&actor, NOW)
+            .await?
+            .into_iter()
+            .find(|team| team.kind == TeamKind::Personal)
+            .ok_or("Missing personal Team")?;
+        assert!(personal.handle.is_none());
+        personals.push(personal.id);
+    }
     assert!(matches!(
         store
             .create_team(
                 &owner,
                 &CreateTeam {
-                    id: "invalid".to_owned(),
                     name: String::new(),
                     handle: "invalid".to_owned()
                 },
@@ -76,29 +100,44 @@ async fn exercise(store: Store, tokens: &[BearerSecret]) -> Result<(), TestError
             .await,
         Err(StoreError::InvalidInput)
     ));
+    for handle in ["ab", "Upper", "a_b", "abc\n", "abcdefghijklmnopq"] {
+        assert!(matches!(
+            store
+                .create_team(
+                    &owner,
+                    &CreateTeam {
+                        name: "Invalid".to_owned(),
+                        handle: handle.to_owned()
+                    },
+                    NOW
+                )
+                .await,
+            Err(StoreError::InvalidInput)
+        ));
+    }
     let created = store
         .create_team(
             &owner,
             &CreateTeam {
-                id: "team-a".to_owned(),
                 name: "Original".to_owned(),
                 handle: "team-a".to_owned(),
             },
             NOW,
         )
         .await?;
+    let team = created.id;
     assert_eq!(created.caller_role, TeamRole::Owner);
     assert_eq!(created.kind, TeamKind::Collaborative);
+    assert_eq!(created.handle.as_deref(), Some("team-a"));
     assert!(!store.current_identity(&owner, NOW).await?.is_admin);
     assert!(store.current_identity(&stranger, NOW).await?.is_admin);
     assert_eq!(store.teams(&owner, NOW).await?.len(), 2);
     let admin_contexts = store.admin_workspaces(&stranger, NOW).await?;
     assert_eq!(admin_contexts.len(), 1);
-    assert_eq!(admin_contexts[0].id, "personal-3");
+    assert_eq!(admin_contexts[0].id, personals[3]);
     let admin_create = CreateTeam {
-        id: "admin-created".into(),
-        name: "Administrator's own Team".into(),
-        handle: "admin-created".into(),
+        name: "Administrator's own Team".to_owned(),
+        handle: "admin-created".to_owned(),
     };
     assert!(matches!(
         store.admin_workspaces(&owner, NOW).await,
@@ -113,42 +152,54 @@ async fn exercise(store: Store, tokens: &[BearerSecret]) -> Result<(), TestError
     let admin_team = store
         .create_admin_workspace(&stranger, &admin_create, NOW)
         .await?;
-    assert_eq!(admin_team.owner_user_id, "user-3");
+    assert_eq!(admin_team.owner_user_id, users[3]);
     assert_eq!(store.admin_workspaces(&stranger, NOW).await?.len(), 2);
     assert_eq!(store.teams(&owner, NOW).await?.len(), 2);
     assert!(matches!(
-        store.team(&stranger, "team-a", NOW).await,
+        store
+            .create_team(
+                &owner,
+                &CreateTeam {
+                    name: "Collision".to_owned(),
+                    handle: "team-a".to_owned()
+                },
+                NOW
+            )
+            .await,
+        Err(StoreError::HandleConflict)
+    ));
+    assert!(matches!(
+        store.team(&stranger, &team, NOW).await,
         Err(StoreError::NotFound)
     ));
     assert!(matches!(
-        store.leave_team(&owner, "team-a", NOW).await,
+        store.leave_team(&owner, &team, NOW).await,
         Err(StoreError::OwnerTransferRequired)
     ));
     assert!(matches!(
-        store.delete_team(&owner, "personal-0", NOW).await,
+        store.delete_team(&owner, &personals[0], NOW).await,
         Err(StoreError::InvalidTransition)
     ));
     assert!(matches!(
         store
             .update_team(
                 &owner,
-                "personal-0",
+                &personals[0],
                 &TeamPatch {
-                    name: Some("Changed".to_owned()),
-                    handle: None
+                    name: Some("Changed".to_owned())
                 },
                 NOW
             )
             .await,
         Err(StoreError::InvalidTransition)
     ));
-    for (id, index) in [("invite-manager", 1), ("invite-member", 2)] {
+
+    for index in [1, 2] {
         let issued = store
             .invite_member(
                 &owner,
                 &InviteMember {
-                    id: id.to_owned(),
-                    team_id: "team-a".to_owned(),
+                    team_id: team.clone(),
                     recipient: EmailAddress::parse(&format!("USER{index}@example.invalid"))?,
                     signup: None,
                 },
@@ -156,109 +207,89 @@ async fn exercise(store: Store, tokens: &[BearerSecret]) -> Result<(), TestError
             )
             .await?;
         assert!(issued.issued_signup_grant_id.is_none());
+        let id = issued.invitation.id;
         let digest = tokens[index].digest();
         assert_eq!(store.received_invitations(&digest, NOW).await?.len(), 1);
         assert!(matches!(
-            store.process_invitation(&stranger, id, true, NOW).await,
+            store.process_invitation(&stranger, &id, true, NOW).await,
             Err(StoreError::NotFound)
         ));
         assert_eq!(
             store
-                .process_invitation(&digest, id, true, NOW)
+                .process_invitation(&digest, &id, true, NOW)
                 .await?
                 .status,
             InvitationStatus::Accepted
         );
         assert!(matches!(
-            store.process_invitation(&digest, id, true, NOW).await,
+            store.process_invitation(&digest, &id, true, NOW).await,
             Err(StoreError::AlreadyProcessed)
         ));
     }
-    assert_eq!(store.team_members(&owner, "team-a", NOW).await?.len(), 3);
+    assert_eq!(store.team_members(&owner, &team, NOW).await?.len(), 3);
     assert!(matches!(
         store
             .update_team(
                 &member,
-                "team-a",
+                &team,
                 &TeamPatch {
-                    name: Some("Denied".to_owned()),
-                    handle: None
+                    name: Some("Denied".to_owned())
                 },
                 NOW
             )
             .await,
         Err(StoreError::Forbidden)
     ));
-    store
-        .set_member_role(&owner, "team-a", "user-1", MembershipRole::Manager, NOW)
-        .await?;
-    assert_eq!(
-        store.team(&manager, "team-a", NOW).await?.caller_role,
-        TeamRole::Manager
-    );
-    store
-        .set_member_role(&owner, "team-a", "user-1", MembershipRole::Member, NOW)
-        .await?;
-    assert_eq!(
-        store.team(&manager, "team-a", NOW).await?.caller_role,
-        TeamRole::Member
-    );
-    store
-        .set_member_role(&owner, "team-a", "user-1", MembershipRole::Manager, NOW)
-        .await?;
+    for (role, expected) in [
+        (MembershipRole::Manager, TeamRole::Manager),
+        (MembershipRole::Member, TeamRole::Member),
+        (MembershipRole::Manager, TeamRole::Manager),
+    ] {
+        store
+            .set_member_role(&owner, &team, &users[1], role, NOW)
+            .await?;
+        assert_eq!(
+            store.team(&manager, &team, NOW).await?.caller_role,
+            expected
+        );
+    }
     assert!(matches!(
         store
-            .set_member_role(&manager, "team-a", "user-2", MembershipRole::Manager, NOW)
+            .set_member_role(&manager, &team, &users[2], MembershipRole::Manager, NOW)
             .await,
         Err(StoreError::Forbidden)
     ));
     assert!(matches!(
         store
-            .remove_team_member(&manager, "team-a", "user-0", NOW)
+            .remove_team_member(&manager, &team, &users[0], NOW)
             .await,
         Err(StoreError::Forbidden)
     ));
     assert!(matches!(
         store
-            .remove_team_member(&owner, "team-a", "user-1", NOW)
+            .remove_team_member(&owner, &team, &users[1], NOW)
             .await,
         Err(StoreError::Forbidden)
     ));
     store
         .update_team(
             &manager,
-            "team-a",
+            &team,
             &TeamPatch {
                 name: Some("Updated".to_owned()),
-                handle: Some("updated-handle".to_owned()),
             },
             NOW,
         )
         .await?;
-    assert_eq!(store.team(&member, "team-a", NOW).await?.name, "Updated");
-    // A failed second patch field rolls back the first field too.
-    assert!(matches!(
-        store
-            .update_team(
-                &owner,
-                "team-a",
-                &TeamPatch {
-                    name: Some("Must rollback".to_owned()),
-                    handle: Some("personal-0".to_owned())
-                },
-                NOW
-            )
-            .await,
-        Err(StoreError::HandleConflict)
-    ));
-    assert_eq!(store.team(&owner, "team-a", NOW).await?.name, "Updated");
+    let updated = store.team(&member, &team, NOW).await?;
+    assert_eq!(updated.name, "Updated");
+    assert_eq!(updated.handle.as_deref(), Some("team-a"));
     assert!(matches!(
         store
             .invite_member(
                 &manager,
                 &InviteMember {
-                    id: "duplicate-member".to_owned(),
-                    team_id: "team-a".to_owned(),
+                    team_id: team.clone(),
                     recipient: EmailAddress::parse("user2@example.invalid")?,
                     signup: None
                 },
@@ -267,13 +298,12 @@ async fn exercise(store: Store, tokens: &[BearerSecret]) -> Result<(), TestError
             .await,
         Err(StoreError::AlreadyMember)
     ));
-    // Unknown no-mail recipient gets an invitation but no automatic signup grant.
+
     let unknown = store
         .invite_member(
             &manager,
             &InviteMember {
-                id: "unknown-no-mail".to_owned(),
-                team_id: "team-a".to_owned(),
+                team_id: team.clone(),
                 recipient: EmailAddress::parse("unknown@example.invalid")?,
                 signup: None,
             },
@@ -281,64 +311,64 @@ async fn exercise(store: Store, tokens: &[BearerSecret]) -> Result<(), TestError
         )
         .await?;
     assert!(unknown.issued_signup_grant_id.is_none());
-    let proof = BearerSecret::generate()?;
     let unknown_mail = store
         .invite_member(
             &manager,
             &InviteMember {
-                id: "unknown-mail".to_owned(),
-                team_id: "team-a".to_owned(),
+                team_id: team.clone(),
                 recipient: EmailAddress::parse("mail@example.invalid")?,
                 signup: Some(TeamSignupGrant {
-                    id: "issued-grant".to_owned(),
-                    proof: proof.digest(),
+                    proof: BearerSecret::generate()?.digest(),
                     expires_at: NOW + 1000,
                 }),
             },
             NOW,
         )
         .await?;
-    assert_eq!(
-        unknown_mail.issued_signup_grant_id.as_deref(),
-        Some("issued-grant")
-    );
-    // An invitation collision must roll back the newly prepared signup grant.
+    assert!(unknown_mail.issued_signup_grant_id.is_some());
+    // Fault after grant insertion proves the whole accepting transaction rolls
+    // back; callers no longer choose entity IDs to provoke a collision.
+    let install = if postgres {
+        "CREATE FUNCTION fail_invitation() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Synthetic invitation failure'; END $$; CREATE TRIGGER fail_invitation BEFORE INSERT ON invitations FOR EACH ROW WHEN (NEW.recipient_email_key='rollback@example.invalid') EXECUTE FUNCTION fail_invitation()"
+    } else {
+        "CREATE TRIGGER fail_invitation BEFORE INSERT ON invitations WHEN NEW.recipient_email_key='rollback@example.invalid' BEGIN SELECT RAISE(ABORT, 'Synthetic invitation failure'); END"
+    };
+    tokio::task::block_in_place(|| connection.batch_execute(install))?;
+    let failed = store
+        .invite_member(
+            &manager,
+            &InviteMember {
+                team_id: team.clone(),
+                recipient: EmailAddress::parse("rollback@example.invalid")?,
+                signup: Some(TeamSignupGrant {
+                    proof: BearerSecret::generate()?.digest(),
+                    expires_at: NOW + 1000,
+                }),
+            },
+            NOW,
+        )
+        .await;
+    let cleanup = tokio::task::block_in_place(|| {
+        connection.batch_execute(if postgres {
+            "DROP TRIGGER fail_invitation ON invitations; DROP FUNCTION fail_invitation()"
+        } else {
+            "DROP TRIGGER fail_invitation"
+        })
+    });
+    assert!(matches!(failed, Err(StoreError::Database(_))));
+    cleanup?;
+    assert_eq!(store.team_invitations(&manager, &team, NOW).await?.len(), 4);
     assert!(matches!(
-        store
-            .invite_member(
-                &manager,
-                &InviteMember {
-                    id: "unknown-mail".to_owned(),
-                    team_id: "team-a".to_owned(),
-                    recipient: EmailAddress::parse("rollback@example.invalid")?,
-                    signup: Some(TeamSignupGrant {
-                        id: "rolled-back-grant".to_owned(),
-                        proof: BearerSecret::generate()?.digest(),
-                        expires_at: NOW + 1000
-                    })
-                },
-                NOW
-            )
-            .await,
-        Err(StoreError::Conflict)
-    ));
-    assert_eq!(
-        store.team_invitations(&manager, "team-a", NOW).await?.len(),
-        4
-    );
-    assert!(matches!(
-        store.team_invitations(&member, "team-a", NOW).await,
+        store.team_invitations(&member, &team, NOW).await,
         Err(StoreError::Forbidden)
     ));
     let decline = store
         .invite_member(
             &owner,
             &InviteMember {
-                id: "decline".to_owned(),
-                team_id: "team-a".to_owned(),
+                team_id: team.clone(),
                 recipient: EmailAddress::parse("user3@example.invalid")?,
                 signup: Some(TeamSignupGrant {
-                    id: "unused-existing-user-grant".to_owned(),
                     proof: BearerSecret::generate()?.digest(),
                     expires_at: NOW + 1000,
                 }),
@@ -350,28 +380,29 @@ async fn exercise(store: Store, tokens: &[BearerSecret]) -> Result<(), TestError
     assert!(decline.issued_signup_grant_id.is_none());
     assert_eq!(
         store
-            .process_invitation(&stranger, "decline", false, NOW)
+            .process_invitation(&stranger, &decline.invitation.id, false, NOW)
             .await?
             .status,
         InvitationStatus::Declined
     );
     assert!(matches!(
-        store.team(&stranger, "team-a", NOW).await,
+        store.team(&stranger, &team, NOW).await,
         Err(StoreError::NotFound)
     ));
-    // Same authenticated recipient races on one proof: exactly one acceptance wins.
-    store
+
+    let race = store
         .invite_member(
             &owner,
             &InviteMember {
-                id: "race".to_owned(),
-                team_id: "team-a".to_owned(),
+                team_id: team.clone(),
                 recipient: EmailAddress::parse("user3@example.invalid")?,
                 signup: None,
             },
             NOW,
         )
-        .await?;
+        .await?
+        .invitation
+        .id;
     let barrier = Arc::new(tokio::sync::Barrier::new(2));
     let first_store = store.clone();
     let second_store = store.clone();
@@ -379,16 +410,18 @@ async fn exercise(store: Store, tokens: &[BearerSecret]) -> Result<(), TestError
     let second_barrier = barrier;
     let first_digest = tokens[3].digest();
     let second_digest = tokens[3].digest();
+    let first_id = race.clone();
+    let second_id = race;
     let first = tokio::spawn(async move {
         first_barrier.wait().await;
         first_store
-            .process_invitation(&first_digest, "race", true, NOW)
+            .process_invitation(&first_digest, &first_id, true, NOW)
             .await
     });
     let second = tokio::spawn(async move {
         second_barrier.wait().await;
         second_store
-            .process_invitation(&second_digest, "race", true, NOW)
+            .process_invitation(&second_digest, &second_id, true, NOW)
             .await
     });
     let (first, second) = tasks::join_pair(first, second, None).await?;
@@ -400,88 +433,91 @@ async fn exercise(store: Store, tokens: &[BearerSecret]) -> Result<(), TestError
             .filter_map(|result| result.as_ref().err())
             .all(|error| matches!(error, StoreError::AlreadyProcessed))
     );
-    assert_eq!(store.team_members(&owner, "team-a", NOW).await?.len(), 4);
+    assert_eq!(store.team_members(&owner, &team, NOW).await?.len(), 4);
     store
-        .remove_team_member(&manager, "team-a", "user-3", NOW)
+        .remove_team_member(&manager, &team, &users[3], NOW)
         .await?;
     assert!(matches!(
-        store.team(&stranger, "team-a", NOW).await,
+        store.team(&stranger, &team, NOW).await,
         Err(StoreError::NotFound)
     ));
-    store.leave_team(&member, "team-a", NOW).await?;
+    store.leave_team(&member, &team, NOW).await?;
     assert!(matches!(
-        store.team(&member, "team-a", NOW).await,
+        store.team(&member, &team, NOW).await,
         Err(StoreError::NotFound)
     ));
-    store
+    let rejoin = store
         .invite_member(
             &owner,
             &InviteMember {
-                id: "member-rejoin".to_owned(),
-                team_id: "team-a".to_owned(),
+                team_id: team.clone(),
                 recipient: EmailAddress::parse("user2@example.invalid")?,
                 signup: None,
             },
             NOW,
         )
-        .await?;
+        .await?
+        .invitation
+        .id;
     store
-        .process_invitation(&member, "member-rejoin", true, NOW)
+        .process_invitation(&member, &rejoin, true, NOW)
         .await?;
-    let transfer = store.transfer_team(&owner, "team-a", "user-2", NOW).await?;
+    let transfer = store.transfer_team(&owner, &team, &users[2], NOW).await?;
     assert!(!store.current_identity(&owner, NOW).await?.is_admin);
     assert!(!store.current_identity(&member, NOW).await?.is_admin);
     assert!(store.current_identity(&stranger, NOW).await?.is_admin);
-    assert_eq!(transfer.owner_user_id, "user-2");
+    assert_eq!(transfer.owner_user_id, users[2]);
     assert_eq!(transfer.caller_role, TeamRole::Manager);
     assert_eq!(
-        store.team(&member, "team-a", NOW).await?.caller_role,
+        store.team(&member, &team, NOW).await?.caller_role,
         TeamRole::Owner
     );
     assert!(matches!(
-        store.delete_team(&owner, "team-a", NOW).await,
+        store.delete_team(&owner, &team, NOW).await,
         Err(StoreError::Forbidden)
     ));
-    store.leave_team(&owner, "team-a", NOW).await?;
+    store.leave_team(&owner, &team, NOW).await?;
     assert_eq!(
-        store.team(&owner, "personal-0", NOW).await?.kind,
+        store.team(&owner, &personals[0], NOW).await?.kind,
         TeamKind::Personal
     );
-    store.leave_team(&manager, "team-a", NOW).await?;
-    store.delete_team(&member, "team-a", NOW).await?;
+    store.leave_team(&manager, &team, NOW).await?;
+    store.delete_team(&member, &team, NOW).await?;
     assert!(matches!(
-        store.team(&member, "team-a", NOW).await,
+        store.team(&member, &team, NOW).await,
         Err(StoreError::NotFound)
     ));
     assert_eq!(
-        store.team(&member, "personal-2", NOW).await?.kind,
+        store.team(&member, &personals[2], NOW).await?.kind,
         TeamKind::Personal
     );
-    store
+
+    let race_team = store
         .create_team(
             &owner,
             &CreateTeam {
-                id: "transfer-race".to_owned(),
                 name: "Race".to_owned(),
                 handle: "transfer-race".to_owned(),
             },
             NOW,
         )
-        .await?;
-    store
+        .await?
+        .id;
+    let invite = store
         .invite_member(
             &owner,
             &InviteMember {
-                id: "transfer-race-invite".to_owned(),
-                team_id: "transfer-race".to_owned(),
+                team_id: race_team.clone(),
                 recipient: EmailAddress::parse("user3@example.invalid")?,
                 signup: None,
             },
             NOW,
         )
-        .await?;
+        .await?
+        .invitation
+        .id;
     store
-        .process_invitation(&stranger, "transfer-race-invite", true, NOW)
+        .process_invitation(&stranger, &invite, true, NOW)
         .await?;
     let barrier = Arc::new(tokio::sync::Barrier::new(2));
     let transferring = store.clone();
@@ -490,39 +526,34 @@ async fn exercise(store: Store, tokens: &[BearerSecret]) -> Result<(), TestError
     let leave_barrier = barrier;
     let owner_digest = tokens[0].digest();
     let target_digest = tokens[3].digest();
+    let transfer_team = race_team.clone();
+    let leave_team = race_team.clone();
+    let target_user = users[3].clone();
     let transfer = tokio::spawn(async move {
         transfer_barrier.wait().await;
         transferring
-            .transfer_team(&owner_digest, "transfer-race", "user-3", NOW)
+            .transfer_team(&owner_digest, &transfer_team, &target_user, NOW)
             .await
     });
     let leave = tokio::spawn(async move {
         leave_barrier.wait().await;
-        leaving
-            .leave_team(&target_digest, "transfer-race", NOW)
-            .await
+        leaving.leave_team(&target_digest, &leave_team, NOW).await
     });
     match tasks::join_pair(transfer, leave, None).await? {
         (Ok(summary), Err(StoreError::OwnerTransferRequired)) => {
-            assert_eq!(summary.owner_user_id, "user-3");
+            assert_eq!(summary.owner_user_id, users[3]);
             assert_eq!(
-                store
-                    .team(&stranger, "transfer-race", NOW)
-                    .await?
-                    .caller_role,
+                store.team(&stranger, &race_team, NOW).await?.caller_role,
                 TeamRole::Owner
             );
-            store.delete_team(&stranger, "transfer-race", NOW).await?;
+            store.delete_team(&stranger, &race_team, NOW).await?;
         }
         (Err(StoreError::NotFound), Ok(())) => {
             assert_eq!(
-                store
-                    .team(&owner, "transfer-race", NOW)
-                    .await?
-                    .owner_user_id,
-                "user-0"
+                store.team(&owner, &race_team, NOW).await?.owner_user_id,
+                users[0]
             );
-            store.delete_team(&owner, "transfer-race", NOW).await?;
+            store.delete_team(&owner, &race_team, NOW).await?;
         }
         outcome => return Err(format!("Unexpected transfer/leave ordering: {outcome:?}").into()),
     }
@@ -538,23 +569,22 @@ async fn collection_retry(
     let owner = tokens[0].digest();
     let stranger = tokens[3].digest();
     let create = CreateTeam {
-        id: "collection-retry".into(),
-        name: "Collection retry".into(),
-        handle: "collection-retry".into(),
+        name: "Collection retry".to_owned(),
+        handle: "collection-retry".to_owned(),
     };
-    store.create_team(&owner, &create, NOW).await?;
+    let original = store.create_team(&owner, &create, NOW).await?.id;
     let install = if postgres {
-        "CREATE FUNCTION fail_collection() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Synthetic collection failure'; END $$; CREATE TRIGGER fail_collection BEFORE DELETE ON teams FOR EACH ROW WHEN (OLD.id='collection-retry') EXECUTE FUNCTION fail_collection()"
+        "CREATE FUNCTION fail_collection() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Synthetic collection failure'; END $$; CREATE TRIGGER fail_collection BEFORE DELETE ON teams FOR EACH ROW WHEN (OLD.handle='collection-retry') EXECUTE FUNCTION fail_collection()"
     } else {
-        "CREATE TRIGGER fail_collection BEFORE DELETE ON teams WHEN OLD.id='collection-retry' BEGIN SELECT RAISE(ABORT, 'Synthetic collection failure'); END"
+        "CREATE TRIGGER fail_collection BEFORE DELETE ON teams WHEN OLD.handle='collection-retry' BEGIN SELECT RAISE(ABORT, 'Synthetic collection failure'); END"
     };
     tokio::task::block_in_place(|| connection.batch_execute(install))?;
     assert!(matches!(
-        store.delete_team(&owner, &create.id, NOW).await,
+        store.delete_team(&owner, &original, NOW).await,
         Err(StoreError::Database(_))
     ));
     assert!(matches!(
-        store.team(&owner, &create.id, NOW).await,
+        store.team(&owner, &original, NOW).await,
         Err(StoreError::NotFound)
     ));
     assert!(
@@ -562,22 +592,12 @@ async fn collection_retry(
             .teams(&owner, NOW)
             .await?
             .iter()
-            .all(|team| team.id != create.id)
+            .all(|team| team.id != original)
     );
-    store
-        .create_team(
-            &owner,
-            &CreateTeam {
-                id: "reused-after-failure".into(),
-                ..create
-            },
-            NOW + 1,
-        )
-        .await?;
+    let reused = store.create_team(&owner, &create, NOW + 1).await?;
+    assert_ne!(original, reused.id);
     assert!(matches!(
-        store
-            .delete_team(&stranger, "collection-retry", NOW + 1)
-            .await,
+        store.delete_team(&stranger, &original, NOW + 1).await,
         Err(StoreError::NotFound)
     ));
     tokio::task::block_in_place(|| {
@@ -587,24 +607,64 @@ async fn collection_retry(
             "DROP TRIGGER fail_collection"
         })
     })?;
-    store
-        .delete_team(&owner, "collection-retry", NOW + 2)
-        .await?;
+    store.delete_team(&owner, &original, NOW + 2).await?;
     assert!(matches!(
-        store.delete_team(&owner, "collection-retry", NOW + 3).await,
+        store.delete_team(&owner, &original, NOW + 3).await,
         Err(StoreError::NotFound)
     ));
     assert_eq!(
         store
-            .team(&owner, "reused-after-failure", NOW + 3)
+            .team(&owner, &reused.id, NOW + 3)
             .await?
-            .handle,
-        "collection-retry"
+            .handle
+            .as_deref(),
+        Some("collection-retry")
     );
-    store
-        .delete_team(&owner, "reused-after-failure", NOW + 3)
-        .await?;
+    store.delete_team(&owner, &reused.id, NOW + 3).await?;
     Ok(())
+}
+
+macro_rules! verify_final {
+    ($connection:expr) => {{
+        assert_eq!(
+            diesel::sql_query(
+                "SELECT count(*) AS n FROM grants WHERE email_key='rollback@example.invalid'"
+            )
+            .get_result::<Count>($connection)?
+            .n,
+            0
+        );
+        assert_eq!(
+            diesel::sql_query("SELECT count(*) AS n FROM users")
+                .get_result::<Count>($connection)?
+                .n,
+            4
+        );
+        assert_eq!(
+            diesel::sql_query("SELECT count(*) AS n FROM personal_contexts")
+                .get_result::<Count>($connection)?
+                .n,
+            4
+        );
+        assert_eq!(
+            diesel::sql_query("SELECT count(*) AS n FROM memberships")
+                .get_result::<Count>($connection)?
+                .n,
+            5
+        );
+        assert_eq!(
+            diesel::sql_query("SELECT count(*) AS n FROM invitations")
+                .get_result::<Count>($connection)?
+                .n,
+            0
+        );
+        assert_eq!(
+            diesel::sql_query("SELECT count(*) AS n FROM teams")
+                .get_result::<Count>($connection)?
+                .n,
+            5
+        );
+    }};
 }
 
 #[test]
@@ -621,43 +681,13 @@ fn team_and_invitation_operations_on_sqlite() -> Result<(), TestError> {
     let mut connection =
         diesel::SqliteConnection::establish(path.to_str().ok_or("Invalid fixture path")?)?;
     connection.batch_execute("PRAGMA foreign_keys=ON")?;
-    connection.batch_execute(&seed_sql(&cipher, &tokens, false)?)?;
-    let runtime = tokio::runtime::Runtime::new()?;
-    runtime.block_on(async {
+    tokio::runtime::Runtime::new()?.block_on(async {
         let store = Store::connect_sqlite(path.clone(), cipher).await?;
+        seed(&store, &tokens).await?;
         collection_retry(&store, &tokens, &mut connection, false).await?;
-        exercise(store, &tokens).await
+        exercise(&store, &tokens, &mut connection, false).await
     })?;
-    assert_eq!(
-        diesel::sql_query("SELECT count(*) AS n FROM grants WHERE id='rolled-back-grant'")
-            .get_result::<Count>(&mut connection)?
-            .n,
-        0
-    );
-    assert_eq!(
-        diesel::sql_query("SELECT count(*) AS n FROM users")
-            .get_result::<Count>(&mut connection)?
-            .n,
-        4
-    );
-    assert_eq!(
-        diesel::sql_query("SELECT count(*) AS n FROM personal_contexts")
-            .get_result::<Count>(&mut connection)?
-            .n,
-        4
-    );
-    assert_eq!(
-        diesel::sql_query("SELECT count(*) AS n FROM memberships WHERE team_id='team-a'")
-            .get_result::<Count>(&mut connection)?
-            .n,
-        0
-    );
-    assert_eq!(
-        diesel::sql_query("SELECT count(*) AS n FROM invitations WHERE team_id='team-a'")
-            .get_result::<Count>(&mut connection)?
-            .n,
-        0
-    );
+    verify_final!(&mut connection);
     Ok(())
 }
 
@@ -666,8 +696,7 @@ fn team_and_invitation_operations_on_postgres() -> Result<(), TestError> {
     let base = std::env::var("CHAPCHOO_TEST_POSTGRES_URL")?;
     let mut admin = AsyncConnectionWrapper::<AsyncPgConnection>::establish(&base)?;
     let unique = BearerSecret::generate()?;
-    let suffix = hex(&unique.digest().as_bytes()[..8]);
-    let schema = format!("team_test_{suffix}");
+    let schema = format!("team_test_{}", hex(&unique.digest().as_bytes()[..8]));
     admin.batch_execute(&format!("CREATE SCHEMA {schema}"))?;
     let separator = if base.contains('?') { '&' } else { '?' };
     let url = format!("{base}{separator}options=-csearch_path%3D{schema}");
@@ -680,43 +709,13 @@ fn team_and_invitation_operations_on_postgres() -> Result<(), TestError> {
             .map(|_| BearerSecret::generate())
             .collect::<Result<Vec<_>, _>>()?;
         let mut connection = AsyncConnectionWrapper::<AsyncPgConnection>::establish(&url)?;
-        connection.batch_execute(&seed_sql(&cipher, &tokens, true)?)?;
-        let runtime = tokio::runtime::Runtime::new()?;
-        runtime.block_on(async {
+        tokio::runtime::Runtime::new()?.block_on(async {
             let store = Store::connect_postgres(url.clone(), cipher).await?;
+            seed(&store, &tokens).await?;
             collection_retry(&store, &tokens, &mut connection, true).await?;
-            exercise(store, &tokens).await
+            exercise(&store, &tokens, &mut connection, true).await
         })?;
-        assert_eq!(
-            diesel::sql_query("SELECT count(*) AS n FROM grants WHERE id='rolled-back-grant'")
-                .get_result::<Count>(&mut connection)?
-                .n,
-            0
-        );
-        assert_eq!(
-            diesel::sql_query("SELECT count(*) AS n FROM users")
-                .get_result::<Count>(&mut connection)?
-                .n,
-            4
-        );
-        assert_eq!(
-            diesel::sql_query("SELECT count(*) AS n FROM personal_contexts")
-                .get_result::<Count>(&mut connection)?
-                .n,
-            4
-        );
-        assert_eq!(
-            diesel::sql_query("SELECT count(*) AS n FROM memberships WHERE team_id='team-a'")
-                .get_result::<Count>(&mut connection)?
-                .n,
-            0
-        );
-        assert_eq!(
-            diesel::sql_query("SELECT count(*) AS n FROM invitations WHERE team_id='team-a'")
-                .get_result::<Count>(&mut connection)?
-                .n,
-            0
-        );
+        verify_final!(&mut connection);
         Ok(())
     })();
     let cleanup = admin.batch_execute(&format!("DROP SCHEMA {schema} CASCADE"));

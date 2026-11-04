@@ -12,15 +12,16 @@ pub use chapchoo_domain::{
     ProviderSubstrate, TeamKind, TeamRole,
 };
 pub use chapchoo_persistence::{
-    AgentRemoval, AgentSummary, ComponentKeyPolicy, ComponentKeyResult, ComponentRoute,
-    ComputerInventorySummary, ComputerRequest, ComputerSummary, ConnectionOwner, ConnectorIdentity,
-    ConnectorSessionResult, ConnectorSource, ControlRegistration, CreationOutcome,
-    DeliveryComputer, DeliveryExecution, DeliverySnapshot, DirectoryPolicy, ExecutionReservation,
-    GrantKind, GrantSummary, InvitationStatus, InvitationSummary, LifecycleRequest,
-    ManagedComputer, ManagedResource, ManagedResourceKind, MemberSummary,
-    NativeRetirementAdmission, ProofPreview, ProviderCapabilities, ProviderChoice,
-    ProviderIdentity, ProviderInventorySummary, ProviderSource, ResolvedRoute, ResourceCursor,
-    ResourceEvidence, ResourceReport, SessionPolicy, SessionResult, TeamPatch, TeamSummary,
+    AgentProfileImage, AgentRemoval, AgentSummary, ComponentKeyPolicy, ComponentKeyResult,
+    ComponentRoute, ComputerInventorySummary, ComputerRequest, ComputerSummary, ConnectionOwner,
+    ConnectorIdentity, ConnectorSessionResult, ConnectorSource, ControlRegistration,
+    CreateAgentProfile, CreateCloudAgent, CreationOutcome, DeliveryComputer, DeliveryExecution,
+    DeliverySnapshot, DirectoryPolicy, ExecutionReservation, GrantKind, GrantSummary,
+    InvitationStatus, InvitationSummary, LifecycleRequest, ManagedComputer, ManagedResource,
+    ManagedResourceKind, MemberSummary, NativeRetirementAdmission, ProofPreview,
+    ProviderCapabilities, ProviderChoice, ProviderCredentialResult, ProviderIdentity,
+    ProviderInventorySummary, ProviderSource, ResolvedRoute, ResourceCursor, ResourceEvidence,
+    ResourceReport, SessionPolicy, SessionResult, TeamPatch, TeamSummary, UpdateAgentProfile,
     UserSummary,
 };
 pub use computers::{ComputerPolicy, ComputersService, PreparedComponentConnection};

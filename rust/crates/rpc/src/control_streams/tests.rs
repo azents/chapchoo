@@ -69,6 +69,7 @@ async fn drain_waits_for_later_owned_work_after_an_earlier_worker_fails() -> Res
 
 pub(super) async fn entry(
     inner: &Inner,
+    provider: &str,
     credential: SecretDigest,
     connector: Option<(&str, &str, &str)>,
 ) -> Result<(Arc<Connection>, OutboundReceivers), TestError> {
@@ -87,9 +88,9 @@ pub(super) async fn entry(
         (
             inner
                 .service
-                .prepare_provider_connection("provider", &credential, &inner.instance_id)
+                .prepare_provider_connection(provider, &credential, &inner.instance_id)
                 .await?,
-            Target::Provider("provider".into()),
+            Target::Provider(provider.into()),
         )
     };
     let prepared = Arc::new(prepared);
@@ -158,8 +159,16 @@ fn delayed_admission_cannot_displace_a_new_provider_or_connector() -> Result<(),
         let inner = services.inner.clone();
         // First exercise the Provider path, then use its actual admitted source
         // to prepare a real execution-bound Connector for the same regression.
-        let (provider_a, _rx_a) = entry(&inner, key.token.digest(), None).await?;
-        exercise_activation(inner.clone(), provider_a, key.token.digest(), None).await?;
+        let (provider_a, _rx_a) =
+            entry(&inner, &key.provider_id, key.key.token.digest(), None).await?;
+        exercise_activation(
+            inner.clone(),
+            &key.provider_id,
+            provider_a,
+            key.key.token.digest(),
+            None,
+        )
+        .await?;
         let setup = BearerSecret::generate()?;
         let accounts = AccountsService::new(
             store,
@@ -184,14 +193,25 @@ fn delayed_admission_cannot_displace_a_new_provider_or_connector() -> Result<(),
         let created = service
             .create_cloud_agent(
                 &user.digest(),
-                &accounts
-                    .list_teams(&user.digest(), AcceptanceTime::System.now()?)
-                    .await?
-                    .remove(0)
-                    .id,
-                "create",
-                "provider",
-                "Private fixture",
+                &chapchoo_service::CreateCloudAgent {
+                    team_id: accounts
+                        .list_teams(&user.digest(), AcceptanceTime::System.now()?)
+                        .await?
+                        .remove(0)
+                        .id,
+                    request_id: "create".into(),
+                    provider_id: key.provider_id.clone(),
+                    name: "Private fixture".into(),
+                    profile: chapchoo_service::CreateAgentProfile {
+                        handle: "stream-agent".into(),
+                        image_id: service
+                            .agent_profile_images(&user.digest(), None, 1, AcceptanceTime::System)
+                            .await?[0]
+                            .id
+                            .clone(),
+                        palette_key: "sage".into(),
+                    },
+                },
                 AcceptanceTime::System,
             )
             .await?;
@@ -203,7 +223,7 @@ fn delayed_admission_cannot_displace_a_new_provider_or_connector() -> Result<(),
             .lock()
             .map_err(|_| "Registry unavailable")?
             .providers
-            .get("provider")
+            .get(&key.provider_id)
             .cloned()
             .ok_or("Provider missing")?;
         let source = inner.source(&current).ok_or("Provider source missing")?;
@@ -238,15 +258,28 @@ fn delayed_admission_cannot_displace_a_new_provider_or_connector() -> Result<(),
             agent.computer.id.as_str(),
             reservation.execution_id.as_str(),
         ));
-        let (connector_a, _connector_rx) =
-            entry(&inner, operational.token.digest(), connector).await?;
-        exercise_activation(inner, connector_a, operational.token.digest(), connector).await?;
+        let (connector_a, _connector_rx) = entry(
+            &inner,
+            &key.provider_id,
+            operational.token.digest(),
+            connector,
+        )
+        .await?;
+        exercise_activation(
+            inner,
+            &key.provider_id,
+            connector_a,
+            operational.token.digest(),
+            connector,
+        )
+        .await?;
         Ok(())
     })
 }
 
 async fn exercise_activation(
     inner: Arc<Inner>,
+    provider: &str,
     a: Arc<Connection>,
     credential: SecretDigest,
     connector: Option<(&str, &str, &str)>,
@@ -264,7 +297,7 @@ async fn exercise_activation(
     // At this exact post-commit/pre-install boundary the activation guard must
     // still be held. B captures the newly committed A, never the old predecessor.
     assert!(inner.activation.try_lock().is_err());
-    let (b, _rx_b) = entry(&inner, credential, connector).await?;
+    let (b, _rx_b) = entry(&inner, provider, credential, connector).await?;
     let worker = inner.clone();
     let successor = b.clone();
     let second = tokio::spawn(async move { worker.activate(successor).await });

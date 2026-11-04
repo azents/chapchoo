@@ -6,6 +6,11 @@ fn container() -> wire::ManagedResource {
         kind: wire::ResourceKind::DockerContainer as i32,
         name: "container-original".into(),
         execution_id: Some("execution".into()),
+        allocation: Some(wire::NativeAllocationWitness {
+            computer_id: "original-computer".into(),
+            provider_id: "original-provider".into(),
+            execution_id: Some("original-execution".into()),
+        }),
         native: Some(wire::managed_resource::Native::DockerContainer(
             wire::DockerContainerNative {
                 daemon_id: format!("daemon:{}", "a".repeat(100)),
@@ -67,9 +72,46 @@ fn decode_rejects_mixed_unknown_or_wrong_substrate_payloads() -> Result<(), Erro
         namespace: "fixture".into(),
         name: "original-pvc".into(),
         uid: Some("original-uid".into()),
+        allocation: Some(wire::NativeAllocationWitness {
+            computer_id: "original-computer".into(),
+            provider_id: "original-provider".into(),
+            execution_id: None,
+        }),
         ..Default::default()
     };
     assert_eq!(decode(&kubernetes)?.native.kind(), ManagedResourceKind::Pvc);
+    Ok(())
+}
+
+#[test]
+fn allocation_witness_is_required_validated_and_independent_of_correlation_identity()
+-> Result<(), Error> {
+    let value = container();
+    let decoded = decode(&value)?;
+    assert_eq!(decoded.allocation.execution(), Some("original-execution"));
+    assert_eq!(decoded.execution_id.as_deref(), Some("execution"));
+    for variant in 0..5 {
+        let mut invalid = value.clone();
+        match variant {
+            0 => invalid.allocation = None,
+            1 => invalid
+                .allocation
+                .as_mut()
+                .ok_or("Witness")?
+                .provider_id
+                .clear(),
+            2 => invalid.allocation.as_mut().ok_or("Witness")?.computer_id = "../invalid".into(),
+            3 => invalid.allocation.as_mut().ok_or("Witness")?.execution_id = None,
+            _ => invalid.execution_id = None,
+        }
+        assert_eq!(
+            decode(&invalid)
+                .err()
+                .ok_or("Accepted invalid witness")?
+                .code(),
+            tonic::Code::InvalidArgument
+        );
+    }
     Ok(())
 }
 

@@ -68,7 +68,6 @@ impl Config {
 pub struct Docker {
     pub(crate) sdk: Engine,
     pub(crate) transport: Transport,
-    pub(crate) provider: String,
     pub(crate) daemon: DockerDaemonId,
     pub(crate) architecture: String,
     pub(crate) config: Config,
@@ -111,20 +110,8 @@ fn workload_policy(info: &SystemInfo) -> Result<(), Error> {
     Ok(())
 }
 impl Docker {
-    pub async fn connect(
-        provider: String,
-        selected: Selection,
-        config: Config,
-    ) -> Result<Self, Error> {
+    pub async fn connect(selected: Selection, config: Config) -> Result<Self, Error> {
         config.validate()?;
-        if provider.is_empty()
-            || provider.len() > 128
-            || provider
-                .chars()
-                .any(|c| c.is_control() || c.is_whitespace())
-        {
-            return Err(Error::Configuration);
-        }
         let negotiate = selected.api_version.is_none();
         let transport = Transport::new(selected).await?;
         let initialized: Result<_, Error> = async {
@@ -154,7 +141,6 @@ impl Docker {
         Ok(Self {
             sdk,
             transport,
-            provider,
             daemon,
             architecture,
             config,
@@ -164,9 +150,6 @@ impl Docker {
 
     pub fn daemon_id(&self) -> &DockerDaemonId {
         &self.daemon
-    }
-    pub fn provider_id(&self) -> &str {
-        &self.provider
     }
     pub fn config(&self) -> &Config {
         &self.config

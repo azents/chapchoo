@@ -56,7 +56,6 @@ impl Engine {
     }
     async fn adapter(&self) -> Result<chapchoo_docker::Docker, AppError> {
         Ok(chapchoo_docker::Docker::connect(
-            "provider".into(),
             chapchoo_docker::connection::Selection {
                 endpoint: chapchoo_docker::connection::Endpoint::Tcp {
                     host: "127.0.0.1".into(),
@@ -472,6 +471,8 @@ async fn native_control_journey_acks_allocations_and_preserves_original_volume_w
                     AcceptanceTime::System,
                 )
                 .await?;
+            let assigned_provider = key.provider_id;
+            let key = key.key;
             let component_key = wire::ComponentKey {
                 token: key.token.expose().into(),
                 issued_at: None,
@@ -483,6 +484,10 @@ async fn native_control_journey_acks_allocations_and_preserves_original_volume_w
                     seconds: key.proactive_after / 1000,
                     nanos: 0,
                 }),
+            };
+            let component_key = wire::ProviderCredentials {
+                provider_id: assigned_provider.clone(),
+                key: Some(component_key),
             };
             let stop = CancellationToken::new();
             let stopping = stop.clone();
@@ -511,20 +516,34 @@ async fn native_control_journey_acks_allocations_and_preserves_original_volume_w
             });
             tokio::time::timeout(Duration::from_secs(10), async {
                 loop {
-                    if app.resolve_provider_route("provider").await?.is_some() {
+                    if app
+                        .resolve_provider_route(&assigned_provider)
+                        .await?
+                        .is_some()
+                    {
                         return Ok::<_, AppError>(());
                     }
                     tokio::time::sleep(Duration::from_millis(10)).await;
                 }
             })
             .await??;
+            let images = app
+                .agent_profile_images(&user.token.digest(), None, 1, AcceptanceTime::System)
+                .await?;
             let CreationOutcome::Present(agent) = app
                 .create_cloud_agent(
                     &user.token.digest(),
-                    &team.id,
-                    "create",
-                    "provider",
-                    "Native",
+                    &chapchoo_service::CreateCloudAgent {
+                        team_id: team.id.clone(),
+                        request_id: "create".into(),
+                        provider_id: assigned_provider.clone(),
+                        name: "Native".into(),
+                        profile: chapchoo_service::CreateAgentProfile {
+                            handle: "native-agent".into(),
+                            image_id: images[0].id.clone(),
+                            palette_key: "sage".into(),
+                        },
+                    },
                     AcceptanceTime::System,
                 )
                 .await?
@@ -565,7 +584,7 @@ async fn native_control_journey_acks_allocations_and_preserves_original_volume_w
                 // process cannot settle an unknown same-process Start submission.
                 stop.cancel();
                 tokio::time::timeout(Duration::from_secs(10), provider).await??;
-                let prior_route = app.resolve_provider_route("provider").await?;
+                let prior_route = app.resolve_provider_route(&assigned_provider).await?;
                 let reconnect_stop = CancellationToken::new();
                 let stopping = reconnect_stop.clone();
                 let channel = super::super::endpoint(&reconnect_endpoint)?.connect_lazy();
@@ -588,7 +607,7 @@ async fn native_control_journey_acks_allocations_and_preserves_original_volume_w
                 });
                 tokio::time::timeout(Duration::from_secs(10), async {
                     loop {
-                        if let Some(route) = app.resolve_provider_route("provider").await?
+                        if let Some(route) = app.resolve_provider_route(&assigned_provider).await?
                             && prior_route.as_ref().is_none_or(|prior| {
                                 prior.component.connection_id != route.component.connection_id
                             })

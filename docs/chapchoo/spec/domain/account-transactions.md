@@ -46,7 +46,9 @@ repository sends no email and stores no raw code.
 
 Collaborative Team creation atomically creates owner membership. Current
 membership and owner reference determine permissions, including after concurrent
-changes. Only the owner appoints/demotes managers, transfers ownership or deletes;
+changes. It accepts the exact final immutable handle; personal Team handles are
+null. Settings patch name only, without rewriting identity or public handle.
+Only the owner appoints/demotes managers, transfers ownership or deletes;
 the former owner is retained as Manager. Managers manage settings and ordinary
 members but cannot remove managers/owner. Personal Team management is rejected.
 Leaving or removing a member atomically accepts terminal deletion for that

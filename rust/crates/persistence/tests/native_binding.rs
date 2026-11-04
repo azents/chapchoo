@@ -1,4 +1,6 @@
 //! The server owns immutable native binding; external Providers use scoped RPC.
+#[path = "support/legacy.rs"]
+mod legacy;
 mod support;
 use base64::{Engine, engine::general_purpose::URL_SAFE};
 use chapchoo_crypto::{BearerSecret, BootstrapProviderPermit, CredentialCipher, RootKey};
@@ -105,9 +107,11 @@ fn sqlite_native_binding_is_scoped_immutable_and_race_safe() -> Result<(), Error
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("binding.sqlite");
     let cipher = cipher()?;
+    let mut connection =
+        diesel::SqliteConnection::establish(path.to_str().ok_or("Non-UTF8 fixture path")?)?;
+    legacy::sqlite(&mut connection, &cipher)?;
+    connection.batch_execute(FOREIGN_OWNER_FIXTURE)?;
     prepare_sqlite(&path, &cipher)?;
-    diesel::SqliteConnection::establish(path.to_str().ok_or("Non-UTF8 fixture path")?)?
-        .batch_execute(FOREIGN_OWNER_FIXTURE)?;
     tokio::runtime::Runtime::new()?.block_on(async {
         let store = Store::connect_sqlite(path, cipher).await?;
         exercise(store).await
@@ -128,9 +132,10 @@ fn postgres_native_binding_is_scoped_immutable_and_race_safe() -> Result<(), Err
     let url = format!("{base}{separator}options=-csearch_path%3D{schema}");
     let result = (|| {
         let cipher = cipher()?;
+        let mut connection = AsyncConnectionWrapper::<AsyncPgConnection>::establish(&url)?;
+        legacy::postgres(&mut connection, &cipher)?;
+        connection.batch_execute(FOREIGN_OWNER_FIXTURE)?;
         prepare_postgres(&url, &cipher)?;
-        AsyncConnectionWrapper::<AsyncPgConnection>::establish(&url)?
-            .batch_execute(FOREIGN_OWNER_FIXTURE)?;
         tokio::runtime::Runtime::new()?.block_on(async {
             let store = Store::connect_postgres(url, cipher).await?;
             exercise(store).await

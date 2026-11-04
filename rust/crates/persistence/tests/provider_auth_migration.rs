@@ -93,7 +93,7 @@ macro_rules! exercise { ($connection:expr,$source:expr,$postgres:expr) => {{
     let connection = $connection;
     let postgres = $postgres;
     let pending = connection.pending_migrations($source)?;
-    assert_eq!(pending.len(),8);
+    assert!(pending.len() >= 8);
     connection.run_migrations(&pending[..5])?;
     connection.batch_execute(&fixture(postgres))?;
     connection.run_migration(&*pending[5])?;
@@ -207,56 +207,78 @@ fn team_fixture(
     token: &BearerSecret,
     postgres: bool,
 ) -> Result<String, Error> {
-    let hex = |bytes: &[u8]| bytes.iter().map(|b| format!("{b:02x}")).collect::<String>();
-    let binary = |bytes: &[u8]| {
-        let hex = hex(bytes);
+    // Native storage fixtures deliberately retain unusable Provider envelopes:
+    // Team revocation must not depend on recovering those private credentials.
+    let native = |number: u8| {
+        let value = format!("019000000000700080000000000000{number:02x}");
         if postgres {
-            format!("decode('{hex}','hex')")
+            format!("'{value}'::uuid")
         } else {
-            format!("X'{hex}'")
+            format!("X'{value}'")
         }
     };
-    let recovery = cipher.protect_latest("owner-session", token)?;
+    let binary = |bytes: &[u8]| {
+        let value = bytes
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        if postgres {
+            format!("decode('{value}','hex')")
+        } else {
+            format!("X'{value}'")
+        }
+    };
+    let user = native(16);
+    let session = native(17);
+    let recovery = cipher.protect_latest("schema-owner-session", token)?;
     let mut sql = format!(
-        "BEGIN; INSERT INTO users(id,email_key,delivery_email,password_hash,created_at,language,time_zone,region) VALUES('team-owner','team@example.invalid','team@example.invalid','synthetic',0,'en','UTC','en-US'); INSERT INTO auth_sessions(id,user_id,current_hash,recovery_nonce,recovery_ciphertext,created_at,rotated_at,expires_at) VALUES('owner-session','team-owner',{},{},{},0,0,1000000);",
+        "BEGIN; INSERT INTO users(id,email_key,delivery_email,password_hash,created_at,language,time_zone,region) VALUES({user},'team@example.invalid','team@example.invalid','synthetic',0,'en','UTC','en-US'); INSERT INTO auth_sessions(id,user_id,current_hash,recovery_nonce,recovery_ciphertext,created_at,rotated_at,expires_at) VALUES({session},{user},{},{},{},0,0,1000000);",
         binary(token.digest().as_bytes()),
         binary(recovery.nonce()),
         binary(recovery.ciphertext())
     );
-    for (index, team) in ["empty-team", "retained-team"].iter().enumerate() {
+    for (index, handle) in ["empty-team", "retained-team"].iter().enumerate() {
         let index = u8::try_from(index)?;
-        sql.push_str(&format!("INSERT INTO teams(id,kind,name,handle,owner_user_id,created_at) VALUES('{team}','COLLABORATIVE','Team','{team}','team-owner',0); INSERT INTO memberships VALUES('{team}','team-owner','MANAGER'); INSERT INTO computer_providers(id,owner_kind,owner_team_id,name,provider_kind,created_at) VALUES('{team}-provider','TEAM','{team}','Provider','KUBERNETES',0); INSERT INTO provider_registration_credentials(provider_id,credential_hash,recovery_nonce,recovery_ciphertext) VALUES('{team}-provider',{},{},{}); INSERT INTO provider_keys(provider_id,current_hash,issued_at,expires_at,current_request_id,recovery_nonce,recovery_ciphertext) VALUES('{team}-provider',{},1,1000000,'key',{},{});",blob(postgres,40+index,32),blob(postgres,42,24),blob(postgres,43,59),blob(postgres,50+index,32),blob(postgres,52,24),blob(postgres,53,59)));
+        let team = native(32 + index);
+        let provider = native(48 + index);
+        sql.push_str(&format!("INSERT INTO teams(id,kind,name,handle,owner_user_id,created_at) VALUES({team},'COLLABORATIVE','Team','{handle}',{user},0); INSERT INTO memberships VALUES({team},{user},'MANAGER'); INSERT INTO computer_providers(id,registration_key,owner_kind,owner_team_id,name,provider_kind,created_at) VALUES({provider},'{handle}-provider','TEAM',{team},'Provider','KUBERNETES',0); INSERT INTO provider_registration_credentials(provider_id,credential_hash,recovery_nonce,recovery_ciphertext) VALUES({provider},{},{},{}); INSERT INTO provider_keys(provider_id,current_hash,issued_at,expires_at,current_request_id,recovery_nonce,recovery_ciphertext) VALUES({provider},{},1,1000000,'key',{},{});",blob(postgres,40+index,32),blob(postgres,42,24),blob(postgres,43,59),blob(postgres,50+index,32),blob(postgres,52,24),blob(postgres,53,59)));
     }
-    sql.push_str(&format!("INSERT INTO computers(id,owner_user_id,kind,provider_id,desired_state,current_request_id,current_payload_hash,current_action,current_phase,created_at) VALUES('retained-computer','team-owner','CLOUD','retained-team-provider','DELETING','delete',{},'DELETE','DELETING',0); INSERT INTO control_instances(id,endpoint,renewed_at,expires_at) VALUES('control','http://localhost:1',1,1000000); INSERT INTO provider_connections(provider_id,control_id,connection_id,credential_hash,expires_at) VALUES('retained-team-provider','control','connection',{},1000000);COMMIT;",blob(postgres,60,32),blob(postgres,51,32)));
+    let computer = native(64);
+    let control = native(65);
+    let connection = native(66);
+    let provider = native(49);
+    sql.push_str(&format!("INSERT INTO computers(id,owner_user_id,kind,provider_id,desired_state,current_request_id,current_payload_hash,current_action,current_phase,created_at) VALUES({computer},{user},'CLOUD',{provider},'DELETING','delete',{},'DELETE','DELETING',0); INSERT INTO control_instances(id,endpoint,renewed_at,expires_at) VALUES({control},'http://localhost:1',1,1000000); INSERT INTO provider_connections(provider_id,control_id,connection_id,credential_hash,expires_at) VALUES({provider},{control},{connection},{},1000000);COMMIT;",blob(postgres,60,32),blob(postgres,51,32)));
     Ok(sql)
 }
 macro_rules! team_deletion { ($connection:expr,$store:expr,$token:expr) => {{
     let connection=$connection;
     let store=$store;
-    store.delete_team(&$token.digest(),"empty-team",100).await?;
+    let empty=store.team_by_handle(&$token.digest(),"empty-team",100).await?.id;
+    let retained=store.team_by_handle(&$token.digest(),"retained-team",100).await?.id;
+    store.delete_team(&$token.digest(),&empty,100).await?;
     tokio::task::block_in_place(|| -> Result<(),Error> {
-        assert_eq!(count!(connection,"SELECT count(*) AS n FROM teams WHERE id='empty-team'"),0);
-        assert_eq!(count!(connection,"SELECT count(*) AS n FROM computer_providers WHERE id='empty-team-provider'"),0);
-        assert_eq!(count!(connection,"SELECT count(*) AS n FROM provider_registration_credentials WHERE provider_id='empty-team-provider'"),0);
+        assert_eq!(count!(connection,"SELECT count(*) AS n FROM teams WHERE handle='empty-team'"),0);
+        assert_eq!(count!(connection,"SELECT count(*) AS n FROM computer_providers WHERE registration_key='empty-team-provider'"),0);
+        assert_eq!(count!(connection,"SELECT count(*) AS n FROM provider_registration_credentials WHERE provider_id=(SELECT id FROM computer_providers WHERE registration_key='empty-team-provider')"),0);
         Ok(())
     })?;
-    store.delete_team(&$token.digest(),"retained-team",100).await?;
-    assert!(matches!(store.team(&$token.digest(),"retained-team",100).await,Err(chapchoo_persistence::StoreError::NotFound)));
+    store.delete_team(&$token.digest(),&retained,100).await?;
+    assert!(matches!(store.team(&$token.digest(),&retained,100).await,Err(chapchoo_persistence::StoreError::NotFound)));
     tokio::task::block_in_place(|| -> Result<(),Error> {
-        assert_eq!(count!(connection,"SELECT count(*) AS n FROM teams WHERE id='retained-team' AND deletion_requested_at=100"),1);
-        assert_eq!(count!(connection,"SELECT count(*) AS n FROM computer_providers WHERE id='retained-team-provider' AND owner_team_id='retained-team'"),1);
-        assert_eq!(count!(connection,"SELECT count(*) AS n FROM provider_registration_credentials WHERE provider_id='retained-team-provider' AND revoked_at=100"),1);
-        assert_eq!(count!(connection,"SELECT count(*) AS n FROM provider_keys WHERE provider_id='retained-team-provider' AND revoked_at=100 AND recovery_nonce IS NULL"),1);
-        assert_eq!(count!(connection,"SELECT count(*) AS n FROM provider_connections WHERE provider_id='retained-team-provider'"),0);
+        assert_eq!(count!(connection,"SELECT count(*) AS n FROM teams WHERE handle='retained-team' AND deletion_requested_at=100"),1);
+        assert_eq!(count!(connection,"SELECT count(*) AS n FROM computer_providers WHERE registration_key='retained-team-provider' AND owner_team_id=(SELECT id FROM teams WHERE handle='retained-team')"),1);
+        assert_eq!(count!(connection,"SELECT count(*) AS n FROM provider_registration_credentials WHERE provider_id=(SELECT id FROM computer_providers WHERE registration_key='retained-team-provider') AND revoked_at=100"),1);
+        assert_eq!(count!(connection,"SELECT count(*) AS n FROM provider_keys WHERE provider_id=(SELECT id FROM computer_providers WHERE registration_key='retained-team-provider') AND revoked_at=100 AND recovery_nonce IS NULL"),1);
+        assert_eq!(count!(connection,"SELECT count(*) AS n FROM provider_connections WHERE provider_id=(SELECT id FROM computer_providers WHERE registration_key='retained-team-provider')"),0);
         // This synthetic Computer has no native resources. Real cleanup remains
         // independently owned; collection never deletes a referenced Computer.
-        connection.batch_execute("DELETE FROM computers WHERE id='retained-computer'")?;
+        connection.batch_execute("DELETE FROM computers WHERE current_request_id='delete'")?;
         Ok(())
     })?;
-    store.delete_team(&$token.digest(),"retained-team",101).await?;
+    store.delete_team(&$token.digest(),&retained,101).await?;
     tokio::task::block_in_place(|| -> Result<(),Error> {
-        assert_eq!(count!(connection,"SELECT count(*) AS n FROM teams WHERE id='retained-team'"),0);
-        assert_eq!(count!(connection,"SELECT count(*) AS n FROM computer_providers WHERE id='retained-team-provider'"),0);
+        assert_eq!(count!(connection,"SELECT count(*) AS n FROM teams WHERE handle='retained-team'"),0);
+        assert_eq!(count!(connection,"SELECT count(*) AS n FROM computer_providers WHERE registration_key='retained-team-provider'"),0);
         Ok(())
     })?;
 }}; }

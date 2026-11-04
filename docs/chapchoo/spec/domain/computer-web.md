@@ -77,7 +77,13 @@ query failure. Connector connectivity is not harness readiness. Display formatti
 uses the user's region/timezone; English, Korean, Japanese and French copy share
 the same typed key set.
 
-Creation retains Team/name/Provider selection on rejection or unavailability and
+Creation presents final handle, catalogue image and six-key palette selection
+alongside Team/name/Provider. Its authenticated SSR snapshot independently draws
+the initial image and palette once and hydrates those exact values. Bounded
+automatic handle candidates preserve manual edits and cancel stale resolutions;
+the backend still owns final uniqueness. See [profile contracts](agent-profile.md).
+
+Creation retains its complete draft on rejection or unavailability and
 navigates to the accepted Agent's detail. A pending/lost creation response retains
 its exact Request ID and payload for explicit recovery; unresolved payload edits
 are locked. An existing removed receipt is distinct from a newly created Agent.
@@ -168,6 +174,7 @@ remains owner-layer coverage.
 
 ## Connections
 
+- [Agent handles and saved profiles](agent-profile.md) — final creation values, catalogue paging and frozen uncertain-result recovery.
 - [Computer owner and installation inventory RPC](computer-client-rpc.md) — Owner operations and redacted installation inventory are separate capabilities over current account authority.
 - [Computer lifecycle admission and Provider keys](computer-lifecycle.md) — Owner requests commit durable intent under current authority. Component evidence and external completion determine what may happen next.
 - [Primary rendering and URL-owned state](web-rendering.md) — Server admission supplies primary content and stable selections; client queries own subsequent interactions rather than a second initial truth.

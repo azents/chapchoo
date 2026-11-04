@@ -82,6 +82,12 @@ are not adoption authority. A bound missing/changed original is never recreated,
 including during its initial execution. An already-confirmed absence cannot
 adopt a surprisingly present object.
 
+Provider/Computer/applicable execution labels use the required persisted
+[allocation witness](computer-storage.md), not the current canonical correlation
+IDs or configured registration key. The adapter validates witness shape before
+native reads/effects. An old volume keeps its exact original labels and
+DockerVolumeIdentity across Repository ID conversion and later execution creation.
+
 A fresh admitted initial preparation may submit one volume-create operation.
 Present exact results can be observed and reported without repeating create.
 Only explicit rejection at the create API boundary qualifies as definite native

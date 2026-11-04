@@ -69,6 +69,13 @@ protection, Team tombstone collection and the breaking configuration boundary.
 
 ## Identities and Relationships
 
+The [Repository identity contract](repository-identity.md) owns UUIDv7 issuance,
+compact database values and complete opaque DTOs. Migration 9 preserves the
+whole product graph, original authenticated credentials, exact accepted hashes,
+removed receipts and native ownership witnesses in one explicit preparation.
+Its closed SQLite rebuild spans account and Computer references, independently
+of the earlier native-only migrations described above.
+
 Opaque IDs and exact request/connection identities are used; no increasing
 application generation is stored. The common schema supports future same-owner
 local sharing without implementing local Mac enrollment or execution.
@@ -91,7 +98,7 @@ erDiagram
 ```
 
 - `computer_providers`: stable ID, SYSTEM/USER/TEAM owner discriminant and exactly one
-  corresponding owner reference, name, immutable Kubernetes/Docker kind, optional
+  corresponding owner reference, configured registration key, name, immutable Kubernetes/Docker kind, optional
   bound Docker daemon and capabilities. The USER
   relation references the existing account; TEAM references `owner_team_id`.
   Reconnection/key change does not
@@ -111,7 +118,8 @@ erDiagram
   associations do not acquire that uniqueness restriction. Every Agent also has
   one non-null `team_id` FK with `NO ACTION` deletion. The `(team_id,owner_user_id,id)`
   index supports private per-team pagination. Team membership does not grant
-  another member access to this owner's Agent. Names are not identity.
+  another member access to this owner's Agent. Its immutable global handle and
+  saved image/palette follow [profile contracts](agent-profile.md). Names are not identity.
 - `agent_creation_receipts`: `(owner, Request ID)` PK, payload fingerprint and
   a unique assigned Agent ID. Assigned Agent ID deliberately has no live-Agent FK, so
   removal cannot erase deduplication. Owner account deletion cascades the receipt
@@ -134,6 +142,10 @@ erDiagram
   resources require their matching execution FK and one identity per execution/kind. Resource evidence retains observation time,
   exact source connection and sticky confirmed-absence time. Resources/executions
   cascade only with actual Computer removal, not with Agent removal.
+  Required allocation-witness columns retain the exact original Computer,
+  Provider and optional execution label values, independently of compact product
+  IDs. Wire/adapters validate role shape and compare that committed witness;
+  current DTO IDs must not replace labels on an existing native allocation.
 - `provider_keys`: one current key record per Provider, current/previous digest,
   fixed overlap/expiry, revocation and protected current recovery material.
 - `provider_registration_credentials`: independent later-registration random
@@ -209,6 +221,8 @@ or UI/E2E.
 
 ## Connections
 
+- [Repository identity](repository-identity.md) — compact storage, Repository issuance and preserving original-root conversion.
+- [Agent handles and saved profiles](agent-profile.md) — immutable public names and saved presentation remain independent of native state.
 - [Private Agent ownership and Team deletion](agent-ownership.md) — Team membership selects context while individual ownership remains the private Agent boundary. Context deletion accepts cleanup intent, not completed native deletion.
 - [Computer lifecycle admission and Provider keys](computer-lifecycle.md) — Owner requests commit durable intent under current authority. Component evidence and external completion determine what may happen next.
 - [Execution reservation, evidence and cleanup](execution-evidence.md) — Reservations precede effects; current-source observations qualify power, retirement and resource absence without granting ambiguous replay.

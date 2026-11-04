@@ -309,7 +309,6 @@ async fn exercise(
             wire::UpdateTeamRequest {
                 team_id: team.id.clone(),
                 name: None,
-                handle: None,
             },
             &owner.token,
         )?)
@@ -322,7 +321,6 @@ async fn exercise(
                 wire::UpdateTeamRequest {
                     team_id: team.id.clone(),
                     name: Some(String::new()),
-                    handle: None,
                 },
                 &owner.token,
             )?)

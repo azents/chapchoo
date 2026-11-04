@@ -47,7 +47,9 @@ grpc-js, ESM imports, `bigint` int64 values and Timestamp seconds/nanos. Generat
 Rust message Debug emits no fields. Regeneration checks compare complete output.
 
 Ingress rejects missing/invalid email, password, proof, ID, pagination and enum
-values. Optional Team name/handle preserve omission; present empty values fail.
+values. Team snapshots have nullable personal handles; collaborative handles are
+required and immutable. Team update accepts optional name only: omission preserves
+the name and a present empty value fails.
 RPC message decoding is bounded to 64 KiB. Instants are Protobuf Timestamp and
 map to signed epoch milliseconds at the storage boundary. Unexpected enum values
 remain wire values until validated; they never become success/default roles.

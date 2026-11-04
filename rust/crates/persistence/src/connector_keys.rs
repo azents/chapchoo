@@ -7,9 +7,11 @@ use crate::{
     computer_executions::current_source,
     computers::valid_id,
     directory::{
-        ComponentRoute, ConnectionOwner, ControlRegistration, DirectoryPolicy, ResolvedRoute,
-        control_query, database_now, live_control, matches_owner, validate_owner,
+        ComponentRoute, ConnectionOwner, ConnectionPreparation, ControlRegistration,
+        DirectoryPolicy, ResolvedRoute, control_query, database_now, live_control, matches_owner,
+        validate_owner,
     },
+    entity_id::{EntityId, EntityKind, IdentitySql},
     store::{Dialect, operation},
 };
 use chapchoo_crypto::{BearerSecret, SecretDigest, payload_fingerprint};
@@ -44,7 +46,6 @@ impl<'a> SessionAuthority<'a> {
 }
 
 pub struct ConnectorSessionDraft {
-    pub id: String,
     pub request_id: String,
     pub initial_key: BearerSecret,
 }
@@ -89,22 +90,22 @@ impl fmt::Debug for ConnectorIdentity {
 
 #[derive(diesel::QueryableByName)]
 struct Locator {
-    #[diesel(sql_type=Text)]
-    computer_id: String,
-    #[diesel(sql_type=Nullable<Text>)]
-    provider_id: Option<String>,
+    #[diesel(sql_type=IdentitySql)]
+    computer_id: EntityId,
+    #[diesel(sql_type=Nullable<IdentitySql>)]
+    provider_id: Option<EntityId>,
 }
 #[derive(diesel::QueryableByName)]
 struct IdRow {
-    #[diesel(sql_type=Text)]
-    id: String,
+    #[diesel(sql_type=IdentitySql)]
+    id: EntityId,
 }
 #[derive(diesel::QueryableByName)]
 struct ExecutionBinding {
-    #[diesel(sql_type=Text)]
-    computer_id: String,
-    #[diesel(sql_type=Nullable<Text>)]
-    current_execution_id: Option<String>,
+    #[diesel(sql_type=IdentitySql)]
+    computer_id: EntityId,
+    #[diesel(sql_type=Nullable<IdentitySql>)]
+    current_execution_id: Option<EntityId>,
     #[diesel(sql_type=Text)]
     desired_state: String,
     #[diesel(sql_type=Nullable<BigInt>)]
@@ -112,10 +113,10 @@ struct ExecutionBinding {
 }
 #[derive(diesel::QueryableByName)]
 struct SessionRow {
-    #[diesel(sql_type=Text)]
-    id: String,
-    #[diesel(sql_type=Text)]
-    execution_id: String,
+    #[diesel(sql_type=IdentitySql)]
+    id: EntityId,
+    #[diesel(sql_type=IdentitySql)]
+    execution_id: EntityId,
     #[diesel(sql_type=Text)]
     initial_request_id: String,
     #[diesel(sql_type=Binary)]
@@ -144,12 +145,12 @@ struct SessionRow {
     recovery_ciphertext: Option<Vec<u8>>,
     #[diesel(sql_type=Nullable<BigInt>)]
     revoked_at: Option<i64>,
-    #[diesel(sql_type=Text)]
-    computer_id: String,
-    #[diesel(sql_type=Nullable<Text>)]
-    provider_id: Option<String>,
-    #[diesel(sql_type=Nullable<Text>)]
-    current_execution_id: Option<String>,
+    #[diesel(sql_type=IdentitySql)]
+    computer_id: EntityId,
+    #[diesel(sql_type=Nullable<IdentitySql>)]
+    provider_id: Option<EntityId>,
+    #[diesel(sql_type=Nullable<IdentitySql>)]
+    current_execution_id: Option<EntityId>,
     #[diesel(sql_type=Text)]
     desired_state: String,
     #[diesel(sql_type=Nullable<BigInt>)]
@@ -162,7 +163,7 @@ impl SessionRow {
         self.revoked_at.is_none()
             && self.retired_at.is_none()
             && self.desired_state != "DELETING"
-            && self.current_execution_id.as_deref() == Some(self.execution_id.as_str())
+            && self.current_execution_id == Some(self.execution_id)
     }
     fn operational(&self, digest: &SecretDigest, now: i64) -> Result<bool, StoreError> {
         if !self.active()
@@ -185,15 +186,19 @@ impl SessionRow {
 
 macro_rules! lock_session {
     ($connection:expr,$dialect:expr,$session_id:expr,$expected_provider:expr)=>{{
+        let session_id = EntityId::from_dto(EntityKind::ConnectorSession, $session_id)?;
         let locator=diesel::sql_query($dialect.query("SELECT c.id AS computer_id,c.provider_id FROM connector_sessions s JOIN computer_executions e ON e.id=s.execution_id JOIN computers c ON c.id=e.computer_id WHERE s.id=?"))
-            .bind::<Text,_>($session_id).get_result::<Locator>($connection).await.optional()?.ok_or(StoreError::Unauthenticated)?;
+            .bind::<IdentitySql,_>(session_id).get_result::<Locator>($connection).await.optional()?.ok_or(StoreError::Unauthenticated)?;
         let expected:Option<&str>=$expected_provider;
-        if expected.is_some_and(|id|locator.provider_id.as_deref()!=Some(id)) { return Err(StoreError::NotFound); }
+        if let Some(expected) = expected
+            && locator.provider_id != Some(EntityId::from_dto(EntityKind::Provider, expected)?) {
+            return Err(StoreError::NotFound);
+        }
         let q=match $dialect { Dialect::Postgres=>"SELECT id FROM computers WHERE id=? FOR NO KEY UPDATE",Dialect::Sqlite=>"SELECT id FROM computers WHERE id=?" };
-        let current=diesel::sql_query($dialect.query(q)).bind::<Text,_>(&locator.computer_id).get_result::<IdRow>($connection).await.optional()?.ok_or(StoreError::Unauthenticated)?;
+        let current=diesel::sql_query($dialect.query(q)).bind::<IdentitySql,_>(locator.computer_id).get_result::<IdRow>($connection).await.optional()?.ok_or(StoreError::Unauthenticated)?;
         if current.id!=locator.computer_id { return Err(StoreError::Integrity); }
         let q=format!("{SESSION_QUERY} WHERE s.id=?");
-        diesel::sql_query($dialect.query(&q)).bind::<Text,_>($session_id).get_result::<SessionRow>($connection).await.optional()?.ok_or(StoreError::Unauthenticated)?
+        diesel::sql_query($dialect.query(&q)).bind::<IdentitySql,_>(session_id).get_result::<SessionRow>($connection).await.optional()?.ok_or(StoreError::Unauthenticated)?
     }};
 }
 
@@ -221,12 +226,12 @@ fn connector_route_query(dialect: Dialect) -> &'static str {
 }
 #[derive(diesel::QueryableByName)]
 struct ConnectorRouteRow {
-    #[diesel(sql_type=Text)]
-    session_id: String,
-    #[diesel(sql_type=Text)]
-    control_id: String,
-    #[diesel(sql_type=Text)]
-    connection_id: String,
+    #[diesel(sql_type=IdentitySql)]
+    session_id: EntityId,
+    #[diesel(sql_type=IdentitySql)]
+    control_id: EntityId,
+    #[diesel(sql_type=IdentitySql)]
+    connection_id: EntityId,
     #[diesel(sql_type=Binary)]
     credential_hash: Vec<u8>,
     #[diesel(sql_type=BigInt)]
@@ -235,8 +240,8 @@ struct ConnectorRouteRow {
 impl ConnectorRouteRow {
     fn route(self) -> ComponentRoute {
         ComponentRoute {
-            control_id: self.control_id,
-            connection_id: self.connection_id,
+            control_id: self.control_id.to_dto(EntityKind::ControlInstance),
+            connection_id: self.connection_id.to_dto(EntityKind::Connection),
             credential_hash: self.credential_hash,
             expires_at: self.expires_at,
         }
@@ -259,14 +264,17 @@ impl Store {
             let session = lock_session!(connection, dialect, source.session_id, None);
             session.operational(source.credential, database_now!(connection, dialect))?;
             let row = diesel::sql_query(dialect.query(connector_route_query(dialect)))
-                .bind::<Text, _>(&session.computer_id)
+                .bind::<IdentitySql, _>(session.computer_id)
                 .get_result::<ConnectorRouteRow>(connection)
                 .await
                 .optional()?
                 .ok_or(StoreError::Conflict)?;
-            if row.session_id != source.session_id
-                || row.control_id != source.control_id
-                || row.connection_id != source.connection_id
+            if row.session_id
+                != EntityId::from_dto(EntityKind::ConnectorSession, source.session_id)?
+                || row.control_id
+                    != EntityId::from_dto(EntityKind::ControlInstance, source.control_id)?
+                || row.connection_id
+                    != EntityId::from_dto(EntityKind::Connection, source.connection_id)?
                 || !key_matches(Some(&row.credential_hash), source.credential)?
             {
                 return Err(StoreError::Conflict);
@@ -278,20 +286,21 @@ impl Store {
                 return Err(StoreError::InvalidTransition);
             }
             Ok(ConnectorIdentity {
-                session_id: session.id,
-                execution_id: session.execution_id,
-                computer_id: session.computer_id,
+                session_id: session.id.to_dto(EntityKind::ConnectorSession),
+                execution_id: session.execution_id.to_dto(EntityKind::Execution),
+                computer_id: session.computer_id.to_dto(EntityKind::Computer),
                 expires_at: session.expires_at.ok_or(StoreError::Integrity)?,
             })
         })
     }
     /// Bootstrap keys cannot open operational streams. This snapshot is captured
     /// before local stream preparation and compared exactly during admission.
-    pub async fn connector_connection_owner(
+    pub async fn prepare_connector_connection(
         &self,
         session_id: &str,
         key: &SecretDigest,
-    ) -> Result<Option<ConnectionOwner>, StoreError> {
+        control_id: &str,
+    ) -> Result<ConnectionPreparation, StoreError> {
         if !valid_id(session_id) {
             return Err(StoreError::InvalidInput);
         }
@@ -299,12 +308,21 @@ impl Store {
             let session = lock_session!(connection, dialect, session_id, None);
             session.operational(key, database_now!(connection, dialect))?;
             let route = diesel::sql_query(dialect.query(connector_route_query(dialect)))
-                .bind::<Text, _>(&session.computer_id)
-                .get_result::<ComponentRoute>(connection)
+                .bind::<IdentitySql, _>(session.computer_id)
+                .get_result::<crate::directory::ComponentRouteRow>(connection)
                 .await
+                .map(ComponentRoute::from)
                 .optional()?;
             session.operational(key, database_now!(connection, dialect))?;
-            Ok(route.map(|row| row.owner()))
+            let _ = live_control!(connection, dialect, control_id);
+            Ok(ConnectionPreparation {
+                expected: route.map(|row| row.owner()),
+                owner: ConnectionOwner {
+                    control_id: control_id.into(),
+                    connection_id: EntityId::generate(database_now!(connection, dialect))?
+                        .to_dto(EntityKind::Connection),
+                },
+            })
         })
     }
     pub async fn admit_connector_connection(
@@ -329,9 +347,10 @@ impl Store {
             let session = lock_session!(connection, dialect, session_id, None);
             session.operational(key, database_now!(connection, dialect))?;
             let route = diesel::sql_query(dialect.query(connector_route_query(dialect)))
-                .bind::<Text, _>(&session.computer_id)
-                .get_result::<ComponentRoute>(connection)
+                .bind::<IdentitySql, _>(session.computer_id)
+                .get_result::<crate::directory::ComponentRouteRow>(connection)
                 .await
+                .map(ComponentRoute::from)
                 .optional()?;
             if !matches_owner(route.as_ref(), expected) {
                 return Err(StoreError::Conflict);
@@ -341,7 +360,7 @@ impl Store {
             session.operational(key, now)?;
             let expiry = policy.expiry(now, true)?;
             diesel::sql_query(dialect.query("INSERT INTO connector_connections(computer_id,session_id,control_id,connection_id,credential_hash,expires_at) VALUES(?,?,?,?,?,?) ON CONFLICT(computer_id) DO UPDATE SET session_id=excluded.session_id,control_id=excluded.control_id,connection_id=excluded.connection_id,credential_hash=excluded.credential_hash,expires_at=excluded.expires_at"))
-                .bind::<Text,_>(&session.computer_id).bind::<Text,_>(session_id).bind::<Text,_>(&owner.control_id).bind::<Text,_>(&owner.connection_id).bind::<Binary,_>(key.as_bytes().as_slice()).bind::<BigInt,_>(expiry).execute(connection).await?;
+                .bind::<IdentitySql,_>(session.computer_id).bind::<IdentitySql,_>(session.id).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::ControlInstance, &owner.control_id)?).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Connection, &owner.connection_id)?).bind::<Binary,_>(key.as_bytes().as_slice()).bind::<BigInt,_>(expiry).execute(connection).await?;
             Ok(ComponentRoute {
                 control_id: owner.control_id.clone(),
                 connection_id: owner.connection_id.clone(),
@@ -365,12 +384,12 @@ impl Store {
             let session = lock_session!(connection, dialect, session_id, None);
             session.operational(key, database_now!(connection, dialect))?;
             let row = diesel::sql_query(dialect.query(connector_route_query(dialect)))
-                .bind::<Text, _>(&session.computer_id)
+                .bind::<IdentitySql, _>(session.computer_id)
                 .get_result::<ConnectorRouteRow>(connection)
                 .await
                 .optional()?
                 .ok_or(StoreError::Conflict)?;
-            if row.session_id != session_id {
+            if row.session_id != session.id {
                 return Err(StoreError::Conflict);
             }
             let mut route = row.route();
@@ -387,7 +406,7 @@ impl Store {
             }
             route.expires_at = policy.expiry(now, true)?;
             diesel::sql_query(dialect.query("UPDATE connector_connections SET expires_at=? WHERE computer_id=? AND session_id=? AND control_id=? AND connection_id=?"))
-                .bind::<BigInt,_>(route.expires_at).bind::<Text,_>(&session.computer_id).bind::<Text,_>(session_id).bind::<Text,_>(&owner.control_id).bind::<Text,_>(&owner.connection_id).execute(connection).await?;
+                .bind::<BigInt,_>(route.expires_at).bind::<IdentitySql,_>(session.computer_id).bind::<IdentitySql,_>(session.id).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::ControlInstance, &owner.control_id)?).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Connection, &owner.connection_id)?).execute(connection).await?;
             Ok(route)
         })
     }
@@ -405,14 +424,14 @@ impl Store {
             let session = lock_session!(connection, dialect, session_id, None);
             session.operational(key, database_now!(connection, dialect))?;
             let row = diesel::sql_query(dialect.query(connector_route_query(dialect)))
-                .bind::<Text, _>(&session.computer_id)
+                .bind::<IdentitySql, _>(session.computer_id)
                 .get_result::<ConnectorRouteRow>(connection)
                 .await
                 .optional()?;
             let Some(row) = row else {
                 return Ok(false);
             };
-            if row.session_id != session_id {
+            if row.session_id != session.id {
                 return Ok(false);
             }
             let route = row.route();
@@ -422,7 +441,7 @@ impl Store {
                 return Ok(false);
             }
             Ok(diesel::sql_query(dialect.query("DELETE FROM connector_connections WHERE computer_id=? AND session_id=? AND control_id=? AND connection_id=?"))
-                .bind::<Text,_>(&session.computer_id).bind::<Text,_>(session_id).bind::<Text,_>(&owner.control_id).bind::<Text,_>(&owner.connection_id).execute(connection).await?==1)
+                .bind::<IdentitySql,_>(session.computer_id).bind::<IdentitySql,_>(session.id).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::ControlInstance, &owner.control_id)?).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Connection, &owner.connection_id)?).execute(connection).await?==1)
         })
     }
     pub async fn resolve_connector_route(
@@ -438,7 +457,7 @@ impl Store {
                 Dialect::Sqlite => "SELECT id FROM computers WHERE id=?",
             };
             let computer = diesel::sql_query(dialect.query(lock))
-                .bind::<Text, _>(computer_id)
+                .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::Computer, computer_id)?)
                 .get_result::<IdRow>(connection)
                 .await
                 .optional()?;
@@ -446,7 +465,7 @@ impl Store {
                 return Ok(None);
             }
             let route = diesel::sql_query(dialect.query(connector_route_query(dialect)))
-                .bind::<Text, _>(computer_id)
+                .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::Computer, computer_id)?)
                 .get_result::<ConnectorRouteRow>(connection)
                 .await
                 .optional()?;
@@ -455,7 +474,7 @@ impl Store {
             };
             let session =
                 diesel::sql_query(dialect.query(&format!("{SESSION_QUERY} WHERE s.id=?")))
-                    .bind::<Text, _>(&route.session_id)
+                    .bind::<IdentitySql, _>(route.session_id)
                     .get_result::<SessionRow>(connection)
                     .await
                     .optional()?;
@@ -464,9 +483,13 @@ impl Store {
             };
             let route = route.route();
             let control = diesel::sql_query(dialect.query(control_query(dialect, false)))
-                .bind::<Text, _>(&route.control_id)
-                .get_result::<ControlRegistration>(connection)
+                .bind::<IdentitySql, _>(EntityId::from_dto(
+                    EntityKind::ControlInstance,
+                    &route.control_id,
+                )?)
+                .get_result::<crate::directory::ControlRow>(connection)
                 .await
+                .map(ControlRegistration::from)
                 .optional()?;
             let Some(control) = control else {
                 return Ok(None);
@@ -536,11 +559,11 @@ impl Store {
     ) -> Result<ConnectorSessionResult, StoreError> {
         let provider_id = authority.provider();
         let provider_key = authority.key();
-        if !valid_id(execution_id) || !valid_id(&draft.id) || !valid_id(&draft.request_id) {
+        if !valid_id(&draft.request_id) {
             return Err(StoreError::InvalidInput);
         }
-        let context = format!("computer-connector-bootstrap:{}", draft.id);
-        let protected = self.cipher.protect_latest(&context, &draft.initial_key)?;
+        let execution_identity = EntityId::from_dto(EntityKind::Execution, execution_id)?;
+        let provider_identity = EntityId::from_dto(EntityKind::Provider, provider_id)?;
         operation!(self, |connection, dialect| {
             let now = if let SessionAuthority::Connection(source) = authority {
                 current_source!(connection, dialect, source).1
@@ -554,13 +577,13 @@ impl Store {
                 Dialect::Sqlite => q.into(),
             };
             let binding = diesel::sql_query(dialect.query(&q))
-                .bind::<Text, _>(execution_id)
-                .bind::<Text, _>(provider_id)
+                .bind::<IdentitySql, _>(execution_identity)
+                .bind::<IdentitySql, _>(provider_identity)
                 .get_result::<ExecutionBinding>(connection)
                 .await
                 .optional()?
                 .ok_or(StoreError::NotFound)?;
-            if binding.current_execution_id.as_deref() != Some(execution_id)
+            if binding.current_execution_id != Some(execution_identity)
                 || binding.retired_at.is_some()
                 || binding.desired_state == "DELETING"
             {
@@ -571,11 +594,14 @@ impl Store {
             }
             let fingerprint = payload_fingerprint(
                 "connector-session",
-                &[binding.computer_id.as_bytes(), execution_id.as_bytes()],
+                &[
+                    binding.computer_id.to_dto(EntityKind::Computer).as_bytes(),
+                    execution_id.as_bytes(),
+                ],
             );
             let q = format!("{SESSION_QUERY} WHERE s.execution_id=?");
             if let Some(existing) = diesel::sql_query(dialect.query(&q))
-                .bind::<Text, _>(execution_id)
+                .bind::<IdentitySql, _>(execution_identity)
                 .get_result::<SessionRow>(connection)
                 .await
                 .optional()?
@@ -588,24 +614,33 @@ impl Store {
                 }
                 let key = recover_key(
                     &self.cipher,
-                    &format!("computer-connector-bootstrap:{}", existing.id),
+                    &format!(
+                        "computer-connector-bootstrap:{}",
+                        existing.id.to_dto(EntityKind::ConnectorSession)
+                    ),
                     &existing.initial_hash,
                     existing.initial_nonce.as_deref(),
                     existing.initial_ciphertext.as_deref(),
                 )?;
                 return Ok(ConnectorSessionResult {
-                    id: existing.id,
-                    execution_id: existing.execution_id,
+                    id: existing.id.to_dto(EntityKind::ConnectorSession),
+                    execution_id: existing.execution_id.to_dto(EntityKind::Execution),
                     accepted_request_id: existing.initial_request_id,
                     initial_key: key,
                 });
             }
+            let assigned = EntityId::generate(now)?;
+            let canonical = assigned.to_dto(EntityKind::ConnectorSession);
+            let protected = self.cipher.protect_latest(
+                &format!("computer-connector-bootstrap:{canonical}"),
+                &draft.initial_key,
+            )?;
             let digest = draft.initial_key.digest();
             diesel::sql_query(dialect.query("INSERT INTO connector_sessions(id,computer_id,execution_id,initial_request_id,initial_payload_hash,initial_hash,initial_nonce,initial_ciphertext,created_at) VALUES(?,?,?,?,?,?,?,?,?)"))
-                .bind::<Text,_>(&draft.id).bind::<Text,_>(&binding.computer_id).bind::<Text,_>(execution_id).bind::<Text,_>(&draft.request_id).bind::<Binary,_>(fingerprint.as_slice()).bind::<Binary,_>(digest.as_bytes().as_slice())
+                .bind::<IdentitySql,_>(assigned).bind::<IdentitySql,_>(binding.computer_id).bind::<IdentitySql,_>(execution_identity).bind::<Text,_>(&draft.request_id).bind::<Binary,_>(fingerprint.as_slice()).bind::<Binary,_>(digest.as_bytes().as_slice())
                 .bind::<Binary,_>(protected.nonce().as_slice()).bind::<Binary,_>(protected.ciphertext()).bind::<BigInt,_>(now).execute(connection).await?;
             Ok(ConnectorSessionResult {
-                id: draft.id.clone(),
+                id: canonical,
                 execution_id: execution_id.into(),
                 accepted_request_id: draft.request_id.clone(),
                 initial_key: BearerSecret::parse(draft.initial_key.expose().to_owned())?,
@@ -683,7 +718,7 @@ impl Store {
                 KeyMutation::Refresh => current.operational(presented, now)?,
             };
             let receipt=diesel::sql_query(dialect.query("SELECT payload_hash,result_hash FROM connector_key_requests WHERE session_id=? AND request_id=?"))
-                .bind::<Text,_>(session_id).bind::<Text,_>(&draft.request_id).get_result::<KeyRequestRow>(connection).await.optional()?;
+                .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::ConnectorSession, session_id)?).bind::<Text,_>(&draft.request_id).get_result::<KeyRequestRow>(connection).await.optional()?;
             if let Some(receipt) = receipt {
                 if receipt.payload_hash != fingerprint {
                     return Err(StoreError::Conflict);
@@ -738,14 +773,17 @@ impl Store {
             };
             diesel::sql_query(dialect.query("UPDATE connector_sessions SET current_hash=?,previous_hash=?,previous_valid_until=?,issued_at=?,expires_at=?,current_request_id=?,recovery_nonce=?,recovery_ciphertext=? WHERE id=?"))
                 .bind::<Binary,_>(digest.as_bytes().as_slice()).bind::<Nullable<Binary>,_>(previous).bind::<Nullable<BigInt>,_>(overlap).bind::<BigInt,_>(now).bind::<BigInt,_>(expires_at)
-                .bind::<Text,_>(&draft.request_id).bind::<Binary,_>(envelope.nonce().as_slice()).bind::<Binary,_>(envelope.ciphertext()).bind::<Text,_>(session_id).execute(connection).await?;
+                .bind::<Text,_>(&draft.request_id).bind::<Binary,_>(envelope.nonce().as_slice()).bind::<Binary,_>(envelope.ciphertext()).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::ConnectorSession, session_id)?).execute(connection).await?;
             diesel::sql_query(dialect.query("INSERT INTO connector_key_requests(session_id,request_id,purpose,payload_hash,result_hash) VALUES(?,?,?,?,?)"))
-                .bind::<Text,_>(session_id).bind::<Text,_>(&draft.request_id).bind::<Text,_>(kind.label()).bind::<Binary,_>(fingerprint.as_slice()).bind::<Binary,_>(digest.as_bytes().as_slice()).execute(connection).await?;
+                .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::ConnectorSession, session_id)?).bind::<Text,_>(&draft.request_id).bind::<Text,_>(kind.label()).bind::<Binary,_>(fingerprint.as_slice()).bind::<Binary,_>(digest.as_bytes().as_slice()).execute(connection).await?;
             if kind == KeyMutation::Exchange {
                 diesel::sql_query(
                     dialect.query("DELETE FROM connector_connections WHERE session_id=?"),
                 )
-                .bind::<Text, _>(session_id)
+                .bind::<IdentitySql, _>(EntityId::from_dto(
+                    EntityKind::ConnectorSession,
+                    session_id,
+                )?)
                 .execute(connection)
                 .await?;
             }
@@ -768,9 +806,9 @@ impl Store {
             let current = lock_session!(connection, dialect, session_id, None);
             current.operational(key, now)?;
             Ok(ConnectorIdentity {
-                session_id: current.id,
-                execution_id: current.execution_id,
-                computer_id: current.computer_id,
+                session_id: current.id.to_dto(EntityKind::ConnectorSession),
+                execution_id: current.execution_id.to_dto(EntityKind::Execution),
+                computer_id: current.computer_id.to_dto(EntityKind::Computer),
                 expires_at: current.expires_at.ok_or(StoreError::Integrity)?,
             })
         })
@@ -832,26 +870,29 @@ impl Store {
                 now
             };
             let current = lock_session!(connection, dialect, session_id, Some(provider_id));
-            if current.provider_id.as_deref() != Some(provider_id) {
+            if current.provider_id != Some(EntityId::from_dto(EntityKind::Provider, provider_id)?) {
                 return Err(StoreError::NotFound);
             }
             if let SessionAuthority::Connection(source) = authority {
                 let _ = current_source!(connection, dialect, source);
             }
             if let Some(prior)=diesel::sql_query(dialect.query("SELECT payload_hash,result_hash FROM connector_key_requests WHERE session_id=? AND request_id=?"))
-                .bind::<Text,_>(session_id).bind::<Text,_>(request_id).get_result::<KeyRequestRow>(connection).await.optional()? {
+                .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::ConnectorSession, session_id)?).bind::<Text,_>(request_id).get_result::<KeyRequestRow>(connection).await.optional()? {
                 if prior.payload_hash!=fingerprint { return Err(StoreError::Conflict); }
                 if current.revoked_at.is_none() || prior.result_hash!=current.initial_hash { return Err(StoreError::InvalidTransition); }
                 return Ok(());
             }
             diesel::sql_query(dialect.query("UPDATE connector_sessions SET revoked_at=COALESCE(revoked_at,?),initial_nonce=NULL,initial_ciphertext=NULL,current_hash=NULL,previous_hash=NULL,previous_valid_until=NULL,issued_at=NULL,expires_at=NULL,current_request_id=NULL,recovery_nonce=NULL,recovery_ciphertext=NULL WHERE id=?"))
-                .bind::<BigInt,_>(now).bind::<Text,_>(session_id).execute(connection).await?;
+                .bind::<BigInt,_>(now).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::ConnectorSession, session_id)?).execute(connection).await?;
             diesel::sql_query(dialect.query("INSERT INTO connector_key_requests(session_id,request_id,purpose,payload_hash,result_hash) VALUES(?,?,'REVOKE',?,?)"))
-                .bind::<Text,_>(session_id).bind::<Text,_>(request_id).bind::<Binary,_>(fingerprint.as_slice()).bind::<Binary,_>(&current.initial_hash).execute(connection).await?;
+                .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::ConnectorSession, session_id)?).bind::<Text,_>(request_id).bind::<Binary,_>(fingerprint.as_slice()).bind::<Binary,_>(&current.initial_hash).execute(connection).await?;
             diesel::sql_query(
                 dialect.query("DELETE FROM connector_connections WHERE session_id=?"),
             )
-            .bind::<Text, _>(session_id)
+            .bind::<IdentitySql, _>(EntityId::from_dto(
+                EntityKind::ConnectorSession,
+                session_id,
+            )?)
             .execute(connection)
             .await?;
             Ok(())

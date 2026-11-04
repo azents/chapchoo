@@ -7,13 +7,19 @@ mod component_keys;
 mod computer_executions;
 mod computers;
 mod connector_keys;
+mod creation_results;
 mod delivery;
 mod directory;
 mod display;
+mod entity_id;
 mod identity;
+mod identity_transition;
 mod models;
 mod native_resources;
 mod preparation;
+mod profile_catalogue;
+mod profile_initialization;
+mod profile_preparation;
 mod sessions;
 mod store;
 mod teams;
@@ -21,24 +27,26 @@ mod teams;
 pub use accounts::{GrantDraft, GrantKind, GrantSummary, NewAccount, ProofPreview};
 pub use challenges::{EmailLoginOutcome, NewChallenge};
 pub use component_keys::{
-    ComponentKeyDraft, ComponentKeyPolicy, ComponentKeyResult, ProviderOwner,
-    ProviderRegistrationOwner, provider_registration_context,
+    ComponentKeyDraft, ComponentKeyPolicy, ComponentKeyResult, ProviderCredentialResult,
+    ProviderOwner, ProviderRegistrationOwner, provider_registration_context,
 };
 pub use computer_executions::{
     ComputerRequest, ExecutionDraft, ExecutionReservation, ExecutionResources, ManagedComputer,
     ManagedResourceKind, NativeRetirementAdmission, ProviderSource,
 };
 pub use computers::{
-    AgentRemoval, AgentSummary, ComputerInventorySummary, ComputerSummary, CreateCloudAgent,
-    CreationOutcome, LifecycleRequest, ProviderCapabilities, ProviderChoice, ProviderIdentity,
-    ProviderInventorySummary, ResourceCursor,
+    AgentRemoval, AgentSummary, ComputerInventorySummary, ComputerSummary, CreateAgentProfile,
+    CreateCloudAgent, CreationOutcome, LifecycleRequest, ProviderCapabilities, ProviderChoice,
+    ProviderIdentity, ProviderInventorySummary, ResourceCursor, UpdateAgentProfile,
 };
 pub use connector_keys::{
     ConnectorIdentity, ConnectorSessionDraft, ConnectorSessionResult, ConnectorSource,
 };
+pub use creation_results::AgentCreationResult;
 pub use delivery::{DeliveryComputer, DeliveryExecution, DeliverySnapshot};
 pub use directory::{
-    ComponentRoute, ConnectionOwner, ControlRegistration, DirectoryPolicy, ResolvedRoute,
+    ComponentRoute, ConnectionOwner, ConnectionPreparation, ControlRegistration, DirectoryPolicy,
+    ResolvedRoute,
 };
 pub use models::{CredentialSnapshot, UserSummary, VerifiedCredential};
 pub use native_resources::{ManagedResource, ResourceEvidence, ResourceReport};
@@ -46,6 +54,7 @@ pub use preparation::{
     POSTGRES_MIGRATIONS, PreparationError, SQLITE_MIGRATIONS, postgres_ready, prepare_postgres,
     prepare_sqlite, sqlite_ready,
 };
+pub use profile_catalogue::AgentProfileImage;
 pub use sessions::{NewSession, SessionPolicy, SessionResult};
 pub use store::{Store, StoreError};
 pub use teams::{

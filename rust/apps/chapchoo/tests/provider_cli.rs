@@ -27,7 +27,7 @@ impl ProviderAuthentication for ControlBoundary {
     async fn exchange(
         &self,
         request: Request<wire::ProviderAuthenticationRequest>,
-    ) -> Result<Response<wire::ComponentKey>, Status> {
+    ) -> Result<Response<wire::ProviderCredentials>, Status> {
         let value = request.into_inner();
         if !matches!(&value.evidence,Some(wire::provider_authentication_request::Evidence::RegistrationToken(token)) if token==self.owner.expose())
         {
@@ -66,7 +66,7 @@ impl ProviderAuthentication for ControlBoundary {
     async fn rotate_key(
         &self,
         _: Request<wire::ProviderKeyRequest>,
-    ) -> Result<Response<wire::ComponentKey>, Status> {
+    ) -> Result<Response<wire::ProviderCredentials>, Status> {
         Err(Status::unimplemented("Not used by this boundary fixture"))
     }
 
@@ -177,7 +177,7 @@ users:
             let configuration = tokio::time::timeout(Duration::from_secs(10), received.recv())
                 .await?
                 .ok_or("Provider did not send its configuration over RPC")?;
-            assert_eq!(configuration.provider_id, "external-provider");
+            assert_eq!(configuration.registration_key, "external-provider");
             assert_eq!(configuration.name, "External fixture");
             let status =
                 tokio::time::timeout(Duration::from_secs(10), child.lock().await.wait()).await??;

@@ -25,6 +25,11 @@ No stream, transient call or response is stored as a durable transport log. DB
 checks followed by network/SDK work remain non-atomic. These local transport tests
 are not Kubernetes retirement/quiescence or browser product-flow evidence.
 
+Resource command admission compares the complete committed native reservation,
+identity, execution binding and original allocation witness. Canonical current
+context IDs are correlation authority, not substitutes for an existing native
+resource's original labels. Missing/malformed witnesses reject at wire ingress.
+
 ## Connections
 
 - [Control admission, streams and calls](computer-control-rpc.md) — Control separates public component authority from trusted peer delivery. Streams and exact-call correlation do not form a durable transport log.

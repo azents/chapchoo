@@ -7,6 +7,11 @@ fn container() -> wire::ManagedResource {
         name: "execution-candidate".into(),
         uid: None,
         execution_id: Some("execution".into()),
+        allocation: Some(wire::NativeAllocationWitness {
+            computer_id: "computer".into(),
+            provider_id: "provider".into(),
+            execution_id: Some("execution".into()),
+        }),
         absence_confirmed: false,
         native: Some(Native::DockerContainer(wire::DockerContainerNative {
             daemon_id: "daemon:fixture".into(),

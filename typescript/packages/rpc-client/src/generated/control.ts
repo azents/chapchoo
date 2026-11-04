@@ -138,7 +138,7 @@ export interface ProviderCapabilities {
 }
 
 export interface ProviderConfiguration {
-  providerId: string;
+  registrationKey: string;
   name: string;
   capabilities: ProviderCapabilities | undefined;
   kind: ProviderKind;
@@ -156,6 +156,11 @@ export interface ComponentKey {
   issuedAt: Timestamp | undefined;
   expiresAt: Timestamp | undefined;
   proactiveAfter: Timestamp | undefined;
+}
+
+export interface ProviderCredentials {
+  providerId: string;
+  key: ComponentKey | undefined;
 }
 
 export interface ConnectorSessionRequest {
@@ -257,6 +262,12 @@ export interface DockerVolumeNative {
   identity: DockerVolumeIdentity | undefined;
 }
 
+export interface NativeAllocationWitness {
+  computerId: string;
+  providerId: string;
+  executionId?: string | undefined;
+}
+
 export interface ManagedResource {
   kind: ResourceKind;
   namespace: string;
@@ -271,7 +282,11 @@ export interface ManagedResource {
    */
   absenceConfirmed: boolean;
   dockerContainer?: DockerContainerNative | undefined;
-  dockerVolume?: DockerVolumeNative | undefined;
+  dockerVolume?:
+    | DockerVolumeNative
+    | undefined;
+  /** Exact committed annotation/label authority; never inferred from current IDs. */
+  allocation: NativeAllocationWitness | undefined;
 }
 
 export interface OwnedPresent {
@@ -1162,13 +1177,13 @@ export const ProviderCapabilities: MessageFns<ProviderCapabilities> = {
 };
 
 function createBaseProviderConfiguration(): ProviderConfiguration {
-  return { providerId: "", name: "", capabilities: undefined, kind: 0, dockerDaemonId: undefined };
+  return { registrationKey: "", name: "", capabilities: undefined, kind: 0, dockerDaemonId: undefined };
 }
 
 export const ProviderConfiguration: MessageFns<ProviderConfiguration> = {
   encode(message: ProviderConfiguration, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.providerId !== "") {
-      writer.uint32(10).string(message.providerId);
+    if (message.registrationKey !== "") {
+      writer.uint32(10).string(message.registrationKey);
     }
     if (message.name !== "") {
       writer.uint32(18).string(message.name);
@@ -1203,7 +1218,7 @@ export const ProviderConfiguration: MessageFns<ProviderConfiguration> = {
               break;
             }
 
-            message.providerId = reader.string();
+            message.registrationKey = reader.string();
             continue;
           }
           case 2: {
@@ -1255,7 +1270,7 @@ export const ProviderConfiguration: MessageFns<ProviderConfiguration> = {
   },
   fromPartial<I extends Exact<DeepPartial<ProviderConfiguration>, I>>(object: I): ProviderConfiguration {
     const message = createBaseProviderConfiguration();
-    message.providerId = object.providerId ?? "";
+    message.registrationKey = object.registrationKey ?? "";
     message.name = object.name ?? "";
     message.capabilities = (object.capabilities !== undefined && object.capabilities !== null)
       ? ProviderCapabilities.fromPartial(object.capabilities)
@@ -1426,6 +1441,73 @@ export const ComponentKey: MessageFns<ComponentKey> = {
     message.proactiveAfter = (object.proactiveAfter !== undefined && object.proactiveAfter !== null)
       ? Timestamp.fromPartial(object.proactiveAfter)
       : undefined;
+    return message;
+  },
+};
+
+function createBaseProviderCredentials(): ProviderCredentials {
+  return { providerId: "", key: undefined };
+}
+
+export const ProviderCredentials: MessageFns<ProviderCredentials> = {
+  encode(message: ProviderCredentials, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.providerId !== "") {
+      writer.uint32(10).string(message.providerId);
+    }
+    if (message.key !== undefined) {
+      ComponentKey.encode(message.key, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ProviderCredentials {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseProviderCredentials();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.providerId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.key = ComponentKey.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ProviderCredentials>, I>>(base?: I): ProviderCredentials {
+    return ProviderCredentials.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ProviderCredentials>, I>>(object: I): ProviderCredentials {
+    const message = createBaseProviderCredentials();
+    message.providerId = object.providerId ?? "";
+    message.key = (object.key !== undefined && object.key !== null) ? ComponentKey.fromPartial(object.key) : undefined;
     return message;
   },
 };
@@ -2763,6 +2845,85 @@ export const DockerVolumeNative: MessageFns<DockerVolumeNative> = {
   },
 };
 
+function createBaseNativeAllocationWitness(): NativeAllocationWitness {
+  return { computerId: "", providerId: "", executionId: undefined };
+}
+
+export const NativeAllocationWitness: MessageFns<NativeAllocationWitness> = {
+  encode(message: NativeAllocationWitness, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.computerId !== "") {
+      writer.uint32(10).string(message.computerId);
+    }
+    if (message.providerId !== "") {
+      writer.uint32(18).string(message.providerId);
+    }
+    if (message.executionId !== undefined) {
+      writer.uint32(26).string(message.executionId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): NativeAllocationWitness {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseNativeAllocationWitness();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.computerId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.providerId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.executionId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<NativeAllocationWitness>, I>>(base?: I): NativeAllocationWitness {
+    return NativeAllocationWitness.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<NativeAllocationWitness>, I>>(object: I): NativeAllocationWitness {
+    const message = createBaseNativeAllocationWitness();
+    message.computerId = object.computerId ?? "";
+    message.providerId = object.providerId ?? "";
+    message.executionId = object.executionId ?? undefined;
+    return message;
+  },
+};
+
 function createBaseManagedResource(): ManagedResource {
   return {
     kind: 0,
@@ -2773,6 +2934,7 @@ function createBaseManagedResource(): ManagedResource {
     absenceConfirmed: false,
     dockerContainer: undefined,
     dockerVolume: undefined,
+    allocation: undefined,
   };
 }
 
@@ -2801,6 +2963,9 @@ export const ManagedResource: MessageFns<ManagedResource> = {
     }
     if (message.dockerVolume !== undefined) {
       DockerVolumeNative.encode(message.dockerVolume, writer.uint32(66).fork()).join();
+    }
+    if (message.allocation !== undefined) {
+      NativeAllocationWitness.encode(message.allocation, writer.uint32(74).fork()).join();
     }
     return writer;
   },
@@ -2882,6 +3047,14 @@ export const ManagedResource: MessageFns<ManagedResource> = {
             message.dockerVolume = DockerVolumeNative.decode(reader, reader.uint32());
             continue;
           }
+          case 9: {
+            if (tag !== 74) {
+              break;
+            }
+
+            message.allocation = NativeAllocationWitness.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2910,6 +3083,9 @@ export const ManagedResource: MessageFns<ManagedResource> = {
       : undefined;
     message.dockerVolume = (object.dockerVolume !== undefined && object.dockerVolume !== null)
       ? DockerVolumeNative.fromPartial(object.dockerVolume)
+      : undefined;
+    message.allocation = (object.allocation !== undefined && object.allocation !== null)
+      ? NativeAllocationWitness.fromPartial(object.allocation)
       : undefined;
     return message;
   },
@@ -5442,8 +5618,8 @@ export const ProviderAuthenticationService = {
     requestSerialize: (value: ProviderAuthenticationRequest): Buffer =>
       Buffer.from(ProviderAuthenticationRequest.encode(value).finish()),
     requestDeserialize: (value: Buffer): ProviderAuthenticationRequest => ProviderAuthenticationRequest.decode(value),
-    responseSerialize: (value: ComponentKey): Buffer => Buffer.from(ComponentKey.encode(value).finish()),
-    responseDeserialize: (value: Buffer): ComponentKey => ComponentKey.decode(value),
+    responseSerialize: (value: ProviderCredentials): Buffer => Buffer.from(ProviderCredentials.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ProviderCredentials => ProviderCredentials.decode(value),
   },
   report: {
     path: "/chapchoo.control.ProviderAuthentication/Report" as const,
@@ -5480,8 +5656,8 @@ export const ProviderAuthenticationService = {
     responseStream: false as const,
     requestSerialize: (value: ProviderKeyRequest): Buffer => Buffer.from(ProviderKeyRequest.encode(value).finish()),
     requestDeserialize: (value: Buffer): ProviderKeyRequest => ProviderKeyRequest.decode(value),
-    responseSerialize: (value: ComponentKey): Buffer => Buffer.from(ComponentKey.encode(value).finish()),
-    responseDeserialize: (value: Buffer): ComponentKey => ComponentKey.decode(value),
+    responseSerialize: (value: ProviderCredentials): Buffer => Buffer.from(ProviderCredentials.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ProviderCredentials => ProviderCredentials.decode(value),
   },
   revokeKey: {
     path: "/chapchoo.control.ProviderAuthentication/RevokeKey" as const,
@@ -5515,11 +5691,11 @@ export const ProviderAuthenticationService = {
 } as const;
 
 export interface ProviderAuthenticationServer extends UntypedServiceImplementation {
-  exchange: handleUnaryCall<ProviderAuthenticationRequest, ComponentKey>;
+  exchange: handleUnaryCall<ProviderAuthenticationRequest, ProviderCredentials>;
   report: handleUnaryCall<ProviderReport, Empty>;
   checkCommand: handleUnaryCall<ProviderCommandCheck, ProviderCommandAdmission>;
   checkConnection: handleUnaryCall<ProviderConnectionCheck, Empty>;
-  rotateKey: handleUnaryCall<ProviderKeyRequest, ComponentKey>;
+  rotateKey: handleUnaryCall<ProviderKeyRequest, ProviderCredentials>;
   revokeKey: handleUnaryCall<ProviderKeyRequest, Empty>;
   issueConnectorSession: handleUnaryCall<ConnectorSessionRequest, ConnectorSession>;
   revokeConnectorSession: handleUnaryCall<RevokeConnectorSessionRequest, Empty>;
@@ -5528,18 +5704,18 @@ export interface ProviderAuthenticationServer extends UntypedServiceImplementati
 export interface ProviderAuthenticationClient extends Client {
   exchange(
     request: ProviderAuthenticationRequest,
-    callback: (error: ServiceError | null, response: ComponentKey) => void,
+    callback: (error: ServiceError | null, response: ProviderCredentials) => void,
   ): ClientUnaryCall;
   exchange(
     request: ProviderAuthenticationRequest,
     metadata: Metadata,
-    callback: (error: ServiceError | null, response: ComponentKey) => void,
+    callback: (error: ServiceError | null, response: ProviderCredentials) => void,
   ): ClientUnaryCall;
   exchange(
     request: ProviderAuthenticationRequest,
     metadata: Metadata,
     options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: ComponentKey) => void,
+    callback: (error: ServiceError | null, response: ProviderCredentials) => void,
   ): ClientUnaryCall;
   report(request: ProviderReport, callback: (error: ServiceError | null, response: Empty) => void): ClientUnaryCall;
   report(
@@ -5585,18 +5761,18 @@ export interface ProviderAuthenticationClient extends Client {
   ): ClientUnaryCall;
   rotateKey(
     request: ProviderKeyRequest,
-    callback: (error: ServiceError | null, response: ComponentKey) => void,
+    callback: (error: ServiceError | null, response: ProviderCredentials) => void,
   ): ClientUnaryCall;
   rotateKey(
     request: ProviderKeyRequest,
     metadata: Metadata,
-    callback: (error: ServiceError | null, response: ComponentKey) => void,
+    callback: (error: ServiceError | null, response: ProviderCredentials) => void,
   ): ClientUnaryCall;
   rotateKey(
     request: ProviderKeyRequest,
     metadata: Metadata,
     options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: ComponentKey) => void,
+    callback: (error: ServiceError | null, response: ProviderCredentials) => void,
   ): ClientUnaryCall;
   revokeKey(
     request: ProviderKeyRequest,

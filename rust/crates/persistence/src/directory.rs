@@ -3,6 +3,7 @@ use crate::{
     Store, StoreError,
     component_keys::{authenticate_provider, key_matches},
     computers::valid_id,
+    entity_id::{EntityId, EntityKind, IdentitySql},
     store::{Dialect, operation},
 };
 use chapchoo_crypto::SecretDigest;
@@ -44,32 +45,71 @@ pub struct ConnectionOwner {
     pub control_id: String,
     pub connection_id: String,
 }
-#[derive(Clone, diesel::QueryableByName)]
+#[derive(Clone)]
 pub struct ControlRegistration {
-    #[diesel(sql_type=Text)]
     pub id: String,
-    #[diesel(sql_type=Text)]
     pub endpoint: String,
-    #[diesel(sql_type=Bool)]
     pub draining: bool,
-    #[diesel(sql_type=BigInt)]
     pub expires_at: i64,
+}
+#[derive(diesel::QueryableByName)]
+pub(crate) struct ControlRow {
+    #[diesel(sql_type=IdentitySql)]
+    id: EntityId,
+    #[diesel(sql_type=Text)]
+    endpoint: String,
+    #[diesel(sql_type=Bool)]
+    draining: bool,
+    #[diesel(sql_type=BigInt)]
+    expires_at: i64,
+}
+impl From<ControlRow> for ControlRegistration {
+    fn from(row: ControlRow) -> Self {
+        Self {
+            id: row.id.to_dto(EntityKind::ControlInstance),
+            endpoint: row.endpoint,
+            draining: row.draining,
+            expires_at: row.expires_at,
+        }
+    }
 }
 impl fmt::Debug for ControlRegistration {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("ControlRegistration([REDACTED])")
     }
 }
-#[derive(Clone, diesel::QueryableByName)]
+#[derive(Clone)]
 pub struct ComponentRoute {
-    #[diesel(sql_type=Text)]
     pub control_id: String,
-    #[diesel(sql_type=Text)]
     pub connection_id: String,
-    #[diesel(sql_type=Binary)]
     pub(crate) credential_hash: Vec<u8>,
-    #[diesel(sql_type=BigInt)]
     pub expires_at: i64,
+}
+#[derive(diesel::QueryableByName)]
+pub(crate) struct ComponentRouteRow {
+    #[diesel(sql_type=IdentitySql)]
+    control_id: EntityId,
+    #[diesel(sql_type=IdentitySql)]
+    connection_id: EntityId,
+    #[diesel(sql_type=Binary)]
+    credential_hash: Vec<u8>,
+    #[diesel(sql_type=BigInt)]
+    expires_at: i64,
+}
+impl From<ComponentRouteRow> for ComponentRoute {
+    fn from(row: ComponentRouteRow) -> Self {
+        Self {
+            control_id: row.control_id.to_dto(EntityKind::ControlInstance),
+            connection_id: row.connection_id.to_dto(EntityKind::Connection),
+            credential_hash: row.credential_hash,
+            expires_at: row.expires_at,
+        }
+    }
+}
+#[derive(Debug)]
+pub struct ConnectionPreparation {
+    pub expected: Option<ConnectionOwner>,
+    pub owner: ConnectionOwner,
 }
 impl ComponentRoute {
     pub fn owner(&self) -> ConnectionOwner {
@@ -140,21 +180,23 @@ pub(crate) fn matches_owner(
     }
 }
 pub(crate) fn validate_owner(owner: &ConnectionOwner) -> Result<(), StoreError> {
-    if valid_id(&owner.control_id) && valid_id(&owner.connection_id) {
-        Ok(())
-    } else {
-        Err(StoreError::InvalidInput)
-    }
+    EntityId::from_dto(EntityKind::ControlInstance, &owner.control_id)?;
+    EntityId::from_dto(EntityKind::Connection, &owner.connection_id)?;
+    Ok(())
 }
 macro_rules! live_control {
     ($connection:expr,$dialect:expr,$id:expr) => {{
-        let row =
+        let row: $crate::directory::ControlRegistration =
             diesel::sql_query($dialect.query($crate::directory::control_query($dialect, false)))
-                .bind::<diesel::sql_types::Text, _>($id)
-                .get_result::<$crate::directory::ControlRegistration>($connection)
+                .bind::<$crate::entity_id::IdentitySql, _>($crate::entity_id::EntityId::from_dto(
+                    $crate::entity_id::EntityKind::ControlInstance,
+                    $id,
+                )?)
+                .get_result::<$crate::directory::ControlRow>($connection)
                 .await
                 .optional()?
-                .ok_or(StoreError::InvalidTransition)?;
+                .ok_or(StoreError::InvalidTransition)?
+                .into();
         if row.draining || row.expires_at <= $crate::directory::database_now!($connection, $dialect)
         {
             return Err(StoreError::InvalidTransition);
@@ -170,31 +212,28 @@ impl Store {
     /// reuse cannot update or revive an earlier process registration.
     pub async fn register_control(
         &self,
-        id: &str,
         endpoint: &str,
         policy: DirectoryPolicy,
     ) -> Result<ControlRegistration, StoreError> {
-        if !valid_id(id)
-            || endpoint.is_empty()
-            || endpoint.len() > 2048
-            || endpoint.chars().any(char::is_whitespace)
+        if endpoint.is_empty() || endpoint.len() > 2048 || endpoint.chars().any(char::is_whitespace)
         {
             return Err(StoreError::InvalidInput);
         }
         operation!(self, |connection, dialect| {
             let now = database_now!(connection, dialect);
             let expiry = policy.expiry(now, false)?;
+            let id = EntityId::generate(now)?;
             diesel::sql_query(dialect.query(
                 "INSERT INTO control_instances(id,endpoint,renewed_at,expires_at) VALUES(?,?,?,?)",
             ))
-            .bind::<Text, _>(id)
+            .bind::<IdentitySql, _>(id)
             .bind::<Text, _>(endpoint)
             .bind::<BigInt, _>(now)
             .bind::<BigInt, _>(expiry)
             .execute(connection)
             .await?;
             Ok(ControlRegistration {
-                id: id.into(),
+                id: id.to_dto(EntityKind::ControlInstance),
                 endpoint: endpoint.into(),
                 draining: false,
                 expires_at: expiry,
@@ -211,9 +250,10 @@ impl Store {
         }
         operation!(self, |connection, dialect| {
             let mut row = diesel::sql_query(dialect.query(control_query(dialect, true)))
-                .bind::<Text, _>(id)
-                .get_result::<ControlRegistration>(connection)
+                .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::ControlInstance, id)?)
+                .get_result::<ControlRow>(connection)
                 .await
+                .map(ControlRegistration::from)
                 .optional()?
                 .ok_or(StoreError::NotFound)?;
             let now = database_now!(connection, dialect);
@@ -226,7 +266,7 @@ impl Store {
             )
             .bind::<BigInt, _>(now)
             .bind::<BigInt, _>(row.expires_at)
-            .bind::<Text, _>(id)
+            .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::ControlInstance, id)?)
             .execute(connection)
             .await?;
             Ok(row)
@@ -242,7 +282,7 @@ impl Store {
             let changed = diesel::sql_query(
                 dialect.query("UPDATE control_instances SET draining=TRUE WHERE id=?"),
             )
-            .bind::<Text, _>(id)
+            .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::ControlInstance, id)?)
             .execute(connection)
             .await?;
             if changed != 1 {
@@ -264,9 +304,10 @@ impl Store {
         operation!(self, |connection, dialect| {
             let control =
                 diesel::sql_query(dialect.query("SELECT * FROM control_instances WHERE id=?"))
-                    .bind::<Text, _>(id)
-                    .get_result::<ControlRegistration>(connection)
+                    .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::ControlInstance, id)?)
+                    .get_result::<ControlRow>(connection)
                     .await
+                    .map(ControlRegistration::from)
                     .optional()?
                     .ok_or(StoreError::NotFound)?;
             if !control.draining {
@@ -275,13 +316,13 @@ impl Store {
             let providers = diesel::sql_query(
                 dialect.query("DELETE FROM provider_connections WHERE control_id=?"),
             )
-            .bind::<Text, _>(id)
+            .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::ControlInstance, id)?)
             .execute(connection)
             .await?;
             let connectors = diesel::sql_query(
                 dialect.query("DELETE FROM connector_connections WHERE control_id=?"),
             )
-            .bind::<Text, _>(id)
+            .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::ControlInstance, id)?)
             .execute(connection)
             .await?;
             Ok(providers + connectors)
@@ -289,11 +330,12 @@ impl Store {
     }
     /// Capture even an expired tuple. A later admission compares exactly this
     /// snapshot, never loops internally to steal a concurrent winning stream.
-    pub async fn provider_connection_owner(
+    pub async fn prepare_provider_connection(
         &self,
         provider_id: &str,
         key: &SecretDigest,
-    ) -> Result<Option<ConnectionOwner>, StoreError> {
+        control_id: &str,
+    ) -> Result<ConnectionPreparation, StoreError> {
         if !valid_id(provider_id) {
             return Err(StoreError::InvalidInput);
         }
@@ -301,13 +343,22 @@ impl Store {
             let now = database_now!(connection, dialect);
             let _ = authenticate_provider!(connection, dialect, provider_id, key, now);
             let route = diesel::sql_query(dialect.query(provider_route_query(dialect)))
-                .bind::<Text, _>(provider_id)
-                .get_result::<ComponentRoute>(connection)
+                .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::Provider, provider_id)?)
+                .get_result::<ComponentRouteRow>(connection)
                 .await
+                .map(ComponentRoute::from)
                 .optional()?;
             let now = database_now!(connection, dialect);
             let _ = authenticate_provider!(connection, dialect, provider_id, key, now);
-            Ok(route.map(|route| route.owner()))
+            let _ = live_control!(connection, dialect, control_id);
+            Ok(ConnectionPreparation {
+                expected: route.map(|route| route.owner()),
+                owner: ConnectionOwner {
+                    control_id: control_id.into(),
+                    connection_id: EntityId::generate(database_now!(connection, dialect))?
+                        .to_dto(EntityKind::Connection),
+                },
+            })
         })
     }
     pub async fn admit_provider_connection(
@@ -332,9 +383,10 @@ impl Store {
             let now = database_now!(connection, dialect);
             let _ = authenticate_provider!(connection, dialect, provider_id, key, now);
             let route = diesel::sql_query(dialect.query(provider_route_query(dialect)))
-                .bind::<Text, _>(provider_id)
-                .get_result::<ComponentRoute>(connection)
+                .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::Provider, provider_id)?)
+                .get_result::<ComponentRouteRow>(connection)
                 .await
+                .map(ComponentRoute::from)
                 .optional()?;
             if !matches_owner(route.as_ref(), expected) {
                 return Err(StoreError::Conflict);
@@ -344,7 +396,7 @@ impl Store {
             let _ = authenticate_provider!(connection, dialect, provider_id, key, now);
             let expiry = policy.expiry(now, true)?;
             diesel::sql_query(dialect.query("INSERT INTO provider_connections(provider_id,control_id,connection_id,credential_hash,expires_at) VALUES(?,?,?,?,?) ON CONFLICT(provider_id) DO UPDATE SET control_id=excluded.control_id,connection_id=excluded.connection_id,credential_hash=excluded.credential_hash,expires_at=excluded.expires_at"))
-                .bind::<Text,_>(provider_id).bind::<Text,_>(&owner.control_id).bind::<Text,_>(&owner.connection_id).bind::<Binary,_>(key.as_bytes().as_slice()).bind::<BigInt,_>(expiry).execute(connection).await?;
+                .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Provider, provider_id)?).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::ControlInstance, &owner.control_id)?).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Connection, &owner.connection_id)?).bind::<Binary,_>(key.as_bytes().as_slice()).bind::<BigInt,_>(expiry).execute(connection).await?;
             Ok(ComponentRoute {
                 control_id: owner.control_id.clone(),
                 connection_id: owner.connection_id.clone(),
@@ -368,9 +420,10 @@ impl Store {
             let now = database_now!(connection, dialect);
             let _ = authenticate_provider!(connection, dialect, provider_id, key, now);
             let mut route = diesel::sql_query(dialect.query(provider_route_query(dialect)))
-                .bind::<Text, _>(provider_id)
-                .get_result::<ComponentRoute>(connection)
+                .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::Provider, provider_id)?)
+                .get_result::<ComponentRouteRow>(connection)
                 .await
+                .map(ComponentRoute::from)
                 .optional()?
                 .ok_or(StoreError::Conflict)?;
             if !matches_owner(Some(&route), Some(owner))
@@ -386,7 +439,7 @@ impl Store {
             }
             route.expires_at = policy.expiry(now, true)?;
             diesel::sql_query(dialect.query("UPDATE provider_connections SET expires_at=? WHERE provider_id=? AND control_id=? AND connection_id=?"))
-                .bind::<BigInt,_>(route.expires_at).bind::<Text,_>(provider_id).bind::<Text,_>(&owner.control_id).bind::<Text,_>(&owner.connection_id).execute(connection).await?;
+                .bind::<BigInt,_>(route.expires_at).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Provider, provider_id)?).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::ControlInstance, &owner.control_id)?).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Connection, &owner.connection_id)?).execute(connection).await?;
             Ok(route)
         })
     }
@@ -404,9 +457,10 @@ impl Store {
             let now = database_now!(connection, dialect);
             let _ = authenticate_provider!(connection, dialect, provider_id, key, now);
             let route = diesel::sql_query(dialect.query(provider_route_query(dialect)))
-                .bind::<Text, _>(provider_id)
-                .get_result::<ComponentRoute>(connection)
+                .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::Provider, provider_id)?)
+                .get_result::<ComponentRouteRow>(connection)
                 .await
+                .map(ComponentRoute::from)
                 .optional()?;
             let Some(route) = route else {
                 return Ok(false);
@@ -417,7 +471,7 @@ impl Store {
                 return Ok(false);
             }
             Ok(diesel::sql_query(dialect.query("DELETE FROM provider_connections WHERE provider_id=? AND control_id=? AND connection_id=?"))
-                .bind::<Text,_>(provider_id).bind::<Text,_>(&owner.control_id).bind::<Text,_>(&owner.connection_id).execute(connection).await?==1)
+                .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Provider, provider_id)?).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::ControlInstance, &owner.control_id)?).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Connection, &owner.connection_id)?).execute(connection).await?==1)
         })
     }
     /// Internal trusted caller only. Returned route remains a snapshot; receivers
@@ -433,7 +487,7 @@ impl Store {
             // Lock the Provider before reading its route/key, matching revocation.
             let provider =
                 diesel::sql_query(dialect.query(crate::computers::provider_lock(dialect)))
-                    .bind::<Text, _>(provider_id)
+                    .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::Provider, provider_id)?)
                     .get_result::<crate::computers::ProviderRow>(connection)
                     .await
                     .optional()?;
@@ -441,17 +495,22 @@ impl Store {
                 return Ok(None);
             }
             let route = diesel::sql_query(dialect.query(provider_route_query(dialect)))
-                .bind::<Text, _>(provider_id)
-                .get_result::<ComponentRoute>(connection)
+                .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::Provider, provider_id)?)
+                .get_result::<ComponentRouteRow>(connection)
                 .await
+                .map(ComponentRoute::from)
                 .optional()?;
             let Some(route) = route else {
                 return Ok(None);
             };
             let control = diesel::sql_query(dialect.query(control_query(dialect, false)))
-                .bind::<Text, _>(&route.control_id)
-                .get_result::<ControlRegistration>(connection)
+                .bind::<IdentitySql, _>(EntityId::from_dto(
+                    EntityKind::ControlInstance,
+                    &route.control_id,
+                )?)
+                .get_result::<ControlRow>(connection)
                 .await
+                .map(ControlRegistration::from)
                 .optional()?;
             let Some(control) = control else {
                 return Ok(None);
@@ -471,7 +530,7 @@ impl Store {
             // route, not an unauthenticated user request or stale-address retry.
             let key =
                 diesel::sql_query(dialect.query("SELECT * FROM provider_keys WHERE provider_id=?"))
-                    .bind::<Text, _>(provider_id)
+                    .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::Provider, provider_id)?)
                     .get_result::<crate::component_keys::ProviderKeyRow>(connection)
                     .await
                     .optional()?;

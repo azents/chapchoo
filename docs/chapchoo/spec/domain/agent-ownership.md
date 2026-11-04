@@ -71,7 +71,8 @@ its owner-scoped creation receipt,
 then validates an authorized currently connected creation-capable Provider and
 writes the receipt, Computer/running intent and Agent atomically. Exact replay
 returns its assigned Agent/current state even if Provider connectivity has since
-changed. Reuse with a changed Team or canonical name/Provider payload rejects. Replay after
+changed. Reuse with a changed Team, Provider, name, handle, image or palette
+payload rejects. Replay after
 Agent removal returns removed, never a fresh allocation. External provisioning is
 outside this transaction.
 
@@ -88,14 +89,16 @@ Debug for owner verifier/proof, private rows, drafts and projections is redacted
 
 ## Application Service
 
-`ComputersService` generates Agent, Computer, execution and session IDs and all
-new component credentials server-side. Caller Request IDs remain stable for
+Repository acceptance issues Agent, Computer, execution, session, Control and
+connection IDs under the [shared identity contract](repository-identity.md).
+`ComputersService` prepares new credentials and independent native names, not
+entity IDs. Caller Request IDs remain stable for
 deduplication. Bootstrap authentication adapters and their immutable permit policy
 are supplied by trusted composition, not request owner assertions. Initial exchange
 can create missing bootstrap metadata; subsequent exchange validates identity and
 preserves DB-owned settings. Component keys cannot self-rotate.
 User-owner methods use current account authority. Store validation and locked
-admission remain authoritative for every generated draft.
+admission remain authoritative for every prepared draft.
 
 Credential methods use execution-scoped sessions and distinct bootstrap versus
 operational roles. Key recovery returns the exact current result and expiry,
@@ -106,6 +109,8 @@ reconciler or perform external resource effects.
 
 ## Connections
 
+- [Agent handles and saved profiles](agent-profile.md) — final immutable handles, catalogue-backed presentation, profile-only changes and exact creation recovery.
+- [Repository identity](repository-identity.md) — acceptance owns issuance; handles, native witnesses and request keys retain separate authority.
 - [Account and Team transaction contracts](account-transactions.md) — Account, session, membership and invitation state changes complete under current database authority before external delivery.
 - [Computer schema and native identities](computer-storage.md) — Durable Computer state records authority, exact resource identity and cleanup obligations; schema records do not themselves perform external effects.
 - [Computer owner and installation inventory RPC](computer-client-rpc.md) — Owner operations and redacted installation inventory are separate capabilities over current account authority.

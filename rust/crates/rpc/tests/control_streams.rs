@@ -67,6 +67,7 @@ fn reply(command: wire::ProviderCommand) -> wire::ProviderFrame {
 }
 async fn open(
     client: &mut ProviderConnectionClient<tonic::transport::Channel>,
+    provider: &str,
     key: &str,
 ) -> Result<
     (
@@ -80,7 +81,7 @@ async fn open(
     sender
         .send(wire::ProviderFrame {
             payload: Some(wire::provider_frame::Payload::Hello(wire::ProviderHello {
-                provider_id: "provider".into(),
+                provider_id: provider.into(),
                 namespace: "fixture".into(),
                 connector_endpoint: "http://127.0.0.1:1".into(),
                 kind: wire::ProviderKind::Kubernetes as i32,
@@ -180,8 +181,9 @@ fn two_control_replacement_cancellation_and_late_replies_preserve_current_stream
             tonic::Code::Unimplemented
         );
         let (_sender_a, mut stream_a, connected_a) =
-            open(&mut client_a, key.token.expose()).await?;
-        let (sender_b, mut stream_b, connected_b) = open(&mut client_b, key.token.expose()).await?;
+            open(&mut client_a, &key.provider_id, key.key.token.expose()).await?;
+        let (sender_b, mut stream_b, connected_b) =
+            open(&mut client_b, &key.provider_id, key.key.token.expose()).await?;
         assert_ne!(connected_a.connection_id, connected_b.connection_id);
         assert_ne!(connected_a.instance_id, connected_b.instance_id);
         let owner_a = wire::ExpectedOwner {
@@ -208,7 +210,7 @@ fn two_control_replacement_cancellation_and_late_replies_preserve_current_stream
         app.withdraw_drained_control_connections(&control_a.id)
             .await?;
         assert_eq!(
-            app.resolve_provider_route("provider")
+            app.resolve_provider_route(&key.provider_id)
                 .await?
                 .ok_or("Old Control removed current owner")?
                 .component
@@ -217,7 +219,7 @@ fn two_control_replacement_cancellation_and_late_replies_preserve_current_stream
         );
         let not_owner = services_a
             .invoke_provider(
-                "provider",
+                &key.provider_id,
                 &owner_a,
                 command("stale", &owner_a.connection_id),
                 Instant::now() + Duration::from_secs(5),
@@ -230,7 +232,7 @@ fn two_control_replacement_cancellation_and_late_replies_preserve_current_stream
         );
         let wrong_owner = services_b
             .invoke_provider(
-                "provider",
+                &key.provider_id,
                 &owner_a,
                 command("wrong-owner", &owner_a.connection_id),
                 Instant::now() + Duration::from_secs(5),
@@ -242,10 +244,11 @@ fn two_control_replacement_cancellation_and_late_replies_preserve_current_stream
         );
         let service = services_b.clone();
         let target = owner_b.clone();
+        let provider = key.provider_id.clone();
         let cancelled = fixture.call(async move {
             service
                 .invoke_provider(
-                    "provider",
+                    &provider,
                     &target,
                     command("cancelled", &target.connection_id),
                     Instant::now() + Duration::from_secs(5),
@@ -273,10 +276,11 @@ fn two_control_replacement_cancellation_and_late_replies_preserve_current_stream
         );
         let service = services_b.clone();
         let target = owner_b.clone();
+        let provider = key.provider_id.clone();
         let pending = fixture.call(async move {
             service
                 .invoke_provider(
-                    "provider",
+                    &provider,
                     &target,
                     command("current", &target.connection_id),
                     Instant::now() + Duration::from_secs(5),

@@ -1,7 +1,11 @@
 //! Fresh domain authority for trusted peer dispatch; never an external API.
 use crate::{
-    ComputerRequest, ManagedResource, Store, StoreError, computers::valid_id,
-    directory::database_now, models::authenticate, store::operation,
+    ComputerRequest, ManagedResource, Store, StoreError,
+    computers::valid_id,
+    directory::database_now,
+    entity_id::{EntityId, EntityKind, IdentitySql},
+    models::authenticate,
+    store::operation,
 };
 use chapchoo_crypto::SecretDigest;
 use diesel::{
@@ -10,43 +14,97 @@ use diesel::{
 };
 use diesel_async::RunQueryDsl;
 
-#[derive(Debug, diesel::QueryableByName)]
+#[derive(Debug)]
 pub struct DeliveryComputer {
-    #[diesel(sql_type=Text)]
     pub id: String,
-    #[diesel(sql_type=Text)]
     pub owner_user_id: String,
-    #[diesel(sql_type=Text)]
     pub provider_id: String,
-    #[diesel(sql_type=Text)]
     pub current_request_id: String,
-    #[diesel(sql_type=Text)]
     pub desired_state: String,
-    #[diesel(sql_type=Text)]
     pub current_phase: String,
-    #[diesel(sql_type=Text)]
     pub current_action: String,
-    #[diesel(sql_type=Nullable<Text>)]
     pub current_execution_id: Option<String>,
-    #[diesel(sql_type=Nullable<Text>)]
     pub expected_old_execution_id: Option<String>,
-    #[diesel(sql_type=Nullable<BigInt>)]
     pub agent_removed_at: Option<i64>,
-    #[diesel(sql_type=Nullable<BigInt>)]
     pub cleanup_completed_at: Option<i64>,
-    #[diesel(sql_type=Nullable<BigInt>)]
     pub initial_start_dispatch_at: Option<i64>,
-    #[diesel(sql_type=Nullable<BigInt>)]
     pub prepare_admitted_at: Option<i64>,
 }
-#[derive(Debug, diesel::QueryableByName)]
+#[derive(diesel::QueryableByName)]
+pub(crate) struct DeliveryComputerRow {
+    #[diesel(sql_type=IdentitySql)]
+    id: EntityId,
+    #[diesel(sql_type=IdentitySql)]
+    owner_user_id: EntityId,
+    #[diesel(sql_type=IdentitySql)]
+    provider_id: EntityId,
+    #[diesel(sql_type=Text)]
+    current_request_id: String,
+    #[diesel(sql_type=Text)]
+    desired_state: String,
+    #[diesel(sql_type=Text)]
+    current_phase: String,
+    #[diesel(sql_type=Text)]
+    current_action: String,
+    #[diesel(sql_type=Nullable<IdentitySql>)]
+    current_execution_id: Option<EntityId>,
+    #[diesel(sql_type=Nullable<IdentitySql>)]
+    expected_old_execution_id: Option<EntityId>,
+    #[diesel(sql_type=Nullable<BigInt>)]
+    agent_removed_at: Option<i64>,
+    #[diesel(sql_type=Nullable<BigInt>)]
+    cleanup_completed_at: Option<i64>,
+    #[diesel(sql_type=Nullable<BigInt>)]
+    initial_start_dispatch_at: Option<i64>,
+    #[diesel(sql_type=Nullable<BigInt>)]
+    prepare_admitted_at: Option<i64>,
+}
+impl From<DeliveryComputerRow> for DeliveryComputer {
+    fn from(row: DeliveryComputerRow) -> Self {
+        Self {
+            id: row.id.to_dto(EntityKind::Computer),
+            owner_user_id: row.owner_user_id.to_dto(EntityKind::User),
+            provider_id: row.provider_id.to_dto(EntityKind::Provider),
+            current_request_id: row.current_request_id,
+            desired_state: row.desired_state,
+            current_phase: row.current_phase,
+            current_action: row.current_action,
+            current_execution_id: row
+                .current_execution_id
+                .map(|id| id.to_dto(EntityKind::Execution)),
+            expected_old_execution_id: row
+                .expected_old_execution_id
+                .map(|id| id.to_dto(EntityKind::Execution)),
+            agent_removed_at: row.agent_removed_at,
+            cleanup_completed_at: row.cleanup_completed_at,
+            initial_start_dispatch_at: row.initial_start_dispatch_at,
+            prepare_admitted_at: row.prepare_admitted_at,
+        }
+    }
+}
+#[derive(Debug)]
 pub struct DeliveryExecution {
-    #[diesel(sql_type=Bool)]
     pub initial_allocation: bool,
-    #[diesel(sql_type=Nullable<BigInt>)]
     pub retired_at: Option<i64>,
-    #[diesel(sql_type=Nullable<BigInt>)]
     pub running_confirmed_at: Option<i64>,
+}
+#[derive(diesel::QueryableByName)]
+pub(crate) struct DeliveryExecutionRow {
+    #[diesel(sql_type=Bool)]
+    initial_allocation: bool,
+    #[diesel(sql_type=Nullable<BigInt>)]
+    retired_at: Option<i64>,
+    #[diesel(sql_type=Nullable<BigInt>)]
+    running_confirmed_at: Option<i64>,
+}
+impl From<DeliveryExecutionRow> for DeliveryExecution {
+    fn from(row: DeliveryExecutionRow) -> Self {
+        Self {
+            initial_allocation: row.initial_allocation,
+            retired_at: row.retired_at,
+            running_confirmed_at: row.running_confirmed_at,
+        }
+    }
 }
 #[derive(Debug)]
 pub struct DeliverySnapshot {
@@ -66,8 +124,8 @@ impl Store {
         operation!(self, |connection, dialect| {
             #[derive(diesel::QueryableByName)]
             struct Found {
-                #[diesel(sql_type=Text)]
-                id: String,
+                #[diesel(sql_type=IdentitySql)]
+                id: EntityId,
             }
             let found=diesel::sql_query(dialect.query(
                 "SELECT s.id FROM connector_sessions s JOIN computers c ON c.id=s.computer_id
@@ -75,10 +133,11 @@ impl Store {
                  WHERE s.id=? AND s.computer_id=? AND s.execution_id=? AND s.initial_hash=?
                  AND s.revoked_at IS NULL AND c.current_request_id=? AND c.current_execution_id=s.execution_id
                  AND c.desired_state='RUNNING' AND c.current_phase<>'RETIRING' AND e.retired_at IS NULL"))
-                .bind::<Text,_>(session).bind::<Text,_>(scope.computer_id)
-                .bind::<Text,_>(execution).bind::<diesel::sql_types::Binary,_>(key.as_bytes().as_slice())
+                .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::ConnectorSession,session)?)
+                .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Computer,scope.computer_id)?)
+                .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Execution,execution)?).bind::<diesel::sql_types::Binary,_>(key.as_bytes().as_slice())
                 .bind::<Text,_>(scope.request_id).get_result::<Found>(connection).await.optional()?;
-            if found.is_none_or(|found| found.id != session) {
+            if found.is_none_or(|found| found.id.to_dto(EntityKind::ConnectorSession) != session) {
                 return Err(StoreError::Forbidden);
             }
             Ok(())
@@ -112,9 +171,13 @@ impl Store {
                 crate::store::Dialect::Sqlite => "SELECT * FROM computers WHERE id=?",
             };
             let computer = diesel::sql_query(dialect.query(query))
-                .bind::<Text, _>(scope.computer_id)
-                .get_result::<DeliveryComputer>(connection)
+                .bind::<IdentitySql, _>(EntityId::from_dto(
+                    EntityKind::Computer,
+                    scope.computer_id,
+                )?)
+                .get_result::<DeliveryComputerRow>(connection)
                 .await
+                .map(DeliveryComputer::from)
                 .optional()?
                 .ok_or(StoreError::NotFound)?;
             if let Some(user) = user {
@@ -123,20 +186,22 @@ impl Store {
                 }
                 #[derive(diesel::QueryableByName)]
                 struct OwnedAgent {
-                    #[diesel(sql_type = Text)]
-                    id: String,
+                    #[diesel(sql_type = IdentitySql)]
+                    computer_id: EntityId,
                 }
                 // Scope removal holds the Computer lock before removing access.
                 // This read must not take a Team lock after the Computer lock.
                 let agent = diesel::sql_query(dialect.query(
-                    "SELECT a.id FROM agents a JOIN teams t ON t.id=a.team_id AND t.deletion_requested_at IS NULL JOIN memberships m ON m.team_id=a.team_id AND m.user_id=a.owner_user_id WHERE a.computer_id=? AND a.owner_user_id=?",
+                    "SELECT a.computer_id FROM agents a JOIN teams t ON t.id=a.team_id AND t.deletion_requested_at IS NULL JOIN memberships m ON m.team_id=a.team_id AND m.user_id=a.owner_user_id WHERE a.computer_id=? AND a.owner_user_id=?",
                 ))
-                    .bind::<Text, _>(scope.computer_id)
-                    .bind::<Text, _>(&user.id)
+                    .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::Computer,scope.computer_id)?)
+                    .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::User,&user.id)?)
                     .get_result::<OwnedAgent>(connection)
                     .await
                     .optional()?;
-                if agent.is_none_or(|agent| agent.id.is_empty()) {
+                if agent.is_none_or(|agent| {
+                    agent.computer_id.to_dto(EntityKind::Computer) != computer.id
+                }) {
                     return Err(StoreError::NotFound);
                 }
             }
@@ -157,10 +222,14 @@ impl Store {
                         diesel::sql_query(dialect.query(
                             "SELECT * FROM computer_executions WHERE id=? AND computer_id=?",
                         ))
-                        .bind::<Text, _>(id)
-                        .bind::<Text, _>(scope.computer_id)
-                        .get_result::<DeliveryExecution>(connection)
+                        .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::Execution, id)?)
+                        .bind::<IdentitySql, _>(EntityId::from_dto(
+                            EntityKind::Computer,
+                            scope.computer_id,
+                        )?)
+                        .get_result::<DeliveryExecutionRow>(connection)
                         .await
+                        .map(DeliveryExecution::from)
                         .optional()?
                         .ok_or(StoreError::NotFound)?,
                     )
@@ -169,10 +238,13 @@ impl Store {
                 };
             let provider =
                 diesel::sql_query(dialect.query("SELECT * FROM computer_providers WHERE id=?"))
-                    .bind::<Text, _>(&computer.provider_id)
+                    .bind::<IdentitySql, _>(EntityId::from_dto(
+                        EntityKind::Provider,
+                        &computer.provider_id,
+                    )?)
                     .get_result::<crate::computers::ProviderRow>(connection)
                     .await?;
-            let resources=diesel::sql_query(dialect.query("SELECT * FROM computer_resources WHERE computer_id=? ORDER BY resource_kind,native_scope,name")).bind::<Text,_>(scope.computer_id).load::<crate::native_resources::ResourceRow>(connection).await?
+            let resources=diesel::sql_query(dialect.query("SELECT * FROM computer_resources WHERE computer_id=? ORDER BY resource_kind,native_scope,name")).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Computer,scope.computer_id)?).load::<crate::native_resources::ResourceRow>(connection).await?
                 .into_iter().map(ManagedResource::try_from).collect::<Result<Vec<_>,StoreError>>()?;
             crate::computer_executions::validate_native_inventory(&provider, &resources)?;
             Ok(DeliverySnapshot {

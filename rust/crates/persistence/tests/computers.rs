@@ -1,3 +1,5 @@
+#[path = "support/legacy.rs"]
+mod legacy;
 mod support;
 #[path = "support/tasks.rs"]
 mod tasks;
@@ -40,7 +42,7 @@ fn seed(
         sql.push_str(&format!("INSERT INTO teams(id,kind,name,handle,owner_user_id,created_at) VALUES('personal-{index}','PERSONAL','Personal','personal-{index}','user-{index}',0); INSERT INTO memberships VALUES('personal-{index}','user-{index}','MEMBER'); INSERT INTO personal_contexts VALUES('user-{index}','personal-{index}');"));
     }
     sql.push_str("UPDATE users SET is_admin=TRUE WHERE id='user-0';");
-    let protected = cipher.protect_latest("provider:provider", provider)?;
+    let protected = cipher.protect_latest("computer-provider:provider", provider)?;
     sql.push_str(&format!("INSERT INTO computer_providers(id,owner_kind,system_owner_id,name,provider_kind,can_create,can_start,can_stop,can_restart,created_at) VALUES('provider','SYSTEM','installation','Fixture','KUBERNETES',TRUE,TRUE,TRUE,TRUE,0); INSERT INTO provider_keys(provider_id,current_hash,issued_at,expires_at,current_request_id,recovery_nonce,recovery_ciphertext) VALUES('provider',{},0,10000000,'key-request',{},{}); INSERT INTO control_instances(id,endpoint,renewed_at,expires_at) VALUES('control','http://127.0.0.1:1',0,10000000); INSERT INTO provider_connections(provider_id,control_id,connection_id,credential_hash,expires_at) VALUES('provider','control','connection',{},10000000);",binary(provider.digest().as_bytes()),binary(protected.nonce()),binary(protected.ciphertext()),binary(provider.digest().as_bytes())));
     for (id, power, source, environment) in [
         ("running", "RUNNING", "connection", "VERIFIED"),
@@ -48,28 +50,49 @@ fn seed(
         ("stopped", "STOPPED", "connection", "VERIFIED"),
         ("missing", "STOPPED", "connection", "MISSING"),
     ] {
-        sql.push_str(&format!("INSERT INTO computers(id,owner_user_id,kind,provider_id,desired_state,current_request_id,current_payload_hash,current_action,current_phase,observed_power,power_observed_at,power_source_connection_id,environment_source_connection_id,saved_environment,created_at) VALUES('{id}','user-0','CLOUD','provider','RUNNING','prior-{id}',{},'START','COMPLETED','{power}',0,'{source}','connection','{environment}',0); INSERT INTO agents(id,owner_user_id,team_id,name,computer_id,computer_kind,created_at) VALUES('agent-{id}','user-0','personal-0','Fixture','{id}','CLOUD',0);",binary(&[0;32])));
+        sql.push_str(&format!("INSERT INTO computers(id,owner_user_id,kind,provider_id,desired_state,current_request_id,current_payload_hash,current_action,current_phase,observed_power,power_observed_at,power_source_connection_id,environment_source_connection_id,saved_environment,created_at) VALUES('{id}','user-0','CLOUD','provider','RUNNING','prior-{id}',{},'START','COMPLETED','{power}',0,'{source}','connection','{environment}',0); INSERT INTO agents(id,owner_user_id,team_id,name,computer_id,computer_kind,created_at) VALUES('agent-{id}','user-0','personal-0','{id}','{id}','CLOUD',0);",binary(&[0;32])));
         if power == "RUNNING" {
             sql.push_str(&format!("INSERT INTO computer_executions(id,computer_id,initial_allocation,running_confirmed_at,created_at) VALUES('execution-{id}','{id}',FALSE,0,0); UPDATE computers SET current_execution_id='execution-{id}',power_source_execution_id='execution-{id}' WHERE id='{id}';"));
         }
     }
     let bootstrap = BearerSecret::generate()?;
     let operational = BearerSecret::generate()?;
-    let initial = cipher.protect_latest("bootstrap:session-running", &bootstrap)?;
-    let current = cipher.protect_latest("operational:session-running", &operational)?;
+    let initial =
+        cipher.protect_latest("computer-connector-bootstrap:session-running", &bootstrap)?;
+    let current = cipher.protect_latest(
+        "computer-connector-operational:session-running",
+        &operational,
+    )?;
     let initial_payload = binary(&[0; 32]);
     sql.push_str(&format!("INSERT INTO connector_sessions(id,computer_id,execution_id,initial_request_id,initial_payload_hash,initial_hash,initial_nonce,initial_ciphertext,current_hash,issued_at,expires_at,current_request_id,recovery_nonce,recovery_ciphertext,created_at) VALUES('session-running','running','execution-running','initial-session-key',{initial_payload},{},{},{},{},0,10000000,'session-key',{},{},0); INSERT INTO connector_connections(computer_id,session_id,control_id,connection_id,credential_hash,expires_at) VALUES('running','session-running','control','connector-connection',{},10000000);",binary(bootstrap.digest().as_bytes()),binary(initial.nonce()),binary(initial.ciphertext()),binary(operational.digest().as_bytes()),binary(current.nonce()),binary(current.ciphertext()),binary(operational.digest().as_bytes())));
     sql.push_str("COMMIT;");
     Ok(sql)
 }
-fn draft(agent: &str, computer: &str, request: &str) -> CreateCloudAgent {
+struct FixtureIds {
+    team: String,
+    provider: String,
+    image: String,
+    agents: std::collections::BTreeMap<String, chapchoo_persistence::AgentSummary>,
+    executions: std::collections::BTreeMap<String, String>,
+}
+impl FixtureIds {
+    fn agent(&self, name: &str) -> Result<&chapchoo_persistence::AgentSummary, TestError> {
+        self.agents
+            .get(name)
+            .ok_or_else(|| "Missing migrated Agent".into())
+    }
+}
+fn draft(ids: &FixtureIds, request: &str) -> CreateCloudAgent {
     CreateCloudAgent {
-        agent_id: agent.into(),
-        team_id: "personal-0".into(),
-        computer_id: computer.into(),
+        team_id: ids.team.clone(),
         request_id: request.into(),
-        provider_id: "provider".into(),
+        provider_id: ids.provider.clone(),
         name: "My Agent".into(),
+        profile: chapchoo_persistence::CreateAgentProfile {
+            handle: format!("agent-{}", request.chars().take(10).collect::<String>()),
+            image_id: ids.image.clone(),
+            palette_key: "sage".into(),
+        },
     }
 }
 fn mutation(request: &str, expected: &str, action: LifecycleAction) -> LifecycleRequest {
@@ -81,7 +104,7 @@ fn mutation(request: &str, expected: &str, action: LifecycleAction) -> Lifecycle
 }
 fn present(outcome: CreationOutcome) -> Result<chapchoo_persistence::AgentSummary, TestError> {
     match outcome {
-        CreationOutcome::Present(v) => Ok(v),
+        CreationOutcome::Present(v) => Ok(*v),
         _ => Err("Expected current Agent".into()),
     }
 }
@@ -89,19 +112,64 @@ fn present(outcome: CreationOutcome) -> Result<chapchoo_persistence::AgentSummar
 async fn exercise(store: Store, users: &[BearerSecret]) -> Result<(), TestError> {
     let owner = users[0].digest();
     let foreign = users[1].digest();
+    let team = store.teams(&owner, NOW).await?.remove(0).id;
+    let mut ids = FixtureIds {
+        provider: store
+            .provider_inventory(&owner, None, 20, NOW)
+            .await?
+            .remove(0)
+            .id,
+        image: store
+            .agent_profile_images(&owner, None, 1, NOW)
+            .await?
+            .remove(0)
+            .id,
+        agents: store
+            .agents(&owner, &team, None, 20, NOW)
+            .await?
+            .into_iter()
+            .map(|agent| (agent.name.clone(), agent))
+            .collect(),
+        team,
+        executions: Default::default(),
+    };
+    for name in ["running", "stale"] {
+        let agent = ids.agent(name)?;
+        let snapshot = store
+            .delivery_snapshot(
+                None,
+                chapchoo_persistence::ComputerRequest {
+                    computer_id: &agent.computer.id,
+                    request_id: &agent.computer.current_request_id,
+                },
+                None,
+            )
+            .await?;
+        ids.executions.insert(
+            name.into(),
+            snapshot
+                .computer
+                .current_execution_id
+                .ok_or("Missing migrated execution")?,
+        );
+    }
+    let running = ids.agent("running")?;
+    let stale = ids.agent("stale")?;
+    let stopped = ids.agent("stopped")?;
+    let missing = ids.agent("missing")?;
     assert!(matches!(
         store.provider_inventory(&foreign, None, 20, NOW).await,
         Err(StoreError::Forbidden)
     ));
     assert!(matches!(
         store
-            .computer_inventory(&foreign, "provider", None, 20, NOW)
+            .computer_inventory(&foreign, &ids.provider, None, 20, NOW)
             .await,
         Err(StoreError::Forbidden)
     ));
     assert!(matches!(
         store
-            .resource_inventory(&foreign, "running", None, 20, NOW)
+            .resource_inventory(&foreign, &running.computer.id, None, 20, NOW)
             .await,
         Err(StoreError::Forbidden)
     ));
@@ -110,17 +178,23 @@ async fn exercise(store: Store, users: &[BearerSecret]) -> Result<(), TestError>
         1
     );
     let inventory = store
-        .computer_inventory(&owner, "provider", None, 2, NOW)
+        .computer_inventory(&owner, &ids.provider, None, 2, NOW)
         .await?;
     assert_eq!(inventory.len(), 2);
     let later = store
-        .computer_inventory(&owner, "provider", Some(&inventory[1].computer.id), 20, NOW)
+        .computer_inventory(
+            &owner,
+            &ids.provider,
+            Some(&inventory[1].computer.id),
+            20,
+            NOW,
+        )
         .await?;
-    assert!(
-        later
+    assert!(later.iter().all(|row| {
+        inventory
             .iter()
-            .all(|row| row.computer.id > inventory[1].computer.id)
-    );
+            .all(|previous| row.computer.id != previous.computer.id)
+    }));
     assert!(
         later
             .iter()
@@ -154,36 +228,32 @@ async fn exercise(store: Store, users: &[BearerSecret]) -> Result<(), TestError>
     );
     let created = present(
         store
-            .create_cloud_agent(&owner, &draft("created", "computer-created", "create"), NOW)
+            .create_cloud_agent(&owner, &draft(&ids, "create"), NOW)
             .await?,
     )?;
-    assert_eq!(created.id, "created");
+    assert!(!created.id.is_empty());
     assert_eq!(created.computer.power, ObservedPower::Unknown);
     let replay = present(
         store
-            .create_cloud_agent(
-                &owner,
-                &draft("ignored-new-id", "ignored-new-computer", "create"),
-                NOW,
-            )
+            .create_cloud_agent(&owner, &draft(&ids, "create"), NOW)
             .await?,
     )?;
-    assert_eq!(replay.id, "created");
-    let mut changed = draft("unused", "unused-computer", "create");
+    assert_eq!(replay.id, created.id);
+    let mut changed = draft(&ids, "create");
     changed.name = "Different".into();
     assert!(matches!(
         store.create_cloud_agent(&owner, &changed, NOW).await,
         Err(StoreError::Conflict)
     ));
     assert!(matches!(
-        store.agent(&foreign, "created", NOW).await,
+        store.agent(&foreign, &created.id, NOW).await,
         Err(StoreError::NotFound)
     ));
     assert!(matches!(
         store
             .request_lifecycle(
                 &foreign,
-                "created",
+                &created.id,
                 &mutation("foreign-delete", "create", LifecycleAction::Delete),
                 NOW
             )
@@ -194,7 +264,7 @@ async fn exercise(store: Store, users: &[BearerSecret]) -> Result<(), TestError>
         store
             .request_lifecycle(
                 &owner,
-                "created",
+                &created.id,
                 &mutation("bad-stop", "create", LifecycleAction::Stop),
                 NOW
             )
@@ -202,16 +272,12 @@ async fn exercise(store: Store, users: &[BearerSecret]) -> Result<(), TestError>
         Err(StoreError::InvalidTransition)
     ));
     assert_eq!(
-        store
-            .agent(&owner, "agent-stale", NOW)
-            .await?
-            .computer
-            .power,
+        store.agent(&owner, &stale.id, NOW).await?.computer.power,
         ObservedPower::Unknown
     );
     assert_eq!(
         store
-            .agent(&owner, "agent-stale", NOW)
+            .agent(&owner, &stale.id, NOW)
             .await?
             .computer
             .last_known_power,
@@ -221,7 +287,7 @@ async fn exercise(store: Store, users: &[BearerSecret]) -> Result<(), TestError>
         store
             .request_lifecycle(
                 &owner,
-                "agent-stale",
+                &stale.id,
                 &mutation("stop-stale", "prior-stale", LifecycleAction::Stop),
                 NOW
             )
@@ -232,7 +298,7 @@ async fn exercise(store: Store, users: &[BearerSecret]) -> Result<(), TestError>
         store
             .request_lifecycle(
                 &owner,
-                "agent-missing",
+                &missing.id,
                 &mutation("start-missing", "prior-missing", LifecycleAction::Start),
                 NOW
             )
@@ -242,7 +308,7 @@ async fn exercise(store: Store, users: &[BearerSecret]) -> Result<(), TestError>
     let started = store
         .request_lifecycle(
             &owner,
-            "agent-stopped",
+            &stopped.id,
             &mutation("start", "prior-stopped", LifecycleAction::Start),
             NOW,
         )
@@ -251,7 +317,7 @@ async fn exercise(store: Store, users: &[BearerSecret]) -> Result<(), TestError>
     let stopped = store
         .request_lifecycle(
             &owner,
-            "agent-running",
+            &running.id,
             &mutation("stop", "prior-running", LifecycleAction::Stop),
             NOW,
         )
@@ -260,7 +326,7 @@ async fn exercise(store: Store, users: &[BearerSecret]) -> Result<(), TestError>
     let repeat = store
         .request_lifecycle(
             &owner,
-            "agent-running",
+            &running.id,
             &mutation("stop", "prior-running", LifecycleAction::Stop),
             NOW,
         )
@@ -270,7 +336,7 @@ async fn exercise(store: Store, users: &[BearerSecret]) -> Result<(), TestError>
         store
             .request_lifecycle(
                 &owner,
-                "agent-running",
+                &running.id,
                 &mutation("stop", "prior-running", LifecycleAction::Restart),
                 NOW
             )
@@ -281,7 +347,7 @@ async fn exercise(store: Store, users: &[BearerSecret]) -> Result<(), TestError>
         store
             .request_lifecycle(
                 &owner,
-                "agent-running",
+                &running.id,
                 &mutation("stale", "prior-running", LifecycleAction::Restart),
                 NOW
             )
@@ -291,7 +357,7 @@ async fn exercise(store: Store, users: &[BearerSecret]) -> Result<(), TestError>
     store
         .request_lifecycle(
             &owner,
-            "agent-running",
+            &running.id,
             &mutation("delete-running", "stop", LifecycleAction::Delete),
             NOW,
         )
@@ -299,7 +365,7 @@ async fn exercise(store: Store, users: &[BearerSecret]) -> Result<(), TestError>
     let deleted = store
         .request_lifecycle(
             &owner,
-            "created",
+            &created.id,
             &mutation("delete", "create", LifecycleAction::Delete),
             NOW,
         )
@@ -307,42 +373,42 @@ async fn exercise(store: Store, users: &[BearerSecret]) -> Result<(), TestError>
     assert_eq!(deleted.computer.desired, DesiredState::Deleting);
     assert_eq!(
         store
-            .force_remove_agent(&owner, "created", "delete", NOW)
+            .force_remove_agent(&owner, &created.id, "delete", NOW)
             .await?,
         AgentRemoval::Removed
     );
     assert_eq!(
         store
-            .force_remove_agent(&owner, "created", "delete", NOW)
+            .force_remove_agent(&owner, &created.id, "delete", NOW)
             .await?,
         AgentRemoval::AlreadyRemoved
     );
     assert!(matches!(
         store
-            .force_remove_agent(&owner, "created", "wrong-delete", NOW)
+            .force_remove_agent(&owner, &created.id, "wrong-delete", NOW)
             .await,
         Err(StoreError::Conflict)
     ));
     assert!(matches!(
-        store.agent(&owner, "created", NOW).await,
+        store.agent(&owner, &created.id, NOW).await,
         Err(StoreError::NotFound)
     ));
     let residual = store
-        .computer_inventory(&owner, "provider", None, 20, NOW)
+        .computer_inventory(&owner, &ids.provider, None, 20, NOW)
         .await?;
     assert!(
         residual
             .iter()
-            .any(|row| row.computer.id == "computer-created"
+            .any(|row| row.computer.id == created.computer.id
                 && row.residual
                 && row.computer.desired == DesiredState::Deleting)
     );
     assert!(
-        matches!(store.create_cloud_agent(&owner,&draft("never-recreate","never-recreate-computer","create"),NOW).await?,CreationOutcome::Removed{assigned_agent_id} if assigned_agent_id=="created")
+        matches!(store.create_cloud_agent(&owner,&draft(&ids,"create"),NOW).await?,CreationOutcome::Removed{assigned_agent_id} if assigned_agent_id==created.id)
     );
     assert!(matches!(
         store
-            .force_remove_agent(&foreign, "created", "delete", NOW)
+            .force_remove_agent(&foreign, &created.id, "delete", NOW)
             .await,
         Err(StoreError::NotFound)
     ));
@@ -353,32 +419,30 @@ async fn exercise(store: Store, users: &[BearerSecret]) -> Result<(), TestError>
     let barrier = Arc::new(tokio::sync::Barrier::new(2));
     let ba = barrier.clone();
     let bb = barrier;
+    let draft_a = draft(&ids, "race");
+    let draft_b = draft(&ids, "race");
     let one = tokio::spawn(async move {
         ba.wait().await;
-        a.create_cloud_agent(&da, &draft("race-one", "race-computer-one", "race"), NOW)
-            .await
+        a.create_cloud_agent(&da, &draft_a, NOW).await
     });
     let two = tokio::spawn(async move {
         bb.wait().await;
-        b.create_cloud_agent(&db, &draft("race-two", "race-computer-two", "race"), NOW)
-            .await
+        b.create_cloud_agent(&db, &draft_b, NOW).await
     });
     let (first, second) = tasks::join_pair(one, two, None).await?;
     let (first, second) = support::combine(first.map_err(Into::into), second.map_err(Into::into))?;
     let first = present(first)?;
     let second = present(second)?;
     assert_eq!(first.id, second.id);
-    store
-        .create_cloud_agent(
-            &owner,
-            &draft("force-race", "force-race-computer", "force-race-create"),
-            NOW,
-        )
-        .await?;
+    let force_race = present(
+        store
+            .create_cloud_agent(&owner, &draft(&ids, "force-race-create"), NOW)
+            .await?,
+    )?;
     store
         .request_lifecycle(
             &owner,
-            "force-race",
+            &force_race.id,
             &mutation(
                 "force-race-delete",
                 "force-race-create",
@@ -391,16 +455,17 @@ async fn exercise(store: Store, users: &[BearerSecret]) -> Result<(), TestError>
     let a = store.clone();
     let da = owner.clone();
     let ba = barrier.clone();
+    let correct_id = force_race.id.clone();
     let correct = tokio::spawn(async move {
         ba.wait().await;
-        a.force_remove_agent(&da, "force-race", "force-race-delete", NOW)
+        a.force_remove_agent(&da, &correct_id, "force-race-delete", NOW)
             .await
     });
     let b = store.clone();
     let db = owner.clone();
     let wrong = tokio::spawn(async move {
         barrier.wait().await;
-        b.force_remove_agent(&db, "force-race", "unaccepted-delete", NOW)
+        b.force_remove_agent(&db, &force_race.id, "unaccepted-delete", NOW)
             .await
     });
     let (correct, wrong) = tasks::join_pair(correct, wrong, None).await?;
@@ -409,8 +474,8 @@ async fn exercise(store: Store, users: &[BearerSecret]) -> Result<(), TestError>
         wrong,
         Err(StoreError::Conflict | StoreError::InvalidTransition)
     ));
-    exercise_provider_keys(&store, &proof).await?;
-    exercise_connector_keys(&store, &proof).await?;
+    exercise_provider_keys(&store, &ids, &proof).await?;
+    exercise_connector_keys(&store, &ids, &proof).await?;
     Ok(())
 }
 
@@ -426,6 +491,7 @@ fn key_draft(request: &str) -> Result<ComponentKeyDraft, TestError> {
 
 async fn exercise_provider_keys(
     store: &Store,
+    ids: &FixtureIds,
     proof: &chapchoo_crypto::VerifiedSystemOwner,
 ) -> Result<(), TestError> {
     let policy = ComponentKeyPolicy {
@@ -451,11 +517,15 @@ async fn exercise_provider_keys(
             NOW + 10,
         )
         .await?;
+    assert_eq!(first.provider_id, ids.provider);
+    assert_eq!(first.provider_id, repeated.provider_id);
+    let first = first.key;
+    let repeated = repeated.key;
     assert!(first.token.expose() == repeated.token.expose());
     assert_eq!(first.expires_at, repeated.expires_at);
     assert_eq!(first.issued_at, repeated.issued_at);
     store
-        .provider_key_identity("provider", &first.token.digest(), NOW + 10)
+        .provider_key_identity(&ids.provider, &first.token.digest(), NOW + 10)
         .await?;
     let second = store
         .rotate_provider_key(
@@ -466,6 +536,7 @@ async fn exercise_provider_keys(
             NOW + 950,
         )
         .await?;
+    let second = second.key;
     assert!(matches!(
         store
             .rotate_provider_key(
@@ -479,16 +550,16 @@ async fn exercise_provider_keys(
         Err(StoreError::InvalidTransition)
     ));
     store
-        .provider_key_identity("provider", &first.token.digest(), NOW + 999)
+        .provider_key_identity(&ids.provider, &first.token.digest(), NOW + 999)
         .await?;
     assert!(matches!(
         store
-            .provider_key_identity("provider", &first.token.digest(), NOW + 1000)
+            .provider_key_identity(&ids.provider, &first.token.digest(), NOW + 1000)
             .await,
         Err(StoreError::Unauthenticated)
     ));
     store
-        .provider_key_identity("provider", &second.token.digest(), NOW + 1000)
+        .provider_key_identity(&ids.provider, &second.token.digest(), NOW + 1000)
         .await?;
     let third = store
         .rotate_provider_key(
@@ -500,7 +571,7 @@ async fn exercise_provider_keys(
         )
         .await?;
     store
-        .provider_key_identity("provider", &second.token.digest(), NOW + 1100)
+        .provider_key_identity(&ids.provider, &second.token.digest(), NOW + 1100)
         .await?;
     store
         .revoke_provider_key(
@@ -518,10 +589,11 @@ async fn exercise_provider_keys(
             NOW + 1102,
         )
         .await?;
+    let third = third.key;
     for digest in [second.token.digest(), third.token.digest()] {
         assert!(matches!(
             store
-                .provider_key_identity("provider", &digest, NOW + 1102)
+                .provider_key_identity(&ids.provider, &digest, NOW + 1102)
                 .await,
             Err(StoreError::Unauthenticated)
         ));
@@ -547,6 +619,7 @@ async fn exercise_provider_keys(
             NOW + 1200,
         )
         .await?;
+    let fourth = fourth.key;
     assert!(matches!(
         store
             .revoke_provider_key(
@@ -570,13 +643,13 @@ async fn exercise_provider_keys(
         Err(StoreError::Conflict)
     ));
     store
-        .provider_key_identity("provider", &fourth.token.digest(), NOW + 1201)
+        .provider_key_identity(&ids.provider, &fourth.token.digest(), NOW + 1201)
         .await?;
     assert!(matches!(
         store
             .rotate_provider_key(
                 ProviderOwner::User(&fourth.token.digest()),
-                "provider",
+                &ids.provider,
                 &provider_key_draft("self-rotation")?,
                 policy,
                 NOW + 1201
@@ -586,7 +659,7 @@ async fn exercise_provider_keys(
     ));
     assert!(matches!(
         store
-            .provider_key_identity("provider", &fourth.token.digest(), fourth.expires_at)
+            .provider_key_identity(&ids.provider, &fourth.token.digest(), fourth.expires_at)
             .await,
         Err(StoreError::Unauthenticated)
     ));
@@ -605,15 +678,15 @@ async fn exercise_provider_keys(
     Ok(())
 }
 
-fn session_draft(id: &str, request: &str) -> Result<ConnectorSessionDraft, TestError> {
+fn session_draft(request: &str) -> Result<ConnectorSessionDraft, TestError> {
     Ok(ConnectorSessionDraft {
-        id: id.into(),
         request_id: request.into(),
         initial_key: BearerSecret::generate()?,
     })
 }
 async fn exercise_connector_keys(
     store: &Store,
+    ids: &FixtureIds,
     proof: &chapchoo_crypto::VerifiedSystemOwner,
 ) -> Result<(), TestError> {
     let time = NOW + 4_000;
@@ -626,21 +699,25 @@ async fn exercise_connector_keys(
             time,
         )
         .await?;
+    let provider = provider.key;
+    let stale = ids.agent("stale")?;
+    let stale_execution = ids.executions.get("stale").ok_or("Stale execution")?;
+    let running_execution = ids.executions.get("running").ok_or("Running execution")?;
     let first = store
         .issue_connector_session(
-            "provider",
+            &ids.provider,
             &provider.token.digest(),
-            "execution-stale",
-            &session_draft("connector-session", "issue-one")?,
+            stale_execution,
+            &session_draft("issue-one")?,
             time,
         )
         .await?;
     let recovered = store
         .issue_connector_session(
-            "provider",
+            &ids.provider,
             &provider.token.digest(),
-            "execution-stale",
-            &session_draft("ignored-session", "issue-two")?,
+            stale_execution,
+            &session_draft("issue-two")?,
             time + 1,
         )
         .await?;
@@ -650,10 +727,10 @@ async fn exercise_connector_keys(
     assert!(matches!(
         store
             .issue_connector_session(
-                "provider",
+                &ids.provider,
                 &provider.token.digest(),
-                "execution-running",
-                &session_draft("terminal-session", "terminal-issue")?,
+                running_execution,
+                &session_draft("terminal-issue")?,
                 time
             )
             .await,
@@ -682,8 +759,8 @@ async fn exercise_connector_keys(
     let identity = store
         .connector_key_identity(&first.id, &operational.token.digest(), time + 3)
         .await?;
-    assert_eq!(identity.computer_id, "stale");
-    assert_eq!(identity.execution_id, "execution-stale");
+    assert_eq!(identity.computer_id, stale.computer.id);
+    assert_eq!(&identity.execution_id, stale_execution);
     let repeated = store
         .exchange_connector_key(
             &first.id,
@@ -789,10 +866,10 @@ async fn exercise_connector_keys(
     ));
     let bootstrap_again = store
         .issue_connector_session(
-            "provider",
+            &ids.provider,
             &provider.token.digest(),
-            "execution-stale",
-            &session_draft("ignored-after-exchange", "issue-three")?,
+            stale_execution,
+            &session_draft("issue-three")?,
             time + 135,
         )
         .await?;
@@ -810,7 +887,7 @@ async fn exercise_connector_keys(
         .await?;
     assert!(matches!(
         store
-            .provider_key_identity("provider", &provider.token.digest(), time + 140)
+            .provider_key_identity(&ids.provider, &provider.token.digest(), time + 140)
             .await,
         Err(StoreError::Unauthenticated)
     ));
@@ -897,9 +974,10 @@ async fn exercise_connector_keys(
             time + 160,
         )
         .await?;
+    let management = management.key;
     store
         .revoke_connector_session(
-            "provider",
+            &ids.provider,
             &management.token.digest(),
             &first.id,
             "session-revoke",
@@ -908,7 +986,7 @@ async fn exercise_connector_keys(
         .await?;
     store
         .revoke_connector_session(
-            "provider",
+            &ids.provider,
             &management.token.digest(),
             &first.id,
             "session-revoke",
@@ -954,10 +1032,10 @@ async fn exercise_connector_keys(
     assert!(matches!(
         store
             .issue_connector_session(
-                "provider",
+                &ids.provider,
                 &management.token.digest(),
-                "execution-stale",
-                &session_draft("no-replacement-session", "no-replacement-request")?,
+                stale_execution,
+                &session_draft("no-replacement-request")?,
                 time + 171
             )
             .await,
@@ -966,7 +1044,7 @@ async fn exercise_connector_keys(
     assert!(matches!(
         store
             .revoke_connector_session(
-                "provider",
+                &ids.provider,
                 &management.token.digest(),
                 &first.id,
                 "refresh-race",
@@ -991,24 +1069,23 @@ fn computer_operations_sqlite() -> Result<(), TestError> {
     let cipher = Arc::new(CredentialCipher::new(RootKey::parse(
         URL_SAFE.encode([1; 32]),
     )?)?);
-    prepare_sqlite(&path, &cipher)?;
     let users = (0..2)
         .map(|_| BearerSecret::generate())
         .collect::<Result<Vec<_>, _>>()?;
     let provider = BearerSecret::generate()?;
     let mut connection = diesel::SqliteConnection::establish(path.to_str().ok_or("Invalid path")?)?;
     connection.batch_execute("PRAGMA foreign_keys=ON")?;
+    legacy::sqlite(&mut connection, &cipher)?;
     connection.batch_execute(&seed(&cipher, &users, &provider, false)?)?;
+    prepare_sqlite(&path, &cipher)?;
     tokio::runtime::Runtime::new()?
         .block_on(async { exercise(Store::connect_sqlite(path, cipher).await?, &users).await })?;
-    assert_eq!(diesel::sql_query("SELECT count(*) AS n FROM computers WHERE id='computer-created' AND agent_removed_at IS NOT NULL AND desired_state='DELETING'").get_result::<Count>(&mut connection)?.n,1);
-    assert_eq!(diesel::sql_query("SELECT count(*) AS n FROM connector_sessions WHERE id='session-running' AND revoked_at IS NOT NULL AND initial_nonce IS NULL AND current_hash IS NULL AND recovery_nonce IS NULL").get_result::<Count>(&mut connection)?.n,1);
+    assert_eq!(diesel::sql_query("SELECT count(*) AS n FROM computers WHERE current_request_id='delete' AND agent_removed_at IS NOT NULL AND desired_state='DELETING'").get_result::<Count>(&mut connection)?.n,1);
+    assert_eq!(diesel::sql_query("SELECT count(*) AS n FROM connector_sessions WHERE initial_request_id='initial-session-key' AND revoked_at IS NOT NULL AND initial_nonce IS NULL AND current_hash IS NULL AND recovery_nonce IS NULL").get_result::<Count>(&mut connection)?.n,1);
     assert_eq!(
-        diesel::sql_query(
-            "SELECT count(*) AS n FROM connector_connections WHERE computer_id='running'"
-        )
-        .get_result::<Count>(&mut connection)?
-        .n,
+        diesel::sql_query("SELECT count(*) AS n FROM connector_connections")
+            .get_result::<Count>(&mut connection)?
+            .n,
         0
     );
     Ok(())
@@ -1031,13 +1108,14 @@ fn postgres_in_schema(url: &str) -> Result<(), TestError> {
     let cipher = Arc::new(CredentialCipher::new(RootKey::parse(
         URL_SAFE.encode([1; 32]),
     )?)?);
-    prepare_postgres(url, &cipher)?;
     let users = (0..2)
         .map(|_| BearerSecret::generate())
         .collect::<Result<Vec<_>, _>>()?;
     let provider = BearerSecret::generate()?;
     let mut connection = AsyncConnectionWrapper::<AsyncPgConnection>::establish(url)?;
+    legacy::postgres(&mut connection, &cipher)?;
     connection.batch_execute(&seed(&cipher, &users, &provider, true)?)?;
+    prepare_postgres(url, &cipher)?;
     tokio::runtime::Runtime::new()?.block_on(async {
         exercise(
             Store::connect_postgres(url.to_owned(), cipher).await?,
@@ -1045,14 +1123,12 @@ fn postgres_in_schema(url: &str) -> Result<(), TestError> {
         )
         .await
     })?;
-    assert_eq!(diesel::sql_query("SELECT count(*) AS n FROM computers WHERE id='computer-created' AND agent_removed_at IS NOT NULL AND desired_state='DELETING'").get_result::<Count>(&mut connection)?.n,1);
-    assert_eq!(diesel::sql_query("SELECT count(*) AS n FROM connector_sessions WHERE id='session-running' AND revoked_at IS NOT NULL AND initial_nonce IS NULL AND current_hash IS NULL AND recovery_nonce IS NULL").get_result::<Count>(&mut connection)?.n,1);
+    assert_eq!(diesel::sql_query("SELECT count(*) AS n FROM computers WHERE current_request_id='delete' AND agent_removed_at IS NOT NULL AND desired_state='DELETING'").get_result::<Count>(&mut connection)?.n,1);
+    assert_eq!(diesel::sql_query("SELECT count(*) AS n FROM connector_sessions WHERE initial_request_id='initial-session-key' AND revoked_at IS NOT NULL AND initial_nonce IS NULL AND current_hash IS NULL AND recovery_nonce IS NULL").get_result::<Count>(&mut connection)?.n,1);
     assert_eq!(
-        diesel::sql_query(
-            "SELECT count(*) AS n FROM connector_connections WHERE computer_id='running'"
-        )
-        .get_result::<Count>(&mut connection)?
-        .n,
+        diesel::sql_query("SELECT count(*) AS n FROM connector_connections")
+            .get_result::<Count>(&mut connection)?
+            .n,
         0
     );
     Ok(())

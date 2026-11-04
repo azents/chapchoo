@@ -336,22 +336,11 @@ function WorkspaceContent(props: WorkspaceContentProps): ReactNode {
                       maxLength={120}
                       disabled={pending}
                     />
-                    <TextInput
-                      label={c.handle}
-                      placeholder={team.handle}
-                      description={c.handleDescription}
-                      value={props.handle}
-                      onChange={(event) =>
-                        props.onHandle(event.currentTarget.value)
-                      }
-                      maxLength={80}
-                      disabled={pending}
-                    />
                     <Button
                       w="fit-content"
                       type="submit"
                       loading={pending}
-                      disabled={!props.name && !props.handle}
+                      disabled={!props.name}
                     >
                       {c.save}
                     </Button>

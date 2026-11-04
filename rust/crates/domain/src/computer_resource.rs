@@ -358,6 +358,53 @@ impl NativeIdentity {
     }
 }
 
+/// Exact source annotation/label values, independent of current Repository IDs.
+/// Construction validates representation only; the committed reservation grants
+/// authority. Migrated witnesses are never rewritten from a new DTO identity.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NativeAllocationWitness {
+    computer: String,
+    provider: String,
+    execution: Option<String>,
+}
+
+impl NativeAllocationWitness {
+    pub fn new(
+        computer: String,
+        provider: String,
+        execution: Option<String>,
+    ) -> Result<Self, InvalidNativeResource> {
+        let valid = |value: &str| {
+            !value.is_empty()
+                && value.len() <= 128
+                && value.bytes().all(|byte| {
+                    byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b':')
+                })
+        };
+        if !valid(&computer)
+            || !valid(&provider)
+            || execution.as_deref().is_some_and(|value| !valid(value))
+        {
+            return Err(InvalidNativeResource);
+        }
+        Ok(Self {
+            computer,
+            provider,
+            execution,
+        })
+    }
+
+    pub fn computer(&self) -> &str {
+        &self.computer
+    }
+    pub fn provider(&self) -> &str {
+        &self.provider
+    }
+    pub fn execution(&self) -> Option<&str> {
+        self.execution.as_deref()
+    }
+}
+
 /// Immutable original allocation bound to its reserved address.
 /// Source authorization and sticky presence/absence remain store responsibilities.
 #[derive(Debug, Clone, PartialEq, Eq)]

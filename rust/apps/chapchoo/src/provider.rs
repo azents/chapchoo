@@ -58,7 +58,6 @@ async fn run_docker_selected(
         .unwrap_or(&options.endpoint);
     endpoint(connector_endpoint)?;
     let adapter = chapchoo_docker::Docker::connect(
-        options.provider_id.clone(),
         selected,
         chapchoo_docker::Config {
             image: options.image,
@@ -200,9 +199,9 @@ pub async fn run(
         memory_limit: options.memory_limit,
     };
     let adapter = if let Some(path) = options.kubeconfig {
-        Kubernetes::from_kubeconfig(&path, options.provider_id.clone(), config).await?
+        Kubernetes::from_kubeconfig(&path, config).await?
     } else if options.in_cluster {
-        Kubernetes::in_cluster(options.provider_id.clone(), config)?
+        Kubernetes::in_cluster(config)?
     } else {
         return Err("Select explicit Kubernetes credentials".into());
     };
@@ -295,11 +294,18 @@ async fn stream_loop(
     connector_endpoint: &str,
     owner: crate::provider_auth::ProviderAuth,
     configuration: wire::ProviderConfiguration,
-    key: wire::ComponentKey,
+    credentials: wire::ProviderCredentials,
     adapter: Arc<Adapter>,
     stop: CancellationToken,
 ) -> Result<(), AppError> {
-    let provider = configuration.provider_id.as_str();
+    let provider_id = credentials.provider_id;
+    if provider_id.is_empty() {
+        return Err("Provider canonical identity is required".into());
+    }
+    let provider = provider_id.as_str();
+    let key = credentials
+        .key
+        .ok_or("Provider operational credential is required")?;
     let mut auth = ProviderAuthenticationClient::new(channel.clone());
     let mut renewal = refresh_at(key.proactive_after.as_ref())?;
     let mut expiry = refresh_at(key.expires_at.as_ref())?;
@@ -321,6 +327,10 @@ async fn stream_loop(
             let request_id = pending_request.as_deref().ok_or("Provider exchange request missing")?;
             match exchange_once(&mut auth, &owner, &configuration, request_id).await {
                 Ok(replacement) => {
+                    if replacement.provider_id != provider {
+                        break Err("Provider canonical identity changed during reauthentication".into());
+                    }
+                    let replacement = replacement.key.ok_or("Provider operational credential is required")?;
                     renewal = refresh_at(replacement.proactive_after.as_ref())?;
                     expiry = refresh_at(replacement.expires_at.as_ref())?;
                     key = BearerSecret::parse(replacement.token)?;
@@ -345,7 +355,7 @@ async fn exchange_once(
     source: &crate::provider_auth::ProviderAuth,
     configuration: &wire::ProviderConfiguration,
     request_id: &str,
-) -> Result<wire::ComponentKey, AppError> {
+) -> Result<wire::ProviderCredentials, AppError> {
     let mut request = Request::new(wire::ProviderAuthenticationRequest {
         configuration: Some(configuration.clone()),
         request_id: request_id.to_owned(),
@@ -360,7 +370,7 @@ async fn exchange(
     configuration: &wire::ProviderConfiguration,
     request_id: &str,
     stop: &CancellationToken,
-) -> Result<wire::ComponentKey, AppError> {
+) -> Result<wire::ProviderCredentials, AppError> {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
     loop {
         match exchange_once(auth, source, configuration, request_id).await {

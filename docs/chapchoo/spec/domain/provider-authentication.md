@@ -28,6 +28,14 @@ Existing DB-owned metadata is not reset during authentication. Bootstrap cannot
 adopt USER/TEAM-owned records or substitute an accepted native kind/daemon.
 Existing SYSTEM owner labels and Provider IDs remain stable.
 
+Configuration and bootstrap proofs identify a bounded registration key, not the
+[canonical Repository ID](repository-identity.md). The configuration wire field
+is `registration_key`. Accepting registration resolves that key under its owning
+transaction and issues a missing Provider's UUIDv7 there. Exchange returns both
+the canonical Provider ID and operational key. The process uses that returned ID
+for Hello, routing and operational calls and rejects a changed canonical ID on
+reauthentication. Configured keys do not become native ownership labels.
+
 ## Server bootstrap policy
 
 `CHAPCHOO_PROVIDER_BOOTSTRAP_CONFIG` is a typed, unknown-field-rejecting JSON
@@ -68,8 +76,8 @@ external Kubernetes execution can select another permitted evidence method.
 ## Protected bootstrap proof
 
 Only the server/issuer holds `SECRET_KEY`. A purpose-specific HKDF-derived AEAD
-capability protects the Provider ID plus random salt. The Provider receives an
-opaque proof; the server verifies integrity, matching Provider identity and its
+capability protects the configured registration key plus random salt. The Provider receives an
+opaque proof; the server verifies integrity, matching registration scope and its
 bootstrap allowed-ID list. A different installation key or purpose does not
 validate. Salt is not replay prevention: a stolen proof is a reusable secret for
 that identity while it remains permitted. Reissuing for the same ID does not
@@ -169,6 +177,7 @@ under its original authority. Schema rollback cannot roll back external effects.
 
 ## Connections
 
+- [Repository identity](repository-identity.md) — configured keys, canonical Provider IDs, credentials and native allocation witnesses remain separate.
 - [Provider process](provider-process.md) — selected evidence files, renewal and retained native tasks.
 - [Control admission](computer-control-rpc.md) — public/internal boundaries and current-source checks.
 - [Provider key lifecycle](computer-lifecycle.md) — overlap, exact recovery and revoke.

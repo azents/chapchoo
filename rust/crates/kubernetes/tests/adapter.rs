@@ -76,7 +76,6 @@ fn fixture(replies: Vec<Reply>) -> Result<(Kubernetes, Requests), TestError> {
     });
     let adapter = Kubernetes::new(
         Client::new(service, "fixture"),
-        "provider".into(),
         Config {
             namespace: "fixture".into(),
             image: "computer:fixture".into(),
@@ -112,6 +111,11 @@ fn resource(kind: ResourceKind, uid: Option<&str>) -> wire::ManagedResource {
         .into(),
         uid: uid.map(str::to_owned),
         execution_id: (kind != ResourceKind::Pvc).then(|| "execution".into()),
+        allocation: Some(wire::NativeAllocationWitness {
+            computer_id: "computer".into(),
+            provider_id: "provider".into(),
+            execution_id: (kind != ResourceKind::Pvc).then(|| "execution".into()),
+        }),
         absence_confirmed: false,
         native: None,
     }
@@ -136,6 +140,45 @@ fn pod(uid: &str, phase: &str) -> Value {
         pod["status"]["containerStatuses"] = json!([{"name":"computer-connector","image":"fixture","imageID":"fixture-id","ready":false,"restartCount":0,"state":{"terminated":{"containerID":"containerd://fixture","exitCode":0,"reason":"Completed","finishedAt":"2026-11-02T00:00:00Z"}}}]);
     }
     pod
+}
+#[tokio::test]
+async fn preserved_witness_survives_current_context_and_is_required_before_io()
+-> Result<(), TestError> {
+    let mut current = context();
+    current.computer_id = "canonical-computer".into();
+    current.execution_id = "canonical-execution".into();
+    let mut original = resource(ResourceKind::Pod, Some("original-uid"));
+    original.execution_id = Some(current.execution_id.clone());
+    let (api, calls) = fixture(vec![reply(
+        Method::GET,
+        "/pods/pod",
+        200,
+        pod("original-uid", "Running"),
+    )])?;
+    let observed = api.observe(&current, &original, None).await?;
+    assert_eq!(observed.presence, Presence::Present);
+    assert_eq!(calls.lock().map_err(|_| "Request lock")?.len(), 1);
+    for invalid in 0..4 {
+        let (api, calls) = fixture(vec![])?;
+        let mut value = original.clone();
+        match invalid {
+            0 => value.allocation = None,
+            1 => value
+                .allocation
+                .as_mut()
+                .ok_or("Witness")?
+                .provider_id
+                .clear(),
+            2 => value.allocation.as_mut().ok_or("Witness")?.computer_id = "../invalid".into(),
+            _ => value.allocation.as_mut().ok_or("Witness")?.execution_id = None,
+        }
+        assert!(matches!(
+            api.observe(&current, &value, None).await,
+            Err(Error::Ownership)
+        ));
+        assert!(calls.lock().map_err(|_| "Request lock")?.is_empty());
+    }
+    Ok(())
 }
 #[tokio::test]
 async fn original_storage_is_never_replaced_and_initial_allocation_creates_once()

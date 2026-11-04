@@ -124,19 +124,37 @@ void test(
       assert.ok(docker, "Real Docker fixture is required");
       const journey = async (): Promise<void> => {
         console.info("Native Docker step: register");
-        await waitFor(
+        const available = await waitFor(
           () => call(catalog.list.bind(catalog), { limit: 20 }, session.token),
-          (choices) =>
-            choices.items.some((item) => item.id === docker.provider),
+          (choices) => choices.items.length > 0,
         );
+        assert.equal(
+          available.items.length,
+          1,
+          "Isolated fixture must have one Provider",
+        );
+        const providerId = available.items[0]?.id;
+        assert.ok(providerId, "Canonical Provider identity is required");
+        assert.notEqual(providerId, docker.provider);
         console.info("Native Docker step: create and connect");
+        const image = (
+          await call(
+            agents.listProfileImages.bind(agents),
+            { limit: 20 },
+            session.token,
+          )
+        ).items[0];
+        assert.ok(image, "A real catalogue image is required");
         const created = await call(
           agents.create.bind(agents),
           {
             requestId: "create",
-            providerId: docker.provider,
+            providerId,
             name: "Native integration",
             teamId: team.id,
+            handle: "native-integration",
+            profileImageId: image.id,
+            paletteKey: "sage",
           },
           session.token,
         );

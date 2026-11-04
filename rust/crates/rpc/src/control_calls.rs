@@ -588,6 +588,11 @@ mod tests {
                     name: "n".repeat(253),
                     uid: Some("u".repeat(128)),
                     execution_id: Some("e".repeat(128)),
+                    allocation: Some(wire::NativeAllocationWitness {
+                        computer_id: "c".repeat(128),
+                        provider_id: "p".repeat(128),
+                        execution_id: Some("e".repeat(128)),
+                    }),
                     absence_confirmed: false,
                     native: None,
                 }),

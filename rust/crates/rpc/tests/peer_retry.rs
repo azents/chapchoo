@@ -94,7 +94,7 @@ fn explicit_not_owner_is_the_only_bounded_retry_and_native_error_is_uncertain() 
             .await?;
         let control = app.register_control("http://127.0.0.1:1").await?;
         let prepared = app
-            .prepare_provider_connection("provider", &key.token.digest(), &control.id)
+            .prepare_provider_connection(&key.provider_id, &key.key.token.digest(), &control.id)
             .await?;
         app.admit_component_connection(&prepared).await?;
         for native_error in [false, true] {
@@ -117,7 +117,7 @@ fn explicit_not_owner_is_the_only_bounded_retry_and_native_error_is_uncertain() 
             let result = delivery
                 .provider(
                     wire::ProviderInvocation {
-                        provider_id: "provider".into(),
+                        provider_id: key.provider_id.clone(),
                         command: Some(wire::ProviderCommand {
                             identity: Some(wire::CallIdentity {
                                 request_id: "stable-request".into(),
