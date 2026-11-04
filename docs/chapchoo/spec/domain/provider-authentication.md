@@ -123,6 +123,19 @@ Exchange receipt fingerprints bind canonical identity, authentication source and
 native configuration, not the raw rotating JWT. Exact current-result recovery
 requires fresh authentication and returns the original key/timestamps. Changed
 intent conflicts; revoked, superseded or expired results cannot be recovered.
+Provider credential mutation IDs use `<created-at-ms>:<opaque-nonce>`. Server
+admission rejects a creation time more than one minute ahead and any request at
+or beyond 15 minutes from creation, before receipt lookup. Timestamps do not
+authenticate a Provider. Retrying within the horizon reuses the exact ID; after
+the horizon the caller must begin a fresh authenticated exchange.
+
+Successful credential mutations remove that Provider's expired receipts in the
+same transaction, using a Provider/expiry index. Failed mutations roll back
+cleanup. No periodic sweeper runs: inactive Providers retain their last history
+until the next successful exchange or Provider deletion's existing cascade.
+This bounds history duration during activity, not the number of authenticated
+requests in a time window. Operational key expiry is independent of retry expiry.
+
 Only the immediately previous operational key has at most five minutes of
 overlap, capped by original expiry. Explicit revoke clears overlap/recovery and
 withdraws the Provider route.
@@ -134,6 +147,12 @@ existing owner and uncertainty; transport/key expiry neither proves cancellation
 nor grants replay permission.
 
 ## Schema and transition boundary
+
+Forward migration 8 removes obsolete opaque-ID receipts and adds explicit retry
+expiry/indexing. It preserves live Provider keys and all canonical/Connector
+records. Old opaque callers fail closed and must update; schema rollback cannot
+restore removed receipt history. The bounded-retry contract is defined by
+[retention-261104](../../design/retention-261104-provider-exchanges.md).
 
 Forward migration 7 preserves Provider/Computer/native identities and Connector
 material while revoking old Provider current/previous keys, clearing encrypted

@@ -93,7 +93,7 @@ macro_rules! exercise { ($connection:expr,$source:expr,$postgres:expr) => {{
     let connection = $connection;
     let postgres = $postgres;
     let pending = connection.pending_migrations($source)?;
-    assert_eq!(pending.len(),7);
+    assert_eq!(pending.len(),8);
     connection.run_migrations(&pending[..5])?;
     connection.batch_execute(&fixture(postgres))?;
     connection.run_migration(&*pending[5])?;
@@ -150,6 +150,23 @@ macro_rules! exercise { ($connection:expr,$source:expr,$postgres:expr) => {{
     }
     assert!(connection.revert_last_migration($source).is_err());
     assert_eq!(connection.applied_migrations()?.len(),7);
+    // Retention cutover discards only now-inadmissible opaque request receipts.
+    // Restore a live key fixture to prove migration 8 does not revoke it.
+    connection.batch_execute(&format!("UPDATE provider_keys SET revoked_at=NULL,recovery_nonce={},recovery_ciphertext={}",blob(postgres,31,24),blob(postgres,32,59)))?;
+    let mut retained = Vec::new();
+    for table in RETAINED.into_iter().filter(|table|*table!="provider_key_requests").chain(["provider_keys"]) {
+        let columns_query = if postgres { format!("SELECT column_name AS value FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='{table}' ORDER BY ordinal_position") } else { format!("SELECT name AS value FROM pragma_table_xinfo('{table}') ORDER BY cid") };
+        let columns = values!(connection, columns_query);
+        let sql = query(table,&columns,postgres);
+        retained.push((table,sql.clone(),values!(connection,&sql)));
+    }
+    assert!(count!(connection,"SELECT COUNT(*) AS n FROM provider_key_requests")>0);
+    connection.run_migration(&*pending[7])?;
+    assert_eq!(count!(connection,"SELECT COUNT(*) AS n FROM provider_key_requests"),0);
+    for (table,sql,before) in retained {
+        assert_eq!(values!(connection,&sql),before,"Retention migration must preserve {table}");
+    }
+    assert_eq!(connection.applied_migrations()?.len(),8);
     if !postgres {
         assert_eq!(count!(connection,"SELECT count(*) AS n FROM pragma_foreign_key_check"),0);
         assert_eq!(count!(connection,"SELECT count(*) AS n FROM sqlite_schema WHERE name GLOB '_auth_new_*'"),0);

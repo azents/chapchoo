@@ -468,7 +468,7 @@ async fn native_control_journey_acks_allocations_and_preserves_original_volume_w
                     &ProviderSubstrate::Docker(DockerDaemonId::parse(
                         "daemon:control-fixture".into(),
                     )?),
-                    "fixture-key",
+                    &key_request_id()?,
                     AcceptanceTime::System,
                 )
                 .await?;

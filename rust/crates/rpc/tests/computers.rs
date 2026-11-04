@@ -118,7 +118,12 @@ fn domain_rpc_keeps_private_owner_authority_and_independent_admin_residual_inven
                     restart: true,
                 },
                 &chapchoo_domain::ProviderSubstrate::Kubernetes,
-                "key",
+                &format!(
+                    "{}:key",
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)?
+                        .as_millis()
+                ),
                 AcceptanceTime::System,
             )
             .await?;

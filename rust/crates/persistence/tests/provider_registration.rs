@@ -6,10 +6,120 @@ use chapchoo_persistence::{
     ComponentKeyDraft, ComponentKeyPolicy, ProviderOwner, ProviderRegistrationOwner, Store,
     provider_registration_context,
 };
-use diesel::{Connection, connection::SimpleConnection};
+use diesel::{Connection, RunQueryDsl, connection::SimpleConnection, sql_types::BigInt};
 use diesel_async::{AsyncPgConnection, async_connection_wrapper::AsyncConnectionWrapper};
 use std::sync::Arc;
 type Error = Box<dyn std::error::Error + Send + Sync>;
+#[derive(diesel::QueryableByName)]
+struct ReceiptCounts {
+    #[diesel(sql_type = BigInt)]
+    own: i64,
+    #[diesel(sql_type = BigInt)]
+    other: i64,
+}
+const COUNTS: &str = "SELECT (SELECT COUNT(*) FROM provider_key_requests WHERE provider_id='server-provider') AS own, (SELECT COUNT(*) FROM provider_key_requests WHERE provider_id<>'server-provider') AS other";
+
+async fn retention(
+    store: &Store,
+    credential: &BearerSecret,
+    mut check: impl FnMut(i64) -> Result<(), Error>,
+) -> Result<(), Error> {
+    let digest = credential.digest();
+    let policy = ComponentKeyPolicy::default();
+    let draft = |request: &str| -> Result<ComponentKeyDraft, Error> {
+        Ok(ComponentKeyDraft {
+            request_id: request.into(),
+            token: BearerSecret::generate()?,
+        })
+    };
+    let original = store
+        .rotate_provider_key(
+            registered(&digest),
+            "server-provider",
+            &draft("1000:exchange-one")?,
+            policy,
+            2000,
+        )
+        .await?;
+    // Deletion is rolled back when a later key-mutation invariant rejects.
+    let failed = ComponentKeyDraft {
+        request_id: "901000:failed".into(),
+        token: original.token,
+    };
+    assert!(
+        store
+            .rotate_provider_key(
+                registered(&digest),
+                "server-provider",
+                &failed,
+                policy,
+                901_000
+            )
+            .await
+            .is_err()
+    );
+    check(1)?;
+    let fresh = store
+        .rotate_provider_key(
+            registered(&digest),
+            "server-provider",
+            &draft("901000:fresh")?,
+            policy,
+            901_000,
+        )
+        .await?;
+    check(1)?;
+    assert!(matches!(
+        store
+            .rotate_provider_key(
+                registered(&digest),
+                "server-provider",
+                &draft("1000:exchange-one")?,
+                policy,
+                901_000
+            )
+            .await,
+        Err(chapchoo_persistence::StoreError::InvalidTransition)
+    ));
+    let retry = store
+        .rotate_provider_key(
+            registered(&digest),
+            "server-provider",
+            &draft("901000:fresh")?,
+            policy,
+            901_001,
+        )
+        .await?;
+    assert_eq!(fresh.token.expose(), retry.token.expose());
+    assert_eq!(fresh.issued_at, retry.issued_at);
+    assert_eq!(fresh.expires_at, retry.expires_at);
+    // A future creation timestamp cannot be used to extend retention arbitrarily.
+    assert!(matches!(
+        store
+            .rotate_provider_key(
+                registered(&digest),
+                "server-provider",
+                &draft("961002:future")?,
+                policy,
+                901_001
+            )
+            .await,
+        Err(chapchoo_persistence::StoreError::InvalidInput)
+    ));
+    check(1)?;
+    Ok(())
+}
+
+macro_rules! check_counts {
+    ($connection:expr, $expected:expr) => {{
+        tokio::task::block_in_place(|| {
+            let counts = diesel::sql_query(COUNTS).get_result::<ReceiptCounts>($connection)?;
+            assert_eq!(counts.own, $expected);
+            assert_eq!(counts.other, 2, "Other Providers must not be swept");
+            Ok::<_, Error>(())
+        })
+    }};
+}
 fn registered(credential: &chapchoo_crypto::SecretDigest) -> ProviderOwner<'_> {
     ProviderOwner::Registration {
         credential,
@@ -75,7 +185,7 @@ async fn exercise(store: &Store, credentials: &[BearerSecret]) -> Result<(), Err
         .enumerate()
     {
         let draft = ComponentKeyDraft {
-            request_id: "exchange-one".into(),
+            request_id: "1000:exchange-one".into(),
             token: BearerSecret::generate()?,
         };
         let digest = credentials[index].digest();
@@ -86,7 +196,7 @@ async fn exercise(store: &Store, credentials: &[BearerSecret]) -> Result<(), Err
         assert_eq!(key.proactive_after, 301_000);
         assert_ne!(key.token.expose(), credentials[index].expose());
         let retry = ComponentKeyDraft {
-            request_id: "exchange-one".into(),
+            request_id: "1000:exchange-one".into(),
             token: BearerSecret::generate()?,
         };
         let recovered = store
@@ -127,9 +237,10 @@ fn sqlite_server_user_team_exchange_and_revocation() -> Result<(), Error> {
     tokio::runtime::Runtime::new()?.block_on(async {
         let store=Store::connect_sqlite(path,cipher).await?;
         exercise(&store,&credentials).await?;
+        retention(&store,&credentials[0],|count|check_counts!(&mut connection,count)).await?;
         connection.batch_execute("UPDATE provider_registration_credentials SET revoked_at=2000 WHERE provider_id='server-provider'; UPDATE teams SET deletion_requested_at=2000 WHERE id='auth-team'")?;
         for (id,index) in [("server-provider",0),("team-provider",2)] {
-            assert!(store.rotate_provider_key(registered(&credentials[index].digest()),id,&ComponentKeyDraft{request_id:"denied".into(),token:BearerSecret::generate()?},ComponentKeyPolicy::default(),3000).await.is_err());
+            assert!(store.rotate_provider_key(registered(&credentials[index].digest()),id,&ComponentKeyDraft{request_id:"3000:denied".into(),token:BearerSecret::generate()?},ComponentKeyPolicy::default(),3000).await.is_err());
         }
         Ok::<_,Error>(())
     })
@@ -160,9 +271,10 @@ fn postgres_server_user_team_exchange_and_revocation() -> Result<(), Error> {
         tokio::runtime::Runtime::new()?.block_on(async {
             let store=Store::connect_postgres(url,cipher).await?;
             exercise(&store,&credentials).await?;
+            retention(&store,&credentials[0],|count|check_counts!(&mut connection,count)).await?;
             tokio::task::block_in_place(||connection.batch_execute("UPDATE provider_registration_credentials SET revoked_at=2000 WHERE provider_id='server-provider'; UPDATE teams SET deletion_requested_at=2000 WHERE id='auth-team'"))?;
             for (id,index) in [("server-provider",0),("team-provider",2)] {
-                assert!(store.rotate_provider_key(registered(&credentials[index].digest()),id,&ComponentKeyDraft{request_id:"denied".into(),token:BearerSecret::generate()?},ComponentKeyPolicy::default(),3000).await.is_err());
+                assert!(store.rotate_provider_key(registered(&credentials[index].digest()),id,&ComponentKeyDraft{request_id:"3000:denied".into(),token:BearerSecret::generate()?},ComponentKeyPolicy::default(),3000).await.is_err());
             }
             Ok::<_,Error>(())
         })

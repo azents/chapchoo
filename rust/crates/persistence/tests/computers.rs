@@ -414,6 +414,9 @@ async fn exercise(store: Store, users: &[BearerSecret]) -> Result<(), TestError>
     Ok(())
 }
 
+fn provider_key_draft(request: &str) -> Result<ComponentKeyDraft, TestError> {
+    key_draft(&format!("{NOW}:{request}"))
+}
 fn key_draft(request: &str) -> Result<ComponentKeyDraft, TestError> {
     Ok(ComponentKeyDraft {
         request_id: request.into(),
@@ -434,7 +437,7 @@ async fn exercise_provider_keys(
         .rotate_provider_key(
             ProviderOwner::System(proof),
             "provider",
-            &key_draft("provider-one")?,
+            &provider_key_draft("provider-one")?,
             policy,
             NOW,
         )
@@ -443,7 +446,7 @@ async fn exercise_provider_keys(
         .rotate_provider_key(
             ProviderOwner::System(proof),
             "provider",
-            &key_draft("provider-one")?,
+            &provider_key_draft("provider-one")?,
             policy,
             NOW + 10,
         )
@@ -458,7 +461,7 @@ async fn exercise_provider_keys(
         .rotate_provider_key(
             ProviderOwner::System(proof),
             "provider",
-            &key_draft("provider-two")?,
+            &provider_key_draft("provider-two")?,
             policy,
             NOW + 950,
         )
@@ -468,7 +471,7 @@ async fn exercise_provider_keys(
             .rotate_provider_key(
                 ProviderOwner::System(proof),
                 "provider",
-                &key_draft("provider-one")?,
+                &provider_key_draft("provider-one")?,
                 policy,
                 NOW + 951
             )
@@ -491,7 +494,7 @@ async fn exercise_provider_keys(
         .rotate_provider_key(
             ProviderOwner::System(proof),
             "provider",
-            &key_draft("provider-three")?,
+            &provider_key_draft("provider-three")?,
             policy,
             NOW + 1100,
         )
@@ -503,7 +506,7 @@ async fn exercise_provider_keys(
         .revoke_provider_key(
             ProviderOwner::System(proof),
             "provider",
-            "provider-revoke",
+            "1000:provider-revoke",
             NOW + 1101,
         )
         .await?;
@@ -511,7 +514,7 @@ async fn exercise_provider_keys(
         .revoke_provider_key(
             ProviderOwner::System(proof),
             "provider",
-            "provider-revoke",
+            "1000:provider-revoke",
             NOW + 1102,
         )
         .await?;
@@ -528,7 +531,7 @@ async fn exercise_provider_keys(
             .rotate_provider_key(
                 ProviderOwner::System(proof),
                 "provider",
-                &key_draft("provider-three")?,
+                &provider_key_draft("provider-three")?,
                 policy,
                 NOW + 1102
             )
@@ -539,7 +542,7 @@ async fn exercise_provider_keys(
         .rotate_provider_key(
             ProviderOwner::System(proof),
             "provider",
-            &key_draft("provider-four")?,
+            &provider_key_draft("provider-four")?,
             policy,
             NOW + 1200,
         )
@@ -549,7 +552,7 @@ async fn exercise_provider_keys(
             .revoke_provider_key(
                 ProviderOwner::System(proof),
                 "provider",
-                "provider-revoke",
+                "1000:provider-revoke",
                 NOW + 1201
             )
             .await,
@@ -560,7 +563,7 @@ async fn exercise_provider_keys(
             .revoke_provider_key(
                 ProviderOwner::System(proof),
                 "provider",
-                "provider-four",
+                "1000:provider-four",
                 NOW + 1201
             )
             .await,
@@ -574,7 +577,7 @@ async fn exercise_provider_keys(
             .rotate_provider_key(
                 ProviderOwner::User(&fourth.token.digest()),
                 "provider",
-                &key_draft("self-rotation")?,
+                &provider_key_draft("self-rotation")?,
                 policy,
                 NOW + 1201
             )
@@ -592,7 +595,7 @@ async fn exercise_provider_keys(
             .rotate_provider_key(
                 ProviderOwner::System(proof),
                 "provider",
-                &key_draft("provider-four")?,
+                &provider_key_draft("provider-four")?,
                 policy,
                 fourth.expires_at
             )
@@ -618,7 +621,7 @@ async fn exercise_connector_keys(
         .rotate_provider_key(
             ProviderOwner::System(proof),
             "provider",
-            &key_draft("provider-connector-setup")?,
+            &provider_key_draft("provider-connector-setup")?,
             ComponentKeyPolicy::default(),
             time,
         )
@@ -801,7 +804,7 @@ async fn exercise_connector_keys(
         .revoke_provider_key(
             ProviderOwner::System(proof),
             "provider",
-            "provider-offline",
+            "1000:provider-offline",
             time + 140,
         )
         .await?;
@@ -889,7 +892,7 @@ async fn exercise_connector_keys(
         .rotate_provider_key(
             ProviderOwner::System(proof),
             "provider",
-            &key_draft("provider-for-session-revoke")?,
+            &provider_key_draft("provider-for-session-revoke")?,
             ComponentKeyPolicy::default(),
             time + 160,
         )

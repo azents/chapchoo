@@ -138,7 +138,12 @@ async fn fixture_with_action(
                 restart: true,
             },
             &ProviderSubstrate::Docker(DockerDaemonId::parse("daemon:original".into())?),
-            "key",
+            &format!(
+                "{}:key",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)?
+                    .as_millis()
+            ),
             AcceptanceTime::System,
         )
         .await?;

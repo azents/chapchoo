@@ -303,7 +303,7 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
     )?;
     let stop = CancellationToken::new();
     let provider_stop = stop.clone();
-    let key = app.exchange_bootstrap_provider(&proof,"Fixture",chapchoo_service::ProviderCapabilities { create:true,start:true,stop:true,restart:true }, &chapchoo_domain::ProviderSubstrate::Kubernetes,"fixture-key",AcceptanceTime::System).await?;
+    let key = app.exchange_bootstrap_provider(&proof,"Fixture",chapchoo_service::ProviderCapabilities { create:true,start:true,stop:true,restart:true }, &chapchoo_domain::ProviderSubstrate::Kubernetes,&key_request_id()?,AcceptanceTime::System).await?;
     let provider_credential=key.token.digest();
     let component_key = wire::ComponentKey {
         token: key.token.expose().into(),

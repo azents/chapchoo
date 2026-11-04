@@ -66,8 +66,16 @@ async fn open_connector(
     };
     Ok((sender, stream, connected))
 }
-fn exchange_request(request: &str, proof: &str) -> wire::ProviderAuthenticationRequest {
-    wire::ProviderAuthenticationRequest {
+fn exchange_request(
+    request: &str,
+    proof: &str,
+) -> Result<wire::ProviderAuthenticationRequest, TestError> {
+    static START: std::sync::OnceLock<std::time::SystemTime> = std::sync::OnceLock::new();
+    let now = START
+        .get_or_init(std::time::SystemTime::now)
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_millis();
+    Ok(wire::ProviderAuthenticationRequest {
         configuration: Some(wire::ProviderConfiguration {
             provider_id: "provider".into(),
             name: "Fixture".into(),
@@ -80,11 +88,11 @@ fn exchange_request(request: &str, proof: &str) -> wire::ProviderAuthenticationR
             kind: wire::ProviderKind::Kubernetes as i32,
             docker_daemon_id: None,
         }),
-        request_id: request.into(),
+        request_id: format!("{now}:{request}"),
         evidence: Some(
             wire::provider_authentication_request::Evidence::BootstrapCredential(proof.into()),
         ),
-    }
+    })
 }
 
 #[test]
@@ -135,25 +143,25 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
         let mut connector = ConnectorAuthenticationClient::connect(endpoint.clone()).await?;
         let mut connection_client = ConnectorConnectionClient::connect(endpoint).await?;
         let first = provider
-            .exchange(exchange_request("issue", owner.expose()))
+            .exchange(exchange_request("issue", owner.expose())?)
             .await?
             .into_inner();
         let repeated = provider
-            .exchange(exchange_request("issue", owner.expose()))
+            .exchange(exchange_request("issue", owner.expose())?)
             .await?
             .into_inner();
         assert!(first.token == repeated.token);
         assert_eq!(first.expires_at, repeated.expires_at);
         assert_eq!(
             provider
-                .exchange(exchange_request("self-rotate", &first.token))
+                .exchange(exchange_request("self-rotate", &first.token)?)
                 .await
                 .err()
                 .ok_or("Expected owner-role rejection")?
                 .code(),
             Code::PermissionDenied
         );
-        let mut invalid = exchange_request("wrong-id", owner.expose());
+        let mut invalid = exchange_request("wrong-id", owner.expose())?;
         if let Some(config) = invalid.configuration.as_mut() {
             config.provider_id = "foreign-provider".into();
         }
@@ -166,7 +174,7 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
                 .code(),
             Code::PermissionDenied
         );
-        let mut missing = exchange_request("no-proof", owner.expose());
+        let mut missing = exchange_request("no-proof", owner.expose())?;
         missing.evidence = None;
         assert_eq!(
             provider
@@ -224,7 +232,10 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
                 .rotate_key(authenticated(
                     wire::ProviderKeyRequest {
                         provider_id: "provider".into(),
-                        request_id: "account-cannot-manage-system".into(),
+                        request_id: format!(
+                            "{}:account-cannot-manage-system",
+                            AcceptanceTime::System.now()?
+                        ),
                     },
                     user.token.expose()
                 )?)
@@ -239,7 +250,10 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
                 .revoke_key(authenticated(
                     wire::ProviderKeyRequest {
                         provider_id: "provider".into(),
-                        request_id: "component-cannot-revoke".into(),
+                        request_id: format!(
+                            "{}:component-cannot-revoke",
+                            AcceptanceTime::System.now()?
+                        ),
                     },
                     &first.token
                 )?)
@@ -354,7 +368,7 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
             .revoke_provider_key(
                 chapchoo_persistence::ProviderOwner::System(&proof),
                 "provider",
-                "revoke",
+                &format!("{}:revoke", AcceptanceTime::System.now()?),
                 AcceptanceTime::System.now()?,
             )
             .await?;
@@ -439,7 +453,7 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
                 .ready
         );
         let replacement = provider
-            .exchange(exchange_request("replacement", owner.expose()))
+            .exchange(exchange_request("replacement", owner.expose())?)
             .await?
             .into_inner();
         let replacement_token = BearerSecret::parse(replacement.token.clone())?;
@@ -486,7 +500,7 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
         admission.store(false, Ordering::Release);
         assert_eq!(
             provider
-                .exchange(exchange_request("drained", owner.expose()))
+                .exchange(exchange_request("drained", owner.expose())?)
                 .await
                 .err()
                 .ok_or("Expected admission rejection")?
@@ -554,16 +568,16 @@ fn standalone_trust_is_private_bound_and_prohibitable() -> Result<(), TestError>
         let mut public = ProviderAuthenticationClient::connect(endpoint).await?;
         let mut internal = ProviderAuthenticationClient::new(channel);
         let request = |id: &str, request_id: &str| {
-            let mut request = exchange_request(request_id, "unused");
+            let mut request = exchange_request(request_id, "unused")?;
             request.evidence = None;
             if let Some(config) = request.configuration.as_mut() {
                 config.provider_id = id.to_owned();
             }
-            request
+            Ok::<_, TestError>(request)
         };
         assert_eq!(
             public
-                .exchange(request("provider", "public"))
+                .exchange(request("provider", "public")?)
                 .await
                 .err()
                 .ok_or("Public Trust admitted")?
@@ -571,18 +585,18 @@ fn standalone_trust_is_private_bound_and_prohibitable() -> Result<(), TestError>
             Code::PermissionDenied
         );
         let first = internal
-            .exchange(request("provider", "internal"))
+            .exchange(request("provider", "internal")?)
             .await?
             .into_inner();
         let recovered = internal
-            .exchange(request("provider", "internal"))
+            .exchange(request("provider", "internal")?)
             .await?
             .into_inner();
         assert_eq!(first.token, recovered.token);
         assert_eq!(first.expires_at, recovered.expires_at);
         assert_eq!(
             internal
-                .exchange(request("foreign", "wrong-id"))
+                .exchange(request("foreign", "wrong-id")?)
                 .await
                 .err()
                 .ok_or("Internal channel changed identity")?
@@ -610,7 +624,7 @@ fn standalone_trust_is_private_bound_and_prohibitable() -> Result<(), TestError>
         let mut prohibited = ProviderAuthenticationClient::new(channel);
         assert_eq!(
             prohibited
-                .exchange(request("provider", "prohibited"))
+                .exchange(request("provider", "prohibited")?)
                 .await
                 .err()
                 .ok_or("Prohibited Trust admitted")?

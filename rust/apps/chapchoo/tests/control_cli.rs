@@ -125,9 +125,12 @@ async fn control_group_has_components_and_separate_network_peer_listener() -> Re
                 restart: true,
             }),
         };
+        let request_time = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_millis();
         let authenticated = |value, request_id: &str| control::ProviderAuthenticationRequest {
             configuration: Some(value),
-            request_id: request_id.into(),
+            request_id: format!("{request_time}:{request_id}"),
             evidence: Some(
                 control::provider_authentication_request::Evidence::BootstrapCredential(
                     owner.expose().to_owned(),

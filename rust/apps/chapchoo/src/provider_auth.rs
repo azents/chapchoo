@@ -215,7 +215,12 @@ mod tests {
                         wire::ProviderKind::Kubernetes,
                         None,
                     )),
-                    request_id: "local-exchange".into(),
+                    request_id: format!(
+                        "{}:local-exchange",
+                        std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)?
+                            .as_millis()
+                    ),
                     evidence: None,
                 })
                 .await?

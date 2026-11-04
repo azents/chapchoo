@@ -19,6 +19,7 @@ mod computer_resource;
 mod display;
 mod email;
 mod password;
+mod provider_request;
 mod role;
 
 pub use computer::{
@@ -35,4 +36,5 @@ pub use computer_resource::{
 pub use display::{DisplayPatch, DisplaySettings, InvalidDisplaySettings};
 pub use email::{EmailAddress, InvalidEmail};
 pub use password::{Password, PasswordPolicyError};
+pub use provider_request::{InvalidProviderKeyRequest, ProviderKeyRequestId};
 pub use role::{MembershipRole, TeamKind, TeamRole};

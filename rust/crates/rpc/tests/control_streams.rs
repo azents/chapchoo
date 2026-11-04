@@ -126,7 +126,12 @@ fn two_control_replacement_cancellation_and_late_replies_preserve_current_stream
                     restart: true,
                 },
                 &chapchoo_domain::ProviderSubstrate::Kubernetes,
-                "key",
+                &format!(
+                    "{}:key",
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)?
+                        .as_millis()
+                ),
                 AcceptanceTime::System,
             )
             .await?;
