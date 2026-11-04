@@ -1,6 +1,7 @@
 ---
 title: "Agent Profiles and Team-Scoped Handles Requirements"
 created: 2026-11-04
+implemented: 2026-11-05
 tags: [agents, accounts, frontend, identity]
 document_role: primary
 document_type: requirements

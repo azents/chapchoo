@@ -1,6 +1,7 @@
 ---
 title: "Agent Profiles, Handles and Identity Transition Design"
 created: 2026-11-04
+implemented: 2026-11-05
 tags: [agents, accounts, architecture, identity, migration]
 document_role: primary
 document_type: design
