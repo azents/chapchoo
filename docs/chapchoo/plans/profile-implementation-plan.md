@@ -80,9 +80,13 @@ Design; local reversible details remain root-owned.
 ## Checkpoint
 
 Phase 1 is open as PR #71 at 9a6a549 with green CI and no Codex findings.
-Phase 2 is integrated WIP; its execution plan records completed preserving
-preparation, account/Team/component/Agent operations and remaining native and
-client dependencies. It has no PR or independent-review request yet.
+Phase 2 is committed at `61b1a36` after the full preserving transition,
+compact runtime/native boundaries and minimum creation consumers. The complete
+Rust gate, actual Node/Rust RPC on both engines, whole TypeScript checks and the
+assembled Computer browser journey pass. The single integrated review found one
+SQLite NUL grammar gap; direct SQL regressions and the same reviewer's focused
+confirmation resolved it. Normal commit hooks pass. Its stacked PR is the next
+delivery action before phase 3 begins.
 The approved baseline is pinned to source 7ba03553; existing unrelated source
 experiments remain protected. Only isolated fixture preparation has executed;
 no deployed migration, native resource effect, merge or deployment has run.
