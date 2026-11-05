@@ -269,15 +269,16 @@ impl ComponentConnectionServices {
                 .await;
         }
         let mut terminal = false;
-        if snapshot.computer.desired_state == "RUNNING"
+        if snapshot.substrate.kind() == chapchoo_domain::ProviderKind::Docker
+            && snapshot.computer.desired_state == "RUNNING"
             && snapshot.computer.current_phase == "BLOCKED"
             && snapshot.computer.current_execution_id.is_some()
             && !(snapshot.computer.current_action == "STOP"
                 && snapshot.computer.current_execution_id
                     == snapshot.computer.expected_old_execution_id)
         {
-            // Explicit owner RetryPreparation, not periodic observation, resumes
-            // a proven-safe failed preparation.
+            // Docker's safely rejected preparation retains its explicit retry
+            // state; it is not Kubernetes API-level Pod absence.
             return Ok(outcome(wire::ForwardingOutcome::Completed));
         }
         let substrate_kind = snapshot.substrate.kind();

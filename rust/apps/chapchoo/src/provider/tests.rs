@@ -613,33 +613,12 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
         .find(|r| r.kind() == chapchoo_domain::ManagedResourceKind::Pod && r.execution_id.as_deref() == Some(&previous))
         .ok_or("Current Pod")?;
     let pod_path = format!("/api/v1/namespaces/{}/pods/{}", pod.native().scope().as_str(), pod.native().name());
-    let mut disappeared = substrate
-        .lock()
-        .map_err(|_| "Substrate lock")?
-        .remove(&pod_path)
-        .ok_or("Synthetic current Pod")?;
+    substrate.lock().map_err(|_| "Substrate lock")?.remove(&pod_path).ok_or("Synthetic current Pod")?;
     let submissions = created.lock().map_err(|_| "Calls lock")?.len();
     connections.reconcile_once(&delivery).await?;
     connections.reconcile_once(&delivery).await?;
-    assert_eq!(
-        created.lock().map_err(|_| "Calls lock")?.len(),
-        submissions,
-        "A bare 404 must not authorize recreation"
-    );
-    assert_eq!(
-        app.agent(&user.token.digest(), &agent.id, AcceptanceTime::System)
-            .await?
-            .computer
-            .power,
-        chapchoo_domain::ObservedPower::Unknown
-    );
-    disappeared["status"] = json!({"phase":"Succeeded","containerStatuses":[{"name":"computer-connector","image":"fixture","imageID":"fixture-id","ready":false,"restartCount":0,"state":{"terminated":{"containerID":"containerd://fixture","exitCode":0,"reason":"Completed","finishedAt":"2026-11-02T00:00:00Z"}}}]});
-    substrate
-        .lock()
-        .map_err(|_| "Substrate lock")?
-        .insert(pod_path, disappeared);
-    connections.reconcile_once(&delivery).await?;
-    connections.reconcile_once(&delivery).await?;
+    assert!(created.lock().map_err(|_| "Calls lock")?.len() > submissions,
+        "A fresh 404 must converge the running target");
     let restored = app
         .delivery_snapshot(
             Some(&user.token.digest()),
@@ -673,6 +652,39 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
             .count(),
         1
     );
+    // A lost Stop completion followed by Start converges from current API absence.
+    let old = restored.computer.current_execution_id.as_deref().ok_or("Restored execution")?;
+    let old_pod = restored.resources.iter().find(|r|
+        r.kind() == chapchoo_domain::ManagedResourceKind::Pod
+            && r.execution_id.as_deref() == Some(old)).ok_or("Restored Pod")?;
+    app.request_lifecycle(
+        &user.token.digest(), &agent.id,
+        &chapchoo_service::LifecycleRequest {
+            request_id: "target-stop".into(), expected_request_id: "restart".into(),
+            action: chapchoo_domain::LifecycleAction::Stop,
+        }, AcceptanceTime::System,
+    ).await?;
+    app.report_lifecycle_issue(
+        &source,
+        ComputerRequest { computer_id: &agent.computer.id, request_id: "target-stop" },
+        Some(old), chapchoo_domain::LifecyclePhase::Uncertain,
+    ).await?;
+    app.request_lifecycle(
+        &user.token.digest(), &agent.id,
+        &chapchoo_service::LifecycleRequest {
+            request_id: "target-start".into(), expected_request_id: "target-stop".into(),
+            action: chapchoo_domain::LifecycleAction::Start,
+        }, AcceptanceTime::System,
+    ).await?;
+    substrate.lock().map_err(|_| "Substrate lock")?.remove(
+        &format!("/api/v1/namespaces/{}/pods/{}", old_pod.native().scope().as_str(), old_pod.native().name())
+    ).ok_or("Stopped Pod")?;
+    connections.reconcile_once(&delivery).await?;
+    connections.reconcile_once(&delivery).await?;
+    let converged = app.agent(&user.token.digest(), &agent.id, AcceptanceTime::System).await?;
+    assert_eq!(converged.computer.power, chapchoo_domain::ObservedPower::Running);
+    assert_eq!(converged.computer.current_request_id, "target-stop");
+    assert_eq!(created.lock().map_err(|_| "Calls lock")?.iter().filter(|kind| kind.as_str() == "PersistentVolumeClaim").count(), 1);
     // Accumulate more than one cleanup frame of historical execution resources.
     for _ in 0..16 {
         let snapshot = app
@@ -680,7 +692,7 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
                 Some(&user.token.digest()),
                 ComputerRequest {
                     computer_id: &agent.computer.id,
-                    request_id: "restart",
+                    request_id: "target-stop",
                 },
                 None,
             )
@@ -713,7 +725,7 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
             Some(&user.token.digest()),
             ComputerRequest {
                 computer_id: &agent.computer.id,
-                request_id: "restart",
+                request_id: "target-stop",
             },
             None,
         )
@@ -739,7 +751,7 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
         &agent.id,
         &chapchoo_service::LifecycleRequest {
             request_id: "delete".into(),
-            expected_request_id: "restart".into(),
+            expected_request_id: "target-stop".into(),
             action: chapchoo_domain::LifecycleAction::Delete,
         },
         AcceptanceTime::System,

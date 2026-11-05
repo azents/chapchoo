@@ -21,7 +21,7 @@ test("operation copy distinguishes shutdown, following target and unverified com
         },
         copy,
       ),
-      { label: copy.checkingStop, hint: copy.checkingStopHint },
+      { label: copy.checkingStop, hint: null },
     );
     assert.equal(
       computerOperation(
@@ -33,6 +33,13 @@ test("operation copy distinguishes shutdown, following target and unverified com
         copy,
       ).label,
       copy.startAfterStop,
+    );
+    assert.deepEqual(
+      computerOperation(
+        { operation: "stop", intent: "running", phase: "uncertain" },
+        copy,
+      ),
+      { label: copy.startAfterStop, hint: null },
     );
     assert.deepEqual(
       computerOperation(
@@ -50,7 +57,7 @@ test("operation copy distinguishes shutdown, following target and unverified com
         { operation: "restart", intent: "running", phase: "uncertain" },
         copy,
       ),
-      { label: copy.checkingRestart, hint: copy.checkingStartHint },
+      { label: copy.checkingRestart, hint: null },
     );
     assert.deepEqual(
       computerOperation(
@@ -62,6 +69,19 @@ test("operation copy distinguishes shutdown, following target and unverified com
         copy,
       ),
       { label: copy.checkingDelete, hint: copy.checkingDeleteHint },
+    );
+  }
+});
+
+test("Korean restart progress uses a concise task label", () => {
+  const copy = computerCopy("ko-KR");
+  for (const operation of ["stop", "restart"]) {
+    assert.deepEqual(
+      computerOperation(
+        { operation, intent: "running", phase: "uncertain" },
+        copy,
+      ),
+      { label: "재시작 중", hint: null },
     );
   }
 });

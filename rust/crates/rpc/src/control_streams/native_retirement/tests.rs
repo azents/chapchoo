@@ -76,6 +76,91 @@ async fn fixture() -> Result<Fixture, Error> {
 }
 
 #[tokio::test]
+async fn docker_safe_preparation_failure_remains_explicitly_retryable_after_convergence()
+-> Result<(), Error> {
+    fixture_with_action(None)
+        .await?
+        .run(async |f, _owned| {
+            let app = &f.services.inner.service;
+            let source = f.services.inner.source(&f.entry).ok_or("Provider source")?;
+            let existing = app
+                .agent(&f.actor, &f.agent_id, AcceptanceTime::System)
+                .await?;
+            let image = app
+                .agent_profile_images(&f.actor, None, 1, AcceptanceTime::System)
+                .await?
+                .into_iter()
+                .next()
+                .ok_or("Profile image")?;
+            let chapchoo_service::CreationOutcome::Present(agent) = app
+                .create_cloud_agent(
+                    &f.actor,
+                    &chapchoo_service::CreateCloudAgent {
+                        team_id: existing.team_id,
+                        request_id: "blocked-create".into(),
+                        provider_id: f.provider_id.clone(),
+                        name: "Blocked".into(),
+                        profile: chapchoo_service::CreateAgentProfile {
+                            handle: "blocked-agent".into(),
+                            image_id: image.id,
+                            palette_key: "sage".into(),
+                        },
+                    },
+                    AcceptanceTime::System,
+                )
+                .await?
+            else {
+                return Err("Expected blocked Agent".into());
+            };
+            let scope = ComputerRequest {
+                computer_id: &agent.computer.id,
+                request_id: "blocked-create",
+            };
+            let reservation = app
+                .reserve_execution(
+                    &source,
+                    scope,
+                    &NativeScope::DockerDaemon(DockerDaemonId::parse("daemon:original".into())?),
+                )
+                .await?;
+            app.claim_execution_dispatch(&source, scope, &reservation.execution_id)
+                .await?;
+            app.report_preparation_blocked(&source, scope, &reservation.execution_id)
+                .await?;
+            let before = app
+                .agent(&f.actor, &agent.id, AcceptanceTime::System)
+                .await?;
+            assert!(before.computer.preparation_retry_available);
+            f.services
+                .converge_provider(
+                    &f.provider_id,
+                    &wire::ExpectedOwner {
+                        instance_id: f.services.inner.instance_id.clone(),
+                        connection_id: f.entry.prepared.owner().connection_id.clone(),
+                    },
+                    &wire::ComputerContext {
+                        computer_id: agent.computer.id,
+                        request_id: "blocked-create".into(),
+                        execution_id: reservation.execution_id,
+                    },
+                    Instant::now() + Duration::from_secs(1),
+                )
+                .await?;
+            assert!(f.receivers.commands.try_recv().is_err());
+            let after = app
+                .agent(&f.actor, &agent.id, AcceptanceTime::System)
+                .await?;
+            assert_eq!(
+                after.computer.progress.phase,
+                chapchoo_domain::LifecyclePhase::Blocked
+            );
+            assert!(after.computer.preparation_retry_available);
+            Ok(())
+        })
+        .await
+}
+
+#[tokio::test]
 async fn failed_native_exercise_joins_later_task_before_service_completion() -> Result<(), Error> {
     use std::future::Future;
     let f = fixture().await?;

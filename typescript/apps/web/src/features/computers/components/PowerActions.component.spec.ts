@@ -9,7 +9,9 @@ test("blocked shutdown does not promise that startup can proceed", async ({
   await page.goto(
     "/iframe.html?id=computers-computer-controls--blocked-shutdown&viewMode=story",
   );
-  await expect(page.getByText(`· ${c.blocked}`, { exact: true })).toBeVisible();
+  await expect(
+    page.getByText(`Computer · ${c.blocked}`, { exact: true }),
+  ).toBeVisible();
   await expect(page.getByText(c.blockedHint, { exact: true })).toBeVisible();
   await expect(
     page.getByRole("button", { name: c.startAfterStop, exact: true }),
@@ -61,10 +63,7 @@ test("shutdown progress permits server-admitted Start without claiming stopped p
     await expect(page.getByText(c.uncertain, { exact: true })).toHaveCount(0);
   }
   await expect(
-    page.getByText(`· ${c.checkingStop}`, { exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByText(c.checkingStopHint, { exact: true }),
+    page.getByText(`Computer · ${c.checkingStop}`, { exact: true }),
   ).toBeVisible();
   await page.goto(
     "/iframe.html?id=computers-computer-controls--start-after-shutdown&viewMode=story",
@@ -72,6 +71,9 @@ test("shutdown progress permits server-admitted Start without claiming stopped p
   await expect(
     page.getByRole("button", { name: c.startAfterStop, exact: true }),
   ).toBeDisabled();
+  await expect(
+    page.getByText(`Computer · ${c.startAfterStop}`, { exact: true }),
+  ).toBeVisible();
   await expect(page.getByText(c.conflicting, { exact: true })).toHaveCount(0);
 });
 

@@ -16,11 +16,7 @@ use kube::{
     Api, Client,
     api::{DeleteParams, PostParams, Preconditions, WatchEvent, WatchParams},
 };
-use std::{
-    collections::BTreeMap,
-    fmt,
-    sync::{Arc, Mutex},
-};
+use std::{collections::BTreeMap, fmt};
 
 pub mod authentication;
 
@@ -66,30 +62,7 @@ pub struct Observation {
     pub resource: wire::ManagedResource,
     pub presence: Presence,
     pub running: bool,
-    pub terminal: Option<TerminalWitness>,
-}
-/// A terminal phase plus exact completed container states establishes that the
-/// execution will not restart. Missing/unknown containers, Pod or Node are never
-/// constructors for this witness.
-#[derive(Debug, Clone)]
-pub struct TerminalWitness {
-    computer: String,
-    execution: String,
-    namespace: String,
-    name: String,
-    uid: String,
-}
-impl TerminalWitness {
-    fn matches(&self, computer: &wire::ComputerContext, resource: &wire::ManagedResource) -> bool {
-        self.computer == computer.computer_id
-            && self.execution == computer.execution_id
-            && self.namespace == resource.namespace
-            && self.name == resource.name
-            && resource.uid.as_ref() == Some(&self.uid)
-    }
-    pub fn uid(&self) -> &str {
-        &self.uid
-    }
+    pub terminal: bool,
 }
 #[derive(Clone)]
 pub struct Config {
@@ -114,7 +87,6 @@ impl fmt::Debug for Config {
 pub struct Kubernetes {
     client: Client,
     config: Config,
-    terminal: Arc<Mutex<BTreeMap<String, TerminalWitness>>>,
 }
 impl fmt::Debug for Kubernetes {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -167,11 +139,7 @@ impl Kubernetes {
         {
             return Err(Error::Configuration);
         }
-        Ok(Self {
-            client,
-            config,
-            terminal: Arc::new(Mutex::new(BTreeMap::new())),
-        })
+        Ok(Self { client, config })
     }
     fn annotations(
         &self,
@@ -283,44 +251,27 @@ impl Kubernetes {
         &self,
         computer: &wire::ComputerContext,
         resource: &wire::ManagedResource,
-        terminal: Option<&TerminalWitness>,
     ) -> Result<Observation, Error> {
         let kind = self.target(computer, resource)?;
         let mut observation = Observation {
             resource: resource.clone(),
             presence: Presence::Unknown,
             running: false,
-            terminal: None,
+            terminal: false,
         };
         let metadata = match kind {
             ResourceKind::Pod => {
                 let api: Api<Pod> = Api::namespaced(self.client.clone(), &resource.namespace);
                 if let Some(pod) = api.get_opt(&resource.name).await? {
-                    let uid = self.validate(computer, resource, &pod.metadata)?;
+                    self.validate(computer, resource, &pod.metadata)?;
                     if let Some(status) = &pod.status {
                         observation.running = status.phase.as_deref() == Some("Running")
                             && pod.metadata.deletion_timestamp.is_none();
-                        if terminal_pod(&pod) {
-                            observation.terminal =
-                                Some(self.remember_terminal(computer, resource, uid));
-                        }
+                        observation.terminal = terminal_pod(&pod);
                     }
                     Some(pod.metadata)
                 } else {
-                    let cached = resource.uid.as_ref().and_then(|uid| {
-                        self.terminal
-                            .lock()
-                            .ok()
-                            .and_then(|cache| cache.get(uid).cloned())
-                    });
-                    if resource.absence_confirmed
-                        || cached
-                            .as_ref()
-                            .is_some_and(|w| w.matches(computer, resource))
-                        || terminal.is_some_and(|w| w.matches(computer, resource))
-                    {
-                        observation.presence = Presence::Absent;
-                    }
+                    observation.presence = Presence::Absent;
                     None
                 }
             }
@@ -474,8 +425,8 @@ impl Kubernetes {
         {
             return Err(Error::Ownership);
         }
-        if self.observe(computer, pvc, None).await?.presence != Presence::Present
-            || self.observe(computer, bootstrap, None).await?.presence != Presence::Present
+        if self.observe(computer, pvc).await?.presence != Presence::Present
+            || self.observe(computer, bootstrap).await?.presence != Presence::Present
         {
             return Err(Error::MissingEnvironment);
         }
@@ -675,33 +626,8 @@ impl Kubernetes {
         }
         Ok(())
     }
-    fn remember_terminal(
-        &self,
-        computer: &wire::ComputerContext,
-        resource: &wire::ManagedResource,
-        uid: String,
-    ) -> TerminalWitness {
-        let witness = TerminalWitness {
-            computer: computer.computer_id.clone(),
-            execution: computer.execution_id.clone(),
-            namespace: resource.namespace.clone(),
-            name: resource.name.clone(),
-            uid,
-        };
-        if let Ok(mut cache) = self.terminal.lock() {
-            if !cache.contains_key(&witness.uid)
-                && cache.len() >= 256
-                && let Some(first) = cache.keys().next().cloned()
-            {
-                cache.remove(&first);
-            }
-            cache.insert(witness.uid.clone(), witness.clone());
-        }
-        witness
-    }
-    /// Observe the exact Pod's ordered SDK watch before deletion. A normal
-    /// kubelet-confirmed terminal/deleted event can prove retirement; API 404,
-    /// expired watch history, EOF or node-loss status alone cannot.
+    /// Delete the exact current Pod and observe API-level absence. A fresh 404
+    /// or exact deleted event completes retirement without historical events.
     pub async fn retire_pod(
         &self,
         computer: &wire::ComputerContext,
@@ -714,7 +640,7 @@ impl Kubernetes {
             // Current terminal-intent authority can carry committed proof that
             // this candidate was never allocated. A fresh GET must agree; no
             // native deletion or terminal inference is needed for a non-object.
-            return self.observe(computer, resource, None).await;
+            return self.observe(computer, resource).await;
         }
         let expected = resource.uid.as_ref().ok_or(Error::Ownership)?;
         let api: Api<Pod> = Api::namespaced(self.client.clone(), &resource.namespace);
@@ -722,30 +648,14 @@ impl Kubernetes {
             resource: resource.clone(),
             presence: Presence::Unknown,
             running: false,
-            terminal: None,
+            terminal: false,
         };
         let Some(pod) = api.get_opt(&resource.name).await? else {
-            let cached = resource.uid.as_ref().and_then(|uid| {
-                self.terminal
-                    .lock()
-                    .ok()
-                    .and_then(|cache| cache.get(uid).cloned())
-            });
-            if resource.absence_confirmed
-                || cached
-                    .as_ref()
-                    .is_some_and(|w| w.matches(computer, resource))
-            {
-                observation.presence = Presence::Absent;
-            }
+            observation.presence = Presence::Absent;
             return Ok(observation);
         };
         self.validate(computer, resource, &pod.metadata)?;
-        let mut terminal = terminal_pod(&pod);
-        if terminal {
-            observation.terminal =
-                Some(self.remember_terminal(computer, resource, expected.clone()));
-        }
+        observation.terminal = terminal_pod(&pod);
         let version = pod
             .metadata
             .resource_version
@@ -765,12 +675,7 @@ impl Kubernetes {
         match api.delete(&resource.name, &params).await {
             Ok(_) => {}
             Err(kube::Error::Api(error)) if error.code == 404 => {
-                if terminal {
-                    return self
-                        .observe(computer, resource, observation.terminal.as_ref())
-                        .await;
-                }
-                return Ok(observation);
+                return self.observe(computer, resource).await;
             }
             Err(error) => return Err(error.into()),
         }
@@ -786,15 +691,9 @@ impl Kubernetes {
                     return Ok(false);
                 }
                 self.validate(computer, resource, &pod.metadata)?;
-                if terminal_pod(&pod) {
-                    terminal = true;
-                    // Retain validated quiescence before a report or stream can
-                    // fail. A new source still needs a fresh exact absence read.
-                    observation.terminal =
-                        Some(self.remember_terminal(computer, resource, expected.clone()));
-                }
+                observation.terminal |= terminal_pod(&pod);
                 if deleted {
-                    return Ok(terminal);
+                    return Ok(true);
                 }
             }
             Ok(false)
@@ -815,7 +714,7 @@ impl Kubernetes {
     ) -> Result<(), Error> {
         let kind = self.target(computer, resource)?;
         let uid = resource.uid.as_ref().ok_or(Error::Ownership)?;
-        let observation = self.observe(computer, resource, None).await?;
+        let observation = self.observe(computer, resource).await?;
         if observation.presence != Presence::Present {
             return Err(Error::Ownership);
         }
@@ -851,7 +750,7 @@ impl Kubernetes {
                 interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
                 loop {
                     interval.tick().await;
-                    match self.observe(computer, resource, None).await?.presence {
+                    match self.observe(computer, resource).await?.presence {
                         Presence::Absent => return Ok(()),
                         Presence::Present => {}
                         Presence::Unknown => return Err(Error::DeletionUncertain),

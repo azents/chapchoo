@@ -29,9 +29,9 @@ Stop receipt replay remains intact, and a later operation/Delete invalidates the
 captured predecessor. If Stop completed first, ordinary Start admission applies.
 
 Old-execution Running observations cannot fulfill this target or reclaim its
-preparation. Only confirmed retirement clears the old execution and selects
-Starting for the Running target; existing original-storage and successor gates
-still apply. Public progress then describes Start while stored Stop provenance
+preparation. Current Kubernetes API absence clears the old execution and selects
+Starting for the Running target without a historical terminal witness;
+existing original-storage and successor gates still apply. Public progress then describes Start while stored Stop provenance
 continues to qualify target-update recovery. The desired state survives page
 closure and backend restart without a browser timer or another intent store.
 

@@ -60,8 +60,9 @@ Resource reports identify the exact reserved object and execution. Owned-present
 evidence binds the original UID; a different same-name UID is rejected. Unknown
 presence does not clear identity. Definitive absence must match the stored UID,
 or explicitly concern a never-observed candidate after all possibly accepted
-creates are quiescent. A timeout, disconnection or bare GET 404 is unknown, not
-that evidence. Confirmed absence of an allocated object is sticky even after an
+creates are quiescent. A timeout or disconnection is unknown. Kubernetes Pod
+GET 404 is current absence, without historical terminal-event qualification;
+Docker absence retains its own native adapter contract. Confirmed absence of an allocated object is sticky even after an
 unknown report: later present reports cannot adopt/recreate it. The external
 Computer Provider is responsible for verifying ownership/content and the
 supported substrate retirement boundary; this module performs no Kubernetes IO.
@@ -113,7 +114,7 @@ These are internal lifecycle operations, not public adoption/cleanup controls.
 - [Execution-bound Connector credentials](connector-credentials.md) — A Connector session belongs to one execution. Bootstrap recovery, operational refresh and revocation have different permissions and retained results.
 - [Owner-scoped convergence and restoration](reconciliation.md) — Current Connector owners take precedence; reconciliation observes exact resources and advances only authorized, known-unsent work.
 - [Docker connection, volume and container contracts](computer-docker.md) — The Docker adapter owns one selected source and exact native resources, with uncertainty distinct from absence or confirmed cleanup.
-- [Kubernetes resource and retirement contracts](computer-kubernetes.md) — Supported Kubernetes SDK operations validate original resource identities and ordered terminal evidence, without equating a delete response with retirement.
+- [Kubernetes resource and retirement contracts](computer-kubernetes.md) — Current API observations distinguish Pod absence from failed lookup and preserve exact present-object identity.
 
 ## References
 

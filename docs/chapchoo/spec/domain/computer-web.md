@@ -146,14 +146,16 @@ to a newer request. Cancel sends no mutation. Every write still revalidates curr
 owner/session/expected request on the backend. A lost response is not rollback or
 permission to replay an external effect.
 
-Computer power and Connector connectivity share one compact summary below the
-profile identity, with current operation shown separately when incomplete. One
+Computer progress and Connector connectivity share one compact summary below the
+profile identity. While an operation is incomplete, its task label is the primary
+status instead of generic unknown power; completed operations show observed power.
+Detailed power facts remain separate in the details modal. One
 primary action changes between Start for stopped power or a Retiring/Uncertain
 Stop, and Stop otherwise. Blocked work instead keeps its blocked label and
 inspection guidance; an accepted Running target is not shown as automatic
 startup progress while shutdown cannot continue. Start during shutdown updates the persistent Running target;
 it does not claim shutdown is complete or create a concurrent execution. The
-accepted target is shown as starting after shutdown and remains visible after
+accepted target is shown as Restarting and remains visible after
 reload. Unknown power alone does not block this backend-admitted target update;
 stale reads, pending submission and backend eligibility still disable unsafe actions. The inapplicable opposite action and its ordinary
 requires-running/stopped explanation are not duplicated. Restart and details use
@@ -165,9 +167,10 @@ Details opens a controlled modal with observed power/time, last-known power when
 current power is unknown, independent Computer and management connections, saved
 storage and the operation status. Short explanations distinguish each observation
 without implying harness readiness, file inspection or backup verification.
-Operation copy names shutdown, startup, restart or deletion verification rather
-than a generic unconfirmed result. Guidance describes the consequence without
-converting unknown physical power into completion. The already-existing RPC
+Operation copy names the current task rather than a generic unconfirmed result.
+Restart progress has a concise Restarting label, without internal shutdown-event
+guidance. Confirmed API Pod absence is projected as stopped by the backend;
+lookup failure remains distinct. The already-existing RPC
 action supplies this distinction in both General and read-only Admin projections.
 Requested intent is also available in an optional troubleshooting disclosure. Closing or Escape
 returns focus; explicit refresh invalidates the same observations. A stale-read
