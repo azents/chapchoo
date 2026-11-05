@@ -110,6 +110,122 @@ fn sqlite_external_auth_schema_preserves_existing_receipts_and_rejects_invalid_s
 }
 
 #[test]
+fn sqlite_external_auth_binary_columns_reject_equal_length_text() -> Result<(), TestError> {
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("binary.sqlite");
+    prepare_sqlite(&path, &cipher()?)?;
+    let mut connection = diesel::SqliteConnection::establish(path.to_str().ok_or("Invalid path")?)?;
+    // Disable foreign keys to isolate the column contract from unrelated FK
+    // rejection. Each candidate is otherwise valid and passes with BLOB values.
+    connection.batch_execute("PRAGMA foreign_keys=OFF")?;
+    let id = "zeroblob(16)";
+    let cases = [
+        (
+            "external_authentications",
+            "id,owner_user_id,kind,name,nonce,ciphertext,current_request_id,active_attempt_id,created_at,updated_at",
+            vec![
+                id,
+                id,
+                "'OPENAI_API_KEY'",
+                "'Synthetic'",
+                "zeroblob(24)",
+                "zeroblob(33)",
+                "'register'",
+                id,
+                "1",
+                "1",
+            ],
+            vec![(0, 16), (1, 16), (4, 24), (5, 33), (7, 16)],
+        ),
+        (
+            "external_authentications",
+            "id,owner_team_id,kind,name,nonce,ciphertext,current_request_id,created_at,updated_at",
+            vec![
+                id,
+                id,
+                "'OPENAI_API_KEY'",
+                "'Synthetic'",
+                "zeroblob(24)",
+                "zeroblob(33)",
+                "'register'",
+                "1",
+                "1",
+            ],
+            vec![(1, 16)],
+        ),
+        (
+            "external_auth_attempts",
+            "id,initiated_by,owner_user_id,request_id,target_id,expected_target_request_id,phase,pending_nonce,pending_ciphertext,interval_ms,next_check_at,expires_at,created_at,updated_at",
+            vec![
+                id,
+                id,
+                id,
+                "'device'",
+                id,
+                "'prior'",
+                "'PENDING'",
+                "zeroblob(24)",
+                "zeroblob(33)",
+                "5000",
+                "10",
+                "1000",
+                "1",
+                "1",
+            ],
+            vec![(0, 16), (1, 16), (2, 16), (4, 16), (7, 24), (8, 33)],
+        ),
+        (
+            "external_auth_attempts",
+            "id,initiated_by,owner_team_id,request_id,phase,result_authentication_id,expires_at,created_at,updated_at",
+            vec![id, id, id, "'device'", "'REGISTERED'", id, "1000", "1", "1"],
+            vec![(2, 16), (5, 16)],
+        ),
+        (
+            "external_auth_requests",
+            "actor_user_id,request_id,operation,fingerprint,assigned_authentication_id,agent_id,attempt_id,accepted_at",
+            vec![
+                id,
+                "'register'",
+                "'REGISTER_KEY'",
+                "zeroblob(32)",
+                id,
+                id,
+                id,
+                "1",
+            ],
+            vec![(0, 16), (3, 32), (4, 16), (5, 16), (6, 16)],
+        ),
+        (
+            "agent_authentication_selections",
+            "agent_id,authentication_id,current_request_id,selected_at",
+            vec![id, id, "'select'", "1"],
+            vec![(0, 16), (1, 16)],
+        ),
+    ];
+    for (table, columns, values, binaries) in cases {
+        let insert = |values: &[&str]| {
+            format!(
+                "INSERT INTO {table}({columns}) VALUES({})",
+                values.join(",")
+            )
+        };
+        connection.batch_execute(&insert(&values))?;
+        connection.batch_execute(&format!("DELETE FROM {table}"))?;
+        for (index, length) in binaries {
+            let text = format!("'{}'", "a".repeat(length));
+            let mut invalid = values.clone();
+            invalid[index] = &text;
+            assert!(
+                connection.batch_execute(&insert(&invalid)).is_err(),
+                "TEXT accepted by {table} column {}",
+                columns.split(',').nth(index).ok_or("Invalid column")?
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn postgres_external_auth_schema_preserves_existing_receipts_and_rejects_invalid_state()
 -> Result<(), TestError> {
     let base = std::env::var("CHAPCHOO_TEST_POSTGRES_URL")?;
