@@ -14,7 +14,6 @@ How to add a new convention: use the `add-convention` skill.
 
 | Convention | File |
 | --- | --- |
-| When designing or changing UI, express constraints and recovery through state-aware controls and flows instead of explanatory labels. | [action-first-ui](../conventions/global/action-first-ui.md) |
 | When review feedback corrects A to B, rewrite directly to B instead of adding unnecessary negative wording about not-A. | [avoid-oppositional-negative-rewrites](../conventions/global/avoid-oppositional-negative-rewrites.md) |
 | Write source-code comments and docstrings in English — applies to module/class/function docstrings and inline comments across every language. | [comments-and-docstrings-in-english](../conventions/global/comments-and-docstrings-in-english.md) |
 | Build all distribution artifacts for open-source reuse with established community standards; keep private deployment conventions and environment values outside the artifacts. | [community-standard-distribution](../conventions/global/community-standard-distribution.md) |
