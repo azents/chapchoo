@@ -23,6 +23,7 @@ import {
   ThemeIcon,
 } from "@mantine/core";
 import { toneColors, darkToneColors, platformFonts } from "./designTokens";
+import { profileVariables } from "./profileTokens";
 import classes from "./theme.module.css";
 import "./editors.css";
 import type { CSSVariablesResolver } from "@mantine/core";
@@ -66,8 +67,8 @@ export const themeCssVariables: CSSVariablesResolver = () => ({
     "--chapchoo-control-height-lg": rem(56),
     "--chapchoo-control-height-xl": rem(64),
   },
-  light: modeVariables(toneColors),
-  dark: modeVariables(darkToneColors),
+  light: { ...modeVariables(toneColors), ...profileVariables(false) },
+  dark: { ...modeVariables(darkToneColors), ...profileVariables(true) },
 });
 
 /** Adaptive web design; DESIGN.md is the visual authority. */

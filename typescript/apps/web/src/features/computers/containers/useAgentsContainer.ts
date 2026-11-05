@@ -1,6 +1,9 @@
 "use client";
 import { formatDisplayDate } from "@chapchoo/ui/displayFormatting";
-import { validAgentPalette } from "@chapchoo/web-core/agent-profile";
+import {
+  randomAgentPalette,
+  validAgentPalette,
+} from "@chapchoo/web-core/agent-profile";
 import { useAuth } from "@chapchoo/web-core/auth-context";
 import { computerCopy } from "@chapchoo/web-core/computer-messages";
 import { useDisplay } from "@chapchoo/web-core/display-context";
@@ -223,6 +226,20 @@ export function useAgentsContainer({
     onProfilePalette: (paletteKey) => {
       if (validAgentPalette(paletteKey)) {
         editDraft({ paletteKey });
+      }
+    },
+    onRandomProfilePalette: () => {
+      if (editor.type !== "editing" || saving.current) {
+        return;
+      }
+      try {
+        editDraft({ paletteKey: randomAgentPalette(editor.draft.paletteKey) });
+      } catch {
+        setEditor((current) =>
+          current.type === "editing"
+            ? { ...current, error: profileCopy.randomFailed }
+            : current,
+        );
       }
     },
     onImagePage: (after) => {

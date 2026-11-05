@@ -3,9 +3,15 @@ import { HeaderControlsContext } from "@chapchoo/ui/AppHeader";
 import { WorkspaceChrome } from "@chapchoo/ui/WorkspaceChrome";
 import { computerCopy } from "@chapchoo/web-core/computer-messages";
 import { shellCopy } from "@chapchoo/web-core/shell-messages";
+import { useMediaQuery } from "@mantine/hooks";
 import { useState } from "react";
 import { creationCopy } from "../creationCopy";
 import { Agents } from "./Agents";
+import {
+  ProfileReviewFrame,
+  reviewImages,
+  reviewRetriever,
+} from "./profileReviewFixture";
 import type { AgentsProps, InitialAgents } from "../types";
 import type { AgentView } from "@chapchoo/web-core/computer";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
@@ -75,6 +81,7 @@ const meta = {
     onProfileName: () => {},
     onProfileImage: () => {},
     onProfilePalette: () => {},
+    onRandomProfilePalette: () => {},
     onImagePage: () => {},
     onSaveProfile: () => {},
     onCancelProfile: () => {},
@@ -93,6 +100,136 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const AgentList: Story = {};
+function ApprovedAgent(props: AgentsProps): ReactElement {
+  const mobile = useMediaQuery("(max-width: 48em)", false);
+  return (
+    <ProfileReviewFrame>
+      <Agents {...props} mobile={mobile} />
+    </ProfileReviewFrame>
+  );
+}
+const approvedList: InitialAgents = {
+  ...initial,
+  type: "list",
+  after: "",
+  page: {
+    nextAfter: null,
+    items: [
+      {
+        ...agent,
+        id: "dubu",
+        name: "두부",
+        handle: "dubu",
+        paletteKey: "butter",
+        profileImage: reviewRetriever,
+      },
+      {
+        ...agent,
+        id: "bori",
+        name: "보리",
+        handle: "bori",
+        paletteKey: "sage",
+        profileImage: { id: "bichon", assetKey: "02-bichon" },
+      },
+      {
+        ...agent,
+        id: "kongi",
+        name: "콩이",
+        handle: "kongi",
+        paletteKey: "apricot",
+      },
+      {
+        ...agent,
+        id: "hodu",
+        name: "호두",
+        handle: "hodu",
+        paletteKey: "teal",
+        profileImage: { id: "husky", assetKey: "05-husky" },
+      },
+    ],
+  },
+};
+export const ApprovedList: Story = {
+  args: {
+    initial: approvedList,
+    data: approvedList,
+    copy: computerCopy("ko-KR"),
+    profileCopy: creationCopy("ko"),
+  },
+  render: ApprovedAgent,
+};
+export const ApprovedDetail: Story = {
+  args: {
+    initial: detail,
+    data: {
+      ...detail,
+      type: "detail",
+      agent: {
+        ...agent,
+        name: "두부",
+        handle: "dubu",
+        paletteKey: "butter",
+        profileImage: reviewRetriever,
+      },
+    },
+    images: { items: reviewImages, nextAfter: null },
+    copy: computerCopy("ko-KR"),
+    profileCopy: creationCopy("ko"),
+  },
+  render: ApprovedAgent,
+};
+export const ApprovedEdit: Story = {
+  ...ApprovedDetail,
+  args: {
+    ...ApprovedDetail.args,
+    editor: {
+      type: "editing",
+      draft: { name: "두부", image: reviewRetriever, paletteKey: "butter" },
+      error: null,
+    },
+  },
+};
+export const ApprovedTeamPicker: Story = {
+  ...ApprovedList,
+  render: (args): ReactElement => (
+    <ProfileReviewFrame teamState="picker">
+      <Agents {...args} />
+    </ProfileReviewFrame>
+  ),
+};
+export const ApprovedTeamCreation: Story = {
+  ...ApprovedList,
+  render: (args): ReactElement => (
+    <ProfileReviewFrame teamState="creating">
+      <Agents {...args} />
+    </ProfileReviewFrame>
+  ),
+};
+export const ApprovedTeamCreated: Story = {
+  ...ApprovedList,
+  args: {
+    ...ApprovedList.args,
+    data: {
+      ...initial,
+      type: "list",
+      after: "",
+      page: { items: [], nextAfter: null },
+    },
+  },
+  render: (args): ReactElement => (
+    <ProfileReviewFrame teamState="created">
+      <Agents {...args} />
+    </ProfileReviewFrame>
+  ),
+};
+export const ApprovedTeamAdded: Story = {
+  ...ApprovedTeamCreated,
+  render: (args): ReactElement => (
+    <ProfileReviewFrame teamState="added">
+      <Agents {...args} />
+    </ProfileReviewFrame>
+  ),
+};
 export const ProfileCards: Story = {
   args: {
     data: {

@@ -9,6 +9,14 @@
 .trigger {
   width: max-content;
   max-width: min(100%, 18rem);
+  min-height: 3.375rem;
+}
+.trigger[aria-expanded="true"] {
+  background: var(--chapchoo-color-selected);
+}
+.choice {
+  min-height: 3rem;
+  padding: var(--mantine-spacing-md);
 }
 .choice[data-selected] {
   background: var(--chapchoo-color-selected);
@@ -36,4 +44,7 @@
 .dropdown {
   max-height: min(32rem, calc(100dvh - 8rem));
   overflow-y: auto;
+  padding: var(--mantine-spacing-sm);
+  border-radius: var(--mantine-radius-lg);
+  box-shadow: var(--mantine-shadow-lg);
 }

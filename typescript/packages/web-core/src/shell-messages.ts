@@ -20,6 +20,7 @@ export interface ShellCopy {
   teamName: string;
   teamHandle: string;
   teamAddress: string;
+  teamHandleHint: string;
   cancel: string;
   close: string;
   create: string;
@@ -52,6 +53,8 @@ const en: ShellCopy = {
   teamName: "Team name",
   teamHandle: "Handle",
   teamAddress: "Team address",
+  teamHandleHint:
+    "Proposed from the name. You can edit it before creating the team.",
   cancel: "Cancel",
   close: "Close",
   create: "Create",
@@ -85,6 +88,7 @@ const ko: ShellCopy = {
   teamName: "팀 이름",
   teamHandle: "핸들",
   teamAddress: "팀 주소",
+  teamHandleHint: "이름에서 자동으로 만들어요. 3~16자로 직접 고칠 수도 있어요.",
   cancel: "취소",
   close: "닫기",
   create: "만들기",
@@ -118,6 +122,7 @@ const ja: ShellCopy = {
   teamName: "チーム名",
   teamHandle: "ハンドル",
   teamAddress: "チームのアドレス",
+  teamHandleHint: "名前から自動で作成します。作成前に3〜16文字で編集できます。",
   cancel: "キャンセル",
   close: "閉じる",
   create: "作成",
@@ -151,6 +156,8 @@ const fr: ShellCopy = {
   teamName: "Nom de l’équipe",
   teamHandle: "Identifiant",
   teamAddress: "Adresse de l’équipe",
+  teamHandleHint:
+    "Proposé à partir du nom. Vous pouvez saisir 3 à 16 caractères avant la création.",
   cancel: "Annuler",
   close: "Fermer",
   create: "Créer",

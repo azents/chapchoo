@@ -111,12 +111,14 @@ export function useNavigation({
     {
       key: "agents",
       label: copy.agents,
+      icon: "agents",
       href: selected ? agentsPath(basePath, selected) : `${basePath}/`,
       active: /^\/teams\/[^/]+\/(?:agents|new-agent)(?:\/|$)/.test(route),
     },
     {
       key: "invitations",
       label: copy.invitations,
+      icon: "mail",
       href: `${basePath}/invitations`,
       active: route === "/invitations",
     },
@@ -125,6 +127,7 @@ export function useNavigation({
           {
             key: "team",
             label: copy.teamSettings,
+            icon: "team" as const,
             href: teamPath(basePath, selected),
             active: /^\/teams\/[^/]+$/.test(route),
           },

@@ -3,6 +3,8 @@
 import { Box, NavLink } from "@mantine/core";
 import { createContext } from "react";
 import { AgentMascotMotion } from "./AgentMascotMotion";
+import { NavigationIcon } from "./NavigationIcon";
+import type { NavigationIconProps } from "./NavigationIcon";
 import classes from "./AppNavigation.module.css";
 import type { ReactElement, ReactNode } from "react";
 
@@ -10,6 +12,7 @@ export interface NavigationItem {
   key: string;
   label: string;
   active?: boolean;
+  icon?: NavigationIconProps["name"];
   href?: string;
   onSelect?: () => void;
 }
@@ -48,6 +51,11 @@ export function NavigationPanel({
         {items.map((item) => {
           const common = {
             label: item.label,
+            leftSection: item.icon ? (
+              <NavigationIcon name={item.icon} />
+            ) : (
+              void 0
+            ),
             active: item.active,
             "aria-current": item.active ? ("page" as const) : void 0,
             onClick: (): void => {

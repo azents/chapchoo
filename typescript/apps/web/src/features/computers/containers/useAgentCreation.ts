@@ -290,9 +290,9 @@ export function useAgentCreation({
     onRandomPalette: () => {
       if (editable()) {
         try {
-          setPalette(randomAgentPalette());
+          setPalette(randomAgentPalette(paletteKey));
         } catch {
-          setSubmission({ type: "error", message: copy.unavailable });
+          setSubmission({ type: "error", message: profileCopy.randomFailed });
         }
       }
     },

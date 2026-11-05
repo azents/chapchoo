@@ -3,7 +3,19 @@ import classes from "./NavigationIcon.module.css";
 import type { ReactElement } from "react";
 
 export interface NavigationIconProps {
-  name: "personal" | "team" | "admin" | "down" | "back" | "forward" | "add";
+  name:
+    | "personal"
+    | "team"
+    | "admin"
+    | "down"
+    | "back"
+    | "forward"
+    | "add"
+    | "edit"
+    | "shuffle"
+    | "check"
+    | "agents"
+    | "mail";
   size?: "sm" | "md";
   className?: string;
 }
@@ -46,6 +58,24 @@ export function NavigationIcon({
         <path d="m14 6-6 6 6 6" />
       ) : name === "forward" ? (
         <path d="m10 6 6 6-6 6" />
+      ) : name === "edit" ? (
+        <path d="m16 3 5 5-12 12-6 1 1-6zM14 5l5 5" />
+      ) : name === "shuffle" ? (
+        <path d="M3 6h3l12 12h3M17 14l4 4-4 4M3 18h3l4-4M14 10l4-4h3M17 2l4 4-4 4" />
+      ) : name === "check" ? (
+        <path d="m5 12 4 4L19 6" />
+      ) : name === "agents" ? (
+        <>
+          <rect x="3" y="3" width="7" height="7" rx="2" />
+          <rect x="14" y="3" width="7" height="7" rx="2" />
+          <rect x="3" y="14" width="7" height="7" rx="2" />
+          <rect x="14" y="14" width="7" height="7" rx="2" />
+        </>
+      ) : name === "mail" ? (
+        <>
+          <rect x="3" y="5" width="18" height="14" rx="3" />
+          <path d="m3 7 9 6 9-6" />
+        </>
       ) : (
         <path d="M12 5v14M5 12h14" />
       )}

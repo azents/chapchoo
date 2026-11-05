@@ -93,6 +93,12 @@ context shows its name without an invented handle. The current valid creation
 candidate also displays its prospective canonical Team address. General uses
 its current mount and Admin uses the configured General destination, never its
 own Admin path. The preview does not navigate or create membership.
+The shared creation modal separates its heading, fields and action footer.
+Handle length is displayed beside its label without changing the accessible
+input name. Automatic-proposal guidance, current availability and the permanent
+handle notice remain distinct, followed by the wrapped address preview.
+The primary Team-create action expands on narrow screens while Cancel remains
+separately reachable; it retains the same modal focus and submission ownership.
 Manual edits survive later name changes; cancelled or superseded checks cannot
 validate another draft. Current availability is advisory and the creation
 transaction owns final uniqueness. The modal retains name/handle on failure,

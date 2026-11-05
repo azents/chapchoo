@@ -16,6 +16,9 @@ export interface ApplicationShellProps {
   brand?: string;
   contextLabel: string;
   title: string;
+  header?: ReactNode;
+  headingActions?: ReactNode;
+  contentClassName?: string;
   identityLabel?: string;
   navigation: readonly NavigationItem[];
   actions?: ReactNode;
@@ -26,6 +29,32 @@ export type ApplicationShellContentProps = Omit<
   ApplicationShellProps,
   "appearance" | "brand"
 >;
+
+/** Page orientation follows the same already-authorized workspace chrome. */
+export function WorkspaceHeading({
+  title,
+  actions,
+}: {
+  title: string;
+  actions?: ReactNode;
+}): ReactNode {
+  const workspace = useContext(AppNavigationContext);
+  return (
+    <Box className={classes.workspaceHeading}>
+      {workspace ? (
+        <Text size="sm" c="dimmed" mb="sm">
+          {workspace.label}
+        </Text>
+      ) : null}
+      <Group justify="space-between" align="center" gap="lg">
+        <Title order={1} className={classes.workspaceTitle}>
+          {title}
+        </Title>
+        {actions}
+      </Group>
+    </Box>
+  );
+}
 
 /** Narrow account actions also remain available outside loaded business shells. */
 export function ApplicationAccountActions({
@@ -79,6 +108,9 @@ export function ApplicationShellContent({
   actions,
   children,
   basePath = "",
+  header,
+  headingActions,
+  contentClassName,
 }: ApplicationShellContentProps): ReactNode {
   const current = useContext(AppNavigationContext);
   return (
@@ -104,10 +136,21 @@ export function ApplicationShellContent({
           actions={actions}
         />
         <Box component="main" className={classes.main}>
-          <div className={classes.content}>
-            <Title order={1} size="h2" className={classes.title}>
-              {title}
-            </Title>
+          <div
+            className={[classes.content, contentClassName]
+              .filter(Boolean)
+              .join(" ")}
+          >
+            {header !== undefined ? (
+              header
+            ) : (
+              <Group justify="space-between" align="center" mb="xl">
+                <Title order={1} size="h2" className={classes.heading}>
+                  {title}
+                </Title>
+                {headingActions}
+              </Group>
+            )}
             <Stack gap="xl">{children}</Stack>
           </div>
         </Box>

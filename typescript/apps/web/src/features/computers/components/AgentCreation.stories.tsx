@@ -1,8 +1,14 @@
 import { computerCopy } from "@chapchoo/web-core/computer-messages";
 import { creationCopy } from "../creationCopy";
 import { AgentCreation } from "./AgentCreation";
+import {
+  ProfileReviewFrame,
+  reviewImages,
+  reviewRetriever,
+} from "./profileReviewFixture";
 import type { InitialAgentCreation } from "../creationTypes";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
+import type { ReactElement } from "react";
 
 const provider = { id: "provider", name: "Community Kubernetes" };
 const image = { id: "image", internalName: "Corgi", assetKey: "03-corgi" };
@@ -11,7 +17,7 @@ const initial: InitialAgentCreation = {
   teamHandle: "my",
   identity: "owner@example.invalid",
   providers: { items: [provider], nextAfter: null },
-  images: { items: [image], nextAfter: null },
+  images: { items: reviewImages, nextAfter: null },
   initialImage: image,
   initialPalette: "sage",
   renderedAt: 1793577600000,
@@ -67,6 +73,24 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Ready: Story = {};
+export const Approved: Story = {
+  args: {
+    copy: computerCopy("ko-KR"),
+    profileCopy: creationCopy("ko"),
+    name: "두부",
+    image: reviewRetriever,
+    paletteKey: "butter",
+    handle: {
+      draft: { source: "manual", candidate: "dubu" },
+      status: "available",
+    },
+  },
+  render: (args): ReactElement => (
+    <ProfileReviewFrame>
+      <AgentCreation {...args} />
+    </ProfileReviewFrame>
+  ),
+};
 export const Empty: Story = {
   args: {
     providers: {
