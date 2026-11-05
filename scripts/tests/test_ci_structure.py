@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import unittest
@@ -47,15 +48,14 @@ class CiStructureTests(unittest.TestCase):
             "pnpm --filter @chapchoo/admin-web test:components",
         ]:
             self.assertIn(command, workflow)
-        rust_job = workflow.split("  validate:", 1)[0]
+        rust_job = workflow.split("  rust:", 1)[1].split("  repository-checks:", 1)[0]
         self.assertIn('CARGO_PROFILE_DEV_DEBUG: "0"', rust_job)
         self.assertIn('CARGO_PROFILE_TEST_DEBUG: "0"', rust_job)
 
     def test_native_build_exports_outputs_to_one_downstream_browser_gate(self) -> None:
         workflow = (ROOT / ".github/workflows/linux-package.yaml").read_text()
         for required in [
-            "architecture: x86_64",
-            "architecture: aarch64",
+            "architecture:\n        required: true",
             "scripts/package-linux.py",
             'test "$(uname -m)" = "$EXPECTED_ARCH"',
             "workflow_call:",
@@ -91,7 +91,7 @@ class CiStructureTests(unittest.TestCase):
         self.assertNotIn("turbo run build", workflow)
         self.assertIn('web-artifacts/general/standalone"', workflow)
         self.assertIn('web-artifacts/admin/standalone"', workflow)
-        self.assertIn("needs: [web-build, binary-build]", workflow)
+        self.assertNotIn("needs:", workflow)
         self.assertEqual(workflow.count("uses: docker/bake-action@"), 1)
         self.assertNotIn("push: true", workflow)
         for filename in ["linux-package.yaml", "snapshot.yaml"]:
@@ -167,7 +167,7 @@ class CiStructureTests(unittest.TestCase):
         self.assertEqual(native.count("cache-to=type=gha,scope="), 3)
         for line in native.splitlines():
             if "cache-to=" in line or "cache-from=" in line:
-                self.assertIn("${{ matrix.architecture }}", line)
+                self.assertIn("${{ inputs.architecture }}", line)
 
     def test_local_mac_wrapper_builds_linux_before_packaging(self) -> None:
         script = (ROOT / "scripts/build-images.sh").read_text()
@@ -194,7 +194,7 @@ class CiStructureTests(unittest.TestCase):
             "  docker-integration:", 1
         )
         for required in [
-            "needs: native-build",
+            "needs: binary-x86",
             "name: binary-build-x86_64",
             "binary-artifacts.tar",
             "--build-context",
@@ -215,6 +215,75 @@ class CiStructureTests(unittest.TestCase):
         self.assertTrue(
             (ROOT / "typescript/apps/integration/src/docker.test.ts").is_file()
         )
+
+    def test_independent_owners_and_architectures_have_narrow_dependencies(
+        self,
+    ) -> None:
+        ci = (ROOT / ".github/workflows/ci.yaml").read_text()
+        jobs = dict(
+            re.findall(
+                r"^  ([\w-]+):\n(.*?)(?=^  [\w-]+:\n|\Z)", ci, re.MULTILINE | re.DOTALL
+            )
+        )
+        for owner in ["repository-checks", "frontend-quality", "frontend-tests"]:
+            self.assertNotIn("needs:", jobs[owner])
+        for architecture, runner, machine, node in [
+            ("x86", "ubuntu-24.04", "x86_64", "x64"),
+            ("arm", "ubuntu-24.04-arm", "aarch64", "arm64"),
+        ]:
+            package = "native-build" if architecture == "x86" else "native-build-arm"
+            self.assertIn(
+                f"needs: [web-{architecture}, binary-{architecture}]", jobs[package]
+            )
+            for producer, filename in [
+                ("web", "build-web"),
+                ("binary", "build-binary"),
+            ]:
+                job = jobs[f"{producer}-{architecture}"]
+                self.assertNotIn("needs:", job)
+                self.assertIn(f"uses: ./.github/workflows/{filename}.yaml", job)
+                self.assertIn(f"runner: {runner}\n", job)
+                self.assertIn(f"architecture: {machine}\n", job)
+            self.assertIn(f"architecture: {machine}\n", jobs[package])
+            self.assertIn(f"node-architecture: {node}\n", jobs[package])
+        self.assertIn("needs: binary-x86\n", jobs["docker-integration"])
+        self.assertIn("needs: native-build\n", jobs["browser-e2e"])
+        self.assertIn("if: always()", jobs["validate"])
+        self.assertIn(
+            "needs: [repository-checks, frontend-quality, frontend-tests]",
+            jobs["validate"],
+        )
+        self.assertIn("toJSON(needs.*.result)", jobs["validate"])
+        # Direct unit tests import the built RPC exports before Storybook runs.
+        self.assertLess(
+            jobs["frontend-tests"].index(
+                "turbo run build --filter=@chapchoo/rpc-client"
+            ),
+            jobs["frontend-tests"].index("pnpm --filter @chapchoo/testenv test"),
+        )
+
+    def test_aggregate_gate_rejects_every_non_success_result(self) -> None:
+        ci = (ROOT / ".github/workflows/ci.yaml").read_text()
+        gate = ci.split("  validate:", 1)[1].split("  browser-e2e:", 1)[0]
+        script = gate.split("python3 - <<'PY'\n", 1)[1].split("          PY", 1)[0]
+        for results, expected in [
+            (["success"] * 3, 0),
+            (["failure", "success", "success"], 1),
+            (["success", "cancelled", "success"], 1),
+            (["success", "success", "skipped"], 1),
+            ([], 1),
+        ]:
+            with self.subTest(results=results):
+                result = subprocess.run(
+                    [
+                        "python3",
+                        "-c",
+                        "\n".join(line[10:] for line in script.splitlines()),
+                    ],
+                    env={**os.environ, "RESULTS": json.dumps(results)},
+                    check=False,
+                )
+                self.assertEqual(result.returncode, expected)
 
 
 if __name__ == "__main__":

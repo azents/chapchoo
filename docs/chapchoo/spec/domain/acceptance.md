@@ -21,15 +21,16 @@ Web-core separately owns the actual logout-response HTTP/browser integration.
 Browser delayed-cookie arrival semantics are dependency behavior and are not a
 product acceptance scenario.
 
-The reusable native build workflow builds images on actual x86-64/ARM64 runners,
+The reusable native package workflow assembles images on actual x86-64/ARM64 runners,
 runs the independent-image smoke check on those existing local images, and
 exports archives/checksums. This checks root/prefixed startup, runtime isolation,
 static assets, private RPC and shutdown before PR merge without another build
 or product E2E. General CI owns product-test orchestration:
-its single downstream `browser-e2e` job waits for the native build and consumes
+its single downstream `browser-e2e` job waits only for the x86-64 package and consumes
 that same run's x86-64 archive, verifies its checksum, and runs the four core
 PostgreSQL/browser journeys once using only the bundled executable, Node and web
 outputs. It does not rebuild the product or repeat source/per-architecture E2E.
+Each architecture's package waits only for its own web and binary producers.
 ARM64 remains a native build/ELF/assembly/image-smoke gate rather than a second
 product-test lane. Snapshot checks the exact images it publishes as well.
 Workflow configuration is not an executed success; actual exact-head CI results
@@ -38,7 +39,8 @@ must be reported separately.
 The separate required `docker-integration` job owns a browser-free real Docker
 lifecycle. It downloads that same run's native binary artifact for actual
 backend/Control/Provider and the Computer image; no web artifact, server or
-Chromium is required. `typescript/apps/integration` calls generated public
+Chromium is required. It starts after the x86-64 binary producer, independently
+of web builds and native packaging. `typescript/apps/integration` calls generated public
 account/Computer RPC and asserts connected Create, Stop/Start with original data,
 successor no-copy including emptied storage, normal Delete and untouched canaries.
 Public Docker SDK support supplies only prerequisites/marker IO. Existing browser
@@ -73,8 +75,13 @@ layer caches are separated by their real toolchain/dependency/architecture
 inputs. Cache restoration never replaces Rust SQLite/PostgreSQL tests, the single
 browser gate, archive/checksum checks or Snapshot's image execution checks.
 
-General CI assigns Rust quality to its Rust job and frontend quality to explicit
-read-only checks. The repository-hook step omits only those duplicated calls;
+General CI runs repository checks, frontend read-only quality, and frontend
+unit/Storybook/component tests as independent jobs alongside Rust quality and
+native builds. The `validate` aggregate succeeds only when all three validation
+owners succeed; failures, cancellation and skipped owners fail the aggregate.
+The frontend test owner explicitly builds shared RPC exports before direct unit
+tests rather than relying on the repository hooks or static checks to build them.
+The repository-hook step omits only the separately owned quality calls;
 generated RPC and other contract hooks still execute. Local commit hooks retain
 their original full checks. Cargo, pre-commit environments, Turbo results and
 Next compiler caches are reused with toolchain/dependency-aware keys; source
