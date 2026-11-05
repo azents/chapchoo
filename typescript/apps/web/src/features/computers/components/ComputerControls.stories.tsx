@@ -61,3 +61,17 @@ export const Off: Story = {
 };
 export const Pending: Story = { args: { pending: true } };
 export const Stale: Story = { args: { stale: true } };
+export const RestartUnsupported: Story = {
+  args: {
+    agent: {
+      ...detail.agent,
+      computer: {
+        ...detail.agent.computer,
+        actions: [
+          { action: "stop", available: true, reason: null },
+          { action: "restart", available: false, reason: "unsupported" },
+        ],
+      },
+    },
+  },
+};

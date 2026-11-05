@@ -70,8 +70,20 @@ export function ComputerControls(props: Props): ReactElement {
           >
             {c[primary]}
           </Button>
-          <Tooltip label={c.restart}>
-            <span>
+          <Tooltip
+            label={
+              !restart?.available && restart?.reason
+                ? `${c.restart}: ${c[restart.reason]}`
+                : c.restart
+            }
+            events={{ hover: true, focus: true, touch: true }}
+          >
+            <span
+              role="group"
+              aria-label={c.restart}
+              tabIndex={!restart?.available && restart?.reason ? 0 : void 0}
+              className={classes.controlHelp}
+            >
               <ActionIcon
                 size="2.75rem"
                 variant="subtle"

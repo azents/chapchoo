@@ -116,6 +116,8 @@ unknown power, stale reads, pending submission and backend eligibility still
 disable unsafe actions. The inapplicable opposite action and its ordinary
 requires-running/stopped explanation are not duplicated. Restart and details use
 named icon controls. Safe preparation retry retains its separate admission.
+Restart's independent blocking reason remains available through its hover,
+focus or touch tooltip rather than a permanent explanation below the icon.
 
 Details opens a controlled modal with observed power/time, last-known power when
 current power is unknown, independent Computer and management connections, saved

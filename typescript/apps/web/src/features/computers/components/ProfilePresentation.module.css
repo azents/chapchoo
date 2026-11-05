@@ -329,6 +329,14 @@
   color: var(--chapchoo-color-muted);
   cursor: pointer;
 }
+.controlHelp {
+  display: inline-flex;
+  border-radius: var(--mantine-radius-sm);
+}
+.controlHelp:focus-visible {
+  outline: 0.125rem solid var(--chapchoo-color-focus);
+  outline-offset: var(--mantine-spacing-xs);
+}
 @media (max-width: 62em) {
   .card {
     gap: var(--mantine-spacing-md);

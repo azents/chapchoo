@@ -4,6 +4,24 @@ import { computerDetailCopy } from "../detailCopy";
 const c = computerCopy("en-US");
 const d = computerDetailCopy("en-US");
 
+test("an unavailable Restart keeps its independent reason reachable by keyboard", async ({
+  page,
+}) => {
+  await page.goto(
+    "/iframe.html?id=computers-computer-controls--restart-unsupported&viewMode=story",
+  );
+  await expect(
+    page.getByRole("button", { name: c.stop, exact: true }),
+  ).toBeEnabled();
+  await expect(
+    page.getByRole("button", { name: c.restart, exact: true }),
+  ).toBeDisabled();
+  await page.getByRole("group", { name: c.restart, exact: true }).focus();
+  await expect(page.getByRole("tooltip")).toHaveText(
+    `${c.restart}: ${c.unsupported}`,
+  );
+});
+
 test("one primary power action follows the current power and server admission", async ({
   page,
 }) => {

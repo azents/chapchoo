@@ -98,7 +98,7 @@ const korean: CreationCopy = {
   open: "열기",
   checking: "사용 가능 여부 확인 중…",
   available: "사용 가능",
-  invalid: "소문자·숫자·하이픈 3~16자. 양끝에는 하이픈을 쓸 수 없습니다.",
+  invalid: "영문 소문자·숫자·하이픈 3~16자. 양끝에는 하이픈을 쓸 수 없습니다.",
   occupied: "이미 사용 중인 핸들입니다.",
   exhausted: "사용 가능한 핸들을 찾지 못했습니다. 다른 핸들을 입력해 주세요.",
   unavailable:
