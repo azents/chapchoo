@@ -143,6 +143,10 @@ export function Chat(props: ChatProps): ReactElement {
   const detailHref = agentPath(p.basePath, p.data.teamHandle, agent.handle);
   const start = agent.computer.actions.find((item) => item.action === "start");
   const working = props.writable && props.activity === "working";
+  const showRetry =
+    p.stale ||
+    (agent.computer.power !== "stopped" &&
+      agent.computer.connector !== "connected");
   return (
     <div className={classes.frame}>
       <aside className={classes.sidebar}>
@@ -196,21 +200,21 @@ export function Chat(props: ChatProps): ReactElement {
                   <span className={classes.readOnly}>{c.readOnly}</span>
                 ) : null}
               </button>
-              {agent.computer.power === "stopped" ? (
-                <button
-                  className={classes.power}
-                  disabled={p.stale || p.pending || !start?.available}
-                  onClick={() => p.onAction("start")}
-                >
-                  {p.copy.start}
-                </button>
-              ) : p.stale || agent.computer.connector !== "connected" ? (
+              {showRetry ? (
                 <button
                   className={classes.power}
                   disabled={p.pending}
                   onClick={p.onRefresh}
                 >
                   {p.copy.retry}
+                </button>
+              ) : agent.computer.power === "stopped" ? (
+                <button
+                  className={classes.power}
+                  disabled={p.stale || p.pending || !start?.available}
+                  onClick={() => p.onAction("start")}
+                >
+                  {p.copy.start}
                 </button>
               ) : null}
             </div>

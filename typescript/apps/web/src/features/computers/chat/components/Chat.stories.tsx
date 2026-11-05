@@ -19,6 +19,7 @@ type FixtureProps = {
     | "disconnected"
     | "unknown"
     | "stale"
+    | "staleStopped"
     | "signedOut"
     | "startError"
     | "empty";
@@ -26,6 +27,9 @@ type FixtureProps = {
   name: string;
 };
 function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
+  const stopped =
+    mode === "stopped" || mode === "startError" || mode === "staleStopped";
+  const stale = mode === "stale" || mode === "staleStopped";
   const agent: AgentView = {
     id: "agent",
     teamId: "team",
@@ -37,12 +41,7 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
       operation: "start",
       intent: "running",
       requestId: "request",
-      power:
-        mode === "stopped" || mode === "startError"
-          ? "stopped"
-          : mode === "unknown"
-            ? "unknown"
-            : "running",
+      power: stopped ? "stopped" : mode === "unknown" ? "unknown" : "running",
       lastKnownPower: "running",
       phase: "completed",
       management: "connected",
@@ -52,15 +51,15 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
       actions: [
         {
           action: "start",
-          available: mode === "stopped",
-          reason: mode === "stopped" ? null : "requiresStopped",
+          available: stopped,
+          reason: stopped ? null : "requiresStopped",
         },
         {
           action: "stop",
-          available: mode !== "stopped",
-          reason: mode === "stopped" ? "requiresRunning" : null,
+          available: !stopped,
+          reason: stopped ? "requiresRunning" : null,
         },
-        { action: "restart", available: mode !== "stopped", reason: null },
+        { action: "restart", available: !stopped, reason: null },
       ],
       forceRemoveAvailable: false,
       startDelayed: false,
@@ -116,7 +115,7 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
     onImagePage: () => {},
     onSaveProfile: () => {},
     onCancelProfile: () => {},
-    stale: mode === "stale",
+    stale,
     pending: false,
     error: mode === "startError" ? c.lostSubmission : null,
     confirmation: actions.confirmation?.action ?? null,
@@ -157,7 +156,7 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
       writable={writable}
       status={
         product.error ??
-        (mode === "stale"
+        (stale
           ? c.stale
           : mode === "stopped"
             ? c.stopped
@@ -209,6 +208,7 @@ export const FailedStart: Story = { args: { mode: "startError" } };
 export const Disconnected: Story = { args: { mode: "disconnected" } };
 export const Unknown: Story = { args: { mode: "unknown" } };
 export const Stale: Story = { args: { mode: "stale" } };
+export const StaleStopped: Story = { args: { mode: "staleStopped" } };
 export const SignedOut: Story = { args: { mode: "signedOut" } };
 export const Empty: Story = { args: { mode: "empty" } };
 export const English: Story = { args: { locale: "en-US", name: "Corgi" } };

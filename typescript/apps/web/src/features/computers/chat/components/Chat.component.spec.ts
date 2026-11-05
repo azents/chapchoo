@@ -206,7 +206,13 @@ for (const width of [320, 390, 1280]) {
 test("unavailable observations keep history readable and input read-only", async ({
   page,
 }) => {
-  for (const state of ["stopped", "disconnected", "unknown", "stale"]) {
+  for (const state of [
+    "stopped",
+    "disconnected",
+    "unknown",
+    "stale",
+    "stale-stopped",
+  ]) {
     await page.goto(
       `/iframe.html?id=chat-conversation--${state}&viewMode=story`,
     );
@@ -216,6 +222,14 @@ test("unavailable observations keep history readable and input read-only", async
     await expect(
       page.getByText("연남동에서, 천천히", { exact: true }),
     ).toBeVisible();
+    if (state === "stale-stopped") {
+      await expect(
+        page.getByRole("main").getByRole("button", {
+          name: computerCopy("ko-KR").retry,
+          exact: true,
+        }),
+      ).toBeEnabled();
+    }
     await page.getByRole("button", { name: /코기.*작업 상태/ }).click();
     await expect(
       page.getByRole("dialog", { name: "작업 상태", exact: true }),
