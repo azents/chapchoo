@@ -41,6 +41,7 @@ export interface AgentsProps extends AgentsInput {
   onProfileName: (value: string) => void;
   onProfileImage: (value: string) => void;
   onProfilePalette: (value: string) => void;
+  onRandomProfilePalette: () => void;
   onImagePage: (after: string | null) => void;
   onSaveProfile: () => void;
   onCancelProfile: () => void;

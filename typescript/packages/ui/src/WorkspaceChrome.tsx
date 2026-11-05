@@ -189,6 +189,15 @@ export function WorkspaceChrome(props: WorkspaceChromeProps): ReactElement {
         }
         onClose={props.closeCreation}
         title={props.copy.createTeam}
+        size="30rem"
+        padding={0}
+        radius="xl"
+        overlayProps={{ backgroundOpacity: 0.35, blur: 4 }}
+        classNames={{
+          header: classes.createHeader,
+          title: classes.createTitle,
+          body: classes.createBody,
+        }}
         closeButtonProps={{ "aria-label": props.copy.close }}
         centered
         closeOnClickOutside={!props.busy}
@@ -200,7 +209,7 @@ export function WorkspaceChrome(props: WorkspaceChromeProps): ReactElement {
             props.onSubmit();
           }}
         >
-          <Stack gap="lg">
+          <Stack gap="lg" className={classes.createFields}>
             <TextInput
               label={props.copy.teamName}
               value={props.name}
@@ -212,7 +221,13 @@ export function WorkspaceChrome(props: WorkspaceChromeProps): ReactElement {
             />
             <TextInput
               label={props.copy.teamHandle}
-              description={props.handleStatus.description}
+              labelProps={{ className: classes.handleLabel }}
+              rightSection={
+                <Text size="xs" c="dimmed">
+                  {props.handle.length}/16
+                </Text>
+              }
+              rightSectionWidth={rem(56)}
               value={props.handle}
               onChange={(event) => props.onHandle(event.currentTarget.value)}
               required
@@ -220,12 +235,23 @@ export function WorkspaceChrome(props: WorkspaceChromeProps): ReactElement {
               disabled={props.busy}
             />
             {props.handleStatus.message ? (
-              <Text size="sm" c="dimmed" role="status">
+              <Text
+                size="xs"
+                c={
+                  props.handleStatus.available
+                    ? "var(--chapchoo-color-success)"
+                    : "dimmed"
+                }
+                role="status"
+              >
                 {props.handleStatus.message}
               </Text>
             ) : null}
+            <Text size="xs" c="dimmed">
+              {props.handleStatus.description}
+            </Text>
             {props.prospectiveAddress ? (
-              <Stack gap="xs">
+              <Stack gap="xs" className={classes.addressPreview}>
                 <Text size="xs" c="dimmed">
                   {props.copy.teamAddress}
                 </Text>
@@ -239,23 +265,23 @@ export function WorkspaceChrome(props: WorkspaceChromeProps): ReactElement {
                 {props.error}
               </Alert>
             ) : null}
-            <Group justify="flex-end">
-              <Button
-                variant="default"
-                onClick={props.closeCreation}
-                disabled={props.busy}
-              >
-                {props.copy.cancel}
-              </Button>
-              <Button
-                type="submit"
-                loading={props.busy}
-                disabled={!props.name.trim() || !props.handleStatus.available}
-              >
-                {props.copy.create}
-              </Button>
-            </Group>
           </Stack>
+          <Group justify="flex-end" className={classes.createFooter}>
+            <Button
+              variant="default"
+              onClick={props.closeCreation}
+              disabled={props.busy}
+            >
+              {props.copy.cancel}
+            </Button>
+            <Button
+              type="submit"
+              loading={props.busy}
+              disabled={!props.name.trim() || !props.handleStatus.available}
+            >
+              {props.copy.create}
+            </Button>
+          </Group>
         </form>
       </Modal>
     </AppNavigationContext.Provider>

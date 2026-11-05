@@ -107,6 +107,7 @@ export function WorkspaceChoices(props: WorkspaceSelectorProps): ReactElement {
               onSelect={props.onSelect}
             />
           ))}
+          <Divider my="xs" />
           <Button
             variant="subtle"
             justify="flex-start"
@@ -139,7 +140,7 @@ export function WorkspaceSelector(props: WorkspaceSelectorProps): ReactElement {
       opened={props.opened}
       triggerRef={props.triggerRef}
       onChange={(opened) => (opened ? props.onOpen() : props.onClose())}
-      width="min(20rem, calc(100vw - 3rem))"
+      width="min(18rem, calc(100vw - 2rem))"
       withinPortal={!props.mobile}
       accessibleLabel={props.copy.choose}
       className={classes.trigger}

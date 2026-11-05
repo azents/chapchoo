@@ -75,6 +75,7 @@ const meta = {
     onProfileName: () => {},
     onProfileImage: () => {},
     onProfilePalette: () => {},
+    onRandomProfilePalette: () => {},
     onImagePage: () => {},
     onSaveProfile: () => {},
     onCancelProfile: () => {},

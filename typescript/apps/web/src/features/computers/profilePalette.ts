@@ -1,38 +1,41 @@
 import type { AgentPaletteKey } from "@chapchoo/web-core/agent-profile";
+import type { CSSProperties } from "react";
 
-/** Coordinated, theme-aware profile tokens; never a workspace-theme override. */
-export const profilePalette: Record<
-  AgentPaletteKey,
-  { surface: string; foreground: string; emphasis: string }
-> = {
-  butter: {
-    surface: "var(--chapchoo-color-accentSoft)",
-    foreground: "var(--chapchoo-color-ink)",
-    emphasis: "var(--chapchoo-color-accentText)",
-  },
-  sage: {
-    surface: "var(--chapchoo-color-selected)",
-    foreground: "var(--chapchoo-color-ink)",
-    emphasis: "var(--chapchoo-color-success)",
-  },
-  apricot: {
-    surface: "var(--mantine-color-orange-light)",
-    foreground: "var(--mantine-color-text)",
-    emphasis: "var(--mantine-color-orange-light-color)",
-  },
-  teal: {
-    surface: "var(--mantine-color-teal-light)",
-    foreground: "var(--mantine-color-text)",
-    emphasis: "var(--mantine-color-teal-light-color)",
-  },
-  lilac: {
-    surface: "var(--mantine-color-grape-light)",
-    foreground: "var(--mantine-color-text)",
-    emphasis: "var(--mantine-color-grape-light-color)",
-  },
-  rose: {
-    surface: "var(--mantine-color-pink-light)",
-    foreground: "var(--mantine-color-text)",
-    emphasis: "var(--mantine-color-pink-light-color)",
-  },
+export function profileStyle(key: AgentPaletteKey): CSSProperties & {
+  "--profile-surface": string;
+  "--profile-ink": string;
+  "--profile-border": string;
+} {
+  const colors = profilePalette[key];
+  return {
+    "--profile-surface": colors.surface,
+    "--profile-ink": colors.emphasis,
+    "--profile-border": colors.border,
+  };
+}
+
+interface ProfilePalette {
+  surface: string;
+  foreground: string;
+  emphasis: string;
+  border: string;
+  swatch: string;
+}
+function palette(key: AgentPaletteKey): ProfilePalette {
+  return {
+    surface: `var(--chapchoo-profile-${key}-surface)`,
+    foreground: `var(--chapchoo-profile-${key}-ink)`,
+    emphasis: `var(--chapchoo-profile-${key}-ink)`,
+    border: `var(--chapchoo-profile-${key}-border)`,
+    swatch: `var(--chapchoo-profile-${key}-swatch)`,
+  };
+}
+/** A profile's palette never overrides the workspace's global appearance. */
+export const profilePalette: Record<AgentPaletteKey, ProfilePalette> = {
+  butter: palette("butter"),
+  sage: palette("sage"),
+  apricot: palette("apricot"),
+  teal: palette("teal"),
+  lilac: palette("lilac"),
+  rose: palette("rose"),
 };

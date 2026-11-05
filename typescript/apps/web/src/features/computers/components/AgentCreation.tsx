@@ -1,23 +1,22 @@
 "use client";
 import { ApplicationShell } from "@chapchoo/ui/ApplicationShell";
 import { PageFailure } from "@chapchoo/ui/PageFailure";
-import { agentPaletteKeys } from "@chapchoo/web-core/agent-profile";
 import { agentsPath } from "@chapchoo/web-core/workspace";
 import {
   Alert,
   Anchor,
+  Box,
   Button,
   Group,
   Loader,
-  Paper,
   Select,
-  SimpleGrid,
   Stack,
   Text,
   TextInput,
 } from "@mantine/core";
-import { profilePalette } from "../profilePalette";
-import { AgentPortrait } from "./AgentPortrait";
+import { ProfileImageChoices, ProfilePaletteChoices } from "./ProfileChoices";
+import classes from "./ProfilePresentation.module.css";
+import { ProfilePreview } from "./ProfilePreview";
 import type { AgentCreationProps } from "../creationTypes";
 import type { ReactElement } from "react";
 
@@ -68,41 +67,48 @@ export function AgentCreation(props: AgentCreationProps): ReactElement {
           props.onCreate();
         }}
       >
-        <SimpleGrid
-          cols={{ base: 1, sm: 2 }}
-          spacing="xl"
-          style={{ alignItems: "start" }}
-        >
-          <Paper
-            component="section"
-            aria-label={p.preview}
-            p="xl"
-            radius="lg"
-            bg={profilePalette[props.paletteKey].surface}
-            c={profilePalette[props.paletteKey].foreground}
-          >
-            <Stack align="center">
-              <AgentPortrait
-                basePath={props.basePath}
-                assetKey={props.image.assetKey}
-                paletteKey={props.paletteKey}
-              />
-              <Text
-                size="xl"
-                fw={600}
-                ta="center"
-                style={{ overflowWrap: "anywhere", maxWidth: "100%" }}
-              >
-                {props.name || c.name}
-              </Text>
-              {props.handle.draft.candidate ? (
-                <Text c={profilePalette[props.paletteKey].emphasis}>
-                  @{props.handle.draft.candidate}
-                </Text>
+        <Box className={classes.creationGrid}>
+          <Box className={classes.creationPreview}>
+            <ProfilePreview
+              basePath={props.basePath}
+              assetKey={props.image.assetKey}
+              paletteKey={props.paletteKey}
+              name={props.name || c.name}
+              handle={props.handle.draft.candidate}
+              label={p.preview}
+            />
+          </Box>
+          <Stack gap="xl">
+            <ProfileImageChoices
+              basePath={props.basePath}
+              label={p.image}
+              images={imageOptions}
+              selected={props.image.id}
+              disabled={locked || props.imagesUnavailable}
+              onChange={props.onImage}
+            />
+            <Group role="group" aria-label={p.image}>
+              {props.imageAfter ? (
+                <Button
+                  type="button"
+                  variant="subtle"
+                  disabled={locked}
+                  onClick={() => props.onImagePage(null)}
+                >
+                  {c.first}
+                </Button>
               ) : null}
-            </Stack>
-          </Paper>
-          <Stack>
+              {props.images.nextAfter ? (
+                <Button
+                  type="button"
+                  variant="subtle"
+                  disabled={locked}
+                  onClick={() => props.onImagePage(props.images.nextAfter)}
+                >
+                  {c.next}
+                </Button>
+              ) : null}
+            </Group>
             <TextInput
               label={c.name}
               value={props.name}
@@ -148,66 +154,13 @@ export function AgentCreation(props: AgentCreationProps): ReactElement {
                 {c.retryRead}
               </Button>
             ) : null}
-            <Select
-              label={p.image}
-              value={props.image.id}
-              data={imageOptions.map((image) => ({
-                value: image.id,
-                label: image.internalName,
-              }))}
-              onChange={(value) => {
-                if (value) {
-                  props.onImage(value);
-                }
-              }}
-              required
-              disabled={locked || props.imagesUnavailable}
-            />
-            <Group role="group" aria-label={p.image}>
-              {props.imageAfter ? (
-                <Button
-                  type="button"
-                  variant="subtle"
-                  disabled={locked}
-                  onClick={() => props.onImagePage(null)}
-                >
-                  {c.first}
-                </Button>
-              ) : null}
-              {props.images.nextAfter ? (
-                <Button
-                  type="button"
-                  variant="subtle"
-                  disabled={locked}
-                  onClick={() => props.onImagePage(props.images.nextAfter)}
-                >
-                  {c.next}
-                </Button>
-              ) : null}
-            </Group>
-            <Select
-              label={p.palette}
-              value={props.paletteKey}
-              data={agentPaletteKeys.map((key) => ({
-                value: key,
-                label: p.palettes[key],
-              }))}
-              onChange={(value) => {
-                if (value) {
-                  props.onPalette(value);
-                }
-              }}
-              required
+            <ProfilePaletteChoices
+              copy={p}
+              selected={props.paletteKey}
               disabled={locked}
+              onChange={props.onPalette}
+              onRandom={props.onRandomPalette}
             />
-            <Button
-              type="button"
-              variant="subtle"
-              onClick={props.onRandomPalette}
-              disabled={locked}
-            >
-              {p.randomPalette}
-            </Button>
             {props.imagesUnavailable ? (
               <Alert color="yellow" role="alert">
                 <Stack gap="sm">
@@ -316,7 +269,7 @@ export function AgentCreation(props: AgentCreationProps): ReactElement {
               </Button>
             </Group>
           </Stack>
-        </SimpleGrid>
+        </Box>
       </Stack>
     </ApplicationShell>
   );

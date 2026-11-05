@@ -1,0 +1,342 @@
+.content {
+  max-width: 66rem;
+  padding-top: var(--mantine-spacing-lg);
+}
+.preview {
+  min-width: 0;
+  border: 1px solid var(--profile-border);
+  background: var(--profile-surface);
+  color: var(--profile-ink);
+  border-radius: 1.75rem;
+  padding: var(--mantine-spacing-xl);
+  text-align: center;
+}
+.previewImage {
+  width: 100%;
+  max-width: 15rem;
+  height: 15rem;
+  object-fit: contain;
+  margin: var(--mantine-spacing-lg) auto;
+}
+.previewName {
+  font-size: 1.75rem;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.previewHandle {
+  font-size: var(--mantine-font-size-sm);
+  opacity: 0.8;
+  margin-top: var(--mantine-spacing-xs);
+  overflow-wrap: anywhere;
+}
+.imageChoice {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 4.75rem;
+  min-width: 0;
+  border: 1px solid var(--chapchoo-color-border);
+  border-radius: var(--mantine-radius-md);
+  background: var(--chapchoo-color-navigation);
+}
+.imageChoice img {
+  width: 5.25rem;
+  height: 4.25rem;
+}
+.imageChoice[data-selected] {
+  border: 2px solid var(--chapchoo-color-accentText);
+  background: var(--chapchoo-profile-butter-surface);
+}
+.imageChoice:focus-visible,
+.swatch:focus-visible {
+  outline: 2px solid var(--chapchoo-color-focus);
+  outline-offset: 0.1875rem;
+}
+.imageChoice:disabled,
+.swatch:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.picked {
+  position: absolute;
+  bottom: var(--mantine-spacing-xs);
+  right: var(--mantine-spacing-xs);
+  width: 1rem;
+  height: 1rem;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--chapchoo-color-accentText);
+  color: var(--chapchoo-color-surface);
+  font-size: 0.625rem;
+}
+.swatch {
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0.25rem;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.swatch > span {
+  display: grid;
+  place-items: center;
+  border: 0.1875rem solid var(--chapchoo-color-surface);
+  box-shadow: 0 0 0 1px var(--chapchoo-color-border);
+  border-radius: 50%;
+  width: 100%;
+  height: 100%;
+  font-size: var(--mantine-font-size-sm);
+}
+.swatch[data-selected] {
+  border: 2px solid currentColor;
+}
+.editorGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 15.25rem) minmax(0, 1fr);
+  gap: var(--mantine-spacing-xl);
+  align-items: start;
+}
+.editorPreview {
+  position: sticky;
+  top: 0;
+}
+.editorFooter {
+  border-top: 1px solid var(--chapchoo-color-border);
+  padding-top: var(--mantine-spacing-lg);
+  margin-top: var(--mantine-spacing-xl);
+}
+.hero {
+  display: flex;
+  gap: var(--mantine-spacing-xl);
+  align-items: center;
+  position: relative;
+  background: var(--profile-surface);
+  color: var(--profile-ink);
+  border: 1px solid var(--profile-border);
+  border-radius: 1.75rem;
+  padding: var(--mantine-spacing-xl) var(--mantine-spacing-2xl);
+  min-width: 0;
+}
+.heroPortrait {
+  width: 12rem;
+  height: 11rem;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.heroIdentity {
+  min-width: 0;
+  flex: 1;
+}
+.heroName {
+  font-size: 2.25rem;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.heroEdit {
+  align-self: flex-start;
+  flex-shrink: 0;
+}
+.creationGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 17rem) minmax(0, 30rem);
+  align-items: start;
+  justify-content: center;
+  gap: var(--mantine-spacing-2xl);
+}
+.creationPreview {
+  position: sticky;
+  top: var(--mantine-spacing-xl);
+}
+.cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--mantine-spacing-xl);
+}
+.card {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-xl);
+  border: 1px solid var(--profile-border);
+  background: var(--profile-surface);
+  color: var(--profile-ink);
+  border-radius: 1.75rem;
+  padding: var(--mantine-spacing-xl);
+  min-width: 0;
+  min-height: 14.375rem;
+  text-decoration: none;
+}
+.card:focus-visible {
+  outline: 2px solid var(--chapchoo-color-focus);
+  outline-offset: 0.1875rem;
+}
+.cardPortrait {
+  width: 10.25rem;
+  height: 10.25rem;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.cardIdentity {
+  min-width: 0;
+  flex: 1;
+}
+.cardName {
+  font-size: 1.75rem;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.cardStatus {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-sm);
+  font-size: var(--mantine-font-size-xs);
+  margin-top: var(--mantine-spacing-lg);
+}
+.statusDot {
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+.open {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-sm);
+  font-size: var(--mantine-font-size-sm);
+  margin-top: var(--mantine-spacing-xl);
+}
+.openArrow {
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: var(--profile-ink);
+  color: var(--profile-surface);
+}
+.computerPanel {
+  border: 1px solid var(--chapchoo-color-border);
+  border-radius: var(--mantine-radius-lg);
+  padding: var(--mantine-spacing-xl);
+}
+@media (max-width: 62em) {
+  .card {
+    gap: var(--mantine-spacing-md);
+    padding: var(--mantine-spacing-lg);
+  }
+  .cardPortrait {
+    width: 7.5rem;
+    height: 7.5rem;
+  }
+}
+@media (max-width: 48em) {
+  .imageGrid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: var(--mantine-spacing-xs);
+  }
+  .imageChoice {
+    min-height: 3rem;
+    padding: 0.125rem;
+    border-radius: var(--mantine-radius-sm);
+  }
+  .imageChoice img {
+    width: 100%;
+    height: 2.75rem;
+  }
+  .picked {
+    width: 0.75rem;
+    height: 0.75rem;
+    bottom: 0.125rem;
+    right: 0.125rem;
+    font-size: 0.5rem;
+  }
+  .cards {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--mantine-spacing-lg);
+  }
+  .card {
+    min-height: 11rem;
+    padding: var(--mantine-spacing-lg);
+    gap: var(--mantine-spacing-lg);
+  }
+  .cardPortrait {
+    width: 7.5rem;
+    height: 7.5rem;
+  }
+  .cardName {
+    font-size: 1.5rem;
+  }
+  .cardStatus {
+    margin-top: var(--mantine-spacing-sm);
+  }
+  .open {
+    margin-top: var(--mantine-spacing-lg);
+  }
+  .creationGrid,
+  .editorGrid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--mantine-spacing-xl);
+  }
+  .creationPreview,
+  .editorPreview {
+    position: static;
+  }
+  .preview {
+    display: flex;
+    align-items: center;
+    gap: var(--mantine-spacing-lg);
+    padding: var(--mantine-spacing-lg);
+    text-align: start;
+  }
+  .previewIdentity {
+    min-width: 0;
+  }
+  .previewName {
+    font-size: 1.5rem;
+  }
+  .previewImage {
+    width: 45%;
+    max-width: 10rem;
+    height: 10rem;
+    margin: 0;
+    flex-shrink: 0;
+  }
+  .editorPreview .previewImage {
+    max-width: 6.25rem;
+    height: 6.25rem;
+  }
+  .hero {
+    padding: var(--mantine-spacing-lg);
+    gap: var(--mantine-spacing-lg);
+    flex-wrap: wrap;
+  }
+  .heroPortrait {
+    width: 8.5rem;
+    height: 8.5rem;
+  }
+  .heroName {
+    font-size: 1.75rem;
+  }
+  .heroEdit {
+    position: absolute;
+    top: var(--mantine-spacing-sm);
+    right: var(--mantine-spacing-sm);
+  }
+  .heroIdentity {
+    min-width: 8rem;
+  }
+}
+@media (max-width: 22em) {
+  .imageGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .preview {
+    gap: var(--mantine-spacing-sm);
+  }
+}

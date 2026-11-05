@@ -12,6 +12,7 @@ export interface CreationCopy {
   close: string;
   randomPalette: string;
   preview: string;
+  open: string;
   checking: string;
   available: string;
   invalid: string;
@@ -32,6 +33,7 @@ const english: CreationCopy = {
   close: "Close",
   randomPalette: "Random color",
   preview: "Profile preview",
+  open: "Open",
   checking: "Checking availability…",
   available: "Available",
   invalid:
@@ -60,6 +62,7 @@ const korean: CreationCopy = {
   close: "닫기",
   randomPalette: "색상 무작위 선택",
   preview: "프로필 미리보기",
+  open: "열기",
   checking: "사용 가능 여부 확인 중…",
   available: "사용 가능",
   invalid:
@@ -89,6 +92,7 @@ const japanese: CreationCopy = {
   close: "閉じる",
   randomPalette: "ランダムなカラー",
   preview: "プロフィールのプレビュー",
+  open: "開く",
   checking: "使用できるか確認中…",
   available: "使用できます",
   invalid:
@@ -119,6 +123,7 @@ const french: CreationCopy = {
   close: "Fermer",
   randomPalette: "Couleur aléatoire",
   preview: "Aperçu du profil",
+  open: "Ouvrir",
   checking: "Vérification de la disponibilité…",
   available: "Disponible",
   invalid:

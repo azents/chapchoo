@@ -49,6 +49,7 @@ const meta = {
     onProfileName: (): void => {},
     onProfileImage: (): void => {},
     onProfilePalette: (): void => {},
+    onRandomProfilePalette: (): void => {},
     onImagePage: (): void => {},
     onRefresh: (): void => {},
     onSaveProfile: (): void => {},

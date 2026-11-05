@@ -58,10 +58,9 @@
   max-width: 60rem;
   margin: 0 auto;
 }
-.title {
+.heading {
   overflow-wrap: anywhere;
   letter-spacing: -0.04em;
-  margin-bottom: var(--mantine-spacing-xl);
 }
 @media (min-width: 48.001em) {
   .shell {
@@ -115,8 +114,5 @@
   }
   .main {
     padding: var(--mantine-spacing-xl) var(--mantine-spacing-lg);
-  }
-  .title {
-    margin-bottom: var(--mantine-spacing-xl);
   }
 }

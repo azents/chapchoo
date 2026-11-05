@@ -1,19 +1,21 @@
-import { agentPaletteKeys } from "@chapchoo/web-core/agent-profile";
 import {
+  ActionIcon,
   Alert,
+  Box,
   Button,
   Drawer,
   Group,
+  Image,
   Modal,
-  Paper,
-  Select,
-  SimpleGrid,
   Stack,
   Text,
   TextInput,
+  Title,
 } from "@mantine/core";
-import { profilePalette } from "../profilePalette";
-import { AgentPortrait } from "./AgentPortrait";
+import { profileStyle } from "../profilePalette";
+import { ProfileImageChoices, ProfilePaletteChoices } from "./ProfileChoices";
+import classes from "./ProfilePresentation.module.css";
+import { ProfilePreview } from "./ProfilePreview";
 import type { AgentsProps } from "../types";
 import type { AgentView } from "@chapchoo/web-core/computer";
 import type { ReactElement } from "react";
@@ -32,59 +34,81 @@ export type AgentProfileProps = Pick<
   | "onProfileName"
   | "onProfileImage"
   | "onProfilePalette"
+  | "onRandomProfilePalette"
   | "onImagePage"
   | "onRefresh"
   | "onSaveProfile"
   | "onCancelProfile"
 > & { agent: AgentView };
-/** The saved identity and transient modal draft have independent render ownership. */
+/** Saved identity and transient draft have independent presentation ownership. */
 export function AgentProfile(props: AgentProfileProps): ReactElement {
   const { agent, profileCopy: p, editor } = props;
   const draft = editor.type === "closed" ? null : editor.draft;
   const busy = editor.type === "saving";
-  const saved = profilePalette[agent.paletteKey];
-  const options = props.images.items.map((image) => ({
-    value: image.id,
-    label: image.internalName,
-  }));
-  if (draft && !options.some((item) => item.value === draft.image.id)) {
-    options.unshift({ value: draft.image.id, label: p.currentImage });
+  const options = [...props.images.items];
+  if (draft && !options.some((item) => item.id === draft.image.id)) {
+    options.unshift({ ...draft.image, internalName: p.currentImage });
   }
   const content = draft ? (
-    <Stack
+    <Box
       component="form"
       onSubmit={(event) => {
         event.preventDefault();
         props.onSaveProfile();
       }}
     >
-      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg">
-        <Paper
-          p="lg"
-          radius="lg"
-          bg={profilePalette[draft.paletteKey].surface}
-          c={profilePalette[draft.paletteKey].foreground}
-        >
-          <Stack align="center">
-            <AgentPortrait
-              basePath={props.basePath}
-              assetKey={draft.image.assetKey}
-              paletteKey={draft.paletteKey}
-            />
-            <Text
-              fw={600}
-              size="xl"
-              ta="center"
-              style={{ overflowWrap: "anywhere" }}
-            >
-              {draft.name || props.copy.name}
-            </Text>
-            <Text size="sm" c={profilePalette[draft.paletteKey].emphasis}>
-              @{agent.handle}
-            </Text>
-          </Stack>
-        </Paper>
-        <Stack>
+      <Box className={classes.editorGrid}>
+        <Box className={classes.editorPreview}>
+          <ProfilePreview
+            basePath={props.basePath}
+            assetKey={draft.image.assetKey}
+            paletteKey={draft.paletteKey}
+            name={draft.name || props.copy.name}
+            handle={agent.handle}
+            label={p.preview}
+          />
+        </Box>
+        <Stack gap="xl">
+          <ProfileImageChoices
+            basePath={props.basePath}
+            label={p.image}
+            images={options}
+            selected={draft.image.id}
+            disabled={busy || props.imagesUnavailable}
+            onChange={props.onProfileImage}
+          />
+          {props.imageAfter || props.images.nextAfter ? (
+            <Group>
+              {props.imageAfter ? (
+                <Button
+                  type="button"
+                  variant="subtle"
+                  disabled={busy}
+                  onClick={() => props.onImagePage(null)}
+                >
+                  {props.copy.first}
+                </Button>
+              ) : null}
+              {props.images.nextAfter ? (
+                <Button
+                  type="button"
+                  variant="subtle"
+                  disabled={busy}
+                  onClick={() => props.onImagePage(props.images.nextAfter)}
+                >
+                  {props.copy.next}
+                </Button>
+              ) : null}
+            </Group>
+          ) : null}
+          {props.imagesUnavailable ? (
+            <Alert color="yellow" role="status">
+              {props.copy.unavailable}
+              <Button type="button" variant="subtle" onClick={props.onRefresh}>
+                {props.copy.retry}
+              </Button>
+            </Alert>
+          ) : null}
           <TextInput
             label={props.copy.name}
             value={draft.name}
@@ -94,78 +118,31 @@ export function AgentProfile(props: AgentProfileProps): ReactElement {
             disabled={busy}
             data-autofocus
           />
+          <ProfilePaletteChoices
+            copy={p}
+            selected={draft.paletteKey}
+            disabled={busy}
+            onChange={props.onProfilePalette}
+            onRandom={props.onRandomProfilePalette}
+          />
           <TextInput
             label={p.handle}
             description={p.permanent}
             value={agent.handle}
             readOnly
-          />
-          <Select
-            label={p.image}
-            value={draft.image.id}
-            data={options}
-            disabled={busy || props.imagesUnavailable}
-            onChange={(value) => {
-              if (value) {
-                props.onProfileImage(value);
-              }
-            }}
-          />
-          <Group>
-            {props.imageAfter ? (
-              <Button
-                type="button"
-                variant="subtle"
-                disabled={busy}
-                onClick={() => props.onImagePage(null)}
-              >
-                {props.copy.first}
-              </Button>
-            ) : null}
-            {props.images.nextAfter ? (
-              <Button
-                type="button"
-                variant="subtle"
-                disabled={busy}
-                onClick={() => props.onImagePage(props.images.nextAfter)}
-              >
-                {props.copy.next}
-              </Button>
-            ) : null}
-          </Group>
-          {props.imagesUnavailable ? (
-            <Alert color="yellow" role="status">
-              {props.copy.unavailable}
-              <Button type="button" variant="subtle" onClick={props.onRefresh}>
-                {props.copy.retry}
-              </Button>
-            </Alert>
-          ) : null}
-          <Select
-            label={p.palette}
-            value={draft.paletteKey}
-            data={agentPaletteKeys.map((key) => ({
-              value: key,
-              label: p.palettes[key],
-            }))}
-            disabled={busy}
-            onChange={(value) => {
-              if (value) {
-                props.onProfilePalette(value);
-              }
-            }}
+            variant="unstyled"
           />
         </Stack>
-      </SimpleGrid>
+      </Box>
       {editor.type === "editing" && editor.error ? (
-        <Alert color="red" role="alert">
+        <Alert color="red" role="alert" mt="lg">
           {editor.error}
         </Alert>
       ) : null}
-      <Group justify="flex-end">
+      <Group justify="flex-end" className={classes.editorFooter}>
         <Button
           type="button"
-          variant="subtle"
+          variant="default"
           disabled={busy}
           onClick={props.onCancelProfile}
         >
@@ -175,7 +152,7 @@ export function AgentProfile(props: AgentProfileProps): ReactElement {
           {p.save}
         </Button>
       </Group>
-    </Stack>
+    </Box>
   ) : null;
   const dialog = {
     opened: draft !== null,
@@ -187,30 +164,46 @@ export function AgentProfile(props: AgentProfileProps): ReactElement {
   };
   return (
     <>
-      <Paper p="lg" radius="lg" bg={saved.surface} c={saved.foreground}>
-        <Group justify="space-between" align="center">
-          <Group
-            wrap="nowrap"
-            flex={{ base: "1 0 100%", sm: 1 }}
-            style={{ minWidth: 0 }}
+      <Box
+        component="section"
+        className={classes.hero}
+        style={profileStyle(agent.paletteKey)}
+      >
+        <Image
+          src={`${props.basePath}/design-assets/${agent.profileImage.assetKey}-216.webp`}
+          alt=""
+          className={classes.heroPortrait}
+        />
+        <Box className={classes.heroIdentity}>
+          <Title order={1} className={classes.heroName}>
+            {agent.name}
+          </Title>
+          <Text className={classes.previewHandle}>@{agent.handle}</Text>
+          <Text size="sm" mt="lg">
+            {props.copy[agent.computer.connector]}
+          </Text>
+        </Box>
+        <ActionIcon
+          className={classes.heroEdit}
+          variant="subtle"
+          color="dark"
+          aria-label={p.edit}
+          onClick={props.onEditProfile}
+          size="lg"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            width="1.25rem"
+            height="1.25rem"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            aria-hidden="true"
           >
-            <AgentPortrait
-              basePath={props.basePath}
-              assetKey={agent.profileImage.assetKey}
-              paletteKey={agent.paletteKey}
-            />
-            <Stack gap="xs" style={{ minWidth: 0 }}>
-              <Text fw={600} size="xl" style={{ overflowWrap: "anywhere" }}>
-                {agent.name}
-              </Text>
-              <Text c={saved.emphasis}>@{agent.handle}</Text>
-            </Stack>
-          </Group>
-          <Button variant="default" onClick={props.onEditProfile}>
-            {p.edit}
-          </Button>
-        </Group>
-      </Paper>
+            <path d="m16 3 5 5-12 12-6 1 1-6zM14 5l5 5" />
+          </svg>
+        </ActionIcon>
+      </Box>
       {props.mobile ? (
         <Drawer
           {...dialog}
@@ -218,11 +211,11 @@ export function AgentProfile(props: AgentProfileProps): ReactElement {
           size="auto"
           styles={{
             content: {
-              maxHeight: "90dvh",
+              maxHeight: "92dvh",
               display: "flex",
               flexDirection: "column",
-              borderTopLeftRadius: "var(--mantine-radius-lg)",
-              borderTopRightRadius: "var(--mantine-radius-lg)",
+              borderTopLeftRadius: "1.5rem",
+              borderTopRightRadius: "1.5rem",
             },
             body: { flex: 1, overflowY: "auto" },
           }}
@@ -230,7 +223,7 @@ export function AgentProfile(props: AgentProfileProps): ReactElement {
           {content}
         </Drawer>
       ) : (
-        <Modal {...dialog} size="lg" centered>
+        <Modal {...dialog} size="50rem" centered padding="xl">
           {content}
         </Modal>
       )}
