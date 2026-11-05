@@ -99,8 +99,8 @@ input name. Automatic-proposal guidance, current availability and the permanent
 handle notice remain distinct, followed by the wrapped address preview.
 Both Team and Agent handle inputs disable automatic capitalization, correction,
 completion and spelling assistance while retaining ordinary text input and exact
-manual values. Concise help retains the same syntax and immutability rules; an
-empty Team handle does not show an invalid-value status before entry.
+manual values. Concise help retains the same syntax and immutability rules, and
+availability or resolution errors remain visible even when the draft is empty.
 The primary Team-create action expands on narrow screens while Cancel remains
 separately reachable; it retains the same modal focus and submission ownership.
 Manual edits survive later name changes; cancelled or superseded checks cannot

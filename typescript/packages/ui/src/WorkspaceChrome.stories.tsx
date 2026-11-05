@@ -127,6 +127,18 @@ export const CreationError: Story = {
 export const CreationPending: Story = {
   args: { creating: true, name: "Design team", handle: "design", busy: true },
 };
+export const CreationAvailabilityFailure: Story = {
+  args: {
+    creating: true,
+    name: "Design team",
+    handle: "",
+    handleStatus: {
+      description: "The handle cannot be changed after creation.",
+      available: false,
+      message: "Could not check availability. Try again.",
+    },
+  },
+};
 export const MobileMenu: Story = { args: { mobile: true, drawer: true } };
 export const MobilePicker: Story = {
   args: { mobile: true, drawer: true, picker: true },

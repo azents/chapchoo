@@ -244,7 +244,7 @@ export function WorkspaceChrome(props: WorkspaceChromeProps): ReactElement {
             <Text size="xs" c="dimmed">
               {props.copy.teamHandleHint}
             </Text>
-            {props.handle && props.handleStatus.message ? (
+            {props.handleStatus.message ? (
               <Text
                 size="xs"
                 c={
