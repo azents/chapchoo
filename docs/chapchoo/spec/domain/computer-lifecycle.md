@@ -13,10 +13,27 @@ and Computer locks. An exact current request/fingerprint returns current progres
 changed payload or a stale predecessor rejects. Running/stopped evidence must
 come from the current eligible Provider connection and match the current execution.
 An older connection's facts remain last-known information but yield unknown
-current power. Start additionally requires verified saved environment from the
-current Provider connection and no current execution; stop/restart require the
-confirmed current execution. Pending or uncertain operations block competing power
-work. Acceptance records intent/phase, not external execution success.
+current power. Ordinary Start additionally requires verified saved environment
+from the current Provider connection and no current execution; stop/restart
+require the confirmed current execution. Pending or uncertain operations block
+competing physical work. Acceptance records intent/phase, not external success.
+
+Start against the exact current Stop may instead update only its desired state
+to Running while retirement is Retiring or Uncertain. Start capability, current
+management connectivity and current-source original saved-storage verification
+remain required. The Stop's request ID, fingerprint, phase, expected execution
+and native command correlation remain unchanged. This is an idempotent target
+update, not a separate queued Start or a newly stored Start receipt. Repeating
+the Running target against that same Stop returns its current progress; original
+Stop receipt replay remains intact, and a later operation/Delete invalidates the
+captured predecessor. If Stop completed first, ordinary Start admission applies.
+
+Old-execution Running observations cannot fulfill this target or reclaim its
+preparation. Only confirmed retirement clears the old execution and selects
+Starting for the Running target; existing original-storage and successor gates
+still apply. Public progress then describes Start while stored Stop provenance
+continues to qualify target-update recovery. The desired state survives page
+closure and backend restart without a browser timer or another intent store.
 
 Delete can supersede preparation and persists terminal intent. In the same
 transaction it revokes that Computer's Connector sessions, discards encrypted

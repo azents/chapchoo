@@ -1217,6 +1217,7 @@ async fn exercise(
             .await,
         Err(StoreError::Conflict)
     ));
+    exercise_start_during_stop(&store, &mut ids, &current_source, &owner_digest).await?;
     let stop_owner =
         exercise_stop_and_initial(&store, &mut ids, &current_source, &owner_digest).await?;
     let current_source = ProviderSource {
@@ -1762,6 +1763,214 @@ async fn exercise_connector_directory(
             .await,
         Err(StoreError::Unauthenticated)
     ));
+    Ok(())
+}
+
+async fn exercise_start_during_stop(
+    store: &Store,
+    ids: &mut FixtureIds,
+    source: &ProviderSource<'_>,
+    owner: &chapchoo_crypto::SecretDigest,
+) -> Result<(), TestError> {
+    for retirement_first in [false, true] {
+        let name = if retirement_first {
+            "completed-stop"
+        } else {
+            "pending-stop"
+        };
+        create_fixture(store, ids, owner, name).await?;
+        let initial_id = format!("create-{name}");
+        let initial = scope(ids, name, &initial_id);
+        let original = store
+            .reserve_execution(source, initial, &draft(name))
+            .await?;
+        present_all(store, source, initial, &original.execution_id).await?;
+        store
+            .report_execution_running(source, initial, &original.execution_id)
+            .await?;
+        let stop_id = format!("stop-{name}");
+        let stop_request = LifecycleRequest {
+            request_id: stop_id.clone(),
+            expected_request_id: initial_id,
+            action: LifecycleAction::Stop,
+        };
+        let stopped = store
+            .request_lifecycle(owner, ids.agent(name), &stop_request, now()?)
+            .await?;
+        assert_eq!(
+            stopped.computer.action_availability(LifecycleAction::Start),
+            chapchoo_domain::ActionAvailability::Available
+        );
+        let stop = scope(ids, name, &stop_id);
+        let before = store.delivery_snapshot(None, stop, None).await?;
+        let pod = before
+            .resources
+            .iter()
+            .find(|r| r.kind() == ManagedResourceKind::Pod)
+            .ok_or("Missing Pod")?;
+        let saved = before
+            .resources
+            .iter()
+            .find(|r| r.kind() == ManagedResourceKind::Pvc)
+            .ok_or("Missing PVC")?;
+        if retirement_first {
+            report(
+                store,
+                source,
+                stop,
+                pod,
+                ResourceEvidence::DefinitivelyAbsent {
+                    expected_uid: pod.kubernetes_uid(),
+                },
+            )
+            .await?;
+            store
+                .retire_execution(source, stop, &original.execution_id)
+                .await?;
+        } else {
+            store
+                .report_lifecycle_issue(
+                    source,
+                    stop,
+                    Some(&original.execution_id),
+                    LifecyclePhase::Uncertain,
+                )
+                .await?;
+        }
+        let update = LifecycleRequest {
+            request_id: format!("run-{name}"),
+            expected_request_id: stop_id.clone(),
+            action: LifecycleAction::Start,
+        };
+        assert!(matches!(
+            store
+                .request_lifecycle(
+                    owner,
+                    ids.agent(name),
+                    &LifecycleRequest {
+                        request_id: stop_id.clone(),
+                        expected_request_id: stop_id.clone(),
+                        action: LifecycleAction::Start,
+                    },
+                    now()?
+                )
+                .await,
+            Err(StoreError::Conflict)
+        ));
+        let accepted = store
+            .request_lifecycle(owner, ids.agent(name), &update, now()?)
+            .await?;
+        assert_eq!(
+            accepted.computer.desired,
+            chapchoo_domain::DesiredState::Running
+        );
+        let active_id = accepted.computer.current_request_id.clone();
+        let active = scope(ids, name, &active_id);
+        if !retirement_first {
+            assert_eq!(active_id, stop_id);
+            let after = store.delivery_snapshot(None, stop, None).await?;
+            assert_eq!(after.computer.current_action, "STOP");
+            assert_eq!(after.computer.current_phase, "UNCERTAIN");
+            assert_eq!(
+                after.computer.current_execution_id.as_deref(),
+                Some(original.execution_id.as_str())
+            );
+            // Original receipt/fingerprint remains recoverable after target change.
+            store
+                .request_lifecycle(owner, ids.agent(name), &stop_request, now()?)
+                .await?;
+            assert!(
+                store
+                    .reserve_execution(source, stop, &draft("forbidden"))
+                    .await
+                    .is_err()
+            );
+            assert!(
+                store
+                    .mark_start_dispatched(source, stop, &original.execution_id)
+                    .await
+                    .is_err()
+            );
+            assert!(
+                store
+                    .report_execution_running(source, stop, &original.execution_id)
+                    .await
+                    .is_err()
+            );
+            assert!(
+                store
+                    .retire_execution(source, stop, &original.execution_id)
+                    .await
+                    .is_err()
+            );
+            report(
+                store,
+                source,
+                stop,
+                pod,
+                ResourceEvidence::DefinitivelyAbsent {
+                    expected_uid: pod.kubernetes_uid(),
+                },
+            )
+            .await?;
+            store
+                .retire_execution(source, stop, &original.execution_id)
+                .await?;
+        }
+        let starting = store
+            .request_lifecycle(owner, ids.agent(name), &update, now()?)
+            .await?;
+        assert_eq!(
+            starting.computer.progress.phase,
+            if retirement_first {
+                LifecyclePhase::Accepted
+            } else {
+                LifecyclePhase::Starting
+            }
+        );
+        assert_eq!(starting.computer.progress.action, LifecycleAction::Start);
+        let successor = store
+            .reserve_execution(source, active, &draft(&format!("next-{name}")))
+            .await?;
+        assert_ne!(successor.execution_id, original.execution_id);
+        let next_saved = successor
+            .resources
+            .iter()
+            .find(|r| r.kind() == ManagedResourceKind::Pvc)
+            .ok_or("Missing successor PVC")?;
+        assert_eq!(next_saved.identity(), saved.identity());
+        assert_eq!(next_saved.native(), saved.native());
+        present_all(store, source, active, &successor.execution_id).await?;
+        store
+            .report_execution_running(source, active, &successor.execution_id)
+            .await?;
+        assert_eq!(
+            store
+                .request_lifecycle(owner, ids.agent(name), &update, now()?)
+                .await?
+                .computer
+                .power,
+            ObservedPower::Running
+        );
+        store
+            .request_lifecycle(
+                owner,
+                ids.agent(name),
+                &LifecycleRequest {
+                    request_id: format!("delete-{name}"),
+                    expected_request_id: active_id,
+                    action: LifecycleAction::Delete,
+                },
+                now()?,
+            )
+            .await?;
+        assert!(matches!(
+            store
+                .request_lifecycle(owner, ids.agent(name), &update, now()?)
+                .await,
+            Err(StoreError::Conflict)
+        ));
+    }
     Ok(())
 }
 

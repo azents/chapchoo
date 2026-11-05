@@ -5,6 +5,7 @@ import { computerCopy } from "@chapchoo/web-core/computer-messages";
 import { shellCopy } from "@chapchoo/web-core/shell-messages";
 import { useMediaQuery } from "@mantine/hooks";
 import { useState } from "react";
+import { useComputerActions } from "../containers/useComputerActions";
 import { creationCopy } from "../creationCopy";
 import { computerDetailCopy } from "../detailCopy";
 import { Agents } from "./Agents";
@@ -26,6 +27,7 @@ const agent: AgentView = {
   profileImage: { id: "image", assetKey: "03-corgi" },
   paletteKey: "sage",
   computer: {
+    operation: "start",
     intent: "running",
     requestId: "request",
     power: "running",
@@ -482,6 +484,53 @@ export const Stopped: Story = {
 };
 export const StopConfirmation: Story = {
   args: { initial: detail, data: detail, confirmation: "stop" },
+};
+function PowerConfirmationInteraction(props: AgentsProps): ReactElement {
+  const [submitted, setSubmitted] = useState<string | null>(null);
+  const [observation, setObservation] = useState(0);
+  const actions = useComputerActions({
+    pending: props.pending,
+    submit: (action, requestId) => setSubmitted(`${action}:${requestId}`),
+    reset: () => setSubmitted(null),
+  });
+  const data =
+    props.data.type === "detail"
+      ? {
+          ...props.data,
+          agent: {
+            ...props.data.agent,
+            computer: {
+              ...props.data.agent.computer,
+              requestId: `observed-${observation}`,
+            },
+          },
+        }
+      : props.data;
+  return (
+    <>
+      <Agents
+        {...props}
+        data={data}
+        confirmation={actions.confirmation?.action ?? null}
+        onAction={(action) => {
+          if (data.type === "detail") {
+            actions.select(action, data.agent.computer.requestId);
+            // A newer query result must not retarget consent already opened.
+            setObservation((current) => current + 1);
+          }
+        }}
+        onConfirm={actions.confirm}
+        onCancel={actions.cancel}
+      />
+      <output aria-label="Submitted power operation">
+        {submitted ?? "No operation submitted"}
+      </output>
+    </>
+  );
+}
+export const PowerConfirmationInteractionFixture: Story = {
+  render: PowerConfirmationInteraction,
+  args: { initial: detail, data: detail },
 };
 export const StaleUnknown: Story = {
   args: {

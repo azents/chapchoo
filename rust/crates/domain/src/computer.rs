@@ -150,11 +150,23 @@ impl ComputerActionContext {
         if self.desired == DesiredState::Deleting {
             return Blocked(Reason::Deleting);
         }
-        if self.lifecycle.is_some_and(LifecycleProgress::pending) {
+        let start_after_stop = action == LifecycleAction::Start
+            && self.desired == DesiredState::Stopped
+            && self.lifecycle.is_some_and(|progress| {
+                progress.action == LifecycleAction::Stop
+                    && matches!(
+                        progress.phase,
+                        LifecyclePhase::Retiring | LifecyclePhase::Uncertain
+                    )
+            });
+        if self.lifecycle.is_some_and(LifecycleProgress::pending) && !start_after_stop {
             return Blocked(Reason::ConflictingLifecycle);
         }
         if self.management != ConnectionStatus::Connected {
             return Blocked(Reason::ManagementUnavailable);
+        }
+        if start_after_stop {
+            return Available;
         }
         match (action, self.power) {
             (_, ObservedPower::Unknown) => Blocked(Reason::PowerUnknown),
@@ -271,6 +283,38 @@ mod tests {
             disconnected.power_action(LifecycleAction::Stop),
             ActionAvailability::Blocked(ActionBlockReason::ManagementUnavailable)
         );
+    }
+
+    #[test]
+    fn start_can_set_the_target_during_stop_without_claiming_stopped_power() {
+        for phase in [LifecyclePhase::Retiring, LifecyclePhase::Uncertain] {
+            let context = ComputerActionContext {
+                desired: DesiredState::Stopped,
+                power: ObservedPower::Unknown,
+                lifecycle: Some(LifecycleProgress {
+                    action: LifecycleAction::Stop,
+                    phase,
+                    initial_start_dispatch_ms: None,
+                }),
+                ..available()
+            };
+            assert_eq!(
+                context.power_action(LifecycleAction::Start),
+                ActionAvailability::Available
+            );
+            assert_eq!(
+                context.power_action(LifecycleAction::Restart),
+                ActionAvailability::Blocked(ActionBlockReason::ConflictingLifecycle)
+            );
+            assert_eq!(
+                ComputerActionContext {
+                    management: ConnectionStatus::Disconnected,
+                    ..context
+                }
+                .power_action(LifecycleAction::Start),
+                ActionAvailability::Blocked(ActionBlockReason::ManagementUnavailable)
+            );
+        }
     }
 
     #[test]

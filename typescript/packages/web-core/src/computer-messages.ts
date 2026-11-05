@@ -1,3 +1,5 @@
+import type { ComputerStatus } from "./computer.js";
+
 const english = {
   signIn: "Sign in",
   accessUnavailable:
@@ -51,12 +53,25 @@ const english = {
   verified: "Verified",
   missing: "Missing",
   accepted: "Accepted",
-  retiring: "Stopping execution",
+  retiring: "Stopping",
   starting: "Starting",
   deleting: "Deleting",
   completed: "Completed",
-  blocked: "Needs attention",
-  uncertain: "Outcome not confirmed",
+  blocked: "Operation blocked",
+  blockedHint:
+    "This operation cannot continue. Check host controls and saved storage in Computer details.",
+  uncertain: "Checking completion",
+  checkingStop: "Verifying shutdown",
+  startAfterStop: "Starting after shutdown",
+  checkingStart: "Verifying startup",
+  checkingRestart: "Verifying restart",
+  checkingDelete: "Verifying deletion",
+  checkingStopHint:
+    "Shutdown has not been verified. A new execution cannot start until the previous one is confirmed stopped.",
+  checkingStartHint:
+    "Startup has not been verified. Check host controls and the last power observation in Computer details before submitting another request.",
+  checkingDeleteHint:
+    "Deletion has not been verified. Resources or saved data may remain; check Computer details before deciding whether to force remove the Agent.",
   start: "Start",
   stop: "Stop",
   restart: "Restart",
@@ -66,8 +81,7 @@ const english = {
   confirm: "Confirm",
   stopWarning:
     "This interrupts running processes. Files in the saved environment remain; live process state is not preserved.",
-  deleteWarning:
-    "The Agent will be removed after its managed Computer resources and saved data are confirmed deleted.",
+  deleteWarning: "This deletes the Agent, its Computer and all saved data.",
   forceWarning:
     "Remove this Agent now? Its Computer and data may remain. The background cleanup request is retained, but completion is not confirmed.",
   delayed:
@@ -156,12 +170,25 @@ const korean: ComputerCopy = {
   verified: "확인됨",
   missing: "없음",
   accepted: "요청 접수됨",
-  retiring: "실행 중지 중",
+  retiring: "종료 중",
   starting: "시작 중",
   deleting: "삭제 중",
   completed: "완료",
-  blocked: "확인 필요",
-  uncertain: "결과 확인 필요",
+  blocked: "작업을 진행할 수 없음",
+  blockedHint:
+    "작업을 계속할 수 없습니다. 컴퓨터 상세 정보에서 관리 연결과 저장 공간 상태를 확인해 주세요.",
+  uncertain: "완료 여부 확인 중",
+  checkingStop: "종료 확인 중",
+  startAfterStop: "종료 후 시작 예정",
+  checkingStart: "시작 확인 중",
+  checkingRestart: "재시작 확인 중",
+  checkingDelete: "삭제 확인 중",
+  checkingStopHint:
+    "이전 실행의 종료를 확인하지 못했습니다. 종료가 확인되기 전에는 새 실행을 시작하지 않습니다.",
+  checkingStartHint:
+    "시작 완료를 확인하지 못했습니다. 요청을 반복하기 전에 컴퓨터 상세 정보에서 관리 연결과 마지막 전원 확인 시각을 확인해 주세요.",
+  checkingDeleteHint:
+    "삭제 완료를 확인하지 못했습니다. 컴퓨터나 저장 데이터가 남아 있을 수 있습니다. 강제 제거 여부를 결정하기 전에 컴퓨터 상세 정보를 확인해 주세요.",
   start: "시작",
   stop: "중지",
   restart: "다시 시작",
@@ -171,8 +198,7 @@ const korean: ComputerCopy = {
   confirm: "확인",
   stopWarning:
     "실행 중인 프로세스가 중단됩니다. 저장 환경의 파일은 유지되지만, 실행 중인 프로세스 상태는 보존되지 않습니다.",
-  deleteWarning:
-    "관리 리소스와 저장 데이터가 모두 삭제된 것을 확인한 뒤 에이전트가 제거됩니다.",
+  deleteWarning: "에이전트와 컴퓨터, 저장된 데이터가 모두 삭제됩니다.",
   forceWarning:
     "지금 에이전트를 강제로 제거할까요? 컴퓨터와 데이터가 남을 수 있습니다. 백그라운드 정리 요청은 유지되지만, 정리가 끝났는지는 확인되지 않았습니다.",
   delayed:
@@ -265,8 +291,21 @@ const japanese: ComputerCopy = {
   starting: "起動中",
   deleting: "削除中",
   completed: "完了",
-  blocked: "確認が必要",
-  uncertain: "結果未確認",
+  blocked: "操作を進められません",
+  blockedHint:
+    "操作を続けられません。コンピューターの詳細でホスト操作の接続と保存環境の状態を確認してください。",
+  uncertain: "完了を確認中",
+  checkingStop: "停止を確認中",
+  startAfterStop: "停止後に起動",
+  checkingStart: "起動を確認中",
+  checkingRestart: "再起動を確認中",
+  checkingDelete: "削除を確認中",
+  checkingStopHint:
+    "前の実行の停止を確認できていません。停止が確認されるまでは、新しい実行を開始しません。",
+  checkingStartHint:
+    "起動の完了を確認できていません。要求を再送する前に、コンピューターの詳細でホスト操作の接続と最後の電源確認時刻を確認してください。",
+  checkingDeleteHint:
+    "削除の完了を確認できていません。コンピューターや保存データが残っている可能性があります。強制削除を選ぶ前に、コンピューターの詳細を確認してください。",
   start: "起動",
   stop: "停止",
   restart: "再起動",
@@ -276,8 +315,7 @@ const japanese: ComputerCopy = {
   confirm: "確認",
   stopWarning:
     "実行中のプロセスを中断します。保存環境のファイルは残りますが、プロセスの実行状態は保持されません。",
-  deleteWarning:
-    "管理リソースと保存データがすべて削除されたことを確認してから、エージェントを削除します。",
+  deleteWarning: "エージェントとコンピューター、保存データをすべて削除します。",
   forceWarning:
     "今すぐエージェントを強制削除しますか？コンピューターやデータが残る場合があります。バックグラウンドでのクリーンアップ要求は維持されますが、完了は確認できていません。",
   delayed:
@@ -369,8 +407,21 @@ const french: ComputerCopy = {
   starting: "Démarrage",
   deleting: "Suppression",
   completed: "Terminée",
-  blocked: "Intervention nécessaire",
-  uncertain: "Résultat non confirmé",
+  blocked: "Opération bloquée",
+  blockedHint:
+    "Cette opération ne peut pas continuer. Vérifiez les commandes de l’hôte et le stockage dans les détails de l’ordinateur.",
+  uncertain: "Vérification de l’achèvement",
+  checkingStop: "Vérification de l’arrêt",
+  startAfterStop: "Démarrage après l’arrêt",
+  checkingStart: "Vérification du démarrage",
+  checkingRestart: "Vérification du redémarrage",
+  checkingDelete: "Vérification de la suppression",
+  checkingStopHint:
+    "L’arrêt de l’exécution précédente n’est pas confirmé. Aucune nouvelle exécution ne démarre avant cette confirmation.",
+  checkingStartHint:
+    "Le démarrage n’est pas confirmé. Consultez les commandes de l’hôte et la dernière observation de l’alimentation dans les détails avant de renouveler la demande.",
+  checkingDeleteHint:
+    "La suppression n’est pas confirmée. Des ressources ou des données peuvent subsister. Consultez les détails avant de décider de retirer immédiatement l’Agent.",
   start: "Démarrer",
   stop: "Arrêter",
   restart: "Redémarrer",
@@ -381,7 +432,7 @@ const french: ComputerCopy = {
   stopWarning:
     "Les processus en cours seront interrompus. Les fichiers de l’environnement persistant seront conservés, mais pas l’état des processus en cours.",
   deleteWarning:
-    "L’Agent sera retiré une fois la suppression de ses ressources gérées et de ses données persistantes confirmée.",
+    "L’Agent, son ordinateur et toutes les données enregistrées seront supprimés.",
   forceWarning:
     "Retirer cet Agent maintenant ? Son ordinateur et ses données peuvent subsister. La demande de nettoyage en arrière-plan est maintenue, mais son achèvement n’est pas confirmé.",
   delayed:
@@ -428,4 +479,41 @@ export function computerCopy(locale: string): ComputerCopy {
     default:
       return english;
   }
+}
+
+/** Explain the current operation without converting intent into observed power. */
+export function computerOperation(
+  computer: Pick<ComputerStatus, "operation" | "intent" | "phase">,
+  copy: ComputerCopy,
+): { label: string; hint: string | null } {
+  if (computer.phase === "blocked") {
+    return { label: copy.blocked, hint: copy.blockedHint };
+  }
+  if (
+    computer.operation === "stop" &&
+    computer.intent === "running" &&
+    (computer.phase === "retiring" || computer.phase === "uncertain")
+  ) {
+    return {
+      label: copy.startAfterStop,
+      hint: computer.phase === "uncertain" ? copy.checkingStopHint : null,
+    };
+  }
+  if (computer.phase === "uncertain") {
+    if (computer.operation === "stop") {
+      return { label: copy.checkingStop, hint: copy.checkingStopHint };
+    }
+    if (computer.operation === "restart") {
+      return { label: copy.checkingRestart, hint: copy.checkingStartHint };
+    }
+    switch (computer.intent) {
+      case "stopped":
+        return { label: copy.checkingStop, hint: copy.checkingStopHint };
+      case "running":
+        return { label: copy.checkingStart, hint: copy.checkingStartHint };
+      case "deleting":
+        return { label: copy.checkingDelete, hint: copy.checkingDeleteHint };
+    }
+  }
+  return { label: copy[computer.phase], hint: null };
 }

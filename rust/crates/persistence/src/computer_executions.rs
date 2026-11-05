@@ -687,7 +687,7 @@ impl Store {
             }
             if current.desired_state != "RUNNING"
                 || current.current_phase == "RETIRING"
-                || (current.current_action == "RESTART"
+                || (matches!(current.current_action.as_str(), "STOP" | "RESTART")
                     && current.current_execution_id.is_some()
                     && current.current_execution_id == current.expected_old_execution_id)
             {
@@ -901,7 +901,7 @@ impl Store {
             if current.desired_state != "RUNNING"
                 || current.current_execution_id.as_deref() != Some(execution_id)
                 || current.current_phase == "RETIRING"
-                || (current.current_action == "RESTART"
+                || (matches!(current.current_action.as_str(), "STOP" | "RESTART")
                     && current.expected_old_execution_id.as_deref() == Some(execution_id))
             {
                 return Err(StoreError::InvalidTransition);
@@ -943,7 +943,7 @@ impl Store {
             if current.desired_state != "RUNNING"
                 || current.current_phase == "RETIRING"
                 || current.current_execution_id.as_deref() != Some(execution_id)
-                || (current.current_action == "RESTART"
+                || (matches!(current.current_action.as_str(), "STOP" | "RESTART")
                     && current.expected_old_execution_id.as_deref() == Some(execution_id))
             {
                 return Err(StoreError::InvalidTransition);

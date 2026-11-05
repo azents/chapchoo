@@ -46,6 +46,8 @@ struct Fixture {
     receivers: OutboundReceivers,
     context: wire::ComputerContext,
     credential: SecretDigest,
+    actor: SecretDigest,
+    agent_id: String,
     token: BearerSecret,
     provider_id: String,
 }
@@ -287,6 +289,8 @@ async fn fixture_with_action(
             execution_id: execution.execution_id,
         },
         credential: key.key.token.digest(),
+        actor: user.token.digest(),
+        agent_id: agent.id,
         token: key.key.token,
         provider_id: key.provider_id,
     })
@@ -503,6 +507,29 @@ async fn stop_restart_and_terminal_early_paths_all_use_the_same_native_gate() ->
                 assert_eq!(value.require_terminal, action.is_none());
                 let source = f.services.inner.source(&f.entry).ok_or("No source")?;
                 assert_eq!(snapshot(f).await?.computer.current_phase, "UNCERTAIN");
+                if action == Some(chapchoo_domain::LifecycleAction::Stop) {
+                    let updated = f
+                        .services
+                        .inner
+                        .service
+                        .request_lifecycle(
+                            &f.actor,
+                            &f.agent_id,
+                            &LifecycleRequest {
+                                request_id: "run-after-stop".into(),
+                                expected_request_id: f.context.request_id.clone(),
+                                action: chapchoo_domain::LifecycleAction::Start,
+                            },
+                            AcceptanceTime::System,
+                        )
+                        .await?;
+                    assert_eq!(updated.computer.current_request_id, f.context.request_id);
+                    assert_eq!(snapshot(f).await?.computer.desired_state, "RUNNING");
+                    f.services.prune_native(&f.entry, &source).await?;
+                    // The already-issued native command is still the only
+                    // retirement authority after the desired target changes.
+                    assert!(f.services.verify_native_dequeue(&source, &retire).is_ok());
+                }
                 assert!(f.services.verify_native_dequeue(&source, &retire).is_ok());
                 respond(&f.services, &f.entry, retire.clone(), &mut HashSet::new()).await?;
                 assert_eq!(

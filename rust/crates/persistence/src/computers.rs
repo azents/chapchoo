@@ -354,6 +354,8 @@ pub(crate) struct AgentComputerRow {
     current_payload_hash: Vec<u8>,
     #[diesel(sql_type = Nullable<IdentitySql>)]
     current_execution_id: Option<EntityId>,
+    #[diesel(sql_type = Nullable<IdentitySql>)]
+    expected_old_execution_id: Option<EntityId>,
     #[diesel(sql_type = Text)]
     current_action: String,
     #[diesel(sql_type = Text)]
@@ -396,7 +398,7 @@ pub(crate) struct AgentComputerRow {
     can_restart: Option<bool>,
 }
 
-const COMPUTER_PROJECTION: &str = "c.id,c.owner_user_id,c.kind,c.provider_id,c.desired_state,c.current_request_id,c.current_payload_hash,c.current_execution_id,c.current_action,c.current_phase,c.initial_start_dispatch_at,c.prepare_admitted_at,ce.initial_allocation AS current_initial_allocation,p.can_create,c.observed_power,c.power_observed_at,c.power_source_connection_id,c.power_source_execution_id,c.environment_source_connection_id,c.saved_environment,pc.connection_id AS provider_connection_id,pc.expires_at AS provider_connection_expires_at,ci.expires_at AS control_expires_at,ci.draining AS control_draining,CASE WHEN pk.revoked_at IS NOT NULL THEN NULL WHEN pc.credential_hash=pk.current_hash THEN pk.expires_at WHEN pc.credential_hash=pk.previous_hash THEN CASE WHEN pk.expires_at<pk.previous_valid_until THEN pk.expires_at ELSE pk.previous_valid_until END ELSE NULL END AS management_key_valid_until,p.can_start,p.can_stop,p.can_restart FROM computers c LEFT JOIN computer_executions ce ON ce.id=c.current_execution_id LEFT JOIN computer_providers p ON p.id=c.provider_id LEFT JOIN provider_connections pc ON pc.provider_id=c.provider_id LEFT JOIN control_instances ci ON ci.id=pc.control_id LEFT JOIN provider_keys pk ON pk.provider_id=c.provider_id";
+const COMPUTER_PROJECTION: &str = "c.id,c.owner_user_id,c.kind,c.provider_id,c.desired_state,c.current_request_id,c.current_payload_hash,c.current_execution_id,c.expected_old_execution_id,c.current_action,c.current_phase,c.initial_start_dispatch_at,c.prepare_admitted_at,ce.initial_allocation AS current_initial_allocation,p.can_create,c.observed_power,c.power_observed_at,c.power_source_connection_id,c.power_source_execution_id,c.environment_source_connection_id,c.saved_environment,pc.connection_id AS provider_connection_id,pc.expires_at AS provider_connection_expires_at,ci.expires_at AS control_expires_at,ci.draining AS control_draining,CASE WHEN pk.revoked_at IS NOT NULL THEN NULL WHEN pc.credential_hash=pk.current_hash THEN pk.expires_at WHEN pc.credential_hash=pk.previous_hash THEN CASE WHEN pk.expires_at<pk.previous_valid_until THEN pk.expires_at ELSE pk.previous_valid_until END ELSE NULL END AS management_key_valid_until,p.can_start,p.can_stop,p.can_restart FROM computers c LEFT JOIN computer_executions ce ON ce.id=c.current_execution_id LEFT JOIN computer_providers p ON p.id=c.provider_id LEFT JOIN provider_connections pc ON pc.provider_id=c.provider_id LEFT JOIN control_instances ci ON ci.id=pc.control_id LEFT JOIN provider_keys pk ON pk.provider_id=c.provider_id";
 
 fn agent_query() -> String {
     format!(
@@ -483,9 +485,19 @@ impl AgentComputerRow {
             ConnectionStatus::Disconnected
         };
         let power = self.current_power(now)?;
+        let stop_predecessor = self.current_action == "STOP";
+        let retiring_old_execution = self.current_execution_id.is_some()
+            && self.current_execution_id == self.expected_old_execution_id;
+        let action =
+            if stop_predecessor && self.desired_state == "RUNNING" && !retiring_old_execution {
+                LifecycleAction::Start
+            } else {
+                LifecycleAction::from_str(&self.current_action).map_err(parsed)?
+            };
         Ok(ComputerSummary {
             preparation_retry_available: self.kind == "CLOUD"
                 && self.desired_state == "RUNNING"
+                && !(stop_predecessor && retiring_old_execution)
                 && self.current_phase == "BLOCKED"
                 && self.current_execution_id.is_some()
                 && self.prepare_admitted_at.is_none()
@@ -502,7 +514,7 @@ impl AgentComputerRow {
             desired: DesiredState::from_str(&self.desired_state).map_err(parsed)?,
             current_request_id: self.current_request_id.clone(),
             progress: LifecycleProgress {
-                action: LifecycleAction::from_str(&self.current_action).map_err(parsed)?,
+                action,
                 phase: LifecyclePhase::from_str(&self.current_phase).map_err(parsed)?,
                 initial_start_dispatch_ms: self.initial_start_dispatch_at,
             },
@@ -1129,6 +1141,40 @@ impl Store {
                 .map_err(|_| StoreError::Integrity)?;
             let phase = LifecyclePhase::from_str(&current.current_phase)
                 .map_err(|_| StoreError::Integrity)?;
+            if request.action == LifecycleAction::Start && action == LifecycleAction::Stop {
+                // Target updates preserve the active Stop's receipt and native
+                // effect identity rather than enqueue another operation.
+                if current.desired_state == "RUNNING" {
+                    return current.summary(now);
+                }
+                if matches!(phase, LifecyclePhase::Retiring | LifecyclePhase::Uncertain)
+                    && current.current_execution_id.is_some()
+                    && current.current_execution_id == current.expected_old_execution_id
+                {
+                    if !provider.can_start
+                        || !current.management_active(now)
+                        || current.saved_environment != "VERIFIED"
+                        || current.environment_source_connection_id.is_none()
+                        || current.environment_source_connection_id
+                            != current.provider_connection_id
+                    {
+                        return Err(StoreError::InvalidTransition);
+                    }
+                    diesel::sql_query(dialect.query(
+                        "UPDATE computers SET desired_state='RUNNING' WHERE id=? AND current_request_id=?",
+                    ))
+                    .bind::<IdentitySql, _>(current.id)
+                    .bind::<Text, _>(&request.expected_request_id)
+                    .execute(connection)
+                    .await?;
+                    return diesel::sql_query(dialect.query(&query))
+                        .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::Agent, agent_id)?)
+                        .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::User, &user.id)?)
+                        .get_result::<AgentComputerRow>(connection)
+                        .await?
+                        .summary(now);
+                }
+            }
             if request.action != LifecycleAction::Delete {
                 let context = ComputerActionContext {
                     desired: DesiredState::from_str(&current.desired_state)

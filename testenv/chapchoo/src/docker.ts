@@ -7,7 +7,10 @@ import {
 } from "./canaryCleanup.js";
 import type { CanaryState, CanaryVolumeState } from "./canaryCleanup.js";
 import type { DockerFixtureConfig } from "./config/index.js";
-import { runningSuccessor } from "./dockerObservation.js";
+import {
+  nativeReadinessStatus,
+  runningSuccessor,
+} from "./dockerObservation.js";
 import type { NativeComputer, NativeObservation } from "./dockerObservation.js";
 export interface DockerEvidence {
   daemon: string;
@@ -269,21 +272,7 @@ export class DockerFixture {
         "Native Computer evidence does not match the fixture's reserved execution",
       );
     }
-    const state = inspected.State;
-    const status = state.Status;
-    if (
-      (status !== "created" &&
-        status !== "running" &&
-        status !== "exited" &&
-        status !== "removing") ||
-      state.Running !== (status === "running") ||
-      state.Dead ||
-      state.Paused ||
-      state.Restarting ||
-      state.Error
-    ) {
-      throw new Error("Native execution is not in an admitted readiness state");
-    }
+    const status = nativeReadinessStatus(inspected.State);
     const value: NativeComputer = {
       container: inspected.Id,
       volume: saved.Name,

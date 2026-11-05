@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
+import { EventEmitter, once } from "node:events";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { OwnedChild } from "./processes.js";
 
@@ -76,6 +77,12 @@ export class SyntheticKubernetes {
   private readonly watches = new Set<ServerResponse>();
   private readonly connectors = new Map<string, OwnedChild>();
   private readonly allocations = new Set<string>();
+  private executions = 0;
+  private shutdownBarrier: {
+    entered: () => void;
+    wait: Promise<void>;
+    release: () => void;
+  } | null = null;
   private server = createServer((request, response) => {
     void this.handle(request, response).catch(() => {
       if (!response.headersSent)
@@ -119,6 +126,31 @@ export class SyntheticKubernetes {
   }
   get savedAllocations(): number {
     return this.allocations.size;
+  }
+  get executionAllocations(): number {
+    return this.executions;
+  }
+  pauseNextShutdown(): { started: Promise<void>; release: () => void } {
+    if (this.shutdownBarrier)
+      throw new Error("A shutdown barrier is already active");
+    const events = new EventEmitter();
+    const started = once(events, "started").then(() => {});
+    const released = once(events, "released").then(() => {});
+    this.shutdownBarrier = {
+      entered: () => {
+        events.emit("started");
+      },
+      wait: released,
+      release: () => {
+        events.emit("released");
+      },
+    };
+    return {
+      started,
+      release: () => {
+        events.emit("released");
+      },
+    };
   }
   private reply(response: ServerResponse, code: number, value: unknown): void {
     response.writeHead(code, { "content-type": "application/json" });
@@ -166,6 +198,7 @@ export class SyntheticKubernetes {
       if (created.kind === "PersistentVolumeClaim")
         this.allocations.add(created.metadata.uid);
       if (created.kind === "Pod") {
+        this.executions += 1;
         const bootstrap = [...this.objects.values()].find(
           (item) =>
             item.kind === "Secret" &&
@@ -219,6 +252,12 @@ export class SyntheticKubernetes {
         return;
       }
       if (current.kind === "Pod") {
+        const barrier = this.shutdownBarrier;
+        if (barrier) {
+          barrier.entered();
+          await barrier.wait;
+          this.shutdownBarrier = null;
+        }
         await this.connectors.get(url.pathname)?.stop();
         this.connectors.delete(url.pathname);
         const terminal = {
@@ -260,6 +299,7 @@ export class SyntheticKubernetes {
     this.reply(response, 200, current);
   }
   async close(): Promise<void> {
+    this.shutdownBarrier?.release();
     for (const watch of this.watches) watch.end();
     for (const connector of this.connectors.values()) await connector.stop();
     this.connectors.clear();

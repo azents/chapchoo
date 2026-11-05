@@ -272,6 +272,9 @@ impl ComponentConnectionServices {
         if snapshot.computer.desired_state == "RUNNING"
             && snapshot.computer.current_phase == "BLOCKED"
             && snapshot.computer.current_execution_id.is_some()
+            && !(snapshot.computer.current_action == "STOP"
+                && snapshot.computer.current_execution_id
+                    == snapshot.computer.expected_old_execution_id)
         {
             // Explicit owner RetryPreparation, not periodic observation, resumes
             // a proven-safe failed preparation.

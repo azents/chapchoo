@@ -7,6 +7,7 @@ import { CharacterArtwork } from "@chapchoo/ui/CharacterArtwork";
 import { ConfirmationDialog } from "@chapchoo/ui/ConfirmationDialog";
 import { NavigationIcon } from "@chapchoo/ui/NavigationIcon";
 import { PageFailure } from "@chapchoo/ui/PageFailure";
+import { computerOperation } from "@chapchoo/web-core/computer-messages";
 import {
   agentPath,
   agentsPath,
@@ -173,9 +174,9 @@ export function Agents(props: AgentsProps): ReactElement {
                       </span>
                       {" · "}
                       <span
-                        aria-label={`${c.phase}: ${c[item.computer.phase]}`}
+                        aria-label={`${c.phase}: ${computerOperation(item.computer, c).label}`}
                       >
-                        {c[item.computer.phase]}
+                        {computerOperation(item.computer, c).label}
                       </span>
                     </Text>
                     <Box className={classes.open}>

@@ -35,6 +35,7 @@ const inventory: InitialComputers = {
     items: [
       {
         id: "computer-retained",
+        operation: "delete",
         intent: "deleting",
         power: "unknown",
         lastKnownPower: "running",
@@ -100,6 +101,7 @@ export const ConfirmedCleanup: Story = {
           {
             intent: "deleting",
             id: "completed-computer",
+            operation: "delete",
             power: "stopped",
             lastKnownPower: "stopped",
             phase: "completed",

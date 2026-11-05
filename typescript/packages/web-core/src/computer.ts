@@ -29,6 +29,7 @@ export type BlockReason =
   | "requiresRunning"
   | "savedUnverified";
 export interface ComputerStatus {
+  operation: "create" | LifecycleAction;
   intent: "running" | "stopped" | "deleting";
   power: Power;
   lastKnownPower: Power;
@@ -221,6 +222,13 @@ function instant(value: Timestamp | undefined): number | null {
 }
 function status(value: Wire.Computer | Wire.InventoryComputer): ComputerStatus {
   return {
+    operation: label<ComputerStatus["operation"]>(value.action, [
+      "create",
+      "start",
+      "stop",
+      "restart",
+      "delete",
+    ]),
     intent: label<ComputerStatus["intent"]>(value.desired, [
       "running",
       "stopped",
