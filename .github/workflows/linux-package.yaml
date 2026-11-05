@@ -2,59 +2,30 @@ name: Build native Linux packages
 
 on:
   workflow_call:
+    inputs:
+      runner:
+        required: true
+        type: string
+      architecture:
+        required: true
+        type: string
+      node-architecture:
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 jobs:
-  web-build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: ubuntu-24.04
-            architecture: x86_64
-          - runner: ubuntu-24.04-arm
-            architecture: aarch64
-    uses: ./.github/workflows/build-web.yaml
-    with:
-      runner: ${{ matrix.runner }}
-      architecture: ${{ matrix.architecture }}
-
-  binary-build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: ubuntu-24.04
-            architecture: x86_64
-          - runner: ubuntu-24.04-arm
-            architecture: aarch64
-    uses: ./.github/workflows/build-binary.yaml
-    with:
-      runner: ${{ matrix.runner }}
-      architecture: ${{ matrix.architecture }}
-
   native-package:
-    name: Native ${{ matrix.architecture }} package
-    needs: [web-build, binary-build]
-    runs-on: ${{ matrix.runner }}
+    name: Native ${{ inputs.architecture }} package
+    runs-on: ${{ inputs.runner }}
     timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: ubuntu-24.04
-            architecture: x86_64
-            node-architecture: x64
-          - runner: ubuntu-24.04-arm
-            architecture: aarch64
-            node-architecture: arm64
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Assert native runner and builder architecture
         env:
-          EXPECTED_ARCH: ${{ matrix.architecture }}
+          EXPECTED_ARCH: ${{ inputs.architecture }}
         run: |
           test "$(uname -m)" = "$EXPECTED_ARCH"
           docker_arch="$(docker info --format '{{.Architecture}}')"
@@ -65,11 +36,11 @@ jobs:
       - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: web-build-${{ matrix.architecture }}
+          name: web-build-${{ inputs.architecture }}
           path: ${{ runner.temp }}/web-download
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: binary-build-${{ matrix.architecture }}
+          name: binary-build-${{ inputs.architecture }}
           path: ${{ runner.temp }}/binary-download
       - name: Unpack this run's target build outputs
         run: |
@@ -88,12 +59,12 @@ jobs:
             fs.read=${{ runner.temp }}/web-artifacts
             fs.read=${{ runner.temp }}/binary-artifacts
           set: |
-            backend.cache-from=type=gha,scope=backend-${{ matrix.architecture }}
-            backend.cache-to=type=gha,scope=backend-${{ matrix.architecture }},mode=max
-            general-web.cache-from=type=gha,scope=general-${{ matrix.architecture }}
-            general-web.cache-to=type=gha,scope=general-${{ matrix.architecture }},mode=max
-            admin-web.cache-from=type=gha,scope=admin-${{ matrix.architecture }}
-            admin-web.cache-to=type=gha,scope=admin-${{ matrix.architecture }},mode=max
+            backend.cache-from=type=gha,scope=backend-${{ inputs.architecture }}
+            backend.cache-to=type=gha,scope=backend-${{ inputs.architecture }},mode=max
+            general-web.cache-from=type=gha,scope=general-${{ inputs.architecture }}
+            general-web.cache-to=type=gha,scope=general-${{ inputs.architecture }},mode=max
+            admin-web.cache-from=type=gha,scope=admin-${{ inputs.architecture }}
+            admin-web.cache-to=type=gha,scope=admin-${{ inputs.architecture }},mode=max
       - name: Smoke test the existing native images
         run: |
           python3 scripts/test-container-images.py \
@@ -102,8 +73,8 @@ jobs:
             --admin chapchoo-package-admin:ci
       - name: Assemble the pinned architecture-matched runtime
         env:
-          ARCHITECTURE: ${{ matrix.architecture }}
-          NODE_ARCHITECTURE: ${{ matrix.node-architecture }}
+          ARCHITECTURE: ${{ inputs.architecture }}
+          NODE_ARCHITECTURE: ${{ inputs.node-architecture }}
         run: |
           mkdir "$RUNNER_TEMP/node-inputs"
           cd "$RUNNER_TEMP/node-inputs"
@@ -125,7 +96,7 @@ jobs:
       - name: Export the source-free archive and checksum
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: chapchoo-linux-${{ matrix.architecture }}
+          name: chapchoo-linux-${{ inputs.architecture }}
           path: ${{ runner.temp }}/artifacts/*
           if-no-files-found: error
           retention-days: 7
