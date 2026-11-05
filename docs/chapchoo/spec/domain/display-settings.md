@@ -13,12 +13,15 @@ authentication and protected surfaces. Its title is “Account and settings” f
 authenticated users and “Settings” for visitors, with localized equivalents.
 The common theme gives every Drawer body an `xl` top inset below its header.
 The account Popover/Drawer applies language, IANA time zone and regional
-format independently and immediately. Protected `/profile` routes duplicate
+format independently and immediately. Protected `/profile/preferences` routes duplicate
 those controls over the same identity-query User; there is no separate account
 settings store. Changing language updates catalogs and document language without
 remounting entered work. A failed account save retains its attempt with an
 explicit retry and never claims success; account/unmount fences reject late
-responses belonging to an old identity.
+responses belonging to an old identity. The separate `/profile` account page
+shows account identity and sign-out; Profile navigation separates those pages
+from received invitations. The preferences page also exposes the existing
+System/Light/Dark appearance control without changing its browser-cookie authority.
 
 The request-cached display snapshot uses validated account values for signed-in
 SSR and hydration. Visitors resolve each dimension from explicit

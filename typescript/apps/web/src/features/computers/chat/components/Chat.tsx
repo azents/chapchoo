@@ -1,18 +1,16 @@
 "use client";
 import { CharacterArtwork } from "@chapchoo/ui/CharacterArtwork";
 import { ConfirmationDialog } from "@chapchoo/ui/ConfirmationDialog";
+import { ContextSidebar } from "@chapchoo/ui/ContextSidebar";
 import { PageFailure } from "@chapchoo/ui/PageFailure";
 import { agentPath } from "@chapchoo/web-core/workspace";
 import {
   ActionIcon,
   Alert,
-  Anchor,
   Box,
   Button,
   Drawer,
-  Group,
   ScrollArea,
-  Text,
 } from "@mantine/core";
 import { ComputerControls } from "../../components/ComputerControls";
 import { profileStyle } from "../../profilePalette";
@@ -51,36 +49,14 @@ function Icon({ name }: { name: keyof typeof paths }): ReactElement {
 }
 
 function Navigation(props: ChatProps): ReactElement {
-  const { product: p } = props;
   return (
-    <div className={classes.navigation}>
-      {props.navigation?.selector ?? props.navigation?.header}
-      {props.agentNavigation}
-      <div className={classes.navigationFoot}>
-        {props.navigation?.items
-          .filter((item) => item.key !== "agents")
-          .map((item) => (
-            <Anchor
-              key={item.key}
-              href={item.href}
-              onClick={item.onSelect}
-              size="sm"
-            >
-              {item.label}
-            </Anchor>
-          ))}
-        <Group gap="sm" wrap="wrap">
-          {props.accountControls ?? (
-            <>
-              <Text size="sm">{p.data.identity}</Text>
-              <Button variant="subtle" onClick={p.onLogout}>
-                {p.copy.logout}
-              </Button>
-            </>
-          )}
-        </Group>
-      </div>
-    </div>
+    <ContextSidebar
+      label={props.navigation?.label ?? props.product.copy.agents}
+      header={props.navigation?.selector ?? props.navigation?.header}
+      content={props.agentNavigation}
+      items={props.navigation?.items ?? []}
+      onSelect={props.onCloseNav}
+    />
   );
 }
 
@@ -165,6 +141,7 @@ export function Chat(props: ChatProps): ReactElement {
             </span>
           </div>
           <div className={classes.right}>
+            {props.accountControls}
             <ActionIcon
               component="a"
               href={detailHref}
@@ -345,8 +322,8 @@ export function Chat(props: ChatProps): ReactElement {
         onClose={props.onCloseNav}
         position="left"
         size="18.125rem"
-        title={c.menu}
-        closeButtonProps={{ "aria-label": c.close }}
+        title={props.navigation?.label ?? c.menu}
+        closeButtonProps={{ "aria-label": c.close, size: "2.75rem" }}
       >
         <Navigation {...props} />
       </Drawer>

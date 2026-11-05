@@ -122,7 +122,7 @@ test("owner manages one Computer while Admin observes independent cleanup invent
       .getByRole("button", { name: "Agents and conversations", exact: true })
       .click();
     const navigation = owner.getByRole("dialog", {
-      name: "Agents and conversations",
+      name: "Your space",
       exact: true,
     });
     await expect(
@@ -138,20 +138,6 @@ test("owner manages one Computer while Admin observes independent cleanup invent
     await expect(navigation).toBeVisible();
     await expect(switchWorkspace).toHaveAttribute("aria-expanded", "false");
     await navigation
-      .getByRole("button", { name: "Account and settings", exact: true })
-      .click();
-    await expect(
-      owner.getByRole("dialog", { name: "Account and settings", exact: true }),
-    ).toBeVisible();
-    await owner.keyboard.press("Escape");
-    await expect(navigation).toBeVisible();
-    await expect(
-      navigation.getByRole("button", {
-        name: "Account and settings",
-        exact: true,
-      }),
-    ).toBeFocused();
-    await navigation
       .getByRole("button", { name: "Close", exact: true })
       .click();
     await expect(
@@ -160,6 +146,22 @@ test("owner manages one Computer while Admin observes independent cleanup invent
         exact: true,
       }),
     ).toBeFocused();
+    await owner
+      .getByRole("button", { name: "Account and settings", exact: true })
+      .click();
+    const openedProfile = owner.waitForEvent("popup");
+    await owner.getByRole("link", { name: "Profile", exact: true }).click();
+    const profileTab = await openedProfile;
+    await expect(profileTab).toHaveURL(`${assembly.generalUrl}/profile`);
+    await expect(
+      profileTab.getByRole("heading", {
+        name: "Account settings",
+        exact: true,
+      }),
+    ).toBeVisible();
+    expect(owner.url()).toBe(chatUrl);
+    await profileTab.close();
+    await owner.keyboard.press("Escape");
     await owner.setViewportSize({ width: 1280, height: 900 });
     await owner
       .getByRole("button", { name: /Acceptance companion.*Activity/ })

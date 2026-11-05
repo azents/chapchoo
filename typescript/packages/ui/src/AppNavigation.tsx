@@ -1,12 +1,7 @@
 "use client";
-
-import { Box, NavLink } from "@mantine/core";
 import { createContext } from "react";
-import { AgentMascotMotion } from "./AgentMascotMotion";
-import { NavigationIcon } from "./NavigationIcon";
 import type { NavigationIconProps } from "./NavigationIcon";
-import classes from "./AppNavigation.module.css";
-import type { ReactElement, ReactNode } from "react";
+import type { ReactNode } from "react";
 
 export interface NavigationItem {
   key: string;
@@ -24,76 +19,9 @@ export interface AppNavigation {
   overlayActive?: boolean;
   trigger: ReactNode;
   homeHref: string | null;
+  homeTarget?: "_blank";
   environment?: string;
   content?: ReactNode;
 }
 /** The product supplies current membership, destinations and transient controls. */
 export const AppNavigationContext = createContext<AppNavigation | null>(null);
-
-export function NavigationPanel({
-  label,
-  items,
-  header,
-  basePath,
-  mascotReplayLabel,
-  onSelect,
-  mobileDrawer = false,
-  content,
-}: {
-  label: string;
-  items: readonly NavigationItem[];
-  header?: ReactNode;
-  basePath: string;
-  mascotReplayLabel: string;
-  onSelect?: () => void;
-  mobileDrawer?: boolean;
-  content?: ReactNode;
-}): ReactElement {
-  return (
-    <Box className={classes.panel} data-drawer={mobileDrawer || void 0}>
-      {header ? <Box className={classes.header}>{header}</Box> : null}
-      {content}
-      <Box component="nav" aria-label={label} className={classes.links}>
-        {items.map((item) => {
-          const common = {
-            label: item.label,
-            leftSection: item.icon ? (
-              <NavigationIcon name={item.icon} />
-            ) : (
-              void 0
-            ),
-            active: item.active,
-            "aria-current": item.active ? ("page" as const) : void 0,
-            onClick: (): void => {
-              item.onSelect?.();
-              onSelect?.();
-            },
-          };
-          return item.href ? (
-            <NavLink
-              key={item.key}
-              component="a"
-              href={item.href}
-              {...common}
-            />
-          ) : (
-            <NavLink
-              key={item.key}
-              component="button"
-              type="button"
-              {...common}
-            />
-          );
-        })}
-      </Box>
-      <Box className={classes.companion}>
-        <AgentMascotMotion
-          basePath={basePath}
-          size={72}
-          playing
-          replayLabel={mascotReplayLabel}
-        />
-      </Box>
-    </Box>
-  );
-}

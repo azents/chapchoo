@@ -283,7 +283,7 @@ test.describe("Assembled account and team acceptance", () => {
       "Agents",
       "No Agents yet.",
     );
-    await member.goto(`${assembly.generalUrl}/profile`);
+    await member.goto(`${assembly.generalUrl}/profile/preferences`);
     const zone = member
       .getByRole("main")
       .getByRole("combobox", { name: "Time zone", exact: true });
@@ -299,7 +299,7 @@ test.describe("Assembled account and team acceptance", () => {
     await serverContent(
       member.context(),
       `${assembly.generalUrl}/profile`,
-      "Profile",
+      "Account settings",
       assembly.member.email,
     );
     const cookie = (await member.context().cookies()).find(
@@ -379,7 +379,7 @@ test.describe("Assembled account and team acceptance", () => {
     await login(second, assembly.generalUrl, assembly.second);
     await second.goto(`${assembly.generalUrl}/profile`);
     await second
-      .getByRole("link", { name: "Invitations for you", exact: true })
+      .getByRole("link", { name: "Invitations", exact: true })
       .click();
     await expect(second).toHaveURL(/\/profile\/invitations$/);
     await expect(

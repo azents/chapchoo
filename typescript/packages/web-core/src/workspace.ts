@@ -1,6 +1,52 @@
 import { teamKind } from "./browser.js";
 import type { Team } from "./browser.js";
 import { validHandle } from "./handle.js";
+import type { ShellCopy } from "./shell-messages.js";
+
+export function profileRoute(route: string): boolean {
+  return route === "/profile" || route.startsWith("/profile/");
+}
+export interface ProfileNavigationItem {
+  key: string;
+  label: string;
+  href: string;
+  active: boolean;
+  icon: "profile" | "info" | "mail";
+}
+export function profileNavigation(
+  mount: string,
+  route: string,
+  copy: ShellCopy,
+  invitations: boolean,
+): ProfileNavigationItem[] {
+  return [
+    {
+      key: "account",
+      label: copy.accountSettings,
+      href: `${mount}/profile`,
+      active: route === "/profile",
+      icon: "profile",
+    },
+    {
+      key: "display",
+      label: copy.displaySettings,
+      href: `${mount}/profile/preferences`,
+      active: route === "/profile/preferences",
+      icon: "info",
+    },
+    ...(invitations
+      ? [
+          {
+            key: "invitations",
+            label: copy.invitations,
+            href: `${mount}/profile/invitations`,
+            active: route === "/profile/invitations",
+            icon: "mail" as const,
+          },
+        ]
+      : []),
+  ];
+}
 
 /** Public route selector. IDs remain preference/cache keys, never path content. */
 export function teamRouteKey(team: Team): string {

@@ -7,6 +7,45 @@ async function center(locator: Locator): Promise<{ x: number; y: number }> {
     return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
   });
 }
+test("Profile context selects its account page independently from personal workspace", async ({
+  page,
+}) => {
+  await page.goto(
+    "/iframe.html?id=navigation-workspace-chrome--profile&viewMode=story",
+  );
+  const sidebar = page.locator("aside");
+  const account = sidebar.getByRole("link", {
+    name: "Account settings",
+    exact: true,
+  });
+  const preferences = sidebar.getByRole("link", {
+    name: "Language and display",
+    exact: true,
+  });
+  await expect(account).toHaveAttribute("aria-current", "page");
+  expect(
+    await account.evaluate(
+      (element) => getComputedStyle(element).backgroundColor,
+    ),
+  ).not.toEqual(
+    await preferences.evaluate(
+      (element) => getComputedStyle(element).backgroundColor,
+    ),
+  );
+  await expect(preferences).toHaveAttribute("href", "/profile/preferences");
+  await expect(
+    sidebar.getByRole("link", { name: "Invitations", exact: true }),
+  ).toHaveAttribute("href", "/profile/invitations");
+  await sidebar
+    .getByRole("button", { name: "Switch workspace", exact: true })
+    .click();
+  await expect(
+    page.getByRole("link", { name: "Profile", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
+  await expect(
+    page.getByRole("link", { name: "Your space", exact: true }),
+  ).toHaveAttribute("href", "/teams/my/agents");
+});
 
 test("navigation icon frames align and banner leaves an independent close target", async ({
   page,
@@ -33,7 +72,7 @@ test("navigation icon frames align and banner leaves an independent close target
   expect(closeBounds?.height).toBeGreaterThanOrEqual(44);
   if (triggerBounds && closeBounds) {
     expect(
-      closeBounds.x - (triggerBounds.x + triggerBounds.width),
+      triggerBounds.y - (closeBounds.y + closeBounds.height),
     ).toBeGreaterThanOrEqual(16);
   }
 });
@@ -53,8 +92,8 @@ test("long workspace names retain bounded banners and balanced navigation paddin
   const close = drawer.getByRole("button", { name: "Close", exact: true });
   await expect(close).toBeInViewport();
   const gap = await trigger.evaluate(
-    (element, closeX) => closeX - element.getBoundingClientRect().right,
-    (await close.boundingBox())?.x ?? 0,
+    (element, closeBottom) => element.getBoundingClientRect().top - closeBottom,
+    await close.evaluate((element) => element.getBoundingClientRect().bottom),
   );
   expect(gap).toBeGreaterThanOrEqual(16);
   const selected = drawer.getByRole("link", { name: "Agents", exact: true });
@@ -122,7 +161,7 @@ test("creation dialog owns explicit cancel, pending admission and uncertain-outc
   );
 });
 
-test("mobile picker overlays unchanged navigation with the existing companion", async ({
+test("mobile picker overlays unchanged context navigation", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -140,13 +179,6 @@ test("mobile picker overlays unchanged navigation with the existing companion", 
     dialog.getByRole("button", { name: "Create team", exact: true }),
   ).toBeVisible();
   await expect(dialog.getByRole("navigation")).toContainText("Agents");
-  await expect(dialog.getByRole("navigation")).toContainText("Invitations");
-  await expect(
-    dialog.getByRole("button", {
-      name: "Replay character animation",
-      exact: true,
-    }),
-  ).toBeVisible();
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
@@ -190,7 +222,7 @@ test.describe("touch workspace overlay", () => {
     await trigger.tap();
     await expect(trigger).toHaveAttribute("aria-expanded", "true");
     await expect(
-      drawer.getByRole("link", { name: "Your space", exact: true }),
+      drawer.getByRole("link", { name: "Profile", exact: true }),
     ).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(trigger).toHaveAttribute("aria-expanded", "false");
@@ -334,7 +366,7 @@ test("desktop workspace banner toggles the picker with mouse and keyboard", asyn
   await page.keyboard.press("Enter");
   await expect(trigger).toHaveAttribute("aria-expanded", "true");
   await expect(
-    page.getByRole("link", { name: "Your space", exact: true }),
+    page.getByRole("link", { name: "Profile", exact: true }),
   ).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(trigger).toHaveAttribute("aria-expanded", "false");
@@ -352,6 +384,16 @@ test("Admin chrome keeps Administration selected and shares the General logo des
       .getByRole("banner")
       .getByRole("link", { name: "chapchoo", exact: true }),
   ).toHaveAttribute("href", "/");
+  await expect(
+    page
+      .getByRole("banner")
+      .getByRole("link", { name: "chapchoo", exact: true }),
+  ).toHaveAttribute("target", "_blank");
+  await expect(
+    page
+      .getByRole("banner")
+      .getByRole("link", { name: "chapchoo", exact: true }),
+  ).toHaveAttribute("rel", "noopener");
   await expect(
     page.getByRole("banner").getByText("admin", { exact: true }),
   ).toBeVisible();

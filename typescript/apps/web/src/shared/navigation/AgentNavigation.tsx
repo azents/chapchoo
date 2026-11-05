@@ -1,14 +1,6 @@
 import { CharacterArtwork } from "@chapchoo/ui/CharacterArtwork";
 import { NavigationIcon } from "@chapchoo/ui/NavigationIcon";
-import {
-  ActionIcon,
-  Anchor,
-  Button,
-  Group,
-  Loader,
-  Stack,
-  Text,
-} from "@mantine/core";
+import { ActionIcon, Anchor, Group, Loader, Stack, Text } from "@mantine/core";
 import classes from "./AgentNavigation.module.css";
 import type { AgentView } from "@chapchoo/web-core/computer";
 import type { ComputerCopy } from "@chapchoo/web-core/computer-messages";
@@ -20,13 +12,11 @@ export interface AgentNavigationProps {
   titleHref: string;
   createHref: string;
   createLabel: string;
+  allAgentsLabel: string;
   items: readonly AgentView[];
   selectedHandle: string | null;
   agentHref: (handle: string) => string;
   status: "loading" | "ready" | "error";
-  after: string | null;
-  nextAfter: string | null;
-  onPage: (after: string | null) => void;
   onSelect?: () => void;
 }
 
@@ -48,7 +38,7 @@ export function AgentNavigation(props: AgentNavigationProps): ReactElement {
         </ActionIcon>
       </Group>
       <nav aria-label={props.copy.agents}>
-        {props.items.map((agent) => (
+        {props.items.slice(0, 5).map((agent) => (
           <a
             key={agent.id}
             href={props.agentHref(agent.handle)}
@@ -83,22 +73,9 @@ export function AgentNavigation(props: AgentNavigationProps): ReactElement {
           {props.copy.noAgents}
         </Text>
       ) : null}
-      <Group gap="xs">
-        {props.after ? (
-          <Button size="xs" variant="subtle" onClick={() => props.onPage(null)}>
-            {props.copy.first}
-          </Button>
-        ) : null}
-        {props.nextAfter ? (
-          <Button
-            size="xs"
-            variant="subtle"
-            onClick={() => props.onPage(props.nextAfter)}
-          >
-            {props.copy.next}
-          </Button>
-        ) : null}
-      </Group>
+      <Anchor href={props.titleHref} onClick={props.onSelect} size="sm">
+        {props.allAgentsLabel}
+      </Anchor>
     </Stack>
   );
 }

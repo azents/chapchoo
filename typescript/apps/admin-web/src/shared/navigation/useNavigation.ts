@@ -9,6 +9,8 @@ import { initialQuery } from "@chapchoo/web-core/page-state";
 import { shellCopy, teamHandleCopy } from "@chapchoo/web-core/shell-messages";
 import {
   agentsPath,
+  profileNavigation,
+  profileRoute,
   teamPath,
   workspacePreference,
 } from "@chapchoo/web-core/workspace";
@@ -41,6 +43,7 @@ export function useNavigation({
     ? pathname.slice(basePath.length)
     : pathname;
   const mobile = useMediaQuery("(max-width: 48em)");
+  const inProfile = profileRoute(route);
   const [drawer, setDrawer] = useState(false),
     [picker, setPicker] = useState(false),
     [creating, setCreating] = useState(false);
@@ -72,7 +75,7 @@ export function useNavigation({
     kind: "admin",
     label: copy.administration,
     href: basePath + "/",
-    selected: true,
+    selected: !inProfile,
   };
   const choices: WorkspaceChoice[] = generalUrl
     ? (query.data?.items ?? []).map((team): WorkspaceChoice => {
@@ -87,6 +90,14 @@ export function useNavigation({
       })
     : [];
   choices.push(current);
+  const profile: WorkspaceChoice = {
+    key: "profile",
+    kind: "profile",
+    label: copy.profile,
+    href: `${basePath}/profile`,
+    selected: inProfile,
+  };
+  choices.unshift(profile);
   const create = trpc.workspaces.create.useMutation({ retry: false });
   async function submit(): Promise<void> {
     if (pending.current || !generalUrl || proposal.status !== "available") {
@@ -137,7 +148,12 @@ export function useNavigation({
     identity: identity !== null,
     copy,
     basePath,
-    homeHref: generalUrl ? generalUrl + "/" : null,
+    homeHref: inProfile
+      ? `${basePath}/profile`
+      : generalUrl
+        ? generalUrl + "/"
+        : null,
+    homeTarget: !inProfile && generalUrl ? "_blank" : void 0,
     environment: "admin",
     mobile,
     drawer,
@@ -154,35 +170,37 @@ export function useNavigation({
     },
     error,
     choices,
-    current,
-    items: [
-      {
-        key: "signup",
-        label: copy.signupLinks,
-        href: basePath + "/",
-        active: route === "/" || route === basePath,
-      },
-      {
-        key: "reset",
-        label: copy.resetLinks,
-        href: basePath + "/password-resets",
-        active: route === "/password-resets",
-      },
-      {
-        key: "computers",
-        label: copy.computerProviders,
-        href: basePath + "/computer-providers",
-        active:
-          route.startsWith("/computer-providers") ||
-          route.startsWith("/computers/"),
-      },
-      {
-        key: "settings",
-        label: copy.serverSettings,
-        href: basePath + "/settings",
-        active: route === "/settings",
-      },
-    ],
+    current: inProfile ? profile : current,
+    items: inProfile
+      ? profileNavigation(basePath, route, copy, false)
+      : [
+          {
+            key: "signup",
+            label: copy.signupLinks,
+            href: basePath + "/",
+            active: route === "/" || route === basePath,
+          },
+          {
+            key: "reset",
+            label: copy.resetLinks,
+            href: basePath + "/password-resets",
+            active: route === "/password-resets",
+          },
+          {
+            key: "computers",
+            label: copy.computerProviders,
+            href: basePath + "/computer-providers",
+            active:
+              route.startsWith("/computer-providers") ||
+              route.startsWith("/computers/"),
+          },
+          {
+            key: "settings",
+            label: copy.serverSettings,
+            href: basePath + "/settings",
+            active: route === "/settings",
+          },
+        ],
     status:
       query.isError || !generalUrl ? "error" : query.data ? "ready" : "loading",
     busy: create.isPending,
@@ -222,7 +240,7 @@ export function useNavigation({
     onSubmit: () => void submit(),
     retry: () => void utils.workspaces.list.invalidate(),
     select: (choice) => {
-      if (identity && choice.kind !== "admin") {
+      if (identity && (choice.kind === "personal" || choice.kind === "team")) {
         document.cookie = workspacePreference(
           identity.id,
           choice.key,

@@ -22,7 +22,6 @@ const items = [
     href: "/teams/my/agents",
     active: true,
   },
-  { key: "invitations", label: "Invitations", href: "/profile/invitations" },
 ];
 const base: WorkspaceChromeProps = {
   children: (
@@ -71,6 +70,13 @@ const base: WorkspaceChromeProps = {
   },
   error: null,
   choices: [
+    {
+      key: "profile",
+      kind: "profile",
+      label: "Profile",
+      href: "/profile",
+      selected: false,
+    },
     current,
     {
       key: "design",
@@ -221,6 +227,7 @@ export const Administration: Story = {
   args: {
     basePath: "/admin",
     homeHref: "/",
+    homeTarget: "_blank",
     environment: "admin",
     current: administration,
     choices: [{ ...current, selected: false }, administration],
@@ -242,4 +249,43 @@ export const Administration: Story = {
 };
 export const MobileAdministration: Story = {
   args: { ...Administration.args, mobile: true, drawer: true },
+};
+const profile = {
+  key: "profile",
+  kind: "profile" as const,
+  label: "Profile",
+  href: "/profile",
+  selected: true,
+};
+const profileItems = [
+  { key: "account", label: "Account settings", href: "/profile", active: true },
+  {
+    key: "display",
+    label: "Language and display",
+    href: "/profile/preferences",
+  },
+  { key: "invitations", label: "Invitations", href: "/profile/invitations" },
+];
+export const Profile: Story = {
+  render: (args): ReactElement => <InteractiveChrome {...args} />,
+  args: {
+    current: profile,
+    choices: [profile, { ...current, selected: false }],
+    items: profileItems,
+    children: (
+      <AppFrame>
+        <ApplicationShellContent
+          title="Account settings"
+          contextLabel="Profile"
+          navigation={profileItems}
+          mascotReplayLabel="Replay character animation"
+        >
+          <Text>companion@example.invalid</Text>
+        </ApplicationShellContent>
+      </AppFrame>
+    ),
+  },
+};
+export const MobileProfile: Story = {
+  args: { ...Profile.args, mobile: true, drawer: true },
 };

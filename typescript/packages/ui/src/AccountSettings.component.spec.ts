@@ -23,6 +23,12 @@ for (const [story, width] of [
       page.getByRole("link", { name: "Profile", exact: true }),
     ).toHaveAttribute("href", "/profile");
     await expect(
+      page.getByRole("link", { name: "Profile", exact: true }),
+    ).toHaveAttribute("target", "_blank");
+    await expect(
+      page.getByRole("link", { name: "Profile", exact: true }),
+    ).toHaveAttribute("rel", "noopener");
+    await expect(
       page
         .getByRole("link", { name: "Profile", exact: true })
         .getByText("companion@example.invalid", { exact: true }),

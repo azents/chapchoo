@@ -62,6 +62,8 @@ function SettingsContent(props: AccountSettingsProps): ReactElement {
         <>
           <InteractiveSurface
             href={props.profileHref}
+            target="_blank"
+            rel="noopener"
             aria-label={props.profileLabel}
             onClick={props.onClose}
             className={classes.profile}

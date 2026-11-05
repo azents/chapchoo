@@ -5,6 +5,7 @@ import type { ReactElement } from "react";
 export interface NavigationIconProps {
   name:
     | "personal"
+    | "profile"
     | "team"
     | "admin"
     | "down"
@@ -46,6 +47,11 @@ export function NavigationIcon({
     >
       {name === "personal" ? (
         <path d="m3 11 9-8 9 8M5 10v11h14V10M9 21v-7h6v7" />
+      ) : name === "profile" ? (
+        <>
+          <circle cx="12" cy="8" r="3.5" />
+          <path d="M4.5 21v-2a7.5 7.5 0 0 1 15 0v2" />
+        </>
       ) : name === "team" ? (
         <>
           <circle cx="9" cy="8" r="3" />

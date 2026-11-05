@@ -1,16 +1,3 @@
-.drawerHeader {
-  align-items: center;
-  gap: var(--mantine-spacing-lg);
-}
-.drawerTitle {
-  flex: 1;
-  min-width: 0;
-  max-width: calc(100% - 3.75rem);
-}
-.drawerClose {
-  flex-shrink: 0;
-  margin-inline-start: auto;
-}
 .createHeader {
   padding: var(--mantine-spacing-xl);
   border-bottom: 0.0625rem solid var(--chapchoo-color-border);

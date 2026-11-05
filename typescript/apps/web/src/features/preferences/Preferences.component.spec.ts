@@ -73,7 +73,7 @@ async function select(
   await page.getByRole("option", { name: value, exact: true }).click();
 }
 
-test("production panel and profile edit the same committed identity snapshot in both directions", async ({
+test("production panel and preferences page edit the same committed identity snapshot in both directions", async ({
   page,
 }) => {
   const calls = await settingsTransport(page);
@@ -84,7 +84,7 @@ test("production panel and profile edit the same committed identity snapshot in 
     page.getByRole("dialog").getByText("저장했습니다", { exact: true }),
   ).toBeVisible();
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "프로필 보기", exact: true }).click();
+  await page.getByRole("button", { name: "설정 보기", exact: true }).click();
   await expect(
     page
       .getByRole("main")

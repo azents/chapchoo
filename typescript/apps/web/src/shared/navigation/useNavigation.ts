@@ -11,6 +11,8 @@ import {
   agentChatPath,
   agentsPath,
   newAgentPath,
+  profileNavigation,
+  profileRoute,
   routeTeamHandle,
   teamPath,
   teamRouteKey,
@@ -45,10 +47,6 @@ export function useNavigation({
   const pathname = usePathname();
   const mobile = useMediaQuery("(max-width: 48em)");
   const visibility = useDocumentVisibility();
-  const [agentPage, setAgentPage] = useState<{
-    teamId: string;
-    after: string | null;
-  } | null>(null);
   const [drawer, setDrawer] = useState(false);
   const [picker, setPicker] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -79,6 +77,7 @@ export function useNavigation({
     ? pathname.slice(basePath.length)
     : pathname;
   const routeTeam = routeTeamHandle(route);
+  const inProfile = profileRoute(route);
   const contexts = query.data?.items ?? [];
   const selected =
     (routeTeam
@@ -92,9 +91,8 @@ export function useNavigation({
     identity?.id ?? null,
   );
   const teamId = admittedIdentity && routeTeam && selected ? selected.id : "";
-  const after = agentPage?.teamId === teamId ? agentPage.after : null;
   const agentList = trpc.computers.list.useQuery(
-    { teamId, ...(after ? { after } : {}) },
+    { teamId },
     {
       enabled: identity !== null && Boolean(teamId) && visibility === "visible",
       retry: false,
@@ -120,11 +118,18 @@ export function useNavigation({
     const common = {
       key: team.id,
       href: agentsPath(basePath, team),
-      selected: team.id === selected?.id,
+      selected: !inProfile && team.id === selected?.id,
     };
     return team.kind === teamKind.personal
       ? { ...common, kind: "personal", label: copy.yourSpace }
       : { ...common, kind: "team", label: team.name, handle: team.handle };
+  });
+  choices.unshift({
+    key: "profile",
+    kind: "profile",
+    label: copy.profile,
+    href: `${basePath}/profile`,
+    selected: inProfile,
   });
   const current = choices.find((choice) => choice.selected) ?? null;
   if (identity?.isAdmin && adminUrl) {
@@ -136,30 +141,36 @@ export function useNavigation({
       selected: false,
     });
   }
-  const items: NavigationItem[] = [
-    ...(!teamId
-      ? ([
-          {
-            key: "agents",
-            label: copy.agents,
-            icon: "agents",
-            href: selected ? agentsPath(basePath, selected) : `${basePath}/`,
-            active: /^\/teams\/[^/]+\/(?:agents|new-agent)(?:\/|$)/.test(route),
-          },
-        ] satisfies NavigationItem[])
-      : []),
-    ...(selected?.kind === teamKind.collaborative
-      ? [
-          {
-            key: "team",
-            label: copy.teamSettings,
-            icon: "team" as const,
-            href: teamPath(basePath, selected),
-            active: /^\/teams\/[^/]+$/.test(route),
-          },
-        ]
-      : []),
-  ];
+  const items: NavigationItem[] = inProfile
+    ? profileNavigation(basePath, route, copy, true)
+    : [
+        ...(!teamId
+          ? ([
+              {
+                key: "agents",
+                label: copy.agents,
+                icon: "agents",
+                href: selected
+                  ? agentsPath(basePath, selected)
+                  : `${basePath}/`,
+                active: /^\/teams\/[^/]+\/(?:agents|new-agent)(?:\/|$)/.test(
+                  route,
+                ),
+              },
+            ] satisfies NavigationItem[])
+          : []),
+        ...(selected?.kind === teamKind.collaborative
+          ? [
+              {
+                key: "team",
+                label: copy.teamSettings,
+                icon: "team" as const,
+                href: teamPath(basePath, selected),
+                active: /^\/teams\/[^/]+$/.test(route),
+              },
+            ]
+          : []),
+      ];
   const create = trpc.teams.create.useMutation({ retry: false });
   async function submit(): Promise<void> {
     if (pending.current || proposal.status !== "available") {
@@ -211,7 +222,7 @@ export function useNavigation({
     identity: identity !== null,
     copy,
     basePath,
-    homeHref: `${basePath}/`,
+    homeHref: inProfile ? `${basePath}/profile` : `${basePath}/`,
     mobile,
     drawer,
     picker,
@@ -236,6 +247,7 @@ export function useNavigation({
             titleHref: agentsPath(basePath, selected),
             createHref: newAgentPath(basePath, selected),
             createLabel: computerText.create,
+            allAgentsLabel: copy.allAgents,
             items: agentList.data?.items ?? [],
             selectedHandle:
               currentAgent && validHandle(currentAgent) ? currentAgent : null,
@@ -245,9 +257,6 @@ export function useNavigation({
               : agentList.data
                 ? "ready"
                 : "loading",
-            after,
-            nextAfter: agentList.data?.nextAfter ?? null,
-            onPage: (value) => setAgentPage({ teamId, after: value }),
             onSelect: () => setDrawer(false),
           }
         : null,
@@ -289,7 +298,7 @@ export function useNavigation({
     onSubmit: () => void submit(),
     retry: () => void utils.teams.list.invalidate(),
     select: (choice) => {
-      if (identity && choice.kind !== "admin") {
+      if (identity && (choice.kind === "personal" || choice.kind === "team")) {
         document.cookie = workspacePreference(
           identity.id,
           choice.key,

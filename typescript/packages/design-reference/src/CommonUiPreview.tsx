@@ -6,7 +6,9 @@ import { DisplayEntry, DisplayPanel } from "@chapchoo/ui/DisplaySettings";
 import { useState } from "react";
 import { Mascot } from "@chapchoo/ui/Mascot";
 import { NavigationIcon } from "@chapchoo/ui/NavigationIcon";
-import { NavigationPanel } from "@chapchoo/ui/AppNavigation";
+import { ContextSidebar } from "@chapchoo/ui/ContextSidebar";
+import { ProfileAccount } from "@chapchoo/ui/ProfileAccount";
+import { WorkspaceSelector } from "@chapchoo/ui/WorkspaceSelector";
 import { InteractiveSurface } from "@chapchoo/ui/InteractiveSurface";
 import { DropdownButton } from "@chapchoo/ui/DropdownButton";
 import {
@@ -29,6 +31,7 @@ import "@mantine/core/styles.css";
 export default function CommonUiPreview(): ReactElement {
   const [opened, setOpened] = useState(false);
   const [workspaceOpened, setWorkspaceOpened] = useState(false);
+  const [profilePicker, setProfilePicker] = useState(false);
   const [value, setValue] = useState({
     language: "en",
     timeZone: "UTC",
@@ -96,11 +99,9 @@ export default function CommonUiPreview(): ReactElement {
       />
       <Stack p="lg">
         <Stack gap="xs" maw="18rem">
-          <NavigationPanel
+          <ContextSidebar
             label="Workspace destinations"
             header="Personal workspace"
-            basePath=""
-            mascotReplayLabel="Replay character animation"
             items={[
               {
                 key: "settings",
@@ -180,6 +181,69 @@ export default function CommonUiPreview(): ReactElement {
             A divider row keeps the surrounding content baseline.
           </Text>
         </Paper>
+        <WorkspaceSelector
+          current={{
+            key: "profile",
+            kind: "profile",
+            label: "Profile",
+            href: "#profile",
+            selected: true,
+          }}
+          choices={[
+            {
+              key: "profile",
+              kind: "profile",
+              label: "Profile",
+              href: "#profile",
+              selected: true,
+            },
+            {
+              key: "personal",
+              kind: "personal",
+              label: "Your space",
+              href: "#personal",
+              selected: false,
+            },
+          ]}
+          status="ready"
+          mobile={false}
+          opened={profilePicker}
+          copy={{
+            choose: "Switch workspace",
+            teams: "Teams",
+            create: "Create team",
+            back: "Back",
+            unavailable: "Could not load spaces",
+            retry: "Retry",
+          }}
+          onOpen={() => setProfilePicker(true)}
+          onClose={() => setProfilePicker(false)}
+          onSelect={() => setProfilePicker(false)}
+          onCreate={() => setProfilePicker(false)}
+          onRetry={() => {}}
+        />
+        <ProfileAccount
+          title="Account settings"
+          contextLabel="Profile"
+          identityLabel="companion@example.invalid"
+          emailLabel="Email"
+          logoutLabel="Sign out"
+          onLogout={() => {}}
+          mascotReplayLabel="Replay character animation"
+          navigation={[
+            {
+              key: "account",
+              label: "Account settings",
+              href: "#profile",
+              active: true,
+            },
+            {
+              key: "display",
+              label: "Language and display",
+              href: "#preferences",
+            },
+          ]}
+        />
         <Table.ScrollContainer minWidth={rem(480)}>
           <Table withTableBorder>
             <Table.Thead>

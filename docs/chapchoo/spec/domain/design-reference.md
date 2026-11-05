@@ -41,8 +41,9 @@ unchanged. Common-UI alpha-contact metadata anchors motion inside the preserved
 square layout box without new asset copies or original PNG loading in product pages.
 The stories isolate their theme in a nested document, like the tone references.
 The use criteria and approved motion values live in root `DESIGN.md`.
-General/Admin authentication panels and desktop sidebar companions use the same
-motion implementation. Mobile companion hiding remains unchanged.
+General/Admin authentication panels use the same motion implementation.
+Production context sidebars have no generic companion; their Agent rows retain
+saved artwork. The reference continues to demonstrate the reusable primitive.
 
 The onboarding/local-outline stories demonstrate ownership boundaries. The
 common-UI reuse story imports the promoted shared-web implementation. The reuse story's nested document loads the Mantine stylesheet

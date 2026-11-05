@@ -37,6 +37,8 @@ export function AppHeader({
           <Text
             component="a"
             href={navigation.homeHref}
+            target={navigation.homeTarget}
+            rel={navigation.homeTarget === "_blank" ? "noopener" : void 0}
             fw={750}
             size="lg"
             className={classes.brand}

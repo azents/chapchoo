@@ -10,7 +10,7 @@ import { Button, Container, Stack, Text } from "@mantine/core";
 import { useState } from "react";
 import { DisplayProvider } from "@/shared/preferences/DisplayProvider";
 import { RpcProvider } from "@/shared/rpc/provider";
-import { ProfilePage } from "./ProfilePage";
+import { PreferencesPage } from "./PreferencesPage";
 import type { DisplayInitial } from "@chapchoo/web-core/display-context";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import type { ReactElement } from "react";
@@ -55,7 +55,7 @@ function Preferences({
     <RpcProvider initialIdentity={initial.identity} basePath="">
       <DisplayProvider initial={initial} basePath="">
         {showProfile ? (
-          <ProfilePage basePath="" />
+          <PreferencesPage basePath="" />
         ) : (
           <AppFrame>
             <Container component="main" py="xl">
@@ -67,7 +67,7 @@ function Preferences({
                 </Text>
                 {!guest ? (
                   <Button onClick={(): void => setShowProfile(true)}>
-                    프로필 보기
+                    설정 보기
                   </Button>
                 ) : null}
               </Stack>
@@ -86,7 +86,7 @@ const meta = {
     docs: {
       description: {
         component:
-          "Production display controller, provider and profile with seeded identity. The non-profile backdrop and local view switch are explanatory fixtures; browser tests intercept RPC, not a live account backend.",
+          "Production display controller, provider and Profile preferences page with seeded identity. The backdrop and local view switch are explanatory fixtures; browser tests intercept RPC, not a live account backend.",
       },
     },
   },
