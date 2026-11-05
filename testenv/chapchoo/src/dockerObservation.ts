@@ -5,12 +5,45 @@ export interface NativeComputer {
   user: string;
   noCopy: boolean;
 }
+type NativeStatus = "created" | "running" | "exited" | "removing";
+interface NativeReadinessState {
+  Status: string;
+  Running: boolean;
+  Dead: boolean;
+  Paused: boolean;
+  Restarting: boolean;
+  Error: string;
+}
+/** Docker marks Dead during removal; that transition is not running readiness. */
+export function nativeReadinessStatus(
+  state: NativeReadinessState,
+): NativeStatus {
+  const status = state.Status;
+  const admitted =
+    status === "created" ||
+    status === "running" ||
+    status === "exited" ||
+    status === "removing";
+  if (
+    !admitted ||
+    state.Running !== (status === "running") ||
+    (state.Dead && status !== "removing") ||
+    state.Paused ||
+    state.Restarting ||
+    state.Error
+  ) {
+    throw new Error(
+      `Native execution is not in an admitted readiness state: status=${admitted ? status : "unsupported"}, running=${state.Running}, dead=${state.Dead}, paused=${state.Paused}, restarting=${state.Restarting}, error=${Boolean(state.Error)}`,
+    );
+  }
+  return status;
+}
 export type NativeObservation =
   | { type: "absent"; daemon: string; volume: string }
   | {
       type: "present";
       native: NativeComputer;
-      status: "created" | "running" | "exited" | "removing";
+      status: NativeStatus;
     };
 
 /** A gap is not success; only a different verified running ID is ready. */
