@@ -2,12 +2,7 @@
 import { CharacterArtwork } from "@chapchoo/ui/CharacterArtwork";
 import { ConfirmationDialog } from "@chapchoo/ui/ConfirmationDialog";
 import { PageFailure } from "@chapchoo/ui/PageFailure";
-import {
-  agentChatPath,
-  agentPath,
-  agentsPath,
-  newAgentPath,
-} from "@chapchoo/web-core/workspace";
+import { agentPath } from "@chapchoo/web-core/workspace";
 import {
   ActionIcon,
   Alert,
@@ -60,45 +55,7 @@ function Navigation(props: ChatProps): ReactElement {
   return (
     <div className={classes.navigation}>
       {props.navigation?.selector ?? props.navigation?.header}
-      <div className={classes.sectionTitle}>
-        <Anchor href={agentsPath(p.basePath, p.data.teamHandle)}>
-          {p.copy.agents}
-        </Anchor>
-        <ActionIcon
-          component="a"
-          href={newAgentPath(p.basePath, p.data.teamHandle)}
-          variant="subtle"
-          aria-label={p.profileCopy.newAgent}
-        >
-          <Icon name="plus" />
-        </ActionIcon>
-      </div>
-      <nav aria-label={p.copy.agents}>
-        {props.choices.map((agent) => (
-          <a
-            key={agent.id}
-            className={classes.agentChoice}
-            data-selected={agent.id === props.agent.id || void 0}
-            href={agentChatPath(p.basePath, p.data.teamHandle, agent.handle)}
-            aria-current={agent.id === props.agent.id ? "page" : void 0}
-          >
-            <CharacterArtwork
-              basePath={p.basePath}
-              assetKey={agent.profileImage.assetKey}
-              className={classes.choicePortrait}
-            />
-            <span>
-              {agent.name}
-              <small>@{agent.handle}</small>
-            </span>
-          </a>
-        ))}
-        {props.choicesUnavailable ? (
-          <Button variant="subtle" onClick={props.onRetryChoices}>
-            {p.copy.retryRead}
-          </Button>
-        ) : null}
-      </nav>
+      {props.agentNavigation}
       <div className={classes.navigationFoot}>
         {props.navigation?.items
           .filter((item) => item.key !== "agents")
@@ -143,10 +100,6 @@ export function Chat(props: ChatProps): ReactElement {
   const detailHref = agentPath(p.basePath, p.data.teamHandle, agent.handle);
   const start = agent.computer.actions.find((item) => item.action === "start");
   const working = props.writable && props.activity === "working";
-  const showRetry =
-    p.stale ||
-    (agent.computer.power !== "stopped" &&
-      agent.computer.connector !== "connected");
   return (
     <div className={classes.frame}>
       <aside className={classes.sidebar}>
@@ -196,19 +149,8 @@ export function Chat(props: ChatProps): ReactElement {
                   <span>{props.status}</span>
                   <Icon name="chevron" />
                 </span>
-                {!props.writable ? (
-                  <span className={classes.readOnly}>{c.readOnly}</span>
-                ) : null}
               </button>
-              {showRetry ? (
-                <button
-                  className={classes.power}
-                  disabled={p.pending}
-                  onClick={p.onRefresh}
-                >
-                  {p.copy.retry}
-                </button>
-              ) : agent.computer.power === "stopped" ? (
+              {agent.computer.power === "stopped" ? (
                 <button
                   className={classes.power}
                   disabled={p.stale || p.pending || !start?.available}

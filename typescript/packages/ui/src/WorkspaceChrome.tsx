@@ -28,6 +28,7 @@ export interface WorkspaceChromeProps {
   basePath: string;
   homeHref: string | null;
   environment?: string;
+  navigationContent?: ReactNode;
   copy: {
     chooseContext: string;
     teams: string;
@@ -148,6 +149,7 @@ export function WorkspaceChrome(props: WorkspaceChromeProps): ReactElement {
         trigger,
         homeHref: props.homeHref,
         environment: props.environment,
+        content: props.navigationContent,
       }}
     >
       {props.children}
@@ -182,6 +184,7 @@ export function WorkspaceChrome(props: WorkspaceChromeProps): ReactElement {
           basePath={props.basePath}
           mascotReplayLabel={props.mascotReplayLabel}
           onSelect={props.closeDrawer}
+          content={props.navigationContent}
         />
       </Drawer>
       <Modal

@@ -222,14 +222,19 @@ test("unavailable observations keep history readable and input read-only", async
     await expect(
       page.getByText("연남동에서, 천천히", { exact: true }),
     ).toBeVisible();
-    if (state === "stale-stopped") {
-      await expect(
-        page.getByRole("main").getByRole("button", {
-          name: computerCopy("ko-KR").retry,
-          exact: true,
-        }),
-      ).toBeEnabled();
-    }
+    const main = page.getByRole("main");
+    await expect(
+      main.getByRole("button", {
+        name: computerCopy("ko-KR").retry,
+        exact: true,
+      }),
+    ).toHaveCount(0);
+    await expect(
+      main.locator("header").getByText("읽기 전용", { exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      main.getByRole("textbox", { name: "메시지", exact: true }),
+    ).toHaveAttribute("placeholder", /읽기 전용/);
     await page.getByRole("button", { name: /코기.*작업 상태/ }).click();
     await expect(
       page.getByRole("dialog", { name: "작업 상태", exact: true }),

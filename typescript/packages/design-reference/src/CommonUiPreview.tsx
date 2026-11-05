@@ -6,6 +6,7 @@ import { DisplayEntry, DisplayPanel } from "@chapchoo/ui/DisplaySettings";
 import { useState } from "react";
 import { Mascot } from "@chapchoo/ui/Mascot";
 import { NavigationIcon } from "@chapchoo/ui/NavigationIcon";
+import { NavigationPanel } from "@chapchoo/ui/AppNavigation";
 import { InteractiveSurface } from "@chapchoo/ui/InteractiveSurface";
 import { DropdownButton } from "@chapchoo/ui/DropdownButton";
 import {
@@ -95,8 +96,37 @@ export default function CommonUiPreview(): ReactElement {
       />
       <Stack p="lg">
         <Stack gap="xs" maw="18rem">
-          <NavLink label="Agents" active />
-          <NavLink label="Invitations" />
+          <NavigationPanel
+            label="Workspace destinations"
+            header="Personal workspace"
+            basePath=""
+            mascotReplayLabel="Replay character animation"
+            items={[
+              {
+                key: "settings",
+                label: "Workspace settings",
+                href: "#workspace-settings",
+              },
+            ]}
+            content={
+              <Stack gap="xs">
+                <Text size="sm" fw={600}>
+                  Companions
+                </Text>
+                <NavLink
+                  component="a"
+                  href="#research-companion"
+                  label="Research companion"
+                  active
+                />
+                <NavLink
+                  component="a"
+                  href="#writing-companion"
+                  label="Writing companion"
+                />
+              </Stack>
+            }
+          />
         </Stack>
         <InteractiveSurface href="#profile-example">
           <Group justify="space-between">

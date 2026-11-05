@@ -126,6 +126,7 @@ export function ApplicationShellContent({
             )
           }
           items={current?.items ?? navigation}
+          content={current?.content}
           basePath={basePath}
           mascotReplayLabel={mascotReplayLabel}
         />

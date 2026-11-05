@@ -14,9 +14,7 @@ export interface ChatProps {
   navigation: AppNavigation | null;
   accountControls: ReactNode;
   secondaryOverlay: boolean;
-  choices: readonly AgentView[];
-  choicesUnavailable: boolean;
-  onRetryChoices: () => void;
+  agentNavigation: ReactNode;
   showSample: boolean;
   input: string;
   messages: readonly { id: number; text: string }[];

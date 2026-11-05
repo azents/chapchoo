@@ -25,6 +25,7 @@ export interface AppNavigation {
   trigger: ReactNode;
   homeHref: string | null;
   environment?: string;
+  content?: ReactNode;
 }
 /** The product supplies current membership, destinations and transient controls. */
 export const AppNavigationContext = createContext<AppNavigation | null>(null);
@@ -37,6 +38,7 @@ export function NavigationPanel({
   mascotReplayLabel,
   onSelect,
   mobileDrawer = false,
+  content,
 }: {
   label: string;
   items: readonly NavigationItem[];
@@ -45,10 +47,12 @@ export function NavigationPanel({
   mascotReplayLabel: string;
   onSelect?: () => void;
   mobileDrawer?: boolean;
+  content?: ReactNode;
 }): ReactElement {
   return (
     <Box className={classes.panel} data-drawer={mobileDrawer || void 0}>
       {header ? <Box className={classes.header}>{header}</Box> : null}
+      {content}
       <Box component="nav" aria-label={label} className={classes.links}>
         {items.map((item) => {
           const common = {

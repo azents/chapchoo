@@ -157,7 +157,7 @@ function WorkspaceContent(props: WorkspaceContentProps): ReactNode {
         {
           key: "invitations",
           label: c.receivedInvitations,
-          href: `${props.basePath}/invitations`,
+          href: `${props.basePath}/profile/invitations`,
           active: team === null,
         },
       ]}
