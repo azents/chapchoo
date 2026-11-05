@@ -21,6 +21,9 @@ client-owned. Received invitations are primary data at `/profile/invitations`. T
 management invitations remain supplementary to the member/settings record.
 Workspace-selector data is supplementary on other feature routes; its failure
 does not replace independently available primary content with an empty success.
+The supplementary [Team Agent navigation](workspace-navigation.md#general-working-context-and-navigation)
+also reads its independent paging selection from the URL; its list and exact
+current-Agent lookup remain outside the primary route's required-data boundary.
 
 Admin inventory offset is a canonical decimal URL search value with the existing
 25-row page size and int64 bound. Admin login method is URL-owned and constrained

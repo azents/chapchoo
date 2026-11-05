@@ -86,6 +86,23 @@ export const computersRouter = router({
         ),
       ),
     ),
+  getInTeam: procedure
+    .input(
+      z.object({ teamId: id, handle: z.string().refine(validHandle) }).strict(),
+    )
+    .query(({ ctx, input }) =>
+      attempt(() =>
+        ctx.session.authenticated(async (token) =>
+          agent(
+            await call(
+              ctx.backend.agents.getInTeam.bind(ctx.backend.agents),
+              input,
+              token,
+            ),
+          ),
+        ),
+      ),
+    ),
   providers: procedure
     .input(page)
     .query(({ ctx, input }) =>

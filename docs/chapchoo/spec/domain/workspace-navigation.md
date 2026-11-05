@@ -22,8 +22,13 @@ profile and invitation routes retain the validated recent context. Every Team
 route shares one owner-scoped Agent list in its left navigation, including list,
 creation, detail, chat and Team settings. The same list appears in the mobile
 Drawer, with current-Agent selection, creation and bounded next/first navigation.
-One selected-Team query owns that supplementary list; changing Team changes its
-query key and resets its paging selection. It refreshes while visible and
+One selected-Team query owns that supplementary list. The separate `agentAfter`
+URL cursor selects its bounded page; First/Next push history, reload and
+Back/Forward restore the selection, and same-Team navigation links retain it.
+Team-switch links omit the cursor and start at the first page. A current detail/chat
+Agent outside the fetched page remains selected through a bounded, authenticated
+exact-Team/private-owner lookup, deduplicated against the list. Changing Team changes
+both query keys. The list and current-Agent lookup refresh while visible and
 authenticated without carrying another Team's list as placeholder data.
 Collaborative-Team settings remain alongside the list. A Team switch navigates to only the current user's
 private Agents in that Team. Desktop retains the independently scrolling sidebar;
