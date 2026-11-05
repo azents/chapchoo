@@ -193,6 +193,7 @@ export const ApprovedDetail: Story = {
     copy: computerCopy("ko-KR"),
     profileCopy: creationCopy("ko"),
     detailCopy: computerDetailCopy("ko"),
+    formatTime: () => "11월 2일 오전 9:00",
   },
   render: ApprovedAgent,
 };

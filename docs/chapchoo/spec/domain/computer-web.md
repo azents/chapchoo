@@ -119,7 +119,7 @@ named icon controls. Safe preparation retry retains its separate admission.
 
 Details opens a controlled modal with observed power/time, last-known power when
 current power is unknown, independent Computer and management connections, saved
-storage and the latest operation. Short explanations distinguish each observation
+storage and the operation status. Short explanations distinguish each observation
 without implying harness readiness, file inspection or backup verification.
 Requested intent is in an optional troubleshooting disclosure. Closing or Escape
 returns focus; explicit refresh invalidates the same observations. No new query,

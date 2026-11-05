@@ -17,7 +17,6 @@ import {
   Anchor,
   Box,
   Button,
-  Divider,
   Group,
   Stack,
   Text,
@@ -224,15 +223,19 @@ export function Agents(props: AgentsProps): ReactElement {
             </Alert>
           ) : null}
           <ComputerControls {...props} agent={data.agent} />
-          <Divider mt="xl" />
-          <Stack component="section" aria-label={c.delete}>
+          <Stack
+            component="section"
+            aria-label={c.delete}
+            align="flex-end"
+            mt="xl"
+          >
             {data.agent.computer.actions
               .filter((item) => item.action === "delete")
               .map((item) => (
                 <Group key={item.action}>
                   <Button
                     color="red"
-                    variant="outline"
+                    variant="subtle"
                     onClick={() => props.onAction(item.action)}
                     disabled={props.pending || props.stale || !item.available}
                   >

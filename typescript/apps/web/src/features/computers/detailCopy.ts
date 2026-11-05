@@ -10,7 +10,7 @@ const english = {
   managementHint: "The path used to deliver start and stop requests.",
   storage: "Saved storage",
   storageHint: "Confirms the allocated storage, not file contents or backups.",
-  operation: "Latest power operation",
+  operation: "Operation status",
   diagnostics: "Troubleshooting information",
   close: "Close",
 };
@@ -28,7 +28,7 @@ const korean: ComputerDetailCopy = {
   storage: "저장 공간",
   storageHint:
     "할당된 저장 공간을 확인합니다. 파일 내용이나 백업을 검사한 것은 아닙니다.",
-  operation: "최근 전원 작업",
+  operation: "작업 상태",
   diagnostics: "문제 진단용 정보",
   close: "닫기",
 };
@@ -45,7 +45,7 @@ const japanese: ComputerDetailCopy = {
   storage: "保存領域",
   storageHint:
     "割り当て済みの保存領域の確認です。ファイルの内容やバックアップは検査していません。",
-  operation: "直近の電源操作",
+  operation: "操作の状態",
   diagnostics: "診断情報",
   close: "閉じる",
 };
@@ -63,7 +63,7 @@ const french: ComputerDetailCopy = {
   storage: "Stockage persistant",
   storageHint:
     "Confirme le stockage alloué, pas le contenu des fichiers ni les sauvegardes.",
-  operation: "Dernière opération d’alimentation",
+  operation: "État de l’opération",
   diagnostics: "Informations de diagnostic",
   close: "Fermer",
 };
