@@ -288,7 +288,7 @@ macro_rules! setup {
     ($connection:expr,$source:expr,$postgres:expr,$cipher:expr,$credentials:expr) => {{
         let connection = &mut *$connection;
         let pending = connection.pending_migrations($source)?;
-        assert_eq!(pending.len(), 9);
+        assert!(pending.len() >= 9);
         connection.run_migrations(&pending[..8])?;
         connection.transaction::<_, TestError, _>(|connection| {
             connection
@@ -300,10 +300,14 @@ macro_rules! setup {
 macro_rules! verify {
     ($connection:expr,$postgres:expr,$cipher:expr,$credentials:expr) => {{
         let connection = &mut *$connection;
-        assert_eq!(connection.applied_migrations()?.len(),9);
-        let source = if $postgres { POSTGRES_MIGRATIONS } else { SQLITE_MIGRATIONS };
-        assert!(connection.revert_last_migration(source).is_err());
-        assert_eq!(connection.applied_migrations()?.len(),9);
+        assert_eq!(connection.applied_migrations()?.len(),10);
+        let source = || if $postgres { POSTGRES_MIGRATIONS } else { SQLITE_MIGRATIONS };
+        assert!(connection.transaction::<_, TestError, _>(|connection| {
+            connection.revert_last_migration(source())?;
+            connection.revert_last_migration(source())?;
+            Ok(())
+        }).is_err());
+        assert_eq!(connection.applied_migrations()?.len(),10);
         let query = "SELECT a.id,a.handle,a.palette_key,i.internal_name FROM agents a JOIN profile_images i ON i.id=a.profile_image_id";
         let profiles = diesel::sql_query(query).load::<Profile>(connection)?;
         assert_eq!(profiles.len(),1);

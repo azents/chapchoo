@@ -10,7 +10,7 @@ use std::{error::Error, fs::OpenOptions, path::Path};
 
 pub const SQLITE_MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/sqlite");
 pub const POSTGRES_MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/postgres");
-const VERSIONS: [&str; 9] = [
+const VERSIONS: [&str; 10] = [
     "00000000000001",
     "00000000000002",
     "00000000000003",
@@ -20,6 +20,7 @@ const VERSIONS: [&str; 9] = [
     "00000000000007",
     "00000000000008",
     "00000000000009",
+    "00000000000010",
 ];
 const PG_LOCK: i64 = 1_960_261_029;
 #[cfg(test)]
@@ -51,6 +52,10 @@ fn prepared_product_query() -> String {
         "control_instances",
         "provider_connections",
         "connector_connections",
+        "external_authentications",
+        "external_auth_attempts",
+        "external_auth_requests",
+        "agent_authentication_selections",
     ];
     let additions = tables
         .iter()

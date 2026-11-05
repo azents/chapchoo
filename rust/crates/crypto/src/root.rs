@@ -16,6 +16,9 @@ const ENCRYPTION: &[u8] = b"chapchoo/credential-encryption";
 const CODES: &[u8] = b"chapchoo/email-code-verifier";
 const BINDING: &[u8] = b"chapchoo/installation-key-check";
 const PROVIDER_BOOTSTRAP: &[u8] = b"chapchoo/provider-bootstrap-authentication";
+const EXTERNAL_AUTH: &[u8] = b"chapchoo/external-authentication";
+const DEVICE_ATTEMPT: &[u8] = b"chapchoo/external-device-attempt";
+const EXTERNAL_REQUEST: &[u8] = b"chapchoo/external-request-fingerprint";
 const BINDING_CONTEXT: &[u8] = b"chapchoo/fixed-installation-root";
 
 /// Operator-provided root. No replacement, generation or implicit formatting API.
@@ -46,6 +49,9 @@ impl fmt::Debug for RootKey {
 /// One common immutable cryptographic capability for the backend installation.
 pub struct CredentialCipher {
     pub(crate) provider_bootstrap: Zeroizing<[u8; 32]>,
+    pub(crate) external_auth: Zeroizing<[u8; 32]>,
+    pub(crate) device_attempt: Zeroizing<[u8; 32]>,
+    pub(crate) external_request: Zeroizing<[u8; 32]>,
     encryption: Zeroizing<[u8; 32]>,
     codes: Zeroizing<[u8; 32]>,
     binding: Zeroizing<[u8; 32]>,
@@ -62,6 +68,9 @@ impl CredentialCipher {
         };
         Ok(Self {
             provider_bootstrap: derive(PROVIDER_BOOTSTRAP)?,
+            external_auth: derive(EXTERNAL_AUTH)?,
+            device_attempt: derive(DEVICE_ATTEMPT)?,
+            external_request: derive(EXTERNAL_REQUEST)?,
             encryption: derive(ENCRYPTION)?,
             codes: derive(CODES)?,
             binding: derive(BINDING)?,

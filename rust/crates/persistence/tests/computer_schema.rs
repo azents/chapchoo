@@ -209,7 +209,15 @@ fn sqlite_computer_constraints_and_provider_only_root_guard() -> Result<(), Test
     ))?;
     prepare_sqlite(&path, &original)?;
     exercise_constraints(&mut connection, false)?;
-    assert!(connection.revert_last_migration(SQLITE_MIGRATIONS).is_err());
+    assert!(
+        connection
+            .transaction::<_, TestError, _>(|connection| {
+                connection.revert_last_migration(SQLITE_MIGRATIONS)?;
+                connection.revert_last_migration(SQLITE_MIGRATIONS)?;
+                Ok(())
+            })
+            .is_err()
+    );
     sqlite_ready(&path, &original)?;
     Ok(())
 }
@@ -259,7 +267,11 @@ fn postgres_in_schema(url: &str) -> Result<(), TestError> {
     exercise_constraints(&mut connection, true)?;
     assert!(
         connection
-            .revert_last_migration(POSTGRES_MIGRATIONS)
+            .transaction::<_, TestError, _>(|connection| {
+                connection.revert_last_migration(POSTGRES_MIGRATIONS)?;
+                connection.revert_last_migration(POSTGRES_MIGRATIONS)?;
+                Ok(())
+            })
             .is_err()
     );
     postgres_ready(url, &original)?;

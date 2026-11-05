@@ -3,6 +3,7 @@
 
 mod code;
 mod error;
+mod external;
 mod fingerprint;
 mod password;
 mod provider;
@@ -12,6 +13,10 @@ mod token;
 
 pub use code::{CodeVerifier, EmailCode};
 pub use error::CryptoError;
+pub use external::{
+    ExternalSecret, ExternalSecretContext, ExternalSecretEnvelope, ExternalSecretKind,
+    ExternalSecretOwner,
+};
 pub use fingerprint::payload_fingerprint;
 pub use password::{PasswordCost, PasswordHash, PasswordHasher};
 pub use provider::ProviderBootstrapCredential;
