@@ -97,7 +97,9 @@ export function Chat(props: ChatProps): ReactElement {
       />
     );
   }
-  const detailHref = agentPath(p.basePath, p.data.teamHandle, agent.handle);
+  const detailHref = p.navigationHref(
+    agentPath(p.basePath, p.data.teamHandle, agent.handle),
+  );
   const start = agent.computer.actions.find((item) => item.action === "start");
   const working = props.writable && props.activity === "working";
   return (

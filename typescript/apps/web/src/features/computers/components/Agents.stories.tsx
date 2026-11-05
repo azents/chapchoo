@@ -5,6 +5,7 @@ import { computerCopy } from "@chapchoo/web-core/computer-messages";
 import { shellCopy } from "@chapchoo/web-core/shell-messages";
 import { useMediaQuery } from "@mantine/hooks";
 import { useState } from "react";
+import { agentNavigationHref } from "@/shared/navigation/agentSelection";
 import { useComputerActions } from "../containers/useComputerActions";
 import { creationCopy } from "../creationCopy";
 import { computerDetailCopy } from "../detailCopy";
@@ -74,6 +75,7 @@ const meta = {
     initial,
     data: initial,
     basePath: "",
+    navigationHref: (href) => href,
     copy: computerCopy("en-US"),
     profileCopy: creationCopy("en-US"),
     detailCopy: computerDetailCopy("en-US"),
@@ -108,6 +110,15 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const AgentList: Story = {};
+export const PagedNavigation: Story = {
+  args: {
+    navigationHref: (href) => agentNavigationHref(href, "sidebar-cursor"),
+    data: {
+      ...initial,
+      page: { items: [agent], nextAfter: "main-cursor" },
+    },
+  },
+};
 function DetailInteraction(props: AgentsProps): ReactElement {
   const [opened, setOpened] = useState(props.detailsOpened);
   return (

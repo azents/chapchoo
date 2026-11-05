@@ -24,7 +24,8 @@ creation, detail, chat and Team settings. The same list appears in the mobile
 Drawer, with current-Agent selection, creation and bounded next/first navigation.
 One selected-Team query owns that supplementary list. The separate `agentAfter`
 URL cursor selects its bounded page; First/Next push history, reload and
-Back/Forward restore the selection, and same-Team navigation links retain it.
+Back/Forward restore the selection, and same-Team navigation links retain it,
+including feature Back/list/card links and normal or recovered creation success.
 Team-switch links omit the cursor and start at the first page. A current detail/chat
 Agent outside the fetched page remains selected through a bounded, authenticated
 exact-Team/private-owner lookup, deduplicated against the list. Changing Team changes

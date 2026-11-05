@@ -13,6 +13,7 @@ import { useDocumentVisibility, useMediaQuery } from "@mantine/hooks";
 import { useLocale } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { useAppearanceControl } from "@/shared/appearance/useAppearanceControl";
+import { useAgentNavigationHref } from "@/shared/navigation/useAgentNavigationHref";
 import { trpc } from "@/shared/rpc/client";
 import { creationCopy } from "../creationCopy";
 import { computerDetailCopy } from "../detailCopy";
@@ -33,7 +34,8 @@ export function useAgentsContainer({
   initial,
   basePath,
 }: AgentsInput): AgentsProps {
-  const agentsHref = agentsPath(basePath, initial.teamHandle);
+  const navigationHref = useAgentNavigationHref();
+  const agentsHref = navigationHref(agentsPath(basePath, initial.teamHandle));
   const auth = useAuth();
   const mobile = useMediaQuery("(max-width: 48em)");
   const visibility = useDocumentVisibility();
@@ -193,6 +195,7 @@ export function useAgentsContainer({
   });
   return {
     initial,
+    navigationHref,
     access:
       auth.state.type === "AUTHENTICATED"
         ? "authorized"

@@ -201,6 +201,28 @@ test("owner manages one Computer while Admin observes independent cleanup invent
     await owner.reload();
     await expect(selectedAgent).toHaveAttribute("aria-current", "page");
     await sidebar
+      .getByRole("link", { name: "Create Agent", exact: true })
+      .click();
+    await expect(owner).toHaveURL(
+      new URL(pagedChatUrl).origin +
+        new URL(pagedChatUrl).pathname.replace(
+          /\/agents\/[^/]+\/chat$/,
+          "/new-agent",
+        ) +
+        new URL(pagedChatUrl).search,
+    );
+    await owner
+      .getByRole("link", { name: "Back to Agents", exact: true })
+      .click();
+    await expect(owner).toHaveURL(
+      `${listUrl}?agentAfter=${encodeURIComponent(agentId)}`,
+    );
+    await owner
+      .getByRole("main")
+      .getByRole("link", { name: "Acceptance companion", exact: true })
+      .click();
+    await expect(owner).toHaveURL(pagedChatUrl);
+    await sidebar
       .getByRole("button", { name: "First page", exact: true })
       .click();
     await expect(owner).toHaveURL(chatUrl);

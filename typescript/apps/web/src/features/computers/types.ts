@@ -30,6 +30,7 @@ export interface AgentsInput {
   basePath: string;
 }
 export interface AgentsProps extends AgentsInput {
+  navigationHref: (href: string) => string;
   access: "authorized" | "signedOut" | "unavailable";
   copy: ComputerCopy;
   profileCopy: CreationCopy;

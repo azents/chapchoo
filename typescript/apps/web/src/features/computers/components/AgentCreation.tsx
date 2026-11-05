@@ -31,7 +31,9 @@ export function AgentCreation(props: AgentCreationProps): ReactElement {
   )
     ? props.images.items
     : [props.image, ...props.images.items];
-  const listHref = agentsPath(props.basePath, props.initial.teamHandle);
+  const listHref = props.navigationHref(
+    agentsPath(props.basePath, props.initial.teamHandle),
+  );
   if (props.access !== "authorized") {
     return (
       <PageFailure

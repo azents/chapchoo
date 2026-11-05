@@ -32,7 +32,11 @@ import type { ReactElement } from "react";
 
 export function Agents(props: AgentsProps): ReactElement {
   const { copy: c, data } = props;
-  const listHref = agentsPath(props.basePath, data.teamHandle);
+  const listPath = agentsPath(props.basePath, data.teamHandle);
+  const listHref = props.navigationHref(listPath);
+  const createHref = props.navigationHref(
+    newAgentPath(props.basePath, data.teamHandle),
+  );
   if (props.access !== "authorized") {
     return (
       <PageFailure
@@ -61,10 +65,7 @@ export function Agents(props: AgentsProps): ReactElement {
             title={c.agents}
             actions={
               data.page.items.length ? (
-                <Button
-                  component="a"
-                  href={newAgentPath(props.basePath, data.teamHandle)}
-                >
+                <Button component="a" href={createHref}>
                   <NavigationIcon name="add" size="sm" />{" "}
                   {props.profileCopy.newAgent}
                 </Button>
@@ -131,11 +132,7 @@ export function Agents(props: AgentsProps): ReactElement {
               <Text size="sm" c="dimmed" ta="center">
                 {props.profileCopy.emptyHint}
               </Text>
-              <Button
-                component="a"
-                href={newAgentPath(props.basePath, data.teamHandle)}
-                mt="sm"
-              >
+              <Button component="a" href={createHref} mt="sm">
                 <NavigationIcon name="add" size="sm" />{" "}
                 {props.profileCopy.newAgent}
               </Button>
@@ -146,10 +143,8 @@ export function Agents(props: AgentsProps): ReactElement {
                 <Box
                   key={item.id}
                   component="a"
-                  href={agentChatPath(
-                    props.basePath,
-                    data.teamHandle,
-                    item.handle,
+                  href={props.navigationHref(
+                    agentChatPath(props.basePath, data.teamHandle, item.handle),
                   )}
                   aria-label={item.name}
                   className={classes.card}
@@ -199,7 +194,9 @@ export function Agents(props: AgentsProps): ReactElement {
               {data.after ? <Anchor href={listHref}>{c.first}</Anchor> : null}
               {data.page.nextAfter ? (
                 <Anchor
-                  href={`${listHref}?after=${encodeURIComponent(data.page.nextAfter)}`}
+                  href={props.navigationHref(
+                    `${listPath}?after=${encodeURIComponent(data.page.nextAfter)}`,
+                  )}
                 >
                   {c.next}
                 </Anchor>
@@ -208,11 +205,7 @@ export function Agents(props: AgentsProps): ReactElement {
           ) : null}
           {data.page.items.length ? (
             <Box className={classes.listFooter}>
-              <Anchor
-                size="sm"
-                c="dimmed"
-                href={newAgentPath(props.basePath, data.teamHandle)}
-              >
+              <Anchor size="sm" c="dimmed" href={createHref}>
                 <NavigationIcon name="add" size="sm" />{" "}
                 {props.profileCopy.addCompanion}
               </Anchor>

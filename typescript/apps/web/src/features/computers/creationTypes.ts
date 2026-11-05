@@ -24,6 +24,7 @@ export interface AgentCreationInput {
   basePath: string;
 }
 export interface AgentCreationProps extends AgentCreationInput {
+  navigationHref: (href: string) => string;
   access: "authorized" | "signedOut" | "unavailable";
   copy: ComputerCopy;
   profileCopy: CreationCopy;

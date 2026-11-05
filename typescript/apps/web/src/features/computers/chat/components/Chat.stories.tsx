@@ -96,6 +96,7 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
     initial,
     data: initial,
     basePath: "",
+    navigationHref: (href) => href,
     access: mode === "signedOut" ? "signedOut" : "authorized",
     copy: c,
     profileCopy: creationCopy(locale),
