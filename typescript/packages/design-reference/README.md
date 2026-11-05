@@ -8,6 +8,15 @@ Visual design context and principles live only in root
 tone; the ownership examples demonstrate the same common-UI import boundary.
 Fictional screen examples are not product feature requirements.
 
+## Product-design snapshots
+
+[snapshots/](snapshots/README.md) contains product-specific frozen HTML review
+artifacts. Follow [its scoped rules](snapshots/AGENTS.md) and the
+`product-design-snapshot` skill. New designs are authored with current components,
+reviewed, confirmed, and dumped; only the independent HTML/static assets survive.
+Historical imports keep their original confirmation status. This archive is not
+part of the Storybook catalog or a maintained component representation.
+
 ## Catalog
 
 - `Chapchoo/Foundations`: overview, basic controls, feedback, mascots, iOS type.

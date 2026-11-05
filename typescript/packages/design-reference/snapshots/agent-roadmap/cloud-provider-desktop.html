@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>서버 제공 클라우드 — 등록과 제공</title><meta name="snapshot-conditions" content="eyJsb2NhbGUiOiJrby1LUiIsImNvbG9yU2NoZW1lIjoibGlnaHQiLCJyZWR1Y2VkTW90aW9uIjoicmVkdWNlIn0="><meta name="snapshot-viewport" content="1440x1000"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' data:; font-src 'self' data:; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'"><style>* { box-sizing: border-box; }
+body { margin: 0px; background: rgb(237, 241, 244); color: rgb(52, 75, 90); font: 14px / 1.7 "Noto Sans KR", sans-serif; }
+header { background: rgb(45, 68, 82); color: white; padding: 18px 30px; display: flex; align-items: center; gap: 20px; }
+header small { color: rgb(189, 207, 220); margin-right: auto; }
+main { max-width: 1340px; margin: auto; padding: 28px 24px; }
+h1 { font-size: 25px; margin: 0px; }
+h2 { font-size: 18px; margin: 0px 0px 15px; }
+p { font-size: 12px; color: rgb(131, 157, 173); margin: 7px 0px; }
+.grid { display: grid; grid-template-columns: 0.9fr 1.05fr 1.1fr; gap: 18px; margin-top: 25px; }
+.panel { background: white; border: 1px solid rgb(208, 221, 230); border-radius: 7px; padding: 22px; }
+label { display: block; font-size: 12px; color: rgb(125, 153, 170); margin: 15px 0px 7px; }
+input, button, select { font-style: inherit; font-variant: inherit; font-weight: inherit; font-stretch: inherit; line-height: inherit; font-family: inherit; font-optical-sizing: inherit; font-size-adjust: inherit; font-kerning: inherit; font-feature-settings: inherit; font-variation-settings: inherit; font-language-override: inherit; font-size: 12px; background: white; color: rgb(77, 115, 140); border: 1px solid rgb(194, 212, 224); border-radius: 5px; padding: 10px 12px; }
+input { width: 100%; }
+button { cursor: pointer; }
+.primary { background: rgb(66, 106, 133); color: white; }
+button:disabled { opacity: 0.4; cursor: default; }
+.tag { font-size: 11px; padding: 4px 9px; border: 1px solid rgb(205, 221, 231); border-radius: 14px; background: rgb(245, 249, 252); color: rgb(123, 155, 174); display: inline-block; }
+.line { border-bottom: 1px solid rgb(233, 240, 244); padding: 16px 0px; }
+.line:first-child { padding-top: 0px; }
+.line b { font-size: 13px; }
+.box { background: rgb(246, 249, 251); border: 1px dashed rgb(194, 214, 228); border-radius: 5px; padding: 16px; margin: 18px 0px; font-size: 12px; color: rgb(130, 158, 175); }
+.info { padding: 13px; background: rgb(242, 247, 250); border: 1px solid rgb(213, 228, 237); border-radius: 5px; font-size: 12px; color: rgb(116, 147, 167); margin-top: 18px; }
+.warning { background: rgb(250, 248, 241); border-color: rgb(233, 223, 196); color: rgb(160, 138, 84); }
+footer { margin-top: 22px; font-size: 11px; color: rgb(140, 165, 181); }
+.row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.policy { background: white; border: 1px solid rgb(204, 221, 232); padding: 20px; border-radius: 7px; margin-top: 20px; }
+.policy h2 { font-size: 16px; }
+.policy p { margin: 0px; }
+.hint { font-size: 11px; color: rgb(154, 174, 186); }
+.actions { display: flex; gap: 9px; margin-top: 18px; flex-wrap: wrap; }
+@media (max-width: 850px) {
+  .grid { grid-template-columns: 1fr; }
+  header { flex-wrap: wrap; }
+  main { padding: 22px 15px; }
+  header select { max-width: 100%; }
+}</style></head><body><header><strong>CHAPCHOO · 서버 관리</strong><small>Concept mock · 클라우드 등록과 제공 정책 제안</small><select id="state" aria-label="연결 상태 예시"><option value="waiting">연결 대기</option><option value="ready" selected="">연결됨·생성 가능</option><option value="blocked">연결됨·생성 불가</option><option value="offline">연결 안 됨</option></select></header><main><h1>서버 제공 클라우드 준비하기</h1><p>운영자만 등록·관리합니다. 사용자는 에이전트를 만들 때 제공 가능한 클라우드만 선택합니다.</p><div class="grid"><section class="panel"><h2>1. 클라우드 등록</h2><span class="tag">서버 전체 제공</span> <span class="tag">Kubernetes</span><label for="cloudName">표시 이름</label><input id="cloudName" value="찹츄 기본 클라우드" style=""><p>사용자의 컴퓨터 선택 목록에도 이 이름을 사용합니다.</p><div class="info">종류·제공 범위는 이번 MVP에서 고정합니다. 팀·개인 범위나 Codex 계정은 여기서 선택하지 않습니다.</div><div class="actions"><button class="primary" type="button">등록하고 연결 안내 보기</button></div><p id="registered" class="hint">등록만으로 사용자에게 제공되지 않습니다.</p></section><section class="panel"><h2>2. 설치·연결 안내</h2><div class="line"><b class="cloud-title">찹츄 기본 클라우드</b><p>등록한 클라우드와 연결될 실행 환경을 준비합니다.</p></div><div class="box">설치 안내 영역<br><br>운영자가 Kubernetes 환경에 연결 컴포넌트를 설치·실행합니다.<br><br>실제 설치 명령·연결 자격증명 발급 방식은 기술 설계에서 확정합니다.</div><div class="row"><b>연결 상태</b><span class="tag connection">연결됨</span></div><p class="connection-help">관리 연결이 확인됐어요. 컴퓨터 생성 가능 여부도 별도로 확인합니다.</p><div class="info">화면을 닫아도 등록은 유지됩니다. 목록으로 돌아왔다가 같은 클라우드의 연결 안내를 다시 열 수 있습니다.</div></section><section class="panel"><h2>3. 상태·제공 관리</h2><div class="line"><b class="cloud-title">찹츄 기본 클라우드</b><p>제공 범위 · 서버 전체</p></div><div class="line row"><b>관리 연결</b><span class="tag connection">연결됨</span></div><div class="line row"><b>컴퓨터 생성</b><span id="capacity" class="tag">가능</span></div><label><input type="checkbox" id="allow" style="width: auto; margin-right: 7px;" value="on">새 에이전트 생성 허용</label><p class="hint">운영자 별도 허용 제어는 제안 · 기본 꺼짐</p><div class="info" id="availability">사용자에게 제공하지 않음 · 새 에이전트 생성 허용을 켜야 합니다.</div><div class="actions"><button id="preview" disabled="" type="button">사용자 선택 목록 예시</button></div><p id="result"></p></section></div><section class="policy"><h2>이번에 정할 정책: 연결되면 바로 제공할까요?</h2><p><b>권장안:</b> 운영자가 ‘새 에이전트 생성 허용’을 켜고 연결·생성 가능 조건이 충족될 때만 제공합니다. 잠시 꺼도 기존 에이전트·컴퓨터와 백그라운드 정리는 중단하지 않습니다.<br><b>더 작은 대안:</b> 별도 허용 제어 없이 연결·생성 가능 상태가 되면 즉시 사용자에게 제공합니다.</p></section><footer>설치 방법·자격증명은 설명용 빈 영역이며 실제 값이 없습니다. 상태·허용 변경은 mock입니다. HO 연결 상태와 각 HP의 컴퓨터 연결 상태는 별개이며, 클라우드 연결 단절이 기존 컴퓨터의 꺼짐을 의미하지 않습니다.</footer></main></body></html>

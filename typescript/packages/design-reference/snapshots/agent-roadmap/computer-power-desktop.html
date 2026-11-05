@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Chapchoo — 전원과 연결 관리</title><meta name="snapshot-conditions" content="eyJsb2NhbGUiOiJrby1LUiIsImNvbG9yU2NoZW1lIjoibGlnaHQiLCJyZWR1Y2VkTW90aW9uIjoicmVkdWNlIn0="><meta name="snapshot-viewport" content="1440x1000"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' data:; font-src 'self' data:; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'"><style>* { box-sizing: border-box; }
+body { margin: 0px; background: rgb(242, 245, 247); color: rgb(40, 62, 75); font: 15px / 1.65 system-ui, sans-serif; }
+header { background: rgb(41, 63, 77); color: white; padding: 18px 28px; }
+header small { color: rgb(207, 218, 224); margin-left: 18px; }
+main { max-width: 960px; margin: 32px auto; padding: 0px 22px; }
+h1 { font-size: 26px; }
+h2 { font-size: 19px; }
+section { background: white; border: 1px solid rgb(205, 217, 224); border-radius: 9px; padding: 26px; margin: 20px 0px; }
+.states { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.state { background: rgb(245, 248, 250); padding: 18px; border-radius: 6px; }
+.state small { display: block; color: rgb(101, 123, 137); }
+.state strong { font-size: 21px; }
+p { color: rgb(92, 113, 128); }
+button { font: inherit; padding: 10px 18px; border: 1px solid rgb(171, 192, 207); border-radius: 5px; color: rgb(47, 86, 109); background: white; cursor: pointer; }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+.primary { background: rgb(56, 96, 120); color: white; }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 22px; }
+.notice { padding: 14px 17px; background: rgb(238, 245, 249); border-left: 3px solid rgb(109, 149, 175); margin-top: 20px; }
+.warning { background: rgb(255, 247, 231); border-color: rgb(188, 149, 68); }
+.test { font-size: 12px; border: 1px dashed rgb(170, 188, 200); padding: 15px; }
+.test button { font-size: 12px; padding: 5px 9px; margin: 4px; }
+.test select { font: inherit; padding: 8px; max-width: 100%; }
+.foot { font-size: 12px; color: rgb(101, 123, 137); }
+dialog { border: 1px solid rgb(199, 212, 221); border-radius: 9px; padding: 26px; max-width: 480px; width: 90%; color: rgb(40, 62, 75); }
+dialog::backdrop { background: rgba(35, 58, 75, 0.467); }
+button:focus-visible, select:focus-visible { outline: rgb(80, 124, 153) solid 3px; outline-offset: 3px; }
+@media (max-width: 600px) {
+  .states { grid-template-columns: 1fr; }
+  main { margin: 20px auto; padding: 0px 15px; }
+  header small { display: block; margin: 0px; }
+  section { padding: 20px; }
+}</style></head><body><header><b>CHAPCHOO</b><small>Concept mock · 전원 제어 상세안 · 2026-11-01 · r6</small></header><main><h1>모아의 컴퓨터</h1><p>찹츄 기본 클라우드 · 개인 에이전트</p><section><div class="states"><div class="state"><small>컴퓨터 전원</small><strong id="power">켜짐</strong></div><div class="state"><small>찹츄 접속</small><strong id="hp">연결됨</strong></div></div><div id="notice" class="notice ">컴퓨터가 켜져 있고 찹츄에 연결되어 있어요.</div><div class="actions"><button id="start" class="primary" disabled="" type="button">켜기</button><button id="stop" type="button">끄기</button><button id="restart" type="button">재시작</button></div><p id="reason"></p><button type="button">상태 다시 불러오기</button></section><div class="test"><b>아래는 제품 UI가 아닌 시뮬레이션입니다.</b><p>전원과 HP 접속을 따로 바꾸어 상태·명령을 살펴봅니다. 실제 HO를 호출하지 않습니다.</p><select id="scenario" aria-label="예시 상태"><option value="disconnected" selected="">켜짐 · HP 연결 안 됨</option><option value="connected">켜짐 · HP 연결됨</option><option value="off">꺼짐 확인</option><option value="ho">관리 연결 없음 · HP 연결됨</option><option value="fetch">화면 조회 오류</option></select><div><button type="button">전원 작업 완료 관찰</button><button type="button">HP 접속 관찰</button><button type="button">실행 안 된 실패 확인</button><button type="button">요청 결과 확인 불가</button><button type="button">같은 화면 재진입 예시</button></div></div><p class="foot">전원 제어 포함 · 무활동 종료 제외. 생성·삭제는 별도 기존 여정입니다. 끄기·재시작의 저장 데이터 보존 범위는 확인할 제안이며, 이 mock은 실행·보존을 검증하지 않습니다.</p></main><dialog id="confirm"><h2 id="title"></h2><p id="copy"></p><div class="actions"><button type="button">취소</button><button id="proceed" class="primary" type="button">계속</button></div></dialog></body></html>

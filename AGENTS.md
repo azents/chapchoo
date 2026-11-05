@@ -54,6 +54,8 @@ Never bypass commit hooks.
 
 ## Documentation
 
+Product-design snapshot rules are in [design-reference snapshots/AGENTS.md](typescript/packages/design-reference/snapshots/AGENTS.md).
+
 For visual UI work, read [DESIGN.md](DESIGN.md).
 
 Read `docs/chapchoo/AGENTS.md` for the inherited documentation process.
