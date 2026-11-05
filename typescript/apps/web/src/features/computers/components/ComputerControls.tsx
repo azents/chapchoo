@@ -29,7 +29,7 @@ type Props = Pick<
   | "onAction"
   | "onRefresh"
   | "formatTime"
-> & { agent: AgentView };
+> & { agent: AgentView; onDetailsExit?: () => void };
 /** Project backend eligibility without creating optimistic power or connection state. */
 export function ComputerControls(props: Props): ReactElement {
   const { computer } = props.agent;
@@ -142,6 +142,8 @@ export function ComputerControls(props: Props): ReactElement {
       ) : null}
       <Modal
         opened={props.detailsOpened}
+        returnFocus={!props.onDetailsExit}
+        onExitTransitionEnd={props.onDetailsExit}
         onClose={props.onCloseDetails}
         title={c.details}
         centered

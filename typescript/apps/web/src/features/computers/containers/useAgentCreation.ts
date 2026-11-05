@@ -11,7 +11,7 @@ import {
   resolveHandle,
 } from "@chapchoo/web-core/handle";
 import { initialQuery } from "@chapchoo/web-core/page-state";
-import { agentPath } from "@chapchoo/web-core/workspace";
+import { agentChatPath } from "@chapchoo/web-core/workspace";
 import { useDocumentVisibility } from "@mantine/hooks";
 import { useLocale } from "next-intl";
 import { useEffect, useRef, useState } from "react";
@@ -178,7 +178,7 @@ export function useAgentCreation({
             agentId: history.agentId,
           });
           const team = await client.teams.get.query({ teamId: saved.teamId });
-          window.location.assign(agentPath(basePath, team, saved.handle));
+          window.location.assign(agentChatPath(basePath, team, saved.handle));
           return;
         }
         // No observation is not a cancellation proof. Keep the same frozen
@@ -192,7 +192,7 @@ export function useAgentCreation({
       }
       void utils.computers.list.invalidate();
       window.location.assign(
-        agentPath(basePath, initial.teamHandle, result.agent.handle),
+        agentChatPath(basePath, initial.teamHandle, result.agent.handle),
       );
     } catch {
       setSubmission({

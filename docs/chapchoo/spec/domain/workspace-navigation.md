@@ -73,7 +73,11 @@ inventing a destination or submitting an unusable creation.
 General content uses `/teams/{teamHandle}` for Team settings,
 `/teams/{teamHandle}/agents` for the private list,
 `/teams/{teamHandle}/new-agent` for creation and
-`/teams/{teamHandle}/agents/{agentHandle}` for detail. Personal equivalents use
+`/teams/{teamHandle}/agents/{agentHandle}` for detail and
+`/teams/{teamHandle}/agents/{agentHandle}/chat` for the Agent conversation surface.
+List cards and successful Agent creation enter chat; its character links to
+detail. The chat sidebar presents Agent choices, not conversation history, and
+retains existing workspace/account destinations. Personal equivalents use
 the authenticated `my` alias; it cannot collide with a valid Team handle.
 Agent handle `new` remains valid because creation has a separate path.
 

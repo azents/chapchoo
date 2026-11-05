@@ -9,7 +9,7 @@ import { NavigationIcon } from "@chapchoo/ui/NavigationIcon";
 import { PageFailure } from "@chapchoo/ui/PageFailure";
 import { computerOperation } from "@chapchoo/web-core/computer-messages";
 import {
-  agentPath,
+  agentChatPath,
   agentsPath,
   newAgentPath,
 } from "@chapchoo/web-core/workspace";
@@ -146,7 +146,11 @@ export function Agents(props: AgentsProps): ReactElement {
                 <Box
                   key={item.id}
                   component="a"
-                  href={agentPath(props.basePath, data.teamHandle, item.handle)}
+                  href={agentChatPath(
+                    props.basePath,
+                    data.teamHandle,
+                    item.handle,
+                  )}
                   aria-label={item.name}
                   className={classes.card}
                   style={profileStyle(item.paletteKey)}

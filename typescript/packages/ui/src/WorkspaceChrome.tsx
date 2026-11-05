@@ -143,6 +143,8 @@ export function WorkspaceChrome(props: WorkspaceChromeProps): ReactElement {
         label: props.current?.label ?? props.copy.chooseContext,
         items: props.items,
         header: props.mobile ? null : selector,
+        selector,
+        overlayActive: props.picker || props.creating,
         trigger,
         homeHref: props.homeHref,
         environment: props.environment,

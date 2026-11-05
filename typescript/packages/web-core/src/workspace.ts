@@ -41,6 +41,14 @@ export function agentPath(
   return `${agentsPath(mount, team)}/${encodeURIComponent(handle)}`;
 }
 
+export function agentChatPath(
+  mount: string,
+  team: Team | string,
+  handle: string,
+): string {
+  return `${agentPath(mount, team, handle)}/chat`;
+}
+
 export const workspaceCookie = "chapchoo-workspace";
 export function preferredTeam(
   value: string | undefined,

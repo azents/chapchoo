@@ -175,6 +175,14 @@ technical terms when appropriate and test long Korean/Latin content.
 
 ## Layout
 
+The Agent conversation surface approved on 2026-11-05 uses its floating
+character/status/input composition instead of the ordinary global header.
+Existing workspace and account/appearance controls live in its Agent sidebar
+and navigation sheet. The sidebar contains Agent choices, not conversation
+history. Status remains expanded independently of scrolling. This is an
+explicit surface-specific composition; ordinary account/Admin frames below
+retain their existing layout.
+
 The existing web apps share a sticky global header across authentication, setup,
 general workspaces and Admin. The brand stays left; an icon-only appearance
 button stays at the far right (24px desktop inset, 16px narrow inset). This is
