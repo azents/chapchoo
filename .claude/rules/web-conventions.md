@@ -24,6 +24,7 @@ before designing, implementing, or reviewing web rendering and navigation.
 
 | Convention | File |
 | --- | --- |
+| Open links that change the sidebar menu context in a new tab/window; only the workspace switcher changes context in the current window. | [sidebar-context-navigation](../conventions/web/sidebar-context-navigation.md) |
 | For interactive or live primary content, server-render the initial data and hydrate the same state before client-owned updates. | [ssr-client-state-handoff](../conventions/web/ssr-client-state-handoff.md) |
 | For General and Admin pages, fetch and server-render primary content; keep supplementary data outside the page's required-data boundary. | [ssr-primary-content](../conventions/web/ssr-primary-content.md) |
 | For snapshot-like primary content such as profiles or agent details, require resolved renderer data instead of artificial client loading states. | [ssr-snapshot-renderers](../conventions/web/ssr-snapshot-renderers.md) |
