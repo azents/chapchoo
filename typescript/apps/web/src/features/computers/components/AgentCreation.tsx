@@ -1,5 +1,6 @@
 "use client";
 import { ApplicationShell } from "@chapchoo/ui/ApplicationShell";
+import { NavigationIcon } from "@chapchoo/ui/NavigationIcon";
 import { PageFailure } from "@chapchoo/ui/PageFailure";
 import { agentsPath } from "@chapchoo/web-core/workspace";
 import {
@@ -13,7 +14,9 @@ import {
   Stack,
   Text,
   TextInput,
+  Title,
 } from "@mantine/core";
+import { profileStyle } from "../profilePalette";
 import { ProfileImageChoices, ProfilePaletteChoices } from "./ProfileChoices";
 import classes from "./ProfilePresentation.module.css";
 import { ProfilePreview } from "./ProfilePreview";
@@ -21,8 +24,7 @@ import type { AgentCreationProps } from "../creationTypes";
 import type { ReactElement } from "react";
 
 export function AgentCreation(props: AgentCreationProps): ReactElement {
-  const { copy: c } = props;
-  const p = props.profileCopy;
+  const { copy: c, profileCopy: p } = props;
   const locked = props.pending || props.creationLocked;
   const imageOptions = props.images.items.some(
     (image) => image.id === props.image.id,
@@ -47,6 +49,20 @@ export function AgentCreation(props: AgentCreationProps): ReactElement {
       appearance={props.appearance}
       contextLabel={c.agents}
       title={c.create}
+      contentClassName={classes.creationContent}
+      header={
+        <Box className={classes.creationHeader}>
+          <Anchor href={listHref} size="sm" c="dimmed">
+            <NavigationIcon name="back" size="sm" /> {c.back}
+          </Anchor>
+          <Title order={1} className={classes.creationTitle}>
+            {p.creationTitle}
+          </Title>
+          <Text c="dimmed" mt="sm">
+            {p.chooseProfile}
+          </Text>
+        </Box>
+      }
       identityLabel={props.initial.identity}
       mascotReplayLabel={c.replay}
       actions={
@@ -59,9 +75,9 @@ export function AgentCreation(props: AgentCreationProps): ReactElement {
         { key: "accounts", label: c.accounts, href: `${props.basePath}/` },
       ]}
     >
-      <Anchor href={listHref}>{c.back}</Anchor>
       <Stack
         component="form"
+        style={profileStyle(props.paletteKey)}
         onSubmit={(event) => {
           event.preventDefault();
           props.onCreate();
@@ -78,7 +94,7 @@ export function AgentCreation(props: AgentCreationProps): ReactElement {
               label={p.preview}
             />
           </Box>
-          <Stack gap="xl">
+          <Stack gap="lg">
             <ProfileImageChoices
               basePath={props.basePath}
               label={p.image}
@@ -87,39 +103,42 @@ export function AgentCreation(props: AgentCreationProps): ReactElement {
               disabled={locked || props.imagesUnavailable}
               onChange={props.onImage}
             />
-            <Group role="group" aria-label={p.image}>
-              {props.imageAfter ? (
-                <Button
-                  type="button"
-                  variant="subtle"
-                  disabled={locked}
-                  onClick={() => props.onImagePage(null)}
-                >
-                  {c.first}
-                </Button>
-              ) : null}
-              {props.images.nextAfter ? (
-                <Button
-                  type="button"
-                  variant="subtle"
-                  disabled={locked}
-                  onClick={() => props.onImagePage(props.images.nextAfter)}
-                >
-                  {c.next}
-                </Button>
-              ) : null}
-            </Group>
+            {props.imageAfter || props.images.nextAfter ? (
+              <Group role="group" aria-label={p.image}>
+                {props.imageAfter ? (
+                  <Button
+                    type="button"
+                    variant="subtle"
+                    disabled={locked}
+                    onClick={() => props.onImagePage(null)}
+                  >
+                    {c.first}
+                  </Button>
+                ) : null}
+                {props.images.nextAfter ? (
+                  <Button
+                    type="button"
+                    variant="subtle"
+                    disabled={locked}
+                    onClick={() => props.onImagePage(props.images.nextAfter)}
+                  >
+                    {c.next}
+                  </Button>
+                ) : null}
+              </Group>
+            ) : null}
             <TextInput
               label={c.name}
               value={props.name}
               onChange={(event) => props.onName(event.currentTarget.value)}
               required
               maxLength={120}
-              disabled={props.pending || props.creationLocked}
+              disabled={locked}
             />
             <TextInput
               label={p.handle}
               description={p.permanent}
+              inputWrapperOrder={["label", "input", "description", "error"]}
               value={props.handle.draft.candidate}
               maxLength={16}
               required
@@ -137,13 +156,12 @@ export function AgentCreation(props: AgentCreationProps): ReactElement {
                         : null
               }
             />
-            <Text size="sm" c="dimmed" aria-live="polite">
-              {props.handle.status === "checking"
-                ? p.checking
-                : props.handle.status === "available"
-                  ? p.available
-                  : null}
-            </Text>
+            {props.handle.status === "checking" ||
+            props.handle.status === "available" ? (
+              <Text size="xs" c="dimmed" aria-live="polite">
+                {props.handle.status === "checking" ? p.checking : p.available}
+              </Text>
+            ) : null}
             {props.handle.status === "unavailable" ? (
               <Button
                 type="button"
@@ -189,11 +207,7 @@ export function AgentCreation(props: AgentCreationProps): ReactElement {
                   : []
               }
               onChange={(value) => props.onProvider(value ?? "")}
-              disabled={
-                props.pending ||
-                props.creationLocked ||
-                props.providers.type !== "loaded"
-              }
+              disabled={locked || props.providers.type !== "loaded"}
               required
             />
             {props.providers.type === "loading" ? <Loader size="sm" /> : null}
@@ -201,12 +215,13 @@ export function AgentCreation(props: AgentCreationProps): ReactElement {
             props.providers.items.length === 0 ? (
               <Text c="dimmed">{c.noProviders}</Text>
             ) : null}
-            {props.providers.type === "loaded" ? (
+            {props.providers.type === "loaded" &&
+            (props.providers.after || props.providers.nextAfter) ? (
               <Group>
                 {props.providers.after ? (
                   <Button
                     variant="subtle"
-                    disabled={props.pending || props.creationLocked}
+                    disabled={locked}
                     type="button"
                     onClick={() => props.onProviderPage(null)}
                   >
@@ -216,7 +231,7 @@ export function AgentCreation(props: AgentCreationProps): ReactElement {
                 {props.providers.nextAfter ? (
                   <Button
                     variant="subtle"
-                    disabled={props.pending || props.creationLocked}
+                    disabled={locked}
                     type="button"
                     onClick={() =>
                       props.providers.type === "loaded" &&
@@ -248,28 +263,32 @@ export function AgentCreation(props: AgentCreationProps): ReactElement {
                 {props.error}
               </Alert>
             ) : null}
-            <Group>
-              <Button
-                type="submit"
-                loading={props.pending}
-                disabled={
-                  !props.creationLocked &&
-                  (!props.name.trim() ||
-                    props.handle.status !== "available" ||
-                    props.imagesUnavailable ||
-                    !props.providerId ||
-                    props.providers.type !== "loaded" ||
-                    props.providers.stale ||
-                    !props.providers.items.some(
-                      (item) => item.id === props.providerId,
-                    ))
-                }
-              >
-                {props.creationLocked ? c.recoverCreation : c.create}
-              </Button>
-            </Group>
           </Stack>
         </Box>
+        <Group justify="space-between" className={classes.creationFooter}>
+          <Anchor href={listHref} size="sm" c="dimmed">
+            {c.cancel}
+          </Anchor>
+          <Button
+            type="submit"
+            className={classes.primary}
+            loading={props.pending}
+            disabled={
+              !props.creationLocked &&
+              (!props.name.trim() ||
+                props.handle.status !== "available" ||
+                props.imagesUnavailable ||
+                !props.providerId ||
+                props.providers.type !== "loaded" ||
+                props.providers.stale ||
+                !props.providers.items.some(
+                  (item) => item.id === props.providerId,
+                ))
+            }
+          >
+            {props.creationLocked ? c.recoverCreation : c.create}
+          </Button>
+        </Group>
       </Stack>
     </ApplicationShell>
   );

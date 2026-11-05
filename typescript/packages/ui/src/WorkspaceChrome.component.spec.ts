@@ -88,7 +88,7 @@ test("creation dialog owns explicit cancel, pending admission and uncertain-outc
     dialog.getByRole("button", { name: "Cancel", exact: true }),
   ).toBeEnabled();
   await expect(
-    dialog.getByRole("button", { name: "Create", exact: true }),
+    dialog.getByRole("button", { name: "Create team", exact: true }),
   ).toBeEnabled();
   await page.goto(
     "/iframe.html?id=navigation-workspace-chrome--creation-pending&viewMode=story",

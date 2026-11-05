@@ -76,9 +76,7 @@ test("owner manages one Computer while Admin observes independent cleanup invent
     );
     await owner.goto(`${assembly.generalUrl}/teams/my/agents`);
     const listUrl = owner.url();
-    await owner
-      .getByRole("link", { name: "Create Agent", exact: true })
-      .click();
+    await owner.getByRole("link", { name: "New Agent", exact: true }).click();
     await expect(owner).toHaveURL(/\/teams\/my\/new-agent$/);
     await owner
       .getByRole("textbox", { name: "Agent name", exact: true })
@@ -93,12 +91,25 @@ test("owner manages one Computer while Admin observes independent cleanup invent
       .getByRole("option", { name: "Acceptance Kubernetes", exact: true })
       .click({ timeout: 90_000 });
     await owner
+      .getByRole("group", { name: "Profile image", exact: true })
+      .getByRole("button", { name: /^corgi$/i })
+      .click();
+    await owner
+      .getByRole("group", { name: "Color", exact: true })
+      .getByRole("button", { name: "Rose", exact: true })
+      .click();
+    await owner
       .getByRole("button", { name: "Create Agent", exact: true })
       .click();
     await expect(
       owner.getByRole("heading", { name: "Acceptance companion", exact: true }),
     ).toBeVisible();
     await fact(owner, "Computer power", "Running");
+    await expect(
+      owner
+        .getByRole("main")
+        .locator('img[src$="/design-assets/03-corgi-216.webp"]'),
+    ).toHaveCount(1);
     await owner
       .getByRole("button", { name: "Computer details", exact: true })
       .click();
@@ -108,8 +119,20 @@ test("owner manages one Computer while Admin observes independent cleanup invent
     await owner
       .getByRole("button", { name: "Edit profile", exact: true })
       .click();
+    const profile = owner.getByRole("dialog", {
+      name: "Edit profile",
+      exact: true,
+    });
+    await profile
+      .getByRole("group", { name: "Profile image", exact: true })
+      .getByRole("button", { name: /^retriever$/i })
+      .click();
+    await profile
+      .getByRole("group", { name: "Color", exact: true })
+      .getByRole("button", { name: "Butter", exact: true })
+      .click();
     await owner
-      .getByRole("textbox", { name: "Agent name", exact: true })
+      .getByRole("textbox", { name: "Name", exact: true })
       .fill("Saved companion");
     await owner.getByRole("button", { name: "Save", exact: true }).click();
     await expect(
@@ -128,6 +151,11 @@ test("owner manages one Computer while Admin observes independent cleanup invent
         exact: true,
       }),
     ).toBeVisible();
+    await expect(
+      document
+        .getByRole("main")
+        .locator('img[src$="/design-assets/01-retriever-216.webp"]'),
+    ).toHaveCount(1);
     await document.close();
 
     await owner.getByRole("button", { name: "Stop", exact: true }).click();

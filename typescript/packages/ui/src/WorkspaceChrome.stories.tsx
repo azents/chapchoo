@@ -50,6 +50,8 @@ const base: WorkspaceChromeProps = {
     teamName: "Team name",
     teamHandle: "Handle",
     teamAddress: "Team address",
+    teamHandleHint:
+      "Proposed from the name. You can edit it before creating the team.",
     cancel: "Cancel",
     create: "Create",
   },

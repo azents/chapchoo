@@ -52,6 +52,7 @@ export function AgentProfile(props: AgentProfileProps): ReactElement {
   const content = draft ? (
     <Box
       component="form"
+      style={profileStyle(draft.paletteKey)}
       onSubmit={(event) => {
         event.preventDefault();
         props.onSaveProfile();
@@ -110,10 +111,11 @@ export function AgentProfile(props: AgentProfileProps): ReactElement {
             </Alert>
           ) : null}
           <TextInput
-            label={props.copy.name}
+            label={p.name}
             value={draft.name}
             onChange={(event) => props.onProfileName(event.currentTarget.value)}
             required
+            withAsterisk={false}
             maxLength={120}
             disabled={busy}
             data-autofocus
@@ -125,13 +127,16 @@ export function AgentProfile(props: AgentProfileProps): ReactElement {
             onChange={props.onProfilePalette}
             onRandom={props.onRandomProfilePalette}
           />
-          <TextInput
-            label={p.handle}
-            description={p.permanent}
-            value={agent.handle}
-            readOnly
-            variant="unstyled"
-          />
+          <Box
+            role="group"
+            aria-label={p.handle}
+            className={classes.handleNote}
+          >
+            <Text size="xs">@{agent.handle}</Text>
+            <Text size="xs" c="dimmed">
+              {p.handlePreserved}
+            </Text>
+          </Box>
         </Stack>
       </Box>
       {editor.type === "editing" && editor.error ? (
@@ -148,7 +153,12 @@ export function AgentProfile(props: AgentProfileProps): ReactElement {
         >
           {props.copy.cancel}
         </Button>
-        <Button type="submit" loading={busy} disabled={!draft.name.trim()}>
+        <Button
+          type="submit"
+          className={classes.primary}
+          loading={busy}
+          disabled={!draft.name.trim()}
+        >
           {p.save}
         </Button>
       </Group>
@@ -161,6 +171,8 @@ export function AgentProfile(props: AgentProfileProps): ReactElement {
     closeOnClickOutside: !busy,
     closeOnEscape: !busy,
     closeButtonProps: { disabled: busy, "aria-label": p.close },
+    overlayProps: { backgroundOpacity: 0.35, blur: 4 },
+    classNames: { header: classes.editorHeader, title: classes.editorTitle },
   };
   return (
     <>
@@ -207,6 +219,7 @@ export function AgentProfile(props: AgentProfileProps): ReactElement {
       {props.mobile ? (
         <Drawer
           {...dialog}
+          padding="xl"
           position="bottom"
           size="auto"
           styles={{

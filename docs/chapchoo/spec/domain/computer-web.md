@@ -13,7 +13,12 @@ for the private Agent list, separate creation form and Agent/Computer detail.
 The list uses Agent-oriented headings and
 empty copy. Profile image/name lead each saved-profile card; handle and Computer
 power/operation observations are subordinate, not an overall Agent health model.
-Cards use two columns on desktop and one on mobile with contained long names.
+Cards use large bundled artwork, the saved name/handle and an explicit Open
+affordance. Power/operation and Connector facts remain small, independent
+observations beneath the identity, not interchangeable readiness signals.
+Two columns are used when the content has room; the grid collapses before a
+desktop sidebar crowds the cards, and mobile uses one column with contained
+long names.
 The list has no routine Refresh button; existing automatic observation
 continues and a stale read exposes an explicit retry. Its Create Agent entry
 navigates to the dedicated form instead of embedding it. Every Agent has a required
@@ -81,8 +86,11 @@ alongside Team/name/Provider. Its authenticated SSR snapshot independently draws
 the initial image and palette once and hydrates those exact values. Bounded
 automatic handle candidates preserve manual edits and cancel stale resolutions;
 the backend still owns final uniqueness. See [profile contracts](agent-profile.md).
-Desktop places the live preview beside its fields; mobile stacks them. The
-explicit random-color action changes only the unlocked palette draft.
+Desktop places a portrait-oriented preview beside the image grid and fields;
+mobile stacks a horizontal preview above the compact image choices. Named
+palette swatches and an explicit random-color action change only the unlocked
+palette draft. The creation footer retains its primary action below the complete
+form; Provider eligibility and all frozen-request rules still govern admission.
 
 Creation retains its complete draft on rejection or unavailability and
 navigates to the accepted Agent's detail. A pending/lost creation response retains

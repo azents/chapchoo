@@ -93,6 +93,15 @@ web mount; reads and navigation never choose new random values.
 The selected palette supplies coordinated theme-aware surface, foreground and
 emphasis colors on those profiles without changing workspace appearance.
 
+Image choices are bounded catalogue-backed thumbnail buttons with a visible
+selected check; colors are six named circular swatches, not text dropdowns.
+Desktop uses a three-column image grid beside the preview. Mobile uses a compact
+single row where six touch targets fit, with a narrower-width grid fallback.
+Native button focus and Enter/Space activation retain keyboard access. Selection
+updates the controlled preview without submitting. Explicit random-color actions
+choose a different palette from the current draft; other input edits never call
+that action or rerandomize the image.
+
 Detail renders the saved profile and opens an independent controlled edit
 draft in a desktop dialog or mobile bottom sheet. Name/image/palette changes
 update its preview; the handle is read-only. Catalogue pages are

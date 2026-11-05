@@ -228,8 +228,20 @@ export function useAgentsContainer({
         editDraft({ paletteKey });
       }
     },
-    onRandomProfilePalette: () =>
-      editDraft({ paletteKey: randomAgentPalette() }),
+    onRandomProfilePalette: () => {
+      if (editor.type !== "editing" || saving.current) {
+        return;
+      }
+      try {
+        editDraft({ paletteKey: randomAgentPalette(editor.draft.paletteKey) });
+      } catch {
+        setEditor((current) =>
+          current.type === "editing"
+            ? { ...current, error: profileCopy.randomFailed }
+            : current,
+        );
+      }
+    },
     onImagePage: (after) => {
       if (!saving.current) {
         setImageAfter(after);

@@ -20,11 +20,29 @@ test("Exact unresolved creation remains recoverable after its Provider disappear
     page.getByRole("textbox", { name: profile.handle, exact: true }),
   ).toBeDisabled();
   await expect(
-    page.getByRole("combobox", { name: profile.image, exact: true }),
+    page
+      .getByRole("group", { name: profile.image, exact: true })
+      .getByRole("button", { name: "Corgi", exact: true }),
   ).toBeDisabled();
   await expect(
-    page.getByRole("combobox", { name: profile.palette, exact: true }),
+    page
+      .getByRole("group", { name: profile.palette, exact: true })
+      .getByRole("button", { name: profile.palettes.sage, exact: true }),
   ).toBeDisabled();
+  const images = page
+    .getByRole("group", { name: profile.image, exact: true })
+    .getByRole("button");
+  await expect(images).toHaveCount(6);
+  for (const button of await images.all()) {
+    await expect(button).toBeDisabled();
+  }
+  const palettes = page
+    .getByRole("group", { name: profile.palette, exact: true })
+    .getByRole("button");
+  await expect(palettes).toHaveCount(7);
+  for (const button of await palettes.all()) {
+    await expect(button).toBeDisabled();
+  }
 });
 test("creation keeps profile selections visible and blocks unverified handles", async ({
   page,
@@ -40,8 +58,10 @@ test("creation keeps profile selections visible and blocks unverified handles", 
       page.getByRole("textbox", { name: profile.handle, exact: true }),
     ).toHaveValue("my-agent");
     await expect(
-      page.getByRole("combobox", { name: profile.image, exact: true }),
-    ).toHaveValue("Corgi");
+      page
+        .getByRole("group", { name: profile.image, exact: true })
+        .getByRole("button", { name: "Corgi", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
   }
   await expect(page.getByText(profile.occupied, { exact: true })).toBeVisible();
 });
@@ -52,11 +72,15 @@ test("catalogue failure retains the chosen image and color without allowing a ne
     "/iframe.html?id=computers-agent-creation--catalogue-unavailable&viewMode=story",
   );
   await expect(
-    page.getByRole("combobox", { name: profile.image, exact: true }),
-  ).toHaveValue("Corgi");
+    page
+      .getByRole("group", { name: profile.image, exact: true })
+      .getByRole("button", { name: "Corgi", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
   await expect(
-    page.getByRole("combobox", { name: profile.palette, exact: true }),
-  ).toHaveValue("Sage");
+    page
+      .getByRole("group", { name: profile.palette, exact: true })
+      .getByRole("button", { name: profile.palettes.sage, exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
   await expect(
     page.getByRole("button", { name: copy.create, exact: true }),
   ).toBeDisabled();
@@ -74,7 +98,9 @@ test("profile creation renders the real selection and permanent-handle guidance"
     page.getByRole("button", { name: copy.create, exact: true }),
   ).toBeEnabled();
   await expect(
-    page.locator('img[src="/design-assets/03-corgi-216.webp"]'),
+    page
+      .getByRole("region", { name: profile.preview, exact: true })
+      .locator('img[src="/design-assets/03-corgi-216.webp"]'),
   ).toBeVisible();
   await page.screenshot({
     path: info.outputPath("creation-desktop.png"),
@@ -99,7 +125,9 @@ test("Korean profile creation keeps every field reachable on narrow screens", as
     page.getByText(localized.permanent, { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("combobox", { name: localized.image, exact: true }),
+    page
+      .getByRole("group", { name: localized.image, exact: true })
+      .getByRole("button", { name: "Corgi", exact: true }),
   ).toBeVisible();
   expect(
     await page.evaluate(
@@ -190,7 +218,7 @@ test("Empty Agent list keeps its Team-qualified creation entry", async ({
   ).toBeVisible();
   await expect(page.getByText(copy.noAgents, { exact: true })).toBeVisible();
   await expect(
-    page.getByRole("link", { name: copy.create, exact: true }),
+    page.getByRole("link", { name: profile.newAgent, exact: true }),
   ).toHaveAttribute("href", "/teams/my/new-agent");
 });
 test("saved profile cards lead with identity and stale reads have explicit recovery", async ({

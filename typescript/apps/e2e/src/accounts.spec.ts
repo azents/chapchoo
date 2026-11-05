@@ -226,7 +226,9 @@ test.describe("Assembled account and team acceptance", () => {
         { exact: true },
       ),
     ).toBeVisible();
-    await creation.getByRole("button", { name: "Create", exact: true }).click();
+    await creation
+      .getByRole("button", { name: "Create team", exact: true })
+      .click();
     await expect(
       administrator.getByRole("heading", { name: "Agents", exact: true }),
     ).toBeVisible();
@@ -339,7 +341,9 @@ test.describe("Assembled account and team acceptance", () => {
         exact: true,
       }),
     ).toBeVisible();
-    await creation.getByRole("button", { name: "Create", exact: true }).click();
+    await creation
+      .getByRole("button", { name: "Create team", exact: true })
+      .click();
     await expect(creation).not.toBeVisible();
     await expect(
       member

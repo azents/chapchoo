@@ -30,6 +30,32 @@ export type ApplicationShellContentProps = Omit<
   "appearance" | "brand"
 >;
 
+/** Page orientation follows the same already-authorized workspace chrome. */
+export function WorkspaceHeading({
+  title,
+  actions,
+}: {
+  title: string;
+  actions?: ReactNode;
+}): ReactNode {
+  const workspace = useContext(AppNavigationContext);
+  return (
+    <Box className={classes.workspaceHeading}>
+      {workspace ? (
+        <Text size="sm" c="dimmed" mb="sm">
+          {workspace.label}
+        </Text>
+      ) : null}
+      <Group justify="space-between" align="center" gap="lg">
+        <Title order={1} className={classes.workspaceTitle}>
+          {title}
+        </Title>
+        {actions}
+      </Group>
+    </Box>
+  );
+}
+
 /** Narrow account actions also remain available outside loaded business shells. */
 export function ApplicationAccountActions({
   identityLabel,

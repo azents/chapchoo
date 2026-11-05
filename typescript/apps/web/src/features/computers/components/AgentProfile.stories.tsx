@@ -3,6 +3,7 @@ import { computerCopy } from "@chapchoo/web-core/computer-messages";
 import { useState } from "react";
 import { creationCopy } from "../creationCopy";
 import { AgentProfile } from "./AgentProfile";
+import { reviewImages, reviewRetriever } from "./profileReviewFixture";
 import type { ProfileEditor } from "../types";
 import type { AgentProfileProps } from "./AgentProfile";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
@@ -42,7 +43,7 @@ const meta = {
       },
     },
     editor: { type: "closed" },
-    images: { items: [image], nextAfter: null },
+    images: { items: reviewImages, nextAfter: null },
     imageAfter: null,
     imagesUnavailable: false,
     onEditProfile: (): void => {},
@@ -61,6 +62,17 @@ type Story = StoryObj<typeof meta>;
 export const Saved: Story = {};
 export const Editing: Story = {
   args: { editor: { type: "editing", draft, error: null } },
+};
+export const ApprovedEditing: Story = {
+  args: {
+    profileCopy: creationCopy("ko"),
+    copy: computerCopy("ko-KR"),
+    editor: {
+      type: "editing",
+      draft: { name: "두부", image: reviewRetriever, paletteKey: "butter" },
+      error: null,
+    },
+  },
 };
 export const Saving: Story = { args: { editor: { type: "saving", draft } } };
 export const SaveFailure: Story = {
@@ -116,6 +128,30 @@ function InteractiveProfile(props: AgentProfileProps): ReactElement {
           );
         }
       }}
+      onProfileImage={(id) => {
+        const image = props.images.items.find((item) => item.id === id);
+        if (image) {
+          setEditor((current) =>
+            current.type === "editing"
+              ? { ...current, draft: { ...current.draft, image } }
+              : current,
+          );
+        }
+      }}
+      onRandomProfilePalette={() =>
+        setEditor((current) =>
+          current.type === "editing"
+            ? {
+                ...current,
+                draft: {
+                  ...current.draft,
+                  paletteKey:
+                    current.draft.paletteKey === "butter" ? "sage" : "butter",
+                },
+              }
+            : current,
+        )
+      }
       onSaveProfile={() =>
         setEditor((current) =>
           current.type === "editing"

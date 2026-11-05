@@ -19,6 +19,27 @@
   font-size: var(--mantine-font-size-xl);
   font-weight: 600;
 }
+.fieldLabel {
+  width: 100%;
+}
+.handleLabel {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--mantine-spacing-md);
+}
+.handleLabel > span:last-child {
+  font-size: var(--mantine-font-size-xs);
+  color: var(--chapchoo-color-muted);
+  font-weight: 400;
+}
+.createFields.createFields input {
+  border-color: var(--chapchoo-color-border);
+  background: var(--chapchoo-color-surfaceWarm);
+}
+.createFields.createFields input:focus {
+  border-color: var(--chapchoo-color-focus);
+}
 .createFields {
   padding: var(--mantine-spacing-xl);
 }

@@ -1,3 +1,4 @@
+import { NavigationIcon } from "@chapchoo/ui/NavigationIcon";
 import { agentPaletteKeys } from "@chapchoo/web-core/agent-profile";
 import {
   Box,
@@ -53,7 +54,7 @@ export function ProfileImageChoices(props: {
             />
             {image.id === props.selected ? (
               <span className={classes.picked} aria-hidden="true">
-                ✓
+                <NavigationIcon name="check" size="sm" />
               </span>
             ) : null}
           </UnstyledButton>
@@ -83,7 +84,8 @@ export function ProfilePaletteChoices(props: {
             disabled={props.disabled}
             onClick={props.onRandom}
           >
-            <span aria-hidden="true">⤨</span> {props.copy.randomPalette}
+            <NavigationIcon name="shuffle" size="sm" />{" "}
+            {props.copy.randomPalette}
           </Button>
         ) : null}
       </Group>
@@ -105,7 +107,9 @@ export function ProfilePaletteChoices(props: {
               component="span"
               style={{ background: profilePalette[key].swatch }}
             >
-              {props.selected === key ? "✓" : null}
+              {props.selected === key ? (
+                <NavigationIcon name="check" size="sm" />
+              ) : null}
             </Box>
           </UnstyledButton>
         ))}

@@ -40,6 +40,7 @@ export interface WorkspaceChromeProps {
     teamName: string;
     teamHandle: string;
     teamAddress: string;
+    teamHandleHint: string;
     cancel: string;
     create: string;
   };
@@ -216,24 +217,28 @@ export function WorkspaceChrome(props: WorkspaceChromeProps): ReactElement {
               onChange={(event) => props.onName(event.currentTarget.value)}
               required
               maxLength={120}
+              withAsterisk={false}
               disabled={props.busy}
               data-autofocus
             />
             <TextInput
-              label={props.copy.teamHandle}
-              labelProps={{ className: classes.handleLabel }}
-              rightSection={
-                <Text size="xs" c="dimmed">
-                  {props.handle.length}/16
-                </Text>
+              label={
+                <span className={classes.handleLabel}>
+                  <span>{props.copy.teamHandle}</span>
+                  <span aria-hidden="true">{props.handle.length}/16</span>
+                </span>
               }
-              rightSectionWidth={rem(56)}
+              labelProps={{ className: classes.fieldLabel }}
               value={props.handle}
               onChange={(event) => props.onHandle(event.currentTarget.value)}
               required
               maxLength={16}
+              withAsterisk={false}
               disabled={props.busy}
             />
+            <Text size="xs" c="dimmed">
+              {props.copy.teamHandleHint}
+            </Text>
             {props.handleStatus.message ? (
               <Text
                 size="xs"
@@ -279,7 +284,7 @@ export function WorkspaceChrome(props: WorkspaceChromeProps): ReactElement {
               loading={props.busy}
               disabled={!props.name.trim() || !props.handleStatus.available}
             >
-              {props.copy.create}
+              {props.copy.createTeam}
             </Button>
           </Group>
         </form>

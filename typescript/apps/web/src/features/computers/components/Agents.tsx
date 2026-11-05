@@ -1,6 +1,10 @@
 "use client";
-import { ApplicationShell } from "@chapchoo/ui/ApplicationShell";
+import {
+  ApplicationShell,
+  WorkspaceHeading,
+} from "@chapchoo/ui/ApplicationShell";
 import { ConfirmationDialog } from "@chapchoo/ui/ConfirmationDialog";
+import { NavigationIcon } from "@chapchoo/ui/NavigationIcon";
 import { PageFailure } from "@chapchoo/ui/PageFailure";
 import {
   agentPath,
@@ -19,6 +23,7 @@ import {
   SimpleGrid,
   Stack,
   Text,
+  Title,
 } from "@mantine/core";
 import { profileStyle } from "../profilePalette";
 import { AgentProfile } from "./AgentProfile";
@@ -53,19 +58,20 @@ export function Agents(props: AgentsProps): ReactElement {
             {c.back}
           </Anchor>
         ) : (
-          void 0
-        )
-      }
-      headingActions={
-        data.type === "list" ? (
-          <Button
-            component="a"
-            href={newAgentPath(props.basePath, data.teamHandle)}
-          >
-            <span aria-hidden="true">＋</span> {c.create}
-          </Button>
-        ) : (
-          void 0
+          <WorkspaceHeading
+            title={c.agents}
+            actions={
+              data.page.items.length ? (
+                <Button
+                  component="a"
+                  href={newAgentPath(props.basePath, data.teamHandle)}
+                >
+                  <NavigationIcon name="add" size="sm" />{" "}
+                  {props.profileCopy.newAgent}
+                </Button>
+              ) : null
+            }
+          />
         )
       }
       identityLabel={data.identity}
@@ -108,8 +114,35 @@ export function Agents(props: AgentsProps): ReactElement {
       ) : null}
       {data.type === "list" ? (
         <>
+          {data.page.items.length ? (
+            <Text size="xs" c="dimmed">
+              • {props.profileCopy.companions}
+            </Text>
+          ) : null}
           {data.page.items.length === 0 ? (
-            <Text c="dimmed">{c.noAgents}</Text>
+            <Stack align="center" gap="lg" className={classes.emptyState}>
+              <Image
+                src={`${props.basePath}/design-assets/01-retriever-216.webp`}
+                alt=""
+                w="9rem"
+                h="8rem"
+                fit="contain"
+              />
+              <Title order={2} size="h3" ta="center">
+                {c.noAgents}
+              </Title>
+              <Text size="sm" c="dimmed" ta="center">
+                {props.profileCopy.emptyHint}
+              </Text>
+              <Button
+                component="a"
+                href={newAgentPath(props.basePath, data.teamHandle)}
+                mt="sm"
+              >
+                <NavigationIcon name="add" size="sm" />{" "}
+                {props.profileCopy.newAgent}
+              </Button>
+            </Stack>
           ) : (
             <Box className={classes.cards}>
               {data.page.items.map((item) => (
@@ -135,10 +168,23 @@ export function Agents(props: AgentsProps): ReactElement {
                       <span className={classes.statusDot} aria-hidden="true" />
                       {c[item.computer.connector]}
                     </Box>
+                    <Text size="xs" className={classes.cardFacts}>
+                      <span
+                        aria-label={`${c.power}: ${c[item.computer.power]}`}
+                      >
+                        {c[item.computer.power]}
+                      </span>
+                      {" · "}
+                      <span
+                        aria-label={`${c.phase}: ${c[item.computer.phase]}`}
+                      >
+                        {c[item.computer.phase]}
+                      </span>
+                    </Text>
                     <Box className={classes.open}>
                       {props.profileCopy.open}
                       <span className={classes.openArrow} aria-hidden="true">
-                        →
+                        <NavigationIcon name="forward" size="sm" />
                       </span>
                     </Box>
                   </Box>
@@ -146,16 +192,30 @@ export function Agents(props: AgentsProps): ReactElement {
               ))}
             </Box>
           )}
-          <Group>
-            {data.after ? <Anchor href={listHref}>{c.first}</Anchor> : null}
-            {data.page.nextAfter ? (
+          {data.after || data.page.nextAfter ? (
+            <Group>
+              {data.after ? <Anchor href={listHref}>{c.first}</Anchor> : null}
+              {data.page.nextAfter ? (
+                <Anchor
+                  href={`${listHref}?after=${encodeURIComponent(data.page.nextAfter)}`}
+                >
+                  {c.next}
+                </Anchor>
+              ) : null}
+            </Group>
+          ) : null}
+          {data.page.items.length ? (
+            <Box className={classes.listFooter}>
               <Anchor
-                href={`${listHref}?after=${encodeURIComponent(data.page.nextAfter)}`}
+                size="sm"
+                c="dimmed"
+                href={newAgentPath(props.basePath, data.teamHandle)}
               >
-                {c.next}
+                <NavigationIcon name="add" size="sm" />{" "}
+                {props.profileCopy.addCompanion}
               </Anchor>
-            ) : null}
-          </Group>
+            </Box>
+          ) : null}
         </>
       ) : (
         <>
