@@ -32,6 +32,7 @@ Current scopes:
 | `python` | `python/**` |
 | `rust` | `rust/**` |
 | `typescript` | `typescript/**` |
+| `ui` | User-facing presentation, localized UI copy, interaction and design references; see `.claude/rules/ui-conventions.md` for current paths |
 | `web` | General/Admin web apps, shared web packages, and browser verification; see `.claude/rules/web-conventions.md` for current paths |
 | `infra` | `infra/**` |
 | `github-actions` | `.github/workflows/**` |
@@ -39,8 +40,11 @@ Current scopes:
 
 If no scope fits, **stop and ask the user** — adding a scope is a separate change (new entry in `SCOPE_CONFIG`, new index file in `.claude/rules/`, new directory in `.claude/conventions/`). When uncertain between two scopes, prefer the more specific one; when uncertain whether anything fits, prefer `global`.
 
-Use `web` for language-independent rendering, data ownership, and navigation
-contracts; use language scopes for language-specific constructs and tooling.
+Use `ui` for user-facing presentation, copy and interaction, including design
+references. Use `web` for language-independent rendering, data ownership and
+navigation contracts. Use language scopes for language-specific constructs and
+tooling. A rule about UI is not repo-wide merely because multiple UI surfaces
+share it.
 
 ## Step 2 — Pick a kebab-case filename
 

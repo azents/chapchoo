@@ -2,9 +2,12 @@
 description: Presentation and interaction conventions for product UI and design references.
 paths:
   - typescript/apps/web/src/**
+  - typescript/apps/web/messages/**
   - typescript/apps/admin-web/src/**
+  - typescript/apps/admin-web/messages/**
   - typescript/apps/e2e/**
   - typescript/packages/ui/**
+  - typescript/packages/web-core/**
   - typescript/packages/design-reference/**
   - DESIGN.md
 ---
