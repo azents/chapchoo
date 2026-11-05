@@ -8,16 +8,20 @@ import { useHandleDraft } from "@chapchoo/web-core/handle-draft";
 import { initialQuery } from "@chapchoo/web-core/page-state";
 import { shellCopy, teamHandleCopy } from "@chapchoo/web-core/shell-messages";
 import {
+  agentChatPath,
   agentsPath,
+  newAgentPath,
   routeTeamHandle,
   teamPath,
   teamRouteKey,
   workspacePreference,
 } from "@chapchoo/web-core/workspace";
-import { useMediaQuery } from "@mantine/hooks";
+import { useDocumentVisibility, useMediaQuery } from "@mantine/hooks";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/shared/rpc/client";
+import { navigationOwnerMatches } from "./navigationOwner";
+import type { AgentNavigationProps } from "./AgentNavigation";
 import type { InitialNavigation } from "./types";
 import type { NavigationItem } from "@chapchoo/ui/AppNavigation";
 import type { WorkspaceChoice } from "@chapchoo/ui/WorkspaceSelector";
@@ -40,6 +44,11 @@ export function useNavigation({
   const copy = shellCopy(display.value.language);
   const pathname = usePathname();
   const mobile = useMediaQuery("(max-width: 48em)");
+  const visibility = useDocumentVisibility();
+  const [agentPage, setAgentPage] = useState<{
+    teamId: string;
+    after: string | null;
+  } | null>(null);
   const [drawer, setDrawer] = useState(false);
   const [picker, setPicker] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -78,6 +87,26 @@ export function useNavigation({
           (team) =>
             team.id === (initial.type === "ready" ? initial.preferred : null),
         ) ?? contexts.find((team) => team.kind === teamKind.personal))) ?? null;
+  const admittedIdentity = navigationOwnerMatches(
+    initial,
+    identity?.id ?? null,
+  );
+  const teamId = admittedIdentity && routeTeam && selected ? selected.id : "";
+  const after = agentPage?.teamId === teamId ? agentPage.after : null;
+  const agentList = trpc.computers.list.useQuery(
+    { teamId, ...(after ? { after } : {}) },
+    {
+      enabled: identity !== null && Boolean(teamId) && visibility === "visible",
+      retry: false,
+      refetchInterval: 15_000,
+      refetchIntervalInBackground: false,
+      refetchOnWindowFocus: true,
+    },
+  );
+  const computerText = computerCopy(display.value.language);
+  const currentAgent = /^\/teams\/[^/]+\/agents\/([^/]+)(?:\/|$)/.exec(
+    route,
+  )?.[1];
   useEffect(() => {
     if (identity && selected && routeTeam === teamRouteKey(selected)) {
       document.cookie = workspacePreference(
@@ -108,20 +137,17 @@ export function useNavigation({
     });
   }
   const items: NavigationItem[] = [
-    {
-      key: "agents",
-      label: copy.agents,
-      icon: "agents",
-      href: selected ? agentsPath(basePath, selected) : `${basePath}/`,
-      active: /^\/teams\/[^/]+\/(?:agents|new-agent)(?:\/|$)/.test(route),
-    },
-    {
-      key: "invitations",
-      label: copy.invitations,
-      icon: "mail",
-      href: `${basePath}/invitations`,
-      active: route === "/invitations",
-    },
+    ...(!teamId
+      ? ([
+          {
+            key: "agents",
+            label: copy.agents,
+            icon: "agents",
+            href: selected ? agentsPath(basePath, selected) : `${basePath}/`,
+            active: /^\/teams\/[^/]+\/(?:agents|new-agent)(?:\/|$)/.test(route),
+          },
+        ] satisfies NavigationItem[])
+      : []),
     ...(selected?.kind === teamKind.collaborative
       ? [
           {
@@ -202,6 +228,29 @@ export function useNavigation({
     choices,
     current,
     items,
+    agentNavigation:
+      teamId && selected && identity
+        ? {
+            basePath,
+            copy: computerText,
+            titleHref: agentsPath(basePath, selected),
+            createHref: newAgentPath(basePath, selected),
+            createLabel: computerText.create,
+            items: agentList.data?.items ?? [],
+            selectedHandle:
+              currentAgent && validHandle(currentAgent) ? currentAgent : null,
+            agentHref: (handle) => agentChatPath(basePath, selected, handle),
+            status: agentList.isError
+              ? "error"
+              : agentList.data
+                ? "ready"
+                : "loading",
+            after,
+            nextAfter: agentList.data?.nextAfter ?? null,
+            onPage: (value) => setAgentPage({ teamId, after: value }),
+            onSelect: () => setDrawer(false),
+          }
+        : null,
     status: query.isError ? "error" : query.data ? "ready" : "loading",
     busy: create.isPending,
     mascotReplayLabel: computerCopy(display.value.language).replay,
@@ -274,6 +323,7 @@ export interface NavigationModel {
   choices: WorkspaceChoice[];
   current: WorkspaceChoice | null;
   items: NavigationItem[];
+  agentNavigation: AgentNavigationProps | null;
   status: "ready" | "loading" | "error";
   busy: boolean;
   mascotReplayLabel: string;

@@ -1,5 +1,6 @@
 import { computerCopy } from "@chapchoo/web-core/computer-messages";
 import { useState } from "react";
+import { AgentNavigation } from "@/shared/navigation/AgentNavigation";
 import { useComputerActions } from "../../containers/useComputerActions";
 import { creationCopy } from "../../creationCopy";
 import { computerDetailCopy } from "../../detailCopy";
@@ -136,19 +137,32 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
       navigation={null}
       accountControls={null}
       secondaryOverlay={false}
-      choices={[
-        agent,
-        {
-          ...agent,
-          id: "second",
-          handle: "bichon",
-          name: locale.startsWith("ko") ? "비숑" : "Bichon",
-          profileImage: { id: "bichon", assetKey: "02-bichon" },
-          paletteKey: "lilac",
-        },
-      ]}
-      choicesUnavailable={false}
-      onRetryChoices={() => {}}
+      agentNavigation={
+        <AgentNavigation
+          basePath=""
+          copy={c}
+          titleHref="/teams/my/agents"
+          createHref="/teams/my/new-agent"
+          createLabel={product.profileCopy.newAgent}
+          selectedHandle="corgi"
+          agentHref={(handle) => `/teams/my/agents/${handle}/chat`}
+          status="ready"
+          after={null}
+          nextAfter={null}
+          onPage={() => {}}
+          items={[
+            agent,
+            {
+              ...agent,
+              id: "second",
+              handle: "bichon",
+              name: locale.startsWith("ko") ? "비숑" : "Bichon",
+              profileImage: { id: "bichon", assetKey: "02-bichon" },
+              paletteKey: "lilac",
+            },
+          ]}
+        />
+      }
       showSample={mode !== "empty"}
       input={input}
       messages={messages}

@@ -18,9 +18,14 @@ against current membership on every app-entry request. It is not authorization.
 
 The General root layout server-loads selector context and hands it to one
 identity-scoped client query. The URL selects Agent context or Team settings;
-profile and invitation routes retain the validated recent context. Navigation
-items remain Agents, Invitations and collaborative-Team settings across list,
-detail, settings and profile. A Team switch navigates to only the current user's
+profile and invitation routes retain the validated recent context. Every Team
+route shares one owner-scoped Agent list in its left navigation, including list,
+creation, detail, chat and Team settings. The same list appears in the mobile
+Drawer, with current-Agent selection, creation and bounded next/first navigation.
+One selected-Team query owns that supplementary list; changing Team changes its
+query key and resets its paging selection. It refreshes while visible and
+authenticated without carrying another Team's list as placeholder data.
+Collaborative-Team settings remain alongside the list. A Team switch navigates to only the current user's
 private Agents in that Team. Desktop retains the independently scrolling sidebar;
 mobile hides it and uses the header's left Drawer. Its banner contains the
 current icon/name and an adjacent chevron, with a bounded content-width trigger.
@@ -46,7 +51,10 @@ focus and Escape/outside dismissal until closed; cancel restores the same
 navigation context without mutating or selecting. Successful ordinary creation selects the new
 Team after the server response. Validation/pending/uncertain errors retain their
 actual outcome; there is no automatic creation retry. Received invitation
-acceptance is reachable at `/invitations` and server-renders its required list.
+acceptance is reachable from Profile at `/profile/invitations` and server-renders
+its required list. It is not duplicated as a Team-navigation item. The outgoing
+invitation controls remain in Team settings. The former top-level invitation
+route has no compatibility redirect.
 Membership/role/ownership operations remain reachable through Team settings.
 Leave, kick and Team-delete confirmations disclose Agent and saved Computer-data
 deletion, without introducing archive or automatic rehoming.
@@ -76,7 +84,8 @@ General content uses `/teams/{teamHandle}` for Team settings,
 `/teams/{teamHandle}/agents/{agentHandle}` for detail and
 `/teams/{teamHandle}/agents/{agentHandle}/chat` for the Agent conversation surface.
 List cards and successful Agent creation enter chat; its character links to
-detail. The chat sidebar presents Agent choices, not conversation history, and
+detail. The chat sidebar uses the same Team Agent choices as other Team pages,
+not conversation history, and
 retains existing workspace/account destinations. Personal equivalents use
 the authenticated `my` alias; it cannot collide with a valid Team handle.
 Agent handle `new` remains valid because creation has a separate path.

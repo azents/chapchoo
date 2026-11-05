@@ -17,7 +17,7 @@ client-only initial loading states.
 
 Interactive queries receive the same initial data and selection for SSR and
 hydration, without mount/reconnect repeats. Later updates and invalidation remain
-client-owned. Received invitations are primary data at `/invitations`. Team
+client-owned. Received invitations are primary data at `/profile/invitations`. Team
 management invitations remain supplementary to the member/settings record.
 Workspace-selector data is supplementary on other feature routes; its failure
 does not replace independently available primary content with an empty success.

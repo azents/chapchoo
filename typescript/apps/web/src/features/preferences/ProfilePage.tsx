@@ -28,6 +28,12 @@ function useProfile({
       auth.state.type === "AUTHENTICATED" ? auth.state.user.email : "",
     accountHeading: text.account,
     emailLabel: text.email,
+    accountLinks: [
+      {
+        label: accountText("receivedInvitations"),
+        href: `${basePath}/profile/invitations`,
+      },
+    ],
     appearance,
     navigation: [
       { key: "home", label: text.home, href: `${basePath}/` },

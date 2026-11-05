@@ -125,6 +125,9 @@ test("owner manages one Computer while Admin observes independent cleanup invent
       name: "Agents and conversations",
       exact: true,
     });
+    await expect(
+      navigation.getByRole("link", { name: /Acceptance companion.*@/ }),
+    ).toHaveAttribute("href", new URL(chatUrl).pathname);
     const switchWorkspace = navigation.getByRole("button", {
       name: "Switch workspace",
       exact: true,
@@ -311,7 +314,7 @@ test("owner manages one Computer while Admin observes independent cleanup invent
       timeout: 90_000,
     });
     await expect(
-      owner.getByText("No Agents yet.", { exact: true }),
+      owner.getByRole("main").getByText("No Agents yet.", { exact: true }),
     ).toBeVisible();
     await expect(admin.getByText(/Cleanup confirmed/)).toBeVisible({
       timeout: 90_000,

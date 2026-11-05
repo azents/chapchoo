@@ -377,10 +377,11 @@ test.describe("Assembled account and team acceptance", () => {
       member.getByText(assembly.second.email, { exact: true }),
     ).toBeVisible();
     await login(second, assembly.generalUrl, assembly.second);
+    await second.goto(`${assembly.generalUrl}/profile`);
     await second
-      .locator("aside")
-      .getByRole("link", { name: "Invitations", exact: true })
+      .getByRole("link", { name: "Invitations for you", exact: true })
       .click();
+    await expect(second).toHaveURL(/\/profile\/invitations$/);
     await expect(
       second.getByRole("heading", { name: "Invitations for you", exact: true }),
     ).toBeVisible();

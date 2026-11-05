@@ -18,50 +18,6 @@
   flex-direction: column;
   min-height: 100%;
 }
-.sectionTitle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  color: var(--chapchoo-color-secondary);
-  font-size: var(--mantine-font-size-xs);
-  font-weight: 600;
-  padding-inline: var(--mantine-spacing-md);
-  margin: var(--mantine-spacing-xl) 0 var(--mantine-spacing-sm);
-}
-.sectionTitle a {
-  color: inherit;
-  font-size: inherit;
-}
-.agentChoice {
-  display: flex;
-  align-items: center;
-  gap: var(--mantine-spacing-sm);
-  width: 100%;
-  padding: var(--mantine-spacing-md);
-  border-radius: var(--mantine-radius-md);
-  color: inherit;
-  text-decoration: none;
-  font-size: var(--mantine-font-size-sm);
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-.agentChoice {
-  font-weight: 600;
-}
-.agentChoice small {
-  display: block;
-  font-size: var(--mantine-font-size-xs);
-  font-weight: 400;
-  color: var(--chapchoo-color-secondary);
-}
-.agentChoice[data-selected] {
-  background: var(--chapchoo-color-selected);
-}
-.choicePortrait {
-  width: 2.25rem;
-  height: 2.25rem;
-  flex-shrink: 0;
-}
 .navigationFoot {
   margin-top: auto;
   padding-top: var(--mantine-spacing-xl);
@@ -177,11 +133,6 @@
 }
 .statusLine span {
   max-width: 20rem;
-}
-.readOnly {
-  display: block;
-  font-size: var(--mantine-font-size-xs);
-  line-height: 1.5;
 }
 .power {
   border: 0;

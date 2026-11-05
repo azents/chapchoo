@@ -58,8 +58,13 @@ settings are added to the product.
 Computer status and controls remain real: completed running power, connected
 Connector and fresh observations permit local input; this does not establish
 harness readiness. Otherwise history stays readable and input is read-only.
-Start uses backend eligibility; refresh and the activity sheet reuse existing
-observation/control functions. Stop/restart retain captured-request consent.
+Start uses backend eligibility; visible authenticated views automatically observe
+Computer state at the existing bounded interval (five seconds while pending,
+fifteen seconds when settled), with focus refresh and no full-page reload.
+Read failures retain stale feedback and automatic observation rather than a
+manual Refresh control in the chat status bubble. The activity sheet retains
+existing control/detail functions. Read-only guidance appears in the disabled
+composer placeholder, not a second line in the status bubble. Stop/restart retain captured-request consent.
 Read failure/disconnection never becomes stopped power. Auth withdrawal replaces
 the entire protected conversation surface with the existing recovery view.
 Workspace selection, account settings, invitations and Team settings remain

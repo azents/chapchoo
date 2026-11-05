@@ -22,7 +22,7 @@ const items = [
     href: "/teams/my/agents",
     active: true,
   },
-  { key: "invitations", label: "Invitations", href: "/invitations" },
+  { key: "invitations", label: "Invitations", href: "/profile/invitations" },
 ];
 const base: WorkspaceChromeProps = {
   children: (

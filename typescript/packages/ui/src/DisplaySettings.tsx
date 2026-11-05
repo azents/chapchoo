@@ -1,6 +1,7 @@
 "use client";
 import {
   ActionIcon,
+  Anchor,
   Alert,
   Box,
   Button,
@@ -372,6 +373,7 @@ export interface DisplaySettingsPageProps extends DisplayFieldsProps {
   identityLabel: string;
   mascotReplayLabel: string;
   accountHeading?: string;
+  accountLinks?: readonly { label: string; href: string }[];
   emailLabel?: string;
   navigation: readonly NavigationItem[];
   logoutLabel: string;
@@ -407,6 +409,11 @@ export function DisplaySettingsPage(
             {props.emailLabel}
           </Text>
           <Text>{props.identityLabel}</Text>
+          {props.accountLinks?.map((link) => (
+            <Anchor key={link.href} href={link.href}>
+              {link.label}
+            </Anchor>
+          ))}
         </ContentSection>
       ) : null}
       <ContentSection title={props.heading}>

@@ -3,10 +3,8 @@ import { HeaderControlsContext } from "@chapchoo/ui/AppHeader";
 import { AppNavigationContext } from "@chapchoo/ui/AppNavigation";
 import { computerOperation } from "@chapchoo/web-core/computer-messages";
 import { useDisplay } from "@chapchoo/web-core/display-context";
-import { useDocumentVisibility } from "@mantine/hooks";
 import { useLocale } from "next-intl";
 import { useContext, useRef, useState } from "react";
-import { trpc } from "@/shared/rpc/client";
 import { useAgentsContainer } from "../../containers/useAgentsContainer";
 import { chatCopy } from "../copy";
 import { useChatFocus } from "./useChatFocus";
@@ -22,7 +20,6 @@ export function useChatContainer(props: ChatInput): ChatProps {
   const controlled = useChatFocus(baseProduct, secondaryOverlay);
   const product = controlled.product;
   const copy = chatCopy(useLocale());
-  const visibility = useDocumentVisibility();
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<{ id: number; text: string }[]>([]);
   const messageId = useRef(0);
@@ -33,14 +30,6 @@ export function useChatContainer(props: ChatInput): ChatProps {
     input,
     props.initial.type === "detail" ? props.initial.agent.id : "",
     product.access === "authorized",
-  );
-  const utils = trpc.useUtils();
-  const choices = trpc.computers.list.useQuery(
-    { teamId: props.initial.teamId },
-    {
-      enabled: product.access === "authorized" && visibility === "visible",
-      retry: false,
-    },
   );
   if (product.data.type !== "detail") {
     throw new Error("Chat requires an admitted Agent detail snapshot");
@@ -79,11 +68,7 @@ export function useChatContainer(props: ChatInput): ChatProps {
     navigation,
     accountControls,
     secondaryOverlay,
-    choices: choices.data?.items.some((item) => item.id === agent.id)
-      ? choices.data.items
-      : [agent, ...(choices.data?.items ?? [])],
-    choicesUnavailable: choices.isError,
-    onRetryChoices: () => void utils.computers.list.invalidate(),
+    agentNavigation: navigation?.content,
     showSample: true,
     input,
     messages,

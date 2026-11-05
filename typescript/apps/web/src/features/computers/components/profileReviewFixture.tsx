@@ -121,7 +121,7 @@ export function ProfileReviewFrame({
           key: "invitations",
           label: c.invitations,
           icon: "mail",
-          href: "/invitations",
+          href: "/profile/invitations",
         },
         ...(created
           ? [

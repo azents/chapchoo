@@ -368,7 +368,11 @@ function FeedbackChrome({
           href: "/teams/my/agents",
           active: true,
         },
-        { key: "invitations", label: c.invitations, href: "/invitations" },
+        {
+          key: "invitations",
+          label: c.invitations,
+          href: "/profile/invitations",
+        },
       ]}
       mascotReplayLabel="캐릭터 동작 다시 보기"
       openDrawer={() => setDrawer(true)}
