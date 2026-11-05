@@ -82,11 +82,16 @@ stream EOF or native failure stays unknown; no automatic delete replay occurs.
 The native watch cursor is transient SDK state, not an application generation or
 durable command log.
 
-The ordered watch is call-local. A bounded 256-entry UID-bound terminal-witness
-cache survives same-process reconnects, but not a process crash. The Provider
-also accepts exact committed absence only through DB-validated resource command
-authority. If necessary evidence was lost or expired, a new source remains
-uncertain; API 404 or a process timeout does not prove retirement.
+The ordered watch is call-local. Both GET observations and validated terminal
+watch events retain their exact witness immediately in the same bounded
+256-entry UID-bound cache, before deletion completion or report delivery can
+fail. A fresh current-source GET may combine that retained quiescence with exact
+Pod absence to finish retirement without replaying DELETE. Terminal evidence
+already observed before a later watch EOF/error remains usable; EOF/error alone
+never creates it. The cache survives same-process reconnects, but not a process
+crash. The Provider also accepts exact committed absence only through DB-validated
+resource command authority. If necessary evidence was lost or expired, a new
+source remains uncertain; API 404 or a process timeout does not prove retirement.
 
 The common Provider runtime's `Effects` owns started SDK tasks independently of
 call waiters and stream lifetime. It is no longer a Kubernetes-crate export;
