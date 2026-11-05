@@ -195,6 +195,7 @@ test("Computer read failure preserves the last-known detail and disables control
   ).toBeDisabled();
   await page.getByRole("button", { name: copy.details, exact: true }).click();
   const dialog = page.getByRole("dialog", { name: copy.details, exact: true });
+  await expect(dialog.getByRole("status")).toContainText(copy.stale);
   await expect(
     dialog.getByText(copy.lastKnown, { exact: false }),
   ).toBeVisible();

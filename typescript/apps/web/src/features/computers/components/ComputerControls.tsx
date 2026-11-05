@@ -1,6 +1,7 @@
 import { NavigationIcon } from "@chapchoo/ui/NavigationIcon";
 import {
   ActionIcon,
+  Alert,
   Box,
   Button,
   Group,
@@ -121,6 +122,11 @@ export function ComputerControls(props: Props): ReactElement {
         overlayProps={{ backgroundOpacity: 0.35, blur: 4 }}
       >
         <Stack gap="xl" pt="sm">
+          {props.stale ? (
+            <Alert color="yellow" role="status">
+              {c.stale}
+            </Alert>
+          ) : null}
           <Stack gap="xs">
             <Title order={3} size="h4">
               {computer.power === "running"

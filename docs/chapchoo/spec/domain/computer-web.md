@@ -122,7 +122,8 @@ current power is unknown, independent Computer and management connections, saved
 storage and the operation status. Short explanations distinguish each observation
 without implying harness readiness, file inspection or backup verification.
 Requested intent is in an optional troubleshooting disclosure. Closing or Escape
-returns focus; explicit refresh invalidates the same observations. No new query,
+returns focus; explicit refresh invalidates the same observations. A stale-read
+warning remains visible inside the modal rather than only behind its overlay. No new query,
 poller or mutation is created by opening details. Deletion and force removal sit in a
 separate destructive-action area, retaining the same backend eligibility and
 consent fences.
