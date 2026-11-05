@@ -115,6 +115,68 @@ test("owner manages one Computer while Admin observes independent cleanup invent
     await owner
       .getByRole("button", { name: "Create Agent", exact: true })
       .click();
+    await expect(owner).toHaveURL(/\/teams\/my\/agents\/[a-z0-9-]+\/chat$/);
+    const chatUrl = owner.url();
+    await owner.setViewportSize({ width: 390, height: 844 });
+    await owner
+      .getByRole("button", { name: "Agents and conversations", exact: true })
+      .click();
+    const navigation = owner.getByRole("dialog", {
+      name: "Agents and conversations",
+      exact: true,
+    });
+    const switchWorkspace = navigation.getByRole("button", {
+      name: "Switch workspace",
+      exact: true,
+    });
+    await switchWorkspace.click();
+    await expect(switchWorkspace).toHaveAttribute("aria-expanded", "true");
+    await owner.keyboard.press("Escape");
+    await expect(navigation).toBeVisible();
+    await expect(switchWorkspace).toHaveAttribute("aria-expanded", "false");
+    await navigation
+      .getByRole("button", { name: "Account and settings", exact: true })
+      .click();
+    await expect(
+      owner.getByRole("dialog", { name: "Account and settings", exact: true }),
+    ).toBeVisible();
+    await owner.keyboard.press("Escape");
+    await expect(navigation).toBeVisible();
+    await expect(
+      navigation.getByRole("button", {
+        name: "Account and settings",
+        exact: true,
+      }),
+    ).toBeFocused();
+    await navigation
+      .getByRole("button", { name: "Close", exact: true })
+      .click();
+    await expect(
+      owner.getByRole("button", {
+        name: "Agents and conversations",
+        exact: true,
+      }),
+    ).toBeFocused();
+    await owner.setViewportSize({ width: 1280, height: 900 });
+    await owner
+      .getByRole("button", { name: /Acceptance companion.*Activity/ })
+      .click();
+    await fact(owner, "Computer power", "Running");
+    await owner.getByRole("button", { name: "Stop", exact: true }).click();
+    await owner
+      .getByRole("dialog", { name: "Stop", exact: true })
+      .getByRole("button", { name: "Cancel", exact: true })
+      .click();
+    await owner
+      .getByRole("dialog", { name: "Activity", exact: true })
+      .getByRole("button", { name: "Close", exact: true })
+      .click();
+    await owner
+      .getByRole("link", {
+        name: "Acceptance companion · Agent details",
+        exact: true,
+      })
+      .click();
     await expect(
       owner.getByRole("heading", { name: "Acceptance companion", exact: true }),
     ).toBeVisible();
@@ -168,6 +230,17 @@ test("owner manages one Computer while Admin observes independent cleanup invent
         .locator('img[src$="/design-assets/01-retriever-216.webp"]'),
     ).toHaveCount(1);
     await document.close();
+    await owner.goto(listUrl);
+    await owner
+      .getByRole("link", { name: "Saved companion", exact: true })
+      .click();
+    await expect(owner).toHaveURL(chatUrl);
+    await owner
+      .getByRole("link", {
+        name: "Saved companion · Agent details",
+        exact: true,
+      })
+      .click();
 
     const shutdown = assembly.pauseComputerShutdown();
     try {

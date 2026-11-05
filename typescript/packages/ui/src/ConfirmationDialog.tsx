@@ -16,6 +16,7 @@ export interface ConfirmationDialogProps {
   onCancel: () => void;
   state?: ConfirmationState;
   destructive?: boolean;
+  onExitTransitionEnd?: () => void;
 }
 
 /** Controlled confirmation with app-owned mutation state and explicit consent. */
@@ -29,6 +30,7 @@ export function ConfirmationDialog({
   onCancel,
   state = { type: "READY" },
   destructive = false,
+  onExitTransitionEnd,
 }: ConfirmationDialogProps): ReactNode {
   const pending = state.type === "PENDING";
   return (
@@ -40,7 +42,8 @@ export function ConfirmationDialog({
       closeOnClickOutside={!pending}
       closeOnEscape={!pending}
       withCloseButton={false}
-      returnFocus
+      returnFocus={!onExitTransitionEnd}
+      onExitTransitionEnd={onExitTransitionEnd}
     >
       <Stack gap="lg">
         <Text size="sm" style={{ overflowWrap: "anywhere" }}>

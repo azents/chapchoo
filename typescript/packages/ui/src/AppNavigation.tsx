@@ -20,6 +20,8 @@ export interface AppNavigation {
   label: string;
   items: readonly NavigationItem[];
   header: ReactNode;
+  selector?: ReactNode;
+  overlayActive?: boolean;
   trigger: ReactNode;
   homeHref: string | null;
   environment?: string;

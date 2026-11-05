@@ -13,11 +13,13 @@ General/Admin authentication headings and desktop sidebar companions use shared
 small WebP URL, character selection and surrounding geometry; per-character alpha
 contact metadata anchors the transform inside the square canvas. Authentication
 remains visible on narrow screens. General shows the 72px companion at the lower
-left of its opened navigation Drawer; fallback sidebar compositions retain the
+left of its standard opened navigation Drawer; fallback sidebar compositions retain the
 48em hiding rule. The static `Mascot` primitive remains available for other artwork.
 
-Large Agent list portraits, detail identity art, creation/edit previews and the
-empty-list character also opt into the same gesture through `CharacterArtwork`.
+Large Agent list portraits, detail identity art, creation/edit previews, chat
+portraits/message artwork and the empty-list character also opt into the same
+gesture through `CharacterArtwork`. The chat Agent sidebar uses saved character
+art rather than an additional generic companion.
 Catalogue asset keys and saved profile choices remain unchanged. Small image
 selection thumbnails stay static. These large placements are decorative rather
 than replay controls: no nested button or extra keyboard stop is inserted into

@@ -243,7 +243,7 @@ test("saved profile cards lead with identity and stale reads have explicit recov
   ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Research companion", exact: true }),
-  ).toHaveAttribute("href", "/teams/my/agents/research");
+  ).toHaveAttribute("href", "/teams/my/agents/research/chat");
   await expect(
     page.getByRole("button", { name: copy.retryRead, exact: true }),
   ).toBeEnabled();

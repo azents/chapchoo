@@ -8,6 +8,7 @@ import {
   agentsPath,
   newAgentPath,
   agentPath,
+  agentChatPath,
 } from "../dist/workspace.js";
 const personal = { id: "personal", kind: 1 };
 const shared = { id: "shared", kind: 2 };
@@ -37,6 +38,10 @@ test("canonical Team and Agent routes are mount-aware and keep IDs out of paths"
   assert.equal(
     agentPath("/general", collaborative, "new"),
     "/general/teams/engineering/agents/new",
+  );
+  assert.equal(
+    agentChatPath("/general", collaborative, "research"),
+    "/general/teams/engineering/agents/research/chat",
   );
   for (const handle of ["id:uuid", "Invalid", "x", "../private"]) {
     assert.throws(() => teamPath("", handle));
