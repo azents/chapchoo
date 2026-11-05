@@ -36,10 +36,18 @@ Reservation recovery returns the same initial-allocation classification. Dispatc
 checks this execution fact even after the initial PVC has been confirmed, so a
 create-capable/start-incapable Provider can finish its initial preparation.
 
-`prepare_admitted_at` is a durable once-only admission fence, separate from
+`prepare_admitted_at` records preparation admission, separate from
 `initial_start_dispatch_at`, which records actual component dequeue. Its
 Computer-locked CAS revalidates the exact current source, request and execution.
-A reconnect cannot reset an admitted uncertain Prepare. The Control can release
+Docker preparation remains once-only across reconnects. Kubernetes may ensure
+the same unfinished reservation after a successful current-source Pod absence
+observation: the Pod has no acknowledged UID, desired state is Running, phase is
+Starting/Uncertain, and this is not the expected-old Stop/Restart execution.
+The same execution, Pod/Secret names, saved PVC and recovered Connector bootstrap
+session remain authoritative. Admission and dispatch timestamps are preserved;
+the peer still requires Starting and revalidates each native stage. Safe Blocked
+preparation retains owner RetryPreparation instead of this recovery path.
+The Control can release
 an exact current claim only when it proves rejection before queue acceptance;
 possible forwarding, cancellation and lost results retain the fence. A current
 Provider can report PreparationBlocked only for the current starting execution
@@ -66,6 +74,15 @@ Docker absence retains its own native adapter contract. Confirmed absence of an 
 unknown report: later present reports cannot adopt/recreate it. The external
 Computer Provider is responsible for verifying ownership/content and the
 supported substrate retirement boundary; this module performs no Kubernetes IO.
+
+A current-source absent Kubernetes Pod records stopped power even while an
+unfinished execution reservation remains. Failed lookup/disconnection remains
+Unknown. A UID-less Pod observation does not retire that reservation or create
+terminal non-allocation proof: its `absence_confirmed_at` remains unset unless
+the server already established safe terminal non-allocation. Repeated 404s
+therefore cannot rotate an ambiguous create into a different Pod name or grant
+saved-resource cleanup. Normal retirement requires the acknowledged Pod UID;
+terminal deletion retains its separately qualified never-admitted proof.
 
 Running completion requires a separately reported actual running execution plus
 current-connection present/UID evidence for its Pod/bootstrap Secret and original

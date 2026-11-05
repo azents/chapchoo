@@ -1226,7 +1226,155 @@ async fn exercise(
     };
     exercise_review_regressions(&store, &mut ids, connection, &current_source, &owner_digest)
         .await?;
+    exercise_named_kubernetes_recovery(&store, &mut ids, &current_source, &owner_digest)
+        .await
+        .map_err(|error| format!("Named Kubernetes recovery: {error}"))?;
     exercise_provider_directory(&store, &ids, connection, &provider_digest).await?;
+    Ok(())
+}
+
+async fn exercise_named_kubernetes_recovery(
+    store: &Store,
+    ids: &mut FixtureIds,
+    source: &ProviderSource<'_>,
+    actor: &chapchoo_crypto::SecretDigest,
+) -> Result<(), TestError> {
+    create_fixture(store, ids, actor, "named-pod").await?;
+    let request = scope(ids, "named-pod", "create-named-pod");
+    let reserved = store
+        .reserve_execution(source, request, &draft("named-pod"))
+        .await?;
+    let execution = reserved.execution_id.as_str();
+    let pod = reserved
+        .resources
+        .iter()
+        .find(|r| r.kind() == ManagedResourceKind::Pod)
+        .ok_or("Pod")?;
+    assert!(
+        store
+            .claim_execution_dispatch(source, request, execution)
+            .await?
+    );
+    store
+        .mark_start_dispatched(source, request, execution)
+        .await?;
+    let original = store
+        .delivery_snapshot(Some(actor), request, Some(execution))
+        .await?;
+    store
+        .report_lifecycle_issue(source, request, Some(execution), LifecyclePhase::Uncertain)
+        .await?;
+    for _ in 0..2 {
+        report(
+            store,
+            source,
+            request,
+            pod,
+            ResourceEvidence::DefinitivelyAbsent { expected_uid: None },
+        )
+        .await?;
+        let current = store
+            .delivery_snapshot(Some(actor), request, Some(execution))
+            .await?;
+        assert_eq!(
+            current.computer.current_execution_id.as_deref(),
+            Some(execution)
+        );
+        assert!(
+            current
+                .resources
+                .iter()
+                .find(|r| r.kind() == ManagedResourceKind::Pod)
+                .ok_or("Pod")?
+                .absence_confirmed_at
+                .is_none()
+        );
+        assert_eq!(
+            store
+                .agent(actor, ids.agent("named-pod"), now()?)
+                .await?
+                .computer
+                .power,
+            ObservedPower::Stopped
+        );
+        assert!(matches!(
+            store.retire_execution(source, request, execution).await,
+            Err(StoreError::InvalidTransition)
+        ));
+    }
+    assert!(
+        store
+            .claim_execution_dispatch(source, request, execution)
+            .await?
+    );
+    let recovered = store
+        .reserve_execution(source, request, &draft("different-draft"))
+        .await?;
+    assert_eq!(recovered.execution_id, execution);
+    assert!(
+        recovered
+            .resources
+            .iter()
+            .any(|r| r.native() == pod.native())
+    );
+    let after = store
+        .delivery_snapshot(Some(actor), request, Some(execution))
+        .await?;
+    assert_eq!(
+        after.computer.prepare_admitted_at,
+        original.computer.prepare_admitted_at
+    );
+    assert_eq!(
+        after.computer.initial_start_dispatch_at,
+        original.computer.initial_start_dispatch_at
+    );
+    report(store, source, request, pod, ResourceEvidence::Unknown).await?;
+    store
+        .report_lifecycle_issue(source, request, Some(execution), LifecyclePhase::Uncertain)
+        .await?;
+    assert_eq!(
+        store
+            .agent(actor, ids.agent("named-pod"), now()?)
+            .await?
+            .computer
+            .power,
+        ObservedPower::Unknown
+    );
+    assert!(matches!(
+        store
+            .claim_execution_dispatch(source, request, execution)
+            .await,
+        Err(StoreError::InvalidTransition)
+    ));
+    report(
+        store,
+        source,
+        request,
+        pod,
+        ResourceEvidence::DefinitivelyAbsent { expected_uid: None },
+    )
+    .await?;
+    assert!(
+        store
+            .claim_execution_dispatch(source, request, execution)
+            .await?
+    );
+    store
+        .report_preparation_blocked(source, request, execution)
+        .await?;
+    assert!(
+        store
+            .agent(actor, ids.agent("named-pod"), now()?)
+            .await?
+            .computer
+            .preparation_retry_available
+    );
+    assert!(matches!(
+        store
+            .claim_execution_dispatch(source, request, execution)
+            .await,
+        Err(StoreError::InvalidTransition)
+    ));
     Ok(())
 }
 
@@ -2131,7 +2279,7 @@ async fn exercise_stop_and_initial(
             &draft("stop-successor"),
         )
         .await?;
-    // Quiescent initial allocation without any observed UID may continue, while
+    // Unallocated preparation keeps its exact candidate and native names;
     // allocated/missing storage above remains irreplaceable.
     let initial = scope(ids, "unallocated", "create-unallocated");
     let never_created = store
@@ -2147,12 +2295,16 @@ async fn exercise_stop_and_initial(
         )
         .await?;
     }
-    store
-        .retire_execution(&reconnected, initial, &never_created.execution_id)
-        .await?;
+    assert!(matches!(
+        store
+            .retire_execution(&reconnected, initial, &never_created.execution_id)
+            .await,
+        Err(StoreError::InvalidTransition)
+    ));
     let resumed = store
         .reserve_execution(&reconnected, initial, &draft("initial-resumed"))
         .await?;
+    assert_eq!(resumed.execution_id, never_created.execution_id);
     assert!(
         resumed
             .resources

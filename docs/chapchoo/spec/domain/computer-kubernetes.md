@@ -66,7 +66,12 @@ Successful Pod GET absence means that the reserved Pod is absent. It requires
 no prior terminal event, process-local witness, or historical watch cursor.
 The Provider reports that absence under the current source/request/execution;
 Control records stopped power and converges a Running target by preparing a new
-execution with the original saved PVC. A failed GET, denied API request or
+execution with the original saved PVC when a previously allocated Pod is gone.
+An unfinished UID-less creation keeps its existing execution and native names.
+After fresh absence it can ensure those same names with the same bootstrap
+session; a late original POST and a recovery POST meet at the same name, and
+GET/409 collision validation converges onto one exact object. No historical
+terminal event is needed for either path. A failed GET, denied API request or
 disconnected Provider is not absence. A present object still requires the exact
 reserved ownership and original UID.
 

@@ -616,6 +616,7 @@ impl Worker {
                         && resource.execution_id.as_deref() == Some(&context.execution_id);
                     retired |= observed.presence == Presence::Absent
                         && resource.kind == wire::ResourceKind::Pod as i32
+                        && (resource.uid.is_some() || resource.absence_confirmed)
                         && resource.execution_id.as_deref() == Some(&context.execution_id);
                     unknown |= observed.presence == Presence::Unknown
                         && resource.kind == wire::ResourceKind::Pod as i32
