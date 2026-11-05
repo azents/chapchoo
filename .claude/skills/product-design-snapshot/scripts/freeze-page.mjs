@@ -126,16 +126,23 @@ export async function freezePage(page, output, surface = page) {
       html: clone.outerHTML,
       inlineStyles,
       base: document.baseURI,
-      sheets: [...document.styleSheets].map((sheet) => {
-        try {
-          return {
-            base: sheet.href || document.baseURI,
-            text: [...sheet.cssRules].map((rule) => rule.cssText).join("\n"),
-          };
-        } catch {
-          return { base: sheet.href, text: null };
-        }
-      }),
+      sheets: [...document.styleSheets, ...document.adoptedStyleSheets]
+        .filter((sheet) => !sheet.disabled)
+        .map((sheet) => {
+          try {
+            const rules = [...sheet.cssRules]
+              .map((rule) => rule.cssText)
+              .join("\n");
+            return {
+              base: sheet.href || document.baseURI,
+              text: sheet.media.mediaText
+                ? `@media ${sheet.media.mediaText}{${rules}}`
+                : rules,
+            };
+          } catch {
+            return { base: sheet.href, text: null };
+          }
+        }),
     };
   });
   const assets = new Map();
@@ -174,9 +181,14 @@ export async function freezePage(page, output, surface = page) {
     return assets.get(url);
   };
   const localize = async (text, base) => {
-    const matches = [...text.matchAll(/url\(\s*["']?([^\s"')]+)["']?\s*\)/g)];
+    const matches = [
+      ...text.matchAll(/url\(\s*(?:"([^"]*)"|'([^']*)'|([^\s)]+))\s*\)/g),
+    ];
     for (const match of matches)
-      text = text.replaceAll(match[0], `url('${await embed(match[1], base)}')`);
+      text = text.replaceAll(
+        match[0],
+        `url('${await embed(match[1] ?? match[2] ?? match[3], base)}')`,
+      );
     return text;
   };
   let stylesheet = "";
