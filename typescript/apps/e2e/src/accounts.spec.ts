@@ -2,7 +2,7 @@ import { safeMessage } from "@chapchoo/testenv/safety";
 import { test, expect } from "./fixture.js";
 import type { Assembly } from "./fixture.js";
 import type { FixtureUser } from "@chapchoo/testenv/safety";
-import type { Browser, BrowserContext, Page } from "@playwright/test";
+import type { Browser, BrowserContext, Page, Route } from "@playwright/test";
 
 const contexts: BrowserContext[] = [];
 const websiteErrors: string[] = [];
@@ -226,16 +226,42 @@ test.describe("Assembled account and team acceptance", () => {
         { exact: true },
       ),
     ).toBeVisible();
-    await creation
-      .getByRole("button", { name: "Create team", exact: true })
-      .click();
-    await expect(
-      administrator.getByRole("heading", { name: "Agents", exact: true }),
-    ).toBeVisible();
-    await administrator
-      .locator("aside")
-      .getByRole("button", { name: "Switch workspace", exact: true })
-      .click();
+    // The SSR destination can paint before its client event handlers attach.
+    // Hold only its scripts to exercise that real cross-document boundary.
+    let releaseScripts: () => void = () => {};
+    const scriptsReleased = new Promise<void>((resolve) => {
+      releaseScripts = resolve;
+    });
+    const holdGeneralScripts = async (route: Route): Promise<void> => {
+      if (
+        route.request().resourceType() === "script" &&
+        new URL(route.request().url()).origin ===
+          new URL(assembly.generalUrl).origin
+      ) {
+        await scriptsReleased;
+      }
+      await route.continue();
+    };
+    await administrator.route("**/*", holdGeneralScripts);
+    const switchWorkspace = administrator.locator("aside").getByRole("button", {
+      name: "Switch workspace",
+      exact: true,
+    });
+    try {
+      await creation
+        .getByRole("button", { name: "Create team", exact: true })
+        .click({ noWaitAfter: true });
+      await expect(
+        administrator.getByRole("heading", { name: "Agents", exact: true }),
+      ).toBeVisible();
+      await expect(switchWorkspace).toBeDisabled();
+    } finally {
+      releaseScripts();
+    }
+    await expect(switchWorkspace).toBeEnabled();
+    await administrator.unrouteAll({ behavior: "wait" });
+    await switchWorkspace.click();
+    await expect(switchWorkspace).toHaveAttribute("aria-expanded", "true");
     await administrator
       .getByRole("link", { name: "Administration", exact: true })
       .click();

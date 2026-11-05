@@ -41,7 +41,10 @@ or duplicate account/profile entry; the right-side account control remains.
 A closed touch trigger has no
 sticky hover fill; keyboard focus and current-route selection remain distinct.
 The common DropdownButton owns same-trigger toggle, outside dismissal and
-Escape/focus behavior. Only the current responsive selector is mounted;
+Escape/focus behavior. Its native trigger remains disabled in server HTML and
+through the initial hydration render until the client mount can handle input;
+the selected label and primary page content remain server-rendered. An early
+click cannot be accepted before the picker has an event owner. Only the current responsive selector is mounted;
 a hidden desktop overlay cannot intercept mobile activation.
 Shared navigation rows retain their 44px minimum height and use 14px inline
 padding, balancing the existing single-line text's visible vertical inset.

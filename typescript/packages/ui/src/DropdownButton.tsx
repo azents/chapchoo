@@ -1,7 +1,7 @@
 "use client";
 
 import { Popover } from "@mantine/core";
-import { useMergedRef } from "@mantine/hooks";
+import { useMergedRef, useMounted } from "@mantine/hooks";
 import { useRef } from "react";
 import { InteractiveSurface } from "./InteractiveSurface";
 import classes from "./DropdownButton.module.css";
@@ -23,6 +23,7 @@ export interface DropdownButtonProps {
 
 /** One mounted trigger owns a controlled, dismissible overlay. */
 export function DropdownButton(props: DropdownButtonProps): ReactElement {
+  const mounted = useMounted();
   const trigger = useRef<HTMLButtonElement>(null);
   const triggerRef = useMergedRef(trigger, props.triggerRef);
   return (
@@ -44,6 +45,7 @@ export function DropdownButton(props: DropdownButtonProps): ReactElement {
             .join(" ")}
           aria-label={props.accessibleLabel}
           aria-expanded={props.opened}
+          disabled={!mounted}
           onClick={(event) => {
             event.currentTarget.focus();
             props.onChange(!props.opened);
