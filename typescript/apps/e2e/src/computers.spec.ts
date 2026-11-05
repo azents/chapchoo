@@ -42,12 +42,26 @@ async function login(
   ).toBeVisible();
 }
 async function fact(page: Page, label: string, value: string): Promise<void> {
+  if (label === "Computer power") {
+    await expect(
+      page.getByText(`Computer · ${value}`, { exact: true }),
+    ).toBeVisible({ timeout: 90_000 });
+    return;
+  }
+  await page
+    .getByRole("button", { name: "Computer details", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", {
+    name: "Computer details",
+    exact: true,
+  });
   await expect(
-    page
+    dialog
       .getByText(label, { exact: true })
       .locator("..")
       .getByText(value, { exact: true }),
   ).toBeVisible({ timeout: 90_000 });
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
 }
 
 test("owner manages one Computer while Admin observes independent cleanup inventory", async ({
@@ -110,10 +124,7 @@ test("owner manages one Computer while Admin observes independent cleanup invent
         .getByRole("main")
         .locator('img[src$="/design-assets/03-corgi-216.webp"]'),
     ).toHaveCount(1);
-    await owner
-      .getByRole("button", { name: "Computer details", exact: true })
-      .click();
-    await fact(owner, "Computer Connector", "Connected");
+    await fact(owner, "Computer connection", "Connected");
     const detailUrl = owner.url();
     await expect(owner).toHaveURL(/\/teams\/my\/agents\/[a-z0-9-]+$/);
     await owner
@@ -166,7 +177,7 @@ test("owner manages one Computer while Admin observes independent cleanup invent
     await fact(owner, "Computer power", "Stopped");
     await owner.getByRole("button", { name: "Start", exact: true }).click();
     await fact(owner, "Computer power", "Running");
-    await fact(owner, "Computer Connector", "Connected");
+    await fact(owner, "Computer connection", "Connected");
     expect(assembly.savedAllocations).toBe(1);
 
     const admin = await operator.newPage();

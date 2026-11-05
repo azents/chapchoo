@@ -8,17 +8,17 @@ import { createMascotPlayback } from "./mascotPlayback";
 import type { RefCallback } from "react";
 
 /** Restart locally when visible; never catch up missed background cycles. */
-export function useMascotPlayback(
+export function useMascotPlayback<T extends HTMLElement = HTMLButtonElement>(
   playing: boolean,
   delayMs: number,
 ): {
-  ref: RefCallback<HTMLButtonElement>;
+  ref: RefCallback<T>;
   running: boolean;
   reducedMotion: boolean;
   replay: () => void;
   finish: () => void;
 } {
-  const { ref, entry } = useIntersection<HTMLButtonElement>({ threshold: 0.1 });
+  const { ref, entry } = useIntersection<T>({ threshold: 0.1 });
   const visibility = useDocumentVisibility();
   const reduced = useReducedMotion();
   const enabled =

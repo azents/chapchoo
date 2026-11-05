@@ -230,6 +230,11 @@ export function WorkspaceChrome(props: WorkspaceChromeProps): ReactElement {
               }
               labelProps={{ className: classes.fieldLabel }}
               value={props.handle}
+              autoCapitalize="none"
+              autoCorrect="off"
+              autoComplete="off"
+              spellCheck={false}
+              inputMode="text"
               onChange={(event) => props.onHandle(event.currentTarget.value)}
               required
               maxLength={16}
@@ -239,7 +244,7 @@ export function WorkspaceChrome(props: WorkspaceChromeProps): ReactElement {
             <Text size="xs" c="dimmed">
               {props.copy.teamHandleHint}
             </Text>
-            {props.handleStatus.message ? (
+            {props.handle && props.handleStatus.message ? (
               <Text
                 size="xs"
                 c={

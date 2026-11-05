@@ -1,4 +1,5 @@
 import type { CreationCopy } from "./creationCopy";
+import type { ComputerDetailCopy } from "./detailCopy";
 import type { ColorModeMenuProps } from "@chapchoo/ui/ColorModeMenu";
 import type {
   AgentPaletteKey,
@@ -32,6 +33,10 @@ export interface AgentsProps extends AgentsInput {
   access: "authorized" | "signedOut" | "unavailable";
   copy: ComputerCopy;
   profileCopy: CreationCopy;
+  detailCopy: ComputerDetailCopy;
+  detailsOpened: boolean;
+  onOpenDetails: () => void;
+  onCloseDetails: () => void;
   mobile: boolean;
   editor: ProfileEditor;
   images: Page<AgentProfileImage>;

@@ -80,6 +80,12 @@ test("creation dialog owns explicit cancel, pending admission and uncertain-outc
   await expect(
     dialog.getByRole("textbox", { name: "Handle", exact: true }),
   ).toHaveValue("design");
+  const handle = dialog.getByRole("textbox", { name: "Handle", exact: true });
+  await expect(handle).toHaveAttribute("autocapitalize", "none");
+  await expect(handle).toHaveAttribute("autocorrect", "off");
+  await expect(handle).toHaveAttribute("autocomplete", "off");
+  await expect(handle).toHaveAttribute("spellcheck", "false");
+  await expect(handle).toHaveAttribute("inputmode", "text");
   await expect(dialog.getByText("Team address", { exact: true })).toBeVisible();
   await expect(
     dialog.getByText("/general/teams/design", { exact: true }),

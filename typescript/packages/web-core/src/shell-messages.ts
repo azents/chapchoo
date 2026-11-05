@@ -53,8 +53,7 @@ const en: ShellCopy = {
   teamName: "Team name",
   teamHandle: "Handle",
   teamAddress: "Team address",
-  teamHandleHint:
-    "Proposed from the name. You can edit it before creating the team.",
+  teamHandleHint: "Automatically proposed. You can edit it.",
   cancel: "Cancel",
   close: "Close",
   create: "Create",
@@ -88,7 +87,7 @@ const ko: ShellCopy = {
   teamName: "팀 이름",
   teamHandle: "핸들",
   teamAddress: "팀 주소",
-  teamHandleHint: "이름에서 자동으로 만들어요. 3~16자로 직접 고칠 수도 있어요.",
+  teamHandleHint: "이름에서 자동 생성됩니다. 직접 수정할 수 있어요.",
   cancel: "취소",
   close: "닫기",
   create: "만들기",
@@ -194,11 +193,10 @@ export function teamHandleCopy(language: string): TeamHandleCopy {
   if (language.startsWith("ko"))
     return {
       ...common,
-      permanent: "핸들은 팀을 만든 뒤 변경할 수 없습니다.",
+      permanent: "생성 후 변경할 수 없습니다.",
       checking: "사용 가능 여부 확인 중…",
       available: "사용 가능",
-      invalid:
-        "영문 소문자·숫자·하이픈으로 3~16자를 입력하고, 처음과 끝은 영문 또는 숫자로 작성해 주세요.",
+      invalid: "소문자·숫자·하이픈 3~16자. 양끝에는 하이픈을 쓸 수 없습니다.",
       exhausted:
         "사용 가능한 핸들을 찾지 못했습니다. 다른 핸들을 입력해 주세요.",
       unavailable:

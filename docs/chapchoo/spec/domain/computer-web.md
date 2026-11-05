@@ -109,9 +109,21 @@ to a newer request. Cancel sends no mutation. Every write still revalidates curr
 owner/session/expected request on the backend. A lost response is not rollback or
 permission to replay an external effect.
 
-Computer power and ordinary controls remain immediately visible. Detailed
-intent/phase/management/Connector/saved-environment/observation facts live in an
-initially collapsed diagnostic disclosure. Deletion and force removal sit in a
+Computer power and Connector connectivity share one compact summary below the
+profile identity, with current operation shown separately when incomplete. One
+primary action changes between Start for stopped power and Stop otherwise;
+unknown power, stale reads, pending submission and backend eligibility still
+disable unsafe actions. The inapplicable opposite action and its ordinary
+requires-running/stopped explanation are not duplicated. Restart and details use
+named icon controls. Safe preparation retry retains its separate admission.
+
+Details opens a controlled modal with observed power/time, last-known power when
+current power is unknown, independent Computer and management connections, saved
+storage and the latest operation. Short explanations distinguish each observation
+without implying harness readiness, file inspection or backup verification.
+Requested intent is in an optional troubleshooting disclosure. Closing or Escape
+returns focus; explicit refresh invalidates the same observations. No new query,
+poller or mutation is created by opening details. Deletion and force removal sit in a
 separate destructive-action area, retaining the same backend eligibility and
 consent fences.
 

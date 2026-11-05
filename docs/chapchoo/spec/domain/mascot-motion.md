@@ -16,6 +16,14 @@ remains visible on narrow screens. General shows the 72px companion at the lower
 left of its opened navigation Drawer; fallback sidebar compositions retain the
 48em hiding rule. The static `Mascot` primitive remains available for other artwork.
 
+Large Agent list portraits, detail identity art, creation/edit previews and the
+empty-list character also opt into the same gesture through `CharacterArtwork`.
+Catalogue asset keys and saved profile choices remain unchanged. Small image
+selection thumbnails stay static. These large placements are decorative rather
+than replay controls: no nested button or extra keyboard stop is inserted into
+an Agent link or form. Visibility and reduced-motion cancellation share the same
+playback controller; list placements have a bounded initial stagger.
+
 The approved gesture extends by 5% for 1200ms toward 30 degrees clockwise from
 upward vertical, with a small damped return bounce and six-second automatic rest.
 A native named replay button accepts click/touch/Enter/Space only at rest; input

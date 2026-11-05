@@ -83,8 +83,8 @@ export function ProfilePaletteChoices(props: {
             variant="subtle"
             disabled={props.disabled}
             onClick={props.onRandom}
+            leftSection={<NavigationIcon name="shuffle" size="sm" />}
           >
-            <NavigationIcon name="shuffle" size="sm" />{" "}
             {props.copy.randomPalette}
           </Button>
         ) : null}

@@ -140,6 +140,11 @@ export function AgentCreation(props: AgentCreationProps): ReactElement {
               description={p.permanent}
               inputWrapperOrder={["label", "input", "description", "error"]}
               value={props.handle.draft.candidate}
+              autoCapitalize="none"
+              autoCorrect="off"
+              autoComplete="off"
+              spellCheck={false}
+              inputMode="text"
               maxLength={16}
               required
               disabled={locked}

@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAppearanceControl } from "@/shared/appearance/useAppearanceControl";
 import { trpc } from "@/shared/rpc/client";
 import { creationCopy } from "../creationCopy";
+import { computerDetailCopy } from "../detailCopy";
 import type {
   AgentsInput,
   AgentsProps,
@@ -39,6 +40,8 @@ export function useAgentsContainer({
     visibility === "visible" && auth.state.type === "AUTHENTICATED";
   const copy = computerCopy(useLocale());
   const profileCopy = creationCopy(useLocale());
+  const detailCopy = computerDetailCopy(useLocale());
+  const [detailsOpened, setDetailsOpened] = useState(false);
   const { value: display } = useDisplay();
   const appearance = useAppearanceControl();
   const utils = trpc.useUtils();
@@ -198,6 +201,10 @@ export function useAgentsContainer({
     data,
     copy,
     profileCopy,
+    detailCopy,
+    detailsOpened,
+    onOpenDetails: () => setDetailsOpened(true),
+    onCloseDetails: () => setDetailsOpened(false),
     mobile,
     editor,
     images: images.data ?? { items: [], nextAfter: null },

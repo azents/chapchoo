@@ -82,7 +82,7 @@ const korean: CreationCopy = {
   chooseProfile: "프로필 이미지와 색상도 골라 주세요.",
   emptyHint: "새로운 에이전트와 함께 시작해 보세요.",
   handle: "핸들",
-  permanent: "핸들은 생성한 뒤 변경할 수 없습니다.",
+  permanent: "생성 후 변경할 수 없습니다.",
   image: "프로필 이미지",
   palette: "에이전트 색상",
   edit: "프로필 편집",
@@ -98,8 +98,7 @@ const korean: CreationCopy = {
   open: "열기",
   checking: "사용 가능 여부 확인 중…",
   available: "사용 가능",
-  invalid:
-    "영문 소문자·숫자·하이픈으로 3~16자를 입력하고, 처음과 끝은 영문 또는 숫자로 작성해 주세요.",
+  invalid: "소문자·숫자·하이픈 3~16자. 양끝에는 하이픈을 쓸 수 없습니다.",
   occupied: "이미 사용 중인 핸들입니다.",
   exhausted: "사용 가능한 핸들을 찾지 못했습니다. 다른 핸들을 입력해 주세요.",
   unavailable:
