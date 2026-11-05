@@ -27,6 +27,7 @@ const meta = {
       profileImage: image,
       paletteKey: "sage",
       computer: {
+        operation: "start",
         intent: "running",
         power: "running",
         lastKnownPower: "running",

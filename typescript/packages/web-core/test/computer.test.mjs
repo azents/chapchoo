@@ -128,6 +128,7 @@ test("profile catalogue projects opaque IDs and safe logical assets in bounded p
 test("Computer DTO preserves unknown power separately from last-known evidence", () => {
   const result = agent(wire);
   assert.equal(result.teamId, "team");
+  assert.equal(result.computer.operation, "start");
   assert.equal(result.computer.power, "unknown");
   assert.equal(result.computer.lastKnownPower, "running");
   assert.equal(result.computer.management, "disconnected");
@@ -160,6 +161,7 @@ test("Malformed required Computer projections fail rather than inventing a state
     { ...wire, teamId: "" },
     { ...wire, teamId: void 0 },
     { ...wire, computer: { ...computer, power: 0 } },
+    { ...wire, computer: { ...computer, action: 0 } },
     { ...wire, computer: { ...computer, phase: 99 } },
     {
       ...wire,

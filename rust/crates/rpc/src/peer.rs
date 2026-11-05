@@ -252,7 +252,7 @@ pub(crate) fn validate_provider(
                 || computer.current_execution_id.as_deref() != Some(&context.execution_id)
                 || execution.retired_at.is_some()
                 || execution.initial_allocation != prepare.initial_allocation
-                || (computer.current_action == "RESTART"
+                || (matches!(computer.current_action.as_str(), "STOP" | "RESTART")
                     && computer.expected_old_execution_id.as_deref() == Some(&context.execution_id))
             {
                 return Err(invalid());
@@ -309,7 +309,9 @@ pub(crate) fn validate_provider(
                 && !(computer.desired_state == "RUNNING"
                     && computer.current_phase == "UNCERTAIN"
                     && retire.require_terminal)
-                && !(computer.current_action == "RESTART"
+                && !((computer.current_action == "RESTART"
+                    || (computer.current_action == "STOP"
+                        && matches!(computer.current_phase.as_str(), "RETIRING" | "UNCERTAIN")))
                     && computer.expected_old_execution_id.as_deref() == Some(&context.execution_id))
             {
                 return Err(invalid());

@@ -74,7 +74,7 @@ pub(crate) async fn execution(
             // substrate evidence, not permission to finish the new intent.
             if state.desired_state != "RUNNING"
                 || state.current_phase == "RETIRING"
-                || (state.current_action == "RESTART"
+                || (matches!(state.current_action.as_str(), "STOP" | "RESTART")
                     && state.expected_old_execution_id.as_deref() == Some(&computer.execution_id))
             {
                 return Ok(());

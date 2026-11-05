@@ -16,6 +16,7 @@ import { useAppearanceControl } from "@/shared/appearance/useAppearanceControl";
 import { trpc } from "@/shared/rpc/client";
 import { creationCopy } from "../creationCopy";
 import { computerDetailCopy } from "../detailCopy";
+import { useComputerActions } from "./useComputerActions";
 import type {
   AgentsInput,
   AgentsProps,
@@ -58,10 +59,6 @@ export function useAgentsContainer({
   const updateProfile = trpc.computers.updateProfile.useMutation({
     retry: false,
   });
-  const [confirmation, setConfirmation] = useState<{
-    action: OwnerAction | "force";
-    requestId: string;
-  } | null>(null);
   const [submission, setSubmission] = useState<
     { type: "ready" } | { type: "pending" } | { type: "error"; message: string }
   >({ type: "ready" });
@@ -179,7 +176,7 @@ export function useAgentsContainer({
         action,
       });
       utils.computers.get.setData({ agentId }, updated);
-      setConfirmation(null);
+      actions.complete();
       setSubmission({ type: "ready" });
       void refresh();
     } catch {
@@ -189,6 +186,11 @@ export function useAgentsContainer({
       busy.current = false;
     }
   }
+  const actions = useComputerActions({
+    pending: submission.type === "pending",
+    submit: (action, requestId) => void submitAction(action, requestId),
+    reset: () => setSubmission({ type: "ready" }),
+  });
   return {
     initial,
     access:
@@ -264,29 +266,16 @@ export function useAgentsContainer({
     stale: initial.type === "list" ? list.isError : detail.isError,
     pending: submission.type === "pending",
     error: submission.type === "error" ? submission.message : null,
-    confirmation: confirmation?.action ?? null,
+    confirmation: actions.confirmation?.action ?? null,
     onAction: (value) => {
       if (data.type !== "detail") {
         return;
       }
       const requestId = data.agent.computer.requestId;
-      if (value === "start") {
-        void submitAction(value, requestId);
-      } else {
-        setSubmission({ type: "ready" });
-        setConfirmation({ action: value, requestId });
-      }
+      actions.select(value, requestId);
     },
-    onConfirm: () => {
-      if (confirmation) {
-        void submitAction(confirmation.action, confirmation.requestId);
-      }
-    },
-    onCancel: () => {
-      if (!busy.current) {
-        setConfirmation(null);
-      }
-    },
+    onConfirm: actions.confirm,
+    onCancel: actions.cancel,
     onRefresh: () => {
       if (auth.state.type === "SIGNED_OUT") {
         window.location.assign(`${basePath}/login`);

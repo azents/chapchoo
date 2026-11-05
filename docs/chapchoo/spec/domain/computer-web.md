@@ -111,9 +111,12 @@ permission to replay an external effect.
 
 Computer power and Connector connectivity share one compact summary below the
 profile identity, with current operation shown separately when incomplete. One
-primary action changes between Start for stopped power and Stop otherwise;
-unknown power, stale reads, pending submission and backend eligibility still
-disable unsafe actions. The inapplicable opposite action and its ordinary
+primary action changes between Start for stopped power or an incomplete Stop,
+and Stop otherwise. Start during shutdown updates the persistent Running target;
+it does not claim shutdown is complete or create a concurrent execution. The
+accepted target is shown as starting after shutdown and remains visible after
+reload. Unknown power alone does not block this backend-admitted target update;
+stale reads, pending submission and backend eligibility still disable unsafe actions. The inapplicable opposite action and its ordinary
 requires-running/stopped explanation are not duplicated. Restart and details use
 named icon controls. Safe preparation retry retains its separate admission.
 Restart's independent blocking reason remains available through its hover,
@@ -123,7 +126,11 @@ Details opens a controlled modal with observed power/time, last-known power when
 current power is unknown, independent Computer and management connections, saved
 storage and the operation status. Short explanations distinguish each observation
 without implying harness readiness, file inspection or backup verification.
-Requested intent is in an optional troubleshooting disclosure. Closing or Escape
+Operation copy names shutdown, startup, restart or deletion verification rather
+than a generic unconfirmed result. Guidance describes the consequence without
+converting unknown physical power into completion. The already-existing RPC
+action supplies this distinction in both General and read-only Admin projections.
+Requested intent is also available in an optional troubleshooting disclosure. Closing or Escape
 returns focus; explicit refresh invalidates the same observations. A stale-read
 warning remains visible inside the modal rather than only behind its overlay. No new query,
 poller or mutation is created by opening details. Deletion and force removal sit in a
@@ -136,8 +143,9 @@ and captured predecessor, retains the same Agent/Computer/execution/allocated
 saved environment, and never exposes internal execution IDs to ordinary views.
 
 Stop/restart warns that processes are interrupted and only saved files are
-preserved. Normal deletion exposes the deleting intent until managed cleanup is
-confirmed. Force removal warns that Computer/data may remain while independent
+preserved. Normal deletion consent states that the Agent, Computer and saved data
+are deleted, without describing cleanup ordering. Deleting intent remains visible
+until managed cleanup is confirmed. Force removal warns that Computer/data may remain while independent
 cleanup intent persists. Five-minute start delay comes from the backend's actual
 dispatch interval, never a browser timer or reset on refresh. Confirmed normal
 removal eventually yields owner not-found and navigation to the list; a failed

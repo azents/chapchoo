@@ -1,6 +1,7 @@
 "use client";
 import { ApplicationShell } from "@chapchoo/ui/ApplicationShell";
 import { PageFailure } from "@chapchoo/ui/PageFailure";
+import { computerOperation } from "@chapchoo/web-core/computer-messages";
 import {
   Alert,
   Anchor,
@@ -114,7 +115,10 @@ export function Computers(props: ComputersProps): ReactElement {
                     {[
                       { label: c.intent, value: c[item.intent] },
                       { label: c.power, value: c[item.power] },
-                      { label: c.phase, value: c[item.phase] },
+                      {
+                        label: c.phase,
+                        value: computerOperation(item, c).label,
+                      },
                       { label: c.management, value: c[item.management] },
                       { label: c.connector, value: c[item.connector] },
                       { label: c.saved, value: c[item.saved] },

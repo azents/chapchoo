@@ -169,14 +169,35 @@ test("owner manages one Computer while Admin observes independent cleanup invent
     ).toHaveCount(1);
     await document.close();
 
-    await owner.getByRole("button", { name: "Stop", exact: true }).click();
-    await owner
-      .getByRole("dialog")
-      .getByRole("button", { name: "Confirm", exact: true })
-      .click();
-    await fact(owner, "Computer power", "Stopped");
-    await owner.getByRole("button", { name: "Start", exact: true }).click();
+    const shutdown = assembly.pauseComputerShutdown();
+    try {
+      await owner.getByRole("button", { name: "Stop", exact: true }).click();
+      await owner
+        .getByRole("dialog", { name: "Stop", exact: true })
+        .getByRole("button", { name: "Confirm", exact: true })
+        .click();
+      await shutdown.started;
+      await owner.getByRole("button", { name: "Start", exact: true }).click();
+      await expect(
+        owner.getByRole("button", {
+          name: "Starting after shutdown",
+          exact: true,
+        }),
+      ).toBeDisabled();
+      await owner.reload();
+      await expect(
+        owner.getByRole("button", {
+          name: "Starting after shutdown",
+          exact: true,
+        }),
+      ).toBeDisabled();
+      expect(assembly.executionAllocations).toBe(1);
+      expect(assembly.savedAllocations).toBe(1);
+    } finally {
+      shutdown.release();
+    }
     await fact(owner, "Computer power", "Running");
+    expect(assembly.executionAllocations).toBe(2);
     await fact(owner, "Computer connection", "Connected");
     expect(assembly.savedAllocations).toBe(1);
 

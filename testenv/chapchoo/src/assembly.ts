@@ -469,6 +469,14 @@ export class Assembly {
   get savedAllocations(): number {
     return this.kubernetes?.savedAllocations ?? 0;
   }
+  get executionAllocations(): number {
+    return this.kubernetes?.executionAllocations ?? 0;
+  }
+  pauseComputerShutdown(): { started: Promise<void>; release: () => void } {
+    if (!this.kubernetes)
+      throw new Error("Computer Provider fixture is not started");
+    return this.kubernetes.pauseNextShutdown();
+  }
   async seedSecondUser(): Promise<void> {
     await seedRegisteredUser(
       `127.0.0.1:${this.generalPort}`,

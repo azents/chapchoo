@@ -1,4 +1,5 @@
 import { NavigationIcon } from "@chapchoo/ui/NavigationIcon";
+import { computerOperation } from "@chapchoo/web-core/computer-messages";
 import {
   ActionIcon,
   Alert,
@@ -33,11 +34,14 @@ type Props = Pick<
 export function ComputerControls(props: Props): ReactElement {
   const { computer } = props.agent;
   const { copy: c, detailCopy: d } = props;
-  const primary = computer.power === "stopped" ? "start" : "stop";
+  const stopping =
+    computer.operation === "stop" && computer.phase !== "completed";
+  const primary = computer.power === "stopped" || stopping ? "start" : "stop";
   const admission = computer.actions.find((item) => item.action === primary);
   const restart = computer.actions.find((item) => item.action === "restart");
   const locked = props.pending || props.stale;
   const status = c[computer.power];
+  const operation = computerOperation(computer, c);
   const blockedReason = admission?.reason;
   return (
     <>
@@ -55,7 +59,7 @@ export function ComputerControls(props: Props): ReactElement {
             <span className={classes.statusDot} aria-hidden="true" />
             <Text size="xs">{c[computer.connector]}</Text>
             {computer.phase !== "completed" ? (
-              <Text size="xs">· {c[computer.phase]}</Text>
+              <Text size="xs">· {operation.label}</Text>
             ) : null}
           </Group>
         </Stack>
@@ -63,12 +67,16 @@ export function ComputerControls(props: Props): ReactElement {
           <Button
             variant="light"
             disabled={
-              locked || computer.power === "unknown" || !admission?.available
+              locked ||
+              (computer.power === "unknown" && !stopping) ||
+              !admission?.available
             }
             onClick={() => props.onAction(primary)}
             leftSection={<NavigationIcon name={primary} size="sm" />}
           >
-            {c[primary]}
+            {stopping && computer.intent === "running"
+              ? c.startAfterStop
+              : c[primary]}
           </Button>
           <Tooltip
             label={
@@ -109,7 +117,13 @@ export function ComputerControls(props: Props): ReactElement {
           </Tooltip>
         </Group>
       </Group>
+      {operation.hint ? (
+        <Text size="sm" c="dimmed">
+          {operation.hint}
+        </Text>
+      ) : null}
       {blockedReason &&
+      !(blockedReason === "conflicting" && (operation.hint || stopping)) &&
       blockedReason !== "requiresRunning" &&
       blockedReason !== "requiresStopped" ? (
         <Text size="sm" c="dimmed">
@@ -193,8 +207,13 @@ export function ComputerControls(props: Props): ReactElement {
               <Text size="sm" fw={500}>
                 {d.operation}
               </Text>
-              <Text size="sm">{c[computer.phase]}</Text>
+              <Text size="sm">{operation.label}</Text>
             </Group>
+            {operation.hint ? (
+              <Text size="sm" c="dimmed">
+                {operation.hint}
+              </Text>
+            ) : null}
           </Stack>
           <Box component="details">
             <Box component="summary" className={classes.diagnosticSummary}>
