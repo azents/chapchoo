@@ -16,8 +16,14 @@ Computers with a cursor and one concurrent convergence permit. A source/current
 request check precedes each operation; these checks are not an atomic substrate
 transaction.
 
-A short Computer-locked CAS claims `prepare_admitted_at` once before dispatch.
-Reconnect does not replay an accepted/uncertain Prepare. `initial_start_dispatch_at`
+A short Computer-locked admission records `prepare_admitted_at` before dispatch.
+Docker does not replay an accepted/uncertain Prepare. Kubernetes can ensure the
+same unfinished native names after this pass successfully observes a UID-less
+Pod absent; the Store rechecks current source/request/execution, Running intent,
+Starting/Uncertain phase and current absence, and excludes the expected-old
+Stop/Restart execution. It preserves the existing admission and dispatch times.
+A failed Observe cannot enter this branch using an older absent row.
+`initial_start_dispatch_at`
 is recorded separately at actual component dequeue; delayed-start display uses
 that actual event. An authorized new execution clears both markers only after
 retirement and original-storage gates; retrying an existing reservation does not.
@@ -27,10 +33,14 @@ Each pass observes reserved resources before deciding. Unexpected definitive
 terminal evidence under Running intent requests exact retirement with
 `require_terminal`; the Provider freshly reobserves and rejects live or unknown
 Pods. A successor is reserved only after committed retirement and original-PVC
-proof. The SDK retains at most 256 exact UID-bound terminal witnesses across
-same-process reconnects. They do not survive a process crash. Bare 404, node loss,
-foreign UIDs and missing original storage never authorize recreation. Exact
-committed absence remains independently storage-validated at command dequeue.
+proof. Successful Kubernetes Pod GET 404 is sufficient current absence: it
+retires the old execution and permits the Running target to create a successor
+with the existing PVC. This works after Provider reconnect or restart without
+terminal-event history. Allocated Kubernetes blocked work is still observed so
+disappearance can converge; a safely rejected unallocated preparation on either
+substrate retains its explicit retry path.
+Failed lookup, foreign present UIDs and missing original storage are distinct.
+Exact committed absence remains independently storage-validated at command dequeue.
 
 Delete sorts the complete reserved inventory Pod, bootstrap Secret, then PVC,
 and sends sequential frames of at most 32 resources under one original deadline.
@@ -40,7 +50,7 @@ Already committed current-source absence can finish confirmation independently
 of a lost final response.
 
 Real local Control streams and supported-client synthetic HTTP exercise automatic
-create/stop/start/restart, missing-Pod uncertainty, terminal restoration with one
+create/stop/start/restart, missing-Pod restoration, terminal restoration with one
 original PVC, and deletion across more than 32 historical resources, including
 an eleven-second nonfinal Secret finalizer that outlives the ten-second caller.
 Fresh convergence completes only the never-submitted remainder and the fixture

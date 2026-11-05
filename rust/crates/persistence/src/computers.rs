@@ -430,9 +430,7 @@ impl AgentComputerRow {
             return Ok(ObservedPower::Unknown);
         }
         match (raw, self.current_execution_id.is_some()) {
-            (ObservedPower::Running, false) | (ObservedPower::Stopped, true) => {
-                Ok(ObservedPower::Unknown)
-            }
+            (ObservedPower::Running, false) => Ok(ObservedPower::Unknown),
             _ => Ok(raw),
         }
     }

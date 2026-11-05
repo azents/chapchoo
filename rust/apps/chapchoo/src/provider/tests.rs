@@ -139,6 +139,10 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
     let delayed_finalizer = finalizer.clone();
     let deletions = Arc::new(Mutex::new(BTreeMap::<String, usize>::new()));
     let deleted = deletions.clone();
+    let lose_pod_response = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let lose_next = lose_pod_response.clone();
+    let pending_pod = Arc::new(Mutex::new(None::<(String, Value)>));
+    let pending_create = pending_pod.clone();
     let current_owner = user.token.digest();
     let current_team = team.id.clone();
     let service = tower::service_fn(move |request: HttpRequest<Body>| {
@@ -151,6 +155,8 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
         let deletions = deletions.clone();
         let actor = current_owner.clone();
         let team_id = current_team.clone();
+        let lose_next = lose_next.clone();
+        let pending_create = pending_create.clone();
         async move {
             let method = request.method().clone();
             let path = request.uri().path().to_owned();
@@ -158,6 +164,11 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
                 .uri()
                 .query()
                 .is_some_and(|q| q.contains("watch=true"));
+            let watch_name = request.uri().query().and_then(|query| {
+                url::form_urlencoded::parse(query.as_bytes())
+                    .find(|(key, _)| key == "fieldSelector")
+                    .and_then(|(_, value)| value.strip_prefix("metadata.name=").map(str::to_owned))
+            });
             let bytes = request
                 .into_body()
                 .collect()
@@ -222,16 +233,37 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
                     "{path}/{}",
                     response["metadata"]["name"].as_str().unwrap_or("")
                 );
-                if let Ok(mut objects) = objects.lock() {
-                    objects.insert(key, response.clone());
+                if kind == "Pod" && lose_next.swap(false, std::sync::atomic::Ordering::SeqCst) {
+                    if let Ok(mut pending) = pending_create.lock() {
+                        *pending = Some((key, response));
+                    }
+                    code = 500;
+                    json!({"apiVersion":"v1","kind":"Status","status":"Failure","reason":"InternalError","code":500})
+                } else {
+                    if kind == "Pod"
+                        && let Ok(mut pending) = pending_create.lock()
+                        && let Some((name, pod)) = pending.take()
+                        && let Ok(mut objects) = objects.lock()
+                    {
+                        objects.insert(name, pod);
+                    }
+                    if let Ok(mut objects) = objects.lock() {
+                        if let std::collections::btree_map::Entry::Vacant(slot) = objects.entry(key) {
+                            slot.insert(response.clone());
+                            code = 201;
+                        } else {
+                            code = 409;
+                            response = json!({"apiVersion":"v1","kind":"Status","status":"Failure","reason":"AlreadyExists","code":409});
+                        }
+                    }
+                    response
                 }
-                code = 201;
-                response
             } else if watch {
                 let pod = objects
                     .lock()
                     .ok()
-                    .and_then(|objects| objects.values().find(|v| v["kind"] == "Pod").cloned());
+                    .and_then(|objects| objects.values().find(|v| v["kind"] == "Pod"
+                        && v["metadata"]["name"].as_str() == watch_name.as_deref()).cloned());
                 if let Some(mut pod) = pod {
                     pod["status"] = json!({"phase":"Succeeded","containerStatuses":[{"name":"computer-connector","image":"fixture","imageID":"fixture-id","ready":false,"restartCount":0,"state":{"terminated":{"containerID":"containerd://fixture","exitCode":0,"reason":"Completed","finishedAt":"2026-11-02T00:00:00Z"}}}]});
                     json!({"type":"DELETED","object":pod})
@@ -613,33 +645,12 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
         .find(|r| r.kind() == chapchoo_domain::ManagedResourceKind::Pod && r.execution_id.as_deref() == Some(&previous))
         .ok_or("Current Pod")?;
     let pod_path = format!("/api/v1/namespaces/{}/pods/{}", pod.native().scope().as_str(), pod.native().name());
-    let mut disappeared = substrate
-        .lock()
-        .map_err(|_| "Substrate lock")?
-        .remove(&pod_path)
-        .ok_or("Synthetic current Pod")?;
+    substrate.lock().map_err(|_| "Substrate lock")?.remove(&pod_path).ok_or("Synthetic current Pod")?;
     let submissions = created.lock().map_err(|_| "Calls lock")?.len();
     connections.reconcile_once(&delivery).await?;
     connections.reconcile_once(&delivery).await?;
-    assert_eq!(
-        created.lock().map_err(|_| "Calls lock")?.len(),
-        submissions,
-        "A bare 404 must not authorize recreation"
-    );
-    assert_eq!(
-        app.agent(&user.token.digest(), &agent.id, AcceptanceTime::System)
-            .await?
-            .computer
-            .power,
-        chapchoo_domain::ObservedPower::Unknown
-    );
-    disappeared["status"] = json!({"phase":"Succeeded","containerStatuses":[{"name":"computer-connector","image":"fixture","imageID":"fixture-id","ready":false,"restartCount":0,"state":{"terminated":{"containerID":"containerd://fixture","exitCode":0,"reason":"Completed","finishedAt":"2026-11-02T00:00:00Z"}}}]});
-    substrate
-        .lock()
-        .map_err(|_| "Substrate lock")?
-        .insert(pod_path, disappeared);
-    connections.reconcile_once(&delivery).await?;
-    connections.reconcile_once(&delivery).await?;
+    assert!(created.lock().map_err(|_| "Calls lock")?.len() > submissions,
+        "A fresh 404 must converge the running target");
     let restored = app
         .delivery_snapshot(
             Some(&user.token.digest()),
@@ -673,6 +684,83 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
             .count(),
         1
     );
+    // A lost Stop completion followed by Start converges from current API absence.
+    let old = restored.computer.current_execution_id.as_deref().ok_or("Restored execution")?;
+    let old_pod = restored.resources.iter().find(|r|
+        r.kind() == chapchoo_domain::ManagedResourceKind::Pod
+            && r.execution_id.as_deref() == Some(old)).ok_or("Restored Pod")?;
+    app.request_lifecycle(
+        &user.token.digest(), &agent.id,
+        &chapchoo_service::LifecycleRequest {
+            request_id: "target-stop".into(), expected_request_id: "restart".into(),
+            action: chapchoo_domain::LifecycleAction::Stop,
+        }, AcceptanceTime::System,
+    ).await?;
+    app.report_lifecycle_issue(
+        &source,
+        ComputerRequest { computer_id: &agent.computer.id, request_id: "target-stop" },
+        Some(old), chapchoo_domain::LifecyclePhase::Uncertain,
+    ).await?;
+    app.request_lifecycle(
+        &user.token.digest(), &agent.id,
+        &chapchoo_service::LifecycleRequest {
+            request_id: "target-start".into(), expected_request_id: "target-stop".into(),
+            action: chapchoo_domain::LifecycleAction::Start,
+        }, AcceptanceTime::System,
+    ).await?;
+    substrate.lock().map_err(|_| "Substrate lock")?.remove(
+        &format!("/api/v1/namespaces/{}/pods/{}", old_pod.native().scope().as_str(), old_pod.native().name())
+    ).ok_or("Stopped Pod")?;
+    connections.reconcile_once(&delivery).await?;
+    connections.reconcile_once(&delivery).await?;
+    let converged = app.agent(&user.token.digest(), &agent.id, AcceptanceTime::System).await?;
+    assert_eq!(converged.computer.power, chapchoo_domain::ObservedPower::Running);
+    assert_eq!(converged.computer.current_request_id, "target-stop");
+    assert_eq!(created.lock().map_err(|_| "Calls lock")?.iter().filter(|kind| kind.as_str() == "PersistentVolumeClaim").count(), 1);
+    // An accepted create with a lost response converges the same names/session.
+    let CreationOutcome::Present(ambiguous) = app.create_cloud_agent(
+        &user.token.digest(),
+        &chapchoo_service::CreateCloudAgent {
+            team_id: team.id.clone(), request_id: "ambiguous-create".into(),
+            provider_id: assigned_provider.clone(), name: "Ambiguous".into(),
+            profile: chapchoo_service::CreateAgentProfile {
+                handle: "ambiguous-pod".into(), image_id: images[0].id.clone(),
+                palette_key: "sage".into(),
+            },
+        }, AcceptanceTime::System,
+    ).await? else { return Err("Ambiguous Agent".into()); };
+    let unallocated = ComputerRequest { computer_id: &ambiguous.computer.id, request_id: "ambiguous-create" };
+    let reserved = app.reserve_execution(&source, unallocated, &chapchoo_domain::NativeScope::kubernetes("fixture".into())?).await?;
+    app.claim_execution_dispatch(&source, unallocated, &reserved.execution_id).await?;
+    app.report_preparation_blocked(&source, unallocated, &reserved.execution_id).await?;
+    let before_blocked = created.lock().map_err(|_| "Calls")?.len();
+    connections.reconcile_once(&delivery).await?;
+    let blocked = app.agent(&user.token.digest(), &ambiguous.id, AcceptanceTime::System).await?;
+    assert_eq!(blocked.computer.progress.phase, chapchoo_domain::LifecyclePhase::Blocked);
+    assert!(blocked.computer.preparation_retry_available);
+    assert_eq!(created.lock().map_err(|_| "Calls")?.len(), before_blocked);
+    app.retry_preparation(&user.token.digest(), &ambiguous.id, "retry-ambiguous", "ambiguous-create", AcceptanceTime::System).await?;
+    lose_pod_response.store(true, std::sync::atomic::Ordering::SeqCst);
+    connections.reconcile_once(&delivery).await?;
+    let ambiguous_scope = ComputerRequest { computer_id: &ambiguous.computer.id, request_id: "retry-ambiguous" };
+    let uncertain = app.delivery_snapshot(Some(&user.token.digest()), ambiguous_scope, None).await?;
+    let candidate = uncertain.computer.current_execution_id.as_deref().ok_or("Candidate")?;
+    assert_eq!(uncertain.computer.current_phase, "UNCERTAIN");
+    assert!(pending_pod.lock().map_err(|_| "Pending Pod")?.is_some());
+    connections.reconcile_once(&delivery).await?;
+    let recovered = app.delivery_snapshot(Some(&user.token.digest()), ambiguous_scope, None).await?;
+    assert_eq!(recovered.computer.current_execution_id.as_deref(), Some(candidate));
+    assert_eq!(recovered.computer.current_phase, "COMPLETED");
+    assert_eq!(recovered.computer.prepare_admitted_at, uncertain.computer.prepare_admitted_at);
+    assert_eq!(recovered.computer.initial_start_dispatch_at, uncertain.computer.initial_start_dispatch_at);
+    assert_eq!(substrate.lock().map_err(|_| "Substrate")?.values().filter(|object|
+        object["kind"] == "Pod" && object["metadata"]["annotations"]["chapchoo.io/computer"].as_str() == Some(&ambiguous.computer.id)).count(), 1);
+    app.request_lifecycle(&user.token.digest(), &ambiguous.id, &chapchoo_service::LifecycleRequest {
+        request_id: "delete-ambiguous".into(), expected_request_id: "retry-ambiguous".into(),
+        action: chapchoo_domain::LifecycleAction::Delete,
+    }, AcceptanceTime::System).await?;
+    connections.reconcile_once(&delivery).await?;
+    assert!(app.agent(&user.token.digest(), &ambiguous.id, AcceptanceTime::System).await.is_err());
     // Accumulate more than one cleanup frame of historical execution resources.
     for _ in 0..16 {
         let snapshot = app
@@ -680,7 +768,7 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
                 Some(&user.token.digest()),
                 ComputerRequest {
                     computer_id: &agent.computer.id,
-                    request_id: "restart",
+                    request_id: "target-stop",
                 },
                 None,
             )
@@ -713,7 +801,7 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
             Some(&user.token.digest()),
             ComputerRequest {
                 computer_id: &agent.computer.id,
-                request_id: "restart",
+                request_id: "target-stop",
             },
             None,
         )
@@ -739,7 +827,7 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
         &agent.id,
         &chapchoo_service::LifecycleRequest {
             request_id: "delete".into(),
-            expected_request_id: "restart".into(),
+            expected_request_id: "target-stop".into(),
             action: chapchoo_domain::LifecycleAction::Delete,
         },
         AcceptanceTime::System,

@@ -253,14 +253,14 @@ test("owner manages one Computer while Admin observes independent cleanup invent
       await owner.getByRole("button", { name: "Start", exact: true }).click();
       await expect(
         owner.getByRole("button", {
-          name: "Starting after shutdown",
+          name: "Restarting",
           exact: true,
         }),
       ).toBeDisabled();
       await owner.reload();
       await expect(
         owner.getByRole("button", {
-          name: "Starting after shutdown",
+          name: "Restarting",
           exact: true,
         }),
       ).toBeDisabled();

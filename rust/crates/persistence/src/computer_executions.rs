@@ -499,8 +499,8 @@ impl Store {
         })
     }
 
-    /// One conservative prepare admission per accepted lifecycle request. A
-    /// lost dispatch/ACK does not clear this marker or authorize create replay.
+    /// Docker admits preparation once. Kubernetes may ensure the same unallocated
+    /// native names after current-source absence, preserving dispatch history.
     pub async fn claim_execution_dispatch(
         &self,
         source: &ProviderSource<'_>,
@@ -510,13 +510,45 @@ impl Store {
         validate_source(source)?;
         validate_scope(scope)?;
         operation!(self, |connection, dialect| {
-            let _ = current_source!(connection, dialect, source);
+            let (provider, _) = current_source!(connection, dialect, source);
             let current = current_computer!(connection, dialect, source, scope);
+            let resources = inventory!(connection, dialect, scope.computer_id);
+            let recover_named = provider.substrate()?.kind()
+                == chapchoo_domain::ProviderKind::Kubernetes
+                && matches!(current.current_phase.as_str(), "STARTING" | "UNCERTAIN")
+                && resources.iter().any(|r| {
+                    r.kind() == ManagedResourceKind::Pod
+                        && r.execution_id.as_deref() == Some(execution)
+                        && r.identity.is_none()
+                        && r.presence == ResourcePresence::Absent
+                        && r.source_connection_id.as_deref() == Some(source.connection_id)
+                });
             if current.desired_state != "RUNNING"
-                || current.current_phase != "STARTING"
+                || (current.current_phase != "STARTING" && !recover_named)
                 || current.current_execution_id.as_deref() != Some(execution)
+                || (matches!(current.current_action.as_str(), "STOP" | "RESTART")
+                    && current.expected_old_execution_id.as_deref() == Some(execution))
             {
                 return Err(StoreError::InvalidTransition);
+            }
+            if recover_named {
+                let state = diesel::sql_query(
+                    dialect.query("SELECT * FROM computer_executions WHERE id=? AND computer_id=?"),
+                )
+                .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::Execution, execution)?)
+                .bind::<IdentitySql, _>(EntityId::from_dto(
+                    EntityKind::Computer,
+                    scope.computer_id,
+                )?)
+                .get_result::<Execution>(connection)
+                .await?;
+                if state.retired_at.is_some() {
+                    return Err(StoreError::InvalidTransition);
+                }
+                let now = db_now!(connection, dialect);
+                diesel::sql_query(dialect.query("UPDATE computers SET current_phase='STARTING',prepare_admitted_at=COALESCE(prepare_admitted_at,?) WHERE id=? AND current_request_id=? AND current_execution_id=?"))
+                    .bind::<BigInt,_>(now).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Computer,scope.computer_id)?).bind::<Text,_>(scope.request_id).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Execution,execution)?).execute(connection).await?;
+                return Ok(true);
             }
             let now = db_now!(connection, dialect);
             Ok(diesel::sql_query(dialect.query("UPDATE computers SET prepare_admitted_at=? WHERE id=? AND current_request_id=? AND current_execution_id=? AND prepare_admitted_at IS NULL"))
@@ -866,11 +898,15 @@ impl Store {
                 ResourceEvidence::Unknown => ("UNKNOWN", resource.identity.as_ref()),
             };
             let columns = identity_columns(identity)?;
+            // An empty unallocated Pod name is current absence, not proof that
+            // an earlier accepted create can never commit.
+            let confirm_absence = presence == "ABSENT"
+                && (report.native.kind() != ManagedResourceKind::Pod || identity.is_some());
             diesel::sql_query(dialect.query("UPDATE computer_resources SET resource_uid=COALESCE(resource_uid,?),docker_container_id=COALESCE(docker_container_id,?),docker_volume_metadata=COALESCE(docker_volume_metadata,?),presence=?,observed_at=?,source_connection_id=?,absence_confirmed_at=CASE WHEN ? THEN NULL ELSE COALESCE(absence_confirmed_at,?) END WHERE computer_id=? AND resource_kind=? AND native_scope_kind=? AND native_scope=? AND name=?"))
                 .bind::<Nullable<Text>,_>(columns.uid).bind::<Nullable<Text>,_>(columns.container_id).bind::<Nullable<Text>,_>(columns.volume_metadata)
                 .bind::<Text,_>(presence).bind::<BigInt,_>(now).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Connection,source.connection_id)?)
                 .bind::<Bool,_>(resource.identity.is_none() && presence=="PRESENT")
-                .bind::<Nullable<BigInt>,_>(if presence == "ABSENT" { Some(now) } else { None })
+                .bind::<Nullable<BigInt>,_>(if confirm_absence { Some(now) } else { None })
                 .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Computer,scope.computer_id)?).bind::<Text,_>(report.native.kind().as_str()).bind::<Text,_>(report.native.scope().kind_str()).bind::<Text,_>(report.native.scope().as_str()).bind::<Text,_>(report.native.name()).execute(connection).await?;
             if report.native.kind().role() == ResourceRole::SavedEnvironment {
                 let saved = match presence {
@@ -880,6 +916,17 @@ impl Store {
                 };
                 diesel::sql_query(dialect.query("UPDATE computers SET saved_environment=?,environment_source_connection_id=?,environment_observed_at=? WHERE id=?"))
                     .bind::<Text,_>(saved).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Connection,source.connection_id)?).bind::<BigInt,_>(now).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Computer,scope.computer_id)?).execute(connection).await?;
+            }
+            if report.native.kind() == ManagedResourceKind::Pod
+                && current.current_execution_id.as_deref() == report.execution_id
+            {
+                diesel::sql_query(dialect.query("UPDATE computers SET observed_power=?,power_observed_at=?,power_source_connection_id=?,power_source_execution_id=? WHERE id=?"))
+                    .bind::<Text,_>(if presence == "ABSENT" { "STOPPED" } else { "UNKNOWN" })
+                    .bind::<BigInt,_>(now)
+                    .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Connection,source.connection_id)?)
+                    .bind::<Nullable<IdentitySql>,_>(report.execution_id.map(|id|EntityId::from_dto(EntityKind::Execution,id)).transpose()?)
+                    .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Computer,scope.computer_id)?)
+                    .execute(connection).await?;
             }
             Ok(())
         })
@@ -1041,6 +1088,16 @@ impl Store {
                     && r.presence == ResourcePresence::Absent
                     && r.source_connection_id.as_deref() == Some(source.connection_id)
             }) {
+                return Err(StoreError::InvalidTransition);
+            }
+            if provider.substrate()?.kind() == chapchoo_domain::ProviderKind::Kubernetes
+                && resources.iter().any(|r| {
+                    r.kind() == execution_kind
+                        && r.execution_id.as_deref() == Some(execution_id)
+                        && r.identity.is_none()
+                        && (current.desired_state != "DELETING" || r.absence_confirmed_at.is_none())
+                })
+            {
                 return Err(StoreError::InvalidTransition);
             }
             revoke_execution!(connection, dialect, execution_id, now);

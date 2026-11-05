@@ -41,8 +41,9 @@ export function ComputerControls(props: Props): ReactElement {
   const admission = computer.actions.find((item) => item.action === primary);
   const restart = computer.actions.find((item) => item.action === "restart");
   const locked = props.pending || props.stale;
-  const status = c[computer.power];
   const operation = computerOperation(computer, c);
+  const status =
+    computer.phase === "completed" ? c[computer.power] : operation.label;
   const blockedReason = admission?.reason;
   return (
     <>
@@ -59,9 +60,6 @@ export function ComputerControls(props: Props): ReactElement {
           <Group gap="xs" c="dimmed">
             <span className={classes.statusDot} aria-hidden="true" />
             <Text size="xs">{c[computer.connector]}</Text>
-            {computer.phase !== "completed" ? (
-              <Text size="xs">· {operation.label}</Text>
-            ) : null}
           </Group>
         </Stack>
         <Group gap="sm" wrap="nowrap">

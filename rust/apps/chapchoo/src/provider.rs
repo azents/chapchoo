@@ -609,16 +609,14 @@ impl Worker {
                             .unwrap_or_else(|| context.execution_id.clone()),
                         ..context.clone()
                     };
-                    let observed = self
-                        .adapter
-                        .observe(&resource_context, &resource, None)
-                        .await?;
-                    self.execution_terminal |= observed.terminal.is_some()
+                    let observed = self.adapter.observe(&resource_context, &resource).await?;
+                    self.execution_terminal |= observed.terminal
                         && resource.execution_id.as_deref() == Some(&context.execution_id);
                     running |= observed.running
                         && resource.execution_id.as_deref() == Some(&context.execution_id);
                     retired |= observed.presence == Presence::Absent
                         && resource.kind == wire::ResourceKind::Pod as i32
+                        && (resource.uid.is_some() || resource.absence_confirmed)
                         && resource.execution_id.as_deref() == Some(&context.execution_id);
                     unknown |= observed.presence == Presence::Unknown
                         && resource.kind == wire::ResourceKind::Pod as i32
@@ -714,7 +712,7 @@ impl Worker {
                     false,
                 )
                 .await?;
-                self.observed(&context, self.adapter.observe(&context, &pod, None).await?)
+                self.observed(&context, self.adapter.observe(&context, &pod).await?)
                     .await?;
             }
             wire::provider_command::Operation::Retire(value) => {
@@ -723,8 +721,8 @@ impl Worker {
                 }
                 let pod = value.pod.as_ref().ok_or("Retirement Pod missing")?;
                 if value.require_terminal {
-                    let prior = self.adapter.observe(&context, pod, None).await?;
-                    if prior.terminal.is_none() && prior.presence != Presence::Absent {
+                    let prior = self.adapter.observe(&context, pod).await?;
+                    if !prior.terminal && prior.presence != Presence::Absent {
                         return Err("Automatic restoration requires exact terminal evidence".into());
                     }
                 }
@@ -788,11 +786,11 @@ impl Worker {
                             .unwrap_or_else(|| context.execution_id.clone()),
                         ..context.clone()
                     };
-                    let observed = self.adapter.observe(&context, &resource, None).await?;
+                    let observed = self.adapter.observe(&context, &resource).await?;
                     if observed.presence == Presence::Present {
                         self.adapter.delete(&context, &observed.resource).await?;
                     }
-                    let observed = self.adapter.observe(&context, &resource, None).await?;
+                    let observed = self.adapter.observe(&context, &resource).await?;
                     if observed.presence != Presence::Absent {
                         return Err("Resource cleanup remains uncertain".into());
                     }

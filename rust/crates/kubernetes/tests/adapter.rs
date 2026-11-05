@@ -155,7 +155,7 @@ async fn preserved_witness_survives_current_context_and_is_required_before_io()
         200,
         pod("original-uid", "Running"),
     )])?;
-    let observed = api.observe(&current, &original, None).await?;
+    let observed = api.observe(&current, &original).await?;
     assert_eq!(observed.presence, Presence::Present);
     assert_eq!(calls.lock().map_err(|_| "Request lock")?.len(), 1);
     for invalid in 0..4 {
@@ -173,7 +173,7 @@ async fn preserved_witness_survives_current_context_and_is_required_before_io()
             _ => value.allocation.as_mut().ok_or("Witness")?.execution_id = None,
         }
         assert!(matches!(
-            api.observe(&current, &value, None).await,
+            api.observe(&current, &value).await,
             Err(Error::Ownership)
         ));
         assert!(calls.lock().map_err(|_| "Request lock")?.is_empty());
@@ -241,57 +241,37 @@ async fn foreign_same_name_and_original_uid_mismatch_are_never_adopted() -> Resu
     Ok(())
 }
 #[tokio::test]
-async fn pod_absence_requires_immutable_terminal_evidence_not_a_bare_404() -> Result<(), TestError>
-{
+async fn fresh_pod_absence_is_authoritative_without_history_and_lookup_failures_are_errors()
+-> Result<(), TestError> {
     let object = resource(ResourceKind::Pod, Some("original"));
-    let (failed, _) = fixture(vec![reply(
+    for uid in [None, Some("original")] {
+        let (api, calls) = fixture(vec![reply(Method::GET, "/pods/pod", 404, missing())])?;
+        let observed = api
+            .observe(&context(), &resource(ResourceKind::Pod, uid))
+            .await?;
+        assert_eq!(observed.presence, Presence::Absent);
+        assert!(!observed.running);
+        assert_eq!(calls.lock().map_err(|_| "calls")?.len(), 1);
+    }
+    for code in [403, 500] {
+        let (api, _) = fixture(vec![reply(
+            Method::GET,
+            "/pods/pod",
+            code,
+            json!({"apiVersion":"v1","kind":"Status","status":"Failure","reason":"Unavailable","code":code}),
+        )])?;
+        assert!(api.observe(&context(), &object).await.is_err());
+    }
+    let (api, _) = fixture(vec![reply(
         Method::GET,
         "/pods/pod",
         200,
-        pod("original", "Failed"),
+        pod("foreign", "Running"),
     )])?;
-    assert!(
-        failed
-            .observe(&context(), &object, None)
-            .await?
-            .terminal
-            .is_none()
-    );
-    let mut lost = pod("original", "Succeeded");
-    lost["status"]["containerStatuses"][0]["state"]["terminated"]["reason"] =
-        json!("ContainerStatusUnknown");
-    let (lost, _) = fixture(vec![reply(Method::GET, "/pods/pod", 200, lost)])?;
-    assert!(
-        lost.observe(&context(), &object, None)
-            .await?
-            .terminal
-            .is_none()
-    );
-    let (api, _) = fixture(vec![reply(Method::GET, "/pods/pod", 404, missing())])?;
-    assert_eq!(
-        api.observe(&context(), &object, None).await?.presence,
-        Presence::Unknown
-    );
-    let (api, _) = fixture(vec![
-        reply(Method::GET, "/pods/pod", 200, pod("original", "Succeeded")),
-        reply(Method::GET, "/pods/pod", 404, missing()),
-        reply(Method::GET, "/pods/pod", 404, missing()),
-    ])?;
-    let observed = api.observe(&context(), &object, None).await?;
-    let witness = observed.terminal.ok_or("Terminal witness")?;
-    assert_eq!(
-        api.observe(&context(), &object, Some(&witness))
-            .await?
-            .presence,
-        Presence::Absent
-    );
-    let foreign = resource(ResourceKind::Pod, Some("different"));
-    assert_eq!(
-        api.observe(&context(), &foreign, Some(&witness))
-            .await?
-            .presence,
-        Presence::Unknown
-    );
+    assert!(matches!(
+        api.observe(&context(), &object).await,
+        Err(Error::Ownership)
+    ));
     Ok(())
 }
 #[tokio::test]
@@ -333,7 +313,7 @@ async fn terminal_non_allocation_proof_requires_fresh_absence_and_never_deletes(
         let observation = if kind == ResourceKind::Pod {
             api.retire_pod(&context(), &candidate).await?
         } else {
-            api.observe(&context(), &candidate, None).await?
+            api.observe(&context(), &candidate).await?
         };
         assert_eq!(observation.presence, Presence::Absent);
         assert_eq!(calls.lock().map_err(|_| "calls")?.len(), 1);
@@ -346,7 +326,7 @@ async fn terminal_non_allocation_proof_requires_fresh_absence_and_never_deletes(
         };
         let (api, _) = fixture(vec![reply(Method::GET, suffix, 200, object)])?;
         assert!(matches!(
-            api.observe(&context(), &candidate, None).await,
+            api.observe(&context(), &candidate).await,
             Err(Error::Ownership)
         ));
     }
@@ -597,7 +577,7 @@ async fn pod_creation_is_last_and_uses_the_verified_independent_pvc_and_bootstra
 }
 
 #[tokio::test]
-async fn normal_retirement_starts_ordered_watch_before_uid_delete_and_requires_terminal_event()
+async fn normal_retirement_observes_exact_deletion_without_requiring_terminal_status()
 -> Result<(), TestError> {
     for phase in ["Succeeded", "Failed"] {
         let (api, calls) = fixture(vec![
@@ -618,14 +598,7 @@ async fn normal_retirement_starts_ordered_watch_before_uid_delete_and_requires_t
         let result = api
             .retire_pod(&context(), &resource(ResourceKind::Pod, Some("original")))
             .await?;
-        assert_eq!(
-            result.presence,
-            if phase == "Succeeded" {
-                Presence::Absent
-            } else {
-                Presence::Unknown
-            }
-        );
+        assert_eq!(result.presence, Presence::Absent);
         let calls = calls.lock().map_err(|_| "calls")?;
         assert_eq!(calls.len(), 3);
         assert_eq!(calls[1].0, Method::GET);
@@ -638,14 +611,14 @@ async fn normal_retirement_starts_ordered_watch_before_uid_delete_and_requires_t
 }
 
 #[tokio::test]
-async fn missing_pod_and_compacted_watch_never_authorize_retirement_or_delete_replay()
+async fn missing_pod_needs_no_delete_and_compacted_watch_does_not_prove_absence()
 -> Result<(), TestError> {
     let (api, calls) = fixture(vec![reply(Method::GET, "/pods/pod", 404, missing())])?;
     assert_eq!(
         api.retire_pod(&context(), &resource(ResourceKind::Pod, Some("original")))
             .await?
             .presence,
-        Presence::Unknown
+        Presence::Absent
     );
     assert_eq!(calls.lock().map_err(|_| "calls")?.len(), 1);
     let (api, calls) = fixture(vec![
@@ -682,8 +655,8 @@ async fn missing_pod_and_compacted_watch_never_authorize_retirement_or_delete_re
 }
 
 #[tokio::test]
-async fn retirement_watch_witness_survives_lost_report_and_same_process_reconnect()
--> Result<(), TestError> {
+async fn fresh_absence_recovers_after_lost_report_without_replaying_delete() -> Result<(), TestError>
+{
     for (event, expected) in [
         ("DELETED", Presence::Absent),
         ("MODIFIED", Presence::Unknown),
@@ -708,14 +681,11 @@ async fn retirement_watch_witness_survives_lost_report_and_same_process_reconnec
         let object = resource(ResourceKind::Pod, Some("original"));
         let retired = api.retire_pod(&context(), &object).await?;
         assert_eq!(retired.presence, expected);
-        assert!(retired.terminal.is_some());
+        assert!(retired.terminal);
         // Do not pass the lost result or committed absence to the new worker.
         let reconnected = api.clone();
         assert_eq!(
-            reconnected
-                .observe(&context(), &object, None)
-                .await?
-                .presence,
+            reconnected.observe(&context(), &object).await?.presence,
             Presence::Absent
         );
         let mut successor = context();
@@ -729,10 +699,10 @@ async fn retirement_watch_witness_survives_lost_report_and_same_process_reconnec
             .execution_id = Some(successor.execution_id.clone());
         assert_eq!(
             reconnected
-                .observe(&successor, &successor_object, None)
+                .observe(&successor, &successor_object)
                 .await?
                 .presence,
-            Presence::Unknown
+            Presence::Absent
         );
         assert_eq!(
             calls
@@ -748,8 +718,7 @@ async fn retirement_watch_witness_survives_lost_report_and_same_process_reconnec
 }
 
 #[tokio::test]
-async fn retirement_caches_terminal_get_before_a_native_submission_failure() -> Result<(), TestError>
-{
+async fn fresh_absence_recovers_after_failed_delete_submission() -> Result<(), TestError> {
     let (api, _) = fixture(vec![
         reply(Method::GET, "/pods/pod", 200, pod("original", "Succeeded")),
         reply(
@@ -769,14 +738,14 @@ async fn retirement_caches_terminal_get_before_a_native_submission_failure() -> 
     let object = resource(ResourceKind::Pod, Some("original"));
     assert!(api.retire_pod(&context(), &object).await.is_err());
     assert_eq!(
-        api.observe(&context(), &object, None).await?.presence,
+        api.observe(&context(), &object).await?.presence,
         Presence::Absent
     );
     Ok(())
 }
 
 #[tokio::test]
-async fn unqualified_retirement_events_do_not_seed_reconnect_absence() -> Result<(), TestError> {
+async fn fresh_absence_is_independent_of_prior_watch_content() -> Result<(), TestError> {
     let mut node_lost = pod("original", "Succeeded");
     node_lost["status"]["reason"] = json!("NodeLost");
     for event in [
@@ -791,7 +760,7 @@ async fn unqualified_retirement_events_do_not_seed_reconnect_absence() -> Result
                 Method::GET,
                 "/pods",
                 200,
-                json!({"type":"DELETED","object":event}),
+                json!({"type":"DELETED","object":event.clone()}),
             ),
             reply(
                 Method::DELETE,
@@ -804,11 +773,15 @@ async fn unqualified_retirement_events_do_not_seed_reconnect_absence() -> Result
         let object = resource(ResourceKind::Pod, Some("original"));
         assert_eq!(
             api.retire_pod(&context(), &object).await?.presence,
-            Presence::Unknown
+            if event["metadata"]["uid"] == "original" {
+                Presence::Absent
+            } else {
+                Presence::Unknown
+            }
         );
         assert_eq!(
-            api.observe(&context(), &object, None).await?.presence,
-            Presence::Unknown
+            api.observe(&context(), &object).await?.presence,
+            Presence::Absent
         );
     }
     Ok(())

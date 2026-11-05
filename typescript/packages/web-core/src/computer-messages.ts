@@ -62,12 +62,10 @@ const english = {
     "This operation cannot continue. Check host controls and saved storage in Computer details.",
   uncertain: "Checking completion",
   checkingStop: "Verifying shutdown",
-  startAfterStop: "Starting after shutdown",
+  startAfterStop: "Restarting",
   checkingStart: "Verifying startup",
-  checkingRestart: "Verifying restart",
+  checkingRestart: "Restarting",
   checkingDelete: "Verifying deletion",
-  checkingStopHint:
-    "Shutdown has not been verified. A new execution cannot start until the previous one is confirmed stopped.",
   checkingStartHint:
     "Startup has not been verified. Check host controls and the last power observation in Computer details before submitting another request.",
   checkingDeleteHint:
@@ -179,12 +177,10 @@ const korean: ComputerCopy = {
     "작업을 계속할 수 없습니다. 컴퓨터 상세 정보에서 관리 연결과 저장 공간 상태를 확인해 주세요.",
   uncertain: "완료 여부 확인 중",
   checkingStop: "종료 확인 중",
-  startAfterStop: "종료 후 시작 예정",
+  startAfterStop: "재시작 중",
   checkingStart: "시작 확인 중",
-  checkingRestart: "재시작 확인 중",
+  checkingRestart: "재시작 중",
   checkingDelete: "삭제 확인 중",
-  checkingStopHint:
-    "이전 실행의 종료를 확인하지 못했습니다. 종료가 확인되기 전에는 새 실행을 시작하지 않습니다.",
   checkingStartHint:
     "시작 완료를 확인하지 못했습니다. 요청을 반복하기 전에 컴퓨터 상세 정보에서 관리 연결과 마지막 전원 확인 시각을 확인해 주세요.",
   checkingDeleteHint:
@@ -296,12 +292,10 @@ const japanese: ComputerCopy = {
     "操作を続けられません。コンピューターの詳細でホスト操作の接続と保存環境の状態を確認してください。",
   uncertain: "完了を確認中",
   checkingStop: "停止を確認中",
-  startAfterStop: "停止後に起動",
+  startAfterStop: "再起動中",
   checkingStart: "起動を確認中",
-  checkingRestart: "再起動を確認中",
+  checkingRestart: "再起動中",
   checkingDelete: "削除を確認中",
-  checkingStopHint:
-    "前の実行の停止を確認できていません。停止が確認されるまでは、新しい実行を開始しません。",
   checkingStartHint:
     "起動の完了を確認できていません。要求を再送する前に、コンピューターの詳細でホスト操作の接続と最後の電源確認時刻を確認してください。",
   checkingDeleteHint:
@@ -412,12 +406,10 @@ const french: ComputerCopy = {
     "Cette opération ne peut pas continuer. Vérifiez les commandes de l’hôte et le stockage dans les détails de l’ordinateur.",
   uncertain: "Vérification de l’achèvement",
   checkingStop: "Vérification de l’arrêt",
-  startAfterStop: "Démarrage après l’arrêt",
+  startAfterStop: "Redémarrage en cours",
   checkingStart: "Vérification du démarrage",
-  checkingRestart: "Vérification du redémarrage",
+  checkingRestart: "Redémarrage en cours",
   checkingDelete: "Vérification de la suppression",
-  checkingStopHint:
-    "L’arrêt de l’exécution précédente n’est pas confirmé. Aucune nouvelle exécution ne démarre avant cette confirmation.",
   checkingStartHint:
     "Le démarrage n’est pas confirmé. Consultez les commandes de l’hôte et la dernière observation de l’alimentation dans les détails avant de renouveler la demande.",
   checkingDeleteHint:
@@ -496,19 +488,19 @@ export function computerOperation(
   ) {
     return {
       label: copy.startAfterStop,
-      hint: computer.phase === "uncertain" ? copy.checkingStopHint : null,
+      hint: null,
     };
+  }
+  if (computer.operation === "restart" && computer.phase !== "completed") {
+    return { label: copy.checkingRestart, hint: null };
   }
   if (computer.phase === "uncertain") {
     if (computer.operation === "stop") {
-      return { label: copy.checkingStop, hint: copy.checkingStopHint };
-    }
-    if (computer.operation === "restart") {
-      return { label: copy.checkingRestart, hint: copy.checkingStartHint };
+      return { label: copy.checkingStop, hint: null };
     }
     switch (computer.intent) {
       case "stopped":
-        return { label: copy.checkingStop, hint: copy.checkingStopHint };
+        return { label: copy.checkingStop, hint: null };
       case "running":
         return { label: copy.checkingStart, hint: copy.checkingStartHint };
       case "deleting":

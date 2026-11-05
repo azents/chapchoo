@@ -269,15 +269,21 @@ impl ComponentConnectionServices {
                 .await;
         }
         let mut terminal = false;
+        let mut observed_resources = false;
         if snapshot.computer.desired_state == "RUNNING"
             && snapshot.computer.current_phase == "BLOCKED"
             && snapshot.computer.current_execution_id.is_some()
+            && (snapshot.substrate.kind() == chapchoo_domain::ProviderKind::Docker
+                || snapshot.resources.iter().any(|r| {
+                    r.kind() == chapchoo_domain::ManagedResourceKind::Pod
+                        && r.execution_id == snapshot.computer.current_execution_id
+                        && r.identity().is_none()
+                }))
             && !(snapshot.computer.current_action == "STOP"
                 && snapshot.computer.current_execution_id
                     == snapshot.computer.expected_old_execution_id)
         {
-            // Explicit owner RetryPreparation, not periodic observation, resumes
-            // a proven-safe failed preparation.
+            // Safely rejected unallocated preparation retains its explicit retry.
             return Ok(outcome(wire::ForwardingOutcome::Completed));
         }
         let substrate_kind = snapshot.substrate.kind();
@@ -325,6 +331,7 @@ impl ComponentConnectionServices {
                 return Ok(result);
             }
             terminal = result.result.as_ref().is_some_and(|r| r.execution_terminal);
+            observed_resources = true;
             snapshot = self
                 .inner
                 .service
@@ -333,6 +340,16 @@ impl ComponentConnectionServices {
                 .map_err(status)?;
         }
         let state = &snapshot.computer;
+        let recover_named = observed_resources
+            && substrate_kind == chapchoo_domain::ProviderKind::Kubernetes
+            && matches!(state.current_phase.as_str(), "STARTING" | "UNCERTAIN")
+            && snapshot.resources.iter().any(|r| {
+                r.kind() == chapchoo_domain::ManagedResourceKind::Pod
+                    && r.execution_id == state.current_execution_id
+                    && r.identity().is_none()
+                    && r.presence == chapchoo_domain::ResourcePresence::Absent
+                    && r.source_connection_id.as_deref() == Some(source.connection_id)
+            });
         let current = wire::ComputerContext {
             execution_id: state
                 .current_execution_id
@@ -410,13 +427,15 @@ impl ComponentConnectionServices {
                 .await;
         }
         if state.desired_state != "RUNNING"
-            || matches!(state.current_phase.as_str(), "UNCERTAIN" | "COMPLETED")
+            || (state.current_phase == "UNCERTAIN" && !recover_named)
+            || state.current_phase == "COMPLETED"
             || (state.current_phase == "BLOCKED" && state.current_execution_id.is_some())
         {
             return Ok(outcome(wire::ForwardingOutcome::Completed));
         }
         if snapshot.computer.prepare_admitted_at.is_some()
             && snapshot.computer.current_execution_id.is_some()
+            && !recover_named
         {
             return Ok(outcome(wire::ForwardingOutcome::Uncertain));
         }
