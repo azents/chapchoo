@@ -1,5 +1,4 @@
 import { computerCopy } from "@chapchoo/web-core/computer-messages";
-import { agentNavigationHref } from "@/shared/navigation/agentSelection";
 import { creationCopy } from "../creationCopy";
 import { AgentCreation } from "./AgentCreation";
 import {
@@ -29,7 +28,6 @@ const meta = {
   args: {
     initial,
     basePath: "",
-    navigationHref: (href) => href,
     access: "authorized",
     copy: computerCopy("en-US"),
     profileCopy: creationCopy("en-US"),
@@ -75,11 +73,6 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Ready: Story = {};
-export const PagedNavigation: Story = {
-  args: {
-    navigationHref: (href) => agentNavigationHref(href, "sidebar-cursor"),
-  },
-};
 export const Approved: Story = {
   args: {
     copy: computerCopy("ko-KR"),

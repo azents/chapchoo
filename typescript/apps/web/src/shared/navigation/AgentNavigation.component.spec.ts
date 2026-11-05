@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("Team page shell renders shared Agent choices, current selection and bounded pages", async ({
+test("Team page shell renders five shared Agent choices and the full-list destination", async ({
   page,
 }) => {
   await page.goto(
@@ -19,14 +19,14 @@ test("Team page shell renders shared Agent choices, current selection and bounde
   await expect(
     sidebar.getByRole("link", { name: "Team settings", exact: true }),
   ).toBeVisible();
-  await sidebar.getByRole("button", { name: "Next page", exact: true }).click();
   await expect(
-    sidebar.getByRole("link", { name: /Bichon.*@bichon/ }),
-  ).toBeVisible();
-  await sidebar
-    .getByRole("button", { name: "First page", exact: true })
-    .click();
-  await expect(selected).toBeVisible();
+    sidebar
+      .getByRole("navigation", { name: "Agents", exact: true })
+      .getByRole("link"),
+  ).toHaveCount(5);
+  await expect(
+    sidebar.getByRole("link", { name: "All Agents", exact: true }),
+  ).toHaveAttribute("href", "/teams/design/agents");
 });
 
 test("mobile Team navigation contains the same Agent choices", async ({

@@ -8,13 +8,12 @@ Shared mascot playback owns gesture timing, visibility and explicit replay while
 
 ## Mascot motion
 
-General/Admin authentication headings and desktop sidebar companions use shared
+General/Admin authentication headings use shared
 `AgentMascotMotion` at their existing 72px-square placements. Production keeps the
 small WebP URL, character selection and surrounding geometry; per-character alpha
 contact metadata anchors the transform inside the square canvas. Authentication
-remains visible on narrow screens. General shows the 72px companion at the lower
-left of its standard opened navigation Drawer; fallback sidebar compositions retain the
-48em hiding rule. The static `Mascot` primitive remains available for other artwork.
+remains visible on narrow screens. Context sidebars and navigation Drawers have
+no generic companion. The static `Mascot` primitive remains available for other artwork.
 
 Large Agent list portraits, detail identity art, creation/edit previews, chat
 portraits/message artwork and the empty-list character also opt into the same

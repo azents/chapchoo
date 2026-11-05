@@ -36,8 +36,10 @@ same exact-Team/individual-owner SSR admission and hydrated detail observation.
 The saved character links to the retained detail page for profile editing and
 destructive administration. Sidebar rows show real private Agents with saved
 artwork, names and handles; they navigate by handle. The bounded supplementary
-list does not block the primary Agent, retains the current Agent even when it
-is outside that page, and exposes the full list through its Agents heading.
+list does not block the primary Agent. It shows at most five Agents in default
+order and exposes the full inventory through All Agents below them. Visible
+current-Agent rows are selected; there is no extra off-page row or sidebar
+pagination. The same Chat-based sidebar is shared across all Team routes.
 There is no conversation list or secondary conversation selection.
 
 The floating portrait, status bubble and hamburger share a translucent blurred

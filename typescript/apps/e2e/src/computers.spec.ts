@@ -1,6 +1,6 @@
 import { test as base, expect } from "@playwright/test";
 import { Assembly } from "@chapchoo/testenv/assembly";
-import type { APIResponse, Page, Response } from "@playwright/test";
+import type { Page } from "@playwright/test";
 
 const test = base.extend<object, { assembly: Assembly }>({
   assembly: [
@@ -16,25 +16,6 @@ const test = base.extend<object, { assembly: Assembly }>({
     { scope: "worker", timeout: 660_000 },
   ],
 });
-
-async function browserData(response: Response | APIResponse): Promise<object> {
-  const payload: unknown = await response.json();
-  if (
-    typeof payload !== "object" ||
-    payload === null ||
-    !("result" in payload) ||
-    typeof payload.result !== "object" ||
-    payload.result === null ||
-    !("data" in payload.result) ||
-    typeof payload.result.data !== "object" ||
-    payload.result.data === null ||
-    !("json" in payload.result.data) ||
-    typeof payload.result.data.json !== "object" ||
-    payload.result.data.json === null
-  )
-    throw new Error("Browser RPC response unavailable");
-  return payload.result.data.json;
-}
 
 async function login(
   page: Page,
@@ -131,117 +112,17 @@ test("owner manages one Computer while Admin observes independent cleanup invent
       .getByRole("group", { name: "Color", exact: true })
       .getByRole("button", { name: "Rose", exact: true })
       .click();
-    // Read the public browser boundary, not database state or framework internals.
-    const routeRead = owner.waitForRequest((request) =>
-      request.url().includes("/api/trpc/computers.getInTeam"),
-    );
     await owner
       .getByRole("button", { name: "Create Agent", exact: true })
       .click();
     await expect(owner).toHaveURL(/\/teams\/my\/agents\/[a-z0-9-]+\/chat$/);
     const chatUrl = owner.url();
-    const input: unknown = (await routeRead).postDataJSON();
-    if (
-      typeof input !== "object" ||
-      input === null ||
-      !("json" in input) ||
-      typeof input.json !== "object" ||
-      input.json === null ||
-      !("teamId" in input.json) ||
-      typeof input.json.teamId !== "string"
-    )
-      throw new Error("Agent Team query unavailable");
-    const inventory = await browserData(
-      await context.request.post(
-        `${assembly.generalUrl}/api/trpc/computers.list`,
-        {
-          headers: { origin: new URL(assembly.generalUrl).origin },
-          data: { json: { teamId: input.json.teamId } },
-        },
-      ),
-    );
-    const item: unknown =
-      "items" in inventory && Array.isArray(inventory.items)
-        ? inventory.items[0]
-        : null;
-    if (
-      typeof item !== "object" ||
-      item === null ||
-      !("id" in item) ||
-      typeof item.id !== "string"
-    )
-      throw new Error("Agent inventory ID unavailable");
-    const agentId = item.id;
-    const pagedChatUrl = `${chatUrl}?agentAfter=${encodeURIComponent(agentId)}`;
-    const pagedInventory = owner
-      .waitForResponse(
-        (response) =>
-          response.url().includes("/api/trpc/computers.list") &&
-          Boolean(response.request().postData()?.includes(agentId)),
-      )
-      .then(async (response) => {
-        expect(response.request().postData()).toContain(`"after":"${agentId}"`);
-        return browserData(response);
-      });
-    await owner.goto(pagedChatUrl);
-    const paged = await pagedInventory;
-    if (!("items" in paged))
-      throw new Error("Paged Agent inventory unavailable");
-    expect(paged.items).toEqual([]);
-    const sidebar = owner.locator("aside");
-    const selectedAgent = sidebar.getByRole("link", {
-      name: /Acceptance companion.*@/,
-    });
-    // The only Agent is outside the selected inventory page but remains selected.
-    await expect(selectedAgent).toHaveAttribute("aria-current", "page");
-    await expect(selectedAgent).toHaveAttribute(
-      "href",
-      new URL(pagedChatUrl).pathname + new URL(pagedChatUrl).search,
-    );
-    await owner.reload();
-    await expect(selectedAgent).toHaveAttribute("aria-current", "page");
-    await sidebar
-      .getByRole("link", { name: "Create Agent", exact: true })
-      .click();
-    await expect(owner).toHaveURL(
-      new URL(pagedChatUrl).origin +
-        new URL(pagedChatUrl).pathname.replace(
-          /\/agents\/[^/]+\/chat$/,
-          "/new-agent",
-        ) +
-        new URL(pagedChatUrl).search,
-    );
-    await owner
-      .getByRole("link", { name: "Back to Agents", exact: true })
-      .click();
-    await expect(owner).toHaveURL(
-      `${listUrl}?agentAfter=${encodeURIComponent(agentId)}`,
-    );
-    await owner
-      .getByRole("main")
-      .getByRole("link", { name: "Acceptance companion", exact: true })
-      .click();
-    await expect(owner).toHaveURL(pagedChatUrl);
-    await sidebar
-      .getByRole("button", { name: "First page", exact: true })
-      .click();
-    await expect(owner).toHaveURL(chatUrl);
-    await owner.goBack();
-    await expect(owner).toHaveURL(pagedChatUrl);
-    await expect(
-      sidebar.getByRole("button", { name: "First page", exact: true }),
-    ).toBeVisible();
-    await owner.goForward();
-    await expect(owner).toHaveURL(chatUrl);
-    await expect(
-      sidebar.getByRole("button", { name: "First page", exact: true }),
-    ).toHaveCount(0);
     await owner.setViewportSize({ width: 390, height: 844 });
     await owner
       .getByRole("button", { name: "Agents and conversations", exact: true })
       .click();
     const navigation = owner.getByRole("dialog", {
-      name: "Agents and conversations",
+      name: "Your space",
       exact: true,
     });
     await expect(
@@ -257,20 +138,6 @@ test("owner manages one Computer while Admin observes independent cleanup invent
     await expect(navigation).toBeVisible();
     await expect(switchWorkspace).toHaveAttribute("aria-expanded", "false");
     await navigation
-      .getByRole("button", { name: "Account and settings", exact: true })
-      .click();
-    await expect(
-      owner.getByRole("dialog", { name: "Account and settings", exact: true }),
-    ).toBeVisible();
-    await owner.keyboard.press("Escape");
-    await expect(navigation).toBeVisible();
-    await expect(
-      navigation.getByRole("button", {
-        name: "Account and settings",
-        exact: true,
-      }),
-    ).toBeFocused();
-    await navigation
       .getByRole("button", { name: "Close", exact: true })
       .click();
     await expect(
@@ -279,6 +146,22 @@ test("owner manages one Computer while Admin observes independent cleanup invent
         exact: true,
       }),
     ).toBeFocused();
+    await owner
+      .getByRole("button", { name: "Account and settings", exact: true })
+      .click();
+    const openedProfile = owner.waitForEvent("popup");
+    await owner.getByRole("link", { name: "Profile", exact: true }).click();
+    const profileTab = await openedProfile;
+    await expect(profileTab).toHaveURL(`${assembly.generalUrl}/profile`);
+    await expect(
+      profileTab.getByRole("heading", {
+        name: "Account settings",
+        exact: true,
+      }),
+    ).toBeVisible();
+    expect(owner.url()).toBe(chatUrl);
+    await profileTab.close();
+    await owner.keyboard.press("Escape");
     await owner.setViewportSize({ width: 1280, height: 900 });
     await owner
       .getByRole("button", { name: /Acceptance companion.*Activity/ })

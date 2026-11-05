@@ -2,6 +2,9 @@ export interface ShellCopy {
   account: string;
   settings: string;
   profile: string;
+  accountSettings: string;
+  displaySettings: string;
+  allAgents: string;
   login: string;
   logout: string;
   navigation: string;
@@ -35,6 +38,9 @@ const en: ShellCopy = {
   account: "Account and settings",
   settings: "Settings",
   profile: "Profile",
+  accountSettings: "Account settings",
+  displaySettings: "Language and display",
+  allAgents: "All Agents",
   login: "Sign in",
   logout: "Sign out",
   navigation: "Open navigation",
@@ -69,6 +75,9 @@ const ko: ShellCopy = {
   account: "계정 및 설정",
   settings: "설정",
   profile: "프로필",
+  accountSettings: "계정 설정",
+  displaySettings: "언어 및 디스플레이",
+  allAgents: "전체 에이전트",
   login: "로그인",
   logout: "로그아웃",
   navigation: "메뉴 열기",
@@ -103,6 +112,9 @@ const ja: ShellCopy = {
   account: "アカウントと設定",
   settings: "設定",
   profile: "プロフィール",
+  accountSettings: "アカウント設定",
+  displaySettings: "言語と表示",
+  allAgents: "すべてのエージェント",
   login: "ログイン",
   logout: "ログアウト",
   navigation: "メニューを開く",
@@ -137,6 +149,9 @@ const fr: ShellCopy = {
   account: "Compte et paramètres",
   settings: "Paramètres",
   profile: "Profil",
+  accountSettings: "Paramètres du compte",
+  displaySettings: "Langue et affichage",
+  allAgents: "Tous les agents",
   login: "Se connecter",
   logout: "Se déconnecter",
   navigation: "Ouvrir le menu",

@@ -5,32 +5,23 @@ import { computerCopy } from "@chapchoo/web-core/computer-messages";
 import { useDisplay } from "@chapchoo/web-core/display-context";
 import { validHandle } from "@chapchoo/web-core/handle";
 import { useHandleDraft } from "@chapchoo/web-core/handle-draft";
-import {
-  initialQuery,
-  navigateSelection,
-  readSelection,
-} from "@chapchoo/web-core/page-state";
+import { initialQuery } from "@chapchoo/web-core/page-state";
 import { shellCopy, teamHandleCopy } from "@chapchoo/web-core/shell-messages";
 import {
   agentChatPath,
   agentsPath,
   newAgentPath,
+  profileNavigation,
+  profileRoute,
   routeTeamHandle,
   teamPath,
   teamRouteKey,
   workspacePreference,
 } from "@chapchoo/web-core/workspace";
 import { useDocumentVisibility, useMediaQuery } from "@mantine/hooks";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/shared/rpc/client";
-import {
-  agentCursor,
-  agentCursorKey,
-  agentNavigationHref,
-  agentNavigationItems,
-  routeAgentHandle,
-} from "./agentSelection";
 import { navigationOwnerMatches } from "./navigationOwner";
 import type { AgentNavigationProps } from "./AgentNavigation";
 import type { InitialNavigation } from "./types";
@@ -54,7 +45,6 @@ export function useNavigation({
   const display = useDisplay();
   const copy = shellCopy(display.value.language);
   const pathname = usePathname();
-  const params = useSearchParams();
   const mobile = useMediaQuery("(max-width: 48em)");
   const visibility = useDocumentVisibility();
   const [drawer, setDrawer] = useState(false);
@@ -87,6 +77,7 @@ export function useNavigation({
     ? pathname.slice(basePath.length)
     : pathname;
   const routeTeam = routeTeamHandle(route);
+  const inProfile = profileRoute(route);
   const contexts = query.data?.items ?? [];
   const selected =
     (routeTeam
@@ -100,9 +91,8 @@ export function useNavigation({
     identity?.id ?? null,
   );
   const teamId = admittedIdentity && routeTeam && selected ? selected.id : "";
-  const after = readSelection(params, agentCursorKey, agentCursor);
   const agentList = trpc.computers.list.useQuery(
-    { teamId, ...(after ? { after } : {}) },
+    { teamId },
     {
       enabled: identity !== null && Boolean(teamId) && visibility === "visible",
       retry: false,
@@ -112,20 +102,9 @@ export function useNavigation({
     },
   );
   const computerText = computerCopy(display.value.language);
-  const currentAgent = routeAgentHandle(route);
-  const currentDetail = trpc.computers.getInTeam.useQuery(
-    { teamId, handle: currentAgent ?? "" },
-    {
-      enabled:
-        Boolean(teamId && currentAgent) &&
-        identity !== null &&
-        visibility === "visible",
-      retry: false,
-      refetchInterval: 15_000,
-      refetchIntervalInBackground: false,
-      refetchOnWindowFocus: true,
-    },
-  );
+  const currentAgent = /^\/teams\/[^/]+\/agents\/([^/]+)(?:\/|$)/.exec(
+    route,
+  )?.[1];
   useEffect(() => {
     if (identity && selected && routeTeam === teamRouteKey(selected)) {
       document.cookie = workspacePreference(
@@ -139,11 +118,18 @@ export function useNavigation({
     const common = {
       key: team.id,
       href: agentsPath(basePath, team),
-      selected: team.id === selected?.id,
+      selected: !inProfile && team.id === selected?.id,
     };
     return team.kind === teamKind.personal
       ? { ...common, kind: "personal", label: copy.yourSpace }
       : { ...common, kind: "team", label: team.name, handle: team.handle };
+  });
+  choices.unshift({
+    key: "profile",
+    kind: "profile",
+    label: copy.profile,
+    href: `${basePath}/profile`,
+    selected: inProfile,
   });
   const current = choices.find((choice) => choice.selected) ?? null;
   if (identity?.isAdmin && adminUrl) {
@@ -155,30 +141,36 @@ export function useNavigation({
       selected: false,
     });
   }
-  const items: NavigationItem[] = [
-    ...(!teamId
-      ? ([
-          {
-            key: "agents",
-            label: copy.agents,
-            icon: "agents",
-            href: selected ? agentsPath(basePath, selected) : `${basePath}/`,
-            active: /^\/teams\/[^/]+\/(?:agents|new-agent)(?:\/|$)/.test(route),
-          },
-        ] satisfies NavigationItem[])
-      : []),
-    ...(selected?.kind === teamKind.collaborative
-      ? [
-          {
-            key: "team",
-            label: copy.teamSettings,
-            icon: "team" as const,
-            href: agentNavigationHref(teamPath(basePath, selected), after),
-            active: /^\/teams\/[^/]+$/.test(route),
-          },
-        ]
-      : []),
-  ];
+  const items: NavigationItem[] = inProfile
+    ? profileNavigation(basePath, route, copy, true)
+    : [
+        ...(!teamId
+          ? ([
+              {
+                key: "agents",
+                label: copy.agents,
+                icon: "agents",
+                href: selected
+                  ? agentsPath(basePath, selected)
+                  : `${basePath}/`,
+                active: /^\/teams\/[^/]+\/(?:agents|new-agent)(?:\/|$)/.test(
+                  route,
+                ),
+              },
+            ] satisfies NavigationItem[])
+          : []),
+        ...(selected?.kind === teamKind.collaborative
+          ? [
+              {
+                key: "team",
+                label: copy.teamSettings,
+                icon: "team" as const,
+                href: teamPath(basePath, selected),
+                active: /^\/teams\/[^/]+$/.test(route),
+              },
+            ]
+          : []),
+      ];
   const create = trpc.teams.create.useMutation({ retry: false });
   async function submit(): Promise<void> {
     if (pending.current || proposal.status !== "available") {
@@ -230,7 +222,7 @@ export function useNavigation({
     identity: identity !== null,
     copy,
     basePath,
-    homeHref: `${basePath}/`,
+    homeHref: inProfile ? `${basePath}/profile` : `${basePath}/`,
     mobile,
     drawer,
     picker,
@@ -252,37 +244,19 @@ export function useNavigation({
         ? {
             basePath,
             copy: computerText,
-            titleHref: agentNavigationHref(
-              agentsPath(basePath, selected),
-              after,
-            ),
-            createHref: agentNavigationHref(
-              newAgentPath(basePath, selected),
-              after,
-            ),
+            titleHref: agentsPath(basePath, selected),
+            createHref: newAgentPath(basePath, selected),
             createLabel: computerText.create,
-            items: agentNavigationItems(
-              agentList.data?.items ?? [],
-              currentDetail.data ?? null,
-              teamId,
-              currentAgent,
-            ),
-            selectedHandle: currentAgent,
-            agentHref: (handle) =>
-              agentNavigationHref(
-                agentChatPath(basePath, selected, handle),
-                after,
-              ),
-            status:
-              agentList.isError || (currentAgent && currentDetail.isError)
-                ? "error"
-                : agentList.data
-                  ? "ready"
-                  : "loading",
-            after,
-            nextAfter: agentList.data?.nextAfter ?? null,
-            onPage: (value) =>
-              navigateSelection(agentCursorKey, value, agentCursor, "push"),
+            allAgentsLabel: copy.allAgents,
+            items: agentList.data?.items ?? [],
+            selectedHandle:
+              currentAgent && validHandle(currentAgent) ? currentAgent : null,
+            agentHref: (handle) => agentChatPath(basePath, selected, handle),
+            status: agentList.isError
+              ? "error"
+              : agentList.data
+                ? "ready"
+                : "loading",
             onSelect: () => setDrawer(false),
           }
         : null,
@@ -324,7 +298,7 @@ export function useNavigation({
     onSubmit: () => void submit(),
     retry: () => void utils.teams.list.invalidate(),
     select: (choice) => {
-      if (identity && choice.kind !== "admin") {
+      if (identity && (choice.kind === "personal" || choice.kind === "team")) {
         document.cookie = workspacePreference(
           identity.id,
           choice.key,

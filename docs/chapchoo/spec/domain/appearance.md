@@ -16,14 +16,15 @@ Popover and narrow screens a right Drawer with mini-profile, System/Light/Dark,
 display controls and profile/sign-out or visitor sign-in. The avatar, identity and
 profile label form one full-banner native link using the common InteractiveSurface
 hover/pressed/focus-visible treatment, with a trailing navigation chevron. It is
-one keyboard stop and closes the menu on navigation. Static scope/immediate-help
+one keyboard stop, opens Profile in a new tab/window with `noopener`, and closes
+the menu on navigation. Static scope/immediate-help
 rows are omitted from this menu; actual saved, failure and retry feedback remain.
 App-provided controls replace duplicate page account rows and the separate appearance entry.
 Escape/outside dismissal uses controlled callbacks and restores focus.
 General also supplies a narrow-screen navigation trigger and an app-entry brand link.
-The conversation workspace instead places these existing account/appearance
-controls in its Agent sidebar/navigation sheet, preserving the same preference
-authority without a second global header.
+The conversation workspace places these existing account/appearance controls
+in its right-side presence header, preserving the same preference authority
+without a duplicate left-sidebar entry or a second global header.
 The shared flex frame accommodates the header's actual height; wrapped or
 enlarged identity text grows the header without clipping or covering the content.
 The common UI is prop-driven and owns no identity request or authentication

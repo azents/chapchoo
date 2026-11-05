@@ -17,19 +17,16 @@ JavaScript-readable preference is untrusted, scoped to its User and checked
 against current membership on every app-entry request. It is not authorization.
 
 The General root layout server-loads selector context and hands it to one
-identity-scoped client query. The URL selects Agent context or Team settings;
-profile and invitation routes retain the validated recent context. Every Team
-route shares one owner-scoped Agent list in its left navigation, including list,
-creation, detail, chat and Team settings. The same list appears in the mobile
-Drawer, with current-Agent selection, creation and bounded next/first navigation.
-One selected-Team query owns that supplementary list. The separate `agentAfter`
-URL cursor selects its bounded page; First/Next push history, reload and
-Back/Forward restore the selection, and same-Team navigation links retain it,
-including feature Back/list/card links and normal or recovered creation success.
-Team-switch links omit the cursor and start at the first page. A current detail/chat
-Agent outside the fetched page remains selected through a bounded, authenticated
-exact-Team/private-owner lookup, deduplicated against the list. Changing Team changes
-both query keys. The list and current-Agent lookup refresh while visible and
+identity-scoped client query. The URL selects the Team or the distinct Profile
+context; Profile is not the personal Team and does not overwrite its remembered
+workspace preference. Every Team route uses the Chat-based `ContextSidebar`,
+including list, creation, detail, chat and Team settings, on desktop and mobile.
+Its supplementary list shows at most five private Agents in backend default
+order, with saved artwork, selection among visible rows, creation, and an All
+Agents link below the rows. There is no conversation-recency service yet.
+Full inventory pagination belongs to the Agent-list page, not the sidebar.
+One selected-Team query owns that bounded list; changing Team changes its
+query key. It refreshes while visible and
 authenticated without carrying another Team's list as placeholder data.
 Collaborative-Team settings remain alongside the list. A Team switch navigates to only the current user's
 private Agents in that Team. Desktop retains the independently scrolling sidebar;
@@ -37,9 +34,11 @@ mobile hides it and uses the header's left Drawer. Its banner contains the
 current icon/name and an adjacent chevron, with a bounded content-width trigger.
 The independent close control retains a 44px target and at least the shared
 large gap. Team choices open in a bounded Popover below the banner on both
-desktop and mobile; the feature navigation and companion remain mounted and
+desktop and mobile; the feature navigation remains mounted and
 unchanged behind it. Escape closes the picker first and returns focus to its
-banner without dismissing the mobile Drawer. A closed touch trigger has no
+banner without dismissing the mobile Drawer. The sidebar has no generic mascot
+or duplicate account/profile entry; the right-side account control remains.
+A closed touch trigger has no
 sticky hover fill; keyboard focus and current-route selection remain distinct.
 The common DropdownButton owns same-trigger toggle, outside dismissal and
 Escape/focus behavior. Only the current responsive selector is mounted;
@@ -61,6 +60,18 @@ acceptance is reachable from Profile at `/profile/invitations` and server-render
 its required list. It is not duplicated as a Team-navigation item. The outgoing
 invitation controls remain in Team settings. The former top-level invitation
 route has no compatibility redirect.
+Profile is a separate switcher entry. General `/profile` shows account settings,
+`/profile/preferences` shows personal language/display settings, and
+`/profile/invitations` shows received invitations; these are independent sidebar
+destinations. This context has neither Agent nor Team-settings navigation.
+Admin Profile exposes its own account and preferences pages without adding a
+General invitation-management API to Admin.
+
+Links into another sidebar context open a new tab/window with `noopener`,
+including the account-menu Profile link, preserving the current working page.
+The workspace switcher explicitly changes the current window's context; page
+links within a context remain in that window.
+
 Membership/role/ownership operations remain reachable through Team settings.
 Leave, kick and Team-delete confirmations disclose Agent and saved Computer-data
 deletion, without introducing archive or automatic rehoming.
@@ -68,15 +79,17 @@ deletion, without introducing archive or automatic rehoming.
 Admin uses the same shared workspace chrome with Administration selected,
 a shield/check icon and a lowercase `admin` brand badge. Its stable menu contains
 signup links, password reset links, Computer Providers and server settings,
-including on detail and profile routes. It has no duplicate subtitle or
+including on detail routes. Profile selects the separate account context and
+its account/preferences menu. It has no duplicate subtitle or
 separate back-to-app row. The same left mobile Drawer and overlay picker apply.
 
 Admin Node communicates only with its configured Admin API. The narrow
 AdminWorkspaces service lists the current administrator's accessible Teams and
 checks handle availability and creates an ordinary caller-owned Team; full TeamManagement stays Client-only.
 Selecting a Team or confirmed creation navigates the browser to General, where
-ordinary admission independently runs. Both logos point to General entry and
-therefore resume its validated recent context. Public peer web URLs are optional
+ordinary admission independently runs. Outside Profile, the General logo resumes
+its validated recent context; the Admin logo opens that General destination in a
+new tab/window. Profile brands retain their app's account context. Public peer web URLs are optional
 validated runtime navigation metadata; they are not backend targets, inferred
 paths or compiled deployment hosts. Without a configured General destination,
 Admin renders a non-link brand and unavailable workspace selection rather than

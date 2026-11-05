@@ -3,7 +3,8 @@
 import { Badge, Box, Group, Stack, Text, Title } from "@mantine/core";
 import { useContext } from "react";
 import { HeaderControlsContext } from "./AppHeader";
-import { AppNavigationContext, NavigationPanel } from "./AppNavigation";
+import { AppNavigationContext } from "./AppNavigation";
+import { ContextSidebar } from "./ContextSidebar";
 import { AppFrame } from "./AppFrame";
 import classes from "./ApplicationShell.module.css";
 import type { ColorModeMenuProps } from "./ColorModeMenu";
@@ -100,14 +101,12 @@ export function ApplicationShell({
 
 /** Body composition for consumers retaining a shared frame across feedback states. */
 export function ApplicationShellContent({
-  mascotReplayLabel,
   contextLabel,
   title,
   identityLabel,
   navigation,
   actions,
   children,
-  basePath = "",
   header,
   headingActions,
   contentClassName,
@@ -116,7 +115,7 @@ export function ApplicationShellContent({
   return (
     <Box className={classes.shell} data-contextual={Boolean(current) || void 0}>
       <Box component="aside" className={classes.sidebar}>
-        <NavigationPanel
+        <ContextSidebar
           label={current?.label ?? contextLabel}
           header={
             current?.header ?? (
@@ -127,8 +126,6 @@ export function ApplicationShellContent({
           }
           items={current?.items ?? navigation}
           content={current?.content}
-          basePath={basePath}
-          mascotReplayLabel={mascotReplayLabel}
         />
       </Box>
       <div className={classes.workspace}>

@@ -16,7 +16,6 @@ import { useDocumentVisibility } from "@mantine/hooks";
 import { useLocale } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { useAppearanceControl } from "@/shared/appearance/useAppearanceControl";
-import { useAgentNavigationHref } from "@/shared/navigation/useAgentNavigationHref";
 import { trpc } from "@/shared/rpc/client";
 import { creationCopy } from "../creationCopy";
 import { CreationRequest } from "../creationRequest";
@@ -27,7 +26,6 @@ export function useAgentCreation({
   initial,
   basePath,
 }: AgentCreationInput): AgentCreationProps {
-  const navigationHref = useAgentNavigationHref();
   const auth = useAuth();
   const visibility = useDocumentVisibility();
   const locale = useLocale();
@@ -180,10 +178,7 @@ export function useAgentCreation({
             agentId: history.agentId,
           });
           const team = await client.teams.get.query({ teamId: saved.teamId });
-          const href = agentChatPath(basePath, team, saved.handle);
-          window.location.assign(
-            saved.teamId === initial.teamId ? navigationHref(href) : href,
-          );
+          window.location.assign(agentChatPath(basePath, team, saved.handle));
           return;
         }
         // No observation is not a cancellation proof. Keep the same frozen
@@ -197,9 +192,7 @@ export function useAgentCreation({
       }
       void utils.computers.list.invalidate();
       window.location.assign(
-        navigationHref(
-          agentChatPath(basePath, initial.teamHandle, result.agent.handle),
-        ),
+        agentChatPath(basePath, initial.teamHandle, result.agent.handle),
       );
     } catch {
       setSubmission({
@@ -216,7 +209,6 @@ export function useAgentCreation({
     return !busy.current && !request.current.locked;
   }
   return {
-    navigationHref,
     initial,
     basePath,
     copy,

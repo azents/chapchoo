@@ -96,7 +96,6 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
     initial,
     data: initial,
     basePath: "",
-    navigationHref: (href) => href,
     access: mode === "signedOut" ? "signedOut" : "authorized",
     copy: c,
     profileCopy: creationCopy(locale),
@@ -145,12 +144,10 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
           titleHref="/teams/my/agents"
           createHref="/teams/my/new-agent"
           createLabel={product.profileCopy.newAgent}
+          allAgentsLabel="All Agents"
           selectedHandle="corgi"
           agentHref={(handle) => `/teams/my/agents/${handle}/chat`}
           status="ready"
-          after={null}
-          nextAfter={null}
-          onPage={() => {}}
           items={[
             agent,
             {

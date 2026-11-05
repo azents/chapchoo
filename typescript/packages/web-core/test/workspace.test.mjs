@@ -9,7 +9,40 @@ import {
   newAgentPath,
   agentPath,
   agentChatPath,
+  profileRoute,
+  profileNavigation,
 } from "../dist/workspace.js";
+import { shellCopy } from "../dist/shell-messages.js";
+test("Profile has independent account/display/invitation routes, not a personal Team selection", () => {
+  const menu = profileNavigation(
+    "/app",
+    "/profile/preferences",
+    shellCopy("en"),
+    true,
+  );
+  assert.deepEqual(
+    menu.map(({ key, href, active }) => ({ key, href, active })),
+    [
+      { key: "account", href: "/app/profile", active: false },
+      { key: "display", href: "/app/profile/preferences", active: true },
+      { key: "invitations", href: "/app/profile/invitations", active: false },
+    ],
+  );
+  assert.deepEqual(
+    profileNavigation("/admin", "/profile", shellCopy("en"), false).map(
+      (item) => item.key,
+    ),
+    ["account", "display"],
+  );
+  for (const route of [
+    "/profile",
+    "/profile/preferences",
+    "/profile/invitations",
+  ])
+    assert.equal(profileRoute(route), true);
+  for (const route of ["/profiles", "/teams/my/agents", "/"])
+    assert.equal(profileRoute(route), false);
+});
 const personal = { id: "personal", kind: 1 };
 const shared = { id: "shared", kind: 2 };
 const teams = [personal, shared];

@@ -68,32 +68,3 @@ test("auth mascot keeps its layout and ignores replay input during desktop/touch
     await context.close();
   }
 });
-
-test("desktop sidebar motion retains the responsive mobile hiding rule", async ({
-  page,
-}) => {
-  await page.goto(
-    "/iframe.html?id=accounts-workspace--received-invitations&viewMode=story",
-  );
-  const button = page.getByRole("button", {
-    name: messages.accounts.replayMascot,
-  });
-  await expect(button).toBeVisible();
-  const lineBoxGap = await button.evaluate((element) => {
-    const parent = element.parentElement;
-    if (!parent) {
-      throw new Error("The companion requires its existing layout container.");
-    }
-    const style = getComputedStyle(parent);
-    return (
-      parent.getBoundingClientRect().height -
-      element.getBoundingClientRect().height -
-      parseFloat(style.paddingTop) -
-      parseFloat(style.paddingBottom)
-    );
-  });
-  expect(lineBoxGap).toBeCloseTo(0);
-  await page.setViewportSize({ width: 390, height: 844 });
-  await expect(button).toBeHidden();
-  await expect(page.locator("[data-playing=true]")).toHaveCount(0);
-});

@@ -5,34 +5,6 @@ import { computerDetailCopy } from "../detailCopy";
 const copy = computerCopy("en-US");
 const profile = creationCopy("en-US");
 const detailCopy = computerDetailCopy("en-US");
-test("feature-owned creation Back and list destinations retain independent sidebar paging", async ({
-  page,
-}) => {
-  await page.goto(
-    "/iframe.html?id=computers-agent-creation--paged-navigation&viewMode=story",
-  );
-  await expect(
-    page.getByRole("link", { name: copy.back, exact: true }),
-  ).toHaveAttribute("href", "/teams/my/agents?agentAfter=sidebar-cursor");
-  await page.goto(
-    "/iframe.html?id=computers-agents--paged-navigation&viewMode=story",
-  );
-  await expect(
-    page.getByRole("link", { name: "Research companion", exact: true }),
-  ).toHaveAttribute(
-    "href",
-    "/teams/my/agents/research/chat?agentAfter=sidebar-cursor",
-  );
-  await expect(
-    page.getByRole("link", { name: copy.next, exact: true }),
-  ).toHaveAttribute(
-    "href",
-    "/teams/my/agents?after=main-cursor&agentAfter=sidebar-cursor",
-  );
-  await expect(
-    page.getByRole("link", { name: profile.newAgent, exact: true }),
-  ).toHaveAttribute("href", "/teams/my/new-agent?agentAfter=sidebar-cursor");
-});
 test("Exact unresolved creation remains recoverable after its Provider disappears", async ({
   page,
 }) => {

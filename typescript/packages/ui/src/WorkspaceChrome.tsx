@@ -1,5 +1,6 @@
 "use client";
-import { AppNavigationContext, NavigationPanel } from "./AppNavigation";
+import { AppNavigationContext } from "./AppNavigation";
+import { ContextSidebar } from "./ContextSidebar";
 import { WorkspaceSelector } from "./WorkspaceSelector";
 import { useRef } from "react";
 import classes from "./WorkspaceChrome.module.css";
@@ -27,6 +28,7 @@ export interface WorkspaceChromeProps {
   identity: boolean;
   basePath: string;
   homeHref: string | null;
+  homeTarget?: "_blank";
   environment?: string;
   navigationContent?: ReactNode;
   copy: {
@@ -88,6 +90,7 @@ export function WorkspaceChrome(props: WorkspaceChromeProps): ReactElement {
           header: null,
           trigger: null,
           homeHref: props.homeHref,
+          homeTarget: props.homeTarget,
           environment: props.environment,
         }}
       >
@@ -148,6 +151,7 @@ export function WorkspaceChrome(props: WorkspaceChromeProps): ReactElement {
         overlayActive: props.picker || props.creating,
         trigger,
         homeHref: props.homeHref,
+        homeTarget: props.homeTarget,
         environment: props.environment,
         content: props.navigationContent,
       }}
@@ -160,15 +164,9 @@ export function WorkspaceChrome(props: WorkspaceChromeProps): ReactElement {
         trapFocus={!props.creating}
         onClose={props.closeDrawer}
         position="left"
-        size="20rem"
-        title={props.mobile ? selector : null}
+        size="18.125rem"
+        title={props.current?.label}
         closeButtonProps={{ "aria-label": props.copy.close, size: rem(44) }}
-        classNames={{
-          header: classes.drawerHeader,
-          title: classes.drawerTitle,
-          close: classes.drawerClose,
-        }}
-        padding="lg"
         styles={{
           body: {
             minHeight: "calc(100dvh - 5rem)",
@@ -177,12 +175,10 @@ export function WorkspaceChrome(props: WorkspaceChromeProps): ReactElement {
           },
         }}
       >
-        <NavigationPanel
-          mobileDrawer
+        <ContextSidebar
+          header={props.mobile ? selector : null}
           label={props.copy.navigation}
           items={props.items}
-          basePath={props.basePath}
-          mascotReplayLabel={props.mascotReplayLabel}
           onSelect={props.closeDrawer}
           content={props.navigationContent}
         />

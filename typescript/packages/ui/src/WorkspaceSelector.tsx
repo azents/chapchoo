@@ -21,7 +21,9 @@ export type WorkspaceChoice = {
   label: string;
   href: string;
   selected: boolean;
-} & ({ kind: "team"; handle: string } | { kind: "personal" | "admin" });
+} & (
+  { kind: "team"; handle: string } | { kind: "personal" | "admin" | "profile" }
+);
 export interface WorkspaceSelectorProps {
   current: WorkspaceChoice | null;
   choices: readonly WorkspaceChoice[];
@@ -74,11 +76,16 @@ function Choice({
   );
 }
 export function WorkspaceChoices(props: WorkspaceSelectorProps): ReactElement {
+  const profile = props.choices.filter((choice) => choice.kind === "profile");
   const personal = props.choices.filter((choice) => choice.kind === "personal");
   const teams = props.choices.filter((choice) => choice.kind === "team");
   const admin = props.choices.filter((choice) => choice.kind === "admin");
   return (
     <Stack gap="xs">
+      {profile.map((choice) => (
+        <Choice key={choice.key} choice={choice} onSelect={props.onSelect} />
+      ))}
+      {profile.length ? <Divider my="xs" /> : null}
       {personal.map((choice) => (
         <Choice key={choice.key} choice={choice} onSelect={props.onSelect} />
       ))}

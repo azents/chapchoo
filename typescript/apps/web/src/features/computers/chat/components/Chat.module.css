@@ -13,18 +13,6 @@
   padding: var(--mantine-spacing-xl) var(--mantine-spacing-lg);
   overflow: auto;
 }
-.navigation {
-  display: flex;
-  flex-direction: column;
-  min-height: 100%;
-}
-.navigationFoot {
-  margin-top: auto;
-  padding-top: var(--mantine-spacing-xl);
-  display: flex;
-  flex-direction: column;
-  gap: var(--mantine-spacing-md);
-}
 .workspace {
   display: flex;
   flex-direction: column;

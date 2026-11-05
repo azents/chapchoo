@@ -1,7 +1,6 @@
 "use client";
 import {
   ActionIcon,
-  Anchor,
   Alert,
   Box,
   Button,
@@ -372,9 +371,7 @@ export interface DisplaySettingsPageProps extends DisplayFieldsProps {
   description?: string;
   identityLabel: string;
   mascotReplayLabel: string;
-  accountHeading?: string;
-  accountLinks?: readonly { label: string; href: string }[];
-  emailLabel?: string;
+  displayAppearance?: ColorModeMenuProps;
   navigation: readonly NavigationItem[];
   logoutLabel: string;
   onLogout: () => void;
@@ -403,24 +400,30 @@ export function DisplaySettingsPage(
         </Button>
       }
     >
-      {props.accountHeading ? (
-        <ContentSection title={props.accountHeading}>
-          <Text size="sm" c="dimmed">
-            {props.emailLabel}
-          </Text>
-          <Text>{props.identityLabel}</Text>
-          {props.accountLinks?.map((link) => (
-            <Anchor key={link.href} href={link.href}>
-              {link.label}
-            </Anchor>
-          ))}
-        </ContentSection>
-      ) : null}
       <ContentSection title={props.heading}>
         {props.description ? (
           <Text size="sm" c="dimmed">
             {props.description}
           </Text>
+        ) : null}
+        {props.displayAppearance ? (
+          <Stack gap="sm">
+            <Text size="sm">{props.displayAppearance.label}</Text>
+            <Group>
+              {(["system", "light", "dark"] as const).map((mode) => (
+                <Button
+                  key={mode}
+                  variant={
+                    props.displayAppearance?.value === mode ? "light" : "subtle"
+                  }
+                  aria-pressed={props.displayAppearance?.value === mode}
+                  onClick={() => props.displayAppearance?.onChange(mode)}
+                >
+                  {props.displayAppearance?.labels[mode]}
+                </Button>
+              ))}
+            </Group>
+          </Stack>
         ) : null}
         <Box maw={rem(540)}>
           <DisplayFields {...props} />
