@@ -67,7 +67,11 @@ export function AgentProfile(props: AgentProfileProps): ReactElement {
             name={draft.name || props.copy.name}
             handle={agent.handle}
             label={p.preview}
+            caption={p.previewCaption}
           />
+          <Text size="xs" c="dimmed" mt="sm">
+            {p.previewHint}
+          </Text>
         </Box>
         <Stack gap="xl">
           <ProfileImageChoices

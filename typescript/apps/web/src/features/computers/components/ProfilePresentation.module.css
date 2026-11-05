@@ -89,6 +89,7 @@
 }
 .preview {
   min-width: 0;
+  position: relative;
   border: 0.0625rem solid var(--profile-border);
   background: var(--profile-surface);
   color: var(--profile-ink);
@@ -189,6 +190,16 @@
 .editorPreview {
   position: sticky;
   top: 0;
+}
+.previewCaption {
+  position: absolute;
+  top: var(--mantine-spacing-lg);
+  left: var(--mantine-spacing-lg);
+  opacity: 0.75;
+}
+.editorPreview .previewImage {
+  width: 10.75rem;
+  height: 10.75rem;
 }
 .editorFooter {
   border-top: 0.0625rem solid var(--chapchoo-color-border);
@@ -405,8 +416,18 @@
     flex-shrink: 0;
   }
   .editorPreview .previewImage {
-    max-width: 6.25rem;
-    height: 6.25rem;
+    max-width: 6.9375rem;
+    height: 6.9375rem;
+  }
+  .editorPreview .preview {
+    padding: 0.625rem 1.125rem;
+  }
+  .editorGrid {
+    gap: var(--mantine-spacing-lg);
+  }
+  .previewCaption {
+    position: static;
+    margin-bottom: var(--mantine-spacing-xs);
   }
   .hero {
     padding: var(--mantine-spacing-lg);

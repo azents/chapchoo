@@ -272,6 +272,7 @@ export function AgentCreation(props: AgentCreationProps): ReactElement {
           <Button
             type="submit"
             className={classes.primary}
+            rightSection={<NavigationIcon name="forward" size="sm" />}
             loading={props.pending}
             disabled={
               !props.creationLocked &&

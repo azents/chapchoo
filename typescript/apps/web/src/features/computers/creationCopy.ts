@@ -21,6 +21,8 @@ export interface CreationCopy {
   randomPalette: string;
   randomFailed: string;
   preview: string;
+  previewCaption: string;
+  previewHint: string;
   open: string;
   checking: string;
   available: string;
@@ -51,6 +53,8 @@ const english: CreationCopy = {
   randomPalette: "Random color",
   randomFailed: "Could not choose another color. Your draft is unchanged.",
   preview: "Profile preview",
+  previewCaption: "Preview",
+  previewHint: "Saving applies this profile to the Agent.",
   open: "Open",
   checking: "Checking availability…",
   available: "Available",
@@ -89,6 +93,8 @@ const korean: CreationCopy = {
   randomPalette: "랜덤",
   randomFailed: "다른 색상을 선택하지 못했습니다. 현재 입력은 유지됩니다.",
   preview: "프로필 미리보기",
+  previewCaption: "미리보기",
+  previewHint: "저장하면 에이전트 프로필에 반영됩니다.",
   open: "열기",
   checking: "사용 가능 여부 확인 중…",
   available: "사용 가능",
@@ -128,6 +134,8 @@ const japanese: CreationCopy = {
   randomPalette: "ランダムなカラー",
   randomFailed: "別のカラーを選べませんでした。編集内容は保持されています。",
   preview: "プロフィールのプレビュー",
+  previewCaption: "プレビュー",
+  previewHint: "保存するとエージェントのプロフィールに反映されます。",
   open: "開く",
   checking: "使用できるか確認中…",
   available: "使用できます",
@@ -169,6 +177,8 @@ const french: CreationCopy = {
   randomFailed:
     "Impossible de choisir une autre couleur. Vos modifications sont conservées.",
   preview: "Aperçu du profil",
+  previewCaption: "Aperçu",
+  previewHint: "Enregistrer applique ce profil à l’Agent.",
   open: "Ouvrir",
   checking: "Vérification de la disponibilité…",
   available: "Disponible",

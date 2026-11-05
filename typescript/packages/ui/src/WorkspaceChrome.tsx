@@ -156,7 +156,7 @@ export function WorkspaceChrome(props: WorkspaceChromeProps): ReactElement {
         trapFocus={!props.creating}
         onClose={props.closeDrawer}
         position="left"
-        size="sm"
+        size="20rem"
         title={props.mobile ? selector : null}
         closeButtonProps={{ "aria-label": props.copy.close, size: rem(44) }}
         classNames={{

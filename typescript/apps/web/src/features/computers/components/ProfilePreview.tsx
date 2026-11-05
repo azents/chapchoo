@@ -11,6 +11,7 @@ export function ProfilePreview(props: {
   name: string;
   handle: string;
   label: string;
+  caption?: string;
 }): ReactElement {
   return (
     <Box
@@ -25,6 +26,11 @@ export function ProfilePreview(props: {
         className={classes.previewImage}
       />
       <Box className={classes.previewIdentity}>
+        {props.caption ? (
+          <Text size="xs" className={classes.previewCaption}>
+            {props.caption}
+          </Text>
+        ) : null}
         <Text className={classes.previewName}>{props.name}</Text>
         {props.handle ? (
           <Text className={classes.previewHandle}>@{props.handle}</Text>
