@@ -2,7 +2,7 @@
 import { AccountSettings } from "@chapchoo/ui/AccountSettings";
 import { HeaderControlsContext } from "@chapchoo/ui/AppHeader";
 import { WorkspaceChrome } from "@chapchoo/ui/WorkspaceChrome";
-import { shellCopy } from "@chapchoo/web-core/shell-messages";
+import { shellCopy, teamHandleCopy } from "@chapchoo/web-core/shell-messages";
 import { useMediaQuery } from "@mantine/hooks";
 import { useState } from "react";
 import type { WorkspaceChoice } from "@chapchoo/ui/WorkspaceSelector";
@@ -44,6 +44,7 @@ export function ProfileReviewFrame({
   const [name, setName] = useState("디자인 팀");
   const [handle, setHandle] = useState("dijain-tim");
   const c = shellCopy("ko");
+  const h = teamHandleCopy("ko");
   const current: WorkspaceChoice = created
     ? {
         key: "design",
@@ -73,8 +74,8 @@ export function ProfileReviewFrame({
       handle={handle}
       prospectiveAddress={`/teams/${handle}`}
       handleStatus={{
-        description: "핸들은 팀을 만든 뒤 변경할 수 없습니다.",
-        message: "사용할 수 있는 handle이에요.",
+        description: h.permanent,
+        message: h.available,
         available: true,
       }}
       error={null}
