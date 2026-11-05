@@ -111,8 +111,10 @@ permission to replay an external effect.
 
 Computer power and Connector connectivity share one compact summary below the
 profile identity, with current operation shown separately when incomplete. One
-primary action changes between Start for stopped power or an incomplete Stop,
-and Stop otherwise. Start during shutdown updates the persistent Running target;
+primary action changes between Start for stopped power or a Retiring/Uncertain
+Stop, and Stop otherwise. Blocked work instead keeps its blocked label and
+inspection guidance; an accepted Running target is not shown as automatic
+startup progress while shutdown cannot continue. Start during shutdown updates the persistent Running target;
 it does not claim shutdown is complete or create a concurrent execution. The
 accepted target is shown as starting after shutdown and remains visible after
 reload. Unknown power alone does not block this backend-admitted target update;

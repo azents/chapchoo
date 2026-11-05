@@ -57,7 +57,9 @@ const english = {
   starting: "Starting",
   deleting: "Deleting",
   completed: "Completed",
-  blocked: "Needs attention",
+  blocked: "Operation blocked",
+  blockedHint:
+    "This operation cannot continue. Check host controls and saved storage in Computer details.",
   uncertain: "Checking completion",
   checkingStop: "Verifying shutdown",
   startAfterStop: "Starting after shutdown",
@@ -172,7 +174,9 @@ const korean: ComputerCopy = {
   starting: "시작 중",
   deleting: "삭제 중",
   completed: "완료",
-  blocked: "확인 필요",
+  blocked: "작업을 진행할 수 없음",
+  blockedHint:
+    "작업을 계속할 수 없습니다. 컴퓨터 상세 정보에서 관리 연결과 저장 공간 상태를 확인해 주세요.",
   uncertain: "완료 여부 확인 중",
   checkingStop: "종료 확인 중",
   startAfterStop: "종료 후 시작 예정",
@@ -287,7 +291,9 @@ const japanese: ComputerCopy = {
   starting: "起動中",
   deleting: "削除中",
   completed: "完了",
-  blocked: "確認が必要",
+  blocked: "操作を進められません",
+  blockedHint:
+    "操作を続けられません。コンピューターの詳細でホスト操作の接続と保存環境の状態を確認してください。",
   uncertain: "完了を確認中",
   checkingStop: "停止を確認中",
   startAfterStop: "停止後に起動",
@@ -401,7 +407,9 @@ const french: ComputerCopy = {
   starting: "Démarrage",
   deleting: "Suppression",
   completed: "Terminée",
-  blocked: "Intervention nécessaire",
+  blocked: "Opération bloquée",
+  blockedHint:
+    "Cette opération ne peut pas continuer. Vérifiez les commandes de l’hôte et le stockage dans les détails de l’ordinateur.",
   uncertain: "Vérification de l’achèvement",
   checkingStop: "Vérification de l’arrêt",
   startAfterStop: "Démarrage après l’arrêt",
@@ -478,10 +486,13 @@ export function computerOperation(
   computer: Pick<ComputerStatus, "operation" | "intent" | "phase">,
   copy: ComputerCopy,
 ): { label: string; hint: string | null } {
+  if (computer.phase === "blocked") {
+    return { label: copy.blocked, hint: copy.blockedHint };
+  }
   if (
     computer.operation === "stop" &&
     computer.intent === "running" &&
-    computer.phase !== "completed"
+    (computer.phase === "retiring" || computer.phase === "uncertain")
   ) {
     return {
       label: copy.startAfterStop,

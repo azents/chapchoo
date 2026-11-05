@@ -114,6 +114,24 @@ export const StartAfterShutdown: Story = {
   },
 };
 export const Stale: Story = { args: { stale: true } };
+export const BlockedShutdown: Story = {
+  args: {
+    agent: {
+      ...detail.agent,
+      computer: {
+        ...detail.agent.computer,
+        operation: "stop",
+        intent: "running",
+        phase: "blocked",
+        power: "unknown",
+        actions: [
+          { action: "start", available: false, reason: "conflicting" },
+          { action: "restart", available: false, reason: "conflicting" },
+        ],
+      },
+    },
+  },
+};
 export const RestartUnsupported: Story = {
   args: {
     agent: {

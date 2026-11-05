@@ -3,6 +3,25 @@ import { expect, test } from "@playwright/test";
 const c = computerCopy("en-US");
 test.use({ hasTouch: true });
 
+test("blocked shutdown does not promise that startup can proceed", async ({
+  page,
+}) => {
+  await page.goto(
+    "/iframe.html?id=computers-computer-controls--blocked-shutdown&viewMode=story",
+  );
+  await expect(page.getByText(`· ${c.blocked}`, { exact: true })).toBeVisible();
+  await expect(page.getByText(c.blockedHint, { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: c.startAfterStop, exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByText(c.startAfterStop, { exact: true })).toHaveCount(
+    0,
+  );
+  await expect(
+    page.getByRole("button", { name: c.stop, exact: true }),
+  ).toBeDisabled();
+});
+
 test("deletion consent describes the removed data rather than cleanup ordering", async ({
   page,
 }) => {

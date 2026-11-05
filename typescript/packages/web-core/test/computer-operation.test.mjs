@@ -7,6 +7,13 @@ test("operation copy distinguishes shutdown, following target and unverified com
     const copy = computerCopy(locale);
     assert.deepEqual(
       computerOperation(
+        { operation: "stop", intent: "running", phase: "blocked" },
+        copy,
+      ),
+      { label: copy.blocked, hint: copy.blockedHint },
+    );
+    assert.deepEqual(
+      computerOperation(
         {
           operation: "stop",
           intent: "stopped",

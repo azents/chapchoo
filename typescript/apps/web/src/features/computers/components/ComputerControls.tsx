@@ -35,7 +35,8 @@ export function ComputerControls(props: Props): ReactElement {
   const { computer } = props.agent;
   const { copy: c, detailCopy: d } = props;
   const stopping =
-    computer.operation === "stop" && computer.phase !== "completed";
+    computer.operation === "stop" &&
+    (computer.phase === "retiring" || computer.phase === "uncertain");
   const primary = computer.power === "stopped" || stopping ? "start" : "stop";
   const admission = computer.actions.find((item) => item.action === primary);
   const restart = computer.actions.find((item) => item.action === "restart");
