@@ -301,22 +301,8 @@ impl Kubernetes {
                         observation.running = status.phase.as_deref() == Some("Running")
                             && pod.metadata.deletion_timestamp.is_none();
                         if terminal_pod(&pod) {
-                            let witness = TerminalWitness {
-                                computer: computer.computer_id.clone(),
-                                execution: computer.execution_id.clone(),
-                                namespace: resource.namespace.clone(),
-                                name: resource.name.clone(),
-                                uid,
-                            };
-                            if let Ok(mut cache) = self.terminal.lock() {
-                                if cache.len() >= 256
-                                    && let Some(first) = cache.keys().next().cloned()
-                                {
-                                    cache.remove(&first);
-                                }
-                                cache.insert(witness.uid.clone(), witness.clone());
-                            }
-                            observation.terminal = Some(witness);
+                            observation.terminal =
+                                Some(self.remember_terminal(computer, resource, uid));
                         }
                     }
                     Some(pod.metadata)
@@ -689,6 +675,30 @@ impl Kubernetes {
         }
         Ok(())
     }
+    fn remember_terminal(
+        &self,
+        computer: &wire::ComputerContext,
+        resource: &wire::ManagedResource,
+        uid: String,
+    ) -> TerminalWitness {
+        let witness = TerminalWitness {
+            computer: computer.computer_id.clone(),
+            execution: computer.execution_id.clone(),
+            namespace: resource.namespace.clone(),
+            name: resource.name.clone(),
+            uid,
+        };
+        if let Ok(mut cache) = self.terminal.lock() {
+            if !cache.contains_key(&witness.uid)
+                && cache.len() >= 256
+                && let Some(first) = cache.keys().next().cloned()
+            {
+                cache.remove(&first);
+            }
+            cache.insert(witness.uid.clone(), witness.clone());
+        }
+        witness
+    }
     /// Observe the exact Pod's ordered SDK watch before deletion. A normal
     /// kubelet-confirmed terminal/deleted event can prove retirement; API 404,
     /// expired watch history, EOF or node-loss status alone cannot.
@@ -731,6 +741,11 @@ impl Kubernetes {
             return Ok(observation);
         };
         self.validate(computer, resource, &pod.metadata)?;
+        let mut terminal = terminal_pod(&pod);
+        if terminal {
+            observation.terminal =
+                Some(self.remember_terminal(computer, resource, expected.clone()));
+        }
         let version = pod
             .metadata
             .resource_version
@@ -740,7 +755,6 @@ impl Kubernetes {
             .fields(&format!("metadata.name={}", resource.name))
             .timeout(90);
         let mut watch = api.watch(&params, version).await?.boxed();
-        let mut terminal = terminal_pod(&pod);
         let params = DeleteParams {
             preconditions: Some(Preconditions {
                 uid: Some(expected.clone()),
@@ -752,14 +766,9 @@ impl Kubernetes {
             Ok(_) => {}
             Err(kube::Error::Api(error)) if error.code == 404 => {
                 if terminal {
-                    let witness = TerminalWitness {
-                        computer: computer.computer_id.clone(),
-                        execution: computer.execution_id.clone(),
-                        namespace: resource.namespace.clone(),
-                        name: resource.name.clone(),
-                        uid: expected.clone(),
-                    };
-                    return self.observe(computer, resource, Some(&witness)).await;
+                    return self
+                        .observe(computer, resource, observation.terminal.as_ref())
+                        .await;
                 }
                 return Ok(observation);
             }
@@ -777,7 +786,13 @@ impl Kubernetes {
                     return Ok(false);
                 }
                 self.validate(computer, resource, &pod.metadata)?;
-                terminal |= terminal_pod(&pod);
+                if terminal_pod(&pod) {
+                    terminal = true;
+                    // Retain validated quiescence before a report or stream can
+                    // fail. A new source still needs a fresh exact absence read.
+                    observation.terminal =
+                        Some(self.remember_terminal(computer, resource, expected.clone()));
+                }
                 if deleted {
                     return Ok(terminal);
                 }

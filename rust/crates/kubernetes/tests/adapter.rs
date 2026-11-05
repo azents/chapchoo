@@ -680,3 +680,136 @@ async fn missing_pod_and_compacted_watch_never_authorize_retirement_or_delete_re
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn retirement_watch_witness_survives_lost_report_and_same_process_reconnect()
+-> Result<(), TestError> {
+    for (event, expected) in [
+        ("DELETED", Presence::Absent),
+        ("MODIFIED", Presence::Unknown),
+    ] {
+        let (api, calls) = fixture(vec![
+            reply(Method::GET, "/pods/pod", 200, pod("original", "Running")),
+            reply(
+                Method::GET,
+                "/pods",
+                200,
+                json!({"type":event,"object":pod("original","Succeeded")}),
+            ),
+            reply(
+                Method::DELETE,
+                "/pods/pod",
+                200,
+                json!({"apiVersion":"v1","kind":"Status","status":"Success"}),
+            ),
+            reply(Method::GET, "/pods/pod", 404, missing()),
+            reply(Method::GET, "/pods/pod", 404, missing()),
+        ])?;
+        let object = resource(ResourceKind::Pod, Some("original"));
+        let retired = api.retire_pod(&context(), &object).await?;
+        assert_eq!(retired.presence, expected);
+        assert!(retired.terminal.is_some());
+        // Do not pass the lost result or committed absence to the new worker.
+        let reconnected = api.clone();
+        assert_eq!(
+            reconnected
+                .observe(&context(), &object, None)
+                .await?
+                .presence,
+            Presence::Absent
+        );
+        let mut successor = context();
+        successor.execution_id = "successor".into();
+        let mut successor_object = object.clone();
+        successor_object.execution_id = Some(successor.execution_id.clone());
+        successor_object
+            .allocation
+            .as_mut()
+            .ok_or("Allocation")?
+            .execution_id = Some(successor.execution_id.clone());
+        assert_eq!(
+            reconnected
+                .observe(&successor, &successor_object, None)
+                .await?
+                .presence,
+            Presence::Unknown
+        );
+        assert_eq!(
+            calls
+                .lock()
+                .map_err(|_| "calls")?
+                .iter()
+                .filter(|call| call.0 == Method::DELETE)
+                .count(),
+            1
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn retirement_caches_terminal_get_before_a_native_submission_failure() -> Result<(), TestError>
+{
+    let (api, _) = fixture(vec![
+        reply(Method::GET, "/pods/pod", 200, pod("original", "Succeeded")),
+        reply(
+            Method::GET,
+            "/pods",
+            200,
+            json!({"type":"ERROR","object":{"apiVersion":"v1","kind":"Status","code":410,"reason":"Expired"}}),
+        ),
+        reply(
+            Method::DELETE,
+            "/pods/pod",
+            500,
+            json!({"apiVersion":"v1","kind":"Status","reason":"InternalError","code":500}),
+        ),
+        reply(Method::GET, "/pods/pod", 404, missing()),
+    ])?;
+    let object = resource(ResourceKind::Pod, Some("original"));
+    assert!(api.retire_pod(&context(), &object).await.is_err());
+    assert_eq!(
+        api.observe(&context(), &object, None).await?.presence,
+        Presence::Absent
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn unqualified_retirement_events_do_not_seed_reconnect_absence() -> Result<(), TestError> {
+    let mut node_lost = pod("original", "Succeeded");
+    node_lost["status"]["reason"] = json!("NodeLost");
+    for event in [
+        pod("original", "Running"),
+        pod("original", "Failed"),
+        pod("foreign", "Succeeded"),
+        node_lost,
+    ] {
+        let (api, _) = fixture(vec![
+            reply(Method::GET, "/pods/pod", 200, pod("original", "Running")),
+            reply(
+                Method::GET,
+                "/pods",
+                200,
+                json!({"type":"DELETED","object":event}),
+            ),
+            reply(
+                Method::DELETE,
+                "/pods/pod",
+                200,
+                json!({"apiVersion":"v1","kind":"Status","status":"Success"}),
+            ),
+            reply(Method::GET, "/pods/pod", 404, missing()),
+        ])?;
+        let object = resource(ResourceKind::Pod, Some("original"));
+        assert_eq!(
+            api.retire_pod(&context(), &object).await?.presence,
+            Presence::Unknown
+        );
+        assert_eq!(
+            api.observe(&context(), &object, None).await?.presence,
+            Presence::Unknown
+        );
+    }
+    Ok(())
+}
