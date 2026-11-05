@@ -13,6 +13,10 @@ export interface NavigationIconProps {
     | "add"
     | "edit"
     | "shuffle"
+    | "start"
+    | "stop"
+    | "restart"
+    | "info"
     | "check"
     | "agents"
     | "mail";
@@ -62,6 +66,17 @@ export function NavigationIcon({
         <path d="m16 3 5 5-12 12-6 1 1-6zM14 5l5 5" />
       ) : name === "shuffle" ? (
         <path d="M3 6h3l12 12h3M17 14l4 4-4 4M3 18h3l4-4M14 10l4-4h3M17 2l4 4-4 4" />
+      ) : name === "start" ? (
+        <path d="m8 5 11 7-11 7z" />
+      ) : name === "stop" ? (
+        <rect x="6" y="6" width="12" height="12" rx="2" />
+      ) : name === "restart" ? (
+        <path d="M20 11a8 8 0 1 0-2 6M20 4v7h-7" />
+      ) : name === "info" ? (
+        <>
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 11v6M12 7h.01" />
+        </>
       ) : name === "check" ? (
         <path d="m5 12 4 4L19 6" />
       ) : name === "agents" ? (

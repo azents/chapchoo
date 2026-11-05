@@ -6,6 +6,7 @@ import { shellCopy } from "@chapchoo/web-core/shell-messages";
 import { useMediaQuery } from "@mantine/hooks";
 import { useState } from "react";
 import { creationCopy } from "../creationCopy";
+import { computerDetailCopy } from "../detailCopy";
 import { Agents } from "./Agents";
 import {
   ProfileReviewFrame,
@@ -65,6 +66,7 @@ const detail: InitialAgents = {
 const meta = {
   title: "Computers/Agents",
   component: Agents,
+  render: DetailInteraction,
   args: {
     access: "authorized",
     initial,
@@ -72,6 +74,10 @@ const meta = {
     basePath: "",
     copy: computerCopy("en-US"),
     profileCopy: creationCopy("en-US"),
+    detailCopy: computerDetailCopy("en-US"),
+    detailsOpened: false,
+    onOpenDetails: () => {},
+    onCloseDetails: () => {},
     mobile: false,
     editor: { type: "closed" },
     images: { items: [], nextAfter: null },
@@ -100,11 +106,22 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const AgentList: Story = {};
+function DetailInteraction(props: AgentsProps): ReactElement {
+  const [opened, setOpened] = useState(props.detailsOpened);
+  return (
+    <Agents
+      {...props}
+      detailsOpened={opened}
+      onOpenDetails={() => setOpened(true)}
+      onCloseDetails={() => setOpened(false)}
+    />
+  );
+}
 function ApprovedAgent(props: AgentsProps): ReactElement {
   const mobile = useMediaQuery("(max-width: 48em)", false);
   return (
     <ProfileReviewFrame>
-      <Agents {...props} mobile={mobile} />
+      <DetailInteraction {...props} mobile={mobile} />
     </ProfileReviewFrame>
   );
 }
@@ -175,8 +192,14 @@ export const ApprovedDetail: Story = {
     images: { items: reviewImages, nextAfter: null },
     copy: computerCopy("ko-KR"),
     profileCopy: creationCopy("ko"),
+    detailCopy: computerDetailCopy("ko"),
+    formatTime: () => "11월 2일 오전 9:00",
   },
   render: ApprovedAgent,
+};
+export const ApprovedComputerDetails: Story = {
+  ...ApprovedDetail,
+  args: { ...ApprovedDetail.args, detailsOpened: true },
 };
 export const ApprovedEdit: Story = {
   ...ApprovedDetail,
@@ -186,6 +209,22 @@ export const ApprovedEdit: Story = {
       type: "editing",
       draft: { name: "두부", image: reviewRetriever, paletteKey: "butter" },
       error: null,
+    },
+  },
+};
+export const ApprovedLongName: Story = {
+  ...ApprovedDetail,
+  args: {
+    ...ApprovedDetail.args,
+    data: {
+      ...detail,
+      agent: {
+        ...agent,
+        name: "찹추찹찹추찹추찹찹추찹추찹찹추찹추찹찹추찹추",
+        handle: "long-identifier",
+        paletteKey: "butter",
+        profileImage: reviewRetriever,
+      },
     },
   },
 };
@@ -418,6 +457,29 @@ export const FeedbackPopulated: Story = {
   render: (args): ReactElement => <FeedbackChrome {...args} mobile />,
 };
 export const Running: Story = { args: { initial: detail, data: detail } };
+export const Stopped: Story = {
+  args: {
+    initial: detail,
+    data: {
+      ...detail,
+      agent: {
+        ...agent,
+        computer: {
+          ...agent.computer,
+          power: "stopped",
+          intent: "stopped",
+          connector: "disconnected",
+          actions: [
+            { action: "start", available: true, reason: null },
+            { action: "stop", available: false, reason: "requiresRunning" },
+            { action: "restart", available: false, reason: "requiresRunning" },
+            { action: "delete", available: true, reason: null },
+          ],
+        },
+      },
+    },
+  },
+};
 export const StopConfirmation: Story = {
   args: { initial: detail, data: detail, confirmation: "stop" },
 };

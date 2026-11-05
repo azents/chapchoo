@@ -1,8 +1,10 @@
 import { computerCopy } from "@chapchoo/web-core/computer-messages";
 import { expect, test } from "@playwright/test";
 import { creationCopy } from "../creationCopy";
+import { computerDetailCopy } from "../detailCopy";
 const copy = computerCopy("en-US");
 const profile = creationCopy("en-US");
+const detailCopy = computerDetailCopy("en-US");
 test("Exact unresolved creation remains recoverable after its Provider disappears", async ({
   page,
 }) => {
@@ -188,13 +190,21 @@ test("Computer read failure preserves the last-known detail and disables control
     page.getByRole("heading", { name: "Research companion" }),
   ).toBeVisible();
   await expect(page.getByRole("status")).toContainText(copy.stale);
-  await page.getByRole("button", { name: copy.details, exact: true }).click();
-  await expect(page.getByText(copy.lastKnown, { exact: false })).toBeVisible();
   await expect(
     page.getByRole("button", { name: copy.stop, exact: true }),
   ).toBeDisabled();
-  await expect(page.getByText(copy.connector, { exact: true })).toBeVisible();
-  await expect(page.getByText(copy.management, { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: copy.details, exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: copy.details, exact: true });
+  await expect(dialog.getByRole("status")).toContainText(copy.stale);
+  await expect(
+    dialog.getByText(copy.lastKnown, { exact: false }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByText(detailCopy.connection, { exact: true }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByText(detailCopy.management, { exact: true }),
+  ).toBeVisible();
 });
 test("Creation Provider read failure retains the entered draft and recovery action", async ({
   page,

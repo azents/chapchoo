@@ -6,6 +6,10 @@
 .emptyState {
   padding-block: 5rem;
 }
+.emptyPortrait {
+  width: 9rem;
+  height: 8rem;
+}
 @media (max-width: 48em) {
   .emptyState {
     padding-block: 3rem;
@@ -316,10 +320,22 @@
   background: var(--profile-ink);
   color: var(--profile-surface);
 }
-.computerPanel {
-  border: 0.0625rem solid var(--chapchoo-color-border);
-  border-radius: var(--mantine-radius-lg);
-  padding: var(--mantine-spacing-xl);
+.controlRow {
+  border-bottom: 0.0625rem solid var(--chapchoo-color-border);
+  padding: var(--mantine-spacing-lg) var(--mantine-spacing-xs);
+}
+.diagnosticSummary {
+  font-size: var(--mantine-font-size-xs);
+  color: var(--chapchoo-color-muted);
+  cursor: pointer;
+}
+.controlHelp {
+  display: inline-flex;
+  border-radius: var(--mantine-radius-sm);
+}
+.controlHelp:focus-visible {
+  outline: 0.125rem solid var(--chapchoo-color-focus);
+  outline-offset: var(--mantine-spacing-xs);
 }
 @media (max-width: 62em) {
   .card {
@@ -430,9 +446,10 @@
     margin-bottom: var(--mantine-spacing-xs);
   }
   .hero {
+    display: flex;
+    flex-wrap: nowrap;
     padding: var(--mantine-spacing-lg);
     gap: var(--mantine-spacing-lg);
-    flex-wrap: wrap;
   }
   .heroPortrait {
     width: 8.5rem;
@@ -442,15 +459,17 @@
     font-size: 1.75rem;
   }
   .heroEdit {
-    position: absolute;
-    top: var(--mantine-spacing-sm);
-    right: var(--mantine-spacing-sm);
+    align-self: flex-start;
   }
   .heroIdentity {
-    min-width: 8rem;
+    min-width: 0;
   }
 }
 @media (max-width: 22em) {
+  .heroPortrait {
+    width: 7rem;
+    height: 7rem;
+  }
   .imageGrid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }

@@ -101,7 +101,7 @@ test("Team creation keeps count, automatic-proposal guidance, address and cancel
     await expect(
       dialog.getByText("/teams/dijain-tim", { exact: true }),
     ).toBeVisible();
-    await expect(dialog.getByText(/이름에서 자동으로/)).toBeVisible();
+    await expect(dialog.getByText(/이름에서 자동 생성/)).toBeVisible();
     await expect(
       dialog.getByRole("button", { name: "팀 만들기", exact: true }),
     ).toBeEnabled();
@@ -111,4 +111,77 @@ test("Team creation keeps count, automatic-proposal guidance, address and cancel
       page.getByRole("button", { name: "공간 선택", exact: true }).last(),
     ).toContainText("내 공간");
   }
+});
+
+test("long profile names keep a separate edit target on narrow screens", async ({
+  page,
+}) => {
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto(
+      "/iframe.html?id=computers-agents--approved-long-name&viewMode=story",
+    );
+    const name = await page.getByRole("heading", { level: 1 }).boundingBox();
+    const edit = await page
+      .getByRole("button", { name: ko.edit, exact: true })
+      .boundingBox();
+    expect(name).not.toBeNull();
+    expect(edit).not.toBeNull();
+    if (!name || !edit) {
+      throw new Error("Profile geometry is unavailable");
+    }
+    expect(
+      edit.y + edit.height <= name.y ||
+        edit.x + edit.width <= name.x ||
+        name.x + name.width <= edit.x,
+    ).toBe(true);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+  }
+});
+
+test("profile editor initially shows the whole preview instead of scrolling to the name input", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(
+    "/iframe.html?id=computers-agents--approved-edit&viewMode=story",
+  );
+  const dialog = page.getByRole("dialog", { name: ko.edit, exact: true });
+  await expect(
+    dialog.getByRole("region", { name: ko.preview, exact: true }),
+  ).toBeInViewport({ ratio: 1 });
+  await expect(
+    dialog.getByRole("textbox", { name: ko.name, exact: true }),
+  ).not.toBeFocused();
+});
+
+test("large profile placements opt into motion while image-choice thumbnails remain static", async ({
+  page,
+}) => {
+  for (const { story, count } of [
+    { story: "computers-agents--approved-list", count: 4 },
+    { story: "computers-agents--approved-detail", count: 1 },
+    { story: "computers-agents--approved-team-created", count: 1 },
+    { story: "computers-agent-creation--approved", count: 1 },
+  ]) {
+    await page.goto(`/iframe.html?id=${story}&viewMode=story`);
+    await expect(page.getByRole("main").locator("[data-playing]")).toHaveCount(
+      count,
+    );
+  }
+  const handle = page.getByRole("textbox", { name: ko.handle, exact: true });
+  await expect(handle).toHaveAttribute("autocapitalize", "none");
+  await expect(handle).toHaveAttribute("autocorrect", "off");
+  await expect(handle).toHaveAttribute("autocomplete", "off");
+  await expect(handle).toHaveAttribute("spellcheck", "false");
+  await expect(handle).toHaveAttribute("inputmode", "text");
+  await expect(
+    page
+      .getByRole("group", { name: ko.image, exact: true })
+      .locator("[data-playing]"),
+  ).toHaveCount(0);
 });

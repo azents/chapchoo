@@ -104,7 +104,10 @@ that action or rerandomize the image.
 
 Detail renders the saved profile and opens an independent controlled edit
 draft in a desktop dialog or mobile bottom sheet. Name/image/palette changes
-update its preview; the handle is read-only. Catalogue pages are
+update its preview; the handle is read-only. Initial focus stays at the dialog heading so opening a narrow
+editor does not scroll its preview out of view or immediately summon a keyboard.
+The profile identity retains its existing alignment with a separate in-flow edit
+target rather than overlapping long names. Catalogue pages are
 supplementary: failure retains the chosen reference and name/color draft, not
 a fabricated default. Save disables duplicate submission and submits the complete
 selection. Failure retains the draft; Cancel, close and Escape discard it

@@ -21,6 +21,7 @@
     "./designTokens": "./src/designTokens.ts",
     "./Mascot": "./src/Mascot.tsx",
     "./AgentMascotMotion": "./src/AgentMascotMotion.tsx",
+    "./CharacterArtwork": "./src/CharacterArtwork.tsx",
     "./webIdentity": "./src/webIdentity.ts",
     "./ContentSection": "./src/ContentSection.tsx",
     "./FontFaces": "./src/FontFaces.tsx",

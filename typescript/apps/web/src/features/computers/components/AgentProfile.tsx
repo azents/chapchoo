@@ -1,3 +1,4 @@
+import { CharacterArtwork } from "@chapchoo/ui/CharacterArtwork";
 import {
   ActionIcon,
   Alert,
@@ -5,7 +6,6 @@ import {
   Button,
   Drawer,
   Group,
-  Image,
   Modal,
   Stack,
   Text,
@@ -122,7 +122,6 @@ export function AgentProfile(props: AgentProfileProps): ReactElement {
             withAsterisk={false}
             maxLength={120}
             disabled={busy}
-            data-autofocus
           />
           <ProfilePaletteChoices
             copy={p}
@@ -171,7 +170,11 @@ export function AgentProfile(props: AgentProfileProps): ReactElement {
   const dialog = {
     opened: draft !== null,
     onClose: props.onCancelProfile,
-    title: p.edit,
+    title: (
+      <span tabIndex={-1} data-autofocus style={{ outline: "none" }}>
+        {p.edit}
+      </span>
+    ),
     closeOnClickOutside: !busy,
     closeOnEscape: !busy,
     closeButtonProps: { disabled: busy, "aria-label": p.close },
@@ -185,9 +188,9 @@ export function AgentProfile(props: AgentProfileProps): ReactElement {
         className={classes.hero}
         style={profileStyle(agent.paletteKey)}
       >
-        <Image
-          src={`${props.basePath}/design-assets/${agent.profileImage.assetKey}-216.webp`}
-          alt=""
+        <CharacterArtwork
+          basePath={props.basePath}
+          assetKey={agent.profileImage.assetKey}
           className={classes.heroPortrait}
         />
         <Box className={classes.heroIdentity}>
@@ -195,9 +198,6 @@ export function AgentProfile(props: AgentProfileProps): ReactElement {
             {agent.name}
           </Title>
           <Text className={classes.previewHandle}>@{agent.handle}</Text>
-          <Text size="sm" mt="lg">
-            {props.copy[agent.computer.connector]}
-          </Text>
         </Box>
         <ActionIcon
           className={classes.heroEdit}
@@ -205,7 +205,7 @@ export function AgentProfile(props: AgentProfileProps): ReactElement {
           color="dark"
           aria-label={p.edit}
           onClick={props.onEditProfile}
-          size="lg"
+          size="2.75rem"
         >
           <svg
             viewBox="0 0 24 24"

@@ -399,6 +399,13 @@ retains the static artwork's square box and WebP asset, anchoring at the artwork
 actual contact line inside that box. Static `Mascot` remains available for other
 accessory placements. This rollout does not implement Agent lifecycle behavior.
 
+On 2026-11-05 the requester also selected all large Agent character placements:
+list cards, detail, creation/edit previews and the empty list. These reuse the
+same gesture, asset and visibility/reduced-motion rules, while the small image
+choice thumbnails remain static. Large decorative placements do not add replay
+buttons inside navigation or forms. The selected saved character never changes
+merely because its motion starts or stops.
+
 ### Accessible operation
 
 - Aim for applicable WCAG 2.2 AA: 4.5:1 normal-text contrast, 3:1 qualifying large

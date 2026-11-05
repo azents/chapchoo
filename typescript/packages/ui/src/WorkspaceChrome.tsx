@@ -230,6 +230,11 @@ export function WorkspaceChrome(props: WorkspaceChromeProps): ReactElement {
               }
               labelProps={{ className: classes.fieldLabel }}
               value={props.handle}
+              autoCapitalize="none"
+              autoCorrect="off"
+              autoComplete="off"
+              spellCheck={false}
+              inputMode="text"
               onChange={(event) => props.onHandle(event.currentTarget.value)}
               required
               maxLength={16}

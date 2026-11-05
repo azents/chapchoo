@@ -1,4 +1,5 @@
-import { Box, Image, Text } from "@mantine/core";
+import { CharacterArtwork } from "@chapchoo/ui/CharacterArtwork";
+import { Box, Text } from "@mantine/core";
 import { profileStyle } from "../profilePalette";
 import classes from "./ProfilePresentation.module.css";
 import type { AgentPaletteKey } from "@chapchoo/web-core/agent-profile";
@@ -20,9 +21,9 @@ export function ProfilePreview(props: {
       className={classes.preview}
       style={profileStyle(props.paletteKey)}
     >
-      <Image
-        src={`${props.basePath}/design-assets/${props.assetKey}-216.webp`}
-        alt=""
+      <CharacterArtwork
+        basePath={props.basePath}
+        assetKey={props.assetKey}
         className={classes.previewImage}
       />
       <Box className={classes.previewIdentity}>
