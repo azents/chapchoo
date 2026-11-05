@@ -69,6 +69,10 @@ CREATE TABLE external_auth_requests (
     agent_id BLOB CHECK(agent_id IS NULL OR (typeof(agent_id)='blob' AND length(agent_id)=16)),
     attempt_id BLOB CHECK(attempt_id IS NULL OR (typeof(attempt_id)='blob' AND length(attempt_id)=16)),
     accepted_at BIGINT NOT NULL,
+    owner_user_id BLOB REFERENCES users(id) ON DELETE RESTRICT CHECK(owner_user_id IS NULL OR (typeof(owner_user_id)='blob' AND length(owner_user_id)=16)),
+    owner_team_id BLOB REFERENCES teams(id) ON DELETE RESTRICT CHECK(owner_team_id IS NULL OR (typeof(owner_team_id)='blob' AND length(owner_team_id)=16)),
+    CHECK((owner_user_id IS NOT NULL AND owner_team_id IS NULL) OR
+          (owner_user_id IS NULL AND owner_team_id IS NOT NULL)),
     PRIMARY KEY(actor_user_id,request_id)
 );
 CREATE TABLE agent_authentication_selections (

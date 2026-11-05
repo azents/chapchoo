@@ -103,9 +103,11 @@ selection operation or provider HTTP path is activated by schema preparation.
   step identity for issuing/checking/exchanging, protected pending data for
   provider-pending phases and removal of pending secret bytes for terminal phases.
   A registered result retains historical assigned identity, not a live catalogue FK.
-- `external_auth_requests` retains caller/Request, closed operation kind, keyed
-  fingerprint and assigned result identities. Result IDs are historical values
-  rather than live FKs so later deletion cannot erase an accepted result.
+- `external_auth_requests` retains caller/Request, original User-or-Team owning
+  scope, closed operation kind, keyed fingerprint and assigned result identities.
+  The retained scope permits current-authority checks even after catalogue deletion.
+  Result IDs are historical values rather than live FKs so later deletion cannot
+  erase an accepted result.
 - `agent_authentication_selections` is one row per Agent, with a restricting
   authentication FK and cascading Agent FK. It stores no token or execution data.
   The referencing index supports later transactional in-use checks.

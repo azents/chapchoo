@@ -84,7 +84,9 @@ macro_rules! exercise {
         assert!(connection.batch_execute(&format!("UPDATE external_auth_attempts SET phase='EXCHANGING' WHERE id={attempt}")).is_err());
         assert!(connection.batch_execute(&format!("UPDATE external_auth_attempts SET phase='CANCELLED' WHERE id={attempt}")).is_err());
         connection.batch_execute(&format!("UPDATE external_auth_attempts SET phase='CANCELLED',pending_nonce=NULL,pending_ciphertext=NULL WHERE id={attempt}"))?;
-        connection.batch_execute(&format!("DELETE FROM external_auth_attempts WHERE id={attempt}; DELETE FROM external_authentications WHERE id={record}; INSERT INTO external_auth_requests VALUES({user},'register','REGISTER_KEY',{hash},{record},NULL,NULL,1)"))?;
+        connection.batch_execute(&format!("DELETE FROM external_auth_attempts WHERE id={attempt}; DELETE FROM external_authentications WHERE id={record}; INSERT INTO external_auth_requests VALUES({user},'register','REGISTER_KEY',{hash},{record},NULL,NULL,1,{user},NULL)"))?;
+        assert!(connection.batch_execute("UPDATE external_auth_requests SET owner_user_id=NULL").is_err());
+        assert_eq!(diesel::sql_query(format!("SELECT count(*) AS n FROM external_auth_requests WHERE owner_user_id={user} AND assigned_authentication_id={record}")).get_result::<Count>(connection)?.n,1);
         assert!(connection.revert_last_migration(source()).is_err());
         assert_eq!(diesel::sql_query("SELECT count(*) AS n FROM external_auth_requests").get_result::<Count>(connection)?.n,1);
         connection.batch_execute("DELETE FROM external_auth_requests")?;
@@ -182,7 +184,7 @@ fn sqlite_external_auth_binary_columns_reject_equal_length_text() -> Result<(), 
         ),
         (
             "external_auth_requests",
-            "actor_user_id,request_id,operation,fingerprint,assigned_authentication_id,agent_id,attempt_id,accepted_at",
+            "actor_user_id,request_id,operation,fingerprint,assigned_authentication_id,agent_id,attempt_id,accepted_at,owner_user_id",
             vec![
                 id,
                 "'register'",
@@ -192,8 +194,15 @@ fn sqlite_external_auth_binary_columns_reject_equal_length_text() -> Result<(), 
                 id,
                 id,
                 "1",
+                id,
             ],
-            vec![(0, 16), (3, 32), (4, 16), (5, 16), (6, 16)],
+            vec![(0, 16), (3, 32), (4, 16), (5, 16), (6, 16), (8, 16)],
+        ),
+        (
+            "external_auth_requests",
+            "actor_user_id,request_id,operation,fingerprint,accepted_at,owner_team_id",
+            vec![id, "'register'", "'REGISTER_KEY'", "zeroblob(32)", "1", id],
+            vec![(5, 16)],
         ),
         (
             "agent_authentication_selections",

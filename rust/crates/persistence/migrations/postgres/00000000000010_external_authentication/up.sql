@@ -71,6 +71,10 @@ CREATE TABLE external_auth_requests (
     agent_id UUID,
     attempt_id UUID,
     accepted_at BIGINT NOT NULL,
+    owner_user_id UUID REFERENCES users(id) ON DELETE RESTRICT,
+    owner_team_id UUID REFERENCES teams(id) ON DELETE RESTRICT,
+    CHECK((owner_user_id IS NOT NULL AND owner_team_id IS NULL) OR
+          (owner_user_id IS NULL AND owner_team_id IS NOT NULL)),
     PRIMARY KEY(actor_user_id,request_id)
 );
 CREATE TABLE agent_authentication_selections (
