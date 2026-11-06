@@ -44,13 +44,11 @@ export function useAgentCreation({
   const [step, setStep] = useState<AgentCreationProps["step"]>("environment");
   const [authentication, setAuthentication] =
     useState<AuthenticationView | null>(null);
-  const [authenticationPickerOpen, setAuthenticationPicker] = useState(false);
   const authenticationPanel = useConnectionPanel({
     snapshots: initial.authentications,
     selectedId: authentication?.id,
     onSelect: (value) => {
       setAuthentication(value);
-      setAuthenticationPicker(false);
     },
   });
   const [after, setAfter] = useState<string | null>(null);
@@ -226,7 +224,11 @@ export function useAgentCreation({
     }
   }
   function editable(): boolean {
-    return !busy.current && !request.current.locked;
+    return (
+      !busy.current &&
+      !request.current.locked &&
+      authenticationPanel.dialog.type === "closed"
+    );
   }
   return {
     initial,
@@ -252,20 +254,6 @@ export function useAgentCreation({
     authentication,
     authenticationCopy: authenticationCopy(locale),
     authenticationPanel,
-    authenticationPickerOpen,
-    onAuthenticationPicker: () => {
-      if (editable()) {
-        setAuthenticationPicker(true);
-      }
-    },
-    onCloseAuthenticationPicker: () => {
-      if (
-        authenticationPanel.dialog.type === "closed" &&
-        !authenticationPanel.busy
-      ) {
-        setAuthenticationPicker(false);
-      }
-    },
     onNext: () => {
       if (!editable()) {
         return;

@@ -17,9 +17,6 @@ test("saved reference row opens an explicit picker and blocks unchanged selectio
   await expect(
     dialog.getByRole("button", { name: copy.selected, exact: true }),
   ).toBeDisabled();
-  await expect(
-    dialog.getByText(copy.storedOnly, { exact: true }),
-  ).toBeVisible();
   await dialog.getByRole("button", { name: copy.close, exact: true }).click();
   await expect(
     page

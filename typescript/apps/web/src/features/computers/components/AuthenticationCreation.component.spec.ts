@@ -16,7 +16,12 @@ test("creation stages require explicit environment and authentication choices", 
   await page.goto(
     "/iframe.html?id=computers-agent-creation--authentication&viewMode=story",
   );
-  await expect(page.getByText(copy.unselected, { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "건우의 ChatGPT", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "개발용 API", exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByRole("button", { name: copy.next, exact: true }),
   ).toBeDisabled();

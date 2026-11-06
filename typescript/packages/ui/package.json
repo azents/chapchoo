@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./AgentTheme": "./src/AgentTheme.tsx",
+    "./ProviderIcon": "./src/ProviderIcon.tsx",
     "./ResponsiveDialog": "./src/ResponsiveDialog.tsx",
     "./DropdownButton": "./src/DropdownButton.tsx",
     "./InteractiveSurface": "./src/InteractiveSurface.tsx",

@@ -23,7 +23,7 @@ import {
   ThemeIcon,
 } from "@mantine/core";
 import { toneColors, darkToneColors, platformFonts } from "./designTokens";
-import { profileVariables } from "./profileTokens";
+import { agentThemeColors, profileVariables } from "./profileTokens";
 import classes from "./theme.module.css";
 import "./editors.css";
 import type { CSSVariablesResolver } from "@mantine/core";
@@ -77,6 +77,7 @@ export const theme = createTheme({
   primaryShade: 6,
   autoContrast: true,
   colors: {
+    ...agentThemeColors,
     butter: [
       "#fffbee",
       toneColors.accentSoft,

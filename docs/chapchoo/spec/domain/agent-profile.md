@@ -28,6 +28,11 @@ constraint and reports a typed handle conflict.
 
 ## Profile values and catalogue
 
+Agent creation, detail and chat use a scoped shared Mantine theme context keyed
+by the Agent palette. Primary controls and selection colors follow that context,
+including portaled modals and drawers; account-level pages retain the workspace
+theme. Destructive and error controls keep their semantic colors.
+
 The saved Agent profile contains display name, catalogue image ID and one of six
 palette keys: `butter`, `sage`, `apricot`, `teal`, `lilac`, `rose`. The handle is not
 part of the profile update payload. Repository profile updates retain Agent,

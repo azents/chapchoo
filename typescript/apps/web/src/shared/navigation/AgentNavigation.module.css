@@ -1,5 +1,6 @@
 .agent {
   display: flex;
+  min-height: 4rem;
   align-items: center;
   gap: var(--mantine-spacing-sm);
   padding: var(--mantine-spacing-md);
@@ -24,6 +25,14 @@
   background: var(--chapchoo-color-selected);
 }
 .portrait {
+  width: 2.25rem;
+  height: 2.25rem;
+  flex-shrink: 0;
+}
+.allIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 2.25rem;
   height: 2.25rem;
   flex-shrink: 0;

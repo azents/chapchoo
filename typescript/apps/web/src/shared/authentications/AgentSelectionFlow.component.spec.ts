@@ -100,7 +100,7 @@ test("stale selection conflict refreshes the expected reference and permits an e
     .getByRole("heading", { name: "개발용 API", exact: true })
     .locator("..");
   await card
-    .getByRole("button", { name: "Choose authentication", exact: true })
+    .getByRole("button", { name: "Choose AI authentication", exact: true })
     .click();
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(
@@ -109,7 +109,7 @@ test("stale selection conflict refreshes the expected reference and permits an e
       .getByText("Other tab selection", { exact: true }),
   ).toBeVisible();
   await card
-    .getByRole("button", { name: "Choose authentication", exact: true })
+    .getByRole("button", { name: "Choose AI authentication", exact: true })
     .click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   expect(selections).toBe(2);

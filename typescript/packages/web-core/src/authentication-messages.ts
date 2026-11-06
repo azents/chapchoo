@@ -41,7 +41,6 @@ export interface AuthenticationCopy {
   cancelled: string;
   failed: string;
   superseded: string;
-  storedOnly: string;
   unselected: string;
   ownerOnly: string;
   more: string;
@@ -60,10 +59,14 @@ export interface AuthenticationCopy {
   selected: string;
   remaining: string;
   keyVisibility: string;
+  copyCode: string;
+  copied: string;
   execution: string;
   recordUnavailable: string;
 }
 const english: AuthenticationCopy = {
+  copyCode: "Copy code",
+  copied: "Copied",
   first: "First page",
   recordUnavailable:
     "The connection was saved, but is no longer available to select. No replacement was selected.",
@@ -73,15 +76,15 @@ const english: AuthenticationCopy = {
   environmentHint: "Choose the Computer your Agent will use.",
   selected: "Selected",
   remaining: "Code expires in",
-  title: "AI connections",
+  title: "AI authentication",
   connect: "Connect account",
   codex: "Codex",
   personal: "Personal",
   team: "Team",
-  emptyTitle: "Connect Codex",
+  emptyTitle: "Add AI authentication",
   emptyHint: "Connect ChatGPT or register an OpenAI API key.",
   manage: "Manage",
-  choose: "Choose authentication",
+  choose: "Choose AI authentication",
   change: "Change",
   chatgpt: "ChatGPT account",
   apiKey: "OpenAI API key",
@@ -122,22 +125,22 @@ const english: AuthenticationCopy = {
   cancelled: "Connection cancelled.",
   failed: "Connection could not be completed. You can try again.",
   superseded: "A newer change replaced this attempt.",
-  storedOnly:
-    "Saved authentication reference only; this does not confirm account access, billing or Computer setup.",
-  unselected: "No authentication selected",
+  unselected: "No AI authentication selected",
   ownerOnly: "Only Team Owners and Managers can manage Team connections.",
   more: "Next",
   previous: "Previous",
   environment: "Computer",
-  authentication: "Codex authentication",
+  authentication: "AI authentication",
   profile: "Profile and name",
   environmentTitle: "Choose a Computer",
-  authenticationTitle: "Connect Codex",
-  authenticationHint: "Choose the authentication this Agent will use.",
+  authenticationTitle: "Choose AI authentication",
+  authenticationHint: "Choose the AI authentication this Agent will use.",
   next: "Next",
   newAgent: "New Agent",
 };
 const korean: AuthenticationCopy = {
+  copyCode: "코드 복사",
+  copied: "복사됨",
   first: "처음",
   recordUnavailable:
     "연결은 저장되었지만 지금은 선택할 수 없습니다. 다른 인증으로 바꾸지는 않았습니다.",
@@ -147,15 +150,15 @@ const korean: AuthenticationCopy = {
   environmentHint: "에이전트가 사용할 컴퓨터를 골라 주세요.",
   selected: "선택됨",
   remaining: "코드 유효 시간",
-  title: "AI 연결",
+  title: "AI 인증",
   connect: "계정 연결",
   codex: "Codex",
   personal: "개인",
   team: "팀",
-  emptyTitle: "Codex를 연결하세요",
+  emptyTitle: "AI 인증을 추가하세요",
   emptyHint: "ChatGPT 계정을 연결하거나 OpenAI API 키를 등록하세요.",
   manage: "관리",
-  choose: "사용할 인증 선택",
+  choose: "AI 인증 선택",
   change: "변경",
   chatgpt: "ChatGPT 계정",
   apiKey: "OpenAI API 키",
@@ -194,22 +197,22 @@ const korean: AuthenticationCopy = {
   cancelled: "연결을 취소했습니다.",
   failed: "연결을 완료하지 못했습니다. 다시 시도할 수 있습니다.",
   superseded: "더 최근 변경으로 이 요청이 대체되었습니다.",
-  storedOnly:
-    "저장된 인증 선택입니다. 계정 사용 가능 여부·요금·컴퓨터 설정 완료를 뜻하지 않습니다.",
-  unselected: "선택한 인증 없음",
+  unselected: "선택한 AI 인증 없음",
   ownerOnly: "팀 소유자와 관리자만 팀 연결을 관리할 수 있습니다.",
   more: "다음",
   previous: "이전",
   environment: "컴퓨터",
-  authentication: "Codex 인증",
+  authentication: "AI 인증",
   profile: "프로필·이름",
   environmentTitle: "컴퓨터를 선택하세요",
-  authenticationTitle: "Codex를 연결하세요",
-  authenticationHint: "이 에이전트에서 사용할 인증을 선택하세요.",
+  authenticationTitle: "AI 인증을 선택하세요",
+  authenticationHint: "이 에이전트에서 사용할 AI 인증을 선택하세요.",
   next: "다음",
   newAgent: "새 에이전트",
 };
 const japanese: AuthenticationCopy = {
+  copyCode: "コードをコピー",
+  copied: "コピーしました",
   first: "最初のページ",
   recordUnavailable:
     "接続は保存されましたが、現在は選択できません。別の認証には変更していません。",
@@ -219,16 +222,16 @@ const japanese: AuthenticationCopy = {
   environmentHint: "エージェントが使うコンピューターを選んでください。",
   selected: "選択中",
   remaining: "コードの残り時間",
-  title: "AI接続",
+  title: "AI認証",
   connect: "アカウントを接続",
   codex: "Codex",
   personal: "個人",
   team: "チーム",
-  emptyTitle: "Codexを接続しましょう",
+  emptyTitle: "AI認証を追加",
   emptyHint:
     "ChatGPTアカウントを接続するか、OpenAI APIキーを登録してください。",
   manage: "管理",
-  choose: "認証を選択",
+  choose: "AI認証を選択",
   change: "変更",
   chatgpt: "ChatGPTアカウント",
   apiKey: "OpenAI APIキー",
@@ -267,22 +270,22 @@ const japanese: AuthenticationCopy = {
   cancelled: "接続をキャンセルしました。",
   failed: "接続できませんでした。再試行できます。",
   superseded: "新しい変更によりこの試行は置き換えられました。",
-  storedOnly:
-    "保存された認証の選択です。アカウントの利用可否、料金やコンピューターの設定完了を示すものではありません。",
   unselected: "認証未選択",
   ownerOnly: "チームの接続を管理できるのはオーナーと管理者のみです。",
   more: "次へ",
   previous: "前へ",
   environment: "コンピューター",
-  authentication: "Codex認証",
+  authentication: "AI認証",
   profile: "プロフィール・名前",
   environmentTitle: "コンピューターを選択",
-  authenticationTitle: "Codexを接続しましょう",
-  authenticationHint: "このエージェントで使用する認証を選んでください。",
+  authenticationTitle: "AI認証を選択",
+  authenticationHint: "このエージェントで使用するAI認証を選んでください。",
   next: "次へ",
   newAgent: "新しいエージェント",
 };
 const french: AuthenticationCopy = {
+  copyCode: "Copier le code",
+  copied: "Copié",
   first: "Première page",
   recordUnavailable:
     "La connexion a été enregistrée, mais n’est plus disponible. Aucune autre authentification n’a été sélectionnée.",
@@ -292,15 +295,15 @@ const french: AuthenticationCopy = {
   environmentHint: "Choisissez le Computer que votre Agent utilisera.",
   selected: "Sélectionné",
   remaining: "Expiration du code dans",
-  title: "Connexions IA",
+  title: "Authentification IA",
   connect: "Connecter un compte",
   codex: "Codex",
   personal: "Personnel",
   team: "Équipe",
-  emptyTitle: "Connectez Codex",
+  emptyTitle: "Ajoutez une authentification IA",
   emptyHint: "Connectez ChatGPT ou enregistrez une clé API OpenAI.",
   manage: "Gérer",
-  choose: "Choisir l’authentification",
+  choose: "Choisir l’authentification IA",
   change: "Modifier",
   chatgpt: "Compte ChatGPT",
   apiKey: "Clé API OpenAI",
@@ -340,19 +343,17 @@ const french: AuthenticationCopy = {
   cancelled: "Connexion annulée.",
   failed: "La connexion a échoué. Vous pouvez réessayer.",
   superseded: "Une modification plus récente a remplacé cette tentative.",
-  storedOnly:
-    "Référence d’authentification enregistrée uniquement : ni accès au compte, ni facturation, ni configuration du Computer ne sont confirmés.",
   unselected: "Aucune authentification sélectionnée",
   ownerOnly:
     "Seuls les propriétaires et gestionnaires peuvent gérer les connexions de l’équipe.",
   more: "Suivant",
   previous: "Précédent",
   environment: "Computer",
-  authentication: "Authentification Codex",
+  authentication: "Authentification IA",
   profile: "Profil et nom",
   environmentTitle: "Choisissez un Computer",
-  authenticationTitle: "Connectez Codex",
-  authenticationHint: "Choisissez l’authentification de cet Agent.",
+  authenticationTitle: "Choisissez une authentification IA",
+  authenticationHint: "Choisissez l’authentification IA de cet Agent.",
   next: "Suivant",
   newAgent: "Nouvel Agent",
 };

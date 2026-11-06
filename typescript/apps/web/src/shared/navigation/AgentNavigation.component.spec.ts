@@ -23,7 +23,7 @@ test("Team page shell renders five shared Agent choices and the full-list destin
     sidebar
       .getByRole("navigation", { name: "Agents", exact: true })
       .getByRole("link"),
-  ).toHaveCount(5);
+  ).toHaveCount(6);
   await expect(
     sidebar.getByRole("link", { name: "All Agents", exact: true }),
   ).toHaveAttribute("href", "/teams/design/agents");

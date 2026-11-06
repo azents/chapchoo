@@ -10,11 +10,12 @@ import {
   authenticationList,
   authenticationSelection,
   authenticationScope,
-  deviceProgress,
+  deviceProgress as parseDeviceProgress,
   wireAuthenticationScope,
 } from "../dist/external-authentication.js";
 
 const instant = { seconds: 1n, nanos: 0 };
+const deviceProgress = (value) => parseDeviceProgress(value, 1000);
 void test("mutation boundaries require their operation-specific accepted identity", () => {
   const recordResult = { record: { authenticationId: "credential" } };
   const selectionResult = {
@@ -152,6 +153,7 @@ void test("device boundary admits only one state and the approved fixed destinat
     nextCheckAt: instant,
   };
   assert.equal(deviceProgress({ ...base, pending }).state.type, "pending");
+  assert.equal(deviceProgress({ ...base, pending }).observedAt, 1000);
   assert.deepEqual(
     deviceProgress({ ...base, registered: { authenticationId: "credential" } })
       .state,

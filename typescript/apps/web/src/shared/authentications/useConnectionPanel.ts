@@ -4,7 +4,7 @@ import { authenticationCopy } from "@chapchoo/web-core/authentication-messages";
 import { initialQuery } from "@chapchoo/web-core/page-state";
 import { useMediaQuery } from "@mantine/hooks";
 import { useLocale, useNow } from "next-intl";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { trpc } from "@/shared/rpc/client";
 import {
   authenticationRecordUnavailable,
@@ -51,6 +51,7 @@ export function useConnectionPanel(
   const [name, setName] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [busy, setBusy] = useState(false);
+  const [clockOffset, setClockOffset] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const pending = useRef(false);
   const deviceTarget = useRef<AuthenticationView | null>(null);
@@ -90,7 +91,13 @@ export function useConnectionPanel(
     }
     setApiKey("");
     setError(null);
-    setName("target" in value && value.target ? value.target.name : "");
+    setName(
+      "target" in value && value.target
+        ? value.target.name
+        : dialog.type === "connect" && value.type === "key"
+          ? name
+          : "",
+    );
     setDialog(value);
   }
   async function complete(
@@ -148,6 +155,7 @@ export function useConnectionPanel(
         revision,
       );
     } else {
+      setClockOffset(value.observedAt - Date.now());
       setDialog({ type: "device", progress: value });
     }
   }
@@ -173,8 +181,7 @@ export function useConnectionPanel(
       }
     }
   }
-  async function submit(): Promise<void> {
-    const current = dialog;
+  async function submit(current = dialog): Promise<void> {
     if (
       !["key", "rename", "delete", "deviceName"].includes(current.type) ||
       !snapshot.canManage
@@ -233,7 +240,7 @@ export function useConnectionPanel(
           const value = await client.authentications.startDevice.mutate({
             scope,
             requestId,
-            name: name.trim(),
+            name: current.target?.name ?? name.trim(),
             target: current.target
               ? {
                   authenticationId: current.target.id,
@@ -318,6 +325,39 @@ export function useConnectionPanel(
       }
     });
   }
+  const checkDevice = useEffectEvent((advance: boolean) => {
+    void deviceRead(advance);
+  });
+  useEffect(() => {
+    if (
+      !authorized ||
+      input.enabled === false ||
+      busy ||
+      dialog.type !== "device"
+    ) {
+      return;
+    }
+    const progress = dialog.progress;
+    if (
+      !["pending", "starting", "checking", "exchanging"].includes(
+        progress.state.type,
+      )
+    ) {
+      return;
+    }
+    const advance = progress.state.type === "pending";
+    const serverNow = Date.now() + clockOffset;
+    const next =
+      progress.state.type === "pending"
+        ? progress.state.nextCheckAt
+        : serverNow + 1000;
+    const deadline = Math.min(next, progress.expiresAt);
+    const timer = window.setTimeout(
+      () => checkDevice(advance),
+      Math.max(250, deadline - serverNow),
+    );
+    return () => window.clearTimeout(timer);
+  }, [authorized, input.enabled, busy, dialog, clockOffset]);
   async function cancelDevice(): Promise<void> {
     if (dialog.type !== "device") {
       return;
@@ -413,7 +453,10 @@ export function useConnectionPanel(
       dialog.type === "device"
         ? Math.max(
             0,
-            Math.ceil((dialog.progress.expiresAt - now.getTime()) / 1000),
+            Math.ceil(
+              (dialog.progress.expiresAt - (now.getTime() + clockOffset)) /
+                1000,
+            ),
           )
         : null,
     onName: (value) => {
@@ -478,11 +521,12 @@ export function useConnectionPanel(
       input.onCloseManage?.();
     },
     onSubmit: () => void submit(),
+    onDeviceStart: (target) => void submit({ type: "deviceName", target }),
     onDeviceCheck: () => void deviceRead(true),
     onDeviceStatus: () => void deviceRead(false),
     onDeviceCancel: () => void cancelDevice(),
     onRecover: () => void recover(),
     onDeviceRestart: () =>
-      transition({ type: "deviceName", target: deviceTarget.current }),
+      void submit({ type: "deviceName", target: deviceTarget.current }),
   };
 }

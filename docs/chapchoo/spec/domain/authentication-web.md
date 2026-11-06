@@ -60,10 +60,16 @@ Registration/management uses a desktop modal and a bounded mobile bottom sheet;
 the active attempt owns dismissal and focus independently of the outer picker.
 
 Device registration collects an alias and starts one backend attempt. Active
-interaction shows the actually issued code, fixed official verification link,
-remaining validity, explicit advance/status actions and cancellation. Opening
-the external page does not report success. Poll advances once; an uncertain
-advance switches to status observation rather than replaying it. Provider
+interaction shows the actually issued code with a copy action, fixed official
+verification link, remaining validity and cancellation. Optional alias input is
+part of the connection-method form rather than a separate step. Choosing ChatGPT
+starts the attempt directly. The active panel polls at the next backend-permitted
+check time and completes automatically after success. Each web progress projection
+includes its server observation time; polling deadlines and remaining validity
+apply the response clock offset so a skewed browser clock neither delays the
+attempt nor creates a rapid polling loop. Opening the external page
+does not report success. An uncertain advance stops automatic polling and switches
+to explicit status observation rather than replaying it. Provider
 success returns directly to the originating selection/management task without
 account review or a second Register action. Cancellation, expiry, failure and
 supersession stay distinct. Expired/failed attempts expose a new connection
@@ -92,9 +98,10 @@ receipt recovery, and known accepted responses retain accepted-outcome handling.
 
 ## Creation and existing-Agent selection
 
-New creation proceeds environment → Codex authentication → existing profile.
-It offers only registered eligible cloud environments, keeps the cloud icon and
-selected card, and requires an explicit credential choice. Back/Next retain the
+New creation proceeds environment → AI authentication → existing profile.
+It offers only registered eligible cloud environments, shows their actual
+Kubernetes/Docker type icon and selected card, and requires an explicit credential
+choice from the initial inline candidates rather than a separate picker button. Back/Next retain the
 environment, credential, image, name, handle and palette without retaining secret
 input. No first-record/default fallback is added. Selection can use the caller's
 personal catalogue and, for a collaborative Agent, that exact Team's catalogue.

@@ -85,6 +85,7 @@ pub struct ProviderCapabilities {
 pub struct ProviderChoice {
     pub id: String,
     pub name: String,
+    pub kind: chapchoo_domain::ProviderKind,
 }
 impl fmt::Debug for ProviderChoice {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -809,13 +810,16 @@ impl Store {
                 .bind::<BigInt, _>(limit)
                 .load::<ProviderRow>(connection)
                 .await?;
-            Ok(rows
-                .into_iter()
-                .map(|row| ProviderChoice {
-                    id: row.id.to_dto(EntityKind::Provider),
-                    name: row.name,
+            rows.into_iter()
+                .map(|row| {
+                    let kind = row.substrate()?.kind();
+                    Ok(ProviderChoice {
+                        id: row.id.to_dto(EntityKind::Provider),
+                        name: row.name,
+                        kind,
+                    })
                 })
-                .collect())
+                .collect()
         })
     }
 

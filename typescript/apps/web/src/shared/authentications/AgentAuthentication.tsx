@@ -58,9 +58,6 @@ export function AgentAuthentication(
         closeLabel={c.close}
       >
         <Stack gap="lg">
-          <Text size="sm" c="dimmed">
-            {c.storedOnly}
-          </Text>
           {props.task.type === "uncertain" ? (
             <Alert color="yellow">
               <Stack gap="md">

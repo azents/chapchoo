@@ -1,8 +1,14 @@
 import { expect, test } from "@playwright/test";
 import superjson from "superjson";
 import type { Page } from "@playwright/test";
-async function mockFlow(page: Page, uncertain: boolean): Promise<string[]> {
+async function mockFlow(
+  page: Page,
+  uncertain: boolean,
+  clockSkew = 0,
+): Promise<string[]> {
   const calls: string[] = [];
+  const now = Date.now();
+  await page.clock.setFixedTime(now + clockSkew);
   await page.route("**/api/trpc/authentications.*", async (route) => {
     const method =
       new URL(route.request().url()).pathname.split(".").at(-1) ?? "";
@@ -13,12 +19,13 @@ async function mockFlow(page: Page, uncertain: boolean): Promise<string[]> {
     } else if (method === "startDevice") {
       result = {
         attemptId: "attempt",
-        expiresAt: Date.now() + 300000,
+        observedAt: now,
+        expiresAt: now + 300000,
         state: {
           type: "pending",
           userCode: "ABCD-EFGH",
           verificationUri: "https://auth.openai.com/codex/device",
-          nextCheckAt: 1,
+          nextCheckAt: now + 6000,
         },
         providerFailure: null,
       };
@@ -29,14 +36,16 @@ async function mockFlow(page: Page, uncertain: boolean): Promise<string[]> {
       }
       result = {
         attemptId: "attempt",
-        expiresAt: Date.now() + 300000,
+        observedAt: now,
+        expiresAt: now + 300000,
         state: { type: "registered", authenticationId: "connected" },
         providerFailure: null,
       };
     } else if (method === "deviceStatus") {
       result = {
         attemptId: "attempt",
-        expiresAt: Date.now() + 300000,
+        observedAt: now,
+        expiresAt: now + 300000,
         state: { type: "registered", authenticationId: "connected" },
         providerFailure: null,
       };
@@ -71,41 +80,63 @@ async function start(page: Page): Promise<void> {
     .getByRole("button", { name: "Connect account", exact: true })
     .first()
     .click();
-  await page
-    .getByRole("button", { name: "ChatGPT account", exact: true })
-    .click();
   await expect(
     page.getByRole("textbox", { name: "Alias", exact: true }),
   ).toBeEmpty();
   await page
-    .getByRole("dialog")
-    .getByRole("button", { name: "Connect account", exact: true })
+    .getByRole("button", { name: "ChatGPT account", exact: true })
     .click();
   await expect(page.getByText("ABCD-EFGH", { exact: true })).toBeVisible();
+  const now = await page.evaluate(() => Date.now());
+  await page.clock.install({ time: now });
+  await page.clock.pauseAt(now + 1000);
 }
 test("successful device exchange returns directly to the owning selection without another registration", async ({
   page,
 }) => {
   const calls = await mockFlow(page, false);
   await start(page);
-  await page
-    .getByRole("button", { name: "Check connection", exact: true })
-    .click();
-  await expect(page.getByRole("status")).toHaveText(
-    "Selected: Connected fixture",
-  );
+  expect(calls.filter((value) => value === "pollDevice")).toHaveLength(0);
+  await expect(
+    page.getByRole("textbox", { name: "Alias", exact: true }),
+  ).toHaveCount(0);
+  await page.clock.runFor(5000);
+  await expect(
+    page.getByRole("status").filter({ hasText: "Selected:" }),
+  ).toHaveText("Selected: Connected fixture");
+  await page.clock.resume();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   expect(calls.filter((value) => value === "startDevice")).toHaveLength(1);
   expect(calls.filter((value) => value === "pollDevice")).toHaveLength(1);
 });
+for (const skew of [-20 * 60_000, 20 * 60_000]) {
+  test(`automatic device polling tolerates ${skew}ms of browser clock skew`, async ({
+    page,
+  }) => {
+    const calls = await mockFlow(page, false, skew);
+    await start(page);
+    await expect
+      .poll(() => page.getByRole("dialog").innerText())
+      .toContain("4:59");
+    await page.clock.runFor(4000);
+    expect(calls.filter((value) => value === "pollDevice")).toHaveLength(0);
+    await page.clock.runFor(1000);
+    await expect(
+      page.getByRole("status").filter({ hasText: "Selected:" }),
+    ).toHaveText("Selected: Connected fixture");
+    expect(calls.filter((value) => value === "pollDevice")).toHaveLength(1);
+  });
+}
+
 test("a lost explicit device advance switches to status recovery without replay", async ({
   page,
 }) => {
   const calls = await mockFlow(page, true);
   await start(page);
-  await page
-    .getByRole("button", { name: "Check connection", exact: true })
-    .click();
+  await page.clock.runFor(5000);
+  await expect
+    .poll(() => calls.filter((value) => value === "pollDevice").length)
+    .toBe(1);
   await expect(
     page.getByRole("button", { name: "Check connection", exact: true }),
   ).toHaveCount(0);
@@ -294,9 +325,7 @@ test("accepted record that is now unavailable returns to its task without claimi
     });
   });
   await start(page);
-  await page
-    .getByRole("button", { name: "Check connection", exact: true })
-    .click();
+  await page.clock.runFor(5000);
   await expect(
     page.getByText(
       "The connection was saved, but is no longer available to select. No replacement was selected.",
@@ -308,6 +337,7 @@ test("accepted record that is now unavailable returns to its task without claimi
     .getByRole("button", { name: "Close", exact: true })
     .filter({ hasText: "Close" })
     .click();
+  await page.clock.resume();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByRole("status")).toHaveText("Selected: ");
   expect(calls.filter((value) => value === "startDevice")).toHaveLength(1);

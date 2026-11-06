@@ -23,12 +23,13 @@ workspace preference. Every Team route uses the Chat-based `ContextSidebar`,
 including list, creation, detail, chat and Team settings, on desktop and mobile.
 Its supplementary list shows at most five private Agents in backend default
 order, with saved artwork, selection among visible rows, creation, and an All
-Agents link below the rows. There is no conversation-recency service yet.
+Agents row with matching icon alignment and row treatment below the Agent rows.
+There is no conversation-recency service yet.
 Full inventory pagination belongs to the Agent-list page, not the sidebar.
 One selected-Team query owns that bounded list; changing Team changes its
 query key. It refreshes while visible and
 authenticated without carrying another Team's list as placeholder data.
-The [AI connections catalogue](authentication-web.md) is a same-context destination
+The [AI authentication catalogue](authentication-web.md) is a same-context destination
 at `/teams/{teamHandle}/connections`; personal `my` selects User-owned records,
 while a collaborative route selects exactly that Team's catalogue.
 Collaborative-Team settings remain alongside the list. A Team switch navigates to only the current user's

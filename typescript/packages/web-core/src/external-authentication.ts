@@ -70,6 +70,7 @@ export type DeviceState =
 export interface DeviceProgress {
   attemptId: string;
   expiresAt: number;
+  observedAt: number;
   state: DeviceState;
   providerFailure:
     "rejected" | "unavailable" | "invalidResponse" | "uncertain" | null;
@@ -254,7 +255,10 @@ export function authenticationHistory(
     acceptedAt: instant(value.acceptedAt),
   };
 }
-export function deviceProgress(value: Wire.DeviceProgress): DeviceProgress {
+export function deviceProgress(
+  value: Wire.DeviceProgress,
+  observedAt: number,
+): DeviceProgress {
   const states = [
     value.starting,
     value.pending,
@@ -304,6 +308,7 @@ export function deviceProgress(value: Wire.DeviceProgress): DeviceProgress {
   return {
     attemptId: text(value.attemptId),
     expiresAt: instant(value.expiresAt),
+    observedAt,
     state,
     providerFailure:
       value.providerFailure === undefined

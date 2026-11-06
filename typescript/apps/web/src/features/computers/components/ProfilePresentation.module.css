@@ -71,13 +71,21 @@
 .environmentCard[data-selected] {
   background: var(--chapchoo-color-selected);
 }
+.environmentMark {
+  display: grid;
+  place-items: center;
+  padding: var(--mantine-spacing-md);
+  background: var(--chapchoo-color-surface);
+  border-radius: var(--mantine-radius-md);
+  flex-shrink: 0;
+}
 @media (max-width: 48em) {
   .environmentCards {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 .creationHeader {
-  margin-bottom: 0;
+  margin-bottom: var(--mantine-spacing-2xl);
 }
 .authenticationHeader {
   margin-bottom: var(--mantine-spacing-xl);
