@@ -121,9 +121,7 @@ for (const scenario of [
         .getByLabel(/^API key\s*\*?$/)
         .fill("disposable-replacement-key");
     } else if (scenario.operation !== "delete") {
-      await page
-        .getByRole("textbox", { name: "Connection name" })
-        .fill("Draft");
+      await page.getByRole("textbox", { name: "Alias" }).fill("Draft");
     }
     await page
       .getByRole("dialog")
@@ -154,9 +152,7 @@ for (const scenario of [
       .getByRole("button", { name: "Manage", exact: true })
       .click();
     await page.getByRole("button", { name: "Rename", exact: true }).click();
-    await page
-      .getByRole("textbox", { name: "Connection name" })
-      .fill("New action");
+    await page.getByRole("textbox", { name: "Alias" }).fill("New action");
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(page.getByRole("status")).toHaveText("Closed: 2");

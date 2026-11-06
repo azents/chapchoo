@@ -1,6 +1,27 @@
 import { authenticationCopy } from "@chapchoo/web-core/authentication-messages";
 import { expect, test } from "@playwright/test";
 const copy = authenticationCopy("ko");
+test("empty alias remains optional and creation time identifies unnamed connections", async ({
+  page,
+}) => {
+  await page.goto(
+    "/iframe.html?id=authentication-connections--without-alias&viewMode=story",
+  );
+  const time = page.locator("time");
+  await expect(time).toHaveAttribute("dateTime", "2026-11-06T00:00:00.000Z");
+  const heading = page.getByRole("heading", { level: 3 });
+  await expect(heading).not.toHaveText("");
+  await expect(heading).toHaveText(await time.innerText());
+  await page.goto(
+    "/iframe.html?id=authentication-connections--optional-alias&viewMode=story",
+  );
+  const alias = page.getByRole("textbox", { name: copy.name, exact: true });
+  await expect(alias).toBeEmpty();
+  await expect(alias).not.toHaveAttribute("required");
+  await expect(
+    page.getByRole("button", { name: copy.save, exact: true }),
+  ).toBeEnabled();
+});
 test("forward cursor pages label their reset action as First page", async ({
   page,
 }) => {

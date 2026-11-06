@@ -43,7 +43,8 @@ macro_rules! exercise {
         let connection = &mut *$connection;
         let source = || $source;
         let pg = $postgres;
-        // Empty new tables permit an explicit downgrade to the previous schema.
+        // Restore the required-alias schema, then exercise the original catalogue migration.
+        connection.revert_last_migration(source())?;
         connection.revert_last_migration(source())?;
         assert_eq!(connection.applied_migrations()?.len(),9);
         let user = identity(1,pg);
@@ -59,12 +60,19 @@ macro_rules! exercise {
              INSERT INTO agent_creation_receipts(owner_user_id,request_id,payload_hash,assigned_agent_id,team_id) VALUES({user},'historical-create',{hash},{removed_agent},{team})"
         ))?;
         connection.run_pending_migrations(source())?;
-        assert_eq!(connection.applied_migrations()?.len(),10);
+        assert_eq!(connection.applied_migrations()?.len(),11);
         assert_eq!(diesel::sql_query(format!("SELECT count(*) AS n FROM agent_creation_receipts WHERE owner_user_id={user} AND request_id='historical-create' AND payload_hash={hash} AND assigned_agent_id={removed_agent} AND team_id={team}")).get_result::<Count>(connection)?.n,1);
         assert_eq!(diesel::sql_query("SELECT count(*) AS n FROM external_authentications").get_result::<Count>(connection)?.n,0);
         assert_eq!(diesel::sql_query("SELECT count(*) AS n FROM agent_authentication_selections").get_result::<Count>(connection)?.n,0);
         let insert = format!("INSERT INTO external_authentications(id,owner_user_id,kind,name,nonce,ciphertext,current_request_id,created_at,updated_at) VALUES({record},{user},'OPENAI_API_KEY','Synthetic',{nonce},{payload},'register',1,1)");
         connection.batch_execute(&insert)?;
+        connection.batch_execute(&format!("UPDATE external_authentications SET name='' WHERE id={record}"))?;
+        assert!(connection.revert_last_migration(source()).is_err());
+        assert_eq!(connection.applied_migrations()?.len(),11);
+        connection.batch_execute(&format!("UPDATE external_authentications SET name='Synthetic' WHERE id={record}"))?;
+        connection.revert_last_migration(source())?;
+        connection.run_pending_migrations(source())?;
+        assert_eq!(diesel::sql_query(format!("SELECT count(*) AS n FROM external_authentications WHERE id={record} AND name='Synthetic' AND nonce={nonce} AND ciphertext={payload} AND current_request_id='register' AND created_at=1")).get_result::<Count>(connection)?.n,1);
         for invalid in [
             format!("UPDATE external_authentications SET owner_user_id=NULL WHERE id={record}"),
             format!("UPDATE external_authentications SET owner_team_id={team} WHERE id={record}"),
@@ -76,6 +84,8 @@ macro_rules! exercise {
         ] {
             assert!(connection.batch_execute(&invalid).is_err(),"Invalid contract accepted");
         }
+        // The alias-only downgrade preserves live records and their protected bytes.
+        connection.revert_last_migration(source())?;
         // Real registered credentials and even accepted result receipts cannot be erased by down migration.
         assert!(connection.revert_last_migration(source()).is_err());
         assert_eq!(connection.applied_migrations()?.len(),10);

@@ -31,6 +31,13 @@ SSR snapshots are bound to their initiating User ID and are hidden synchronously
 when identity is withdrawn or replaced. Successful writes invalidate related
 catalogue and Agent queries.
 
+Alias is optional for registration and editing. The field is labelled Alias
+(별칭 in Korean); blank input is stored as an empty alias, not an invented name.
+Catalogue and picker cards show the credential creation date/time, and use it
+as their heading when no alias is set. Creation summaries use the same existing
+creation timestamp. A saved Agent reference without an alias identifies its
+authentication kind; it does not invent a creation date from selection time.
+
 Cards identify alias, Codex/API kind and known provider email without inventing
 missing account/plan metadata or an association count. ChatGPT registration is
 labelled registered; API keys remain usage-unverified. Record management supports

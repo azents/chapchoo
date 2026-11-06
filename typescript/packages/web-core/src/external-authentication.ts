@@ -90,7 +90,7 @@ function optional(value: string | undefined): string | null {
 function alias(value: string): string {
   if ([...value].length > 256 || new TextEncoder().encode(value).length > 1024)
     return invalidResponse();
-  return text(value, 1024);
+  return value === "" ? "" : text(value, 1024);
 }
 export function authenticationKind(value: Wire.Kind): AuthenticationKind {
   switch (value) {

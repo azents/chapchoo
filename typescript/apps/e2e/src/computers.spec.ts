@@ -114,7 +114,7 @@ test("owner manages one Computer while Admin observes independent cleanup invent
       exact: true,
     });
     await authenticationDialog
-      .getByRole("textbox", { name: "Connection name", exact: true })
+      .getByRole("textbox", { name: "Alias", exact: true })
       .fill("Acceptance key");
     await authenticationDialog
       .getByLabel(/^API key\s*\*?$/)
@@ -137,7 +137,7 @@ test("owner manages one Computer while Admin observes independent cleanup invent
       authenticationDialog.getByLabel(/^API key\s*\*?$/),
     ).toHaveValue("");
     await authenticationDialog
-      .getByRole("textbox", { name: "Connection name", exact: true })
+      .getByRole("textbox", { name: "Alias", exact: true })
       .fill("Acceptance key");
     await authenticationDialog
       .getByLabel(/^API key\s*\*?$/)
@@ -298,7 +298,7 @@ test("owner manages one Computer while Admin observes independent cleanup invent
       exact: true,
     });
     await authenticationDialog
-      .getByRole("textbox", { name: "Connection name", exact: true })
+      .getByRole("textbox", { name: "Alias", exact: true })
       .fill("Changed selection");
     await authenticationDialog
       .getByLabel(/^API key\s*\*?$/)

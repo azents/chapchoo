@@ -214,6 +214,7 @@ fn sqlite_computer_constraints_and_provider_only_root_guard() -> Result<(), Test
             .transaction::<_, TestError, _>(|connection| {
                 connection.revert_last_migration(SQLITE_MIGRATIONS)?;
                 connection.revert_last_migration(SQLITE_MIGRATIONS)?;
+                connection.revert_last_migration(SQLITE_MIGRATIONS)?;
                 Ok(())
             })
             .is_err()
@@ -268,6 +269,7 @@ fn postgres_in_schema(url: &str) -> Result<(), TestError> {
     assert!(
         connection
             .transaction::<_, TestError, _>(|connection| {
+                connection.revert_last_migration(POSTGRES_MIGRATIONS)?;
                 connection.revert_last_migration(POSTGRES_MIGRATIONS)?;
                 connection.revert_last_migration(POSTGRES_MIGRATIONS)?;
                 Ok(())

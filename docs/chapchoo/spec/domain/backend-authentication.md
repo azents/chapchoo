@@ -23,8 +23,10 @@ private Agent. Catalogue responses contain metadata, not stored secret bytes,
 other owners' Agent names or association aggregates.
 
 List/Get return ID, owner scope, kind, alias, known account/email/plan/expiry,
-current accepted mutation Request ID and creation/update instants. Missing provider
-metadata stays absent. Provider expiry outside the supported Protobuf Timestamp
+current accepted mutation Request ID and creation/update instants. Missing aliases
+are represented by an empty string; registration and rename accept empty aliases
+while retaining the 256-character/1024-byte and control-character bounds.
+Missing provider metadata stays absent. Provider expiry outside the supported Protobuf Timestamp
 range is rejected before credential publication, so accepted records remain
 serializable through list/detail. Lists default to 50, allow 1–100 and use an opaque stable
 ID cursor; the last full-page ID is the next cursor, so the next page may be empty.

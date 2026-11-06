@@ -26,7 +26,6 @@ const change = record.extend({ requestId: id, expectedRequestId: id });
 const name = z
   .string()
   .trim()
-  .min(1)
   .refine(
     (value) =>
       [...value].length <= 256 && Buffer.byteLength(value, "utf8") <= 1024,

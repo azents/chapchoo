@@ -19,6 +19,7 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
+import { useFormatter } from "next-intl";
 import { AuthenticationDialog } from "./AuthenticationDialog";
 import { CodexMark } from "./CodexMark";
 import classes from "./ConnectionPanel.module.css";
@@ -28,6 +29,9 @@ import type { ReactElement } from "react";
 
 export function ConnectionPanel(props: ConnectionPanelProps): ReactElement {
   const { copy: c, dialog: d } = props;
+  const format = useFormatter();
+  const created = (instant: number): string =>
+    format.dateTime(instant, { dateStyle: "medium", timeStyle: "short" });
   const activeDevice =
     d.type === "device" &&
     !["cancelled", "expired", "failed", "superseded"].includes(
@@ -37,7 +41,7 @@ export function ConnectionPanel(props: ConnectionPanelProps): ReactElement {
   const target = "target" in d ? d.target : null;
   const heading =
     d.type === "manage"
-      ? target?.name
+      ? target?.name || (target ? created(target.createdAt) : c.manage)
       : d.type === "rename"
         ? c.rename
         : d.type === "delete"
@@ -139,8 +143,14 @@ export function ConnectionPanel(props: ConnectionPanelProps): ReactElement {
                 ) : null}
               </Group>
               <Title order={3} size="lg" mt="lg" className={classes.name}>
-                {item.name}
+                {item.name || created(item.createdAt)}
               </Title>
+              <Text size="xs" c="dimmed" mt="xs">
+                {c.created}:{" "}
+                <time dateTime={new Date(item.createdAt).toISOString()}>
+                  {created(item.createdAt)}
+                </time>
+              </Text>
               <Text c="dimmed" size="sm" mt="xs" className={classes.name}>
                 {item.email ??
                   (item.kind === "openaiApiKey" ? c.apiKey : c.chatgpt)}
@@ -199,7 +209,7 @@ export function ConnectionPanel(props: ConnectionPanelProps): ReactElement {
         mobile={props.mobile}
         opened={d.type !== "closed"}
         onClose={props.onClose}
-        title={heading ?? c.connect}
+        title={heading}
         locked={cannotClose}
         closeLabel={c.close}
         size="md"
@@ -292,7 +302,6 @@ export function ConnectionPanel(props: ConnectionPanelProps): ReactElement {
                     onChange={(event) =>
                       props.onName(event.currentTarget.value)
                     }
-                    required
                     maxLength={512}
                     disabled={props.busy}
                   />
@@ -339,10 +348,7 @@ export function ConnectionPanel(props: ConnectionPanelProps): ReactElement {
                   <Button
                     type="submit"
                     loading={props.busy}
-                    disabled={
-                      ((d.type !== "key" || !d.target) && !props.name.trim()) ||
-                      (d.type === "key" && !props.apiKey)
-                    }
+                    disabled={d.type === "key" && !props.apiKey}
                   >
                     {d.type === "deviceName" ? c.connect : c.save}
                   </Button>

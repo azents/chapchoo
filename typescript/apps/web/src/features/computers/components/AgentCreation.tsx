@@ -17,6 +17,7 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
+import { useFormatter } from "next-intl";
 import { AuthenticationDialog } from "@/shared/authentications/AuthenticationDialog";
 import { CodexMark } from "@/shared/authentications/CodexMark";
 import { ConnectionPanel } from "@/shared/authentications/ConnectionPanel";
@@ -29,6 +30,7 @@ import type { ReactElement } from "react";
 
 export function AgentCreation(props: AgentCreationProps): ReactElement {
   const { copy: c, profileCopy: p, authenticationCopy: a } = props;
+  const format = useFormatter();
   const locked = props.pending || props.creationLocked;
   const imageOptions = props.images.items.some(
     (image) => image.id === props.image.id,
@@ -242,7 +244,13 @@ export function AgentCreation(props: AgentCreationProps): ReactElement {
             >
               <Stack gap="xs" style={{ minWidth: 0 }}>
                 <Text style={{ overflowWrap: "anywhere" }}>
-                  {props.authentication?.name ?? a.unselected}
+                  {props.authentication
+                    ? props.authentication.name ||
+                      format.dateTime(props.authentication.createdAt, {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      })
+                    : a.unselected}
                 </Text>
                 {props.authentication?.email ? (
                   <Text

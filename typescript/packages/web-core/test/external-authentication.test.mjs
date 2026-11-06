@@ -37,6 +37,23 @@ const record = {
   createdAt: instant,
   updatedAt: instant,
 };
+void test("missing aliases preserve empty strings and actual creation timestamps", () => {
+  const unnamed = authentication({ ...record, name: "" });
+  assert.equal(unnamed.name, "");
+  assert.equal(unnamed.createdAt, 1000);
+  assert.equal(
+    authenticationSelection({
+      authenticationId: "credential",
+      name: "",
+      kind: 2,
+      requestId: "accepted",
+      selectedAt: instant,
+    }).name,
+    "",
+  );
+  assert.throws(() => authentication({ ...record, name: "\n" }));
+  assert.throws(() => authentication({ ...record, name: "a".repeat(257) }));
+});
 void test("catalogue projection contains only safe identity and preserves exact scope", () => {
   const value = authentication({ ...record, key: "not-a-browser-field" });
   assert.deepEqual(value, {
