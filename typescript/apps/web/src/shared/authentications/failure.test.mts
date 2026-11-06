@@ -9,6 +9,7 @@ void test("only explicit non-acceptance unlocks another authentication attempt",
     "DOMAIN_REASON_INVALID_INPUT",
     "DOMAIN_REASON_PERMISSION_DENIED",
     "DOMAIN_REASON_NOT_FOUND",
+    "DOMAIN_REASON_CONFLICT",
     "DOMAIN_REASON_INVALID_TRANSITION",
     "DOMAIN_REASON_CAPACITY_EXHAUSTED",
   ]) {
@@ -23,9 +24,6 @@ void test("only explicit non-acceptance unlocks another authentication attempt",
     new Error("Transport unavailable"),
     null,
     { data: { reason: "DOMAIN_REASON_INVALID_INPUT" } },
-    Object.assign(new Error("Uncertain"), {
-      data: { reason: "DOMAIN_REASON_CONFLICT" },
-    }),
     Object.assign(new Error("Uncertain"), { data: { reason: null } }),
   ]) {
     assert.equal(definitiveAuthenticationRejection(value), false);

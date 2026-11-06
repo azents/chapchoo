@@ -180,7 +180,7 @@ export function ConnectionPanel(props: ConnectionPanelProps): ReactElement {
         <Group justify="space-between">
           {props.after ? (
             <Button variant="subtle" onClick={() => props.onPage(null)}>
-              {c.previous}
+              {c.first}
             </Button>
           ) : (
             <span />

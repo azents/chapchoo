@@ -10,10 +10,13 @@ function Interactive(props: ConnectionPanelProps): ReactElement {
   const [dialog, setDialog] = useState<ConnectionDialog>(props.dialog);
   const [name, setName] = useState(props.name);
   const [key, setKey] = useState(props.apiKey);
+  const [after, setAfter] = useState(props.after);
   return (
     <ConnectionPanel
       {...props}
       mobile={mobile}
+      after={after}
+      onPage={setAfter}
       dialog={dialog}
       name={name}
       apiKey={key}
@@ -37,6 +40,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Populated: Story = {};
+export const LaterPage: Story = { args: { after: "cursor-page-3" } };
 export const Empty: Story = { args: { items: [] } };
 export const Unavailable: Story = { args: { unavailable: true } };
 export const ReadOnlyTeam: Story = {

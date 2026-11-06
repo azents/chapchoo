@@ -25,6 +25,8 @@ bounded catalogue snapshot. Pagination uses the `after` URL parameter and pushes
 history; `connection` selects a management target in the URL and survives reload.
 The client hydrates the same scope/page; changing scope never borrows another
 catalogue as placeholder data. Unavailable reads remain errors, not empty lists.
+Bounded forward pages offer an explicit First page action rather than claiming
+to reconstruct the immediately preceding cursor.
 SSR snapshots are bound to their initiating User ID and are hidden synchronously
 when identity is withdrawn or replaced. Successful writes invalidate related
 catalogue and Agent queries.
@@ -75,6 +77,11 @@ of an active or uncertain attempt. Generation/identity fences ignore stale
 completions. Invalid sessions withdraw shared identity for both ordinary queries
 and imperative secret mutations; business denial or provider unavailability does
 not sign out the User. The existing POST/Origin/cookie/safe-error boundary applies.
+An explicit conflict from a newly issued catalogue/selection mutation is rejected
+before its receipt, not an unknown transport outcome. The UI refreshes related
+state and permits a deliberate new action with a new Request ID; it does not
+replay the rejected write. Original uncertain requests still use their read-only
+receipt recovery, and known accepted responses retain accepted-outcome handling.
 
 ## Creation and existing-Agent selection
 

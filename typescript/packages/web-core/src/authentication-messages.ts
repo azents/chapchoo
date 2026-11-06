@@ -45,6 +45,7 @@ export interface AuthenticationCopy {
   ownerOnly: string;
   more: string;
   previous: string;
+  first: string;
   environment: string;
   authentication: string;
   profile: string;
@@ -62,6 +63,7 @@ export interface AuthenticationCopy {
   recordUnavailable: string;
 }
 const english: AuthenticationCopy = {
+  first: "First page",
   recordUnavailable:
     "The connection was saved, but is no longer available to select. No replacement was selected.",
   execution: "Execution",
@@ -134,6 +136,7 @@ const english: AuthenticationCopy = {
   newAgent: "New Agent",
 };
 const korean: AuthenticationCopy = {
+  first: "처음",
   recordUnavailable:
     "연결은 저장되었지만 지금은 선택할 수 없습니다. 다른 인증으로 바꾸지는 않았습니다.",
   execution: "실행",
@@ -204,6 +207,7 @@ const korean: AuthenticationCopy = {
   newAgent: "새 에이전트",
 };
 const japanese: AuthenticationCopy = {
+  first: "最初のページ",
   recordUnavailable:
     "接続は保存されましたが、現在は選択できません。別の認証には変更していません。",
   execution: "実行",
@@ -275,6 +279,7 @@ const japanese: AuthenticationCopy = {
   newAgent: "新しいエージェント",
 };
 const french: AuthenticationCopy = {
+  first: "Première page",
   recordUnavailable:
     "La connexion a été enregistrée, mais n’est plus disponible. Aucune autre authentification n’a été sélectionnée.",
   execution: "Exécution",

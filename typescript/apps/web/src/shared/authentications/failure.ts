@@ -12,13 +12,14 @@ function failureReason(error: unknown): unknown {
 export function authenticationRecordUnavailable(error: unknown): boolean {
   return failureReason(error) === "DOMAIN_REASON_NOT_FOUND";
 }
-/** Only explicit pre-acceptance domain rejections unlock a fresh mutation. */
+/** Explicit rejection of a freshly issued mutation permits another deliberate action. */
 export function definitiveAuthenticationRejection(error: unknown): boolean {
   const reason = failureReason(error);
   return (
     reason === "DOMAIN_REASON_INVALID_INPUT" ||
     reason === "DOMAIN_REASON_PERMISSION_DENIED" ||
     reason === "DOMAIN_REASON_NOT_FOUND" ||
+    reason === "DOMAIN_REASON_CONFLICT" ||
     reason === "DOMAIN_REASON_INVALID_TRANSITION" ||
     reason === "DOMAIN_REASON_CAPACITY_EXHAUSTED"
   );

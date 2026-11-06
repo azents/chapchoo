@@ -1,6 +1,17 @@
 import { authenticationCopy } from "@chapchoo/web-core/authentication-messages";
 import { expect, test } from "@playwright/test";
 const copy = authenticationCopy("ko");
+test("forward cursor pages label their reset action as First page", async ({
+  page,
+}) => {
+  await page.goto(
+    "/iframe.html?id=authentication-connections--later-page&viewMode=story",
+  );
+  await page.getByRole("button", { name: copy.first, exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: copy.first, exact: true }),
+  ).toHaveCount(0);
+});
 
 test("catalogue keeps record identity and bounded API storage meaning distinct", async ({
   page,
