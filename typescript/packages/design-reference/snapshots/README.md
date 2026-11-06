@@ -5,6 +5,14 @@ requirements. Read [AGENTS.md](AGENTS.md) and the `product-design-snapshot` Skil
 New concepts start by copying the current UI, then change only the requested parts,
 iterate with feedback, receive explicit confirmation and produce an independent dump.
 
+## Confirmed harness setup
+
+[Harness setup](harness-setup/README.md) is the requester-confirmed integrated
+concept from 2026-11-06 KST: eight core states, local shared CSS and deduplicated
+assets (approximately 1.05 MB). Its approval and fidelity limits are recorded in
+that index. It supersedes the older unconfirmed authentication proposals below,
+without retroactively changing their historical status.
+
 ## Core roadmap
 
 [Agent roadmap](agent-roadmap/index.html) retains 15 representative state pages:

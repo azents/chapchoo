@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="ko-KR" data-mantine-color-scheme="light"><head>
+    <meta charset="utf-8">
+    <title>review-harness-complete--computer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    
+
+    
+    
+
+
+
+
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+  <meta name="next-head-count" content="0"><meta name="snapshot-viewport" content="1440x1100"><meta name="snapshot-conditions" content="eyJsb2NhbGUiOiJrby1LUiIsImNvbG9yU2NoZW1lIjoibGlnaHQiLCJyZWR1Y2VkTW90aW9uIjoicmVkdWNlIn0="><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' data:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; form-action 'none'; base-uri 'none'"><link rel="stylesheet" href="shared.css"><style>
+@font-face { font-family: Pretendard; font-style: normal; font-display: optional; font-weight: 45 920; src: url('assets/d28ace2d199ca5c6304a6191f4233e28ddb225d341d6e0b41db040e9447c2cc9.woff2') format("woff2-variations"); unicode-range: U+2665, U+3160, U+4E2D, U+6587, U+65E5, U+AC12, U+AC14, U+AC16, U+AC81, U+AD34, U+ADE0, U+AE54, U+AEBC, U+AF2C, U+AFC0, U+AFC8, U+B04C, U+B08C, U+B099, U+B0A9, U+B0AC, U+B0AE, U+B0B8, U+B123, U+B179, U+B2E5, U+B2F7, U+B4C0, U+B531, U+B538, U+B545, U+B550, U+B5A8, U+B6F0, U+B728, U+B73B, U+B7AD, U+B7ED, U+B809, U+B864, U+B86D, U+B871, U+B9BF, U+B9F5, U+BA40, U+BA4B, U+BA58, U+BA87, U+BAAC, U+BBC0, U+BC16, U+BC34, U+BD07, U+BD99, U+BE59, U+BFD0, U+C058, U+C0E4, U+C0F5, U+C12D, U+C139, U+C228, U+C529, U+C5C7, U+C635, U+C637, U+C735, U+C77D, U+C787, U+C789, U+C8C4, U+C989, U+C98C, U+C9D0, U+C9D3, U+CC0C, U+CC99, U+CD0C, U+CD2C, U+CD98, U+CDA4, U+CE59, U+CE60, U+CE6D, U+CEA0, U+D0D0-D0D1, U+D0D5, U+D14D, U+D1A4, U+D29C, U+D2F1, U+D301, U+D39C, U+D3BC, U+D4E8, U+D540, U+D5EC, U+D640, U+D750; }
+
+@font-face { font-family: Pretendard; font-style: normal; font-display: optional; font-weight: 45 920; src: url('assets/3e680901e55f16848b58d16d25870596495a6a073d9e3127fe481583ac4439b6.woff2') format("woff2-variations"); unicode-range: U+3C-3D, U+2026, U+24D2, U+314B, U+AC11, U+ACF3, U+AD74, U+AD81, U+ADF9, U+AE34, U+AF43, U+AFB8, U+B05D, U+B07C, U+B110, U+B118, U+B17C, U+B180, U+B18D, U+B192, U+B2CC, U+B355, U+B378, U+B4A4, U+B4EF, U+B78D, U+B799, U+B7A9, U+B7FD, U+B807, U+B80C, U+B839, U+B9B4, U+B9DB, U+BA3C, U+BAB0, U+BBA4, U+BC94, U+BE4C, U+C154, U+C1C4, U+C26C, U+C2AC, U+C2ED, U+C4F4, U+C55E, U+C561, U+C571, U+C5B5, U+C5C4, U+C654-C655, U+C695, U+C6E8, U+C6F9, U+C724, U+C751, U+C775, U+C7A0, U+C7C1, U+C874, U+C880, U+C9D5, U+C9F8, U+CABD, U+CC29, U+CC2C, U+CCA8, U+CCAB, U+CCD0, U+CE21, U+CE35, U+CE7C, U+CE90, U+CEE8, U+CEF4, U+CFE0, U+D070, U+D0B9, U+D0C1, U+D0C4, U+D0C8, U+D15C, U+D1A1, U+D2C0, U+D300, U+D314, U+D3ED, U+D478, U+D480, U+D48D, U+D508, U+D53D, U+D5E4, U+D611, U+D61C, U+D68D, U+D6A8, U+D798; }
+@font-face { font-family: Pretendard; font-style: normal; font-display: optional; font-weight: 45 920; src: url('assets/04ca8277cfe3d27235573956255b0211575504cb695cdeab644c583df774e257.woff2') format("woff2-variations"); unicode-range: U+23, U+25, U+5F, U+A9, U+AC08, U+AC78, U+ACA8, U+ACAC, U+ACE8, U+AD70, U+ADC0, U+ADDC, U+B137, U+B140, U+B208, U+B290, U+B2F5, U+B3C5, U+B3CC, U+B420, U+B429, U+B529, U+B530, U+B77D, U+B79C, U+B7A8, U+B7C9, U+B7F0, U+B7FC, U+B828, U+B860, U+B9AD, U+B9C1, U+B9C9, U+B9DD-B9DE, U+B9E8, U+BA38-BA39, U+BABB, U+BC00, U+BC8C, U+BCA0, U+BCA4, U+BCD1, U+BCFC, U+BD09, U+BDF0, U+BE60, U+C0AD, U+C0B4, U+C0BC, U+C190, U+C1FC, U+C220, U+C288, U+C2B9, U+C2F6, U+C528, U+C545, U+C558, U+C5BC, U+C5D4, U+C600, U+C644, U+C6C0, U+C6C3, U+C721, U+C798, U+C7A1, U+C811, U+C838, U+C871, U+C904, U+C990, U+C9DC, U+CC38, U+CC44, U+CCA0, U+CD1D, U+CD95, U+CDA9, U+CE5C, U+CF00, U+CF58, U+D150, U+D22C, U+D305, U+D328, U+D37C, U+D3F0, U+D551, U+D5A5, U+D5C8, U+D5D8, U+D63C, U+D64D, U+D669, U+D734, U+D76C; }
+@font-face { font-family: Pretendard; font-style: normal; font-display: optional; font-weight: 45 920; src: url('assets/192abc4c6ad933f53d809d8a46ee6237ae71e766bf66199fdce4678841fe12d7.woff2') format("woff2-variations"); unicode-range: U+26, U+2B, U+3E, U+40, U+7E, U+AC01, U+AC19, U+AC1D, U+ACA0, U+ACA9, U+ACB0, U+AD8C, U+AE09, U+AE38, U+AE40, U+AED8, U+B09C, U+B0A0, U+B108, U+B204, U+B298, U+B2D8, U+B2EB-B2EC, U+B2F4, U+B313, U+B358, U+B450, U+B4E0, U+B54C, U+B610, U+B780, U+B78C, U+B791, U+B8E8, U+B958, U+B974, U+B984, U+B9B0, U+B9BC-B9BD, U+B9CE, U+BA70, U+BBFC, U+BC0F, U+BC15, U+BC1B, U+BC31, U+BC95, U+BCC0, U+BCC4, U+BD81, U+BD88, U+C0C8, U+C11D, U+C13C, U+C158, U+C18D, U+C1A1, U+C21C, U+C4F0, U+C54A, U+C560, U+C5B8, U+C5C8, U+C5F4, U+C628, U+C62C, U+C678, U+C6CC, U+C808, U+C810, U+C885, U+C88B, U+C900, U+C988, U+C99D, U+C9C8, U+CC3D-CC3E, U+CC45, U+CD08, U+CE20, U+CEE4, U+D074, U+D0A4, U+D0DD, U+D2B9, U+D3B8, U+D3C9, U+D488, U+D544, U+D559, U+D56D, U+D588, U+D615, U+D648, U+D655, U+D658, U+D65C; }
+@font-face { font-family: Pretendard; font-style: normal; font-display: optional; font-weight: 45 920; src: url('assets/44634e793e0d50fcdf803a2ad513d8bf0482d9adccbbd4ef534325cae9b2ee01.woff2') format("woff2-variations"); unicode-range: U+D, U+7C, U+AC10, U+AC15, U+AC74, U+AC80, U+AC83, U+ACC4, U+AD11, U+AD50, U+AD6D, U+ADFC, U+AE00, U+AE08, U+AE4C, U+B0A8, U+B124, U+B144, U+B178, U+B274, U+B2A5, U+B2E8, U+B2F9, U+B354, U+B370, U+B418, U+B41C, U+B4F1, U+B514, U+B798, U+B808, U+B824-B825, U+B8CC, U+B978, U+B9D0, U+B9E4, U+BAA9, U+BB3C, U+BC18, U+BC1C, U+BC30, U+BC84, U+BCF5, U+BCF8, U+BD84, U+BE0C, U+BE14, U+C0B0, U+C0C9, U+C0DD, U+C124, U+C2DD, U+C2E4, U+C2EC, U+C54C, U+C57C-C57D, U+C591, U+C5C5-C5C6, U+C5ED, U+C608, U+C640, U+C6B8, U+C6D4, U+C784, U+C7AC, U+C800-C801, U+C9C1, U+C9D1, U+CC28, U+CC98, U+CC9C, U+CCAD, U+CD5C, U+CD94, U+CD9C, U+CDE8, U+CE68, U+CF54, U+D0DC, U+D14C, U+D1A0, U+D1B5, U+D2F0, U+D30C, U+D310, U+D398, U+D45C, U+D50C, U+D53C, U+D560, U+D568, U+D589, U+D604, U+D6C4, U+D788; }
+@font-face { font-family: Pretendard; font-style: normal; font-display: optional; font-weight: 45 920; src: url('assets/ed2d605d80cbe4f2c1df801852f7a1d8ad5e1a4972b26d8fee93427317f32f09.woff2') format("woff2-variations"); unicode-range: U+AC04, U+AC1C, U+AC70, U+AC8C, U+ACBD, U+ACF5, U+ACFC, U+AD00, U+AD6C, U+ADF8, U+B098, U+B0B4, U+B294, U+B2C8, U+B300, U+B3C4, U+B3D9, U+B4DC, U+B4E4, U+B77C, U+B7EC, U+B85D, U+B97C, U+B9C8, U+B9CC, U+BA54, U+BA74, U+BA85, U+BAA8, U+BB34, U+BB38, U+BBF8, U+BC14, U+BC29, U+BC88, U+BCF4, U+BD80, U+BE44, U+C0C1, U+C11C, U+C120, U+C131, U+C138, U+C18C, U+C218, U+C2B5, U+C2E0, U+C544, U+C548, U+C5B4, U+C5D0, U+C5EC, U+C5F0, U+C601, U+C624, U+C694, U+C6A9, U+C6B0, U+C6B4, U+C6D0, U+C704, U+C720, U+C73C, U+C740, U+C744, U+C74C, U+C758, U+C77C, U+C785, U+C788, U+C790-C791, U+C7A5, U+C804, U+C815, U+C81C, U+C870, U+C8FC, U+C911, U+C9C4, U+CCB4, U+CE58, U+CE74, U+D06C, U+D0C0, U+D130, U+D2B8, U+D3EC, U+D504, U+D55C, U+D569, U+D574, U+D638, U+D654, U+D68C; }
+@font-face { font-family: Pretendard; font-style: normal; font-display: optional; font-weight: 45 920; src: url('assets/fc9fcd1bea9c8f43f97136a1e89bfa6e34db85f820f86538288647b4c24c5b06.woff2') format("woff2-variations"); unicode-range: U+20-22, U+27-2A, U+2C-39, U+3A-3B, U+3F, U+41-4E, U+4F-5D, U+61-7B, U+7D, U+A0-A1, U+AB, U+AD-AE, U+B7, U+BB, U+BF, U+2013-2014, U+201C-201D, U+2122, U+AC00, U+ACE0, U+AE30, U+B2E4, U+B85C, U+B9AC, U+C0AC, U+C2A4, U+C2DC, U+C774, U+C778, U+C9C0, U+D558; }
+
+
+
+
+@font-face { font-family: "Geist Mono"; src: url('assets/55419aa06f58adcd7f145c6c920e56936416f17e528f60efc6032ffa4269972b.woff2') format("woff2"); font-style: normal; font-weight: 100 900; font-display: optional; }:root, :host { --mantine-line-height: 1.7; --mantine-font-family: Pretendard, sans-serif; --mantine-font-family-monospace: "Geist Mono", Menlo, Consolas, monospace; --mantine-font-family-headings: Pretendard, sans-serif; --mantine-heading-font-weight: 600; --mantine-radius-default: calc(0.75rem * var(--mantine-scale)); --mantine-primary-color-filled: var(--mantine-color-butter-filled); --mantine-primary-color-filled-hover: var(--mantine-color-butter-filled-hover); --mantine-primary-color-light: var(--mantine-color-butter-light); --mantine-primary-color-light-hover: var(--mantine-color-butter-light-hover); --mantine-primary-color-light-color: var(--mantine-color-butter-light-color); --mantine-spacing-xs: calc(0.25rem * var(--mantine-scale)); --mantine-spacing-sm: calc(0.5rem * var(--mantine-scale)); --mantine-spacing-md: calc(0.75rem * var(--mantine-scale)); --mantine-spacing-lg: calc(1rem * var(--mantine-scale)); --mantine-spacing-xl: calc(1.5rem * var(--mantine-scale)); --mantine-spacing-2xs: calc(0.25rem * var(--mantine-scale)); --mantine-spacing-2xl: calc(2rem * var(--mantine-scale)); --mantine-spacing-3xl: calc(3rem * var(--mantine-scale)); --mantine-spacing-4xl: calc(4rem * var(--mantine-scale)); --mantine-font-size-lg: calc(1.25rem * var(--mantine-scale)); --mantine-font-size-xl: calc(1.5rem * var(--mantine-scale)); --mantine-line-height-xs: 1.5; --mantine-line-height-sm: 1.6; --mantine-line-height-md: 1.7; --mantine-line-height-lg: 1.5; --mantine-line-height-xl: 1.4; --mantine-radius-xs: calc(0.375rem * var(--mantine-scale)); --mantine-radius-sm: calc(0.5rem * var(--mantine-scale)); --mantine-radius-md: calc(0.75rem * var(--mantine-scale)); --mantine-radius-lg: calc(1.125rem * var(--mantine-scale)); --mantine-radius-xl: calc(1.5rem * var(--mantine-scale)); --mantine-primary-color-0: var(--mantine-color-butter-0); --mantine-primary-color-1: var(--mantine-color-butter-1); --mantine-primary-color-2: var(--mantine-color-butter-2); --mantine-primary-color-3: var(--mantine-color-butter-3); --mantine-primary-color-4: var(--mantine-color-butter-4); --mantine-primary-color-5: var(--mantine-color-butter-5); --mantine-primary-color-6: var(--mantine-color-butter-6); --mantine-primary-color-7: var(--mantine-color-butter-7); --mantine-primary-color-8: var(--mantine-color-butter-8); --mantine-primary-color-9: var(--mantine-color-butter-9); --mantine-color-red-0: #fff5f2; --mantine-color-red-1: #fbece8; --mantine-color-red-2: #f4d7d1; --mantine-color-red-3: #e9b9ae; --mantine-color-red-4: #d98d7f; --mantine-color-red-5: #bd6052; --mantine-color-red-6: #a24237; --mantine-color-red-7: #8d352d; --mantine-color-red-8: #742b24; --mantine-color-red-9: #5c211b; --mantine-color-blue-0: #f3f7fa; --mantine-color-blue-1: #edf0f3; --mantine-color-blue-2: #dbe5eb; --mantine-color-blue-3: #c3d4df; --mantine-color-blue-4: #9eb7c8; --mantine-color-blue-5: #7494ac; --mantine-color-blue-6: #476b84; --mantine-color-blue-7: #3b5b73; --mantine-color-blue-8: #304c61; --mantine-color-blue-9: #263b4b; --mantine-color-green-0: #f7faf3; --mantine-color-green-1: #edf3e6; --mantine-color-green-2: #e1eacc; --mantine-color-green-3: #cbdbb0; --mantine-color-green-4: #abc58a; --mantine-color-green-5: #7d9a5e; --mantine-color-green-6: #4f6b3b; --mantine-color-green-7: #425c31; --mantine-color-green-8: #354b26; --mantine-color-green-9: #293b1d; --mantine-color-butter-0: #fffbee; --mantine-color-butter-1: #fbf2d0; --mantine-color-butter-2: #f8e8b2; --mantine-color-butter-3: #f5dfa0; --mantine-color-butter-4: #f2d68a; --mantine-color-butter-5: #efcf79; --mantine-color-butter-6: #edca6e; --mantine-color-butter-7: #e5bd54; --mantine-color-butter-8: #b38b2d; --mantine-color-butter-9: #705619; --mantine-h1-font-size: calc(1.75rem * var(--mantine-scale)); --mantine-h1-font-weight: 600; --mantine-h2-font-size: calc(1.5rem * var(--mantine-scale)); --mantine-h2-font-weight: 600; --mantine-h3-font-size: calc(1.25rem * var(--mantine-scale)); --mantine-h3-font-weight: 600; --mantine-h4-line-height: 1.4; --mantine-h4-font-weight: 600; --mantine-h5-font-weight: 600; --mantine-h6-font-weight: 600; --chapchoo-font-input-mobile: max(16px, 1rem); --chapchoo-line-height-control: 1.5; --chapchoo-control-height-xs: calc(2.25rem * var(--mantine-scale)); --chapchoo-control-height-sm: calc(2.75rem * var(--mantine-scale)); --chapchoo-control-height-md: calc(3rem * var(--mantine-scale)); --chapchoo-control-height-lg: calc(3.5rem * var(--mantine-scale)); --chapchoo-control-height-xl: calc(4rem * var(--mantine-scale)); }
+:root[data-mantine-color-scheme="dark"], :host([data-mantine-color-scheme="dark"]) { --mantine-primary-color-contrast: var(--mantine-color-black); --mantine-color-text: #e6e9df; --mantine-color-body: #181c18; --mantine-color-error: #edb1a5; --mantine-color-placeholder: #a0ab94; --mantine-color-anchor: #e5c987; --mantine-color-default: #20261f; --mantine-color-default-hover: #333d2d; --mantine-color-default-border: #3f4a3b; --mantine-color-dimmed: #b8c0af; --mantine-color-dark-filled: var(--mantine-color-dark-6); --mantine-color-dark-filled-hover: var(--mantine-color-dark-7); --mantine-color-dark-outline: var(--mantine-color-dark-2); --mantine-color-dark-outline-hover: rgba(130, 130, 130, 0.05); --mantine-color-gray-filled: var(--mantine-color-gray-6); --mantine-color-gray-filled-hover: var(--mantine-color-gray-7); --mantine-color-gray-outline: var(--mantine-color-gray-2); --mantine-color-gray-outline-hover: rgba(233, 236, 239, 0.05); --mantine-color-red-filled: var(--mantine-color-red-6); --mantine-color-red-filled-hover: var(--mantine-color-red-7); --mantine-color-red-light: rgba(46, 17, 14, 1); --mantine-color-red-light-hover: rgba(64, 23, 19, 1); --mantine-color-red-outline: var(--mantine-color-red-2); --mantine-color-red-outline-hover: rgba(244, 215, 209, 0.05); --mantine-color-pink-filled: var(--mantine-color-pink-6); --mantine-color-pink-filled-hover: var(--mantine-color-pink-7); --mantine-color-pink-outline: var(--mantine-color-pink-2); --mantine-color-pink-outline-hover: rgba(252, 194, 215, 0.05); --mantine-color-grape-filled: var(--mantine-color-grape-6); --mantine-color-grape-filled-hover: var(--mantine-color-grape-7); --mantine-color-grape-outline: var(--mantine-color-grape-2); --mantine-color-grape-outline-hover: rgba(238, 190, 250, 0.05); --mantine-color-violet-filled: var(--mantine-color-violet-6); --mantine-color-violet-filled-hover: var(--mantine-color-violet-7); --mantine-color-violet-outline: var(--mantine-color-violet-2); --mantine-color-violet-outline-hover: rgba(208, 191, 255, 0.05); --mantine-color-indigo-filled: var(--mantine-color-indigo-6); --mantine-color-indigo-filled-hover: var(--mantine-color-indigo-7); --mantine-color-indigo-outline: var(--mantine-color-indigo-2); --mantine-color-indigo-outline-hover: rgba(186, 200, 255, 0.05); --mantine-color-blue-filled: var(--mantine-color-blue-6); --mantine-color-blue-filled-hover: var(--mantine-color-blue-7); --mantine-color-blue-light: rgba(19, 30, 38, 1); --mantine-color-blue-light-hover: rgba(27, 41, 53, 1); --mantine-color-blue-outline: var(--mantine-color-blue-2); --mantine-color-blue-outline-hover: rgba(219, 229, 235, 0.05); --mantine-color-cyan-filled: var(--mantine-color-cyan-6); --mantine-color-cyan-filled-hover: var(--mantine-color-cyan-7); --mantine-color-cyan-outline: var(--mantine-color-cyan-2); --mantine-color-cyan-outline-hover: rgba(153, 233, 242, 0.05); --mantine-color-teal-filled: var(--mantine-color-teal-6); --mantine-color-teal-filled-hover: var(--mantine-color-teal-7); --mantine-color-teal-outline: var(--mantine-color-teal-2); --mantine-color-teal-outline-hover: rgba(150, 242, 215, 0.05); --mantine-color-green-filled: var(--mantine-color-green-6); --mantine-color-green-filled-hover: var(--mantine-color-green-7); --mantine-color-green-light: rgba(21, 30, 15, 1); --mantine-color-green-light-hover: rgba(29, 41, 20, 1); --mantine-color-green-outline: var(--mantine-color-green-2); --mantine-color-green-outline-hover: rgba(225, 234, 204, 0.05); --mantine-color-lime-filled: var(--mantine-color-lime-6); --mantine-color-lime-filled-hover: var(--mantine-color-lime-7); --mantine-color-lime-outline: var(--mantine-color-lime-2); --mantine-color-lime-outline-hover: rgba(216, 245, 162, 0.05); --mantine-color-yellow-filled: var(--mantine-color-yellow-6); --mantine-color-yellow-filled-hover: var(--mantine-color-yellow-7); --mantine-color-yellow-outline: var(--mantine-color-yellow-2); --mantine-color-yellow-outline-hover: rgba(255, 236, 153, 0.05); --mantine-color-orange-filled: var(--mantine-color-orange-6); --mantine-color-orange-filled-hover: var(--mantine-color-orange-7); --mantine-color-orange-outline: var(--mantine-color-orange-2); --mantine-color-orange-outline-hover: rgba(255, 216, 168, 0.05); --mantine-color-butter-text: var(--mantine-color-butter-4); --mantine-color-butter-filled: var(--mantine-color-butter-6); --mantine-color-butter-filled-hover: var(--mantine-color-butter-7); --mantine-color-butter-light: rgba(56, 43, 13, 1); --mantine-color-butter-light-hover: rgba(78, 60, 18, 1); --mantine-color-butter-light-color: var(--mantine-color-butter-0); --mantine-color-butter-outline: var(--mantine-color-butter-2); --mantine-color-butter-outline-hover: rgba(248, 232, 178, 0.05); --chapchoo-color-canvas: #181c18; --chapchoo-color-navigation: #1d221c; --chapchoo-color-surface: #222820; --chapchoo-color-overlay: #2c3528; --chapchoo-color-surfaceWarm: #20261f; --chapchoo-color-selected: #333d2d; --chapchoo-color-border: #3f4a3b; --chapchoo-color-borderStrong: #77856f; --chapchoo-color-ink: #e6e9df; --chapchoo-color-secondary: #b8c0af; --chapchoo-color-muted: #a0ab94; --chapchoo-color-accent: #d9bc78; --chapchoo-color-accentHover: #e4ca8b; --chapchoo-color-onAccent: #272718; --chapchoo-color-accentText: #e5c987; --chapchoo-color-accentSoft: #393421; --chapchoo-color-success: #b4ce98; --chapchoo-color-successSoft: #293623; --chapchoo-color-warning: #e5c282; --chapchoo-color-warningSoft: #3b3222; --chapchoo-color-danger: #edb1a5; --chapchoo-color-dangerSoft: #402b27; --chapchoo-color-focus: #edca6e; --chapchoo-color-surface-raised: #20261f; --chapchoo-color-surface-hover: #333d2d; --chapchoo-color-border-strong: #77856f; --chapchoo-color-error: #edb1a5; --chapchoo-color-subtle: #b8c0af; --chapchoo-color-inverse: #e6e9df; --chapchoo-color-on-inverse: #222820; --chapchoo-color-inverse-muted: #1d221c; --chapchoo-profile-butter-surface: #343020; --chapchoo-profile-butter-ink: #e3d394; --chapchoo-profile-butter-border: #514831; --chapchoo-profile-butter-swatch: #d7c788; --chapchoo-profile-sage-surface: #293127; --chapchoo-profile-sage-ink: #bfd0ac; --chapchoo-profile-sage-border: #424f3b; --chapchoo-profile-sage-swatch: #a7b997; --chapchoo-profile-apricot-surface: #382c25; --chapchoo-profile-apricot-ink: #e2b998; --chapchoo-profile-apricot-border: #574235; --chapchoo-profile-apricot-swatch: #d8ab89; --chapchoo-profile-teal-surface: #253231; --chapchoo-profile-teal-ink: #afd3cd; --chapchoo-profile-teal-border: #3b5150; --chapchoo-profile-teal-swatch: #91b7b2; --chapchoo-profile-lilac-surface: #302b38; --chapchoo-profile-lilac-ink: #d0bfe4; --chapchoo-profile-lilac-border: #4c4259; --chapchoo-profile-lilac-swatch: #baabcf; --chapchoo-profile-rose-surface: #382a30; --chapchoo-profile-rose-ink: #e2b5c1; --chapchoo-profile-rose-border: #57404a; --chapchoo-profile-rose-swatch: #d2a1af; }
+:root[data-mantine-color-scheme="light"], :host([data-mantine-color-scheme="light"]) { --mantine-primary-color-contrast: var(--mantine-color-black); --mantine-color-text: #353a36; --mantine-color-body: #fdfcf8; --mantine-color-error: #a24237; --mantine-color-placeholder: #707765; --mantine-color-anchor: #51431e; --mantine-color-default: #fffefa; --mantine-color-default-hover: #e9eadf; --mantine-color-default-border: #e1e3d7; --mantine-color-dimmed: #626c58; --mantine-color-red-outline-hover: rgba(162, 66, 55, 0.05); --mantine-color-blue-outline-hover: rgba(71, 107, 132, 0.05); --mantine-color-green-outline-hover: rgba(79, 107, 59, 0.05); --mantine-color-butter-text: var(--mantine-color-butter-filled); --mantine-color-butter-filled: var(--mantine-color-butter-6); --mantine-color-butter-filled-hover: var(--mantine-color-butter-7); --mantine-color-butter-light: var(--mantine-color-butter-1); --mantine-color-butter-light-hover: var(--mantine-color-butter-2); --mantine-color-butter-light-color: var(--mantine-color-butter-9); --mantine-color-butter-outline: var(--mantine-color-butter-6); --mantine-color-butter-outline-hover: rgba(237, 202, 110, 0.05); --chapchoo-color-canvas: #fdfcf8; --chapchoo-color-navigation: #f3f2e9; --chapchoo-color-surface: #ffffff; --chapchoo-color-overlay: #ffffff; --chapchoo-color-surfaceWarm: #fffefa; --chapchoo-color-selected: #e9eadf; --chapchoo-color-border: #e1e3d7; --chapchoo-color-borderStrong: #9aab82; --chapchoo-color-ink: #353a36; --chapchoo-color-secondary: #626c58; --chapchoo-color-muted: #707765; --chapchoo-color-accent: #edca6e; --chapchoo-color-accentHover: #e5bd54; --chapchoo-color-onAccent: #51431e; --chapchoo-color-accentText: #51431e; --chapchoo-color-accentSoft: #fbf2d0; --chapchoo-color-success: #4f6b3b; --chapchoo-color-successSoft: #edf3e6; --chapchoo-color-warning: #805a1e; --chapchoo-color-warningSoft: #fbf0d8; --chapchoo-color-danger: #a24237; --chapchoo-color-dangerSoft: #fbece8; --chapchoo-color-focus: #866716; --chapchoo-color-surface-raised: #fffefa; --chapchoo-color-surface-hover: #e9eadf; --chapchoo-color-border-strong: #9aab82; --chapchoo-color-error: #a24237; --chapchoo-color-subtle: #626c58; --chapchoo-color-inverse: #353a36; --chapchoo-color-on-inverse: #ffffff; --chapchoo-color-inverse-muted: #f3f2e9; --chapchoo-profile-butter-surface: #f4efdc; --chapchoo-profile-butter-ink: #766019; --chapchoo-profile-butter-border: #e5dcbe; --chapchoo-profile-butter-swatch: #d7c788; --chapchoo-profile-sage-surface: #edf0e8; --chapchoo-profile-sage-ink: #4b653e; --chapchoo-profile-sage-border: #dbe2d3; --chapchoo-profile-sage-swatch: #a7b997; --chapchoo-profile-apricot-surface: #f4e9df; --chapchoo-profile-apricot-ink: #955831; --chapchoo-profile-apricot-border: #ead9c8; --chapchoo-profile-apricot-swatch: #d8ab89; --chapchoo-profile-teal-surface: #eaf0ee; --chapchoo-profile-teal-ink: #386869; --chapchoo-profile-teal-border: #d9e4df; --chapchoo-profile-teal-swatch: #91b7b2; --chapchoo-profile-lilac-surface: #efebf4; --chapchoo-profile-lilac-ink: #6c5683; --chapchoo-profile-lilac-border: #ded4e8; --chapchoo-profile-lilac-swatch: #baabcf; --chapchoo-profile-rose-surface: #f5e9eb; --chapchoo-profile-rose-ink: #8d515f; --chapchoo-profile-rose-border: #e8d4da; --chapchoo-profile-rose-swatch: #d2a1af; }@media (max-width: 35.9937em) {
+  .mantine-visible-from-xs { display: none !important; }
+}
+@media (min-width: 36em) {
+  .mantine-hidden-from-xs { display: none !important; }
+}
+@media (max-width: 47.9937em) {
+  .mantine-visible-from-sm { display: none !important; }
+}
+@media (min-width: 48em) {
+  .mantine-hidden-from-sm { display: none !important; }
+}
+@media (max-width: 61.9937em) {
+  .mantine-visible-from-md { display: none !important; }
+}
+@media (min-width: 62em) {
+  .mantine-hidden-from-md { display: none !important; }
+}
+@media (max-width: 74.9938em) {
+  .mantine-visible-from-lg { display: none !important; }
+}
+@media (min-width: 75em) {
+  .mantine-hidden-from-lg { display: none !important; }
+}
+@media (max-width: 87.9938em) {
+  .mantine-visible-from-xl { display: none !important; }
+}
+@media (min-width: 88em) {
+  .mantine-hidden-from-xl { display: none !important; }
+}
+:root { --font-chapchoo-sans: "Pretendard", sans-serif; --font-chapchoo-mono: "Geist Mono", ui-monospace, monospace; }#storybook-highlights-menu { position: absolute; z-index: 2147483647; width: 300px; padding: 0px; margin: 15px 0px 0px; transform: translateX(-50%); font-family: "Nunito Sans", -apple-system, ".SFNSText-Regular", "San Francisco", BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 12px; background: white; border-width: medium; border-style: none; border-color: currentcolor; border-image: none; border-radius: 6px; box-shadow: rgba(0, 0, 0, 0.05) 0px 2px 5px 0px, rgba(0, 0, 0, 0.1) 0px 5px 15px 0px; color: rgb(46, 52, 56); }
+#storybook-highlights-menu ul { list-style: none; margin: 0px; padding: 0px; }
+#storybook-highlights-menu > ul { max-height: 300px; overflow-y: auto; padding: 4px 0px; }
+#storybook-highlights-menu li { padding: 0px 4px; margin: 0px; }
+#storybook-highlights-menu li > :not(ul) { display: flex; padding: 8px; margin: 0px; align-items: center; gap: 8px; border-radius: 4px; }
+#storybook-highlights-menu button { width: 100%; border: 0px; background: transparent; color: inherit; text-align: left; font-family: inherit; font-size: inherit; }
+#storybook-highlights-menu button:focus-visible { outline-color: rgb(2, 156, 253); }
+#storybook-highlights-menu button:hover { background: rgba(2, 156, 253, 0.07); color: rgb(2, 156, 253); cursor: pointer; }
+#storybook-highlights-menu li code { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 16px; font-size: 11px; }
+#storybook-highlights-menu li svg { flex-shrink: 0; margin: 1px; color: rgb(115, 130, 140); }
+#storybook-highlights-menu li > button:hover svg, #storybook-highlights-menu li > button:focus-visible svg { color: rgb(2, 156, 253); }
+#storybook-highlights-menu .element-list li svg { display: none; }
+#storybook-highlights-menu li.selectable svg, #storybook-highlights-menu li.selected svg { display: block; }
+#storybook-highlights-menu .menu-list { border-top: 1px solid rgba(38, 85, 115, 0.15); }
+#storybook-highlights-menu .menu-list > li:not(:last-child) { padding-bottom: 4px; margin-bottom: 4px; border-bottom: 1px solid rgba(38, 85, 115, 0.15); }
+#storybook-highlights-menu .menu-items, #storybook-highlights-menu .menu-items li { padding: 0px; }
+#storybook-highlights-menu .menu-item { display: flex; }
+#storybook-highlights-menu .menu-item-content { display: flex; flex-direction: column; flex-grow: 1; }</style></head>
+
+  <body class="sb-main-fullscreen sb-show-main" style="filter: none;">
+    <div class="sb-preparing-story sb-wrapper">
+  <div class="sb-loader"></div>
+</div>
+
+<div class="sb-preparing-docs sb-wrapper">
+  <div class="sb-previewBlock">
+    <div class="sb-previewBlock_header">
+      <div class="sb-previewBlock_icon"></div>
+      <div class="sb-previewBlock_icon"></div>
+      <div class="sb-previewBlock_icon"></div>
+      <div class="sb-previewBlock_icon"></div>
+    </div>
+    <div class="sb-previewBlock_body">
+      <div class="sb-loader"></div>
+    </div>
+  </div>
+  <table aria-hidden="true" class="sb-argstableBlock">
+    <thead class="sb-argstableBlock-head">
+      <tr>
+        <th><span>Name</span></th>
+        <th><span>Description</span></th>
+        <th><span>Default</span></th>
+        <th><span>Control </span></th>
+      </tr>
+    </thead>
+    <tbody class="sb-argstableBlock-body">
+      <tr>
+        <td><span>propertyName</span><span title="Required">*</span></td>
+        <td>
+          <div><span>This is a short description</span></div>
+          <div class="sb-argstableBlock-summary">
+            <div><span class="sb-argstableBlock-code">summary</span></div>
+          </div>
+        </td>
+        <td>
+          <div><span class="sb-argstableBlock-code">defaultValue</span></div>
+        </td>
+        <td><button type="button">Set string</button></td>
+      </tr>
+      <tr>
+        <td><span>propertyName</span><span>*</span></td>
+        <td>
+          <div><span>This is a short description</span></div>
+          <div class="sb-argstableBlock-summary">
+            <div><span class="sb-argstableBlock-code">summary</span></div>
+          </div>
+        </td>
+        <td>
+          <div><span class="sb-argstableBlock-code">defaultValue</span></div>
+        </td>
+        <td><button type="button">Set string</button></td>
+      </tr>
+      <tr>
+        <td><span>propertyName</span><span>*</span></td>
+        <td>
+          <div><span>This is a short description</span></div>
+          <div class="sb-argstableBlock-summary">
+            <div><span class="sb-argstableBlock-code">summary</span></div>
+          </div>
+        </td>
+        <td>
+          <div><span class="sb-argstableBlock-code">defaultValue</span></div>
+        </td>
+        <td><button type="button">Set string</button></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="sb-nopreview sb-wrapper">
+  <div class="sb-nopreview_main">
+    <h1 class="sb-nopreview_heading sb-heading">No Preview</h1>
+    <p>Sorry, but you either have no stories or none are selected somehow.</p>
+    <ul>
+      <li>Please check the Storybook config.</li>
+      <li>Try reloading the page.</li>
+    </ul>
+    <p>
+      If the problem persists, check the browser console, or the terminal you've run Storybook from.
+    </p>
+  </div>
+</div>
+
+<div class="sb-errordisplay sb-wrapper">
+  <div class="sb-errordisplay_main">
+    <h1 id="error-message"></h1>
+    <p>
+      The component failed to render properly, likely due to a configuration issue in Storybook.
+      Here are some common causes and how you can address them:
+    </p>
+    <ol>
+      <li>
+        <strong>Missing Context/Providers</strong>: You can use decorators to supply specific
+        contexts or providers, which are sometimes necessary for components to render correctly. For
+        detailed instructions on using decorators, please visit the
+        <a>Decorators documentation</a>.
+      </li>
+      <li>
+        <strong>Misconfigured Webpack or Vite</strong>: Verify that Storybook picks up all necessary
+        settings for loaders, plugins, and other relevant parameters. You can find step-by-step
+        guides for configuring
+        <a>Webpack</a> or
+        <a>Vite</a>
+        with Storybook.
+      </li>
+      <li>
+        <strong>Missing Environment Variables</strong>: Your Storybook may require specific
+        environment variables to function as intended. You can set up custom environment variables
+        as outlined in the
+        <a>Environment Variables documentation</a>.
+      </li>
+    </ol>
+    <pre class="sb-errordisplay_code"><code id="error-stack"></code></pre>
+  </div>
+</div>
+
+    <div id="storybook-root"><div class="_frame_7z4vs_1"><header class="_header_1hodq_1"><div class="m_4081bf90 mantine-Group-root" style="--group-gap: var(--mantine-spacing-sm); --group-align: center; --group-justify: flex-start; --group-wrap: nowrap;"><span class="_mobileNavigation_1hodq_22"><button class="_focus_18lwo_1 mantine-active _touchTarget_18lwo_35 m_8d3f4000 mantine-ActionIcon-root m_87cf2631 mantine-UnstyledButton-root" data-variant="subtle" type="button" aria-label="메뉴 열기" aria-expanded="false" style="--ai-size: calc(2.75rem * var(--mantine-scale)); --ai-bg: transparent; --ai-hover: var(--chapchoo-color-accentSoft); --ai-hover-color: var(--chapchoo-color-accentText); --ai-color: var(--chapchoo-color-accentText); --ai-bd: calc(0.0625rem * var(--mantine-scale)) solid transparent;"><span class="m_8d3afb97 mantine-ActionIcon-icon"><svg width="calc(1.375rem * var(--mantine-scale))" height="calc(1.375rem * var(--mantine-scale))" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"></path></svg></span></button></span><a class="_focus_18lwo_1 _brand_1hodq_16 m_b6d8b162 mantine-Text-root" data-size="lg" style="--text-fz: var(--mantine-font-size-lg); --text-lh: var(--mantine-line-height-lg); font-weight: 750;">chapchoo</a></div><div class="_tools_1hodq_25 m_4081bf90 mantine-Group-root" style="--group-gap: var(--mantine-spacing-md); --group-align: center; --group-justify: flex-start; --group-wrap: nowrap;"><button class="_focus_18lwo_1 mantine-active _touchTarget_18lwo_35 m_8d3f4000 mantine-ActionIcon-root m_87cf2631 mantine-UnstyledButton-root" data-variant="subtle" type="button" aria-label="계정 및 설정" title="계정 및 설정" aria-expanded="false" aria-haspopup="dialog" id="mantine-u5la6bjwy" style="--ai-size: calc(2.75rem * var(--mantine-scale)); --ai-bg: transparent; --ai-hover: var(--chapchoo-color-accentSoft); --ai-hover-color: var(--chapchoo-color-accentText); --ai-color: var(--chapchoo-color-accentText); --ai-bd: calc(0.0625rem * var(--mantine-scale)) solid transparent;"><span class="m_8d3afb97 mantine-ActionIcon-icon"><svg width="calc(1.375rem * var(--mantine-scale))" height="calc(1.375rem * var(--mantine-scale))" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M4.5 21v-2a7.5 7.5 0 0 1 15 0v2"></path></svg></span></button></div></header><div class="_shell_2wdtj_1" data-contextual="true"><aside class="_sidebar_2wdtj_8"><div class="_navigation_1maqj_1"><div class="_header_1maqj_8"><button aria-label="공간 선택" aria-expanded="false" aria-haspopup="dialog" id="mantine-jqhmfsjjc" type="button" class="_surface_z2gxi_1 _trigger_1inhr_1 _trigger_1v2oz_1"><div class="m_4081bf90 mantine-Group-root" style="--group-gap: var(--mantine-spacing-sm); --group-align: center; --group-justify: flex-start; --group-wrap: nowrap;"><svg class="_icon_1xold_1" width="calc(1.25rem * var(--mantine-scale))" height="calc(1.25rem * var(--mantine-scale))" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m3 11 9-8 9 8M5 10v11h14V10M9 21v-7h6v7"></path></svg><div class="m_6d731127 mantine-Stack-root" style="--stack-gap: 0rem; --stack-align: stretch; --stack-justify: flex-start; min-width: 0px;"><p class="_focus_18lwo_1 _triggerLabel_1v2oz_29 m_b6d8b162 mantine-Text-root" data-size="sm" style="--text-fz: var(--mantine-font-size-sm); --text-lh: var(--mantine-line-height-sm); font-weight: 600;">내 공간</p></div><svg class="_icon_1xold_1 _trailing_1v2oz_40" width="calc(1rem * var(--mantine-scale))" height="calc(1rem * var(--mantine-scale))" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6"></path></svg></div></button></div><nav aria-label="내 공간" class="_links_1maqj_12"><button aria-current="page" data-selected="true" type="button" class="_surface_z2gxi_1 _link_1maqj_12"><svg class="_icon_1xold_1" width="calc(1.25rem * var(--mantine-scale))" height="calc(1.25rem * var(--mantine-scale))" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="3" width="7" height="7" rx="2"></rect><rect x="14" y="3" width="7" height="7" rx="2"></rect><rect x="3" y="14" width="7" height="7" rx="2"></rect><rect x="14" y="14" width="7" height="7" rx="2"></rect></svg><span>에이전트</span></button><a class="_surface_z2gxi_1 _link_1maqj_12"><svg class="_icon_1xold_1" width="calc(1.25rem * var(--mantine-scale))" height="calc(1.25rem * var(--mantine-scale))" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="14" rx="3"></rect><path d="m3 7 9 6 9-6"></path></svg><span>초대</span></a><button type="button" class="_surface_z2gxi_1 _link_1maqj_12"><svg class="_icon_1xold_1" width="calc(1.25rem * var(--mantine-scale))" height="calc(1.25rem * var(--mantine-scale))" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m10 13 4-4M8 16l-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0M16 8l1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0" transform="translate(1 1) scale(.9)"></path></svg><span>AI 연결</span></button></nav></div></aside><div class="_workspace_2wdtj_16"><main class="_main_2wdtj_30"><div class="_content_2wdtj_34"><div class=""><button class="_focus_18lwo_1 _anchor_18lwo_39 m_849cf0da m_b6d8b162 mantine-Text-root mantine-Anchor-root" data-size="sm" data-underline="hover" style="--text-fz: var(--mantine-font-size-sm); --text-lh: var(--mantine-line-height-sm); color: var(--mantine-color-dimmed);" type="button"><span class="m_4081bf90 mantine-Group-root" style="--group-gap: var(--mantine-spacing-xs); --group-align: center; --group-justify: flex-start; --group-wrap: wrap;"><svg class="_icon_1xold_1" width="calc(1rem * var(--mantine-scale))" height="calc(1rem * var(--mantine-scale))" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m14 6-6 6 6 6"></path></svg>에이전트 목록</span></button><div class="_steps_63if1_66 m_cbb4ea7e mantine-Stepper-root" data-size="xs" style="--stepper-icon-color: var(--mantine-color-black); --stepper-icon-size: var(--stepper-icon-size-xs); --stepper-fz: var(--mantine-font-size-xs); --stepper-spacing: var(--mantine-spacing-xs);"><div class="m_aaf89d0b mantine-Stepper-steps" data-orientation="horizontal" data-icon-position="left" data-label-position="right" data-wrap="true"><button class="_focus_18lwo_1 m_f56b1e2c m_cbb57068 mantine-Stepper-step m_87cf2631 mantine-UnstyledButton-root" data-icon-position="left" data-label-position="right" type="button" data-progress="true" tabindex="-1"><span class="m_818e70b mantine-Stepper-stepWrapper"><span class="m_1959ad01 mantine-Stepper-stepIcon" data-progress="true"><span class="m_8faaac38 mantine-Stepper-stepIconContent">1</span></span></span><span class="m_1956aa2a mantine-Stepper-stepBody" data-orientation="horizontal" data-icon-position="left"><span class="m_12051f6c mantine-Stepper-stepLabel">컴퓨터</span></span></button><div class="m_2a371ac9 mantine-Stepper-separator" data-orientation="horizontal"></div><button class="_focus_18lwo_1 m_f56b1e2c m_cbb57068 mantine-Stepper-step m_87cf2631 mantine-UnstyledButton-root" data-icon-position="left" data-label-position="right" type="button" tabindex="-1"><span class="m_818e70b mantine-Stepper-stepWrapper"><span class="m_1959ad01 mantine-Stepper-stepIcon"><span class="m_8faaac38 mantine-Stepper-stepIconContent">2</span></span></span><span class="m_1956aa2a mantine-Stepper-stepBody" data-orientation="horizontal" data-icon-position="left"><span class="m_12051f6c mantine-Stepper-stepLabel">Codex 인증</span></span></button><div class="m_2a371ac9 mantine-Stepper-separator" data-orientation="horizontal"></div><button class="_focus_18lwo_1 m_f56b1e2c m_cbb57068 mantine-Stepper-step m_87cf2631 mantine-UnstyledButton-root" data-icon-position="left" data-label-position="right" type="button" tabindex="-1"><span class="m_818e70b mantine-Stepper-stepWrapper"><span class="m_1959ad01 mantine-Stepper-stepIcon"><span class="m_8faaac38 mantine-Stepper-stepIconContent">3</span></span></span><span class="m_1956aa2a mantine-Stepper-stepBody" data-orientation="horizontal" data-icon-position="left"><span class="m_12051f6c mantine-Stepper-stepLabel">프로필·이름</span></span></button></div></div><h1 class="m_8a5d1357 mantine-Title-root" data-size="h2" data-order="1" style="--title-fw: var(--mantine-h2-font-weight); --title-lh: var(--mantine-h2-line-height); --title-fz: var(--mantine-h2-font-size); margin-top: var(--mantine-spacing-xl);">어디에서 함께할까요?</h1><p class="_focus_18lwo_1 m_b6d8b162 mantine-Text-root" style="margin-top: var(--mantine-spacing-sm); color: var(--mantine-color-dimmed);">에이전트가 사용할 컴퓨터를 골라 주세요.</p></div><div class="m_6d731127 mantine-Stack-root" style="--stack-gap: var(--mantine-spacing-xl); --stack-align: stretch; --stack-justify: flex-start;"><div class="m_6d731127 mantine-Stack-root" style="--stack-gap: var(--mantine-spacing-xl); --stack-align: stretch; --stack-justify: flex-start;"><div class="m_4081bf90 mantine-Group-root" style="--group-gap: var(--mantine-spacing-xs); --group-align: center; --group-justify: flex-start; --group-wrap: wrap;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M7 18a5 5 0 0 1-1-10 6 6 0 0 1 11-1 5 5 0 0 1 0 11H7Z"></path></svg><p class="_focus_18lwo_1 m_b6d8b162 mantine-Text-root" data-size="sm" style="--text-fz: var(--mantine-font-size-sm); --text-lh: var(--mantine-line-height-sm);">클라우드</p></div><div class="_paper_18lwo_58 m_1b7284a3 mantine-Paper-root" data-with-border="true" style="--paper-radius: var(--mantine-radius-lg); padding: var(--mantine-spacing-xl); background: var(--chapchoo-color-selected); max-width: 26rem;"><div class="m_4081bf90 mantine-Group-root" style="--group-gap: var(--mantine-spacing-md); --group-align: center; --group-justify: flex-start; --group-wrap: wrap;"><div class="_providerIcon_63if1_69"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m12 2 9 5v10l-9 5-9-5V7zM12 6v12M6.8 9l10.4 6M17.2 9 6.8 15"></path></svg></div><div class=""><p class="_focus_18lwo_1 m_b6d8b162 mantine-Text-root" style="font-weight: 600;">Kubernetes</p><p class="_focus_18lwo_1 m_b6d8b162 mantine-Text-root" data-size="xs" style="--text-fz: var(--mantine-font-size-xs); --text-lh: var(--mantine-line-height-xs); color: var(--mantine-color-dimmed);">Community Kubernetes</p></div></div></div><div class="m_3eebeb36 mantine-Divider-root" data-orientation="horizontal" role="separator" aria-orientation="horizontal" style="margin-top: var(--mantine-spacing-lg);"></div><div class="m_4081bf90 mantine-Group-root" style="--group-gap: var(--mantine-spacing-md); --group-align: center; --group-justify: space-between; --group-wrap: wrap;"><button class="_focus_18lwo_1 mantine-active _button_18lwo_5 m_77c9d27d mantine-Button-root m_87cf2631 mantine-UnstyledButton-root" data-variant="subtle" type="button" style="--button-bg: transparent; --button-hover: var(--chapchoo-color-accentSoft); --button-color: var(--chapchoo-color-accentText); --button-bd: calc(0.0625rem * var(--mantine-scale)) solid transparent; --button-hover-color: var(--chapchoo-color-accentText); --button-height: var(--chapchoo-control-height-sm);"><span class="_buttonInner_18lwo_14 m_80f1301b mantine-Button-inner"><span class="_buttonLabel_18lwo_17 m_811560b9 mantine-Button-label">이전</span></span></button><button class="_focus_18lwo_1 mantine-active _button_18lwo_5 m_77c9d27d mantine-Button-root m_87cf2631 mantine-UnstyledButton-root" data-variant="filled" data-with-right-section="true" type="button" style="--button-bg: var(--chapchoo-color-accent); --button-hover: var(--chapchoo-color-accentHover); --button-color: var(--chapchoo-color-onAccent); --button-bd: calc(0.0625rem * var(--mantine-scale)) solid transparent; --button-hover-color: var(--chapchoo-color-onAccent); --button-height: var(--chapchoo-control-height-sm);"><span class="_buttonInner_18lwo_14 m_80f1301b mantine-Button-inner"><span class="_buttonLabel_18lwo_17 m_811560b9 mantine-Button-label">다음</span><span class="m_a74036a mantine-Button-section" data-position="right"><svg class="_icon_1xold_1" width="calc(1rem * var(--mantine-scale))" height="calc(1rem * var(--mantine-scale))" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m10 6 6 6-6 6"></path></svg></span></span></button></div></div></div></div></main></div></div></div></div>
+    <div id="storybook-docs" hidden="true"></div>
+    
+  
+
+<div id="storybook-highlights-root" style=""><div id="storybook-highlights-menu" popover="manual" style="display: none;"></div></div><div data-portal="true" data-mantine-shared-portal-node="true"><div><div class="m_9df02822 mantine-Modal-root" id="mantine-7sxjwry8q" style="--modal-radius: var(--mantine-radius-lg); --modal-y-offset: 5dvh; --mb-z-index: 201; --mb-padding: var(--mantine-spacing-xl);"></div></div><div><div class="m_f11b401e mantine-Drawer-root" data-size="sm" id="mantine-tdyxhx938" style="--drawer-size: var(--drawer-size-sm); --drawer-justify: flex-end; --mb-z-index: 200; --mb-padding: var(--mantine-spacing-xl);"></div></div><div><div class="m_9df02822 mantine-Modal-root" data-centered="true" id="mantine-tykhaa07u" style="--modal-radius: var(--mantine-radius-lg); --modal-size: 32rem; --modal-y-offset: 5dvh; --mb-z-index: 200; --mb-padding: var(--mantine-spacing-xl);"></div></div><div><div class="m_f11b401e mantine-Drawer-root" id="mantine-rui45mw6j" style="--drawer-size: 18.125rem; --mb-z-index: 200;"></div></div><div><div class="m_9df02822 mantine-Modal-root" data-centered="true" id="mantine-qvzfgh7cp" style="--modal-radius: var(--mantine-radius-xl); --modal-size: 30rem; --modal-y-offset: 5dvh; --mb-z-index: 200; --mb-padding: 0rem;"></div></div></div><svg id="storybook-a11y-vision-filters" aria-hidden="true" color-interpolation-filters="sRGB" style="position:absolute;width:0;height:0;overflow:hidden">
+  <defs>
+    <filter id="storybook-a11y-vision-protanopia">
+      <feColorMatrix in="SourceGraphic" type="matrix" values="0.567, 0.433, 0, 0, 0 0.558, 0.442, 0, 0, 0 0, 0.242, 0.758, 0, 0 0, 0, 0, 1, 0"></feColorMatrix>
+    </filter>
+    <filter id="storybook-a11y-vision-protanomaly">
+      <feColorMatrix in="SourceGraphic" type="matrix" values="0.817, 0.183, 0, 0, 0 0.333, 0.667, 0, 0, 0 0, 0.125, 0.875, 0, 0 0, 0, 0, 1, 0"></feColorMatrix>
+    </filter>
+    <filter id="storybook-a11y-vision-deuteranopia">
+      <feColorMatrix in="SourceGraphic" type="matrix" values="0.625, 0.375, 0, 0, 0 0.7, 0.3, 0, 0, 0 0, 0.3, 0.7, 0, 0 0, 0, 0, 1, 0"></feColorMatrix>
+    </filter>
+    <filter id="storybook-a11y-vision-deuteranomaly">
+      <feColorMatrix in="SourceGraphic" type="matrix" values="0.8, 0.2, 0, 0, 0 0.258, 0.742, 0, 0, 0 0, 0.142, 0.858, 0, 0 0, 0, 0, 1, 0"></feColorMatrix>
+    </filter>
+    <filter id="storybook-a11y-vision-tritanopia">
+      <feColorMatrix in="SourceGraphic" type="matrix" values="0.95, 0.05,  0, 0, 0 0,  0.433, 0.567, 0, 0 0,  0.475, 0.525, 0, 0 0,  0, 0, 1, 0"></feColorMatrix>
+    </filter>
+    <filter id="storybook-a11y-vision-tritanomaly">
+      <feColorMatrix in="SourceGraphic" type="matrix" values="0.967, 0.033, 0, 0, 0 0, 0.733, 0.267, 0, 0 0, 0.183, 0.817, 0, 0 0, 0, 0, 1, 0"></feColorMatrix>
+    </filter>
+    <filter id="storybook-a11y-vision-achromatopsia">
+      <feColorMatrix in="SourceGraphic" type="matrix" values="0.299, 0.587, 0.114, 0, 0 0.299, 0.587, 0.114, 0, 0 0.299, 0.587, 0.114, 0, 0 0, 0, 0, 1, 0"></feColorMatrix>
+    </filter>
+  </defs>
+</svg></body></html>
