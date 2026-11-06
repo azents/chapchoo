@@ -46,15 +46,17 @@ export function Agents(props: AgentsProps): ReactElement {
     );
   }
   return (
-    <AgentTheme palette={data.type === "detail" ? data.agent.paletteKey : null}>
-      <ApplicationShell
-        basePath={props.basePath}
-        appearance={props.appearance}
-        contextLabel={c.agents}
-        title={data.type === "detail" ? data.agent.name : c.agents}
-        contentClassName={classes.content}
-        header={
-          data.type === "detail" ? (
+    <ApplicationShell
+      basePath={props.basePath}
+      appearance={props.appearance}
+      contextLabel={c.agents}
+      title={data.type === "detail" ? data.agent.name : c.agents}
+      contentClassName={classes.content}
+      header={
+        <AgentTheme
+          palette={data.type === "detail" ? data.agent.paletteKey : null}
+        >
+          {data.type === "detail" ? (
             <Anchor href={listHref} mb="lg" display="inline-block">
               {c.back}
             </Anchor>
@@ -73,24 +75,28 @@ export function Agents(props: AgentsProps): ReactElement {
                 ) : null
               }
             />
-          )
-        }
-        identityLabel={data.identity}
-        mascotReplayLabel={c.replay}
-        actions={
-          <Button variant="subtle" onClick={props.onLogout}>
-            {c.logout}
-          </Button>
-        }
-        navigation={[
-          {
-            key: "agents",
-            label: c.agents,
-            active: true,
-            href: listHref,
-          },
-          { key: "accounts", label: c.accounts, href: `${props.basePath}/` },
-        ]}
+          )}
+        </AgentTheme>
+      }
+      identityLabel={data.identity}
+      mascotReplayLabel={c.replay}
+      actions={
+        <Button variant="subtle" onClick={props.onLogout}>
+          {c.logout}
+        </Button>
+      }
+      navigation={[
+        {
+          key: "agents",
+          label: c.agents,
+          active: true,
+          href: listHref,
+        },
+        { key: "accounts", label: c.accounts, href: `${props.basePath}/` },
+      ]}
+    >
+      <AgentTheme
+        palette={data.type === "detail" ? data.agent.paletteKey : null}
       >
         {props.stale ? (
           <Group justify="flex-end">
@@ -307,7 +313,7 @@ export function Agents(props: AgentsProps): ReactElement {
                 : { type: "READY" }
           }
         />
-      </ApplicationShell>
-    </AgentTheme>
+      </AgentTheme>
+    </ApplicationShell>
   );
 }

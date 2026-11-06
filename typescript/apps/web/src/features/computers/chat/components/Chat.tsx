@@ -78,11 +78,11 @@ export function Chat(props: ChatProps): ReactElement {
   const start = agent.computer.actions.find((item) => item.action === "start");
   const working = props.writable && props.activity === "working";
   return (
-    <AgentTheme palette={agent.paletteKey}>
-      <div className={classes.frame}>
-        <aside className={classes.sidebar}>
-          {!props.navOpened ? <Navigation {...props} /> : null}
-        </aside>
+    <div className={classes.frame}>
+      <aside className={classes.sidebar}>
+        {!props.navOpened ? <Navigation {...props} /> : null}
+      </aside>
+      <AgentTheme palette={agent.paletteKey}>
         <main
           className={classes.workspace}
           style={profileStyle(agent.paletteKey)}
@@ -318,21 +318,23 @@ export function Chat(props: ChatProps): ReactElement {
             </footer>
           </div>
         </main>
-        <Drawer
-          opened={props.navOpened}
-          returnFocus={false}
-          onExitTransitionEnd={props.focus.navigationClosed}
-          closeOnEscape={!props.secondaryOverlay}
-          closeOnClickOutside={!props.secondaryOverlay}
-          trapFocus={!props.secondaryOverlay}
-          onClose={props.onCloseNav}
-          position="left"
-          size="18.125rem"
-          title={props.navigation?.label ?? c.menu}
-          closeButtonProps={{ "aria-label": c.close, size: "2.75rem" }}
-        >
-          <Navigation {...props} />
-        </Drawer>
+      </AgentTheme>
+      <Drawer
+        opened={props.navOpened}
+        returnFocus={false}
+        onExitTransitionEnd={props.focus.navigationClosed}
+        closeOnEscape={!props.secondaryOverlay}
+        closeOnClickOutside={!props.secondaryOverlay}
+        trapFocus={!props.secondaryOverlay}
+        onClose={props.onCloseNav}
+        position="left"
+        size="18.125rem"
+        title={props.navigation?.label ?? c.menu}
+        closeButtonProps={{ "aria-label": c.close, size: "2.75rem" }}
+      >
+        <Navigation {...props} />
+      </Drawer>
+      <AgentTheme palette={agent.paletteKey}>
         <Drawer
           opened={props.opened}
           returnFocus={false}
@@ -467,7 +469,7 @@ export function Chat(props: ChatProps): ReactElement {
                 : { type: "READY" }
           }
         />
-      </div>
-    </AgentTheme>
+      </AgentTheme>
+    </div>
   );
 }

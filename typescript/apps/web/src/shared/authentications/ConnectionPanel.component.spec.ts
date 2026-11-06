@@ -9,12 +9,14 @@ test("device code has a copy action and successful feedback", async ({
   await page.goto(
     "/iframe.html?id=authentication-connections--device-code&viewMode=story",
   );
-  const code = await page.locator("code").innerText();
+  await expect(page.getByText("ABCD-EFGH", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: copy.copyCode, exact: true }).click();
   await expect(
     page.getByRole("button", { name: copy.copied, exact: true }),
   ).toBeVisible();
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(code);
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+    "ABCD-EFGH",
+  );
 });
 test("empty alias remains optional and creation time identifies unnamed connections", async ({
   page,
@@ -112,7 +114,7 @@ test("device interaction displays the actual code, official destination, validit
     dialog.getByText(`${copy.remaining} 4:00`, { exact: true }),
   ).toBeVisible();
   await expect(
-    dialog.getByRole("button", { name: copy.check, exact: true }),
+    dialog.getByRole("button", { name: copy.copyCode, exact: true }),
   ).toBeEnabled();
   await expect(
     dialog.getByRole("button", { name: copy.cancel, exact: true }),

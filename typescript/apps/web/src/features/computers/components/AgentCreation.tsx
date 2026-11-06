@@ -65,17 +65,17 @@ export function AgentCreation(props: AgentCreationProps): ReactElement {
     );
   }
   return (
-    <AgentTheme palette={props.paletteKey}>
-      <ApplicationShell
-        basePath={props.basePath}
-        appearance={props.appearance}
-        contextLabel={c.agents}
-        title={c.create}
-        contentClassName={[
-          classes.creationContent,
-          step < 2 ? classes.compactCreation : "",
-        ].join(" ")}
-        header={
+    <ApplicationShell
+      basePath={props.basePath}
+      appearance={props.appearance}
+      contextLabel={c.agents}
+      title={c.create}
+      contentClassName={[
+        classes.creationContent,
+        step < 2 ? classes.compactCreation : "",
+      ].join(" ")}
+      header={
+        <AgentTheme palette={props.paletteKey}>
           <Box
             className={[
               classes.creationHeader,
@@ -126,19 +126,21 @@ export function AgentCreation(props: AgentCreationProps): ReactElement {
               </Group>
             ) : null}
           </Box>
-        }
-        identityLabel={props.initial.identity}
-        mascotReplayLabel={c.replay}
-        actions={
-          <Button variant="subtle" onClick={props.onLogout}>
-            {c.logout}
-          </Button>
-        }
-        navigation={[
-          { key: "agents", label: c.agents, active: true, href: listHref },
-          { key: "accounts", label: c.accounts, href: `${props.basePath}/` },
-        ]}
-      >
+        </AgentTheme>
+      }
+      identityLabel={props.initial.identity}
+      mascotReplayLabel={c.replay}
+      actions={
+        <Button variant="subtle" onClick={props.onLogout}>
+          {c.logout}
+        </Button>
+      }
+      navigation={[
+        { key: "agents", label: c.agents, active: true, href: listHref },
+        { key: "accounts", label: c.accounts, href: `${props.basePath}/` },
+      ]}
+    >
+      <AgentTheme palette={props.paletteKey}>
         <Stack
           component="form"
           gap="xl"
@@ -450,7 +452,7 @@ export function AgentCreation(props: AgentCreationProps): ReactElement {
             </Button>
           </Group>
         </Stack>
-      </ApplicationShell>
-    </AgentTheme>
+      </AgentTheme>
+    </ApplicationShell>
   );
 }
