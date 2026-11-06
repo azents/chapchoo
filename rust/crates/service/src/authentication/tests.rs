@@ -71,11 +71,29 @@ struct Gate {
     entered: parking_lot::Mutex<Option<oneshot::Sender<()>>>,
     release: Mutex<Option<oneshot::Receiver<()>>>,
 }
+impl Gate {
+    async fn wait(&self) -> Result<(), DeviceProviderFailure> {
+        self.entered
+            .lock()
+            .take()
+            .ok_or(DeviceProviderFailure::InvalidResponse)?
+            .send(())
+            .map_err(|_| DeviceProviderFailure::Uncertain)?;
+        self.release
+            .lock()
+            .await
+            .take()
+            .ok_or(DeviceProviderFailure::InvalidResponse)?
+            .await
+            .map_err(|_| DeviceProviderFailure::Uncertain)
+    }
+}
 struct Provider {
     issue: AtomicUsize,
     poll: AtomicUsize,
     exchange: AtomicUsize,
     gate: Option<Gate>,
+    exchange_gate: Option<Gate>,
     failure: Option<DeviceProviderFailure>,
     pending_once: bool,
 }
@@ -86,6 +104,7 @@ impl Provider {
             poll: AtomicUsize::new(0),
             exchange: AtomicUsize::new(0),
             gate: None,
+            exchange_gate: None,
             failure: None,
             pending_once: true,
         }
@@ -96,23 +115,7 @@ impl DeviceAuthenticationProvider for Provider {
         Box::pin(async move {
             self.issue.fetch_add(1, Ordering::SeqCst);
             if let Some(gate) = &self.gate {
-                let entered = gate
-                    .entered
-                    .lock()
-                    .take()
-                    .ok_or(DeviceProviderFailure::InvalidResponse)?;
-                entered
-                    .send(())
-                    .map_err(|_| DeviceProviderFailure::Uncertain)?;
-                let release = gate
-                    .release
-                    .lock()
-                    .await
-                    .take()
-                    .ok_or(DeviceProviderFailure::InvalidResponse)?;
-                release
-                    .await
-                    .map_err(|_| DeviceProviderFailure::Uncertain)?;
+                gate.wait().await?;
             }
             if let Some(failure) = self.failure {
                 return Err(failure);
@@ -151,6 +154,9 @@ impl DeviceAuthenticationProvider for Provider {
     ) -> DeviceProviderFuture<'a, DeviceAuthenticationTokens> {
         Box::pin(async move {
             self.exchange.fetch_add(1, Ordering::SeqCst);
+            if let Some(gate) = &self.exchange_gate {
+                gate.wait().await?;
+            }
             Ok(DeviceAuthenticationTokens {
                 secret: ExternalSecret::new(b"synthetic-oauth-bundle".to_vec())
                     .map_err(|_| DeviceProviderFailure::InvalidResponse)?,
@@ -174,6 +180,80 @@ fn state(progress: AuthenticationProgress) -> DeviceAuthenticationStatus {
     match progress {
         AuthenticationProgress::Current(status)
         | AuthenticationProgress::ProviderFailure { status, .. } => status,
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn live_exchange_keeps_exact_ownership_for_status_and_duplicate_poll() -> Result<(), TestError>
+{
+    let fixture = fixture().await?;
+    let (entered, exchanging) = oneshot::channel();
+    let (release, released) = oneshot::channel();
+    let provider = Arc::new(Provider {
+        exchange_gate: Some(Gate {
+            entered: parking_lot::Mutex::new(Some(entered)),
+            release: Mutex::new(Some(released)),
+        }),
+        pending_once: false,
+        ..Provider::immediate()
+    });
+    let service = AuthenticationService::new(fixture.store.clone(), provider.clone(), 4)?;
+    let result = async {
+        let first = state(
+            service
+                .start_device(
+                    &fixture.actor,
+                    draft("live-exchange"),
+                    AcceptanceTime::Fixed(1000),
+                )
+                .await?,
+        );
+        let attempt = first.attempt_id;
+        let worker = service.clone();
+        let actor = SecretDigest::from_bytes(*fixture.actor.as_bytes());
+        let owned_attempt = attempt.clone();
+        let call = tokio::spawn(async move {
+            worker
+                .poll_device(&actor, owned_attempt, AcceptanceTime::Fixed(2000))
+                .await
+        });
+        exchanging.await.map_err(ServiceError::infrastructure)?;
+        assert!(matches!(
+            state(
+                service
+                    .device_status(&fixture.actor, &attempt, 2001)
+                    .await?
+            )
+            .state,
+            DeviceAuthenticationState::Exchanging
+        ));
+        assert!(matches!(
+            state(
+                service
+                    .poll_device(&fixture.actor, attempt, AcceptanceTime::Fixed(2001))
+                    .await?
+            )
+            .state,
+            DeviceAuthenticationState::Exchanging
+        ));
+        assert_eq!(provider.poll.load(Ordering::SeqCst), 1);
+        assert_eq!(provider.exchange.load(Ordering::SeqCst), 1);
+        release
+            .send(())
+            .map_err(|_| ServiceError::domain(crate::DomainReason::Internal))?;
+        assert!(matches!(
+            state(call.await.map_err(ServiceError::infrastructure)??).state,
+            DeviceAuthenticationState::Registered { .. }
+        ));
+        assert_eq!(provider.exchange.load(Ordering::SeqCst), 1);
+        Ok::<_, ServiceError>(())
+    }
+    .await;
+    let cleanup = service.finish().await;
+    match (result, cleanup) {
+        (Err(primary), Err(cleanup)) => Err(TestError::from(combined(primary, cleanup))),
+        (Err(error), _) | (_, Err(error)) => Err(TestError::from(error)),
+        _ => Ok(()),
     }
 }
 
@@ -421,10 +501,23 @@ async fn retained_exchange_without_process_owner_reports_uncertainty_and_never_r
         ));
         assert_eq!(provider.poll.load(Ordering::SeqCst), 0);
         assert_eq!(provider.exchange.load(Ordering::SeqCst), 0);
+        let stale = fixture
+            .store
+            .external_device_authentication_status(&fixture.actor, &step.attempt_id(), 2001)
+            .await?;
         assert!(matches!(
             state(
                 service
                     .cancel_device(&fixture.actor, &step.attempt_id(), "cancel-retained", 2001)
+                    .await?
+            )
+            .state,
+            DeviceAuthenticationState::Cancelled
+        ));
+        assert!(matches!(
+            state(
+                service
+                    .current(&fixture.actor, stale, AcceptanceTime::Fixed(2001))
                     .await?
             )
             .state,

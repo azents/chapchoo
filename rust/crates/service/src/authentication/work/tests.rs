@@ -16,6 +16,76 @@ impl Drop for Probe {
     }
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn ownership_observation_waits_for_the_existing_admission_batch_only() -> Result<(), TestError>
+{
+    for dispatched in [true, false] {
+        let work = Arc::new(AuthenticationWork::new(1)?);
+        let (visible, committed) = oneshot::channel();
+        let (handoff, handed_off) = oneshot::channel();
+        let (finish, finished) = oneshot::channel();
+        let worker = work.clone();
+        let caller = tokio::spawn(async move {
+            worker
+                .run(move |work| async move {
+                    let admission = work.admission();
+                    visible
+                        .send(())
+                        .map_err(|_| ServiceError::domain(DomainReason::Internal))?;
+                    handed_off.await.map_err(ServiceError::infrastructure)?;
+                    if dispatched {
+                        work.mark("visible-attempt".into(), "visible-step");
+                    }
+                    drop(admission);
+                    finished.await.map_err(ServiceError::infrastructure)?;
+                    Ok(())
+                })
+                .await
+        });
+        committed.await?;
+        let mut observed =
+            Box::pin(work.owns_after_admission("visible-attempt", Some("visible-step")));
+        std::future::poll_fn(|context| {
+            assert!(observed.as_mut().poll(context).is_pending());
+            std::task::Poll::Ready(())
+        })
+        .await;
+        // Later admissions cannot explain the row already observed; they must
+        // not extend the reader's finite handoff barrier.
+        let (later_ready, later_started) = oneshot::channel();
+        let (release_later, later_released) = oneshot::channel();
+        let later = work.clone();
+        let later = tokio::spawn(async move {
+            let guard = later.admission();
+            later_ready.send(()).map_err(|_| "Observer disappeared")?;
+            later_released.await?;
+            drop(guard);
+            Ok::<_, TestError>(())
+        });
+        later_started.await?;
+        handoff.send(()).map_err(|_| "Admission was abandoned")?;
+        assert_eq!(observed.await, dispatched);
+        release_later
+            .send(())
+            .map_err(|_| "Later admission was abandoned")?;
+        later.await??;
+        assert!(
+            !work
+                .owns_after_admission("visible-attempt", Some("another-step"))
+                .await
+        );
+        finish.send(()).map_err(|_| "Effect owner was abandoned")?;
+        caller.await??;
+        work.finish().await?;
+        assert!(
+            !work
+                .owns_after_admission("visible-attempt", Some("visible-step"))
+                .await
+        );
+    }
+    Ok(())
+}
+
 #[tokio::test]
 async fn cancelled_finish_retains_joined_primary_and_cleanup_causes_until_reentry()
 -> Result<(), TestError> {

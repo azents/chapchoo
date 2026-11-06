@@ -535,6 +535,62 @@ async fn exercise_device(store: &Store) -> Result<(String, String, String), Test
         State::Expired
     ));
 
+    // Observation itself terminalizes abandoned temporary material. No later
+    // poll/cancel/completion is allowed to incidentally perform this cleanup.
+    for phase in ["starting", "pending", "exchanging"] {
+        let request = format!("observed-expiry-{phase}");
+        let step = start(store, &owner, &personal, &request, None).await?;
+        let attempt = step.attempt_id();
+        match phase {
+            "pending" => {
+                store
+                    .accept_external_device_authorization(&owner, &step, &issued(NOW)?, NOW)
+                    .await?;
+            }
+            "exchanging" => {
+                issue_to_exchange(store, &owner, step).await?;
+            }
+            _ => {}
+        }
+        assert!(matches!(
+            store
+                .external_device_authentication_status(&owner, &attempt, NOW + 900_001)
+                .await?
+                .state,
+            State::Expired
+        ));
+        assert!(
+            store
+                .external_authentication_request_result(&owner, &request, NOW + 900_001)
+                .await?
+                .is_some()
+        );
+    }
+    // Exercise receipt replay separately, so it cannot mask a missing status
+    // cleanup for the three abandoned attempts above.
+    let replay = start(store, &owner, &personal, "observed-expiry-replay", None).await?;
+    store
+        .accept_external_device_authorization(&owner, &replay, &issued(NOW)?, NOW)
+        .await?;
+    assert!(matches!(
+        store
+            .start_external_device_authentication(
+                &owner,
+                &StartDeviceAuthentication {
+                    scope: personal.clone(),
+                    request_id: "observed-expiry-replay".into(),
+                    name: "Synthetic ChatGPT".into(),
+                    target: None,
+                },
+                NOW + 900_001
+            )
+            .await?,
+        StartDeviceAdmission::Current(DeviceAuthenticationStatus {
+            state: State::Expired,
+            ..
+        })
+    ));
+
     let team = store
         .create_team(
             &owner,
@@ -765,7 +821,7 @@ struct Count {
     #[diesel(sql_type=BigInt)]
     n: i64,
 }
-const TERMINAL_SECRETS: &str = "SELECT count(*) AS n FROM external_auth_attempts WHERE phase NOT IN ('STARTING','PENDING','CHECKING','EXCHANGING') AND (pending_nonce IS NOT NULL OR pending_ciphertext IS NOT NULL OR step_id IS NOT NULL)";
+const TERMINAL_SECRETS: &str = "SELECT count(*) AS n FROM external_auth_attempts WHERE (phase NOT IN ('STARTING','PENDING','CHECKING','EXCHANGING') AND (pending_nonce IS NOT NULL OR pending_ciphertext IS NOT NULL OR step_id IS NOT NULL)) OR (request_id IN ('observed-expiry-starting','observed-expiry-pending','observed-expiry-exchanging','observed-expiry-replay') AND phase<>'EXPIRED')";
 fn verify_oauth(
     cipher: &CredentialCipher,
     row: StoredSecret,

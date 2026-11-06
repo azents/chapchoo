@@ -73,6 +73,9 @@ pub struct DeviceAuthenticationStatus {
     pub attempt_id: String,
     pub expires_at: i64,
     pub state: DeviceAuthenticationState,
+    /// Internal ownership witness for this already-existing admitted step.
+    /// Transport projections deliberately omit it; it is not dispatch authority.
+    pub step_id: Option<String>,
 }
 impl fmt::Debug for DeviceAuthenticationStatus {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -118,6 +121,9 @@ impl fmt::Debug for DeviceAuthenticationStep {
 impl DeviceAuthenticationStep {
     pub fn attempt_id(&self) -> String {
         self.attempt.to_dto(EntityKind::AuthenticationAttempt)
+    }
+    pub fn step_id(&self) -> &str {
+        &self.step_id
     }
 }
 
@@ -281,6 +287,7 @@ impl AttemptRow {
             attempt_id: self.id.to_dto(EntityKind::AuthenticationAttempt),
             expires_at: self.expires_at,
             state,
+            step_id: self.step_id.clone(),
         })
     }
 }
@@ -334,6 +341,28 @@ macro_rules! terminal {
         diesel::sql_query($dialect.query("UPDATE external_authentications SET active_attempt_id=NULL WHERE active_attempt_id=?"))
             .bind::<IdentitySql,_>($row.id).execute($connection).await?;
         $row.phase=$phase.to_owned(); $row.step_id=None; $row.pending_nonce=None; $row.pending_ciphertext=None;
+    }};
+}
+macro_rules! expire_observation {
+    ($connection:expr,$dialect:expr,$row:expr,$user:expr,$now:expr) => {{
+        if $row.expires_at <= $now
+            && matches!(
+                $row.phase.as_str(),
+                "STARTING" | "PENDING" | "CHECKING" | "EXCHANGING"
+            )
+        {
+            // The normal authority boundary is already held. Match mutation
+            // lock order before clearing target linkage and temporary bytes.
+            ($row, _) = admitted_attempt!($connection, $dialect, $row.id, $user);
+            if $row.expires_at <= $now
+                && matches!(
+                    $row.phase.as_str(),
+                    "STARTING" | "PENDING" | "CHECKING" | "EXCHANGING"
+                )
+            {
+                terminal!($connection, $dialect, $row, "EXPIRED", $now);
+            }
+        }
     }};
 }
 macro_rules! acceptance_fence {
@@ -424,7 +453,7 @@ impl Store {
                 else {
                     return Err(StoreError::Integrity);
                 };
-                let row = attempt_row!(
+                let mut row = attempt_row!(
                     connection,
                     dialect,
                     EntityId::from_dto(EntityKind::AuthenticationAttempt, &attempt_id)?,
@@ -435,6 +464,7 @@ impl Store {
                 {
                     return Err(StoreError::Integrity);
                 }
+                expire_observation!(connection, dialect, row, &user.id, now);
                 return Ok(StartDeviceAdmission::Current(row.status(self, now)?));
             }
             if let Some(target_id) = target_id {
@@ -487,7 +517,7 @@ impl Store {
         })
     }
 
-    /// Read-only: observing an in-flight step never grants another dispatch.
+    /// Observing state never dispatches I/O; expiry also clears temporary material.
     pub async fn external_device_authentication_status(
         &self,
         actor: &SecretDigest,
@@ -506,7 +536,9 @@ impl Store {
                 return Err(StoreError::NotFound);
             }
             // Re-read after the Team lock, which may have waited for cancellation.
-            attempt_row!(connection, dialect, id, false).status(self, now)
+            let mut current = attempt_row!(connection, dialect, id, false);
+            expire_observation!(connection, dialect, current, &user.id, now);
+            current.status(self, now)
         })
     }
 

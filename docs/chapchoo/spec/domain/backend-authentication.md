@@ -49,7 +49,10 @@ target starts same-record ChatGPT reauthentication. HTTP occurs outside database
 transactions and acceptance rechecks current session, role, attempt, step and
 target mutation. Code disclosure is limited to the initiating current manager.
 The active pending projection includes the code, fixed verification destination
-and next permitted check time. DeviceStatus only reads retained state. PollDevice
+and next permitted check time. DeviceStatus observes retained progress and lazily
+terminalizes expired active attempts, clearing temporary device material under
+current authority without dispatching provider I/O. Exact start-result recovery
+performs the same expiry cleanup. PollDevice
 performs at most one due provider check, then at most one authorization-code
 exchange; there is no autonomous poll worker or client-authorized retry loop.
 Successful exchange directly registers and returns the record ID, with no second

@@ -38,7 +38,8 @@ impl Error for WorkFailures {
 }
 #[derive(Default)]
 struct Book {
-    active: HashMap<Id, String>,
+    active: HashMap<Id, (String, String)>,
+    admissions: HashMap<Id, Arc<AtomicBool>>,
     failures: Vec<ServiceError>,
 }
 
@@ -47,6 +48,7 @@ pub(super) struct AuthenticationWork {
     book: parking_lot::Mutex<Book>,
     closed: AtomicBool,
     capacity: Arc<Semaphore>,
+    admission_changed: tokio::sync::Notify,
     #[cfg(test)]
     collected: tokio::sync::Notify,
 }
@@ -65,15 +67,60 @@ impl AuthenticationWork {
             book: parking_lot::Mutex::new(Book::default()),
             closed: AtomicBool::new(false),
             capacity: Arc::new(Semaphore::new(capacity)),
+            admission_changed: tokio::sync::Notify::new(),
             #[cfg(test)]
             collected: tokio::sync::Notify::new(),
         })
     }
-    pub(super) fn mark(&self, attempt: String) {
-        self.book.lock().active.insert(tokio::task::id(), attempt);
+    pub(super) fn mark(&self, attempt: String, step: &str) {
+        self.book
+            .lock()
+            .active
+            .insert(tokio::task::id(), (attempt, step.to_owned()));
     }
-    pub(super) fn owns(&self, attempt: &str) -> bool {
-        self.book.lock().active.values().any(|id| id == attempt)
+    pub(super) fn admission(self: &Arc<Self>) -> Admission {
+        let id = tokio::task::id();
+        let settled = Arc::new(AtomicBool::new(false));
+        self.book.lock().admissions.insert(id, settled.clone());
+        Admission {
+            work: self.clone(),
+            id,
+            settled,
+        }
+    }
+    pub(super) async fn owns_after_admission(&self, attempt: &str, step: Option<&str>) -> bool {
+        let pending = {
+            let book = self.book.lock();
+            if book
+                .active
+                .values()
+                .any(|(id, owned)| id == attempt && Some(owned.as_str()) == step)
+            {
+                return true;
+            }
+            // A committed row can become visible before its admission future
+            // returns the sealed step. Await only this finite existing batch,
+            // then classify; new admissions cannot explain an earlier read.
+            book.admissions.values().cloned().collect::<Vec<_>>()
+        };
+        loop {
+            let changed = self.admission_changed.notified();
+            tokio::pin!(changed);
+            changed.as_mut().enable();
+            {
+                let book = self.book.lock();
+                if pending
+                    .iter()
+                    .all(|settled| settled.load(Ordering::Acquire))
+                {
+                    return book
+                        .active
+                        .values()
+                        .any(|(id, owned)| id == attempt && Some(owned.as_str()) == step);
+                }
+            }
+            changed.await;
+        }
     }
     fn collect(&self, result: Result<(Id, Completed), JoinError>) {
         // Record a joined failure synchronously before any later await. A
@@ -163,6 +210,18 @@ impl AuthenticationWork {
             self.collect(result);
         }
         self.take_failure()
+    }
+}
+pub(super) struct Admission {
+    work: Arc<AuthenticationWork>,
+    id: Id,
+    settled: Arc<AtomicBool>,
+}
+impl Drop for Admission {
+    fn drop(&mut self) {
+        self.work.book.lock().admissions.remove(&self.id);
+        self.settled.store(true, Ordering::Release);
+        self.work.admission_changed.notify_waiters();
     }
 }
 pub(super) fn combined(primary: ServiceError, cleanup: ServiceError) -> ServiceError {

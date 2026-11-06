@@ -51,28 +51,53 @@ impl AuthenticationService {
             work: Arc::new(AuthenticationWork::new(capacity)?),
         })
     }
-    fn current(&self, mut status: DeviceAuthenticationStatus) -> AuthenticationProgress {
-        if matches!(
+    async fn current(
+        &self,
+        actor: &SecretDigest,
+        mut status: DeviceAuthenticationStatus,
+        clock: AcceptanceTime,
+    ) -> Result<AuthenticationProgress, ServiceError> {
+        while matches!(
             &status.state,
             DeviceAuthenticationState::Starting
                 | DeviceAuthenticationState::Checking
                 | DeviceAuthenticationState::Exchanging
-        ) && !self.work.owns(&status.attempt_id)
+        ) && !self
+            .work
+            .owns_after_admission(&status.attempt_id, status.step_id.as_deref())
+            .await
         {
-            // Durable in-flight state without this process's work owner is
-            // uncertain, never an invitation to reconstruct provider dispatch.
-            status.state = DeviceAuthenticationState::Uncertain;
+            // Work may have completed and been reaped since the original read
+            // or while admission ownership was handed off. Re-read only after
+            // the ownerless observation, so terminal success is not downgraded.
+            let previous_step = status.step_id.clone();
+            status = self
+                .store
+                .external_device_authentication_status(actor, &status.attempt_id, clock.now()?)
+                .await?;
+            if status.step_id == previous_step
+                && matches!(
+                    &status.state,
+                    DeviceAuthenticationState::Starting
+                        | DeviceAuthenticationState::Checking
+                        | DeviceAuthenticationState::Exchanging
+                )
+            {
+                // Retained in-flight state without an owner never grants replay.
+                status.state = DeviceAuthenticationState::Uncertain;
+            }
         }
-        AuthenticationProgress::Current(status)
+        Ok(AuthenticationProgress::Current(status))
     }
     async fn acceptance(
         &self,
+        actor: &SecretDigest,
         step: &DeviceAuthenticationStep,
         result: Result<DeviceAuthenticationStatus, StoreError>,
         clock: AcceptanceTime,
     ) -> Result<AuthenticationProgress, ServiceError> {
         match result {
-            Ok(status) => Ok(self.current(status)),
+            Ok(status) => self.current(actor, status, clock).await,
             Err(primary) => {
                 let failure = if matches!(
                     &primary,
@@ -127,7 +152,7 @@ impl AuthenticationService {
         if settlement == DeviceStepSettlement::Recorded {
             Ok(AuthenticationProgress::ProviderFailure { status, reason })
         } else {
-            Ok(self.current(status))
+            self.current(actor, status, clock).await
         }
     }
     pub async fn start_device(
@@ -140,14 +165,20 @@ impl AuthenticationService {
         let actor = SecretDigest::from_bytes(*actor.as_bytes());
         self.work
             .run(move |work| async move {
-                match service
+                let admission = work.admission();
+                let admitted = service
                     .store
                     .start_external_device_authentication(&actor, &draft, clock.now()?)
-                    .await?
-                {
-                    StartDeviceAdmission::Current(status) => Ok(service.current(status)),
+                    .await?;
+                if let StartDeviceAdmission::Issue(step) = &admitted {
+                    work.mark(step.attempt_id(), step.step_id());
+                }
+                drop(admission);
+                match admitted {
+                    StartDeviceAdmission::Current(status) => {
+                        service.current(&actor, status, clock).await
+                    }
                     StartDeviceAdmission::Issue(step) => {
-                        work.mark(step.attempt_id());
                         match service.provider.issue(clock.now()?).await {
                             Ok(issued) => {
                                 let result = service
@@ -159,7 +190,7 @@ impl AuthenticationService {
                                         clock.now()?,
                                     )
                                     .await;
-                                service.acceptance(&step, result, clock).await
+                                service.acceptance(&actor, &step, result, clock).await
                             }
                             Err(reason) => {
                                 service.provider_failure(&actor, &step, reason, clock).await
@@ -180,15 +211,21 @@ impl AuthenticationService {
         let actor = SecretDigest::from_bytes(*actor.as_bytes());
         self.work
             .run(move |work| async move {
-                let check = match service
+                let admission = work.admission();
+                let admitted = service
                     .store
                     .check_external_device_authentication(&actor, &attempt, clock.now()?)
-                    .await?
-                {
-                    CheckDeviceAdmission::Current(status) => return Ok(service.current(status)),
+                    .await?;
+                if let CheckDeviceAdmission::Check(check) = &admitted {
+                    work.mark(check.step.attempt_id(), check.step.step_id());
+                }
+                drop(admission);
+                let check = match admitted {
+                    CheckDeviceAdmission::Current(status) => {
+                        return service.current(&actor, status, clock).await;
+                    }
                     CheckDeviceAdmission::Check(check) => check,
                 };
-                work.mark(check.step.attempt_id());
                 let approval = match service
                     .provider
                     .poll(&check.device_auth_id, &check.user_code)
@@ -204,7 +241,7 @@ impl AuthenticationService {
                                 clock.now()?,
                             )
                             .await;
-                        return service.acceptance(&check.step, result, clock).await;
+                        return service.acceptance(&actor, &check.step, result, clock).await;
                     }
                     Ok(DevicePollOutcome::Approved(approval)) => approval,
                     Err(reason) => {
@@ -213,17 +250,24 @@ impl AuthenticationService {
                             .await;
                     }
                 };
-                let step = match service
+                let admission = work.admission();
+                let admitted = service
                     .store
                     .exchange_external_device_authentication(&actor, &check.step, clock.now()?)
-                    .await
-                {
+                    .await;
+                if let Ok(ExchangeDeviceAdmission::Exchange(step)) = &admitted {
+                    work.mark(step.attempt_id(), step.step_id());
+                }
+                drop(admission);
+                let step = match admitted {
                     Ok(ExchangeDeviceAdmission::Current(status)) => {
-                        return Ok(service.current(status));
+                        return service.current(&actor, status, clock).await;
                     }
                     Ok(ExchangeDeviceAdmission::Exchange(step)) => step,
                     Err(primary) => {
-                        return service.acceptance(&check.step, Err(primary), clock).await;
+                        return service
+                            .acceptance(&actor, &check.step, Err(primary), clock)
+                            .await;
                     }
                 };
                 match service.provider.exchange(&approval, clock.now()?).await {
@@ -237,7 +281,7 @@ impl AuthenticationService {
                                 clock.now()?,
                             )
                             .await;
-                        service.acceptance(&step, result, clock).await
+                        service.acceptance(&actor, &step, result, clock).await
                     }
                     Err(reason) => service.provider_failure(&actor, &step, reason, clock).await,
                 }
@@ -251,11 +295,14 @@ impl AuthenticationService {
         now: i64,
     ) -> Result<AuthenticationProgress, ServiceError> {
         self.work.reap()?;
-        Ok(self.current(
+        self.current(
+            actor,
             self.store
                 .external_device_authentication_status(actor, attempt, now)
                 .await?,
-        ))
+            AcceptanceTime::Fixed(now),
+        )
+        .await
     }
     pub async fn cancel_device(
         &self,
@@ -266,11 +313,14 @@ impl AuthenticationService {
     ) -> Result<AuthenticationProgress, ServiceError> {
         // Cancellation remains available without acquiring an external-work slot.
         self.work.reap()?;
-        Ok(self.current(
+        self.current(
+            actor,
             self.store
                 .cancel_external_device_authentication(actor, attempt, request, now)
                 .await?,
-        ))
+            AcceptanceTime::Fixed(now),
+        )
+        .await
     }
     /// Stop admission and await every owned call. Cancellation of this finish
     /// preserves the JoinSet and already-collected causes for a later re-entry.
