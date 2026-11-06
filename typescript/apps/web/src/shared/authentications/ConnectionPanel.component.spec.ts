@@ -1,6 +1,21 @@
 import { authenticationCopy } from "@chapchoo/web-core/authentication-messages";
 import { expect, test } from "@playwright/test";
 const copy = authenticationCopy("ko");
+test("device code has a copy action and successful feedback", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto(
+    "/iframe.html?id=authentication-connections--device-code&viewMode=story",
+  );
+  const code = await page.locator("code").innerText();
+  await page.getByRole("button", { name: copy.copyCode, exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: copy.copied, exact: true }),
+  ).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(code);
+});
 test("empty alias remains optional and creation time identifies unnamed connections", async ({
   page,
 }) => {
@@ -139,7 +154,7 @@ test("key and device dialogs reflow without hiding their actions on narrow scree
             story === "key-entry"
               ? copy.save
               : story === "device-code"
-                ? copy.check
+                ? copy.copyCode
                 : copy.selected,
           exact: true,
         }),

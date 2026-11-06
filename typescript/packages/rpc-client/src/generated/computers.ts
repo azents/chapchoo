@@ -208,6 +208,7 @@ export interface AgentList {
 export interface ProviderChoice {
   id: string;
   name: string;
+  kind: ProviderKind;
 }
 
 export interface ProviderChoices {
@@ -1653,7 +1654,7 @@ export const AgentList: MessageFns<AgentList> = {
 };
 
 function createBaseProviderChoice(): ProviderChoice {
-  return { id: "", name: "" };
+  return { id: "", name: "", kind: 0 };
 }
 
 export const ProviderChoice: MessageFns<ProviderChoice> = {
@@ -1663,6 +1664,9 @@ export const ProviderChoice: MessageFns<ProviderChoice> = {
     }
     if (message.name !== "") {
       writer.uint32(18).string(message.name);
+    }
+    if (message.kind !== 0) {
+      writer.uint32(24).int32(message.kind);
     }
     return writer;
   },
@@ -1696,6 +1700,14 @@ export const ProviderChoice: MessageFns<ProviderChoice> = {
             message.name = reader.string();
             continue;
           }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.kind = reader.int32() as any;
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1715,6 +1727,7 @@ export const ProviderChoice: MessageFns<ProviderChoice> = {
     const message = createBaseProviderChoice();
     message.id = object.id ?? "";
     message.name = object.name ?? "";
+    message.kind = object.kind ?? 0;
     return message;
   },
 };

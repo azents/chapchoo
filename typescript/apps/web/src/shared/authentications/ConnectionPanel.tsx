@@ -9,6 +9,7 @@ import {
   Box,
   Button,
   Code,
+  CopyButton,
   Divider,
   Group,
   Loader,
@@ -223,11 +224,17 @@ export function ConnectionPanel(props: ConnectionPanelProps): ReactElement {
         <Stack gap="lg">
           {d.type === "connect" ? (
             <Stack gap="md">
+              <TextInput
+                label={c.name}
+                value={props.name}
+                onChange={(event) => props.onName(event.currentTarget.value)}
+                maxLength={512}
+                disabled={props.busy}
+              />
               <InteractiveSurface
                 className={classes.option}
-                onClick={() =>
-                  props.onDialog({ type: "deviceName", target: null })
-                }
+                disabled={props.busy}
+                onClick={() => props.onDeviceStart(null)}
               >
                 <Text component="span" fw={600}>
                   {c.chatgpt}
@@ -251,7 +258,6 @@ export function ConnectionPanel(props: ConnectionPanelProps): ReactElement {
                 {d.target.email ??
                   (d.target.kind === "openaiApiKey" ? c.apiKey : c.chatgpt)}
               </Text>
-              <Text size="sm">{c.storedOnly}</Text>
               <Button
                 variant="default"
                 onClick={() =>
@@ -272,9 +278,7 @@ export function ConnectionPanel(props: ConnectionPanelProps): ReactElement {
               ) : (
                 <Button
                   variant="default"
-                  onClick={() =>
-                    props.onDialog({ type: "deviceName", target: d.target })
-                  }
+                  onClick={() => props.onDeviceStart(d.target)}
                 >
                   {c.reauthenticate}
                 </Button>
@@ -290,9 +294,7 @@ export function ConnectionPanel(props: ConnectionPanelProps): ReactElement {
               </Button>
             </Stack>
           ) : null}
-          {d.type === "key" ||
-          d.type === "rename" ||
-          d.type === "deviceName" ? (
+          {d.type === "key" || d.type === "rename" ? (
             <Box
               component="form"
               onSubmit={(event) => {
@@ -356,7 +358,7 @@ export function ConnectionPanel(props: ConnectionPanelProps): ReactElement {
                     loading={props.busy}
                     disabled={d.type === "key" && !props.apiKey}
                   >
-                    {d.type === "deviceName" ? c.connect : c.save}
+                    {c.save}
                   </Button>
                 </Group>
               </Stack>
@@ -391,6 +393,13 @@ export function ConnectionPanel(props: ConnectionPanelProps): ReactElement {
                   <Code block className={classes.code}>
                     {state.userCode}
                   </Code>
+                  <CopyButton key={state.userCode} value={state.userCode}>
+                    {({ copied, copy }) => (
+                      <Button variant="default" onClick={copy}>
+                        {copied ? c.copied : c.copyCode}
+                      </Button>
+                    )}
+                  </CopyButton>
                   <Text size="sm" c="dimmed">
                     {c.remaining}{" "}
                     {Math.floor((props.remainingSeconds ?? 0) / 60)}:
@@ -407,13 +416,10 @@ export function ConnectionPanel(props: ConnectionPanelProps): ReactElement {
                   >
                     {c.openDevice}
                   </Button>
-                  <Button
-                    variant="default"
-                    loading={props.busy}
-                    onClick={props.onDeviceCheck}
-                  >
-                    {c.check}
-                  </Button>
+                  <Group gap="sm" role="status">
+                    <Loader size="sm" />
+                    <Text>{c.checking}</Text>
+                  </Group>
                 </>
               ) : state.type === "starting" ||
                 state.type === "checking" ||

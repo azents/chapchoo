@@ -44,9 +44,6 @@ export interface AgentCreationProps extends AgentCreationInput {
   authentication: AuthenticationView | null;
   authenticationCopy: AuthenticationCopy;
   authenticationPanel: ConnectionPanelProps;
-  authenticationPickerOpen: boolean;
-  onAuthenticationPicker: () => void;
-  onCloseAuthenticationPicker: () => void;
   onNext: () => void;
   onBack: () => void;
   handle: {

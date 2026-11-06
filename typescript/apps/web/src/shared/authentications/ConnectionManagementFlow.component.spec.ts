@@ -120,21 +120,21 @@ for (const scenario of [
       await page
         .getByLabel(/^API key\s*\*?$/)
         .fill("disposable-replacement-key");
-    } else if (scenario.operation !== "delete") {
+    } else if (
+      scenario.operation !== "delete" &&
+      scenario.operation !== "startDevice"
+    ) {
       await page.getByRole("textbox", { name: "Alias" }).fill("Draft");
     }
-    await page
-      .getByRole("dialog")
-      .getByRole("button", {
-        name:
-          scenario.operation === "delete"
-            ? "Delete connection"
-            : scenario.operation === "startDevice"
-              ? "Connect account"
-              : "Save",
-        exact: true,
-      })
-      .click();
+    if (scenario.operation !== "startDevice") {
+      await page
+        .getByRole("dialog")
+        .getByRole("button", {
+          name: scenario.operation === "delete" ? "Delete connection" : "Save",
+          exact: true,
+        })
+        .click();
+    }
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(page.getByRole("status")).toHaveText("Closed: 1");
     expect(writes).toBe(1);

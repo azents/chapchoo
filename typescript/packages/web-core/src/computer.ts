@@ -179,6 +179,7 @@ export interface AgentView {
 export interface ProviderChoice {
   id: string;
   name: string;
+  kind: "kubernetes" | "docker";
 }
 export function profileImages(
   value: Wire.AgentProfileImages,
@@ -345,7 +346,11 @@ export function agents(value: Wire.AgentList): Page<AgentView> {
 }
 export function choices(value: Wire.ProviderChoices): Page<ProviderChoice> {
   return page(
-    value.items.map((item) => ({ id: text(item.id), name: text(item.name) })),
+    value.items.map((item) => ({
+      id: text(item.id),
+      name: text(item.name),
+      kind: label<ProviderChoice["kind"]>(item.kind, ["kubernetes", "docker"]),
+    })),
     value.nextAfter,
   );
 }

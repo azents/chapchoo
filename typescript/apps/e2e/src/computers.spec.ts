@@ -100,9 +100,6 @@ test("owner manages one Computer while Admin observes independent cleanup invent
       owner.getByRole("button", { name: "Next", exact: true }),
     ).toBeDisabled();
     await owner
-      .getByRole("button", { name: "Choose authentication", exact: true })
-      .click();
-    await owner
       .getByRole("button", { name: "Connect account", exact: true })
       .first()
       .click();

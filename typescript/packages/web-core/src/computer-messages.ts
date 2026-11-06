@@ -52,7 +52,7 @@ const english = {
   disconnected: "Disconnected",
   verified: "Verified",
   missing: "Missing",
-  accepted: "Accepted",
+  accepted: "Preparing",
   retiring: "Stopping",
   starting: "Starting",
   deleting: "Deleting",
@@ -167,7 +167,7 @@ const korean: ComputerCopy = {
   disconnected: "연결 끊김",
   verified: "확인됨",
   missing: "없음",
-  accepted: "요청 접수됨",
+  accepted: "준비 중",
   retiring: "종료 중",
   starting: "시작 중",
   deleting: "삭제 중",
@@ -282,7 +282,7 @@ const japanese: ComputerCopy = {
   disconnected: "切断",
   verified: "確認済み",
   missing: "見つかりません",
-  accepted: "受付済み",
+  accepted: "準備中",
   retiring: "実行を停止中",
   starting: "起動中",
   deleting: "削除中",
@@ -396,7 +396,7 @@ const french: ComputerCopy = {
   disconnected: "Déconnecté",
   verified: "Vérifié",
   missing: "Absent",
-  accepted: "Acceptée",
+  accepted: "Préparation",
   retiring: "Arrêt de l’exécution",
   starting: "Démarrage",
   deleting: "Suppression",
@@ -478,6 +478,20 @@ export function computerOperation(
   computer: Pick<ComputerStatus, "operation" | "intent" | "phase">,
   copy: ComputerCopy,
 ): { label: string; hint: string | null } {
+  if (computer.phase === "accepted") {
+    switch (computer.operation) {
+      case "create":
+        return { label: copy.accepted, hint: null };
+      case "start":
+        return { label: copy.starting, hint: null };
+      case "stop":
+        return { label: copy.retiring, hint: null };
+      case "restart":
+        return { label: copy.checkingRestart, hint: null };
+      case "delete":
+        return { label: copy.deleting, hint: null };
+    }
+  }
   if (computer.phase === "blocked") {
     return { label: copy.blocked, hint: copy.blockedHint };
   }

@@ -69,6 +69,7 @@ export function fixturePanel(locale = "ko"): ConnectionPanelProps {
     onDialog: (): void => {},
     onClose: (): void => {},
     onSubmit: (): void => {},
+    onDeviceStart: (): void => {},
     onDeviceCheck: (): void => {},
     onDeviceStatus: (): void => {},
     onDeviceCancel: (): void => {},

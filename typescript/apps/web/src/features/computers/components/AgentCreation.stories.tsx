@@ -16,7 +16,11 @@ import type { InitialAgentCreation } from "../creationTypes";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import type { ReactElement } from "react";
 
-const provider = { id: "provider", name: "Community Kubernetes" };
+const provider = {
+  id: "provider",
+  name: "Community Kubernetes",
+  kind: "kubernetes" as const,
+};
 const image = { id: "image", internalName: "Corgi", assetKey: "03-corgi" };
 const initial: InitialAgentCreation = {
   teamId: "team",
@@ -47,9 +51,6 @@ const meta = {
     authentication: fixtureConnection,
     authenticationCopy: authenticationCopy("en"),
     authenticationPanel: fixturePanel("en"),
-    authenticationPickerOpen: false,
-    onAuthenticationPicker: (): void => {},
-    onCloseAuthenticationPicker: (): void => {},
     onNext: (): void => {},
     onBack: (): void => {},
     handle: {

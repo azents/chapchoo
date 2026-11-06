@@ -60,7 +60,7 @@ message Agent {
   chapchoo.authentication.AgentSelection authentication = 9;
 }
 message AgentList { repeated Agent items = 1; optional string next_after = 2; }
-message ProviderChoice { string id = 1; string name = 2; }
+message ProviderChoice { string id = 1; string name = 2; ProviderKind kind = 3; }
 message ProviderChoices { repeated ProviderChoice items = 1; optional string next_after = 2; }
 enum ComputerKind { COMPUTER_KIND_UNSPECIFIED = 0; COMPUTER_KIND_CLOUD = 1; COMPUTER_KIND_LOCAL = 2; }
 enum DesiredState { DESIRED_STATE_UNSPECIFIED = 0; DESIRED_STATE_RUNNING = 1; DESIRED_STATE_STOPPED = 2; DESIRED_STATE_DELETING = 3; }

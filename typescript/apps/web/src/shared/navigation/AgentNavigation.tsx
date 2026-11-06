@@ -59,6 +59,16 @@ export function AgentNavigation(props: AgentNavigationProps): ReactElement {
             </span>
           </a>
         ))}
+        <a
+          href={props.titleHref}
+          onClick={props.onSelect}
+          className={classes.agent}
+        >
+          <span className={classes.allIcon}>
+            <NavigationIcon name="agents" />
+          </span>
+          <span>{props.allAgentsLabel}</span>
+        </a>
       </nav>
       {props.status === "loading" ? (
         <Loader size="xs" aria-label={props.copy.agents} />
@@ -73,9 +83,6 @@ export function AgentNavigation(props: AgentNavigationProps): ReactElement {
           {props.copy.noAgents}
         </Text>
       ) : null}
-      <Anchor href={props.titleHref} onClick={props.onSelect} size="sm">
-        {props.allAgentsLabel}
-      </Anchor>
     </Stack>
   );
 }

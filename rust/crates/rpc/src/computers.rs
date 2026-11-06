@@ -537,6 +537,10 @@ impl wire::provider_catalog_server::ProviderCatalog for CatalogAdapter {
                 .map(|p| wire::ProviderChoice {
                     id: p.id,
                     name: p.name,
+                    kind: match p.kind {
+                        domain::ProviderKind::Kubernetes => wire::ProviderKind::Kubernetes as i32,
+                        domain::ProviderKind::Docker => wire::ProviderKind::Docker as i32,
+                    },
                 })
                 .collect(),
             next_after,

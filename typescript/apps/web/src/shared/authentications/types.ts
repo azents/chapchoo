@@ -70,6 +70,7 @@ export interface ConnectionPanelProps {
   onDialog: (value: ConnectionDialog) => void;
   onClose: () => void;
   onSubmit: () => void;
+  onDeviceStart: (target: AuthenticationView | null) => void;
   onDeviceCheck: () => void;
   onDeviceStatus: () => void;
   onDeviceCancel: () => void;
