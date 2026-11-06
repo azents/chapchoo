@@ -68,10 +68,11 @@ another root yields no plaintext. Pending device material uses its own derived
 key; API-key and ChatGPT kinds also remain distinct in authenticated data.
 
 External request matching uses a keyed HMAC over context, operation and bounded
-length-delimited input fields, not a public raw hash of an API key. These are
-library capabilities: no external-auth Store mutation, provider login, Client RPC
-or Computer delivery is activated by the primitive or
-[prepared schema](account-storage.md#external-authentication-storage-foundation).
+length-delimited input fields, not a public raw hash of an API key.
+[Backend authentication](backend-authentication.md) uses these primitives for
+scoped catalogue mutations and explicit device acquisition. The primitive and
+[prepared schema](account-storage.md#external-authentication-storage-foundation)
+do not themselves authorize acquisition or Computer delivery.
 Decryption is not authorization; current caller and lifecycle checks remain
 separate business-operation obligations.
 

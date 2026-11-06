@@ -7,6 +7,7 @@ members = [
     "crates/service",
     "crates/rpc",
     "crates/mail",
+    "crates/openai-auth",
     "crates/kubernetes",
     "crates/docker",
     "apps/chapchoo",
@@ -44,6 +45,11 @@ chapchoo-protocol = { path = "crates/protocol" }
 chapchoo-service = { path = "crates/service" }
 chapchoo-rpc = { path = "crates/rpc" }
 chapchoo-mail = { path = "crates/mail" }
+chapchoo-openai-auth = { path = "crates/openai-auth" }
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "json", "form", "system-proxy", "http2"] }
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-platform-verifier = "0.7.1"
+parking_lot = "0.12.5"
 chapchoo-kubernetes = { path = "crates/kubernetes" }
 chapchoo-docker = { path = "crates/docker" }
 bollard = { version = "=0.21.1", default-features = false }

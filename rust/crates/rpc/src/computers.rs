@@ -130,6 +130,10 @@ impl ComputerServices {
             profile_image_id: value.image_id,
             profile_image_asset_key: value.image_asset_key,
             palette_key: value.palette_key,
+            authentication: value
+                .authentication
+                .map(crate::authentication::selection)
+                .transpose()?,
             computer: Some(self.computer(value.computer).await?),
         })
     }

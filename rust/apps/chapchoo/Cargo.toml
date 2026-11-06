@@ -13,6 +13,7 @@ chapchoo-persistence.workspace = true
 chapchoo-service.workspace = true
 chapchoo-rpc.workspace = true
 chapchoo-mail.workspace = true
+chapchoo-openai-auth.workspace = true
 chapchoo-protocol.workspace = true
 chapchoo-kubernetes.workspace = true
 chapchoo-docker.workspace = true

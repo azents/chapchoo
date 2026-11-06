@@ -110,14 +110,16 @@ selection operation or provider HTTP path is activated by schema preparation.
   erase an accepted result.
 - `agent_authentication_selections` is one row per Agent, with a restricting
   authentication FK and cascading Agent FK. It stores no token or execution data.
-  The referencing index supports later transactional in-use checks.
+  The referencing index supports transactional in-use checks.
 
 New-table row counts participate in the first-root binding guard. A down migration
 refuses to erase even an accepted result without a remaining credential. Only
-an empty foundation may be explicitly reverted. The prepared schema and crypto
-capabilities are not evidence of implemented role enforcement, acquisition,
-creation selection, lifecycle cleanup or runtime readiness; those require the
-future completed operations. Existing account/Computer behavior remains unchanged.
+an empty foundation may be explicitly reverted.
+[Backend authentication operations](backend-authentication.md) supply current-role
+admission, acquisition acceptance, existing-Agent selection and scoped lifecycle
+cleanup. Schema preparation alone activates none of those effects and assigns no
+credentials to existing Agents. New-create payloads and accepted historical
+creation receipts remain unchanged.
 
 ## Connections
 

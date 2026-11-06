@@ -18,6 +18,7 @@ import {
   type ServiceError,
   type UntypedServiceImplementation,
 } from "@grpc/grpc-js";
+import { AgentSelection } from "./authentication.js";
 import { Empty } from "./google/protobuf/empty.js";
 import { Timestamp } from "./google/protobuf/timestamp.js";
 
@@ -195,6 +196,7 @@ export interface Agent {
   profileImageId: string;
   paletteKey: string;
   profileImageAssetKey: string;
+  authentication: AgentSelection | undefined;
 }
 
 export interface AgentList {
@@ -1406,6 +1408,7 @@ function createBaseAgent(): Agent {
     profileImageId: "",
     paletteKey: "",
     profileImageAssetKey: "",
+    authentication: undefined,
   };
 }
 
@@ -1434,6 +1437,9 @@ export const Agent: MessageFns<Agent> = {
     }
     if (message.profileImageAssetKey !== "") {
       writer.uint32(66).string(message.profileImageAssetKey);
+    }
+    if (message.authentication !== undefined) {
+      AgentSelection.encode(message.authentication, writer.uint32(74).fork()).join();
     }
     return writer;
   },
@@ -1515,6 +1521,14 @@ export const Agent: MessageFns<Agent> = {
             message.profileImageAssetKey = reader.string();
             continue;
           }
+          case 9: {
+            if (tag !== 74) {
+              break;
+            }
+
+            message.authentication = AgentSelection.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1542,6 +1556,9 @@ export const Agent: MessageFns<Agent> = {
     message.profileImageId = object.profileImageId ?? "";
     message.paletteKey = object.paletteKey ?? "";
     message.profileImageAssetKey = object.profileImageAssetKey ?? "";
+    message.authentication = (object.authentication !== undefined && object.authentication !== null)
+      ? AgentSelection.fromPartial(object.authentication)
+      : undefined;
     return message;
   },
 };

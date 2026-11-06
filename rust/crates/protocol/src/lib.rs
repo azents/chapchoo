@@ -7,6 +7,51 @@
 //! use chapchoo_persistence::Store;
 //! ```
 
+/// Backend catalogue and device acquisition; all messages omit fields in Debug.
+pub mod authentication {
+    tonic::include_proto!("chapchoo.authentication");
+    macro_rules! redacted_debug {
+        ($($message:ty),+ $(,)?) => {$(
+            impl std::fmt::Debug for $message {
+                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    f.debug_struct(stringify!($message)).finish_non_exhaustive()
+                }
+            }
+        )+};
+    }
+    redacted_debug!(
+        Scope,
+        scope::Owner,
+        Authentication,
+        ListRequest,
+        AuthenticationList,
+        RecordRequest,
+        RegisterKeyRequest,
+        ReplaceKeyRequest,
+        RenameRequest,
+        DeleteRequest,
+        RecordIdentity,
+        SelectionIdentity,
+        DeviceIdentity,
+        AcceptedResult,
+        accepted_result::Result,
+        DeleteResult,
+        delete_result::Outcome,
+        RequestResultRequest,
+        HistoricalResult,
+        ReauthenticateTarget,
+        StartDeviceRequest,
+        DeviceRequest,
+        CancelDeviceRequest,
+        PendingDevice,
+        DeviceProgress,
+        device_progress::State,
+        ExpectedSelection,
+        SelectAgentRequest,
+        AgentSelection,
+    );
+}
+
 /// Computer domain contracts carry private names and identities; formatting is
 /// field-free just like account and component messages.
 pub mod computers {

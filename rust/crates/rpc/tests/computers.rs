@@ -100,6 +100,19 @@ fn domain_rpc_keeps_private_owner_authority_and_independent_admin_residual_inven
             .list_teams(&user.digest(), AcceptanceTime::System.now()?)
             .await?
             .remove(0);
+        let authentication_service = Arc::new(chapchoo_service::AuthenticationService::new(
+            store.clone(),
+            Arc::new(support::authentication::Provider::default()),
+            1,
+        )?);
+        let authentication =
+            chapchoo_rpc::AuthenticationServices::new(authentication_service.clone());
+        let stopped = fixture.shutdown();
+        fixture.server(async move {
+            let _ = stopped.await;
+            authentication_service.close();
+            authentication_service.finish().await
+        });
         let app = Arc::new(ComputersService::new(store));
         assert!(
             app.register_control("https://control.example.invalid:50053")
@@ -142,6 +155,7 @@ fn domain_rpc_keeps_private_owner_authority_and_independent_admin_residual_inven
                 .add_service(services.computers_server())
                 .add_service(services.catalog_server())
                 .add_service(services.inventory_server())
+                .add_service(authentication.server())
                 .serve_with_incoming_shutdown(incoming, async {
                     let _ = stopped.await;
                 }),
@@ -190,6 +204,89 @@ fn domain_rpc_keeps_private_owner_authority_and_independent_admin_residual_inven
                 .into_inner(),
         )?;
         assert_eq!(created.id, replay.id);
+        assert!(created.authentication.is_none());
+        use chapchoo_protocol::authentication as auth_wire;
+        let mut authentications =
+            auth_wire::authentications_client::AuthenticationsClient::new(channel.clone());
+        let personal_scope = Some(auth_wire::Scope {
+            owner: Some(auth_wire::scope::Owner::Personal(())),
+        });
+        let registered = authentications
+            .register_key(auth(
+                auth_wire::RegisterKeyRequest {
+                    scope: personal_scope.clone(),
+                    request_id: "register-auth".into(),
+                    name: "Selected key".into(),
+                    key: b"fixture-key".to_vec(),
+                },
+                &user,
+            )?)
+            .await?
+            .into_inner();
+        let Some(auth_wire::accepted_result::Result::Record(registered)) = registered.result else {
+            return Err(Error::from("Missing credential identity"));
+        };
+        let selection = auth_wire::SelectAgentRequest {
+            request_id: "select-auth".into(),
+            agent_id: created.id.clone(),
+            authentication_id: registered.authentication_id.clone(),
+            expected: None,
+        };
+        assert_eq!(
+            authentications
+                .select_agent(auth(selection.clone(), &foreign)?)
+                .await
+                .err()
+                .ok_or("Foreign Agent management")?
+                .code(),
+            Code::NotFound
+        );
+        let selected = authentications
+            .select_agent(auth(selection.clone(), &user)?)
+            .await?
+            .into_inner();
+        assert!(matches!(
+            selected.result,
+            Some(auth_wire::accepted_result::Result::Selection(_))
+        ));
+        assert_eq!(
+            authentications
+                .select_agent(auth(selection, &user)?)
+                .await?
+                .into_inner(),
+            selected
+        );
+        let with_selection = agents
+            .get(auth(
+                wire::AgentRequest {
+                    agent_id: created.id.clone(),
+                },
+                &user,
+            )?)
+            .await?
+            .into_inner();
+        let saved = with_selection
+            .authentication
+            .ok_or("Missing saved reference projection")?;
+        assert_eq!(saved.authentication_id, registered.authentication_id);
+        assert_eq!(saved.request_id, "select-auth");
+        assert_eq!(with_selection.computer, created.computer);
+        let in_use = authentications
+            .delete(auth(
+                auth_wire::DeleteRequest {
+                    scope: personal_scope,
+                    request_id: "delete-selected".into(),
+                    authentication_id: registered.authentication_id,
+                    expected_request_id: "register-auth".into(),
+                },
+                &user,
+            )?)
+            .await?
+            .into_inner();
+        assert!(matches!(
+            in_use.outcome,
+            Some(auth_wire::delete_result::Outcome::InUse(()))
+        ));
         assert!(!created.profile_image_asset_key.is_empty());
         let scoped = wire::TeamAgentRequest {
             team_id: team.id.clone(),

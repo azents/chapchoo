@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./authentication": {
+      "types": "./dist/generated/authentication.d.ts",
+      "default": "./dist/generated/authentication.js"
+    },
     "./computers": {
       "types": "./dist/generated/computers.d.ts",
       "default": "./dist/generated/computers.js"
