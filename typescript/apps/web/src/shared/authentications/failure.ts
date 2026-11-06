@@ -12,6 +12,14 @@ function failureReason(error: unknown): unknown {
 export function authenticationRecordUnavailable(error: unknown): boolean {
   return failureReason(error) === "DOMAIN_REASON_NOT_FOUND";
 }
+export function authenticationTargetChanged(error: unknown): boolean {
+  const reason = failureReason(error);
+  return (
+    reason === "DOMAIN_REASON_CONFLICT" ||
+    reason === "DOMAIN_REASON_INVALID_TRANSITION" ||
+    reason === "DOMAIN_REASON_NOT_FOUND"
+  );
+}
 /** Explicit rejection of a freshly issued mutation permits another deliberate action. */
 export function definitiveAuthenticationRejection(error: unknown): boolean {
   const reason = failureReason(error);

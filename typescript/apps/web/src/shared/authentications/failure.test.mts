@@ -1,9 +1,37 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  authenticationTargetChanged,
   definitiveAuthenticationRejection,
   withdrawAuthenticationSession,
 } from "./failure.ts";
+void test("only changed or removed targets discard a rejected management draft", () => {
+  for (const reason of [
+    "DOMAIN_REASON_CONFLICT",
+    "DOMAIN_REASON_INVALID_TRANSITION",
+    "DOMAIN_REASON_NOT_FOUND",
+  ]) {
+    assert.equal(
+      authenticationTargetChanged(
+        Object.assign(new Error("Rejected"), { data: { reason } }),
+      ),
+      true,
+    );
+  }
+  for (const reason of [
+    "DOMAIN_REASON_INVALID_INPUT",
+    "DOMAIN_REASON_INVALID_SESSION",
+    "DOMAIN_REASON_CAPACITY_EXHAUSTED",
+    null,
+  ]) {
+    assert.equal(
+      authenticationTargetChanged(
+        Object.assign(new Error("Rejected"), { data: { reason } }),
+      ),
+      false,
+    );
+  }
+});
 void test("only explicit non-acceptance unlocks another authentication attempt", () => {
   for (const reason of [
     "DOMAIN_REASON_INVALID_INPUT",

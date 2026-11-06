@@ -19,7 +19,20 @@ function Consumer(): ReactElement {
     </Stack>
   );
 }
-function Flow(): ReactElement {
+function ManagementConsumer(): ReactElement {
+  const [closed, setClosed] = useState(0);
+  const props = useConnectionPanel({
+    snapshots: [fixtureCatalogue],
+    onCloseManage: () => setClosed((value) => value + 1),
+  });
+  return (
+    <Stack p="lg">
+      <Text role="status">Closed: {closed}</Text>
+      <ConnectionPanel {...props} />
+    </Stack>
+  );
+}
+function Flow({ management = false }: { management?: boolean }): ReactElement {
   return (
     <RpcProvider
       initialIdentity={{
@@ -33,7 +46,7 @@ function Flow(): ReactElement {
         },
       }}
     >
-      <Consumer />
+      {management ? <ManagementConsumer /> : <Consumer />}
     </RpcProvider>
   );
 }
@@ -43,3 +56,4 @@ const meta = { title: "Authentication/Flow", component: Flow } satisfies Meta<
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const InPlace: Story = {};
+export const Management: Story = { args: { management: true } };

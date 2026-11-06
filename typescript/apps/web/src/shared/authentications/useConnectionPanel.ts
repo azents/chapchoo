@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/shared/rpc/client";
 import {
   authenticationRecordUnavailable,
+  authenticationTargetChanged,
   definitiveAuthenticationRejection,
   withdrawAuthenticationSession,
 } from "./failure";
@@ -249,6 +250,27 @@ export function useConnectionPanel(
           return;
         }
         if (!accepted && definitiveAuthenticationRejection(failure)) {
+          if (
+            "target" in current &&
+            current.target &&
+            authenticationTargetChanged(failure)
+          ) {
+            setApiKey("");
+            setName("");
+            deviceTarget.current = null;
+            try {
+              await Promise.all([
+                utils.authentications.list.invalidate({ scope }),
+                utils.computers.invalidate(),
+              ]);
+            } finally {
+              if (revision === fence.current) {
+                setDialog({ type: "closed" });
+                input.onCloseManage?.();
+              }
+            }
+            return;
+          }
           setError(copy.unavailable);
           return;
         }
