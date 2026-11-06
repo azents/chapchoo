@@ -74,9 +74,9 @@ async function start(page: Page): Promise<void> {
   await page
     .getByRole("button", { name: "ChatGPT account", exact: true })
     .click();
-  await page
-    .getByRole("textbox", { name: "Connection name", exact: true })
-    .fill("Device fixture");
+  await expect(
+    page.getByRole("textbox", { name: "Alias", exact: true }),
+  ).toBeEmpty();
   await page
     .getByRole("dialog")
     .getByRole("button", { name: "Connect account", exact: true })
@@ -255,9 +255,9 @@ test("accepted key followed by an unavailable read retains its original receipt 
   await page
     .getByRole("button", { name: "OpenAI API key", exact: true })
     .click();
-  await page
-    .getByRole("textbox", { name: "Connection name", exact: true })
-    .fill("Synthetic key");
+  await expect(
+    page.getByRole("textbox", { name: "Alias", exact: true }),
+  ).toBeEmpty();
   await page.getByLabel(/^API key\s*\*?$/).fill("disposable-component-key");
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await page

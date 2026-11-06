@@ -30,7 +30,12 @@ export function AgentAuthentication(
             <Stack gap={0} style={{ minWidth: 0 }}>
               <Text size="sm">{c.codex}</Text>
               <Text size="xs" c="dimmed" className={classes.name}>
-                {props.agent.authentication?.name ?? c.unselected}
+                {props.agent.authentication
+                  ? props.agent.authentication.name ||
+                    (props.agent.authentication.kind === "chatgpt"
+                      ? c.chatgpt
+                      : c.apiKey)
+                  : c.unselected}
               </Text>
             </Stack>
           </Group>

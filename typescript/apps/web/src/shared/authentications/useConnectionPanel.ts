@@ -388,6 +388,10 @@ export function useConnectionPanel(
     });
   }
   return {
+    display:
+      auth.state.type === "AUTHENTICATED"
+        ? (auth.state.user.display ?? null)
+        : null,
     mobile,
     copy,
     scope,

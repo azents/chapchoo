@@ -41,7 +41,7 @@ async fn start(
     let draft = StartDeviceAuthentication {
         scope: scope.clone(),
         request_id: request.to_owned(),
-        name: "Synthetic ChatGPT".to_owned(),
+        name: String::new(),
         target: target.map(|(id, expected)| ReauthenticateTarget {
             authentication_id: id.to_owned(),
             expected_request_id: expected.to_owned(),
@@ -108,7 +108,7 @@ async fn exercise_device(store: &Store) -> Result<(String, String, String), Test
     let replay = StartDeviceAuthentication {
         scope: personal.clone(),
         request_id: "device-success".to_owned(),
-        name: "Synthetic ChatGPT".to_owned(),
+        name: String::new(),
         target: None,
     };
     assert!(matches!(
@@ -334,7 +334,7 @@ async fn exercise_device(store: &Store) -> Result<(String, String, String), Test
         .external_authentication(&owner, &personal, &id, NOW)
         .await?;
     assert_eq!(detail.current_request_id, "reauth-success");
-    assert_eq!(detail.name, "Synthetic ChatGPT");
+    assert_eq!(detail.name, "");
     assert_eq!(detail.account_id.as_deref(), Some("account-a"));
 
     let uncertain = exchange(store, &owner, &personal, "uncertain-exchange", None).await?;
@@ -628,7 +628,7 @@ async fn exercise_device(store: &Store) -> Result<(String, String, String), Test
                 &StartDeviceAuthentication {
                     scope: personal.clone(),
                     request_id: "observed-expiry-replay".into(),
-                    name: "Synthetic ChatGPT".into(),
+                    name: String::new(),
                     target: None,
                 },
                 NOW + 900_001

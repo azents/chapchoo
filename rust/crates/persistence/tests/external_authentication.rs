@@ -134,9 +134,21 @@ async fn exercise(store: &Store) -> Result<(String, String), TestError> {
     let original = RegisterApiKey {
         scope: personal.clone(),
         request_id: "personal-register".to_owned(),
-        name: "Personal key".to_owned(),
+        name: String::new(),
         key: key("synthetic-personal-key")?,
     };
+    let whitespace = RegisterApiKey {
+        scope: personal.clone(),
+        request_id: "whitespace-register".to_owned(),
+        name: "   ".to_owned(),
+        key: key("synthetic-personal-key")?,
+    };
+    assert!(matches!(
+        store
+            .register_external_api_key(&owner, &whitespace, NOW)
+            .await,
+        Err(StoreError::InvalidInput)
+    ));
     let id = record(
         store
             .register_external_api_key(&owner, &original, NOW)
@@ -234,7 +246,7 @@ async fn exercise(store: &Store) -> Result<(String, String), TestError> {
         request_id: "rename".to_owned(),
         authentication_id: id.clone(),
         expected_request_id: "replace".to_owned(),
-        name: "Renamed".to_owned(),
+        name: String::new(),
     };
     store
         .rename_external_authentication(&owner, &rename, NOW)
@@ -244,7 +256,7 @@ async fn exercise(store: &Store) -> Result<(String, String), TestError> {
             .external_authentication(&owner, &personal, &id, NOW)
             .await?
             .name,
-        "Renamed"
+        ""
     );
     // Accepted replacement replay survives a subsequent mutation and cannot restore its old key.
     store

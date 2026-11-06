@@ -15,6 +15,7 @@ export interface AuthenticationCopy {
   unverified: string;
   billing: string;
   name: string;
+  created: string;
   key: string;
   issueKey: string;
   save: string;
@@ -88,7 +89,8 @@ const english: AuthenticationCopy = {
   unverified: "Usage unverified",
   billing:
     "OpenAI API usage is billed separately from your ChatGPT subscription.",
-  name: "Connection name",
+  name: "Alias",
+  created: "Created",
   key: "API key",
   issueKey: "Create an OpenAI API key",
   save: "Save",
@@ -160,7 +162,8 @@ const korean: AuthenticationCopy = {
   registered: "등록됨",
   unverified: "사용 확인 전",
   billing: "OpenAI API 사용 요금은 ChatGPT 구독과 별도로 청구됩니다.",
-  name: "연결 이름",
+  name: "별칭",
+  created: "생성 일자",
   key: "API 키",
   issueKey: "OpenAI API 키 발급",
   save: "저장",
@@ -233,7 +236,8 @@ const japanese: AuthenticationCopy = {
   unverified: "利用未確認",
   billing:
     "OpenAI APIの利用料金はChatGPTのサブスクリプションとは別に請求されます。",
-  name: "接続名",
+  name: "エイリアス",
+  created: "作成日時",
   key: "APIキー",
   issueKey: "OpenAI APIキーを発行",
   save: "保存",
@@ -304,7 +308,8 @@ const french: AuthenticationCopy = {
   unverified: "Utilisation non vérifiée",
   billing:
     "L’utilisation de l’API OpenAI est facturée séparément de votre abonnement ChatGPT.",
-  name: "Nom de la connexion",
+  name: "Alias",
+  created: "Date de création",
   key: "Clé API",
   issueKey: "Créer une clé API OpenAI",
   save: "Enregistrer",

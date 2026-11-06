@@ -40,6 +40,7 @@ export const fixtureCatalogue = {
 } satisfies CatalogueSnapshot;
 export function fixturePanel(locale = "ko"): ConnectionPanelProps {
   return {
+    display: { region: "ko-KR", timeZone: "Asia/Seoul" },
     copy: authenticationCopy(locale),
     mobile: false,
     scope: fixtureCatalogue.scope,

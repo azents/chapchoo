@@ -196,7 +196,7 @@ fn request_id(value: &str) -> Result<(), StoreError> {
     Ok(())
 }
 fn name(value: &str) -> Result<(), StoreError> {
-    if value.trim().is_empty()
+    if (!value.is_empty() && value.trim().is_empty())
         || value.chars().count() > 256
         || value.len() > 1024
         || value.chars().any(char::is_control)

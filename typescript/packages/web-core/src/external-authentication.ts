@@ -88,9 +88,10 @@ function optional(value: string | undefined): string | null {
   return text(value, 4096);
 }
 function alias(value: string): string {
+  if (value !== "" && value.trim() === "") return invalidResponse();
   if ([...value].length > 256 || new TextEncoder().encode(value).length > 1024)
     return invalidResponse();
-  return text(value, 1024);
+  return value === "" ? "" : text(value, 1024);
 }
 export function authenticationKind(value: Wire.Kind): AuthenticationKind {
   switch (value) {

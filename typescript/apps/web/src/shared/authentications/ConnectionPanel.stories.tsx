@@ -40,6 +40,16 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Populated: Story = {};
+export const WithoutAlias: Story = {
+  args: { items: [{ ...fixtureConnection, name: "" }] },
+};
+export const OptionalAlias: Story = {
+  args: {
+    dialog: { type: "key", target: null },
+    name: "",
+    apiKey: "synthetic-key",
+  },
+};
 export const LaterPage: Story = { args: { after: "cursor-page-3" } };
 export const Empty: Story = { args: { items: [] } };
 export const Unavailable: Story = { args: { unavailable: true } };
