@@ -171,6 +171,7 @@ export function AgentCreation(props: AgentCreationProps): ReactElement {
                     <InteractiveSurface
                       key={item.id}
                       role="radio"
+                      aria-label={item.name}
                       aria-checked={props.providerId === item.id}
                       disabled={
                         locked ||
@@ -181,10 +182,17 @@ export function AgentCreation(props: AgentCreationProps): ReactElement {
                       data-selected={props.providerId === item.id || void 0}
                       onClick={() => props.onProvider(item.id)}
                     >
-                      <ProviderIcon kind={item.kind} size={32} />
-                      <Text component="span" fw={600}>
-                        {item.name}
-                      </Text>
+                      <Box className={classes.environmentMark}>
+                        <ProviderIcon kind={item.kind} size={24} />
+                      </Box>
+                      <Stack component="span" gap="xs">
+                        <Text component="span" fw={600}>
+                          {item.kind === "kubernetes" ? "Kubernetes" : "Docker"}
+                        </Text>
+                        <Text component="span" size="sm" c="dimmed">
+                          {item.name}
+                        </Text>
+                      </Stack>
                     </InteractiveSurface>
                   ))}
                 </Box>

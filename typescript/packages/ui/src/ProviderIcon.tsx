@@ -22,16 +22,8 @@ export function ProviderIcon({
     >
       {kind === "kubernetes" ? (
         <>
-          <path d="m12 2 7.8 3.8 1.9 8.4-5.4 6.7H7.7l-5.4-6.7 1.9-8.4Z" />
-          <circle cx="12" cy="12" r="5" />
-          <circle cx="12" cy="12" r="1.5" />
-          {Array.from({ length: 7 }, (_, index) => (
-            <path
-              key={index}
-              d="M12 5v5.5"
-              transform={`rotate(${(index * 360) / 7} 12 12)`}
-            />
-          ))}
+          <path d="m12 2 9 5v10l-9 5-9-5V7Z" />
+          <path d="M12 6v12M7 9l10 6M7 15l10-6" />
         </>
       ) : (
         <>
