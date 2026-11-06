@@ -1,10 +1,14 @@
 import { expect, test } from "@playwright/test";
 import superjson from "superjson";
 import type { Page } from "@playwright/test";
-async function mockFlow(page: Page, uncertain: boolean): Promise<string[]> {
+async function mockFlow(
+  page: Page,
+  uncertain: boolean,
+  clockSkew = 0,
+): Promise<string[]> {
   const calls: string[] = [];
   const now = Date.now();
-  await page.clock.setFixedTime(now);
+  await page.clock.setFixedTime(now + clockSkew);
   await page.route("**/api/trpc/authentications.*", async (route) => {
     const method =
       new URL(route.request().url()).pathname.split(".").at(-1) ?? "";
@@ -15,7 +19,8 @@ async function mockFlow(page: Page, uncertain: boolean): Promise<string[]> {
     } else if (method === "startDevice") {
       result = {
         attemptId: "attempt",
-        expiresAt: Date.now() + 300000,
+        observedAt: now,
+        expiresAt: now + 300000,
         state: {
           type: "pending",
           userCode: "ABCD-EFGH",
@@ -31,14 +36,16 @@ async function mockFlow(page: Page, uncertain: boolean): Promise<string[]> {
       }
       result = {
         attemptId: "attempt",
-        expiresAt: Date.now() + 300000,
+        observedAt: now,
+        expiresAt: now + 300000,
         state: { type: "registered", authenticationId: "connected" },
         providerFailure: null,
       };
     } else if (method === "deviceStatus") {
       result = {
         attemptId: "attempt",
-        expiresAt: Date.now() + 300000,
+        observedAt: now,
+        expiresAt: now + 300000,
         state: { type: "registered", authenticationId: "connected" },
         providerFailure: null,
       };
@@ -102,6 +109,25 @@ test("successful device exchange returns directly to the owning selection withou
   expect(calls.filter((value) => value === "startDevice")).toHaveLength(1);
   expect(calls.filter((value) => value === "pollDevice")).toHaveLength(1);
 });
+for (const skew of [-20 * 60_000, 20 * 60_000]) {
+  test(`automatic device polling tolerates ${skew}ms of browser clock skew`, async ({
+    page,
+  }) => {
+    const calls = await mockFlow(page, false, skew);
+    await start(page);
+    await expect
+      .poll(() => page.getByRole("dialog").innerText())
+      .toContain("4:59");
+    await page.clock.runFor(4000);
+    expect(calls.filter((value) => value === "pollDevice")).toHaveLength(0);
+    await page.clock.runFor(1000);
+    await expect(
+      page.getByRole("status").filter({ hasText: "Selected:" }),
+    ).toHaveText("Selected: Connected fixture");
+    expect(calls.filter((value) => value === "pollDevice")).toHaveLength(1);
+  });
+}
+
 test("a lost explicit device advance switches to status recovery without replay", async ({
   page,
 }) => {

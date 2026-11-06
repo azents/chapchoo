@@ -89,6 +89,7 @@ export const DeviceCode: Story = {
       progress: {
         attemptId: "attempt",
         expiresAt: 1794000000000,
+        observedAt: 1793923200000,
         state: {
           type: "pending",
           userCode: "ABCD-EFGH",

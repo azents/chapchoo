@@ -51,6 +51,7 @@ export function useConnectionPanel(
   const [name, setName] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [busy, setBusy] = useState(false);
+  const [clockOffset, setClockOffset] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const pending = useRef(false);
   const deviceTarget = useRef<AuthenticationView | null>(null);
@@ -154,6 +155,7 @@ export function useConnectionPanel(
         revision,
       );
     } else {
+      setClockOffset(value.observedAt - Date.now());
       setDialog({ type: "device", progress: value });
     }
   }
@@ -344,17 +346,18 @@ export function useConnectionPanel(
       return;
     }
     const advance = progress.state.type === "pending";
+    const serverNow = Date.now() + clockOffset;
     const next =
       progress.state.type === "pending"
         ? progress.state.nextCheckAt
-        : Date.now() + 1000;
+        : serverNow + 1000;
     const deadline = Math.min(next, progress.expiresAt);
     const timer = window.setTimeout(
       () => checkDevice(advance),
-      Math.max(250, deadline - Date.now()),
+      Math.max(250, deadline - serverNow),
     );
     return () => window.clearTimeout(timer);
-  }, [authorized, input.enabled, busy, dialog]);
+  }, [authorized, input.enabled, busy, dialog, clockOffset]);
   async function cancelDevice(): Promise<void> {
     if (dialog.type !== "device") {
       return;
@@ -450,7 +453,10 @@ export function useConnectionPanel(
       dialog.type === "device"
         ? Math.max(
             0,
-            Math.ceil((dialog.progress.expiresAt - now.getTime()) / 1000),
+            Math.ceil(
+              (dialog.progress.expiresAt - (now.getTime() + clockOffset)) /
+                1000,
+            ),
           )
         : null,
     onName: (value) => {

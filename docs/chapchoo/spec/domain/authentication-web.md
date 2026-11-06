@@ -64,7 +64,10 @@ interaction shows the actually issued code with a copy action, fixed official
 verification link, remaining validity and cancellation. Optional alias input is
 part of the connection-method form rather than a separate step. Choosing ChatGPT
 starts the attempt directly. The active panel polls at the next backend-permitted
-check time and completes automatically after success. Opening the external page
+check time and completes automatically after success. Each web progress projection
+includes its server observation time; polling deadlines and remaining validity
+apply the response clock offset so a skewed browser clock neither delays the
+attempt nor creates a rapid polling loop. Opening the external page
 does not report success. An uncertain advance stops automatic polling and switches
 to explicit status observation rather than replaying it. Provider
 success returns directly to the originating selection/management task without
