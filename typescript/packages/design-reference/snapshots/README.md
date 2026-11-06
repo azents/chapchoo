@@ -9,7 +9,7 @@ iterate with feedback, receive explicit confirmation and produce an independent 
 
 [Harness setup](harness-setup/README.md) is the requester-confirmed integrated
 concept from 2026-11-06 KST: eight core states, local shared CSS and deduplicated
-assets (approximately 1.32 MB). Its approval and fidelity limits are recorded in
+assets (approximately 1.05 MB). Its approval and fidelity limits are recorded in
 that index. It supersedes the older unconfirmed authentication proposals below,
 without retroactively changing their historical status.
 

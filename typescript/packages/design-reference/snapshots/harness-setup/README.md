@@ -24,7 +24,8 @@ personal Computer/connector UI, or user cloud registration was added.
 Only eight representative states are retained. Intermediate options, exhaustive
 responsive/error combinations and verification PNGs are excluded. Styles are
 local and shared in `shared.css`; font subsets and artwork are deduplicated in
-`assets/`. Total payload is approximately 1.32 MB before this short index.
+`assets/`. The 26 core files total 1,048,496 bytes (approximately 1.05 MB)
+before this short index. Unused Storybook-only fonts and unneeded subsets are omitted.
 See [asset licenses](../ASSETS.md) and [archive rules](../AGENTS.md).
 
 ## Capture and fidelity
