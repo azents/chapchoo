@@ -47,7 +47,9 @@ pub(crate) fn status(error: ServiceError) -> Status {
                 Code::FailedPrecondition
             }
         }
-        DomainReason::CapacityExhausted => Code::ResourceExhausted,
+        DomainReason::CapacityExhausted | DomainReason::AuthenticationCapacityExhausted => {
+            Code::ResourceExhausted
+        }
         DomainReason::Internal => Code::Internal,
     };
     let mut result = Status::new(code, error.to_string());
@@ -80,6 +82,9 @@ fn wire_reason(reason: DomainReason) -> WireReason {
         DomainReason::HandleConflict => WireReason::HandleConflict,
         DomainReason::MailUnavailable => WireReason::MailUnavailable,
         DomainReason::CapacityExhausted => WireReason::CapacityExhausted,
+        DomainReason::AuthenticationCapacityExhausted => {
+            WireReason::AuthenticationCapacityExhausted
+        }
         DomainReason::Internal => WireReason::Internal,
     }
 }

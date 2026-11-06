@@ -1,0 +1,94 @@
+syntax = "proto3";
+package chapchoo.authentication;
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+// Client-only backend catalogue. Stored and selected do not mean applied or valid.
+service Authentications {
+  rpc List(ListRequest) returns (AuthenticationList);
+  rpc Get(RecordRequest) returns (Authentication);
+  rpc RegisterKey(RegisterKeyRequest) returns (AcceptedResult);
+  rpc ReplaceKey(ReplaceKeyRequest) returns (AcceptedResult);
+  rpc Rename(RenameRequest) returns (AcceptedResult);
+  rpc Delete(DeleteRequest) returns (DeleteResult);
+  rpc RequestResult(RequestResultRequest) returns (HistoricalResult);
+  // A target starts same-account reauthentication, preserving its record ID.
+  rpc StartDevice(StartDeviceRequest) returns (DeviceProgress);
+  // Status never dispatches provider I/O. Poll advances at most one due check.
+  rpc DeviceStatus(DeviceRequest) returns (DeviceProgress);
+  rpc PollDevice(DeviceRequest) returns (DeviceProgress);
+  rpc CancelDevice(CancelDeviceRequest) returns (DeviceProgress);
+  rpc SelectAgent(SelectAgentRequest) returns (AcceptedResult);
+}
+message Scope { oneof owner { google.protobuf.Empty personal = 1; string team_id = 2; } }
+enum Kind { KIND_UNSPECIFIED = 0; KIND_CHATGPT = 1; KIND_OPENAI_API_KEY = 2; }
+message Authentication {
+  string id = 1; Scope scope = 2; Kind kind = 3; string name = 4;
+  optional string account_id = 5; optional string email = 6; optional string plan_type = 7;
+  google.protobuf.Timestamp expires_at = 8; string current_request_id = 9;
+  google.protobuf.Timestamp created_at = 10; google.protobuf.Timestamp updated_at = 11;
+}
+message ListRequest { Scope scope = 1; optional string after = 2; uint32 limit = 3; }
+message AuthenticationList { repeated Authentication items = 1; optional string next_after = 2; }
+message RecordRequest { Scope scope = 1; string authentication_id = 2; }
+message RegisterKeyRequest { Scope scope = 1; string request_id = 2; string name = 3; bytes key = 4; }
+message ReplaceKeyRequest {
+  Scope scope = 1; string request_id = 2; string authentication_id = 3;
+  string expected_request_id = 4; bytes key = 5;
+}
+message RenameRequest {
+  Scope scope = 1; string request_id = 2; string authentication_id = 3;
+  string expected_request_id = 4; string name = 5;
+}
+message DeleteRequest {
+  Scope scope = 1; string request_id = 2; string authentication_id = 3; string expected_request_id = 4;
+}
+message RecordIdentity { string authentication_id = 1; }
+message SelectionIdentity { string agent_id = 1; string authentication_id = 2; }
+message DeviceIdentity { string attempt_id = 1; }
+message AcceptedResult {
+  oneof result {
+    RecordIdentity record = 1; RecordIdentity deleted = 2;
+    SelectionIdentity selection = 3; DeviceIdentity device = 4;
+  }
+}
+message DeleteResult { oneof outcome { AcceptedResult accepted = 1; google.protobuf.Empty in_use = 2; } }
+enum Operation {
+  OPERATION_UNSPECIFIED = 0; OPERATION_REGISTER_KEY = 1; OPERATION_REPLACE_KEY = 2;
+  OPERATION_RENAME = 3; OPERATION_DELETE = 4; OPERATION_SELECT = 5;
+  OPERATION_START_DEVICE = 6; OPERATION_CANCEL_DEVICE = 7;
+}
+message RequestResultRequest { string request_id = 1; }
+// No accepted result is not evidence that a prior uncertain mutation stopped.
+message HistoricalResult { Operation operation = 1; AcceptedResult accepted = 2; google.protobuf.Timestamp accepted_at = 3; }
+message ReauthenticateTarget { string authentication_id = 1; string expected_request_id = 2; }
+message StartDeviceRequest { Scope scope = 1; string request_id = 2; string name = 3; ReauthenticateTarget target = 4; }
+message DeviceRequest { string attempt_id = 1; }
+message CancelDeviceRequest { string attempt_id = 1; string request_id = 2; }
+message PendingDevice { string user_code = 1; string verification_uri = 2; google.protobuf.Timestamp next_check_at = 3; }
+enum ProviderFailure {
+  PROVIDER_FAILURE_UNSPECIFIED = 0; PROVIDER_FAILURE_REJECTED = 1;
+  PROVIDER_FAILURE_UNAVAILABLE = 2; PROVIDER_FAILURE_INVALID_RESPONSE = 3; PROVIDER_FAILURE_UNCERTAIN = 4;
+}
+message DeviceProgress {
+  string attempt_id = 1; google.protobuf.Timestamp expires_at = 2;
+  oneof state {
+    google.protobuf.Empty starting = 3; PendingDevice pending = 4;
+    google.protobuf.Empty checking = 5; google.protobuf.Empty exchanging = 6;
+    RecordIdentity registered = 7; google.protobuf.Empty cancelled = 8;
+    google.protobuf.Empty expired = 9; google.protobuf.Empty failed = 10;
+    google.protobuf.Empty superseded = 11; google.protobuf.Empty uncertain = 12;
+  }
+  optional ProviderFailure provider_failure = 13;
+}
+message ExpectedSelection { string authentication_id = 1; string request_id = 2; }
+message SelectAgentRequest {
+  string request_id = 1; string agent_id = 2; string authentication_id = 3;
+  // Absence compares against an Agent with no prior selection.
+  ExpectedSelection expected = 4;
+}
+// Saved local reference only; contains no secret or Computer application status.
+message AgentSelection {
+  string authentication_id = 1; string name = 2; Kind kind = 3;
+  string request_id = 4; google.protobuf.Timestamp selected_at = 5;
+}

@@ -24,6 +24,14 @@ Backend task, web reap and signal failures are retained together privately inste
 of replacing an earlier failure with a later cleanup result. Completed forced
 cleanup still reports failure rather than a successful graceful stop.
 
+The Client group also owns the [backend authentication Service](backend-authentication.md).
+Its fixed HTTPS provider client is composed before listener admission; started
+provider calls belong to a bounded task owner, not a browser/RPC waiter.
+Shutdown closes its admission and joins it alongside backend/web cleanup.
+The owner is retained across partial startup failure and cancelled drain futures,
+including already-collected causes. A cleanup deadline is not proof that an
+uncertain provider effect was rolled back.
+
 Unary gRPC health for an empty service, either common service or any domain
 service actually registered on the listener rereads read-only database
 readiness with bounded probe capacity. `chapchoo.liveness` reports process

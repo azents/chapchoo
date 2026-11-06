@@ -186,6 +186,7 @@ pub struct AgentSummary {
     pub image_asset_key: String,
     pub palette_key: String,
     pub computer: ComputerSummary,
+    pub authentication: Option<crate::AgentAuthenticationSelection>,
 }
 impl fmt::Debug for AgentSummary {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -338,6 +339,16 @@ pub(crate) struct AgentComputerRow {
     profile_asset_key: Option<String>,
     #[diesel(sql_type = Nullable<Text>)]
     palette_key: Option<String>,
+    #[diesel(sql_type = Nullable<IdentitySql>)]
+    selected_authentication_id: Option<EntityId>,
+    #[diesel(sql_type = Nullable<Text>)]
+    selected_authentication_name: Option<String>,
+    #[diesel(sql_type = Nullable<Text>)]
+    selected_authentication_kind: Option<String>,
+    #[diesel(sql_type = Nullable<Text>)]
+    selection_request_id: Option<String>,
+    #[diesel(sql_type = Nullable<BigInt>)]
+    selected_at: Option<i64>,
     #[diesel(sql_type = IdentitySql)]
     id: EntityId,
     #[diesel(sql_type = IdentitySql)]
@@ -402,7 +413,7 @@ const COMPUTER_PROJECTION: &str = "c.id,c.owner_user_id,c.kind,c.provider_id,c.d
 
 fn agent_query() -> String {
     format!(
-        "SELECT a.id AS agent_id,a.team_id,a.name,a.handle,a.profile_image_id,pi.asset_key AS profile_asset_key,a.palette_key,{COMPUTER_PROJECTION} JOIN agents a ON a.computer_id=c.id JOIN profile_images pi ON pi.id=a.profile_image_id JOIN memberships am ON am.team_id=a.team_id AND am.user_id=a.owner_user_id"
+        "SELECT a.id AS agent_id,a.team_id,a.name,a.handle,a.profile_image_id,pi.asset_key AS profile_asset_key,a.palette_key,aa.id AS selected_authentication_id,aa.name AS selected_authentication_name,aa.kind AS selected_authentication_kind,aas.current_request_id AS selection_request_id,aas.selected_at,{COMPUTER_PROJECTION} JOIN agents a ON a.computer_id=c.id JOIN profile_images pi ON pi.id=a.profile_image_id JOIN memberships am ON am.team_id=a.team_id AND am.user_id=a.owner_user_id LEFT JOIN agent_authentication_selections aas ON aas.agent_id=a.id LEFT JOIN external_authentications aa ON aa.id=aas.authentication_id AND (aa.owner_user_id=a.owner_user_id OR aa.owner_team_id=a.team_id)"
     )
 }
 
@@ -437,6 +448,25 @@ impl AgentComputerRow {
 
     fn summary(self, now: i64) -> Result<AgentSummary, StoreError> {
         let computer = self.computer_summary(now)?;
+        let authentication = match (
+            self.selected_authentication_id,
+            self.selected_authentication_name,
+            self.selected_authentication_kind,
+            self.selection_request_id,
+            self.selected_at,
+        ) {
+            (None, None, None, None, None) => None,
+            (Some(id), Some(name), Some(kind), Some(request_id), Some(selected_at)) => {
+                Some(crate::AgentAuthenticationSelection {
+                    authentication_id: id.to_dto(EntityKind::Authentication),
+                    name,
+                    kind: crate::AuthenticationKind::parse(&kind)?,
+                    request_id,
+                    selected_at,
+                })
+            }
+            _ => return Err(StoreError::Integrity),
+        };
         let handle = self.handle.ok_or(StoreError::Integrity)?;
         let palette_key = self.palette_key.ok_or(StoreError::Integrity)?;
         let image_asset_key = self.profile_asset_key.ok_or(StoreError::Integrity)?;
@@ -463,6 +493,7 @@ impl AgentComputerRow {
             palette_key,
             image_asset_key,
             computer,
+            authentication,
         })
     }
 
@@ -633,7 +664,7 @@ impl Store {
             // Reuse the evidence projection without private live Agent data.
             // Residual Computers remain independently discoverable.
             let query = format!(
-                "SELECT NULL AS agent_id,NULL AS team_id,NULL AS name,NULL AS handle,NULL AS profile_image_id,NULL AS profile_asset_key,NULL AS palette_key,{COMPUTER_PROJECTION}"
+                "SELECT NULL AS agent_id,NULL AS team_id,NULL AS name,NULL AS handle,NULL AS profile_image_id,NULL AS profile_asset_key,NULL AS palette_key,NULL AS selected_authentication_id,NULL AS selected_authentication_name,NULL AS selected_authentication_kind,NULL AS selection_request_id,NULL AS selected_at,{COMPUTER_PROJECTION}"
             );
             let query = format!(
                 "{query} WHERE c.provider_id=? AND (? IS NULL OR c.id>?) ORDER BY c.id LIMIT ?"

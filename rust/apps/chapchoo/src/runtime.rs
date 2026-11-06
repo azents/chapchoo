@@ -1,6 +1,10 @@
 use chapchoo_crypto::PasswordCost;
-use chapchoo_rpc::{AccountServices, ComputerServices, ServiceGroup, ServiceGroups};
-use chapchoo_service::{AccountsService, ComputersService, Mailer, PasswordWork};
+use chapchoo_rpc::{
+    AccountServices, AuthenticationServices, ComputerServices, ServiceGroup, ServiceGroups,
+};
+use chapchoo_service::{
+    AccountsService, AuthenticationService, ComputersService, Mailer, PasswordWork,
+};
 use std::{
     sync::{
         Arc,
@@ -54,6 +58,7 @@ pub async fn serve(config: Option<BackendConfig>, options: ServeOptions) -> Resu
     let mut general_web = None;
     let mut admin_web = None;
     let mut control_plane = None;
+    let mut authentication = None;
     let mut signal = Termination::new()?;
     let startup = async {
         if let Some(config) = &config {
@@ -64,6 +69,7 @@ pub async fn serve(config: Option<BackendConfig>, options: ServeOptions) -> Resu
                 &stop,
                 &mut tasks,
                 &mut control_plane,
+                &mut authentication,
             )
             .await?;
         }
@@ -160,11 +166,20 @@ pub async fn serve(config: Option<BackendConfig>, options: ServeOptions) -> Resu
         }
     };
     admission.store(false, Ordering::Release);
+    if let Some(authentication) = &authentication {
+        authentication.close();
+    }
     stop.cancel();
     if let Some(control) = control_plane.take() {
         tasks.spawn(control.shutdown());
     }
-    let cleanup = cleanup(&mut tasks, &mut general_web, &mut admin_web).await;
+    let cleanup = cleanup(
+        &mut tasks,
+        &mut general_web,
+        &mut admin_web,
+        &authentication,
+    )
+    .await;
     complete(failure.map_or(Ok(()), Err), cleanup)?;
     tracing::info!("Selected components stopped");
     Ok(())
@@ -177,6 +192,7 @@ async fn start_backends(
     stop: &CancellationToken,
     tasks: &mut BackendTasks,
     control: &mut Option<ControlPlane>,
+    authentication: &mut Option<Arc<AuthenticationService>>,
 ) -> Result<(), AppError> {
     let mut application = ApplicationConfig::load()?;
     let store = config.connect().await?;
@@ -196,6 +212,16 @@ async fn start_backends(
         mailer,
         application.accounts,
     )?);
+    let groups = ServiceGroups::new(options.groups.iter().map(|group| group.domain()));
+    if groups.contains(ServiceGroup::Client) {
+        // Publish the fallible effect owner before any later startup await.
+        // Partial startup failure therefore retains the same explicit drain.
+        *authentication = Some(Arc::new(AuthenticationService::new(
+            store.clone(),
+            Arc::new(chapchoo_openai_auth::OpenAiDeviceClient::new()?),
+            16,
+        )?));
+    }
     // All selected sockets are owned before a Control can publish its endpoint.
     let listener = TcpListener::bind(options.listen).await?;
     let peer_listener = if let Some(address) = options.peer_listen {
@@ -203,7 +229,6 @@ async fn start_backends(
     } else {
         None
     };
-    let groups = ServiceGroups::new(options.groups.iter().map(|group| group.domain()));
     let app = Arc::new(ComputersService::new(store).with_policy(application.computers)?);
     let computers = ComputerServices::new(app.clone()).with_admission(admission.clone());
     if groups.contains(ServiceGroup::Control) {
@@ -289,7 +314,15 @@ async fn start_backends(
     let components = control
         .as_ref()
         .map(|plane| (&plane.authentication, &plane.connections));
-    let routes = groups.routes(Some(&rpc), Some(&computers), components)?;
+    let authentication_rpc = authentication.as_ref().map(|service| {
+        AuthenticationServices::new(service.clone()).with_admission(admission.clone())
+    });
+    let routes = groups.routes(
+        Some(&rpc),
+        Some(&computers),
+        authentication_rpc.as_ref(),
+        components,
+    )?;
     let health = HealthServer::new(HealthService {
         config: config.clone(),
         admission: admission.clone(),
@@ -387,6 +420,7 @@ struct CleanupFailures {
     backend: Result<(), AppError>,
     general: Result<(), AppError>,
     admin: Result<(), AppError>,
+    authentication: Result<(), AppError>,
 }
 
 impl CleanupFailures {
@@ -395,11 +429,15 @@ impl CleanupFailures {
             backend: Ok(()),
             general: Ok(()),
             admin: Ok(()),
+            authentication: Ok(()),
         }
     }
 
     fn finish(self) -> Result<(), AppError> {
-        complete(complete(self.backend, self.general), self.admin)
+        complete(
+            complete(complete(self.backend, self.general), self.admin),
+            self.authentication,
+        )
     }
 }
 
@@ -425,11 +463,20 @@ async fn join_owned(
     general: &mut Option<WebChild>,
     admin: &mut Option<WebChild>,
     failures: &mut CleanupFailures,
+    authentication: &Option<Arc<AuthenticationService>>,
 ) {
     tokio::join!(
         drain(tasks, &mut failures.backend),
         reap_web(general, &mut failures.general),
-        reap_web(admin, &mut failures.admin)
+        reap_web(admin, &mut failures.admin),
+        async {
+            if let Some(authentication) = authentication {
+                retain(
+                    &mut failures.authentication,
+                    authentication.finish().await.map_err(Into::into),
+                );
+            }
+        }
     );
 }
 
@@ -437,6 +484,7 @@ async fn cleanup(
     tasks: &mut BackendTasks,
     general: &mut Option<WebChild>,
     admin: &mut Option<WebChild>,
+    authentication: &Option<Arc<AuthenticationService>>,
 ) -> Result<(), AppError> {
     // Completed causes outlive a timed-out join future and its forced successor.
     let mut failures = CleanupFailures::new();
@@ -446,7 +494,7 @@ async fn cleanup(
     }
     let graceful = tokio::time::timeout(
         Duration::from_secs(20),
-        join_owned(tasks, general, admin, &mut failures),
+        join_owned(tasks, general, admin, &mut failures, authentication),
     )
     .await;
     if graceful.is_ok() {
@@ -458,7 +506,7 @@ async fn cleanup(
     tasks.abort_all();
     let forced = tokio::time::timeout(
         Duration::from_secs(5),
-        join_owned(tasks, general, admin, &mut failures),
+        join_owned(tasks, general, admin, &mut failures, authentication),
     )
     .await;
     let forced = complete(
@@ -572,6 +620,7 @@ mod tests {
                 &mut general,
                 &mut admin,
                 &mut failures,
+                &None,
             ));
             std::future::poll_fn(|context| {
                 assert!(join.as_mut().poll(context).is_pending());
@@ -582,7 +631,7 @@ mod tests {
         assert!(failures.backend.is_err());
         assert_eq!(dropped.load(Ordering::SeqCst), 0);
         release.send(()).map_err(|_| "Worker was abandoned")?;
-        join_owned(&mut tasks, &mut general, &mut admin, &mut failures).await;
+        join_owned(&mut tasks, &mut general, &mut admin, &mut failures, &None).await;
         let failure = failures.finish().err().ok_or("Missing completed cause")?;
         assert_eq!(dropped.load(Ordering::SeqCst), 0);
         drop(failure);

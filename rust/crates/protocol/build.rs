@@ -8,6 +8,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         protos.join("accounts.proto"),
         protos.join("control.proto"),
         protos.join("computers.proto"),
+        protos.join("authentication.proto"),
     ];
     for source in &sources {
         println!("cargo:rerun-if-changed={}", source.display());
@@ -28,6 +29,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         "chapchoo.accounts.InvitationAction",
         "chapchoo.accounts.GrantKind",
         "chapchoo.accounts.DomainReason",
+        "chapchoo.authentication.Kind",
+        "chapchoo.authentication.Operation",
+        "chapchoo.authentication.ProviderFailure",
         "chapchoo.control.ProviderKind",
         "chapchoo.control.ResourceKind",
         "chapchoo.control.ExecutionFact",

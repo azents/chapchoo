@@ -2,6 +2,7 @@ syntax = "proto3";
 package chapchoo.computers;
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
+import "authentication.proto";
 
 service Agents {
   rpc ListProfileImages(Page) returns (AgentProfileImages);
@@ -55,6 +56,7 @@ message Agent {
   string id = 1; string name = 2; Computer computer = 3; string team_id = 4;
   string handle = 5; string profile_image_id = 6; string palette_key = 7;
   string profile_image_asset_key = 8;
+  chapchoo.authentication.AgentSelection authentication = 9;
 }
 message AgentList { repeated Agent items = 1; optional string next_after = 2; }
 message ProviderChoice { string id = 1; string name = 2; }

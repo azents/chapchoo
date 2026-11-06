@@ -58,7 +58,9 @@ Every generated message and outcome oneof has field-free Debug output.
   a removed assigned ID, or an absent observation. The latter is not evidence
   that an uncertain concurrent Create stopped.
 
-Agent DTOs carry the persisted handle, image ID, selected local asset key and palette in addition to name,
+Agent DTOs optionally carry the [saved backend authentication reference](backend-authentication.md),
+without secret material or Computer-application status.
+They carry the persisted handle, image ID, selected local asset key and palette in addition to name,
 Team and Computer. Missing final creation fields reject rather than invoking a
 server default or legacy mode. [Profile contracts](agent-profile.md) own grammar,
 uniqueness, catalogue validation and full-payload recovery.

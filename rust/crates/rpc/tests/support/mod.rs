@@ -16,6 +16,7 @@ use tokio::{
 };
 
 type TestError = Box<dyn Error + Send + Sync>;
+pub mod authentication;
 
 struct CompletionFailure(Vec<TestError>);
 

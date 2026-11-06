@@ -17,10 +17,26 @@ tags: [harness, implementation, security]
 ## Delivery Phases
 
 1. `Codex authentication [1/3]: protected credential schema and primitives` — branch `feat/codex-auth-backend` -> main. M1/M2/M4/M6/M9 foundation: purpose-bound variable-size secrets, keyed request identity, preserving SQLite/PostgreSQL schema and typed IDs. No reachable feature API until phase2.
-2. `Codex authentication [2/3]: backend acquisition and saved Agent selection` — stacked on phase1. Complete Store/Service/RPC operations, provider HTTP, concurrency/recovery, creation receipt extension, lifecycle integration and generated Node clients. M1-M7/M9. No Computer credential delivery, model call, runtime refresh or web activation.
-3. `Codex authentication [3/3]: authentication management and Agent flows` — stacked on phase2. M8 integration, minimal fixture-backed E2E, component checks, final same-SHA review, Spec promotion, Requirements/Design implemented date only after verified completion, temporary plan cleanup.
+2. `Codex authentication [2/3]: backend acquisition and saved Agent selection` — stacked on phase1. Complete catalogue/acquisition and existing-Agent Store/Service/RPC operations, provider HTTP, concurrency/recovery, lifecycle integration and generated Node clients. M1-M7/M9 excluding new-create activation. No Computer credential delivery, model call, runtime refresh or web activation.
+3. `Codex authentication [3/3]: authentication management and Agent flows` — stacked on phase2. M8 integration matching the approved visual design, and the M6/M9 atomic new-create Store/RPC/payload-comparison cutover together with its selection UI; preserving historical receipt recovery, minimal fixture-backed E2E, component checks, rendered desktop/mobile visual comparison, final same-SHA review, Spec promotion, Requirements/Design implemented date only after verified completion, temporary plan cleanup.
 
 No extra docs-only or cleanup PR is created to satisfy a ritual. Open each completed phase PR before later implementation. Never merge or deploy without explicit approval.
+
+The new-create cutover is paired with its UI because the current General creation
+router and core Computer browser journey do not yet supply authentication.
+Requiring it in phase2 would break the unchanged creation journey. Phase2 keeps
+that existing contract unchanged; phase3 replaces it atomically with the approved
+selected-reference contract. This is execution ordering, not a second creation
+mode, permissive fallback, feature flag or reduced verification obligation.
+
+UI completion includes the approved shell/icon style, empty connection state,
+account cards, management and in-place dialogs, computer-first three-step
+creation, retained profile fields and compact Agent authentication row. Compare
+actual rendered desktop/mobile states against the approved visual reference,
+correcting layout, spacing, typography and responsive differences. Apply the
+confirmed later scope amendments when consulting historical snapshots: account
+review/second registration and Computer application/status/retry illustrations
+are not production targets.
 
 ## Integration and Prerequisites
 

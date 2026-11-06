@@ -89,6 +89,11 @@ Debug for owner verifier/proof, private rows, drafts and projections is redacted
 
 ## Application Service
 
+[Backend authentication selection](backend-authentication.md) checks this Agent
+ownership independently of credential-scope access. Team management does not
+grant another User's private-Agent mutation. Departure/removal detaches references
+under the same cleanup boundary while preserving reusable personal credentials.
+
 Repository acceptance issues Agent, Computer, execution, session, Control and
 connection IDs under the [shared identity contract](repository-identity.md).
 `ComputersService` prepares new credentials and independent native names, not

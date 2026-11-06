@@ -96,12 +96,13 @@ macro_rules! delete_team_agents {
         use $crate::entity_id::{EntityId, EntityKind, IdentitySql};
         let owner: Option<EntityId> = $owner;
         let team: EntityId = *$team;
+        $crate::external_auth::detach_team_authentications!($connection, $dialect, team, owner, $now);
         let query = format!("{} WHERE a.team_id=? AND (a.owner_user_id=? OR ?=TRUE) ORDER BY c.provider_id,c.id", $crate::agent_cleanup::SCOPED_AGENTS);
         let initial = diesel::sql_query($dialect.query(&query))
             .bind::<IdentitySql,_>(team).bind::<diesel::sql_types::Nullable<IdentitySql>,_>(owner)
             .bind::<diesel::sql_types::Bool,_>(owner.is_none())
             .load::<$crate::agent_cleanup::ScopedAgent>($connection).await?;
-        // Keep the same Team -> Provider -> Computer ordering as direct Agent
+        // Keep the same Team -> authentication -> Provider -> Computer ordering as direct Agent
         // operations; reconciliation can never observe a half-admitted deletion.
         let mut providers: std::collections::BTreeSet<EntityId> = initial.iter().filter_map(|row| row.provider_id).collect();
         let owned_providers = if owner.is_none() {

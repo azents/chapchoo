@@ -24,6 +24,7 @@ pub enum DomainReason {
     HandleConflict,
     MailUnavailable,
     CapacityExhausted,
+    AuthenticationCapacityExhausted,
     Internal,
 }
 
@@ -146,6 +147,9 @@ impl fmt::Display for ServiceError {
                 DomainReason::HandleConflict => "Team handle is already in use",
                 DomainReason::MailUnavailable => "Email delivery is not configured",
                 DomainReason::CapacityExhausted => "Password processing capacity is exhausted",
+                DomainReason::AuthenticationCapacityExhausted => {
+                    "Authentication processing capacity is exhausted"
+                }
             }
         };
         formatter.write_str(message)

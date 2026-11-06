@@ -12,6 +12,7 @@ mod delivery;
 mod directory;
 mod display;
 mod entity_id;
+mod external_auth;
 mod identity;
 mod identity_transition;
 mod models;
@@ -47,6 +48,16 @@ pub use delivery::{DeliveryComputer, DeliveryExecution, DeliverySnapshot};
 pub use directory::{
     ComponentRoute, ConnectionOwner, ConnectionPreparation, ControlRegistration, DirectoryPolicy,
     ResolvedRoute,
+};
+pub use external_auth::{
+    AgentAuthenticationSelection, AuthenticationAcceptedResult, AuthenticationKind,
+    AuthenticationOperation, AuthenticationRequestResult, AuthenticationScope,
+    AuthenticationSummary, CheckDeviceAdmission, DeleteAuthentication, DeleteAuthenticationOutcome,
+    DeviceAuthenticationState, DeviceAuthenticationStatus, DeviceAuthenticationStep,
+    DeviceAuthenticationTokens, DeviceAuthorizationDraft, DeviceCheck, DeviceStepFailure,
+    DeviceStepSettlement, ExchangeDeviceAdmission, ExpectedAgentAuthentication,
+    ReauthenticateTarget, RegisterApiKey, RenameAuthentication, ReplaceApiKey,
+    SelectAgentAuthentication, StartDeviceAdmission, StartDeviceAuthentication,
 };
 pub use models::{CredentialSnapshot, UserSummary, VerifiedCredential};
 pub use native_resources::{ManagedResource, ResourceEvidence, ResourceReport};

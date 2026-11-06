@@ -2,6 +2,8 @@ import process from "node:process";
 
 import { credentials, Metadata, status } from "@grpc/grpc-js";
 import { AgentsClient } from "../dist/generated/computers.js";
+import { AuthenticationsClient } from "../dist/generated/authentication.js";
+import { verifyAuthentication } from "./authentication.mjs";
 
 import {
   AuthenticationClient,
@@ -126,6 +128,7 @@ async function main() {
   const accountGrants = client(AccountGrantsClient, adminEndpoint);
   const displayDefaults = client(DisplayDefaultsClient, adminEndpoint);
   const agents = client(AgentsClient, generalEndpoint);
+  const authentications = client(AuthenticationsClient, generalEndpoint);
 
   for (const auth of [authGeneral, authAdmin]) {
     const methods = await call(auth, "methods", {});
@@ -147,6 +150,14 @@ async function main() {
     typeof administrator.token === "string" && administrator.token.length > 0,
   );
   check(administrator.user?.isAdmin === true);
+  await verifyAuthentication({
+    client: authentications,
+    token: administrator.token,
+    call,
+    check,
+    rejected,
+    status,
+  });
   const initialDefaults = await call(
     personalPreferences,
     "displayDefaults",

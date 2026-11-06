@@ -1,5 +1,6 @@
 //! Per-call authenticated gRPC boundary over application services.
 mod adapters;
+mod authentication;
 mod component_auth;
 mod computers;
 mod control_calls;
@@ -16,6 +17,7 @@ mod reports;
 mod status;
 
 pub use adapters::AccountServices;
+pub use authentication::AuthenticationServices;
 pub use component_auth::ComponentAuthenticationServices;
 pub use computers::ComputerServices;
 pub use control_streams::ComponentConnectionServices;

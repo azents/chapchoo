@@ -43,6 +43,10 @@ fn selectable_group_unions_deduplicate_shared_services_and_exclude_peers() -> Re
                 session_policy: SessionPolicy::default(),
             },
         )?));
+        let authentication_service = Arc::new(chapchoo_service::AuthenticationService::new(
+            store.clone(), Arc::new(support::authentication::Provider::default()), 1,
+        )?);
+        let authentication = chapchoo_rpc::AuthenticationServices::new(authentication_service.clone());
         let app = Arc::new(ComputersService::new(store));
         let computers = chapchoo_rpc::ComputerServices::new(app.clone());
         let connections = ComponentConnectionServices::new(
@@ -71,6 +75,7 @@ fn selectable_group_unions_deduplicate_shared_services_and_exclude_peers() -> Re
                     .add_routes(groups.routes(
                         Some(&account),
                         Some(&computers),
+                        Some(&authentication),
                         Some((&auth, &connections)),
                     )?)
                     .serve_with_incoming_shutdown(incoming, async {
@@ -116,6 +121,10 @@ fn selectable_group_unions_deduplicate_shared_services_and_exclude_peers() -> Re
                 .await
                 .err()
                 .ok_or("Anonymous component request accepted")?;
+            let catalogue = chapchoo_protocol::authentication::authentications_client::AuthenticationsClient::new(channel.clone())
+                .list(chapchoo_protocol::authentication::ListRequest::default())
+                .await.err().ok_or("Anonymous catalogue request accepted")?;
+            assert_eq!(catalogue.code(), if groups.contains(ServiceGroup::Client) { Code::Unauthenticated } else { Code::Unimplemented });
             assert_eq!(
                 provider.code() == Code::Unimplemented,
                 !groups.contains(ServiceGroup::Control)
@@ -131,17 +140,18 @@ fn selectable_group_unions_deduplicate_shared_services_and_exclude_peers() -> Re
             );
             drop(channel);
         }
-        assert!(ServiceGroups::default().routes(None, None, None).is_err());
+        assert!(ServiceGroups::default().routes(None, None, None, None).is_err());
         assert!(
             ServiceGroups::new([ServiceGroup::Control])
-                .routes(None, None, None)
+                .routes(None, None, None, None)
                 .is_err()
         );
         assert!(
             ServiceGroups::new([ServiceGroup::Client])
-                .routes(None, None, None)
+                .routes(None, None, None, None)
                 .is_err()
         );
+        authentication_service.finish().await?;
         Ok(())
     }))
 }

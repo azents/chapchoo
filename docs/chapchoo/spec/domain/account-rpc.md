@@ -26,6 +26,10 @@ installation Teams; creation grants the caller ordinary owner membership. The
 same storage transaction authenticates and checks current administrator status
 before the read or write. It grants no member management or private-Agent access.
 TeamManagement remains Client-only. Admin web uses its Admin backend exclusively.
+The separate [backend authentication catalogue](backend-authentication.md) is
+Client-only and uses the same per-call session authority; it is not the shared
+account Authentication login service. Its larger bounded key/catalogue frames
+are defined by that service rather than the account frame limit.
 TeamManagement.ResolveHandle returns only a currently accessible live
 collaborative Team. Its CheckHandle authenticates the caller and returns a
 boolean without revealing existing Team ownership or membership. AdminWorkspaces

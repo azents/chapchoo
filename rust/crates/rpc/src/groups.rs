@@ -1,6 +1,7 @@
 //! Runtime-selected public service union. PeerRelay has a separate factory.
 use crate::{
-    AccountServices, ComponentAuthenticationServices, ComponentConnectionServices, ComputerServices,
+    AccountServices, AuthenticationServices, ComponentAuthenticationServices,
+    ComponentConnectionServices, ComputerServices,
 };
 use tonic::{Status, service::Routes};
 
@@ -54,6 +55,7 @@ impl ServiceGroups {
                 "chapchoo.computers.Agents",
                 "chapchoo.computers.Computers",
                 "chapchoo.computers.ProviderCatalog",
+                "chapchoo.authentication.Authentications",
             ]);
         }
         if self.admin {
@@ -81,6 +83,7 @@ impl ServiceGroups {
         self,
         accounts: Option<&AccountServices>,
         computers: Option<&ComputerServices>,
+        authentication: Option<&AuthenticationServices>,
         components: Option<(
             &ComponentAuthenticationServices,
             &ComponentConnectionServices,
@@ -101,6 +104,10 @@ impl ServiceGroups {
                 .add_service(accounts.authentication_server())
                 .add_service(accounts.personal_preferences_server());
             if self.client {
+                let authentication = authentication.ok_or_else(|| {
+                    Status::failed_precondition("Backend authentication services are required")
+                })?;
+                routes.add_service(authentication.server());
                 routes
                     .add_service(accounts.account_lifecycle_server())
                     .add_service(accounts.teams_server())
