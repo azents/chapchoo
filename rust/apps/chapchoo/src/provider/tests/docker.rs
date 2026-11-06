@@ -374,7 +374,7 @@ async fn native_control_journey_acks_allocations_and_preserves_original_volume_w
             let store = Store::connect_sqlite(path, cipher).await?;
             let app = Arc::new(ComputersService::new(store.clone()));
             let accounts = AccountsService::new(
-                store,
+                store.clone(),
                 PasswordWork::new(1, PasswordCost::new(10)?)?,
                 None,
                 AccountsConfig {
@@ -392,6 +392,12 @@ async fn native_control_journey_acks_allocations_and_preserves_original_volume_w
                     None,
                 )
                 .await?;
+            let authentication_id = test_support::authentication(
+                &store,
+                &user.token.digest(),
+                AcceptanceTime::System.now()?,
+            )
+            .await?;
             let team = accounts
                 .list_teams(&user.token.digest(), AcceptanceTime::System.now()?)
                 .await?
@@ -536,6 +542,7 @@ async fn native_control_journey_acks_allocations_and_preserves_original_volume_w
                     &chapchoo_service::CreateCloudAgent {
                         team_id: team.id.clone(),
                         request_id: "create".into(),
+                        authentication_id: authentication_id.clone(),
                         provider_id: assigned_provider.clone(),
                         name: "Native".into(),
                         profile: chapchoo_service::CreateAgentProfile {

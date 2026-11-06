@@ -55,7 +55,7 @@ fn memory_and_tcp_peer_handlers_revalidate_domain_and_exact_reconciler_authority
         let store = Store::connect_sqlite(path, cipher).await?;
         let app = Arc::new(ComputersService::new(store.clone()));
         let accounts = AccountsService::new(
-            store,
+            store.clone(),
             PasswordWork::new(1, PasswordCost::new(10)?)?,
             None,
             AccountsConfig {
@@ -169,6 +169,12 @@ fn memory_and_tcp_peer_handlers_revalidate_domain_and_exact_reconciler_authority
                         .remove(0)
                         .id,
                     request_id: "create".into(),
+                    authentication_id: support::authentication::register_personal(
+                        &store,
+                        &user.token.digest(),
+                        AcceptanceTime::System.now()?,
+                    )
+                    .await?,
                     provider_id: key.provider_id.clone(),
                     name: "Fixture".into(),
                     profile: chapchoo_service::CreateAgentProfile {

@@ -109,6 +109,7 @@ pub struct CreateCloudAgent {
     pub provider_id: String,
     pub name: String,
     pub profile: CreateAgentProfile,
+    pub authentication_id: String,
 }
 #[derive(Debug, Clone)]
 pub struct CreateAgentProfile {
@@ -832,6 +833,8 @@ impl Store {
         let team = EntityId::from_dto(EntityKind::Team, &draft.team_id)?;
         let target_provider = EntityId::from_dto(EntityKind::Provider, &draft.provider_id)?;
         let image = EntityId::from_dto(EntityKind::ProfileImage, &draft.profile.image_id)?;
+        let authentication =
+            EntityId::from_dto(EntityKind::Authentication, &draft.authentication_id)?;
         let fingerprint = payload_fingerprint(
             "create-cloud-agent",
             &[
@@ -841,6 +844,7 @@ impl Store {
                 draft.profile.handle.as_bytes(),
                 draft.profile.image_id.as_bytes(),
                 draft.profile.palette_key.as_bytes(),
+                draft.authentication_id.as_bytes(),
             ],
         );
         operation!(self, |connection, dialect| {
@@ -857,6 +861,24 @@ impl Store {
                     None => Ok(CreationOutcome::Removed { assigned_agent_id: receipt.assigned_agent_id.to_dto(EntityKind::Agent) }),
                 };
             }
+            // Receipt replay needs no surviving catalogue entry. New creation
+            // locks the eligible reference before Provider/Computer admission.
+            let reference_sql = match dialect {
+                Dialect::Postgres => {
+                    "SELECT id FROM external_authentications WHERE id=? AND (owner_user_id=? OR owner_team_id=?) FOR UPDATE"
+                }
+                Dialect::Sqlite => {
+                    "SELECT id FROM external_authentications WHERE id=? AND (owner_user_id=? OR owner_team_id=?)"
+                }
+            };
+            diesel::sql_query(dialect.query(reference_sql))
+                .bind::<IdentitySql, _>(authentication)
+                .bind::<IdentitySql, _>(owner)
+                .bind::<IdentitySql, _>(team)
+                .get_result::<crate::external_auth::AuthenticationLock>(connection)
+                .await
+                .optional()?
+                .ok_or(StoreError::NotFound)?;
             let provider = diesel::sql_query(dialect.query(provider_lock(dialect)))
                 .bind::<IdentitySql, _>(target_provider)
                 .get_result::<ProviderRow>(connection)
@@ -893,6 +915,8 @@ impl Store {
                 .execute(connection).await.map_err(|error|StoreError::unique_field(error,"agents_handle_key","agents.handle",StoreError::HandleConflict))?;
             diesel::sql_query(dialect.query("INSERT INTO agent_creation_receipts(owner_user_id,team_id,request_id,payload_hash,assigned_agent_id) VALUES(?,?,?,?,?)"))
                 .bind::<IdentitySql,_>(owner).bind::<IdentitySql,_>(team).bind::<Text,_>(&draft.request_id).bind::<Binary,_>(fingerprint.as_slice()).bind::<IdentitySql,_>(agent).execute(connection).await?;
+            diesel::sql_query(dialect.query("INSERT INTO agent_authentication_selections(agent_id,authentication_id,current_request_id,selected_at) VALUES(?,?,?,?)"))
+                .bind::<IdentitySql,_>(agent).bind::<IdentitySql,_>(authentication).bind::<Text,_>(&draft.request_id).bind::<BigInt,_>(now).execute(connection).await?;
             let query = format!("{} WHERE a.id=? AND a.owner_user_id=?", agent_query());
             let row = diesel::sql_query(dialect.query(&query))
                 .bind::<IdentitySql, _>(agent)

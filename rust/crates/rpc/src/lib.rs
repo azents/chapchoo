@@ -15,6 +15,9 @@ mod peer;
 mod provider_authentication;
 mod reports;
 mod status;
+#[cfg(test)]
+#[path = "../tests/support/mod.rs"]
+pub(crate) mod test_support;
 
 pub use adapters::AccountServices;
 pub use authentication::AuthenticationServices;

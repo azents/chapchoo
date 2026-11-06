@@ -1,0 +1,115 @@
+import { authenticationCopy } from "@chapchoo/web-core/authentication-messages";
+import { expect, test } from "@playwright/test";
+const copy = authenticationCopy("ko");
+
+test("catalogue keeps record identity and bounded API storage meaning distinct", async ({
+  page,
+}) => {
+  await page.goto(
+    "/iframe.html?id=authentication-connections--populated&viewMode=story",
+  );
+  await expect(
+    page.getByRole("heading", { name: "건우의 ChatGPT" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("gunwoo@example.com", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText(copy.unverified, { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: copy.manage })).toHaveCount(2);
+  await page.goto(
+    "/iframe.html?id=authentication-connections--read-only-team&viewMode=story",
+  );
+  await expect(page.getByRole("button", { name: copy.manage })).toHaveCount(0);
+  await expect(page.getByText(copy.ownerOnly)).toBeVisible();
+});
+test("in-place key entry is masked with official issuance and separate billing before submission", async ({
+  page,
+}) => {
+  await page.goto(
+    "/iframe.html?id=authentication-connections--key-entry&viewMode=story",
+  );
+  const dialog = page.getByRole("dialog", { name: copy.apiKey, exact: true });
+  await expect(dialog.getByLabel(/^API 키\s*\*?$/)).toHaveAttribute(
+    "type",
+    "password",
+  );
+  await expect(
+    dialog.getByRole("link", { name: copy.issueKey }),
+  ).toHaveAttribute("href", "https://platform.openai.com/api-keys");
+  await expect(dialog.getByText(copy.billing)).toBeVisible();
+  await expect(
+    dialog.getByRole("button", { name: copy.save, exact: true }),
+  ).toBeDisabled();
+  await dialog.getByRole("button", { name: copy.cancel, exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+});
+test("device interaction displays the actual code, official destination, validity and cancellation", async ({
+  page,
+}) => {
+  await page.goto(
+    "/iframe.html?id=authentication-connections--device-code&viewMode=story",
+  );
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText("ABCD-EFGH", { exact: true })).toBeVisible();
+  await expect(
+    dialog.getByRole("link", { name: copy.openDevice }),
+  ).toHaveAttribute("href", "https://auth.openai.com/codex/device");
+  await expect(
+    dialog.getByText(`${copy.remaining} 4:00`, { exact: true }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByRole("button", { name: copy.check, exact: true }),
+  ).toBeEnabled();
+  await expect(
+    dialog.getByRole("button", { name: copy.cancel, exact: true }),
+  ).toBeEnabled();
+});
+test("uncertain mutation keeps recovery as the only action and unavailable reads are not empty catalogues", async ({
+  page,
+}) => {
+  await page.goto(
+    "/iframe.html?id=authentication-connections--uncertain-request&viewMode=story",
+  );
+  await expect(
+    page
+      .getByRole("dialog")
+      .getByRole("button", { name: copy.recover, exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.goto(
+    "/iframe.html?id=authentication-connections--unavailable&viewMode=story",
+  );
+  await expect(page.getByText(copy.unavailable, { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: copy.emptyTitle }),
+  ).toHaveCount(0);
+});
+test("key and device dialogs reflow without hiding their actions on narrow screens", async ({
+  page,
+}) => {
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 844 });
+    for (const story of ["key-entry", "device-code", "picker"]) {
+      await page.goto(
+        `/iframe.html?id=authentication-connections--${story}&viewMode=story`,
+      );
+      await expect(
+        page.getByRole("button", {
+          name:
+            story === "key-entry"
+              ? copy.save
+              : story === "device-code"
+                ? copy.check
+                : copy.selected,
+          exact: true,
+        }),
+      ).toBeVisible();
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+    }
+  }
+});

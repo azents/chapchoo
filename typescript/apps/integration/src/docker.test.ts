@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { Buffer } from "node:buffer";
+import { AuthenticationsClient } from "@chapchoo/rpc-client/authentication";
 import { Assembly } from "@chapchoo/testenv/assembly";
 import { credentials, Metadata, status } from "@grpc/grpc-js";
 import {
@@ -108,6 +110,11 @@ void test(
       credentials.createInsecure(),
       options,
     );
+    const authentications = new AuthenticationsClient(
+      endpoint,
+      credentials.createInsecure(),
+      options,
+    );
     let evidence: NativeEvidence | null = null;
     let failure: Error | null = null;
     try {
@@ -146,11 +153,30 @@ void test(
           )
         ).items[0];
         assert.ok(image, "A real catalogue image is required");
+        const key = Buffer.from("disposable-native-integration-key");
+        let authenticationId: string | undefined;
+        try {
+          const registered = await call(
+            authentications.registerKey.bind(authentications),
+            {
+              scope: { personal: {} },
+              requestId: "native-key",
+              name: "Native fixture only",
+              key,
+            },
+            session.token,
+          );
+          authenticationId = registered.record?.authenticationId;
+        } finally {
+          key.fill(0);
+        }
+        assert.ok(authenticationId, "Explicit authentication is required");
         const created = await call(
           agents.create.bind(agents),
           {
             requestId: "create",
             providerId,
+            authenticationId,
             name: "Native integration",
             teamId: team.id,
             handle: "native-agent",
@@ -305,6 +331,7 @@ void test(
       agents.close();
       computers.close();
       catalog.close();
+      authentications.close();
       try {
         await assembly.close();
       } catch (cleanup) {

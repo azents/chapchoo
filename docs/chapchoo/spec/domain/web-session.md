@@ -76,6 +76,12 @@ app's identity and scoped caches. Current-Admin permission loss on Computer
 inventory ends only the Admin context; ordinary owner business denials retain
 General authentication.
 
+General [external-authentication](authentication-web.md) queries participate in
+the same invalid-session policy. Its imperative secret mutations keep raw keys
+out of mutation-cache variables and explicitly clear the shared identity on a
+typed invalid-session response. They do not replay the write or treat ordinary
+Team/provider denial as logout.
+
 Session-ending navigation is single-shot, clears identity-bound query/mutation
 data, cancels outstanding queries and uses that app's configured login mount.
 Authentication success clears previous account data and performs a full

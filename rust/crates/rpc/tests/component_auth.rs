@@ -277,6 +277,12 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
                         .remove(0)
                         .id,
                     request_id: "create".into(),
+                    authentication_id: support::authentication::register_personal(
+                        &store,
+                        &user.token.digest(),
+                        AcceptanceTime::System.now()?,
+                    )
+                    .await?,
                     provider_id: provider_id.clone(),
                     name: "Fixture".into(),
                     profile: chapchoo_service::CreateAgentProfile {

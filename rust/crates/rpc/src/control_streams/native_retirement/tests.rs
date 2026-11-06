@@ -19,8 +19,7 @@ use std::{
 };
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
-#[path = "../../../tests/support/mod.rs"]
-mod support;
+use crate::test_support as support;
 
 #[derive(Debug)]
 struct FailedCompletion {
@@ -49,6 +48,7 @@ struct Fixture {
     actor: SecretDigest,
     agent_id: String,
     token: BearerSecret,
+    authentication: String,
     provider_id: String,
 }
 
@@ -98,6 +98,7 @@ async fn docker_safe_preparation_failure_remains_explicitly_retryable_after_conv
                     &chapchoo_service::CreateCloudAgent {
                         team_id: existing.team_id,
                         request_id: "blocked-create".into(),
+                        authentication_id: f.authentication.clone(),
                         provider_id: f.provider_id.clone(),
                         name: "Blocked".into(),
                         profile: chapchoo_service::CreateAgentProfile {
@@ -257,7 +258,7 @@ async fn fixture_with_action(
     services.inner.activate(entry.clone()).await?;
     let setup = BearerSecret::generate()?;
     let accounts = AccountsService::new(
-        store,
+        store.clone(),
         PasswordWork::new(1, PasswordCost::new(10)?)?,
         None,
         AccountsConfig {
@@ -275,6 +276,12 @@ async fn fixture_with_action(
             None,
         )
         .await?;
+    let authentication = support::authentication::register_personal(
+        &store,
+        &user.token.digest(),
+        AcceptanceTime::System.now()?,
+    )
+    .await?;
     let team = accounts
         .list_teams(&user.token.digest(), AcceptanceTime::System.now()?)
         .await?
@@ -285,6 +292,7 @@ async fn fixture_with_action(
             &chapchoo_service::CreateCloudAgent {
                 team_id: team.id.clone(),
                 request_id: "create".into(),
+                authentication_id: authentication.clone(),
                 provider_id: key.provider_id.clone(),
                 name: "Native".into(),
                 profile: chapchoo_service::CreateAgentProfile {
@@ -377,6 +385,7 @@ async fn fixture_with_action(
         actor: user.token.digest(),
         agent_id: agent.id,
         token: key.key.token,
+        authentication,
         provider_id: key.provider_id,
     })
 }

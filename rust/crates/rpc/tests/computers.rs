@@ -113,7 +113,7 @@ fn domain_rpc_keeps_private_owner_authority_and_independent_admin_residual_inven
             authentication_service.close();
             authentication_service.finish().await
         });
-        let app = Arc::new(ComputersService::new(store));
+        let app = Arc::new(ComputersService::new(store.clone()));
         assert!(
             app.register_control("https://control.example.invalid:50053")
                 .await
@@ -180,6 +180,12 @@ fn domain_rpc_keeps_private_owner_authority_and_independent_admin_residual_inven
         );
         let creation = wire::CreateAgentRequest {
             team_id: team.id.clone(),
+            authentication_id: support::authentication::register_personal(
+                &store,
+                &user.digest(),
+                AcceptanceTime::System.now()?,
+            )
+            .await?,
             request_id: "create".into(),
             provider_id: key.provider_id.clone(),
             name: "Private Agent name".into(),
@@ -204,7 +210,14 @@ fn domain_rpc_keeps_private_owner_authority_and_independent_admin_residual_inven
                 .into_inner(),
         )?;
         assert_eq!(created.id, replay.id);
-        assert!(created.authentication.is_none());
+        assert_eq!(
+            created
+                .authentication
+                .as_ref()
+                .ok_or("Missing creation selection")?
+                .authentication_id,
+            creation.authentication_id
+        );
         use chapchoo_protocol::authentication as auth_wire;
         let mut authentications =
             auth_wire::authentications_client::AuthenticationsClient::new(channel.clone());
@@ -230,7 +243,10 @@ fn domain_rpc_keeps_private_owner_authority_and_independent_admin_residual_inven
             request_id: "select-auth".into(),
             agent_id: created.id.clone(),
             authentication_id: registered.authentication_id.clone(),
-            expected: None,
+            expected: Some(auth_wire::ExpectedSelection {
+                authentication_id: creation.authentication_id.clone(),
+                request_id: creation.request_id.clone(),
+            }),
         };
         assert_eq!(
             authentications

@@ -1,5 +1,10 @@
 import type { CreationCopy } from "./creationCopy";
+import type {
+  CatalogueSnapshot,
+  ConnectionPanelProps,
+} from "@/shared/authentications/types";
 import type { ColorModeMenuProps } from "@chapchoo/ui/ColorModeMenu";
+import type { AuthenticationCopy } from "@chapchoo/web-core/authentication-messages";
 import type {
   AgentPaletteKey,
   AgentProfileImage,
@@ -7,6 +12,7 @@ import type {
   ProviderChoice,
 } from "@chapchoo/web-core/computer";
 import type { ComputerCopy } from "@chapchoo/web-core/computer-messages";
+import type { AuthenticationView } from "@chapchoo/web-core/external-authentication";
 import type { HandleDraft } from "@chapchoo/web-core/handle";
 
 export interface InitialAgentCreation {
@@ -14,6 +20,7 @@ export interface InitialAgentCreation {
   teamHandle: string;
   identity: string;
   providers: Page<ProviderChoice>;
+  authentications: CatalogueSnapshot[];
   images: Page<AgentProfileImage>;
   initialImage: AgentProfileImage;
   initialPalette: AgentPaletteKey;
@@ -33,6 +40,15 @@ export interface AgentCreationProps extends AgentCreationInput {
   creationLocked: boolean;
   name: string;
   providerId: string;
+  step: "environment" | "authentication" | "profile";
+  authentication: AuthenticationView | null;
+  authenticationCopy: AuthenticationCopy;
+  authenticationPanel: ConnectionPanelProps;
+  authenticationPickerOpen: boolean;
+  onAuthenticationPicker: () => void;
+  onCloseAuthenticationPicker: () => void;
+  onNext: () => void;
+  onBack: () => void;
   handle: {
     draft: HandleDraft;
     status:

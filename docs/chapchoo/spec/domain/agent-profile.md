@@ -51,7 +51,7 @@ are assigned as part of the same explicit preserving transaction. See the
 
 ## Final creation and client candidates
 
-Agents.Create requires the final Team, Provider, display name, handle, image ID
+Agents.Create requires the final Team, Provider, selected authentication ID, display name, handle, image ID
 and palette along with its purpose-scoped Request ID. All those values enter the
 creation fingerprint. Store validates catalogue/type and palette/handle grammar;
 it neither picks defaults nor accepts a legacy missing-profile payload. Exact
@@ -62,6 +62,8 @@ General creation's authenticated server snapshot reads the catalogue and draws
 initial image and palette independently once. Hydration receives that exact draft;
 changing Team discards another Team's draft. The browser previews the selected
 image, pages the bounded catalogue and permits exact manual handle editing.
+The [authentication creation flow](authentication-web.md#creation-and-existing-agent-selection)
+precedes the profile step and retains its selected reference across Back/Next.
 
 Client candidate generation transliterates the display name with pinned AnyAscii,
 normalizes its proposal and adds a cryptographic base36 suffix. At most eight
@@ -72,8 +74,10 @@ A final handle conflict starts a fresh bounded candidate resolution.
 One complete creation payload and Request ID are frozen across uncertain
 outcomes. While frozen, field edits and catalogue paging are refused; recovery
 remains available despite later Provider/catalogue unavailability. Only a
-positive pre-acceptance rejection for invalid input/transition, permission or
-handle conflict releases that payload. Authentication, transport, unknown and
+positive pre-acceptance rejection for invalid input/transition, permission,
+missing selected resource or handle conflict releases that payload. A credential
+deleted before final admission therefore permits explicit reselection rather
+than replaying an unusable frozen reference. Authentication, transport, unknown and
 generic conflict failures are not evidence that the prior submission was absent.
 
 Frozen-request recovery first reads owner/request-only history. A present result
@@ -119,6 +123,7 @@ queries. Background Computer observation does not overwrite in-progress edits.
 
 - [Repository identity](repository-identity.md) — IDs are opaque and separate from handles, request keys and native witnesses.
 - [Private Agent ownership](agent-ownership.md) — context selection does not share an owner's Agent with another member.
+- [Backend authentication](backend-authentication.md) — atomic new selection and preserved historical creation results.
 - [Owner RPC](computer-client-rpc.md) — current public create, availability, catalogue and read contracts.
 - [Computer web](computer-web.md) — creation presents final inputs and preserves uncertain submissions; native convergence remains backend-owned.
 

@@ -5,6 +5,7 @@ import { call } from "@chapchoo/web-core/rpc";
 import { notFound, redirect } from "next/navigation";
 import { getConfig, getLoginRedirect } from "@/config";
 import { resolveRouteTeam } from "@/shared/navigation/team";
+import { agentAuthenticationScopes } from "@/shared/server/authenticationSnapshots";
 import { getBackend } from "@/shared/server/backend";
 import { readPageScope } from "@/shared/server/identity";
 import type { InitialAgents } from "../types";
@@ -38,7 +39,16 @@ export async function loadAgents(
       if (current.teamId !== teamId) {
         notFound();
       }
-      return { ...common, teamId, type: "detail", agent: current };
+      return {
+        ...common,
+        teamId,
+        type: "detail",
+        agent: current,
+        authenticationSnapshots: agentAuthenticationScopes(
+          selected,
+          identity.id,
+        ),
+      };
     }
     return {
       ...common,

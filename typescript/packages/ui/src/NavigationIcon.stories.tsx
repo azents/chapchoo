@@ -20,6 +20,8 @@ export const Geometry: Story = {
       "back",
       "down",
       "add",
+      "connections",
+      "cloud",
     ];
     return (
       <Stack>

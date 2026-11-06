@@ -125,8 +125,12 @@ query failure. Connector connectivity is not harness readiness. Display formatti
 uses the user's region/timezone; English, Korean, Japanese and French copy share
 the same typed key set.
 
-Creation presents final handle, catalogue image and six-key palette selection
-alongside Team/name/Provider. Its authenticated SSR snapshot independently draws
+Creation follows registered cloud environment, required Codex authentication,
+then final handle, catalogue image and six-key palette selection alongside
+Team/name. The [authentication web contract](authentication-web.md) owns in-place
+registration and the compact existing-Agent saved-reference row. Computer
+controls and chat-local presentation remain independent.
+Its authenticated SSR snapshot independently draws
 the initial image and palette once and hydrates those exact values. Bounded
 automatic handle candidates preserve manual edits and cancel stale resolutions;
 the backend still owns final uniqueness. See [profile contracts](agent-profile.md).

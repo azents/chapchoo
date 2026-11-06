@@ -15,6 +15,30 @@ use std::sync::Arc;
 
 type TestError = Box<dyn std::error::Error + Send + Sync>;
 
+async fn authentication(
+    store: &Store,
+    actor: &SecretDigest,
+    request: &str,
+    now: i64,
+) -> Result<String, TestError> {
+    match store
+        .register_external_api_key(
+            actor,
+            &crate::RegisterApiKey {
+                scope: crate::AuthenticationScope::Personal,
+                request_id: request.to_owned(),
+                name: "Fixture authentication".into(),
+                key: chapchoo_crypto::ExternalSecret::new(b"synthetic-profile-api-key".to_vec())?,
+            },
+            now,
+        )
+        .await?
+    {
+        crate::AuthenticationAcceptedResult::Record { authentication_id } => Ok(authentication_id),
+        _ => Err("Missing profile fixture authentication".into()),
+    }
+}
+
 fn cipher() -> Result<Arc<CredentialCipher>, TestError> {
     Ok(Arc::new(CredentialCipher::new(RootKey::parse(
         URL_SAFE.encode([64; 32]),
@@ -171,8 +195,13 @@ async fn exercise(store: Store) -> Result<(), TestError> {
             DirectoryPolicy::default(),
         )
         .await?;
+    let authentication_id =
+        authentication(&store, &actor, "profile-fixture-authentication", now).await?;
+    let other_authentication =
+        authentication(&store, &other_actor, "profile-fixture-authentication", now).await?;
     let draft = CreateCloudAgent {
         team_id: personal.id.clone(),
+        authentication_id,
         request_id: "create-profile".into(),
         provider_id: provider.provider_id.clone(),
         name: "First profile".into(),
@@ -195,6 +224,32 @@ async fn exercise(store: Store) -> Result<(), TestError> {
     let recovered = present(recovered?)?;
     assert_eq!(first.id, recovered.id);
     assert_eq!(first.computer.id, recovered.computer.id);
+    let saved = first
+        .authentication
+        .as_ref()
+        .ok_or("Missing atomic creation selection")?;
+    assert_eq!(saved.authentication_id, draft.authentication_id);
+    assert_eq!(saved.request_id, draft.request_id);
+    let mut missing_authentication = draft_copy(&draft);
+    missing_authentication.request_id = "missing-authentication".into();
+    missing_authentication.profile.handle = "missing-auth".into();
+    missing_authentication.authentication_id.clear();
+    assert!(matches!(
+        store
+            .create_cloud_agent(&actor, &missing_authentication, now)
+            .await,
+        Err(StoreError::InvalidInput)
+    ));
+    let mut foreign_authentication = draft_copy(&draft);
+    foreign_authentication.request_id = "foreign-authentication".into();
+    foreign_authentication.profile.handle = "foreign-auth".into();
+    foreign_authentication.authentication_id = other_authentication.clone();
+    assert!(matches!(
+        store
+            .create_cloud_agent(&actor, &foreign_authentication, now)
+            .await,
+        Err(StoreError::NotFound)
+    ));
     EntityId::from_dto(EntityKind::Agent, &first.id)?;
     EntityId::from_dto(EntityKind::Computer, &first.computer.id)?;
     assert_eq!(first.handle, draft.profile.handle);
@@ -312,7 +367,7 @@ async fn exercise(store: Store) -> Result<(), TestError> {
             .await,
         Err(StoreError::NotFound)
     ));
-    for field in 0..6 {
+    for field in 0..7 {
         let mut changed = draft_copy(&draft);
         match field {
             0 => changed.team_id = collaborative.id.clone(),
@@ -320,6 +375,7 @@ async fn exercise(store: Store) -> Result<(), TestError> {
             2 => changed.profile.handle = "changed-handle".into(),
             3 => changed.profile.image_id = images[1].id.clone(),
             4 => changed.profile.palette_key = "rose".into(),
+            5 => changed.authentication_id = other_authentication.clone(),
             _ => changed.provider_id = EntityId::generate(now)?.to_dto(EntityKind::Provider),
         }
         assert!(matches!(
@@ -330,6 +386,7 @@ async fn exercise(store: Store) -> Result<(), TestError> {
     let mut changed = draft_copy(&draft);
     changed.request_id = "collision".into();
     changed.team_id = other_team.id.clone();
+    changed.authentication_id = other_authentication.clone();
     assert!(matches!(
         store.create_cloud_agent(&other_actor, &changed, now).await,
         Err(StoreError::HandleConflict)
@@ -424,21 +481,42 @@ async fn exercise(store: Store) -> Result<(), TestError> {
             .agent_handle_available(&actor, &personal.id, &first.handle, now)
             .await?
     );
+    assert!(matches!(
+        store
+            .delete_external_authentication(
+                &actor,
+                &crate::DeleteAuthentication {
+                    scope: crate::AuthenticationScope::Personal,
+                    request_id: "delete-original-authentication".into(),
+                    authentication_id: draft.authentication_id.clone(),
+                    expected_request_id: "profile-fixture-authentication".into(),
+                },
+                now
+            )
+            .await?,
+        crate::DeleteAuthenticationOutcome::Accepted(_)
+    ));
+    // Historical accepted payload recovery does not need a live credential.
     match store.create_cloud_agent(&actor, &draft, now).await? {
         CreationOutcome::Removed { assigned_agent_id } => assert_eq!(assigned_agent_id, first.id),
         CreationOutcome::Present(_) => return Err("Removed receipt allocated an Agent".into()),
     }
     changed = draft_copy(&draft);
     changed.request_id = "reuse-handle".into();
+    let replacement_authentication =
+        authentication(&store, &actor, "replacement-authentication", now).await?;
+    changed.authentication_id = replacement_authentication.clone();
     let replacement = present(store.create_cloud_agent(&actor, &changed, now).await?)?;
     assert_ne!(replacement.id, first.id);
     assert_eq!(replacement.handle, first.handle);
     let mut left = draft_copy(&draft);
+    left.authentication_id = replacement_authentication;
     left.request_id = "race-left".into();
     left.profile.handle = "racing-handle".into();
     let mut right = draft_copy(&left);
     right.request_id = "race-right".into();
     right.team_id = other_team.id.clone();
+    right.authentication_id = other_authentication;
     let (left, right) = tokio::join!(
         store.create_cloud_agent(&actor, &left, now),
         store.create_cloud_agent(&other_actor, &right, now),
@@ -447,6 +525,47 @@ async fn exercise(store: Store) -> Result<(), TestError> {
         (Ok(CreationOutcome::Present(_)), Err(StoreError::HandleConflict))
         | (Err(StoreError::HandleConflict), Ok(CreationOutcome::Present(_))) => {}
         _ => return Err("Global handle race did not produce exactly one winner".into()),
+    }
+    let race_authentication = authentication(&store, &actor, "race-authentication", now).await?;
+    let mut racing_creation = draft_copy(&draft);
+    racing_creation.request_id = "create-auth-race".into();
+    racing_creation.profile.handle = "auth-race-agent".into();
+    racing_creation.authentication_id = race_authentication.clone();
+    let deletion = crate::DeleteAuthentication {
+        scope: crate::AuthenticationScope::Personal,
+        request_id: "delete-auth-race".into(),
+        authentication_id: race_authentication.clone(),
+        expected_request_id: "race-authentication".into(),
+    };
+    let (created, deleted) = tokio::join!(
+        store.create_cloud_agent(&actor, &racing_creation, now),
+        store.delete_external_authentication(&actor, &deletion, now)
+    );
+    match (created, deleted) {
+        (Ok(CreationOutcome::Present(agent)), Ok(crate::DeleteAuthenticationOutcome::InUse)) => {
+            assert_eq!(
+                agent
+                    .authentication
+                    .ok_or("Missing raced selection")?
+                    .authentication_id,
+                race_authentication
+            );
+        }
+        (
+            Err(StoreError::NotFound),
+            Ok(crate::DeleteAuthenticationOutcome::Accepted(
+                crate::AuthenticationAcceptedResult::Deleted { authentication_id },
+            )),
+        ) => {
+            assert_eq!(authentication_id, race_authentication);
+            assert!(
+                store
+                    .agent_creation_result(&actor, &racing_creation.request_id, now)
+                    .await?
+                    .is_none()
+            );
+        }
+        _ => return Err("Creation/deletion race violated atomic reference admission".into()),
     }
     store.drain_control(&control.id).await?;
     store
@@ -458,6 +577,7 @@ async fn exercise(store: Store) -> Result<(), TestError> {
 fn draft_copy(draft: &CreateCloudAgent) -> CreateCloudAgent {
     CreateCloudAgent {
         team_id: draft.team_id.clone(),
+        authentication_id: draft.authentication_id.clone(),
         request_id: draft.request_id.clone(),
         provider_id: draft.provider_id.clone(),
         name: draft.name.clone(),

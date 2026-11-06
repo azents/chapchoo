@@ -335,6 +335,7 @@ impl wire::agents_server::Agents for AgentsAdapter {
                     request_id: value.request_id,
                     provider_id: value.provider_id,
                     name: value.name,
+                    authentication_id: value.authentication_id,
                     profile: chapchoo_service::CreateAgentProfile {
                         handle: value.handle,
                         image_id: value.profile_image_id,

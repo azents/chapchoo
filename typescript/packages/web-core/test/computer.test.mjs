@@ -51,6 +51,24 @@ test("saved profile decoding preserves opaque references and rejects unsafe pres
   assert.equal(saved.handle, "companion");
   assert.deepEqual(saved.profileImage, { id: "image", assetKey: "03-corgi" });
   assert.equal(saved.paletteKey, "sage");
+  assert.equal(saved.authentication, null);
+  const selected = agent({
+    ...wire,
+    authentication: {
+      authenticationId: "credential",
+      name: "Development",
+      kind: 2,
+      requestId: "selected",
+      selectedAt: { seconds: 1n, nanos: 0 },
+    },
+  });
+  assert.deepEqual(selected.authentication, {
+    authenticationId: "credential",
+    name: "Development",
+    kind: "openaiApiKey",
+    requestId: "selected",
+    selectedAt: 1000,
+  });
   for (const bad of [
     { handle: "Invalid" },
     { handle: "a\n" },

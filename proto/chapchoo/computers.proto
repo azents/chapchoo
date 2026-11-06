@@ -47,6 +47,7 @@ message PresentCreation { string assigned_agent_id = 1; string team_id = 2; }
 message CreateAgentRequest {
   string request_id = 1; string provider_id = 2; string name = 3; string team_id = 4;
   string handle = 5; string profile_image_id = 6; string palette_key = 7;
+  string authentication_id = 8;
 }
 message CreateAgentResult {
   oneof outcome { Agent agent = 1; RemovedCreation removed = 2; }

@@ -43,15 +43,48 @@
   border-top: 0.0625rem solid var(--chapchoo-color-border);
 }
 .creationContent {
-  max-width: 49rem;
+  max-width: 60rem;
   padding-top: var(--mantine-spacing-lg);
 }
+.compactCreation {
+  padding-top: 0;
+}
+.authenticationRow {
+  padding-block: var(--mantine-spacing-lg);
+  border-block: 0.0625rem solid var(--chapchoo-color-border);
+}
+.environmentCards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 26rem));
+  gap: var(--mantine-spacing-lg);
+}
+.environmentCard {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-lg);
+  min-height: 6rem;
+  padding: var(--mantine-spacing-xl);
+  border-radius: var(--mantine-radius-lg);
+  border: 0.0625rem solid var(--chapchoo-color-border);
+  text-align: start;
+}
+.environmentCard[data-selected] {
+  background: var(--chapchoo-color-selected);
+}
+@media (max-width: 48em) {
+  .environmentCards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 .creationHeader {
-  margin-bottom: var(--mantine-spacing-2xl);
+  margin-bottom: 0;
+}
+.authenticationHeader {
+  margin-bottom: var(--mantine-spacing-xl);
 }
 .creationTitle {
-  margin-top: var(--mantine-spacing-2xl);
-  font-size: 2.125rem;
+  margin-top: var(--mantine-spacing-xl);
+  font-size: 1.5rem;
   font-weight: 600;
   line-height: 1.3;
 }
@@ -59,6 +92,9 @@
   border-top: 0.0625rem solid var(--chapchoo-color-border);
   padding-top: var(--mantine-spacing-xl);
   margin-top: var(--mantine-spacing-lg);
+}
+.setupFooter {
+  margin-top: var(--mantine-spacing-2xl);
 }
 .primary.primary {
   background: var(--profile-ink);
@@ -352,7 +388,7 @@
     padding-top: 0;
   }
   .creationTitle {
-    font-size: 1.75rem;
+    font-size: 1.5rem;
   }
   .editorFooter {
     flex-wrap: nowrap;

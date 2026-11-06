@@ -176,6 +176,7 @@ export interface CreateAgentRequest {
   handle: string;
   profileImageId: string;
   paletteKey: string;
+  authenticationId: string;
 }
 
 export interface CreateAgentResult {
@@ -1148,7 +1149,16 @@ export const PresentCreation: MessageFns<PresentCreation> = {
 };
 
 function createBaseCreateAgentRequest(): CreateAgentRequest {
-  return { requestId: "", providerId: "", name: "", teamId: "", handle: "", profileImageId: "", paletteKey: "" };
+  return {
+    requestId: "",
+    providerId: "",
+    name: "",
+    teamId: "",
+    handle: "",
+    profileImageId: "",
+    paletteKey: "",
+    authenticationId: "",
+  };
 }
 
 export const CreateAgentRequest: MessageFns<CreateAgentRequest> = {
@@ -1173,6 +1183,9 @@ export const CreateAgentRequest: MessageFns<CreateAgentRequest> = {
     }
     if (message.paletteKey !== "") {
       writer.uint32(58).string(message.paletteKey);
+    }
+    if (message.authenticationId !== "") {
+      writer.uint32(66).string(message.authenticationId);
     }
     return writer;
   },
@@ -1246,6 +1259,14 @@ export const CreateAgentRequest: MessageFns<CreateAgentRequest> = {
             message.paletteKey = reader.string();
             continue;
           }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.authenticationId = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1270,6 +1291,7 @@ export const CreateAgentRequest: MessageFns<CreateAgentRequest> = {
     message.handle = object.handle ?? "";
     message.profileImageId = object.profileImageId ?? "";
     message.paletteKey = object.paletteKey ?? "";
+    message.authenticationId = object.authenticationId ?? "";
     return message;
   },
 };

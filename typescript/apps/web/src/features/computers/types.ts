@@ -1,5 +1,6 @@
 import type { CreationCopy } from "./creationCopy";
 import type { ComputerDetailCopy } from "./detailCopy";
+import type { CatalogueSnapshot } from "@/shared/authentications/types";
 import type { ColorModeMenuProps } from "@chapchoo/ui/ColorModeMenu";
 import type {
   AgentPaletteKey,
@@ -7,6 +8,7 @@ import type {
 } from "@chapchoo/web-core/agent-profile";
 import type { AgentView, OwnerAction, Page } from "@chapchoo/web-core/computer";
 import type { ComputerCopy } from "@chapchoo/web-core/computer-messages";
+import type { ReactNode } from "react";
 export interface ProfileDraft {
   name: string;
   image: Pick<AgentProfileImage, "id" | "assetKey">;
@@ -18,7 +20,11 @@ export type ProfileEditor =
   | { type: "saving"; draft: ProfileDraft };
 export type InitialAgents = (
   | { type: "list"; page: Page<AgentView>; after: string }
-  | { type: "detail"; agent: AgentView }
+  | {
+      type: "detail";
+      agent: AgentView;
+      authenticationSnapshots: CatalogueSnapshot[];
+    }
 ) & {
   renderedAt: number;
   identity: string;
@@ -30,6 +36,7 @@ export interface AgentsInput {
   basePath: string;
 }
 export interface AgentsProps extends AgentsInput {
+  authenticationControl: ReactNode;
   access: "authorized" | "signedOut" | "unavailable";
   copy: ComputerCopy;
   profileCopy: CreationCopy;

@@ -1,0 +1,45 @@
+.card {
+  padding: var(--mantine-spacing-xl);
+  background: var(--chapchoo-color-surface);
+}
+.card[data-selected] {
+  border-color: var(--chapchoo-color-focus);
+}
+.savedRow {
+  padding-block: var(--mantine-spacing-lg);
+  border-block: 0.0625rem solid var(--chapchoo-color-border);
+}
+.sheet.sheet {
+  height: auto;
+  flex: 0 0 auto;
+  max-height: 90dvh;
+  overflow-y: auto;
+  border-radius: var(--mantine-radius-lg) var(--mantine-radius-lg) 0 0;
+}
+.fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.name {
+  overflow-wrap: anywhere;
+}
+.empty {
+  padding-block: 4rem;
+}
+.option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--mantine-spacing-lg);
+  padding: var(--mantine-spacing-lg);
+  border: 0.0625rem solid var(--chapchoo-color-border);
+  border-radius: var(--mantine-radius-md);
+}
+.code {
+  text-align: center;
+  font-size: var(--mantine-font-size-xl);
+  letter-spacing: 0.15em;
+  padding: var(--mantine-spacing-lg);
+}

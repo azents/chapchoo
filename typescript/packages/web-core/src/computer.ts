@@ -5,6 +5,8 @@ import { timestampMilliseconds, validTimestamp } from "./validation.js";
 import { validAgentPalette } from "./agent-profile.js";
 import type { AgentPaletteKey, AgentProfileImage } from "./agent-profile.js";
 import { validHandle } from "./handle.js";
+import { authenticationSelection } from "./external-authentication.js";
+import type { AuthenticationSelection } from "./external-authentication.js";
 export type { AgentPaletteKey, AgentProfileImage } from "./agent-profile.js";
 
 export type Power = "running" | "stopped" | "unknown";
@@ -171,6 +173,7 @@ export interface AgentView {
   handle: string;
   profileImage: Pick<AgentProfileImage, "id" | "assetKey">;
   paletteKey: AgentPaletteKey;
+  authentication: AuthenticationSelection | null;
   computer: ComputerView;
 }
 export interface ProviderChoice {
@@ -299,6 +302,9 @@ export function agent(value: Wire.Agent): AgentView {
       assetKey: value.profileImageAssetKey,
     },
     paletteKey: value.paletteKey,
+    authentication: value.authentication
+      ? authenticationSelection(value.authentication)
+      : null,
     computer: {
       ...status(computer),
       requestId: text(computer.requestId),

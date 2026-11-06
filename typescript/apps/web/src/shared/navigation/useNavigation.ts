@@ -1,5 +1,6 @@
 "use client";
 import { useAuth } from "@chapchoo/web-core/auth-context";
+import { authenticationCopy } from "@chapchoo/web-core/authentication-messages";
 import { teamKind } from "@chapchoo/web-core/browser";
 import { computerCopy } from "@chapchoo/web-core/computer-messages";
 import { useDisplay } from "@chapchoo/web-core/display-context";
@@ -44,6 +45,7 @@ export function useNavigation({
   const auth = useAuth();
   const display = useDisplay();
   const copy = shellCopy(display.value.language);
+  const authenticationText = authenticationCopy(display.value.language);
   const pathname = usePathname();
   const mobile = useMediaQuery("(max-width: 48em)");
   const visibility = useDocumentVisibility();
@@ -158,6 +160,17 @@ export function useNavigation({
                 ),
               },
             ] satisfies NavigationItem[])
+          : []),
+        ...(selected
+          ? [
+              {
+                key: "connections",
+                label: authenticationText.title,
+                icon: "connections" as const,
+                href: `${teamPath(basePath, selected)}/connections`,
+                active: /^\/teams\/[^/]+\/connections$/.test(route),
+              },
+            ]
           : []),
         ...(selected?.kind === teamKind.collaborative
           ? [

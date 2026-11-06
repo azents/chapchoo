@@ -4,6 +4,7 @@ const config: StorybookConfig = {
   staticDirs: [
     { from: "../public/fonts", to: "/fonts" },
     { from: "../../../packages/ui/assets/illustrations", to: "/design-assets" },
+    { from: "../../../packages/ui/assets/icons", to: "/design-assets/icons" },
   ],
   stories: [
     "../src/**/*.stories.@(ts|tsx|mdx)",

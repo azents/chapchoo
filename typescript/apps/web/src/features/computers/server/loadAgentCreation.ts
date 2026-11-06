@@ -6,6 +6,7 @@ import { call } from "@chapchoo/web-core/rpc";
 import { notFound, redirect } from "next/navigation";
 import { getConfig, getLoginRedirect } from "@/config";
 import { resolveRouteTeam } from "@/shared/navigation/team";
+import { readAgentAuthenticationSnapshots } from "@/shared/server/authenticationSnapshots";
 import { getBackend } from "@/shared/server/backend";
 import { readPageScope } from "@/shared/server/identity";
 import { initialProfile } from "../creationDefaults";
@@ -45,6 +46,10 @@ export async function loadAgentCreation(
       teamHandle,
       identity: identity.email,
       providers,
+      authentications: await readAgentAuthenticationSnapshots(
+        selected,
+        identity.id,
+      ),
       images,
       ...selection,
       renderedAt: Date.now(),

@@ -1,6 +1,7 @@
 ---
 title: "Codex Authentication Setup Requirements"
 created: 2026-11-06
+implemented: 2026-11-06
 document_role: primary
 document_type: requirements
 snapshot_id: harness-261106

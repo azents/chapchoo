@@ -5,6 +5,11 @@ import { computerCopy } from "@chapchoo/web-core/computer-messages";
 import { shellCopy } from "@chapchoo/web-core/shell-messages";
 import { useMediaQuery } from "@mantine/hooks";
 import { useState } from "react";
+import { AgentAuthentication } from "@/shared/authentications/AgentAuthentication";
+import {
+  fixtureAgentAuthentication,
+  fixtureCatalogue,
+} from "@/shared/authentications/connectionFixture";
 import { useComputerActions } from "../containers/useComputerActions";
 import { creationCopy } from "../creationCopy";
 import { computerDetailCopy } from "../detailCopy";
@@ -20,6 +25,7 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import type { ReactElement } from "react";
 
 const agent: AgentView = {
+  authentication: null,
   id: "agent",
   teamId: "team",
   name: "Research companion",
@@ -59,6 +65,7 @@ const initial: InitialAgents = {
 };
 const detail: InitialAgents = {
   type: "detail",
+  authenticationSnapshots: [fixtureCatalogue],
   teamId: agent.teamId,
   teamHandle: "my",
   agent,
@@ -94,6 +101,7 @@ const meta = {
     onSaveProfile: () => {},
     onCancelProfile: () => {},
     stale: false,
+    authenticationControl: null,
     pending: false,
     error: null,
     confirmation: null,
@@ -180,6 +188,9 @@ export const ApprovedList: Story = {
 export const ApprovedDetail: Story = {
   args: {
     initial: detail,
+    authenticationControl: (
+      <AgentAuthentication {...fixtureAgentAuthentication()} />
+    ),
     data: {
       ...detail,
       type: "detail",

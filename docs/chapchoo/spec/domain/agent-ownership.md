@@ -68,10 +68,11 @@ ownership from the Provider row rather than caller assertions. See
 
 Cloud creation locks the current owner and selected Team, checks membership and
 its owner-scoped creation receipt,
-then validates an authorized currently connected creation-capable Provider and
-writes the receipt, Computer/running intent and Agent atomically. Exact replay
+then admits an eligible explicit [authentication reference](backend-authentication.md#saved-agent-selection-creation-and-cleanup)
+before an authorized currently connected creation-capable Provider and
+writes the receipt, Computer/running intent, Agent and selection atomically. Exact replay
 returns its assigned Agent/current state even if Provider connectivity has since
-changed. Reuse with a changed Team, Provider, name, handle, image or palette
+changed. Reuse with a changed Team, Provider, authentication, name, handle, image or palette
 payload rejects. Replay after
 Agent removal returns removed, never a fresh allocation. External provisioning is
 outside this transaction.

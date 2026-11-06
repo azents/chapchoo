@@ -4,6 +4,8 @@ import { readFile } from "node:fs/promises";
 import process from "node:process";
 import console from "node:console";
 import { randomBytes } from "node:crypto";
+import { Buffer } from "node:buffer";
+import { AuthenticationsClient } from "../dist/generated/authentication.js";
 import { setTimeout as delay } from "node:timers/promises";
 import { credentials, Metadata, status } from "@grpc/grpc-js";
 import {
@@ -154,6 +156,7 @@ try {
   const agents = client(AgentsClient);
   const computers = client(ComputersClient);
   const catalog = client(ProviderCatalogClient);
+  const authentications = client(AuthenticationsClient);
   const email = `acceptance-${randomBytes(8).toString("hex")}@example.invalid`;
   const session = await call(installation, "initialize", {
     installationProof: (await readFile(proofFile, "utf8")).trim(),
@@ -179,12 +182,32 @@ try {
     await call(agents, "listProfileImages", { limit: 20 }, session.token)
   ).items[0];
   check(image, "Profile catalogue item absent");
+  const key = Buffer.from("disposable-acceptance-key");
+  let authenticationId;
+  try {
+    const registered = await call(
+      authentications,
+      "registerKey",
+      {
+        scope: { personal: {} },
+        requestId: "acceptance-key",
+        name: "Acceptance only",
+        key,
+      },
+      session.token,
+    );
+    authenticationId = registered.record?.authenticationId;
+    check(authenticationId, "Explicit authentication is required");
+  } finally {
+    key.fill(0);
+  }
   const created = await call(
     agents,
     "create",
     {
       requestId: "create",
       providerId,
+      authenticationId,
       name: "Authentication acceptance",
       teamId: team.id,
       handle: "auth-acceptance",

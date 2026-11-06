@@ -4,6 +4,14 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./authentication-messages": {
+      "types": "./dist/authentication-messages.d.ts",
+      "default": "./dist/authentication-messages.js"
+    },
+    "./external-authentication": {
+      "types": "./dist/external-authentication.d.ts",
+      "default": "./dist/external-authentication.js"
+    },
     "./handle-draft": {
       "types": "./dist/handle-draft.d.ts",
       "default": "./dist/handle-draft.js"

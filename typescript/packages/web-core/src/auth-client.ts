@@ -32,7 +32,9 @@ export function invalidatesSession(
         (path.startsWith("displayDefaults.") ||
           path.startsWith("workspaces."))) ||
       (app === "general"
-        ? path.startsWith("teams.") || path.startsWith("invitations.")
+        ? path.startsWith("teams.") ||
+          path.startsWith("invitations.") ||
+          path.startsWith("authentications.")
         : path.startsWith("signupGrants.") || path.startsWith("resetGrants.")))
   );
 }

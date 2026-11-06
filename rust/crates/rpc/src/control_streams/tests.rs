@@ -1,5 +1,6 @@
 //! Deterministic regression for durable admission followed by delayed activation.
 use super::*;
+use crate::test_support as support;
 use base64::{Engine, engine::general_purpose::URL_SAFE};
 use chapchoo_crypto::{
     BearerSecret, BootstrapProviderPermit, CredentialCipher, PasswordCost, RootKey,
@@ -171,7 +172,7 @@ fn delayed_admission_cannot_displace_a_new_provider_or_connector() -> Result<(),
         .await?;
         let setup = BearerSecret::generate()?;
         let accounts = AccountsService::new(
-            store,
+            store.clone(),
             PasswordWork::new(1, PasswordCost::new(10)?)?,
             None,
             AccountsConfig {
@@ -200,6 +201,12 @@ fn delayed_admission_cannot_displace_a_new_provider_or_connector() -> Result<(),
                         .remove(0)
                         .id,
                     request_id: "create".into(),
+                    authentication_id: support::authentication::register_personal(
+                        &store,
+                        &user.digest(),
+                        AcceptanceTime::System.now()?,
+                    )
+                    .await?,
                     provider_id: key.provider_id.clone(),
                     name: "Private fixture".into(),
                     profile: chapchoo_service::CreateAgentProfile {

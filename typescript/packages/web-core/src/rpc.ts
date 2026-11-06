@@ -10,6 +10,7 @@ import {
   AdminWorkspacesClient,
 } from "@chapchoo/rpc-client/accounts";
 import { Metadata, credentials } from "@grpc/grpc-js";
+import { AuthenticationsClient } from "@chapchoo/rpc-client/authentication";
 import {
   AgentsClient,
   ComputersClient,
@@ -30,6 +31,7 @@ export interface BackendClients {
   providerCatalog: ProviderCatalogClient;
   providerInventory: ProviderInventoryClient;
   authentication: AuthenticationClient;
+  authentications: AuthenticationsClient;
   personalPreferences: PersonalPreferencesClient;
   accountLifecycle: AccountLifecycleClient;
   teams: TeamManagementClient;
@@ -57,6 +59,11 @@ export function createBackend(config: WebConfig): BackendClients {
     options,
   );
   const agents = new AgentsClient(endpoint.host, security, options);
+  const authentications = new AuthenticationsClient(
+    endpoint.host,
+    security,
+    options,
+  );
   const computers = new ComputersClient(endpoint.host, security, options);
   const providerCatalog = new ProviderCatalogClient(
     endpoint.host,
@@ -106,6 +113,7 @@ export function createBackend(config: WebConfig): BackendClients {
     providerCatalog,
     providerInventory,
     authentication,
+    authentications,
     personalPreferences,
     accountLifecycle,
     teams,
@@ -120,6 +128,7 @@ export function createBackend(config: WebConfig): BackendClients {
       providerCatalog.close();
       providerInventory.close();
       authentication.close();
+      authentications.close();
       personalPreferences.close();
       accountLifecycle.close();
       teams.close();
