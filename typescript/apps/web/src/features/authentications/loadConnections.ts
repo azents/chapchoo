@@ -11,6 +11,7 @@ import { resolveRouteTeam } from "@/shared/navigation/team";
 import { readAuthenticationSnapshot } from "@/shared/server/authenticationSnapshots";
 import { getBackend } from "@/shared/server/backend";
 import { readPageScope } from "@/shared/server/identity";
+import { readConnectionPage } from "./connectionPageRead";
 import type { ConnectionsInput } from "./types";
 import type { AuthenticationScope } from "@chapchoo/web-core/external-authentication";
 import type { SearchValues } from "@chapchoo/web-core/page-state";
@@ -38,34 +39,40 @@ export async function loadConnections(
   ) {
     notFound();
   }
-  const snapshot = await readAuthenticationSnapshot(
-    scope,
-    canManage,
-    identity.id,
-    after ?? void 0,
-  );
-  const reader = await readPageScope();
-  const backend = getBackend(getConfig());
-  const managed = connection
-    ? await reader.read(async (token) =>
-        authentication(
-          await call(
-            backend.authentications.get.bind(backend.authentications),
-            {
-              scope: wireAuthenticationScope(scope),
-              authenticationId: connection,
-            },
-            token,
+  const page = await readConnectionPage(async (): Promise<ConnectionsInput> => {
+    const snapshot = await readAuthenticationSnapshot(
+      scope,
+      canManage,
+      identity.id,
+      after ?? void 0,
+    );
+    const reader = await readPageScope();
+    const backend = getBackend(getConfig());
+    const managed = connection
+      ? await reader.read(async (token) =>
+          authentication(
+            await call(
+              backend.authentications.get.bind(backend.authentications),
+              {
+                scope: wireAuthenticationScope(scope),
+                authenticationId: connection,
+              },
+              token,
+            ),
           ),
-        ),
-      )
-    : null;
-  return {
-    basePath: getPublicConfig().publicBasePath,
-    teamHandle,
-    identity: identity.email,
-    snapshot,
-    managed,
-    after: after ?? null,
-  };
+        )
+      : null;
+    return {
+      basePath: getPublicConfig().publicBasePath,
+      teamHandle,
+      identity: identity.email,
+      snapshot,
+      managed,
+      after: after ?? null,
+    };
+  });
+  if (page === null) {
+    notFound();
+  }
+  return page;
 }
