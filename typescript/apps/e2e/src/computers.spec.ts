@@ -93,17 +93,68 @@ test("owner manages one Computer while Admin observes independent cleanup invent
     await owner.getByRole("link", { name: "New Agent", exact: true }).click();
     await expect(owner).toHaveURL(/\/teams\/my\/new-agent$/);
     await owner
+      .getByRole("radio", { name: "Acceptance Kubernetes", exact: true })
+      .click({ timeout: 90_000 });
+    await owner.getByRole("button", { name: "Next", exact: true }).click();
+    await expect(
+      owner.getByRole("button", { name: "Next", exact: true }),
+    ).toBeDisabled();
+    await owner
+      .getByRole("button", { name: "Choose authentication", exact: true })
+      .click();
+    await owner
+      .getByRole("button", { name: "Connect account", exact: true })
+      .first()
+      .click();
+    await owner
+      .getByRole("button", { name: "OpenAI API key", exact: true })
+      .click();
+    let authenticationDialog = owner.getByRole("dialog", {
+      name: "OpenAI API key",
+      exact: true,
+    });
+    await authenticationDialog
+      .getByRole("textbox", { name: "Connection name", exact: true })
+      .fill("Acceptance key");
+    await authenticationDialog
+      .getByLabel(/^API key\s*\*?$/)
+      .fill("disposable-browser-key");
+    await authenticationDialog
+      .getByRole("button", { name: "Cancel", exact: true })
+      .click();
+    await owner
+      .getByRole("button", { name: "Connect account", exact: true })
+      .first()
+      .click();
+    await owner
+      .getByRole("button", { name: "OpenAI API key", exact: true })
+      .click();
+    authenticationDialog = owner.getByRole("dialog", {
+      name: "OpenAI API key",
+      exact: true,
+    });
+    await expect(
+      authenticationDialog.getByLabel(/^API key\s*\*?$/),
+    ).toHaveValue("");
+    await authenticationDialog
+      .getByRole("textbox", { name: "Connection name", exact: true })
+      .fill("Acceptance key");
+    await authenticationDialog
+      .getByLabel(/^API key\s*\*?$/)
+      .fill("disposable-browser-key");
+    await authenticationDialog
+      .getByRole("button", { name: "Save", exact: true })
+      .click();
+    await expect(
+      owner.getByText("Acceptance key", { exact: true }),
+    ).toBeVisible();
+    await owner.getByRole("button", { name: "Next", exact: true }).click();
+    await owner
       .getByRole("textbox", { name: "Agent name", exact: true })
       .fill("Acceptance companion")
       .catch(() => {
         throw new Error("Computer acceptance create form unavailable");
       });
-    await owner
-      .getByRole("combobox", { name: "Computer Provider", exact: true })
-      .click();
-    await owner
-      .getByRole("option", { name: "Acceptance Kubernetes", exact: true })
-      .click({ timeout: 90_000 });
     await owner
       .getByRole("group", { name: "Profile image", exact: true })
       .getByRole("button", { name: /^corgi$/i })
@@ -112,6 +163,29 @@ test("owner manages one Computer while Admin observes independent cleanup invent
       .getByRole("group", { name: "Color", exact: true })
       .getByRole("button", { name: "Rose", exact: true })
       .click();
+    await owner.getByRole("button", { name: "Previous", exact: true }).click();
+    await expect(
+      owner.getByText("Acceptance key", { exact: true }),
+    ).toBeVisible();
+    await owner.getByRole("button", { name: "Previous", exact: true }).click();
+    await expect(
+      owner.getByRole("radio", { name: "Acceptance Kubernetes", exact: true }),
+    ).toBeChecked();
+    await owner.getByRole("button", { name: "Next", exact: true }).click();
+    await owner.getByRole("button", { name: "Next", exact: true }).click();
+    await expect(
+      owner.getByRole("textbox", { name: "Agent name", exact: true }),
+    ).toHaveValue("Acceptance companion");
+    await expect(
+      owner
+        .getByRole("group", { name: "Profile image", exact: true })
+        .getByRole("button", { name: /^corgi$/i }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect(
+      owner
+        .getByRole("group", { name: "Color", exact: true })
+        .getByRole("button", { name: "Rose", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
     await owner
       .getByRole("button", { name: "Create Agent", exact: true })
       .click();
@@ -193,6 +267,49 @@ test("owner manages one Computer while Admin observes independent cleanup invent
     ).toHaveCount(1);
     await fact(owner, "Computer connection", "Connected");
     const detailUrl = owner.url();
+    await expect(
+      owner.getByText("Acceptance key", { exact: true }),
+    ).toBeVisible();
+    const authenticationMark = owner.locator(
+      'main img[src$="/design-assets/icons/codex/logo.svg"]',
+    );
+    await expect
+      .poll(() =>
+        authenticationMark.evaluate(
+          (image) =>
+            image instanceof HTMLImageElement &&
+            image.complete &&
+            image.naturalWidth > 0,
+        ),
+      )
+      .toBe(true);
+    await owner.getByRole("button", { name: "Change", exact: true }).click();
+    await expect(
+      owner.getByRole("button", { name: "Selected", exact: true }),
+    ).toBeDisabled();
+    await owner
+      .getByRole("button", { name: "Connect account", exact: true })
+      .click();
+    await owner
+      .getByRole("button", { name: "OpenAI API key", exact: true })
+      .click();
+    authenticationDialog = owner.getByRole("dialog", {
+      name: "OpenAI API key",
+      exact: true,
+    });
+    await authenticationDialog
+      .getByRole("textbox", { name: "Connection name", exact: true })
+      .fill("Changed selection");
+    await authenticationDialog
+      .getByLabel(/^API key\s*\*?$/)
+      .fill("disposable-second-browser-key");
+    await authenticationDialog
+      .getByRole("button", { name: "Save", exact: true })
+      .click();
+    await expect(
+      owner.getByText("Changed selection", { exact: true }),
+    ).toBeVisible();
+    await expect(owner).toHaveURL(detailUrl);
     await expect(owner).toHaveURL(/\/teams\/my\/agents\/[a-z0-9-]+$/);
     await owner
       .getByRole("button", { name: "Edit profile", exact: true })
@@ -234,6 +351,9 @@ test("owner manages one Computer while Admin observes independent cleanup invent
         .getByRole("main")
         .locator('img[src$="/design-assets/01-retriever-216.webp"]'),
     ).toHaveCount(1);
+    await expect(
+      document.getByText("Changed selection", { exact: true }),
+    ).toBeVisible();
     await document.close();
     await owner.goto(listUrl);
     await owner

@@ -1,3 +1,5 @@
+#[path = "support/authentication.rs"]
+mod fixture_auth;
 mod support;
 #[path = "support/tasks.rs"]
 mod tasks;
@@ -38,6 +40,7 @@ fn now() -> Result<i64, TestError> {
 #[derive(Clone)]
 struct FixtureIds {
     team: String,
+    authentication: String,
     provider: String,
     image: String,
     agents: std::collections::BTreeMap<String, chapchoo_persistence::AgentSummary>,
@@ -53,6 +56,7 @@ impl FixtureIds {
 fn creation(ids: &FixtureIds, id: &str) -> CreateCloudAgent {
     CreateCloudAgent {
         team_id: ids.team.clone(),
+        authentication_id: ids.authentication.clone(),
         request_id: format!("create-{id}"),
         provider_id: ids.provider.clone(),
         name: "Fixture".into(),
@@ -271,6 +275,7 @@ async fn exercise(
         )
         .await?;
     let mut ids = FixtureIds {
+        authentication: fixture_auth::personal(&store, &owner_digest, now()?).await?,
         team: store.teams(&owner_digest, now()?).await?.remove(0).id,
         provider: provider_id.clone(),
         image: store

@@ -20,6 +20,31 @@ use tokio_util::sync::CancellationToken;
 type TestError = Box<dyn Error + Send + Sync>;
 type Cleanup = Pin<Box<dyn Future<Output = Result<(), TestError>> + Send>>;
 
+/// Explicit synthetic prerequisite; never validates a key or invokes a model.
+pub async fn authentication(
+    store: &chapchoo_persistence::Store,
+    actor: &chapchoo_crypto::SecretDigest,
+    now: i64,
+) -> Result<String, TestError> {
+    use chapchoo_persistence::{AuthenticationAcceptedResult, AuthenticationScope, RegisterApiKey};
+    match store
+        .register_external_api_key(
+            actor,
+            &RegisterApiKey {
+                scope: AuthenticationScope::Personal,
+                request_id: "fixture-agent-authentication".into(),
+                name: "Fixture authentication".into(),
+                key: chapchoo_crypto::ExternalSecret::new(b"synthetic-fixture-api-key".to_vec())?,
+            },
+            now,
+        )
+        .await?
+    {
+        AuthenticationAcceptedResult::Record { authentication_id } => Ok(authentication_id),
+        _ => Err("Missing fixture authentication identity".into()),
+    }
+}
+
 struct Failures(Vec<TestError>);
 impl fmt::Debug for Failures {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

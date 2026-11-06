@@ -1,4 +1,10 @@
+import { authenticationCopy } from "@chapchoo/web-core/authentication-messages";
 import { computerCopy } from "@chapchoo/web-core/computer-messages";
+import {
+  fixtureCatalogue,
+  fixtureConnection,
+  fixturePanel,
+} from "@/shared/authentications/connectionFixture";
 import { creationCopy } from "../creationCopy";
 import { AgentCreation } from "./AgentCreation";
 import {
@@ -17,6 +23,7 @@ const initial: InitialAgentCreation = {
   teamHandle: "my",
   identity: "owner@example.invalid",
   providers: { items: [provider], nextAfter: null },
+  authentications: [fixtureCatalogue],
   images: { items: reviewImages, nextAfter: null },
   initialImage: image,
   initialPalette: "sage",
@@ -36,6 +43,15 @@ const meta = {
     creationLocked: false,
     name: "Research companion",
     providerId: "provider",
+    step: "profile",
+    authentication: fixtureConnection,
+    authenticationCopy: authenticationCopy("en"),
+    authenticationPanel: fixturePanel("en"),
+    authenticationPickerOpen: false,
+    onAuthenticationPicker: (): void => {},
+    onCloseAuthenticationPicker: (): void => {},
+    onNext: (): void => {},
+    onBack: (): void => {},
     handle: {
       draft: {
         source: "automatic",
@@ -73,8 +89,20 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Ready: Story = {};
+export const Environment: Story = {
+  args: { step: "environment", providerId: "" },
+};
+export const SelectedEnvironment: Story = { args: { step: "environment" } };
+export const Authentication: Story = {
+  args: { step: "authentication", authentication: null },
+};
+export const SelectedAuthentication: Story = {
+  args: { step: "authentication" },
+};
 export const Approved: Story = {
   args: {
+    authenticationCopy: authenticationCopy("ko"),
+    authenticationPanel: fixturePanel("ko"),
     copy: computerCopy("ko-KR"),
     profileCopy: creationCopy("ko"),
     name: "두부",
@@ -91,8 +119,17 @@ export const Approved: Story = {
     </ProfileReviewFrame>
   ),
 };
+export const ApprovedEnvironment: Story = {
+  ...Approved,
+  args: { ...Approved.args, step: "environment" },
+};
+export const ApprovedAuthentication: Story = {
+  ...Approved,
+  args: { ...Approved.args, step: "authentication" },
+};
 export const Empty: Story = {
   args: {
+    step: "environment",
     providers: {
       type: "loaded",
       items: [],
@@ -153,6 +190,7 @@ export const CatalogueUnavailable: Story = {
 };
 export const Japanese: Story = {
   args: {
+    authenticationCopy: authenticationCopy("ja"),
     copy: computerCopy("ja-JP"),
     profileCopy: creationCopy("ja-JP"),
     providers: Empty.args?.providers,
@@ -162,6 +200,7 @@ export const Japanese: Story = {
 };
 export const French: Story = {
   args: {
+    authenticationCopy: authenticationCopy("fr"),
     copy: computerCopy("fr-FR"),
     profileCopy: creationCopy("fr-FR"),
     providers: Empty.args?.providers,
@@ -171,6 +210,7 @@ export const French: Story = {
 };
 export const Korean: Story = {
   args: {
+    authenticationCopy: authenticationCopy("ko"),
     copy: computerCopy("ko-KR"),
     profileCopy: creationCopy("ko-KR"),
     providers: Empty.args?.providers,

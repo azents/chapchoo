@@ -13,6 +13,7 @@ import {
 } from "@chapchoo/web-core/validation";
 import { z } from "zod";
 import { authRouter } from "@/shared/server/auth";
+import { authenticationsRouter } from "@/shared/server/authentications";
 import { computersRouter } from "@/shared/server/computers";
 import { displayInput } from "@/shared/server/displayInput";
 import { procedure, router } from "@/shared/server/trpc";
@@ -28,6 +29,7 @@ const handle = z.string().min(3).max(16).refine(validHandle);
 
 export const appRouter = router({
   computers: computersRouter,
+  authentications: authenticationsRouter,
   auth: authRouter,
   signup: router({
     preview: procedure

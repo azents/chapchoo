@@ -118,8 +118,9 @@ an empty foundation may be explicitly reverted.
 [Backend authentication operations](backend-authentication.md) supply current-role
 admission, acquisition acceptance, existing-Agent selection and scoped lifecycle
 cleanup. Schema preparation alone activates none of those effects and assigns no
-credentials to existing Agents. New-create payloads and accepted historical
-creation receipts remain unchanged.
+credentials to existing Agents. [New-create admission](backend-authentication.md#saved-agent-selection-creation-and-cleanup)
+atomically saves its explicit authentication reference; accepted historical
+creation fingerprints remain unchanged and recoverable without a new payload.
 
 ## Connections
 

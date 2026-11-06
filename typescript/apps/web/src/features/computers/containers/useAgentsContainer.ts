@@ -11,8 +11,9 @@ import { initialQuery } from "@chapchoo/web-core/page-state";
 import { agentsPath } from "@chapchoo/web-core/workspace";
 import { useDocumentVisibility, useMediaQuery } from "@mantine/hooks";
 import { useLocale } from "next-intl";
-import { useEffect, useRef, useState } from "react";
+import { createElement, useEffect, useRef, useState } from "react";
 import { useAppearanceControl } from "@/shared/appearance/useAppearanceControl";
+import { AgentAuthenticationPage } from "@/shared/authentications/AgentAuthenticationPage";
 import { trpc } from "@/shared/rpc/client";
 import { creationCopy } from "../creationCopy";
 import { computerDetailCopy } from "../detailCopy";
@@ -193,6 +194,16 @@ export function useAgentsContainer({
   });
   return {
     initial,
+    authenticationControl:
+      data.type === "detail"
+        ? createElement(AgentAuthenticationPage, {
+            basePath,
+            key: data.agent.id,
+            agent: data.agent,
+            snapshots: data.authenticationSnapshots,
+            unavailable: detail.isError || submission.type === "pending",
+          })
+        : null,
     access:
       auth.state.type === "AUTHENTICATED"
         ? "authorized"

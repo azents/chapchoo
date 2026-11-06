@@ -20,6 +20,7 @@ const meta = {
     profileCopy: creationCopy("en-US"),
     copy: computerCopy("en-US"),
     agent: {
+      authentication: null,
       id: "opaque-agent",
       teamId: "opaque-team",
       name: "Research companion",

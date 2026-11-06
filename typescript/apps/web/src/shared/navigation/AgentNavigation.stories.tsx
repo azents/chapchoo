@@ -23,6 +23,7 @@ function Fixture(): ReactElement {
     items: [
       {
         id: "corgi",
+        authentication: null,
         teamId: "design",
         name: "Corgi",
         handle: "corgi",

@@ -89,7 +89,12 @@ export function ProfilePaletteChoices(props: {
           </Button>
         ) : null}
       </Group>
-      <Group className={classes.swatches} justify="space-between" wrap="nowrap">
+      <Group
+        className={classes.swatches}
+        justify="space-between"
+        wrap="nowrap"
+        gap="xs"
+      >
         {agentPaletteKeys.map((key) => (
           <UnstyledButton
             type="button"

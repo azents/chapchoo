@@ -4,6 +4,7 @@ import {
   validAgentPalette,
 } from "@chapchoo/web-core/agent-profile";
 import { useAuth } from "@chapchoo/web-core/auth-context";
+import { authenticationCopy } from "@chapchoo/web-core/authentication-messages";
 import { computerCopy } from "@chapchoo/web-core/computer-messages";
 import {
   editHandle,
@@ -16,10 +17,12 @@ import { useDocumentVisibility } from "@mantine/hooks";
 import { useLocale } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { useAppearanceControl } from "@/shared/appearance/useAppearanceControl";
+import { useConnectionPanel } from "@/shared/authentications/useConnectionPanel";
 import { trpc } from "@/shared/rpc/client";
 import { creationCopy } from "../creationCopy";
 import { CreationRequest } from "../creationRequest";
 import type { AgentCreationInput, AgentCreationProps } from "../creationTypes";
+import type { AuthenticationView } from "@chapchoo/web-core/external-authentication";
 import type { HandleDraft } from "@chapchoo/web-core/handle";
 
 export function useAgentCreation({
@@ -27,6 +30,8 @@ export function useAgentCreation({
   basePath,
 }: AgentCreationInput): AgentCreationProps {
   const auth = useAuth();
+  const ownerUserId =
+    auth.state.type === "AUTHENTICATED" ? auth.state.user.id : null;
   const visibility = useDocumentVisibility();
   const locale = useLocale();
   const copy = computerCopy(locale);
@@ -36,6 +41,18 @@ export function useAgentCreation({
   const client = utils.client;
   const [name, setName] = useState("");
   const [providerId, setProviderId] = useState("");
+  const [step, setStep] = useState<AgentCreationProps["step"]>("environment");
+  const [authentication, setAuthentication] =
+    useState<AuthenticationView | null>(null);
+  const [authenticationPickerOpen, setAuthenticationPicker] = useState(false);
+  const authenticationPanel = useConnectionPanel({
+    snapshots: initial.authentications,
+    selectedId: authentication?.id,
+    onSelect: (value) => {
+      setAuthentication(value);
+      setAuthenticationPicker(false);
+    },
+  });
   const [after, setAfter] = useState<string | null>(null);
   const [imageAfter, setImageAfter] = useState<string | null>(null);
   const [image, setImage] = useState(initial.initialImage);
@@ -138,6 +155,8 @@ export function useAgentCreation({
       (!request.current.locked &&
         (!name.trim() ||
           !providerId ||
+          !authentication ||
+          step !== "profile" ||
           handle.status !== "available" ||
           !images.data ||
           images.isError ||
@@ -158,6 +177,7 @@ export function useAgentCreation({
           teamId: initial.teamId,
           name: name.trim(),
           providerId,
+          authenticationId: authentication?.id ?? "",
           handle: draft.current.candidate,
           profileImageId: image.id,
           paletteKey,
@@ -215,7 +235,10 @@ export function useAgentCreation({
     profileCopy,
     appearance,
     access:
-      auth.state.type === "AUTHENTICATED"
+      auth.state.type === "AUTHENTICATED" &&
+      initial.authentications.every(
+        (value) => value.ownerUserId === ownerUserId,
+      )
         ? "authorized"
         : auth.state.type === "SIGNED_OUT"
           ? "signedOut"
@@ -225,6 +248,44 @@ export function useAgentCreation({
     creationLocked: request.current.locked,
     name,
     providerId,
+    step,
+    authentication,
+    authenticationCopy: authenticationCopy(locale),
+    authenticationPanel,
+    authenticationPickerOpen,
+    onAuthenticationPicker: () => {
+      if (editable()) {
+        setAuthenticationPicker(true);
+      }
+    },
+    onCloseAuthenticationPicker: () => {
+      if (
+        authenticationPanel.dialog.type === "closed" &&
+        !authenticationPanel.busy
+      ) {
+        setAuthenticationPicker(false);
+      }
+    },
+    onNext: () => {
+      if (!editable()) {
+        return;
+      }
+      if (
+        step === "environment" &&
+        providers.data?.items.some((value) => value.id === providerId) &&
+        !providers.isError
+      ) {
+        setStep("authentication");
+      }
+      if (step === "authentication" && authentication) {
+        setStep("profile");
+      }
+    },
+    onBack: () => {
+      if (editable()) {
+        setStep(step === "profile" ? "authentication" : "environment");
+      }
+    },
     handle,
     image,
     paletteKey,

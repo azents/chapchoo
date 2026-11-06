@@ -63,7 +63,9 @@ contracts with `/app` and `/admin` mounts and production web listeners.
    allows the new password, and retains ordinary-user exclusion from Admin while
    General access remains available. Admin logout withdraws the same browser's
    General session without signing out independent browser contexts.
-4. Create one personal Agent, inspect SSR Computer detail and independent Connector
+4. Register synthetic authentication in the retained computer-first creation flow,
+   create one personal Agent, change only its saved reference through in-place
+   registration, inspect SSR saved identity, Computer detail and independent Connector
    connectivity, stop/start with one original PVC identity, inspect read-only
    operator resources, then confirm normal removal and retained cleanup evidence.
    Actual Control, Computer Provider and Computer Connector processes use isolated

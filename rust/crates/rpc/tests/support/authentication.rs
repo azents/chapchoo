@@ -5,6 +5,30 @@ use chapchoo_service::{
 };
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+pub async fn register_personal(
+    store: &chapchoo_persistence::Store,
+    actor: &chapchoo_crypto::SecretDigest,
+    now: i64,
+) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    use chapchoo_persistence::{AuthenticationAcceptedResult, AuthenticationScope, RegisterApiKey};
+    match store
+        .register_external_api_key(
+            actor,
+            &RegisterApiKey {
+                scope: AuthenticationScope::Personal,
+                request_id: "fixture-agent-authentication".into(),
+                name: "Fixture authentication".into(),
+                key: ExternalSecret::new(b"synthetic-fixture-api-key".to_vec())?,
+            },
+            now,
+        )
+        .await?
+    {
+        AuthenticationAcceptedResult::Record { authentication_id } => Ok(authentication_id),
+        _ => Err("Missing fixture authentication identity".into()),
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct Provider {
     pub issues: AtomicUsize,

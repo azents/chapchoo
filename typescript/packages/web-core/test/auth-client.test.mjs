@@ -33,7 +33,15 @@ function fixture(authenticated = true) {
 }
 
 void test("only protected invalid-session reasons end authentication", () => {
-  for (const path of ["auth.identity", "teams.list", "invitations.process"]) {
+  for (const path of [
+    "auth.identity",
+    "teams.list",
+    "invitations.process",
+    "authentications.list",
+    "authentications.registerKey",
+    "authentications.pollDevice",
+    "authentications.selectAgent",
+  ]) {
     assert.equal(
       invalidatesSession("DOMAIN_REASON_INVALID_SESSION", path, "general"),
       true,

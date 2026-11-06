@@ -3,6 +3,7 @@ import type { AgentPaletteKey } from "@chapchoo/web-core/computer";
 export interface CreationDraft {
   teamId: string;
   providerId: string;
+  authenticationId: string;
   name: string;
   handle: string;
   profileImageId: string;
@@ -28,6 +29,7 @@ export class CreationRequest {
       reason === "DOMAIN_REASON_INVALID_INPUT" ||
       reason === "DOMAIN_REASON_INVALID_TRANSITION" ||
       reason === "DOMAIN_REASON_PERMISSION_DENIED" ||
+      reason === "DOMAIN_REASON_NOT_FOUND" ||
       reason === "DOMAIN_REASON_HANDLE_CONFLICT"
     ) {
       this.payload = null;

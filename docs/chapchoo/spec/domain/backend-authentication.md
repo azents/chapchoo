@@ -8,7 +8,8 @@ Client callers can register backend-owned OpenAI API keys or acquire ChatGPT
 credentials through device authorization. Agents save references to these records;
 selection performs no Computer delivery, native credential-file write, refresh,
 Codex launch or model call. Stored, selected, valid, entitled and funded are
-independent facts. General web activation is not part of this backend surface.
+independent facts. The [General authentication surface](authentication-web.md)
+uses these contracts without widening their authority or adding execution.
 
 ## Scope, authority and catalogue
 
@@ -88,7 +89,7 @@ and a 128-KiB bounded successful response body, including chunked responses. Pol
 The API accepts no arbitrary issuer, transport override or certificate bypass.
 Deterministic provider substitution belongs to trusted fixture composition only.
 
-## Saved existing-Agent selection and cleanup
+## Saved Agent selection, creation and cleanup
 
 SelectAgent changes only the saved authentication reference for an existing Agent.
 Personal records must belong to its User; Team records must belong to the Agent's
@@ -97,8 +98,24 @@ use. Expected absence or the pair of authentication ID and accepted selection
 Request ID fences stale intent, including A→B→A. Completed replay recovers its
 original accepted result even after later selection changes or catalogue removal.
 The Agent projection optionally contains record ID, alias, kind, selection Request
-ID and time. Existing/pre-feature Agents remain unselected. New-create payloads
-and their historical creation-result recovery are unchanged by this surface.
+ID and time. Existing/pre-feature Agents remain unselected.
+
+New Agents require an explicit authentication ID in the complete creation payload.
+After current owner/Team admission and accepted-receipt recovery, Store locks and
+validates that credential before Provider/Computer admission. Personal records
+must belong to the Agent owner; Team records must belong to its current Team.
+Agent, Computer, creation receipt and saved selection are inserted atomically,
+and the creation Request ID is also the initial selection Request ID. The
+authentication ID participates in the typed creation fingerprint; changing it
+under an accepted creation Request ID conflicts. Authentication deletion and
+creation reference admission share the credential lock. Exact completed replay
+precedes live credential eligibility, so later catalogue removal or changed
+selection cannot erase an accepted creation result.
+
+Historical creation fingerprints remain untouched. Owner/request-only
+Agents.CreationResult recovers pre-feature receipts independently of the new
+payload representation; it does not run fresh creation admission or backfill a
+selection.
 
 Selection neither requires connectivity/power nor changes Computer lifecycle
 requests. Lock order is User, Team, sorted old/new authentication records, Provider,
@@ -117,6 +134,7 @@ protect relationships and empty-only downgrade, not provider validity.
 - [Account storage](account-storage.md) — preserving explicit preparation and retained historical identities.
 - [Private Agent ownership](agent-ownership.md) — independent Agent authority and Team cleanup.
 - [Owner RPC](computer-client-rpc.md) — optional saved-reference projection, separate from Computer observations.
+- [Authentication web](authentication-web.md) — scoped catalogue, device/key interaction and explicit Agent selection.
 - [Foreground process ownership](runtime-process.md) — partial startup and joined failure completion.
 
 ## References

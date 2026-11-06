@@ -45,12 +45,16 @@ fn change(
         }),
     }
 }
+struct CreationReferences<'a> {
+    image: &'a str,
+    authentication: &'a str,
+}
 async fn create(
     store: &Store,
     actor: &SecretDigest,
     team: &str,
     provider: &str,
-    image: &str,
+    references: CreationReferences<'_>,
     handle: &str,
     now: i64,
 ) -> Result<AgentSummary, TestError> {
@@ -62,9 +66,10 @@ async fn create(
                 request_id: format!("create-{handle}"),
                 provider_id: provider.to_owned(),
                 name: handle.to_owned(),
+                authentication_id: references.authentication.to_owned(),
                 profile: CreateAgentProfile {
                     handle: handle.to_owned(),
-                    image_id: image.to_owned(),
+                    image_id: references.image.to_owned(),
                     palette_key: "sage".to_owned(),
                 },
             },
@@ -204,7 +209,10 @@ async fn exercise_selection(store: &Store) -> Result<(), TestError> {
         &owner,
         &team.id,
         &provider.provider_id,
-        &image,
+        CreationReferences {
+            image: &image,
+            authentication: &personal_key,
+        },
         "selection-a",
         now,
     )
@@ -214,7 +222,10 @@ async fn exercise_selection(store: &Store) -> Result<(), TestError> {
         &member,
         &team.id,
         &provider.provider_id,
-        &image,
+        CreationReferences {
+            image: &image,
+            authentication: &member_key,
+        },
         "selection-b",
         now,
     )
@@ -224,12 +235,35 @@ async fn exercise_selection(store: &Store) -> Result<(), TestError> {
         &owner,
         &team.id,
         &provider.provider_id,
-        &image,
+        CreationReferences {
+            image: &image,
+            authentication: &personal_key,
+        },
         "selection-c",
         now,
     )
     .await?;
-    assert!(a.authentication.is_none() && b.authentication.is_none() && c.authentication.is_none());
+    assert_eq!(
+        a.authentication
+            .as_ref()
+            .ok_or("Missing creation selection")?
+            .authentication_id,
+        personal_key
+    );
+    assert_eq!(
+        b.authentication
+            .as_ref()
+            .ok_or("Missing creation selection")?
+            .authentication_id,
+        member_key
+    );
+    assert_eq!(
+        c.authentication
+            .as_ref()
+            .ok_or("Missing creation selection")?
+            .authentication_id,
+        personal_key
+    );
     assert!(
         store
             .close_provider_connection(
@@ -244,7 +278,12 @@ async fn exercise_selection(store: &Store) -> Result<(), TestError> {
         ConnectionStatus::Disconnected
     );
 
-    let first = change("select-a-1", &a.id, &shared_one, None);
+    let first = change(
+        "select-a-1",
+        &a.id,
+        &shared_one,
+        Some((&personal_key, "create-selection-a")),
+    );
     let (one, two) = tokio::join!(
         store.select_agent_authentication(&owner, &first, now),
         store.select_agent_authentication(&owner, &first, now)
@@ -265,7 +304,16 @@ async fn exercise_selection(store: &Store) -> Result<(), TestError> {
         "AgentAuthenticationSelection([REDACTED])"
     );
     store
-        .select_agent_authentication(&owner, &change("select-c-1", &c.id, &shared_one, None), now)
+        .select_agent_authentication(
+            &owner,
+            &change(
+                "select-c-1",
+                &c.id,
+                &shared_one,
+                Some((&personal_key, "create-selection-c")),
+            ),
+            now,
+        )
         .await?;
     assert!(matches!(
         store
@@ -385,7 +433,12 @@ async fn exercise_selection(store: &Store) -> Result<(), TestError> {
     store
         .select_agent_authentication(
             &member,
-            &change("select-b-team", &b.id, &shared_two, None),
+            &change(
+                "select-b-team",
+                &b.id,
+                &shared_two,
+                Some((&member_key, "create-selection-b")),
+            ),
             now,
         )
         .await?;

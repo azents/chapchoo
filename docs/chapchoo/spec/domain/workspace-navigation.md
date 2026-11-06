@@ -28,6 +28,9 @@ Full inventory pagination belongs to the Agent-list page, not the sidebar.
 One selected-Team query owns that bounded list; changing Team changes its
 query key. It refreshes while visible and
 authenticated without carrying another Team's list as placeholder data.
+The [AI connections catalogue](authentication-web.md) is a same-context destination
+at `/teams/{teamHandle}/connections`; personal `my` selects User-owned records,
+while a collaborative route selects exactly that Team's catalogue.
 Collaborative-Team settings remain alongside the list. A Team switch navigates to only the current user's
 private Agents in that Team. Desktop retains the independently scrolling sidebar;
 mobile hides it and uses the header's left Drawer. Its banner contains the

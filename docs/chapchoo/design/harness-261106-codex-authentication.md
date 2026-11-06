@@ -1,6 +1,7 @@
 ---
 title: "Codex Authentication Setup Design"
 created: 2026-11-06
+implemented: 2026-11-06
 document_role: primary
 document_type: design
 snapshot_id: harness-261106
@@ -12,7 +13,7 @@ tags: [harness, authentication, architecture, security, frontend]
 - Snapshot: `harness-261106`.
 - Product authority: [harness-261106/REQ](../requirements/harness-261106-codex-authentication.md), including the 07:02 and 07:33 KST scope amendments on 2026-11-06.
 - Technical authority: [harness-261106/ADR-D1 and ADR-D2](../adr/harness-261106-codex-authentication.md).
-- This is an approved development Design awaiting complete implementation, not a current-system Spec.
+- This records the approved implemented development Design; current-system behavior belongs to the linked Spec Wiki.
 
 ## Scope and Observable Completion
 

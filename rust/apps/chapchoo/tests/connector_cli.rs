@@ -96,6 +96,12 @@ async fn connector_process_exchanges_connects_and_observes_independently_of_prov
                         .remove(0)
                         .id,
                     request_id: "create".into(),
+                    authentication_id: test_support::authentication(
+                        &store,
+                        &user.token.digest(),
+                        AcceptanceTime::System.now()?,
+                    )
+                    .await?,
                     provider_id: key.provider_id.clone(),
                     name: "Fixture".into(),
                     profile: chapchoo_service::CreateAgentProfile {

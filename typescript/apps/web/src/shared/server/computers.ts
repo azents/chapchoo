@@ -109,6 +109,7 @@ export const computersRouter = router({
         .object({
           requestId: id,
           providerId: id,
+          authenticationId: id,
           teamId: id,
           name: z.string().trim().min(1).max(120),
           handle: z.string().refine(validHandle),

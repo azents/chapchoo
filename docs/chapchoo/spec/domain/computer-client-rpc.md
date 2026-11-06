@@ -15,10 +15,12 @@ Every generated message and outcome oneof has field-free Debug output.
 
 ## Owner operations
 
-- Agents.Create accepts required Team, Request and Provider IDs, name, final
+- Agents.Create accepts required Team, Request, Provider and authentication IDs, name, final
   handle, catalogue image ID and palette. The atomic creation
   receipt returns the original Agent on replay or its removed-creation outcome;
-  replay after removal never creates a new Agent/Computer.
+  replay after removal never creates a new Agent/Computer. The selected
+  authentication is admitted and saved in that same transaction; changed
+  authentication under an accepted Request ID conflicts.
 - Agents.List/Get and Computers.Get expose only the authenticated owner's private
   Agent and dedicated Computer projection. Installation administrator status does
   not grant access to another user's private Agent detail.

@@ -1,5 +1,6 @@
 import { computerCopy } from "@chapchoo/web-core/computer-messages";
 import { useState } from "react";
+import { fixtureCatalogue } from "@/shared/authentications/connectionFixture";
 import { AgentNavigation } from "@/shared/navigation/AgentNavigation";
 import { useComputerActions } from "../../containers/useComputerActions";
 import { creationCopy } from "../../creationCopy";
@@ -38,6 +39,7 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
     handle: "corgi",
     profileImage: { id: "corgi", assetKey: "03-corgi" },
     paletteKey: "teal",
+    authentication: null,
     computer: {
       operation: "start",
       intent: "running",
@@ -69,6 +71,7 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
   };
   const initial: InitialAgents = {
     type: "detail",
+    authenticationSnapshots: [fixtureCatalogue],
     agent,
     renderedAt: 1793854800000,
     identity: "owner@example.invalid",
@@ -93,6 +96,7 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
     reset: () => {},
   });
   const product: AgentsProps = {
+    authenticationControl: null,
     initial,
     data: initial,
     basePath: "",

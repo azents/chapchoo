@@ -1,3 +1,5 @@
+#[path = "support/authentication.rs"]
+mod fixture_auth;
 #[path = "support/legacy.rs"]
 mod legacy;
 mod support;
@@ -55,6 +57,9 @@ fn seed(
             sql.push_str(&format!("INSERT INTO computer_executions(id,computer_id,initial_allocation,running_confirmed_at,created_at) VALUES('execution-{id}','{id}',FALSE,0,0); UPDATE computers SET current_execution_id='execution-{id}',power_source_execution_id='execution-{id}' WHERE id='{id}';"));
         }
     }
+    // Preserve an accepted pre-authentication payload as opaque history across
+    // preparation. New required-auth mutation admission must not reinterpret it.
+    sql.push_str(&format!("INSERT INTO agent_creation_receipts(owner_user_id,team_id,request_id,payload_hash,assigned_agent_id) VALUES('user-0','personal-0','historical-auth-free',{},'agent-running');", binary(&[17;32])));
     let bootstrap = BearerSecret::generate()?;
     let operational = BearerSecret::generate()?;
     let initial =
@@ -70,6 +75,7 @@ fn seed(
 }
 struct FixtureIds {
     team: String,
+    authentication: String,
     provider: String,
     image: String,
     agents: std::collections::BTreeMap<String, chapchoo_persistence::AgentSummary>,
@@ -85,6 +91,7 @@ impl FixtureIds {
 fn draft(ids: &FixtureIds, request: &str) -> CreateCloudAgent {
     CreateCloudAgent {
         team_id: ids.team.clone(),
+        authentication_id: ids.authentication.clone(),
         request_id: request.into(),
         provider_id: ids.provider.clone(),
         name: "My Agent".into(),
@@ -114,6 +121,7 @@ async fn exercise(store: Store, users: &[BearerSecret]) -> Result<(), TestError>
     let foreign = users[1].digest();
     let team = store.teams(&owner, NOW).await?.remove(0).id;
     let mut ids = FixtureIds {
+        authentication: fixture_auth::personal(&store, &owner, NOW).await?,
         provider: store
             .provider_inventory(&owner, None, 20, NOW)
             .await?
@@ -157,6 +165,56 @@ async fn exercise(store: Store, users: &[BearerSecret]) -> Result<(), TestError>
     let stale = ids.agent("stale")?;
     let stopped = ids.agent("stopped")?;
     let missing = ids.agent("missing")?;
+    assert_eq!(
+        store
+            .agent_creation_result(&owner, "historical-auth-free", NOW)
+            .await?,
+        Some(chapchoo_persistence::AgentCreationResult::Present {
+            assigned_agent_id: running.id.clone(),
+            team_id: ids.team.clone(),
+        })
+    );
+    assert!(
+        store
+            .agent_creation_result(&foreign, "historical-auth-free", NOW)
+            .await?
+            .is_none()
+    );
+    assert!(matches!(
+        store
+            .create_cloud_agent(&owner, &draft(&ids, "historical-auth-free"), NOW)
+            .await,
+        Err(StoreError::Conflict)
+    ));
+    assert!(
+        ids.agents
+            .values()
+            .all(|agent| agent.authentication.is_none())
+    );
+    store
+        .select_agent_authentication(
+            &owner,
+            &chapchoo_persistence::SelectAgentAuthentication {
+                request_id: "migrated-agent-selection".into(),
+                agent_id: stopped.id.clone(),
+                authentication_id: ids.authentication.clone(),
+                expected: None,
+            },
+            NOW,
+        )
+        .await?;
+    let selected_legacy = store.agent(&owner, &stopped.id, NOW).await?;
+    assert_eq!(
+        selected_legacy
+            .authentication
+            .ok_or("Missing migrated Agent selection")?
+            .authentication_id,
+        ids.authentication
+    );
+    assert_eq!(
+        selected_legacy.computer.current_request_id,
+        stopped.computer.current_request_id
+    );
     assert!(matches!(
         store.provider_inventory(&foreign, None, 20, NOW).await,
         Err(StoreError::Forbidden)

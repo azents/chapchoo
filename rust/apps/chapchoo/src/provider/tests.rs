@@ -66,7 +66,7 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
     let store = Store::connect_sqlite(path, cipher).await?;
     let app = Arc::new(ComputersService::new(store.clone()));
     let accounts = AccountsService::new(
-        store,
+        store.clone(),
         PasswordWork::new(1, PasswordCost::new(10)?)?,
         None,
         AccountsConfig {
@@ -84,6 +84,7 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
             None,
         )
         .await?;
+    let authentication_id = test_support::authentication(&store, &user.token.digest(), AcceptanceTime::System.now()?).await?;
     let team = accounts
         .list_teams(&user.token.digest(), AcceptanceTime::System.now()?)
         .await?
@@ -381,6 +382,7 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
             &chapchoo_service::CreateCloudAgent {
                 team_id: team.id.clone(),
                 request_id: "create".into(),
+                authentication_id: authentication_id.clone(),
                 provider_id: assigned_provider.clone(),
                 name: "Fixture".into(),
                 profile: chapchoo_service::CreateAgentProfile {
@@ -405,6 +407,7 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
             &chapchoo_service::CreateCloudAgent {
                 team_id: team.id.clone(),
                 request_id: "never-started".into(),
+                authentication_id: authentication_id.clone(),
                 provider_id: assigned_provider.clone(),
                 name: "Unstarted fixture".into(),
                 profile: chapchoo_service::CreateAgentProfile {
@@ -722,6 +725,7 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
         &user.token.digest(),
         &chapchoo_service::CreateCloudAgent {
             team_id: team.id.clone(), request_id: "ambiguous-create".into(),
+            authentication_id: authentication_id.clone(),
             provider_id: assigned_provider.clone(), name: "Ambiguous".into(),
             profile: chapchoo_service::CreateAgentProfile {
                 handle: "ambiguous-pod".into(), image_id: images[0].id.clone(),

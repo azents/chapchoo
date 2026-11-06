@@ -20,6 +20,8 @@ export interface NavigationIconProps {
     | "info"
     | "check"
     | "agents"
+    | "connections"
+    | "cloud"
     | "mail";
   size?: "sm" | "md";
   className?: string;
@@ -92,6 +94,13 @@ export function NavigationIcon({
           <rect x="3" y="14" width="7" height="7" rx="2" />
           <rect x="14" y="14" width="7" height="7" rx="2" />
         </>
+      ) : name === "cloud" ? (
+        <path d="M6 19h12a5 5 0 0 0 .4-10A7 7 0 0 0 5 8.5 5.3 5.3 0 0 0 6 19Z" />
+      ) : name === "connections" ? (
+        <path
+          d="m9 15 6-6M8 16l-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0M16 8l1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0"
+          transform="translate(1 1) scale(.9)"
+        />
       ) : name === "mail" ? (
         <>
           <rect x="3" y="5" width="18" height="14" rx="3" />

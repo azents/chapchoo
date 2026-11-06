@@ -1,3 +1,5 @@
+#[path = "support/authentication.rs"]
+mod fixture_auth;
 #[path = "support/legacy.rs"]
 mod legacy;
 mod support;
@@ -56,12 +58,14 @@ fn seed(
 }
 struct FixtureIds {
     provider: String,
+    authentication: String,
     image: String,
     admin: chapchoo_crypto::SecretDigest,
 }
 fn draft(ids: &FixtureIds, id: &str, team: &str) -> CreateCloudAgent {
     CreateCloudAgent {
         team_id: team.into(),
+        authentication_id: ids.authentication.clone(),
         request_id: format!("create-{id}"),
         provider_id: ids.provider.clone(),
         name: "Private".into(),
@@ -79,8 +83,10 @@ async fn create(
     id: &str,
     team: &str,
 ) -> Result<chapchoo_persistence::AgentSummary, TestError> {
+    let mut draft = draft(ids, id, team);
+    draft.authentication_id = fixture_auth::personal(store, &actor.digest(), now()?).await?;
     let CreationOutcome::Present(agent) = store
-        .create_cloud_agent(&actor.digest(), &draft(ids, id, team), now()?)
+        .create_cloud_agent(&actor.digest(), &draft, now()?)
         .await
         .map_err(|error| format!("Create {id}: {error}"))?
     else {
@@ -138,6 +144,7 @@ async fn exercise(
     provider: &BearerSecret,
 ) -> Result<(), TestError> {
     let ids = FixtureIds {
+        authentication: fixture_auth::personal(&store, &users[0].digest(), now()?).await?,
         admin: users[0].digest(),
         provider: store
             .provider_inventory(&users[0].digest(), None, 1, now()?)
