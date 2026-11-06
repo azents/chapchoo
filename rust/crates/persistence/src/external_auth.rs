@@ -16,6 +16,10 @@ use crate::{
     store::Dialect,
 };
 
+/// Latest supported credential expiry, including millisecond precision at the
+/// end of year 9999. Accepted metadata must remain representable over RPC.
+pub const MAX_AUTHENTICATION_EXPIRY_MILLIS: i64 = 253_402_300_799_999;
+
 /// Personal settings are always bound to the authenticated User, never a supplied User ID.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AuthenticationScope {

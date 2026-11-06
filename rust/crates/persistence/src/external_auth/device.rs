@@ -719,7 +719,10 @@ impl Store {
         if step.phase != StepPhase::Exchanging {
             return Err(StoreError::InvalidInput);
         }
-        if tokens.expires_at.is_some_and(|expiry| expiry < 0) {
+        if tokens
+            .expires_at
+            .is_some_and(|expiry| !(0..=MAX_AUTHENTICATION_EXPIRY_MILLIS).contains(&expiry))
+        {
             return Err(StoreError::InvalidInput);
         }
         for value in [&tokens.account_id, &tokens.email, &tokens.plan_type]

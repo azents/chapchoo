@@ -56,8 +56,8 @@ pub use external_auth::{
     DeviceAuthenticationState, DeviceAuthenticationStatus, DeviceAuthenticationStep,
     DeviceAuthenticationTokens, DeviceAuthorizationDraft, DeviceCheck, DeviceStepFailure,
     DeviceStepSettlement, ExchangeDeviceAdmission, ExpectedAgentAuthentication,
-    ReauthenticateTarget, RegisterApiKey, RenameAuthentication, ReplaceApiKey,
-    SelectAgentAuthentication, StartDeviceAdmission, StartDeviceAuthentication,
+    MAX_AUTHENTICATION_EXPIRY_MILLIS, ReauthenticateTarget, RegisterApiKey, RenameAuthentication,
+    ReplaceApiKey, SelectAgentAuthentication, StartDeviceAdmission, StartDeviceAuthentication,
 };
 pub use models::{CredentialSnapshot, UserSummary, VerifiedCredential};
 pub use native_resources::{ManagedResource, ResourceEvidence, ResourceReport};

@@ -331,6 +331,36 @@ async fn stalled_exchange_has_bounded_lifetime_without_authorizing_replay() -> R
     Ok(())
 }
 #[tokio::test]
+async fn token_expiry_must_remain_representable_by_the_public_protocol() -> Result<(), TestError> {
+    let replies = [253_402_300_799_u64, 253_402_300_800_u64]
+        .into_iter()
+        .map(|seconds| {
+            Reply::Json(
+                200,
+                serde_json::json!({
+                    "access_token": "access", "refresh_token": "refresh", "expires_in": seconds,
+                })
+                .to_string(),
+            )
+        })
+        .collect();
+    let requests = exercise(replies, None, |client| async move {
+        assert_eq!(
+            client.exchange(&approval()?, 999).await?.expires_at,
+            Some(MAX_AUTHENTICATION_EXPIRY_MILLIS)
+        );
+        assert!(matches!(
+            client.exchange(&approval()?, 999).await,
+            Err(DeviceProviderFailure::InvalidResponse)
+        ));
+        Ok(())
+    })
+    .await?;
+    assert_eq!(requests.len(), 2);
+    Ok(())
+}
+
+#[tokio::test]
 async fn absent_or_malformed_claims_do_not_fabricate_account_identity_or_expiry()
 -> Result<(), TestError> {
     let wrong = id_token(r#"{"sub":"wrong-sub","https://api.openai.com/auth":"wrong-account"}"#);

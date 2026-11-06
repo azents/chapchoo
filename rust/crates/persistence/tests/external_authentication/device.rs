@@ -535,6 +535,55 @@ async fn exercise_device(store: &Store) -> Result<(String, String, String), Test
         State::Expired
     ));
 
+    let bounded = exchange(store, &owner, &personal, "bounded-expiry", None).await?;
+    let before = store
+        .external_authentications(&owner, &personal, None, 100, NOW)
+        .await?
+        .len();
+    let mut bounded_tokens = tokens(Some("bounded-expiry-account"))?;
+    bounded_tokens.expires_at = Some(chapchoo_persistence::MAX_AUTHENTICATION_EXPIRY_MILLIS + 1);
+    assert!(matches!(
+        store
+            .complete_external_device_authentication(&owner, &bounded, &bounded_tokens, NOW + 1001)
+            .await,
+        Err(StoreError::InvalidInput)
+    ));
+    assert_eq!(
+        store
+            .external_authentications(&owner, &personal, None, 100, NOW)
+            .await?
+            .len(),
+        before
+    );
+    bounded_tokens.expires_at = Some(chapchoo_persistence::MAX_AUTHENTICATION_EXPIRY_MILLIS);
+    let bounded_id = registered(
+        store
+            .complete_external_device_authentication(&owner, &bounded, &bounded_tokens, NOW + 1001)
+            .await?,
+    )?;
+    assert_eq!(
+        store
+            .external_authentication(&owner, &personal, &bounded_id, NOW + 1001)
+            .await?
+            .expires_at,
+        Some(chapchoo_persistence::MAX_AUTHENTICATION_EXPIRY_MILLIS)
+    );
+    assert!(matches!(
+        store
+            .delete_external_authentication(
+                &owner,
+                &DeleteAuthentication {
+                    scope: personal.clone(),
+                    request_id: "delete-bounded-expiry".into(),
+                    authentication_id: bounded_id,
+                    expected_request_id: "bounded-expiry".into(),
+                },
+                NOW + 1001
+            )
+            .await?,
+        DeleteAuthenticationOutcome::Accepted(_)
+    ));
+
     // Observation itself terminalizes abandoned temporary material. No later
     // poll/cancel/completion is allowed to incidentally perform this cleanup.
     for phase in ["starting", "pending", "exchanging"] {

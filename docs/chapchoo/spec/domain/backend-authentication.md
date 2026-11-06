@@ -23,7 +23,9 @@ other owners' Agent names or association aggregates.
 
 List/Get return ID, owner scope, kind, alias, known account/email/plan/expiry,
 current accepted mutation Request ID and creation/update instants. Missing provider
-metadata stays absent. Lists default to 50, allow 1–100 and use an opaque stable
+metadata stays absent. Provider expiry outside the supported Protobuf Timestamp
+range is rejected before credential publication, so accepted records remain
+serializable through list/detail. Lists default to 50, allow 1–100 and use an opaque stable
 ID cursor; the last full-page ID is the next cursor, so the next page may be empty.
 The service bounds request decoding to 256 KiB and response encoding to 2 MiB.
 
@@ -66,8 +68,10 @@ unavailability, invalid response and uncertain transport are typed independently
 of the retained progress. In-flight state without this process's work owner is
 projected uncertain. Neither time passing, status reads, duplicate calls nor a
 lost browser waiter permits an uncertain exchange to dispatch again. Explicit
-cancellation remains available without an external-work permit and fences later
-publication; it does not claim provider revocation or physical cancellation.
+cancellation persists its fence independently of external-work permits, JoinSet
+bookkeeping contention and unrelated retained work failures. It fences later
+publication without claiming provider revocation or physical cancellation; the
+work owner still retains failures for ordinary reaping and explicit shutdown.
 
 The foreground Client composition owns capacity 16, within the Service's allowed
 1–64 range. Admission rejects contention/overflow before Store admission with a

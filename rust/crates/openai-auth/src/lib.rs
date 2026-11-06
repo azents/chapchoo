@@ -4,7 +4,7 @@ use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chapchoo_service::{
     DeviceApproval, DeviceAuthenticationProvider, DeviceAuthenticationTokens,
     DeviceAuthorizationDraft, DevicePollOutcome, DeviceProviderFailure, DeviceProviderFuture,
-    ExternalSecret,
+    ExternalSecret, MAX_AUTHENTICATION_EXPIRY_MILLIS,
 };
 use reqwest::{Client, ClientBuilder, Response, Url};
 use rustls_platform_verifier::BuilderVerifierExt;
@@ -382,7 +382,9 @@ impl DeviceAuthenticationProvider for OpenAiDeviceClient {
                             .checked_mul(1000)
                             .ok_or(DeviceProviderFailure::InvalidResponse)?,
                     )
-                    .filter(|_| now >= 0)
+                    .filter(|expiry| {
+                        now >= 0 && (0..=MAX_AUTHENTICATION_EXPIRY_MILLIS).contains(expiry)
+                    })
                     .ok_or(DeviceProviderFailure::InvalidResponse)
                 })
                 .transpose()?;

@@ -393,6 +393,23 @@ async fn cancelled_waiter_keeps_started_capacity_and_cancellation_can_still_fenc
             .state,
             DeviceAuthenticationState::Starting
         ));
+        let mut drain = Box::pin(service.finish());
+        std::future::poll_fn(|context| {
+            assert!(drain.as_mut().poll(context).is_pending());
+            std::task::Poll::Ready(())
+        })
+        .await;
+        // Finish holds the JoinSet bookkeeping mutex while physical work is
+        // blocked. Cancellation must still commit its fence before release.
+        assert!(matches!(
+            state(
+                service
+                    .device_status(&fixture.actor, &attempt_id, 1000)
+                    .await?
+            )
+            .state,
+            DeviceAuthenticationState::Starting
+        ));
         assert!(matches!(
             state(
                 service
@@ -402,6 +419,7 @@ async fn cancelled_waiter_keeps_started_capacity_and_cancellation_can_still_fenc
             .state,
             DeviceAuthenticationState::Cancelled
         ));
+        drop(drain);
         Ok::<_, TestError>(())
     }
     .await;

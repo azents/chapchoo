@@ -294,7 +294,7 @@ impl AuthenticationService {
         attempt: &str,
         now: i64,
     ) -> Result<AuthenticationProgress, ServiceError> {
-        self.work.reap()?;
+        self.work.reap_available()?;
         self.current(
             actor,
             self.store
@@ -311,8 +311,9 @@ impl AuthenticationService {
         request: &str,
         now: i64,
     ) -> Result<AuthenticationProgress, ServiceError> {
-        // Cancellation remains available without acquiring an external-work slot.
-        self.work.reap()?;
+        // Persist the cancellation fence independently of work capacity,
+        // bookkeeping contention and unrelated retained work failures. Their
+        // existing owner still collects them on ordinary reaping or finish.
         self.current(
             actor,
             self.store

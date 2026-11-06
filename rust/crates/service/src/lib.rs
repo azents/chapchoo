@@ -27,13 +27,13 @@ pub use chapchoo_persistence::{
     DeliverySnapshot, DeviceAuthenticationState, DeviceAuthenticationStatus,
     DeviceAuthenticationTokens, DeviceAuthorizationDraft, DirectoryPolicy, ExecutionReservation,
     ExpectedAgentAuthentication, GrantKind, GrantSummary, InvitationStatus, InvitationSummary,
-    LifecycleRequest, ManagedComputer, ManagedResource, ManagedResourceKind, MemberSummary,
-    NativeRetirementAdmission, ProofPreview, ProviderCapabilities, ProviderChoice,
-    ProviderCredentialResult, ProviderIdentity, ProviderInventorySummary, ProviderSource,
-    ReauthenticateTarget, RegisterApiKey, RenameAuthentication, ReplaceApiKey, ResolvedRoute,
-    ResourceCursor, ResourceEvidence, ResourceReport, SelectAgentAuthentication, SessionPolicy,
-    SessionResult, StartDeviceAuthentication, TeamPatch, TeamSummary, UpdateAgentProfile,
-    UserSummary,
+    LifecycleRequest, MAX_AUTHENTICATION_EXPIRY_MILLIS, ManagedComputer, ManagedResource,
+    ManagedResourceKind, MemberSummary, NativeRetirementAdmission, ProofPreview,
+    ProviderCapabilities, ProviderChoice, ProviderCredentialResult, ProviderIdentity,
+    ProviderInventorySummary, ProviderSource, ReauthenticateTarget, RegisterApiKey,
+    RenameAuthentication, ReplaceApiKey, ResolvedRoute, ResourceCursor, ResourceEvidence,
+    ResourceReport, SelectAgentAuthentication, SessionPolicy, SessionResult,
+    StartDeviceAuthentication, TeamPatch, TeamSummary, UpdateAgentProfile, UserSummary,
 };
 pub use computers::{ComputerPolicy, ComputersService, PreparedComponentConnection};
 pub use error::{DomainReason, InfrastructureReport, ServiceError};

@@ -149,11 +149,12 @@ impl AuthenticationWork {
             Err(ServiceError::infrastructure(WorkFailures(failures)))
         }
     }
-    pub(super) fn reap(&self) -> Result<(), ServiceError> {
-        let mut tasks = self
-            .tasks
-            .try_lock()
-            .map_err(|_| ServiceError::domain(DomainReason::AuthenticationCapacityExhausted))?;
+    pub(super) fn reap_available(&self) -> Result<(), ServiceError> {
+        let Ok(mut tasks) = self.tasks.try_lock() else {
+            // Reading progress is not effect admission. A busy owner retains
+            // every task/failure for its normal reaping or explicit drain.
+            return Ok(());
+        };
         while let Some(result) = tasks.try_join_next_with_id() {
             self.collect(result);
         }
