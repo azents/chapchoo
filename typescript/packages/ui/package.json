@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./ResponsiveDialog": "./src/ResponsiveDialog.tsx",
     "./DropdownButton": "./src/DropdownButton.tsx",
     "./InteractiveSurface": "./src/InteractiveSurface.tsx",
     "./NavigationIcon": "./src/NavigationIcon.tsx",

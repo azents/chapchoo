@@ -1,7 +1,10 @@
+"use client";
+
 import { Drawer, Modal } from "@mantine/core";
-import classes from "./ConnectionPanel.module.css";
+import classes from "./ResponsiveDialog.module.css";
 import type { ReactElement, ReactNode } from "react";
-export interface AuthenticationDialogProps {
+
+export interface ResponsiveDialogProps {
   mobile: boolean;
   opened: boolean;
   onClose: () => void;
@@ -11,9 +14,9 @@ export interface AuthenticationDialogProps {
   size?: "md" | "lg";
   children: ReactNode;
 }
-export function AuthenticationDialog(
-  props: AuthenticationDialogProps,
-): ReactElement {
+
+/** Shared presentation; callers retain operation state and dismissal authority. */
+export function ResponsiveDialog(props: ResponsiveDialogProps): ReactElement {
   const common = {
     opened: props.opened,
     onClose: props.onClose,
@@ -28,7 +31,7 @@ export function AuthenticationDialog(
       {...common}
       position="bottom"
       size="auto"
-      classNames={{ content: classes.sheet }}
+      classNames={{ content: classes.sheet, body: classes.body }}
       overlayProps={{ backgroundOpacity: 0.35, blur: 4 }}
     >
       {props.children}

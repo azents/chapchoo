@@ -9,14 +9,6 @@
   padding-block: var(--mantine-spacing-lg);
   border-block: 0.0625rem solid var(--chapchoo-color-border);
 }
-.sheet.sheet {
-  height: auto;
-  flex: 0 0 100%;
-  width: 100%;
-  max-height: 90dvh;
-  overflow-y: auto;
-  border-radius: var(--mantine-radius-lg) var(--mantine-radius-lg) 0 0;
-}
 .fieldset {
   border: 0;
   padding: 0;

@@ -1,5 +1,5 @@
+import { ResponsiveDialog } from "@chapchoo/ui/ResponsiveDialog";
 import { Alert, Box, Button, Group, Stack, Text } from "@mantine/core";
-import { AuthenticationDialog } from "./AuthenticationDialog";
 import { CodexMark } from "./CodexMark";
 import { ConnectionPanel } from "./ConnectionPanel";
 import classes from "./ConnectionPanel.module.css";
@@ -48,7 +48,7 @@ export function AgentAuthentication(
           </Button>
         </Group>
       </Stack>
-      <AuthenticationDialog
+      <ResponsiveDialog
         mobile={props.panel.mobile}
         opened={props.opened}
         onClose={props.onClose}
@@ -83,7 +83,7 @@ export function AgentAuthentication(
             </>
           )}
         </Stack>
-      </AuthenticationDialog>
+      </ResponsiveDialog>
     </>
   );
 }
