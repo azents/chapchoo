@@ -12,6 +12,13 @@ test("empty alias remains optional and creation time identifies unnamed connecti
   const heading = page.getByRole("heading", { level: 3 });
   await expect(heading).not.toHaveText("");
   await expect(heading).toHaveText(await time.innerText());
+  await expect(time).toHaveText(
+    new Intl.DateTimeFormat("ko-KR", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "Asia/Seoul",
+    }).format(Date.parse("2026-11-06T00:00:00Z")),
+  );
   await page.goto(
     "/iframe.html?id=authentication-connections--optional-alias&viewMode=story",
   );

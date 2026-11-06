@@ -137,6 +137,18 @@ async fn exercise(store: &Store) -> Result<(String, String), TestError> {
         name: String::new(),
         key: key("synthetic-personal-key")?,
     };
+    let whitespace = RegisterApiKey {
+        scope: personal.clone(),
+        request_id: "whitespace-register".to_owned(),
+        name: "   ".to_owned(),
+        key: key("synthetic-personal-key")?,
+    };
+    assert!(matches!(
+        store
+            .register_external_api_key(&owner, &whitespace, NOW)
+            .await,
+        Err(StoreError::InvalidInput)
+    ));
     let id = record(
         store
             .register_external_api_key(&owner, &original, NOW)

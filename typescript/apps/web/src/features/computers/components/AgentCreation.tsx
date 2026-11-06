@@ -1,5 +1,6 @@
 "use client";
 import { ApplicationShell } from "@chapchoo/ui/ApplicationShell";
+import { formatDisplayDate } from "@chapchoo/ui/displayFormatting";
 import { InteractiveSurface } from "@chapchoo/ui/InteractiveSurface";
 import { NavigationIcon } from "@chapchoo/ui/NavigationIcon";
 import { PageFailure } from "@chapchoo/ui/PageFailure";
@@ -17,7 +18,6 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
-import { useFormatter } from "next-intl";
 import { AuthenticationDialog } from "@/shared/authentications/AuthenticationDialog";
 import { CodexMark } from "@/shared/authentications/CodexMark";
 import { ConnectionPanel } from "@/shared/authentications/ConnectionPanel";
@@ -30,7 +30,7 @@ import type { ReactElement } from "react";
 
 export function AgentCreation(props: AgentCreationProps): ReactElement {
   const { copy: c, profileCopy: p, authenticationCopy: a } = props;
-  const format = useFormatter();
+  const display = props.authenticationPanel.display;
   const locked = props.pending || props.creationLocked;
   const imageOptions = props.images.items.some(
     (image) => image.id === props.image.id,
@@ -246,10 +246,15 @@ export function AgentCreation(props: AgentCreationProps): ReactElement {
                 <Text style={{ overflowWrap: "anywhere" }}>
                   {props.authentication
                     ? props.authentication.name ||
-                      format.dateTime(props.authentication.createdAt, {
-                        dateStyle: "medium",
-                        timeStyle: "short",
-                      })
+                      ((display
+                        ? formatDisplayDate(
+                            props.authentication.createdAt,
+                            display.region,
+                            display.timeZone,
+                            "medium",
+                          )
+                        : null) ??
+                        a.unavailable)
                     : a.unselected}
                 </Text>
                 {props.authentication?.email ? (

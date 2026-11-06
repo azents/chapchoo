@@ -39,6 +39,7 @@ export interface ConnectionPanelInput {
   onPage?: (value: string | null) => void;
 }
 export interface ConnectionPanelProps {
+  display: { region: string; timeZone: string } | null;
   mobile: boolean;
   basePath?: string;
   showConnectAction?: boolean;

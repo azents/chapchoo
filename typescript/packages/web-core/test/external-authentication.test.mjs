@@ -52,6 +52,7 @@ void test("missing aliases preserve empty strings and actual creation timestamps
     "",
   );
   assert.throws(() => authentication({ ...record, name: "\n" }));
+  assert.throws(() => authentication({ ...record, name: "   " }));
   assert.throws(() => authentication({ ...record, name: "a".repeat(257) }));
 });
 void test("catalogue projection contains only safe identity and preserves exact scope", () => {

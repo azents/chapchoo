@@ -88,6 +88,7 @@ function optional(value: string | undefined): string | null {
   return text(value, 4096);
 }
 function alias(value: string): string {
+  if (value !== "" && value.trim() === "") return invalidResponse();
   if ([...value].length > 256 || new TextEncoder().encode(value).length > 1024)
     return invalidResponse();
   return value === "" ? "" : text(value, 1024);

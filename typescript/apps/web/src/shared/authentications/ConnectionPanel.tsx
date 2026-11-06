@@ -1,3 +1,4 @@
+import { formatDisplayDate } from "@chapchoo/ui/displayFormatting";
 import { InteractiveSurface } from "@chapchoo/ui/InteractiveSurface";
 import { NavigationIcon } from "@chapchoo/ui/NavigationIcon";
 import {
@@ -19,7 +20,6 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
-import { useFormatter } from "next-intl";
 import { AuthenticationDialog } from "./AuthenticationDialog";
 import { CodexMark } from "./CodexMark";
 import classes from "./ConnectionPanel.module.css";
@@ -29,9 +29,15 @@ import type { ReactElement } from "react";
 
 export function ConnectionPanel(props: ConnectionPanelProps): ReactElement {
   const { copy: c, dialog: d } = props;
-  const format = useFormatter();
   const created = (instant: number): string =>
-    format.dateTime(instant, { dateStyle: "medium", timeStyle: "short" });
+    (props.display
+      ? formatDisplayDate(
+          instant,
+          props.display.region,
+          props.display.timeZone,
+          "medium",
+        )
+      : null) ?? c.unavailable;
   const activeDevice =
     d.type === "device" &&
     !["cancelled", "expired", "failed", "superseded"].includes(
