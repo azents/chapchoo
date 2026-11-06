@@ -146,7 +146,7 @@ test("owner manages one Computer while Admin observes independent cleanup invent
       .getByRole("button", { name: "Save", exact: true })
       .click();
     await expect(
-      owner.getByText("Acceptance key", { exact: true }),
+      owner.getByRole("main").getByText("Acceptance key", { exact: true }),
     ).toBeVisible();
     await owner.getByRole("button", { name: "Next", exact: true }).click();
     await owner
@@ -165,7 +165,7 @@ test("owner manages one Computer while Admin observes independent cleanup invent
       .click();
     await owner.getByRole("button", { name: "Previous", exact: true }).click();
     await expect(
-      owner.getByText("Acceptance key", { exact: true }),
+      owner.getByRole("main").getByText("Acceptance key", { exact: true }),
     ).toBeVisible();
     await owner.getByRole("button", { name: "Previous", exact: true }).click();
     await expect(
@@ -268,7 +268,7 @@ test("owner manages one Computer while Admin observes independent cleanup invent
     await fact(owner, "Computer connection", "Connected");
     const detailUrl = owner.url();
     await expect(
-      owner.getByText("Acceptance key", { exact: true }),
+      owner.getByRole("main").getByText("Acceptance key", { exact: true }),
     ).toBeVisible();
     const authenticationMark = owner.locator(
       'main img[src$="/design-assets/icons/codex/logo.svg"]',
@@ -307,7 +307,7 @@ test("owner manages one Computer while Admin observes independent cleanup invent
       .getByRole("button", { name: "Save", exact: true })
       .click();
     await expect(
-      owner.getByText("Changed selection", { exact: true }),
+      owner.getByRole("main").getByText("Changed selection", { exact: true }),
     ).toBeVisible();
     await expect(owner).toHaveURL(detailUrl);
     await expect(owner).toHaveURL(/\/teams\/my\/agents\/[a-z0-9-]+$/);
