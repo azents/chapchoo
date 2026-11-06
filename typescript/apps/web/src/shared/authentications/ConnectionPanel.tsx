@@ -1,6 +1,7 @@
 import { formatDisplayDate } from "@chapchoo/ui/displayFormatting";
 import { InteractiveSurface } from "@chapchoo/ui/InteractiveSurface";
 import { NavigationIcon } from "@chapchoo/ui/NavigationIcon";
+import { ResponsiveDialog } from "@chapchoo/ui/ResponsiveDialog";
 import {
   Alert,
   Anchor,
@@ -20,7 +21,6 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
-import { AuthenticationDialog } from "./AuthenticationDialog";
 import { CodexMark } from "./CodexMark";
 import classes from "./ConnectionPanel.module.css";
 import { scopeKey } from "./types";
@@ -211,7 +211,7 @@ export function ConnectionPanel(props: ConnectionPanelProps): ReactElement {
           ) : null}
         </Group>
       ) : null}
-      <AuthenticationDialog
+      <ResponsiveDialog
         mobile={props.mobile}
         opened={d.type !== "closed"}
         onClose={props.onClose}
@@ -487,7 +487,7 @@ export function ConnectionPanel(props: ConnectionPanelProps): ReactElement {
             </Alert>
           ) : null}
         </Stack>
-      </AuthenticationDialog>
+      </ResponsiveDialog>
     </Stack>
   );
 }

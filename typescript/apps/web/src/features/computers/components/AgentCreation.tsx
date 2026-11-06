@@ -4,6 +4,7 @@ import { formatDisplayDate } from "@chapchoo/ui/displayFormatting";
 import { InteractiveSurface } from "@chapchoo/ui/InteractiveSurface";
 import { NavigationIcon } from "@chapchoo/ui/NavigationIcon";
 import { PageFailure } from "@chapchoo/ui/PageFailure";
+import { ResponsiveDialog } from "@chapchoo/ui/ResponsiveDialog";
 import { agentsPath } from "@chapchoo/web-core/workspace";
 import {
   Alert,
@@ -18,7 +19,6 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
-import { AuthenticationDialog } from "@/shared/authentications/AuthenticationDialog";
 import { CodexMark } from "@/shared/authentications/CodexMark";
 import { ConnectionPanel } from "@/shared/authentications/ConnectionPanel";
 import { profileStyle } from "../profilePalette";
@@ -462,7 +462,7 @@ export function AgentCreation(props: AgentCreationProps): ReactElement {
           </Button>
         </Group>
       </Stack>
-      <AuthenticationDialog
+      <ResponsiveDialog
         mobile={props.authenticationPanel.mobile}
         opened={props.authenticationPickerOpen}
         onClose={props.onCloseAuthenticationPicker}
@@ -475,7 +475,7 @@ export function AgentCreation(props: AgentCreationProps): ReactElement {
           {...props.authenticationPanel}
           basePath={props.basePath}
         />
-      </AuthenticationDialog>
+      </ResponsiveDialog>
     </ApplicationShell>
   );
 }
