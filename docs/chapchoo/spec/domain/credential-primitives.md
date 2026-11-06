@@ -53,6 +53,28 @@ not implicit Display/serialization. Raw passwords, decoded roots and derived
 keys use zeroizing owners. This does not prove that every library/OS copy is
 erased. Decryption failures yield no plaintext.
 
+## External-authentication protection primitives
+
+`ExternalSecret` owns 1–65,536 bytes in a zeroizing buffer, with explicit exposure
+and redacted Debug. `ExternalSecretEnvelope` has a 24-byte nonce and a complete
+authenticated ciphertext of 17–65,552 bytes. It does not widen or reuse the fixed
+session-bearer recovery envelope.
+
+The existing installation root derives separate external-authentication,
+pending-device and request-fingerprint keys. Context binds User versus Team
+scope, exact owner identity, object/attempt identity and ChatGPT/API-key/pending
+kind with length-delimited fields. Moving ciphertext between contexts or using
+another root yields no plaintext. Pending device material uses its own derived
+key; API-key and ChatGPT kinds also remain distinct in authenticated data.
+
+External request matching uses a keyed HMAC over context, operation and bounded
+length-delimited input fields, not a public raw hash of an API key. These are
+library capabilities: no external-auth Store mutation, provider login, Client RPC
+or Computer delivery is activated by the primitive or
+[prepared schema](account-storage.md#external-authentication-storage-foundation).
+Decryption is not authorization; current caller and lifecycle checks remain
+separate business-operation obligations.
+
 ## Password Hashing and Failure Boundaries
 
 `PasswordHasher` uses bcrypt non-truncating APIs, fresh random salts and cost 12
@@ -90,5 +112,6 @@ primitive tests alone do not establish those contracts.
 - [`rust/crates/domain/src/email.rs`](../../../../rust/crates/domain/src/email.rs)
 - [`rust/crates/domain/src/password.rs`](../../../../rust/crates/domain/src/password.rs)
 - [`rust/crates/crypto/src/root.rs`](../../../../rust/crates/crypto/src/root.rs)
+- [`rust/crates/crypto/src/external.rs`](../../../../rust/crates/crypto/src/external.rs)
 - [`rust/crates/crypto/src/token.rs`](../../../../rust/crates/crypto/src/token.rs)
 - [`rust/crates/crypto/src/password.rs`](../../../../rust/crates/crypto/src/password.rs)

@@ -85,6 +85,40 @@ application startup invokes only readiness, not preparation. A
 changed root, absent history or incorrect migration set does not authorize
 adopting a new key, deleting data or creating the first administrator.
 
+## External-authentication storage foundation
+
+Explicit preparation includes migration10 for backend external authentication.
+It adds empty tables without assigning credentials to existing Agents or
+rewriting accepted creation fingerprints. UUID PostgreSQL/BLOB16 SQLite identity
+representations match the existing installation. No public registration,
+selection operation or provider HTTP path is activated by schema preparation.
+
+- `external_authentications` has exactly one User or Team owner FK, ChatGPT or
+  API-key kind, display metadata, bounded protected secret, latest mutation
+  Request identity and optional active-attempt binding. API-key rows cannot
+  claim OAuth account/plan/expiry metadata. Owner and reauth dependencies use
+  restricting references; schema FKs do not implement management permissions.
+- `external_auth_attempts` binds initiating User, exact owner, original Request
+  and optional reauth target plus expected mutation. Phase checks require active
+  step identity for issuing/checking/exchanging, protected pending data for
+  provider-pending phases and removal of pending secret bytes for terminal phases.
+  A registered result retains historical assigned identity, not a live catalogue FK.
+- `external_auth_requests` retains caller/Request, original User-or-Team owning
+  scope, closed operation kind, keyed fingerprint and assigned result identities.
+  The retained scope permits current-authority checks even after catalogue deletion.
+  Result IDs are historical values rather than live FKs so later deletion cannot
+  erase an accepted result.
+- `agent_authentication_selections` is one row per Agent, with a restricting
+  authentication FK and cascading Agent FK. It stores no token or execution data.
+  The referencing index supports later transactional in-use checks.
+
+New-table row counts participate in the first-root binding guard. A down migration
+refuses to erase even an accepted result without a remaining credential. Only
+an empty foundation may be explicitly reverted. The prepared schema and crypto
+capabilities are not evidence of implemented role enforcement, acquisition,
+creation selection, lifecycle cleanup or runtime readiness; those require the
+future completed operations. Existing account/Computer behavior remains unchanged.
+
 ## Connections
 
 - [Repository-owned identity](repository-identity.md) — shared issuance, opaque DTOs, compact storage and original-root preserving cutover.
