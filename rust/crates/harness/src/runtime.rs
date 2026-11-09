@@ -570,6 +570,7 @@ struct Live {
     session: Option<agent_client_protocol::v2::ActiveSession<Agent>>,
     requests: Requests,
     _supply: AppliedSupply,
+    requested_supply: HarnessSupply,
     _launch: tempfile::TempDir,
     capture: crate::CaptureLog,
     observations: Arc<Observations>,
@@ -637,6 +638,7 @@ impl State {
             versions: live._supply.versions.clone(),
         });
         observed.authentication_id = Some(live._authentication.authentication_id.clone());
+        observed.applied_supply = Some(live.requested_supply.clone());
         Ok(observed)
     }
     fn stop(&self, target: &NativeWorkTarget) -> Result<(), Error> {
@@ -823,6 +825,7 @@ impl State {
             session: None,
             requests,
             _supply: applied,
+            requested_supply: supply,
             _launch: launch,
             capture: source,
             observations,

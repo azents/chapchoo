@@ -41,6 +41,10 @@ void test("only protected invalid-session reasons end authentication", () => {
     "authentications.registerKey",
     "authentications.pollDevice",
     "authentications.selectAgent",
+    "conversations.region",
+    "conversations.send",
+    "conversations.answer",
+    "conversations.stop",
   ]) {
     assert.equal(
       invalidatesSession("DOMAIN_REASON_INVALID_SESSION", path, "general"),

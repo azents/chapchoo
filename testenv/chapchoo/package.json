@@ -8,7 +8,8 @@
     "./processes": "./dist/processes.js",
     "./safety": "./dist/safety.js",
     "./config": "./dist/config/index.js",
-    "./seed": "./dist/seed.js"
+    "./seed": "./dist/seed.js",
+    "./nativeConversation": "./dist/nativeConversation.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

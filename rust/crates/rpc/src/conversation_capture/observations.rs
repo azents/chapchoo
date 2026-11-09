@@ -67,6 +67,10 @@ pub(super) async fn native(
                     })
                     .transpose()?,
                 authentication_id: value.authentication_id,
+                applied_supply: value
+                    .applied_supply
+                    .map(|value| crate::conversations::supply(Some(value)))
+                    .transpose()?,
             },
         )
         .await

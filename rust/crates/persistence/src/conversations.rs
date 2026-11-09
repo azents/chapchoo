@@ -3,6 +3,7 @@
 mod answers;
 pub(crate) mod authority;
 mod delivery;
+mod input_reads;
 mod inputs;
 mod native_state;
 mod preparation;
@@ -41,6 +42,7 @@ pub use delivery::{
     ConversationInputChunk, ConversationInputDelivery, ConversationInputOutcome,
     ConversationOperationForwarding,
 };
+pub use input_reads::{ConversationInputAnchor, ConversationInputScope, RetainedConversationInput};
 pub use inputs::{
     AcceptConversationInput, ConversationInputAdmission, ConversationInputReceipt,
     ConversationInputReference,

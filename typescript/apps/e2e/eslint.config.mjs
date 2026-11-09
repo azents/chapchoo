@@ -5,7 +5,11 @@ import prettier from "eslint-plugin-prettier/recommended";
 export default defineConfig([
   { ignores: ["test-results/**", "artifacts/**"] },
   {
-    files: ["src/**/*.ts", "playwright.config.ts"],
+    files: [
+      "src/**/*.ts",
+      "playwright.config.ts",
+      "playwright.docker.config.ts",
+    ],
     extends: [tseslint.configs.recommendedTypeChecked],
     languageOptions: {
       parserOptions: {

@@ -4,6 +4,8 @@ mod answers;
 mod authentication;
 #[path = "conversations/delivery.rs"]
 mod delivery;
+#[path = "conversations/input_reads.rs"]
+mod input_reads;
 #[path = "conversations/native_state.rs"]
 mod native_state;
 #[path = "conversations/preparation.rs"]
@@ -446,6 +448,14 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
     );
     assert_eq!(first.id, existing.id);
     assert_eq!(first.text.as_str(), draft.text.as_str());
+    input_reads::exercise(
+        store,
+        f,
+        &first.conversation_id,
+        &ConversationTarget::NotStarted,
+        first.text.as_str(),
+    )
+    .await?;
     let changed = AcceptConversationInput {
         text: ConversationText::parse("changed".to_owned())?,
         ..AcceptConversationInput {
@@ -566,6 +576,14 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
     store
         .complete_conversation_source(&source, &first.conversation_id, &s1, Some(&pair.position))
         .await?;
+    input_reads::exercise(
+        store,
+        f,
+        &first.conversation_id,
+        &ConversationTarget::Snapshot(s1.clone()),
+        first.text.as_str(),
+    )
+    .await?;
     assert!(matches!(
         store
             .bind_conversation_source(&source, &binding)

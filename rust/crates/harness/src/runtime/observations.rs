@@ -30,6 +30,7 @@ pub struct NativeObservation {
     pub work: Option<NativeWorkTarget>,
     pub preparation: Option<crate::NativePreparationObservation>,
     pub authentication_id: Option<String>,
+    pub applied_supply: Option<HarnessSupply>,
 }
 #[derive(Default)]
 pub(super) struct Observations(SyncMutex<Observed>, tokio::sync::Notify);
@@ -170,6 +171,7 @@ impl Observations {
             foreground: state.foreground.unwrap_or(NativeForeground::Unknown),
             preparation: None,
             authentication_id: None,
+            applied_supply: None,
             work: match (&state.source, &state.work) {
                 (Some((snapshot, native)), Some(work)) => Some(NativeWorkTarget {
                     snapshot: snapshot.clone(),

@@ -105,7 +105,7 @@ impl std::error::Error for Failures {
             .map(|error| error as &(dyn std::error::Error + 'static))
     }
 }
-fn supply(value: Option<wire::HarnessSupply>) -> Result<HarnessSupply, Status> {
+pub(crate) fn supply(value: Option<wire::HarnessSupply>) -> Result<HarnessSupply, Status> {
     match value.and_then(|value| value.choice) {
         Some(wire::harness_supply::Choice::Managed(())) => Ok(HarnessSupply::Managed),
         Some(wire::harness_supply::Choice::ExistingCodexPath(path)) => Ok(HarnessSupply::Existing(
@@ -164,6 +164,30 @@ fn stop_receipt(value: ConversationStopReceipt) -> wire::StopReceipt {
 }
 #[tonic::async_trait]
 impl Conversations for ConversationServices {
+    async fn inputs(
+        &self,
+        request: Request<wire::OwnerInputsRequest>,
+    ) -> Result<Response<wire::RetainedInputs>, Status> {
+        input::list(self, request).await
+    }
+    async fn read_input(
+        &self,
+        request: Request<wire::OwnerInputRead>,
+    ) -> Result<Response<wire::FieldChunk>, Status> {
+        input::read(self, request).await
+    }
+    async fn latest_plan(
+        &self,
+        request: Request<wire::RecordSource>,
+    ) -> Result<Response<wire::RecordRegion>, Status> {
+        records::latest_plan(self, request).await
+    }
+    async fn request_answer(
+        &self,
+        request: Request<wire::OwnerRequestAnswer>,
+    ) -> Result<Response<wire::OwnerAnswerStatus>, Status> {
+        answers::historical(self, request).await
+    }
     async fn read_answer(
         &self,
         request: Request<wire::OwnerAnswerRead>,
@@ -282,6 +306,7 @@ impl Conversations for ConversationServices {
                 codex: value.codex,
             }),
             authentication_id: observed.authentication_id,
+            applied_supply: observed.applied_supply.map(wire_supply),
         });
         let conversation = wire::CaptureState {
             conversation_id: current.id,

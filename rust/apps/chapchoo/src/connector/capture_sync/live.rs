@@ -81,6 +81,20 @@ pub(super) async fn publish_live(
                                 }
                             }),
                             authentication_id: observed.authentication_id,
+                            applied_supply: observed.applied_supply.map(|supply| {
+                                captured::HarnessSupply {
+                                    choice: Some(match supply {
+                                        chapchoo_domain::HarnessSupply::Managed => {
+                                            captured::harness_supply::Choice::Managed(())
+                                        }
+                                        chapchoo_domain::HarnessSupply::Existing(path) => {
+                                            captured::harness_supply::Choice::ExistingCodexPath(
+                                                path.as_str().into(),
+                                            )
+                                        }
+                                    }),
+                                }
+                            }),
                         },
                         key,
                     )?)

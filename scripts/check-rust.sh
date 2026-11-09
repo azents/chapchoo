@@ -16,7 +16,7 @@ cargo metadata --locked --format-version 1 --no-deps | python3 -c '
 import json, sys
 packages = {p["name"]: p for p in json.load(sys.stdin)["packages"]}
 allowed = {
-    "chapchoo-domain": {"email_address", "jiff", "thiserror", "zeroize"},
+    "chapchoo-domain": {"email_address", "jiff", "thiserror", "zeroize", "jsonschema", "serde_json"},
     "chapchoo-crypto": {
         "base64", "bcrypt", "chacha20poly1305", "chapchoo-domain", "getrandom", "hkdf",
         "hmac", "sha2", "subtle", "thiserror", "zeroize",

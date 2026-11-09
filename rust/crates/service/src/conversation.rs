@@ -52,6 +52,21 @@ impl ConversationService {
             .authentication
             .map(|selection| selection.authentication_id))
     }
+    pub async fn request_answer(
+        &self,
+        actor: &chapchoo_crypto::SecretDigest,
+        agent: &str,
+        conversation: &str,
+        snapshot: &SnapshotId,
+        occurrence: &chapchoo_domain::EventOccurrenceId,
+        now: i64,
+    ) -> Result<Option<ConversationAnswerAcceptance>, ServiceError> {
+        Ok(self
+            .store
+            .conversation_request_answer(actor, agent, conversation, snapshot, occurrence, now)
+            .await?
+            .map(Into::into))
+    }
     pub async fn retained_answer(
         &self,
         actor: &chapchoo_crypto::SecretDigest,

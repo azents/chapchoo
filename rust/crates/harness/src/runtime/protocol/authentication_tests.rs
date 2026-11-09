@@ -104,6 +104,9 @@ async fn already_live_setup_preserves_applied_credentials_without_calling_new_pr
         authentication_id: "old-record".into(),
         source: [11; 24],
     };
+    let applied_choice = HarnessSupply::Existing(chapchoo_domain::ExistingCodexPath::parse(
+        "/owner/codex".into(),
+    )?);
     state.live = Some(Live {
         child,
         protocol,
@@ -124,6 +127,7 @@ async fn already_live_setup_preserves_applied_credentials_without_calling_new_pr
                 codex: "0.165.0".into(),
             },
         },
+        requested_supply: applied_choice.clone(),
         _launch: launch,
         capture: source.clone(),
         observations: Arc::default(),
@@ -153,6 +157,7 @@ async fn already_live_setup_preserves_applied_credentials_without_calling_new_pr
         .ok_or("Missing live owner")?
         ._authentication
         .clone();
+    assert_eq!(state.observe()?.applied_supply, Some(applied_choice));
     let preserved = std::fs::read(storage.state().join("auth.json"))?;
     assert_eq!(provider.0.load(Ordering::SeqCst), 0);
     let checked = Arc::new(CheckProvider(AtomicUsize::new(0)));

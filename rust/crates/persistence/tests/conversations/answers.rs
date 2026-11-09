@@ -302,6 +302,62 @@ pub(super) async fn exercise(
             .is_empty()
     );
     assert_eq!(read.answer, original);
+    let discovered = store
+        .conversation_request_answer(
+            &owner,
+            &f.agent.id,
+            conversation,
+            snapshot,
+            closed.occurrence.occurrence(),
+            f.now,
+        )
+        .await?
+        .ok_or("Missing source-bound historical answer")?;
+    assert_eq!(discovered.id, read.id);
+    assert_eq!(discovered.request_id, read.request_id);
+    assert_eq!(
+        discovered.delivery,
+        Delivery::Known(ResultEvidence::ResponderAccepted)
+    );
+    assert!(
+        store
+            .conversation_request_answer(
+                &owner,
+                &f.agent.id,
+                conversation,
+                snapshot,
+                &EventOccurrenceId::parse("not-a-question".into())?,
+                f.now,
+            )
+            .await?
+            .is_none()
+    );
+    assert!(matches!(
+        store
+            .conversation_request_answer(
+                &f.other.digest(),
+                &f.agent.id,
+                conversation,
+                snapshot,
+                closed.occurrence.occurrence(),
+                f.now,
+            )
+            .await,
+        Err(StoreError::NotFound)
+    ));
+    assert!(matches!(
+        store
+            .conversation_request_answer(
+                &owner,
+                &f.agent.id,
+                conversation,
+                &SnapshotId::parse("replaced-source".into())?,
+                closed.occurrence.occurrence(),
+                f.now,
+            )
+            .await,
+        Err(StoreError::Conflict)
+    ));
     assert_eq!(
         store
             .conversation_retained_answer(

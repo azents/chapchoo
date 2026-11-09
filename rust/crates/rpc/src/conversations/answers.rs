@@ -1,4 +1,34 @@
 use super::*;
+pub(super) async fn historical(
+    service: &ConversationServices,
+    request: Request<wire::OwnerRequestAnswer>,
+) -> Result<Response<wire::OwnerAnswerStatus>, Status> {
+    service.admit()?;
+    let actor = actor(&request)?;
+    let value = request.into_inner();
+    let source = value
+        .source
+        .ok_or_else(|| Status::invalid_argument("Record source is required"))?;
+    let snapshot = SnapshotId::parse(source.snapshot_id)
+        .map_err(|_| Status::invalid_argument("Record snapshot is invalid"))?;
+    let occurrence = chapchoo_domain::EventOccurrenceId::parse(value.occurrence_id)
+        .map_err(|_| Status::invalid_argument("Request occurrence is invalid"))?;
+    let retained = service
+        .conversation
+        .request_answer(
+            &actor,
+            &source.agent_id,
+            &source.conversation_id,
+            &snapshot,
+            &occurrence,
+            now()?,
+        )
+        .await
+        .map_err(status)?;
+    Ok(Response::new(wire::OwnerAnswerStatus {
+        acceptance: retained.map(acceptance),
+    }))
+}
 use chapchoo_service::{
     ConversationAnswer as Answer, ConversationAnswerAcceptance, ConversationAnswerDelivery,
     ConversationAnswerDraft, ConversationAnswerResult, ConversationAnswerValue as Value,

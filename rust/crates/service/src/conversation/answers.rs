@@ -182,7 +182,8 @@ fn valid_value(property: &schema::ElicitationPropertySchema, value: &Value) -> b
     match (property, value) {
         (P::String(p), Value::Text(value)) => {
             let length = value.chars().count();
-            p.min_length.is_none_or(|min| length >= min as usize)
+            normalize::text_rule(p).is_ok_and(|rule| rule.accepts(value))
+                && p.min_length.is_none_or(|min| length >= min as usize)
                 && p.max_length.is_none_or(|max| length <= max as usize)
                 && p.enum_values
                     .as_ref()

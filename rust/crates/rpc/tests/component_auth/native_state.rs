@@ -34,6 +34,9 @@ pub(super) async fn exercise(
             codex: "0.165.0".into(),
         }),
         authentication_id: None,
+        applied_supply: Some(c::HarnessSupply {
+            choice: Some(c::harness_supply::Choice::Managed(())),
+        }),
     };
     assert_eq!(
         client
@@ -84,6 +87,10 @@ pub(super) async fn exercise(
             .ok_or("Missing preparation")?
             .adapter,
         "2.6.0"
+    );
+    assert_eq!(
+        native.applied_supply,
+        Some(chapchoo_domain::HarnessSupply::Managed)
     );
     let mut owner =
         c::conversations_client::ConversationsClient::connect(context.endpoint.to_owned()).await?;

@@ -26,6 +26,7 @@ pub(super) async fn exercise(
         work_id: Some("exact-work".into()),
         preparation: None,
         authentication_id: None,
+        applied_supply: Some(HarnessSupply::Managed),
     };
     assert!(
         store
@@ -48,6 +49,7 @@ pub(super) async fn exercise(
             work_id: None,
             preparation: None,
             authentication_id: None,
+            applied_supply: Some(HarnessSupply::Managed),
         },
     ] {
         store
@@ -63,6 +65,21 @@ pub(super) async fn exercise(
             )
             .await?;
     }
+    let unknown_supply = Observation {
+        applied_supply: None,
+        ..running.clone()
+    };
+    store
+        .observe_conversation_native(&source, conversation, &unknown_supply)
+        .await?;
+    assert!(
+        store
+            .conversation_native_observation(&owner, &f.agent.id, conversation, f.now)
+            .await?
+            .ok_or("Missing original observation")?
+            .applied_supply
+            .is_none()
+    );
     store
         .observe_conversation_native(&source, conversation, &running)
         .await?;
@@ -178,10 +195,23 @@ pub(super) async fn exercise(
             ..preparation
         }),
         authentication_id: running.authentication_id.clone(),
+        applied_supply: Some(HarnessSupply::Managed),
     };
     store
         .observe_conversation_native(&source, conversation, &idle)
         .await?;
+    let changed_supply = Observation {
+        applied_supply: Some(HarnessSupply::Existing(ExistingCodexPath::parse(
+            "/owner/codex".into(),
+        )?)),
+        ..idle.clone()
+    };
+    assert!(matches!(
+        store
+            .observe_conversation_native(&source, conversation, &changed_supply)
+            .await,
+        Err(StoreError::Conflict)
+    ));
     store
         .observe_conversation_native(&source, conversation, &running)
         .await?;
@@ -243,6 +273,43 @@ pub(super) async fn exercise(
             .await,
         Err(StoreError::Conflict)
     ));
+    // A retained source can describe a later physical start with a new applied choice.
+    let resumed = Observation {
+        target: running.target.clone(),
+        position: position(12, "resumed-state")?,
+        foreground: Foreground::Idle,
+        work_id: None,
+        preparation: conflict.preparation.clone(),
+        authentication_id: conflict.authentication_id.clone(),
+        applied_supply: Some(HarnessSupply::Existing(ExistingCodexPath::parse(
+            "/owner/new codex".into(),
+        )?)),
+    };
+    store
+        .ingest_conversation_pair(
+            &source,
+            conversation,
+            &CapturedEventPair {
+                snapshot: snapshot.clone(),
+                position: resumed.position.clone(),
+                raw: b"resumed native state".to_vec(),
+                normalized: b"state".to_vec(),
+            },
+        )
+        .await?;
+    store
+        .observe_conversation_native(&source, conversation, &resumed)
+        .await?;
+    store
+        .observe_conversation_native(&source, conversation, &running)
+        .await?;
+    assert_eq!(
+        store
+            .conversation_native_observation(&owner, &f.agent.id, conversation, f.now)
+            .await?
+            .ok_or("Missing later applied observation")?,
+        resumed
+    );
     assert_eq!(
         store
             .agent(&owner, &f.agent.id, f.now)

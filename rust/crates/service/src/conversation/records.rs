@@ -6,6 +6,44 @@ use chapchoo_persistence::{
     ConversationRecordMetadata, ConversationRegionRead, EventPayloadChunk,
 };
 impl ConversationService {
+    pub async fn latest_plan(
+        &self,
+        actor: &SecretDigest,
+        read: &ConversationRegionRead<'_>,
+        now: i64,
+    ) -> Result<Vec<ConversationRecordMetadata>, ServiceError> {
+        Ok(self
+            .store
+            .conversation_latest_plan(actor, read, now)
+            .await?)
+    }
+    pub async fn inputs(
+        &self,
+        actor: &SecretDigest,
+        scope: &chapchoo_persistence::ConversationInputScope<'_>,
+        before: Option<&chapchoo_persistence::ConversationInputAnchor>,
+        limit: i64,
+        now: i64,
+    ) -> Result<Vec<chapchoo_persistence::RetainedConversationInput>, ServiceError> {
+        Ok(self
+            .store
+            .conversation_inputs(actor, scope, before, limit, now)
+            .await?)
+    }
+    pub async fn input_text(
+        &self,
+        actor: &SecretDigest,
+        scope: &chapchoo_persistence::ConversationInputScope<'_>,
+        request: &str,
+        offset: u32,
+        length: u32,
+        now: i64,
+    ) -> Result<EventPayloadChunk, ServiceError> {
+        Ok(self
+            .store
+            .conversation_input_text(actor, scope, request, offset, length, now)
+            .await?)
+    }
     pub async fn records(
         &self,
         actor: &SecretDigest,

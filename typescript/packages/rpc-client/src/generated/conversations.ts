@@ -150,6 +150,7 @@ export interface ObservedNative {
   position: SourcePosition | undefined;
   foreground: Foreground;
   workId?: string | undefined;
+  appliedSupply: HarnessSupply | undefined;
   preparation: NativePreparation | undefined;
   authenticationId?: string | undefined;
 }
@@ -209,6 +210,40 @@ export interface OwnerInputResultRequest {
   agentId: string;
   conversationId: string;
   requestId: string;
+}
+
+/** Read-only discovery binds the exact current source, including not-started input. */
+export interface OwnerInputScope {
+  agentId: string;
+  conversationId: string;
+  target: InputTarget | undefined;
+}
+
+export interface InputAnchor {
+  acceptedAt: bigint;
+  requestId: string;
+}
+
+export interface OwnerInputsRequest {
+  scope: OwnerInputScope | undefined;
+  before: InputAnchor | undefined;
+  limit: number;
+}
+
+export interface RetainedInput {
+  acceptance: InputAcceptance | undefined;
+  totalBytes: bigint;
+}
+
+export interface RetainedInputs {
+  inputs: RetainedInput[];
+}
+
+export interface OwnerInputRead {
+  scope: OwnerInputScope | undefined;
+  requestId: string;
+  offset: number;
+  length: number;
 }
 
 export interface InputDelivery {
@@ -303,6 +338,12 @@ export interface OwnerAnswerResultRequest {
 
 export interface OwnerAnswerStatus {
   acceptance: AnswerAcceptance | undefined;
+}
+
+/** Historical discovery is source-bound and does not confer live responder authority. */
+export interface OwnerRequestAnswer {
+  source: RecordSource | undefined;
+  occurrenceId: string;
 }
 
 /**
@@ -575,7 +616,11 @@ export interface NativeStateReport {
   foreground: Foreground;
   workId?: string | undefined;
   preparation: NativePreparation | undefined;
-  authenticationId?: string | undefined;
+  authenticationId?:
+    | string
+    | undefined;
+  /** Observed actual-start choice, never the latest saved owner selection. */
+  appliedSupply: HarnessSupply | undefined;
 }
 
 export interface LiveRequestReport {
@@ -852,6 +897,7 @@ function createBaseObservedNative(): ObservedNative {
     position: undefined,
     foreground: 0,
     workId: undefined,
+    appliedSupply: undefined,
     preparation: undefined,
     authenticationId: undefined,
   };
@@ -870,6 +916,9 @@ export const ObservedNative: MessageFns<ObservedNative> = {
     }
     if (message.workId !== undefined) {
       writer.uint32(34).string(message.workId);
+    }
+    if (message.appliedSupply !== undefined) {
+      HarnessSupply.encode(message.appliedSupply, writer.uint32(42).fork()).join();
     }
     if (message.preparation !== undefined) {
       NativePreparation.encode(message.preparation, writer.uint32(50).fork()).join();
@@ -925,6 +974,14 @@ export const ObservedNative: MessageFns<ObservedNative> = {
             message.workId = reader.string();
             continue;
           }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.appliedSupply = HarnessSupply.decode(reader, reader.uint32());
+            continue;
+          }
           case 6: {
             if (tag !== 50) {
               break;
@@ -966,6 +1023,9 @@ export const ObservedNative: MessageFns<ObservedNative> = {
       : undefined;
     message.foreground = object.foreground ?? 0;
     message.workId = object.workId ?? undefined;
+    message.appliedSupply = (object.appliedSupply !== undefined && object.appliedSupply !== null)
+      ? HarnessSupply.fromPartial(object.appliedSupply)
+      : undefined;
     message.preparation = (object.preparation !== undefined && object.preparation !== null)
       ? NativePreparation.fromPartial(object.preparation)
       : undefined;
@@ -1689,6 +1749,464 @@ export const OwnerInputResultRequest: MessageFns<OwnerInputResultRequest> = {
     message.agentId = object.agentId ?? "";
     message.conversationId = object.conversationId ?? "";
     message.requestId = object.requestId ?? "";
+    return message;
+  },
+};
+
+function createBaseOwnerInputScope(): OwnerInputScope {
+  return { agentId: "", conversationId: "", target: undefined };
+}
+
+export const OwnerInputScope: MessageFns<OwnerInputScope> = {
+  encode(message: OwnerInputScope, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.agentId !== "") {
+      writer.uint32(10).string(message.agentId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(18).string(message.conversationId);
+    }
+    if (message.target !== undefined) {
+      InputTarget.encode(message.target, writer.uint32(26).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): OwnerInputScope {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseOwnerInputScope();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.agentId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.target = InputTarget.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<OwnerInputScope>, I>>(base?: I): OwnerInputScope {
+    return OwnerInputScope.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<OwnerInputScope>, I>>(object: I): OwnerInputScope {
+    const message = createBaseOwnerInputScope();
+    message.agentId = object.agentId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    message.target = (object.target !== undefined && object.target !== null)
+      ? InputTarget.fromPartial(object.target)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseInputAnchor(): InputAnchor {
+  return { acceptedAt: 0n, requestId: "" };
+}
+
+export const InputAnchor: MessageFns<InputAnchor> = {
+  encode(message: InputAnchor, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.acceptedAt !== 0n) {
+      if (BigInt.asIntN(64, message.acceptedAt) !== message.acceptedAt) {
+        throw new globalThis.Error("value provided for field message.acceptedAt of type int64 too large");
+      }
+      writer.uint32(8).int64(message.acceptedAt);
+    }
+    if (message.requestId !== "") {
+      writer.uint32(18).string(message.requestId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): InputAnchor {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseInputAnchor();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.acceptedAt = reader.int64() as bigint;
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.requestId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<InputAnchor>, I>>(base?: I): InputAnchor {
+    return InputAnchor.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<InputAnchor>, I>>(object: I): InputAnchor {
+    const message = createBaseInputAnchor();
+    message.acceptedAt = (object.acceptedAt !== undefined && object.acceptedAt !== null)
+      ? BigInt(object.acceptedAt)
+      : 0n;
+    message.requestId = object.requestId ?? "";
+    return message;
+  },
+};
+
+function createBaseOwnerInputsRequest(): OwnerInputsRequest {
+  return { scope: undefined, before: undefined, limit: 0 };
+}
+
+export const OwnerInputsRequest: MessageFns<OwnerInputsRequest> = {
+  encode(message: OwnerInputsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.scope !== undefined) {
+      OwnerInputScope.encode(message.scope, writer.uint32(10).fork()).join();
+    }
+    if (message.before !== undefined) {
+      InputAnchor.encode(message.before, writer.uint32(18).fork()).join();
+    }
+    if (message.limit !== 0) {
+      writer.uint32(24).uint32(message.limit);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): OwnerInputsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseOwnerInputsRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.scope = OwnerInputScope.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.before = InputAnchor.decode(reader, reader.uint32());
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.limit = reader.uint32();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<OwnerInputsRequest>, I>>(base?: I): OwnerInputsRequest {
+    return OwnerInputsRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<OwnerInputsRequest>, I>>(object: I): OwnerInputsRequest {
+    const message = createBaseOwnerInputsRequest();
+    message.scope = (object.scope !== undefined && object.scope !== null)
+      ? OwnerInputScope.fromPartial(object.scope)
+      : undefined;
+    message.before = (object.before !== undefined && object.before !== null)
+      ? InputAnchor.fromPartial(object.before)
+      : undefined;
+    message.limit = object.limit ?? 0;
+    return message;
+  },
+};
+
+function createBaseRetainedInput(): RetainedInput {
+  return { acceptance: undefined, totalBytes: 0n };
+}
+
+export const RetainedInput: MessageFns<RetainedInput> = {
+  encode(message: RetainedInput, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.acceptance !== undefined) {
+      InputAcceptance.encode(message.acceptance, writer.uint32(10).fork()).join();
+    }
+    if (message.totalBytes !== 0n) {
+      if (BigInt.asIntN(64, message.totalBytes) !== message.totalBytes) {
+        throw new globalThis.Error("value provided for field message.totalBytes of type int64 too large");
+      }
+      writer.uint32(16).int64(message.totalBytes);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RetainedInput {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRetainedInput();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.acceptance = InputAcceptance.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.totalBytes = reader.int64() as bigint;
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<RetainedInput>, I>>(base?: I): RetainedInput {
+    return RetainedInput.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<RetainedInput>, I>>(object: I): RetainedInput {
+    const message = createBaseRetainedInput();
+    message.acceptance = (object.acceptance !== undefined && object.acceptance !== null)
+      ? InputAcceptance.fromPartial(object.acceptance)
+      : undefined;
+    message.totalBytes = (object.totalBytes !== undefined && object.totalBytes !== null)
+      ? BigInt(object.totalBytes)
+      : 0n;
+    return message;
+  },
+};
+
+function createBaseRetainedInputs(): RetainedInputs {
+  return { inputs: [] };
+}
+
+export const RetainedInputs: MessageFns<RetainedInputs> = {
+  encode(message: RetainedInputs, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.inputs) {
+      RetainedInput.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RetainedInputs {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRetainedInputs();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.inputs.push(RetainedInput.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<RetainedInputs>, I>>(base?: I): RetainedInputs {
+    return RetainedInputs.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<RetainedInputs>, I>>(object: I): RetainedInputs {
+    const message = createBaseRetainedInputs();
+    message.inputs = object.inputs?.map((e) => RetainedInput.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseOwnerInputRead(): OwnerInputRead {
+  return { scope: undefined, requestId: "", offset: 0, length: 0 };
+}
+
+export const OwnerInputRead: MessageFns<OwnerInputRead> = {
+  encode(message: OwnerInputRead, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.scope !== undefined) {
+      OwnerInputScope.encode(message.scope, writer.uint32(10).fork()).join();
+    }
+    if (message.requestId !== "") {
+      writer.uint32(18).string(message.requestId);
+    }
+    if (message.offset !== 0) {
+      writer.uint32(24).uint32(message.offset);
+    }
+    if (message.length !== 0) {
+      writer.uint32(32).uint32(message.length);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): OwnerInputRead {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseOwnerInputRead();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.scope = OwnerInputScope.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.requestId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.offset = reader.uint32();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.length = reader.uint32();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<OwnerInputRead>, I>>(base?: I): OwnerInputRead {
+    return OwnerInputRead.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<OwnerInputRead>, I>>(object: I): OwnerInputRead {
+    const message = createBaseOwnerInputRead();
+    message.scope = (object.scope !== undefined && object.scope !== null)
+      ? OwnerInputScope.fromPartial(object.scope)
+      : undefined;
+    message.requestId = object.requestId ?? "";
+    message.offset = object.offset ?? 0;
+    message.length = object.length ?? 0;
     return message;
   },
 };
@@ -2940,6 +3458,75 @@ export const OwnerAnswerStatus: MessageFns<OwnerAnswerStatus> = {
     message.acceptance = (object.acceptance !== undefined && object.acceptance !== null)
       ? AnswerAcceptance.fromPartial(object.acceptance)
       : undefined;
+    return message;
+  },
+};
+
+function createBaseOwnerRequestAnswer(): OwnerRequestAnswer {
+  return { source: undefined, occurrenceId: "" };
+}
+
+export const OwnerRequestAnswer: MessageFns<OwnerRequestAnswer> = {
+  encode(message: OwnerRequestAnswer, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.source !== undefined) {
+      RecordSource.encode(message.source, writer.uint32(10).fork()).join();
+    }
+    if (message.occurrenceId !== "") {
+      writer.uint32(18).string(message.occurrenceId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): OwnerRequestAnswer {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseOwnerRequestAnswer();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.source = RecordSource.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.occurrenceId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<OwnerRequestAnswer>, I>>(base?: I): OwnerRequestAnswer {
+    return OwnerRequestAnswer.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<OwnerRequestAnswer>, I>>(object: I): OwnerRequestAnswer {
+    const message = createBaseOwnerRequestAnswer();
+    message.source = (object.source !== undefined && object.source !== null)
+      ? RecordSource.fromPartial(object.source)
+      : undefined;
+    message.occurrenceId = object.occurrenceId ?? "";
     return message;
   },
 };
@@ -6276,6 +6863,7 @@ function createBaseNativeStateReport(): NativeStateReport {
     workId: undefined,
     preparation: undefined,
     authenticationId: undefined,
+    appliedSupply: undefined,
   };
 }
 
@@ -6304,6 +6892,9 @@ export const NativeStateReport: MessageFns<NativeStateReport> = {
     }
     if (message.authenticationId !== undefined) {
       writer.uint32(74).string(message.authenticationId);
+    }
+    if (message.appliedSupply !== undefined) {
+      HarnessSupply.encode(message.appliedSupply, writer.uint32(58).fork()).join();
     }
     return writer;
   },
@@ -6385,6 +6976,14 @@ export const NativeStateReport: MessageFns<NativeStateReport> = {
             message.authenticationId = reader.string();
             continue;
           }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.appliedSupply = HarnessSupply.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -6418,6 +7017,9 @@ export const NativeStateReport: MessageFns<NativeStateReport> = {
       ? NativePreparation.fromPartial(object.preparation)
       : undefined;
     message.authenticationId = object.authenticationId ?? undefined;
+    message.appliedSupply = (object.appliedSupply !== undefined && object.appliedSupply !== null)
+      ? HarnessSupply.fromPartial(object.appliedSupply)
+      : undefined;
     return message;
   },
 };
@@ -8169,6 +8771,24 @@ export const ConversationsService = {
     responseSerialize: (value: OwnerInputStatus): Buffer => Buffer.from(OwnerInputStatus.encode(value).finish()),
     responseDeserialize: (value: Buffer): OwnerInputStatus => OwnerInputStatus.decode(value),
   },
+  inputs: {
+    path: "/chapchoo.conversations.Conversations/Inputs" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: OwnerInputsRequest): Buffer => Buffer.from(OwnerInputsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): OwnerInputsRequest => OwnerInputsRequest.decode(value),
+    responseSerialize: (value: RetainedInputs): Buffer => Buffer.from(RetainedInputs.encode(value).finish()),
+    responseDeserialize: (value: Buffer): RetainedInputs => RetainedInputs.decode(value),
+  },
+  readInput: {
+    path: "/chapchoo.conversations.Conversations/ReadInput" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: OwnerInputRead): Buffer => Buffer.from(OwnerInputRead.encode(value).finish()),
+    requestDeserialize: (value: Buffer): OwnerInputRead => OwnerInputRead.decode(value),
+    responseSerialize: (value: FieldChunk): Buffer => Buffer.from(FieldChunk.encode(value).finish()),
+    responseDeserialize: (value: Buffer): FieldChunk => FieldChunk.decode(value),
+  },
   submitAnswer: {
     path: "/chapchoo.conversations.Conversations/SubmitAnswer" as const,
     requestStream: false as const,
@@ -8185,6 +8805,15 @@ export const ConversationsService = {
     requestSerialize: (value: OwnerAnswerResultRequest): Buffer =>
       Buffer.from(OwnerAnswerResultRequest.encode(value).finish()),
     requestDeserialize: (value: Buffer): OwnerAnswerResultRequest => OwnerAnswerResultRequest.decode(value),
+    responseSerialize: (value: OwnerAnswerStatus): Buffer => Buffer.from(OwnerAnswerStatus.encode(value).finish()),
+    responseDeserialize: (value: Buffer): OwnerAnswerStatus => OwnerAnswerStatus.decode(value),
+  },
+  requestAnswer: {
+    path: "/chapchoo.conversations.Conversations/RequestAnswer" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: OwnerRequestAnswer): Buffer => Buffer.from(OwnerRequestAnswer.encode(value).finish()),
+    requestDeserialize: (value: Buffer): OwnerRequestAnswer => OwnerRequestAnswer.decode(value),
     responseSerialize: (value: OwnerAnswerStatus): Buffer => Buffer.from(OwnerAnswerStatus.encode(value).finish()),
     responseDeserialize: (value: Buffer): OwnerAnswerStatus => OwnerAnswerStatus.decode(value),
   },
@@ -8212,6 +8841,15 @@ export const ConversationsService = {
     responseStream: false as const,
     requestSerialize: (value: OwnerRecordsRequest): Buffer => Buffer.from(OwnerRecordsRequest.encode(value).finish()),
     requestDeserialize: (value: Buffer): OwnerRecordsRequest => OwnerRecordsRequest.decode(value),
+    responseSerialize: (value: RecordRegion): Buffer => Buffer.from(RecordRegion.encode(value).finish()),
+    responseDeserialize: (value: Buffer): RecordRegion => RecordRegion.decode(value),
+  },
+  latestPlan: {
+    path: "/chapchoo.conversations.Conversations/LatestPlan" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: RecordSource): Buffer => Buffer.from(RecordSource.encode(value).finish()),
+    requestDeserialize: (value: Buffer): RecordSource => RecordSource.decode(value),
     responseSerialize: (value: RecordRegion): Buffer => Buffer.from(RecordRegion.encode(value).finish()),
     responseDeserialize: (value: Buffer): RecordRegion => RecordRegion.decode(value),
   },
@@ -8260,11 +8898,15 @@ export interface ConversationsServer extends UntypedServiceImplementation {
   saveSupply: handleUnaryCall<SaveSupplyRequest, SavedSupply>;
   submitInput: handleUnaryCall<OwnerInputPiece, OwnerInputProgress>;
   inputResult: handleUnaryCall<OwnerInputResultRequest, OwnerInputStatus>;
+  inputs: handleUnaryCall<OwnerInputsRequest, RetainedInputs>;
+  readInput: handleUnaryCall<OwnerInputRead, FieldChunk>;
   submitAnswer: handleUnaryCall<OwnerAnswerPiece, OwnerAnswerProgress>;
   answerResult: handleUnaryCall<OwnerAnswerResultRequest, OwnerAnswerStatus>;
+  requestAnswer: handleUnaryCall<OwnerRequestAnswer, OwnerAnswerStatus>;
   readAnswer: handleUnaryCall<OwnerAnswerRead, FieldChunk>;
   liveRequests: handleUnaryCall<OwnerLiveRequests, LiveRequestList>;
   records: handleUnaryCall<OwnerRecordsRequest, RecordRegion>;
+  latestPlan: handleUnaryCall<RecordSource, RecordRegion>;
   fields: handleUnaryCall<OwnerFieldsRequest, RecordFields>;
   readField: handleUnaryCall<OwnerFieldRead, FieldChunk>;
   stop: handleUnaryCall<OwnerStopRequest, StopReceipt>;
@@ -8347,6 +8989,36 @@ export interface ConversationsClient extends Client {
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: OwnerInputStatus) => void,
   ): ClientUnaryCall;
+  inputs(
+    request: OwnerInputsRequest,
+    callback: (error: ServiceError | null, response: RetainedInputs) => void,
+  ): ClientUnaryCall;
+  inputs(
+    request: OwnerInputsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: RetainedInputs) => void,
+  ): ClientUnaryCall;
+  inputs(
+    request: OwnerInputsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: RetainedInputs) => void,
+  ): ClientUnaryCall;
+  readInput(
+    request: OwnerInputRead,
+    callback: (error: ServiceError | null, response: FieldChunk) => void,
+  ): ClientUnaryCall;
+  readInput(
+    request: OwnerInputRead,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: FieldChunk) => void,
+  ): ClientUnaryCall;
+  readInput(
+    request: OwnerInputRead,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: FieldChunk) => void,
+  ): ClientUnaryCall;
   submitAnswer(
     request: OwnerAnswerPiece,
     callback: (error: ServiceError | null, response: OwnerAnswerProgress) => void,
@@ -8373,6 +9045,21 @@ export interface ConversationsClient extends Client {
   ): ClientUnaryCall;
   answerResult(
     request: OwnerAnswerResultRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: OwnerAnswerStatus) => void,
+  ): ClientUnaryCall;
+  requestAnswer(
+    request: OwnerRequestAnswer,
+    callback: (error: ServiceError | null, response: OwnerAnswerStatus) => void,
+  ): ClientUnaryCall;
+  requestAnswer(
+    request: OwnerRequestAnswer,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: OwnerAnswerStatus) => void,
+  ): ClientUnaryCall;
+  requestAnswer(
+    request: OwnerRequestAnswer,
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: OwnerAnswerStatus) => void,
@@ -8418,6 +9105,21 @@ export interface ConversationsClient extends Client {
   ): ClientUnaryCall;
   records(
     request: OwnerRecordsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: RecordRegion) => void,
+  ): ClientUnaryCall;
+  latestPlan(
+    request: RecordSource,
+    callback: (error: ServiceError | null, response: RecordRegion) => void,
+  ): ClientUnaryCall;
+  latestPlan(
+    request: RecordSource,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: RecordRegion) => void,
+  ): ClientUnaryCall;
+  latestPlan(
+    request: RecordSource,
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: RecordRegion) => void,

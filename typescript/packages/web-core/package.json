@@ -4,6 +4,30 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./conversation-supply-rpc": {
+      "types": "./dist/conversation-supply-rpc.d.ts",
+      "default": "./dist/conversation-supply-rpc.js"
+    },
+    "./conversation-supply": {
+      "types": "./dist/conversation-supply.d.ts",
+      "default": "./dist/conversation-supply.js"
+    },
+    "./conversation-state": {
+      "types": "./dist/conversation-state.d.ts",
+      "default": "./dist/conversation-state.js"
+    },
+    "./conversation-form": {
+      "types": "./dist/conversation-form.d.ts",
+      "default": "./dist/conversation-form.js"
+    },
+    "./conversation": {
+      "types": "./dist/conversation.d.ts",
+      "default": "./dist/conversation.js"
+    },
+    "./conversation-types": {
+      "types": "./dist/conversation-types.d.ts",
+      "default": "./dist/conversation-types.js"
+    },
     "./authentication-messages": {
       "types": "./dist/authentication-messages.d.ts",
       "default": "./dist/authentication-messages.js"
@@ -124,14 +148,18 @@
     "format:check": "prettier --check 'src/**/*.ts' 'test/**/*.mjs' '*.mjs' 'package.json'"
   },
   "dependencies": {
-    "any-ascii": "0.3.3",
     "@chapchoo/rpc-client": "workspace:*",
     "@grpc/grpc-js": "1.14.6",
     "@mantine/hooks": "^9.7.4",
     "@tanstack/react-query": "^5.105.0",
     "@trpc/client": "11.19.0",
     "@trpc/server": "11.19.0",
-    "react": "^19.3.1"
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "any-ascii": "0.3.3",
+    "lossless-json": "^4.3.3",
+    "react": "^19.3.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",

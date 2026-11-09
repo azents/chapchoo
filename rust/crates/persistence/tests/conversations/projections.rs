@@ -355,6 +355,59 @@ pub(super) async fn exercise(
         6
     );
     append_reads_finish(store, f, conversation, snapshot).await?;
+    let read_plan = ConversationRegionRead {
+        agent_id: &f.agent.id,
+        conversation_id: conversation,
+        snapshot,
+        before: None,
+        limit: 1,
+    };
+    assert!(
+        store
+            .conversation_latest_plan(&f.owner.digest(), &read_plan, f.now)
+            .await?
+            .is_empty()
+    );
+    ingest(
+        store,
+        f,
+        conversation,
+        snapshot,
+        30,
+        &[update(
+            Kind::Plan,
+            "retained-plan",
+            Change::Replace(b"plan".to_vec()),
+        )],
+    )
+    .await?;
+    for ordinal in 31..=56 {
+        ingest(
+            store,
+            f,
+            conversation,
+            snapshot,
+            ordinal,
+            &[update(
+                Kind::Tool,
+                &format!("tool-{ordinal}"),
+                Change::Replace(b"tool".to_vec()),
+            )],
+        )
+        .await?;
+    }
+    let plan = store
+        .conversation_latest_plan(&f.owner.digest(), &read_plan, f.now)
+        .await?;
+    assert_eq!(plan.len(), 1);
+    assert_eq!(plan[0].native_id, "retained-plan");
+    assert_eq!(plan[0].anchor.ordinal, 30);
+    assert!(matches!(
+        store
+            .conversation_latest_plan(&f.other.digest(), &read_plan, f.now)
+            .await,
+        Err(StoreError::NotFound)
+    ));
     let current = store
         .current_conversation(&f.owner.digest(), &f.agent.id, f.now)
         .await?
@@ -371,6 +424,12 @@ pub(super) async fn exercise(
             },
         )
         .await?;
+    assert!(matches!(
+        store
+            .conversation_latest_plan(&f.owner.digest(), &read_plan, f.now)
+            .await,
+        Err(StoreError::Conflict)
+    ));
     assert!(matches!(
         store
             .conversation_region(

@@ -11,8 +11,25 @@ import { chatCopy } from "../copy";
 import { Chat } from "./Chat";
 import type { AgentsProps, InitialAgents } from "../../types";
 import type { AgentView } from "@chapchoo/web-core/computer";
+import type { ConversationRecord } from "@chapchoo/web-core/conversation-types";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import type { ReactElement } from "react";
+function fixtureMessage(
+  kind: "user" | "assistant",
+  nativeId: string,
+  text: string,
+  ordinal: bigint,
+): ConversationRecord {
+  return {
+    key: `${kind}:${nativeId}`,
+    kind,
+    nativeId,
+    anchor: { ordinal, index: 0n },
+    updatedOrdinal: ordinal,
+    content: [{ type: "text", text }],
+    locations: [],
+  };
+}
 
 type FixtureProps = {
   mode:
@@ -79,13 +96,38 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
     teamHandle: "my",
   };
   const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<{ id: number; text: string }[]>([]);
+  const [records, setRecords] = useState<ConversationRecord[]>(
+    mode === "empty"
+      ? []
+      : [
+          fixtureMessage(
+            "user",
+            "user-one",
+            "  Plan a quiet afternoon in Seoul.  ",
+            1n,
+          ),
+          fixtureMessage(
+            "assistant",
+            "assistant-one",
+            "Let's leave some room to explore.\n\n**First**, a walk through the park.\n\n" +
+              "A complete retained paragraph for the reading-position fixture.\n\n".repeat(
+                24,
+              ),
+            2n,
+          ),
+          fixtureMessage(
+            "assistant",
+            "assistant-two",
+            "I am checking the opening hours.",
+            3n,
+          ),
+        ],
+  );
   const [opened, setOpened] = useState(false);
   const [navOpened, setNavOpened] = useState(false);
   const [detailsOpened, setDetailsOpened] = useState(false);
-  const [activity, setActivity] = useState<"working" | "stopped" | "idle">(
-    "working",
-  );
+  const [activity, setActivity] = useState<"working" | "idle">("working");
+  const [workStop, setWorkStop] = useState<"idle" | "published">("idle");
   const floating = useFloatingChat(input, agent.id);
   const copy = chatCopy(locale);
   const c = computerCopy(locale);
@@ -140,6 +182,7 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
       copy={copy}
       navigation={null}
       accountControls={null}
+      supplyControl={null}
       secondaryOverlay={false}
       agentNavigation={
         <AgentNavigation
@@ -165,11 +208,41 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
           ]}
         />
       }
-      showSample={mode !== "empty"}
+      conversation={{
+        region: {
+          header: {
+            agentId: agent.id,
+            conversationId: "conversation",
+            state: "ready",
+            source: {
+              agentId: agent.id,
+              conversationId: "conversation",
+              snapshotId: "snapshot",
+            },
+            native: { snapshotId: "snapshot", nativeSessionId: "native" },
+            foreground: activity,
+            workId: activity === "working" ? "work" : void 0,
+          },
+          records,
+          renderedAt: initial.renderedAt,
+        },
+        read: "ready",
+        readingOlder: false,
+        inputs: [],
+        stop: workStop,
+        drafts: {},
+        onRead: () => {},
+        onOlder: () => {},
+        onLatest: floating.followLatest,
+        onHistory: () => {},
+        onQuestionOption: () => {},
+        onQuestionField: () => {},
+        onAnswer: () => {},
+      }}
       input={input}
-      messages={messages}
       activity={activity}
       writable={writable}
+      sendable={writable && Boolean(input.trim())}
       status={
         product.error ??
         (stale
@@ -182,9 +255,7 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
                 ? c.unknown
                 : activity === "working"
                   ? copy.working
-                  : activity === "stopped"
-                    ? copy.stopped
-                    : copy.idle)
+                  : copy.idle)
       }
       opened={opened}
       navOpened={navOpened}
@@ -198,14 +269,19 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
           return;
         }
         floating.followLatest();
-        setMessages((previous) => [
+        setRecords((previous) => [
           ...previous,
-          { id: previous.length, text: input },
+          fixtureMessage(
+            "user",
+            `user-${previous.length}`,
+            input,
+            BigInt(previous.length + 1),
+          ),
         ]);
         setInput("");
         setActivity("idle");
       }}
-      onStop={() => setActivity("stopped")}
+      onStop={() => setWorkStop("published")}
       floating={floating}
     />
   );

@@ -25,8 +25,8 @@ navigates to the dedicated form instead of embedding it. Every Agent has a requi
 Team while retaining its individual owner. Account/team pages share the selected
 context navigation. Admin exposes read-only Provider inventory at `/computer-providers`,
 Provider Computers under the selected Provider path, and exact resource inventory
-at `/computers/<Computer ID>`. Chat currently has local presentation only, not a
-harness or conversation service. File management, team-public Agents and concrete
+at `/computers/<Computer ID>`. Chat uses the private owner conversation service
+and the execution-local native owner. File management, team-public Agents and concrete
 Mac enrollment UI remain outside the implemented surface.
 
 ## Agent conversation surface
@@ -50,16 +50,18 @@ remains active until manual scrolling; growing input does not reset a detached
 position, and Jump to latest restores following. Adjacent same-sender messages
 use the large gap, sender changes use the double-large gap.
 
-Transcript examples, typed messages and task/tool activity are local UI state.
-Send appends a user message without calling a model or synthesizing a response.
-Local work stop changes activity only. Reload or Agent navigation discards local
-edits. File attachment is not connected. No chat data, execution receipt, stream,
-credential or browser persistence is introduced, and no mock banner or review
-settings are added to the product.
+The [conversation reader and controls](conversation-web.md) use actual normalized
+records, retained original inputs/answers and exact source-bound operations.
+Production transcript/plan/tool examples and local-only Send/Stop are removed.
+Activity opens real plan/history references and offers independent current-work
+cancellation; Computer Stop/restart retain their own confirmation and power
+semantics. File attachment remains unconnected. No browser-persisted transcript,
+offline effect queue or mock settings are introduced.
 
 Computer status and controls remain real: completed running power, connected
-Connector and fresh observations permit local input; this does not establish
-harness readiness. Otherwise history stays readable and input is read-only.
+Connector, completed lifecycle and fresh owner reads permit text admission; these
+facts do not establish harness readiness or model success. Otherwise history stays
+readable and input is read-only.
 Start uses backend eligibility; visible authenticated views automatically observe
 Computer state at the existing bounded interval (five seconds while pending,
 fifteen seconds when settled), with focus refresh and no full-page reload.
@@ -129,7 +131,7 @@ Creation follows registered cloud environment, required Codex authentication,
 then final handle, catalogue image and six-key palette selection alongside
 Team/name. The [authentication web contract](authentication-web.md) owns in-place
 registration and the compact existing-Agent saved-reference row. Computer
-controls and chat-local presentation remain independent.
+controls and current-work conversation controls remain independent.
 Its authenticated SSR snapshot independently draws
 the initial image and palette once and hydrates those exact values. Bounded
 automatic handle candidates preserve manual edits and cancel stale resolutions;

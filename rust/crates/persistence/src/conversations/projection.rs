@@ -173,6 +173,41 @@ struct FieldRow {
     bytes: i64,
 }
 impl Store {
+    pub async fn conversation_latest_plan(
+        &self,
+        actor: &SecretDigest,
+        read: &ConversationRegionRead<'_>,
+        now: i64,
+    ) -> Result<Vec<ConversationRecordMetadata>, StoreError> {
+        let agent = EntityId::from_dto(EntityKind::Agent, read.agent_id)?;
+        let id = EntityId::from_dto(EntityKind::Conversation, read.conversation_id)?;
+        operation!(self, |connection, dialect| {
+            let _ = owned_agent!(connection, dialect, actor, agent, now);
+            let row = conversation!(connection, dialect, id);
+            if row.agent_id != agent {
+                return Err(StoreError::NotFound);
+            }
+            if row.source_snapshot.as_deref() != Some(read.snapshot.as_str()) {
+                return Err(StoreError::Conflict);
+            }
+            let rows = diesel::sql_query(dialect.query(
+                "SELECT r.record_kind,r.native_id,r.first_ordinal,r.first_index,r.updated_ordinal FROM conversation_records r JOIN conversations c ON c.id=r.conversation_id AND c.source_snapshot=r.source_snapshot WHERE r.conversation_id=? AND r.source_snapshot=? AND r.record_kind='PLAN' ORDER BY r.first_ordinal DESC,r.first_index DESC LIMIT 1",
+            )).bind::<IdentitySql,_>(id).bind::<Text,_>(read.snapshot.as_str()).load::<RecordRow>(connection).await?;
+            rows.into_iter()
+                .map(|value| {
+                    Ok(ConversationRecordMetadata {
+                        kind: ConversationRecordKind::Plan,
+                        native_id: value.native_id,
+                        anchor: ConversationRecordAnchor {
+                            ordinal: value.first_ordinal,
+                            index: value.first_index,
+                        },
+                        updated_ordinal: value.updated_ordinal,
+                    })
+                })
+                .collect()
+        })
+    }
     /// Keyset metadata only; large content has independently fenced continuations.
     pub async fn conversation_region(
         &self,

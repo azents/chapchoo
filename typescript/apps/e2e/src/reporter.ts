@@ -67,6 +67,18 @@ export default class SafeReporter implements Reporter {
     }
     // Do not publish inline buffers or artifact paths through reporter forwarding.
     result.attachments.splice(0);
+    for (const annotation of test.annotations) {
+      if (
+        annotation.type === "conversation-read-evidence" &&
+        /^initialReads=\d+;inputToFirstMs=\d+;answerToUpdateMs=\d+;responseToVisibleUpperMs=\d+;reconnectMs=\d+;reentryMs=\d+;regionReads=\d+$/.test(
+          annotation.description ?? "",
+        )
+      ) {
+        process.stdout.write(
+          `Conversation read evidence: ${annotation.description}\n`,
+        );
+      }
+    }
     process.stdout.write(`${result.status}: ${sanitize(test.title)}\n`);
     if (result.status !== "passed" && result.status !== "skipped") {
       for (const error of result.errors) {
@@ -79,7 +91,7 @@ export default class SafeReporter implements Reporter {
       `Failure: ${safeMessage(error.message ?? "Test runner failed")}\n`,
     );
     const location = error.stack?.match(
-      /\/e2e\/src\/(accounts\.spec\.ts|computers\.spec\.ts|fixture\.ts):(\d+):(\d+)/,
+      /\/e2e\/src\/(accounts\.spec\.ts|computers\.spec\.ts|conversation\.docker\.ts|fixture\.ts):(\d+):(\d+)/,
     );
     if (location) {
       process.stderr.write(
