@@ -463,7 +463,7 @@ impl wire::connector_authentication_server::ConnectorAuthentication
             .identity
             .as_ref()
             .is_none_or(|identity| identity.connection_id != source.connection_id)
-            || command.observe.is_none()
+            || command.operation.is_none()
         {
             return Err(Status::permission_denied("Command source does not match"));
         }

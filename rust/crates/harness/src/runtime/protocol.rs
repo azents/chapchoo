@@ -5,13 +5,16 @@ mod tests;
 pub(super) async fn connect(
     transport: impl agent_client_protocol::ConnectTo<Client>,
     requests: Requests,
+    observations: Arc<Observations>,
     ready: oneshot::Sender<Result<agent_client_protocol::v2::ActiveSession<Agent>, Error>>,
     done: CancellationToken,
     cwd: std::path::PathBuf,
-    resume: Option<NativeConversationId>,
+    context: NativeContext,
 ) -> Result<(), agent_client_protocol::Error> {
     let permission = requests.clone();
     let forms = requests;
+    let permission_observation = observations.clone();
+    let form_observation = observations;
     Client
         .v2()
         .on_receive_notification(
@@ -23,12 +26,22 @@ pub(super) async fn connect(
                         responder: Responder<schema::RequestPermissionResponse>,
                         _cx: ConnectionTo<Agent>| {
                 let mut pending = permission.lock().await;
-                pending.retain(|_, r| !r.cancelled());
-                let key = responder.id().to_string();
-                if pending.len() >= MAX_REQUESTS || pending.contains_key(&key) {
-                    return Err(agent_client_protocol::Error::internal_error());
+                pending.retain(|_, (_, r)| !r.cancelled());
+                let position = permission_observation
+                    .take_request(responder.id())
+                    .map_err(|_| agent_client_protocol::Error::internal_error())?;
+                if !requests::supported_permission(&request) {
+                    return responder
+                        .respond_with_error(agent_client_protocol::Error::invalid_params());
                 }
-                pending.insert(key, Pending::Permission(request, responder));
+                let key = observations::token("request")
+                    .map_err(|_| agent_client_protocol::Error::internal_error())?;
+                if pending.len() >= MAX_REQUESTS {
+                    return responder
+                        .respond_with_error(agent_client_protocol::Error::internal_error());
+                }
+                pending.insert(key, (position, Pending::Permission(request, responder)));
+                permission_observation.changed();
                 Ok(())
             },
             agent_client_protocol::on_receive_request!(),
@@ -37,28 +50,29 @@ pub(super) async fn connect(
             async move |request: schema::CreateElicitationRequest,
                         responder: Responder<schema::CreateElicitationResponse>,
                         _cx: ConnectionTo<Agent>| {
-                if !matches!(
-                    request.mode,
-                    schema::ElicitationMode::Form(schema::ElicitationFormMode {
-                        scope: schema::ElicitationScope::Session(_),
-                        ..
-                    })
-                ) {
-                    return Err(agent_client_protocol::Error::invalid_params());
-                }
                 let mut pending = forms.lock().await;
-                pending.retain(|_, r| !r.cancelled());
-                let key = responder.id().to_string();
-                if pending.len() >= MAX_REQUESTS || pending.contains_key(&key) {
-                    return Err(agent_client_protocol::Error::internal_error());
+                pending.retain(|_, (_, r)| !r.cancelled());
+                let position = form_observation
+                    .take_request(responder.id())
+                    .map_err(|_| agent_client_protocol::Error::internal_error())?;
+                if !requests::supported_form(&request) {
+                    return responder
+                        .respond_with_error(agent_client_protocol::Error::invalid_params());
                 }
-                pending.insert(key, Pending::Form(request, responder));
+                let key = observations::token("request")
+                    .map_err(|_| agent_client_protocol::Error::internal_error())?;
+                if pending.len() >= MAX_REQUESTS {
+                    return responder
+                        .respond_with_error(agent_client_protocol::Error::internal_error());
+                }
+                pending.insert(key, (position, Pending::Form(request, responder)));
+                form_observation.changed();
                 Ok(())
             },
             agent_client_protocol::on_receive_request!(),
         )
         .connect_with(transport, async move |cx: ConnectionTo<Agent>| {
-            let session = match initialize_session(cx, cwd, resume).await {
+            let session = match initialize_session(cx, cwd, context).await {
                 Ok(session) => session,
                 Err((stage, cause)) => {
                     let _ = ready.send(Err(Error::ProtocolRejected {
@@ -78,7 +92,7 @@ pub(super) async fn connect(
 async fn initialize_session(
     cx: ConnectionTo<Agent>,
     cwd: std::path::PathBuf,
-    resume: Option<NativeConversationId>,
+    context: NativeContext,
 ) -> Result<
     agent_client_protocol::v2::ActiveSession<Agent>,
     (crate::ProtocolStage, agent_client_protocol::Error),
@@ -108,19 +122,26 @@ async fn initialize_session(
             agent_client_protocol::Error::invalid_params(),
         ));
     }
-    let session = match resume {
-        Some(id) => {
-            cx.resume_session_from(
-                schema::ResumeSessionRequest::new(id.as_str(), cwd)
-                    .replay_from(schema::ReplayFrom::Start(schema::ReplayFromStart::new())),
-            )
-            .start_session()
-            .block_task()
-            .await
-            .map_err(|e| (ProtocolStage::Session, e))?
-            .session
+    let session = match context {
+        NativeContext::Resume {
+            session: id,
+            replay,
+        } => {
+            let request = schema::ResumeSessionRequest::new(id.as_str(), cwd);
+            let request = match replay {
+                CaptureReplay::FromStart => {
+                    request.replay_from(schema::ReplayFrom::Start(schema::ReplayFromStart::new()))
+                }
+                CaptureReplay::AlreadyCaptured => request,
+            };
+            cx.resume_session_from(request)
+                .start_session()
+                .block_task()
+                .await
+                .map_err(|e| (ProtocolStage::Session, e))?
+                .session
         }
-        None => {
+        NativeContext::New => {
             cx.build_session(cwd)
                 .start_session()
                 .block_task()

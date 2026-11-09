@@ -1,5 +1,6 @@
 use super::*;
 
+#[derive(Clone)]
 pub struct AcceptConversationInput {
     pub agent_id: String,
     pub conversation_id: Option<String>,
@@ -7,6 +8,7 @@ pub struct AcceptConversationInput {
     pub target: ConversationTarget,
     pub text: ConversationText,
 }
+#[derive(Clone)]
 pub struct ConversationInputReceipt {
     pub id: String,
     pub conversation_id: String,
@@ -14,6 +16,64 @@ pub struct ConversationInputReceipt {
     pub target: ConversationTarget,
     pub text: ConversationText,
     pub accepted_at: i64,
+}
+/// Bounded acceptance metadata; status reads never load the submitted text.
+pub struct ConversationInputReference {
+    pub id: String,
+    pub conversation_id: String,
+    pub request_id: String,
+    pub target: ConversationTarget,
+    pub accepted_at: i64,
+}
+impl fmt::Debug for ConversationInputReference {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("ConversationInputReference([REDACTED])")
+    }
+}
+#[derive(diesel::QueryableByName)]
+pub(super) struct InputReferenceRow {
+    #[diesel(sql_type=IdentitySql)]
+    id: EntityId,
+    #[diesel(sql_type=IdentitySql)]
+    conversation_id: EntityId,
+    #[diesel(sql_type=Text)]
+    request_id: String,
+    #[diesel(sql_type=Nullable<Text>)]
+    target_snapshot: Option<String>,
+    #[diesel(sql_type=BigInt)]
+    accepted_at: i64,
+}
+impl InputReferenceRow {
+    pub(super) fn reference(self) -> Result<ConversationInputReference, StoreError> {
+        Ok(ConversationInputReference {
+            id: self.id.to_dto(EntityKind::ConversationOperation),
+            conversation_id: self.conversation_id.to_dto(EntityKind::Conversation),
+            request_id: self.request_id,
+            target: match self.target_snapshot {
+                Some(snapshot) => ConversationTarget::Snapshot(
+                    SnapshotId::parse(snapshot).map_err(|_| StoreError::Integrity)?,
+                ),
+                None => ConversationTarget::NotStarted,
+            },
+            accepted_at: self.accepted_at,
+        })
+    }
+}
+pub enum ConversationInputAdmission {
+    Accepted(ConversationInputReceipt),
+    Existing(ConversationInputReceipt),
+}
+impl ConversationInputAdmission {
+    pub fn into_receipt(self) -> ConversationInputReceipt {
+        match self {
+            Self::Accepted(receipt) | Self::Existing(receipt) => receipt,
+        }
+    }
+}
+impl fmt::Debug for ConversationInputAdmission {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("ConversationInputAdmission([REDACTED])")
+    }
 }
 impl fmt::Debug for AcceptConversationInput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -26,7 +86,7 @@ impl fmt::Debug for ConversationInputReceipt {
     }
 }
 #[derive(diesel::QueryableByName)]
-struct InputRow {
+pub(super) struct InputRow {
     #[diesel(sql_type=IdentitySql)]
     id: EntityId,
     #[diesel(sql_type=IdentitySql)]
@@ -41,7 +101,7 @@ struct InputRow {
     accepted_at: i64,
 }
 impl InputRow {
-    fn receipt(self) -> Result<ConversationInputReceipt, StoreError> {
+    pub(super) fn receipt(self) -> Result<ConversationInputReceipt, StoreError> {
         Ok(ConversationInputReceipt {
             id: self.id.to_dto(EntityKind::ConversationOperation),
             conversation_id: self.conversation_id.to_dto(EntityKind::Conversation),
@@ -60,6 +120,35 @@ impl InputRow {
 }
 
 impl Store {
+    pub async fn conversation_input_reference(
+        &self,
+        actor: &SecretDigest,
+        agent_id: &str,
+        conversation_id: &str,
+        request: &str,
+        now: i64,
+    ) -> Result<Option<ConversationInputReference>, StoreError> {
+        request_id(request)?;
+        let agent = EntityId::from_dto(EntityKind::Agent, agent_id)?;
+        let id = EntityId::from_dto(EntityKind::Conversation, conversation_id)?;
+        operation!(self, |connection, dialect| {
+            let _ = owned_agent!(connection, dialect, actor, agent, now);
+            let row = conversation!(connection, dialect, id);
+            if row.agent_id != agent {
+                return Err(StoreError::NotFound);
+            }
+            diesel::sql_query(dialect.query(
+                "SELECT id,conversation_id,request_id,target_snapshot,accepted_at FROM conversation_inputs WHERE conversation_id=? AND request_id=?",
+            ))
+            .bind::<IdentitySql, _>(id)
+            .bind::<Text, _>(request)
+            .get_result::<InputReferenceRow>(connection)
+            .await
+            .optional()?
+            .map(InputReferenceRow::reference)
+            .transpose()
+        })
+    }
     /// Persist product acceptance only. No forwarding/native success is implied.
     pub async fn accept_conversation_input(
         &self,
@@ -67,6 +156,19 @@ impl Store {
         draft: &AcceptConversationInput,
         now: i64,
     ) -> Result<ConversationInputReceipt, StoreError> {
+        Ok(self
+            .admit_conversation_input(actor, draft, now)
+            .await?
+            .into_receipt())
+    }
+    /// Distinguish a new product operation from receipt recovery in the same
+    /// completed transaction. Only a new operation enters its processing owner.
+    pub async fn admit_conversation_input(
+        &self,
+        actor: &SecretDigest,
+        draft: &AcceptConversationInput,
+        now: i64,
+    ) -> Result<ConversationInputAdmission, StoreError> {
         request_id(&draft.request_id)?;
         let agent = EntityId::from_dto(EntityKind::Agent, &draft.agent_id)?;
         let expected = draft
@@ -116,7 +218,7 @@ impl Store {
                 if previous.target != draft.target || previous.text != draft.text {
                     return Err(StoreError::Conflict);
                 }
-                return Ok(previous);
+                return Ok(ConversationInputAdmission::Existing(previous));
             }
             if owner.desired_state == "DELETING" || !draft.target.matches(&row.source()?) {
                 return Err(StoreError::InvalidTransition);
@@ -129,14 +231,16 @@ impl Store {
                 .bind::<IdentitySql,_>(id).bind::<IdentitySql,_>(row.id).bind::<Text,_>(&draft.request_id)
                 .bind::<Nullable<Text>,_>(draft.target.snapshot().map(SnapshotId::as_str))
                 .bind::<Text,_>(draft.text.as_str()).bind::<BigInt,_>(now).execute(connection).await?;
-            Ok(ConversationInputReceipt {
-                id: id.to_dto(EntityKind::ConversationOperation),
-                conversation_id: row.id.to_dto(EntityKind::Conversation),
-                request_id: draft.request_id.clone(),
-                target: draft.target.clone(),
-                text: draft.text.clone(),
-                accepted_at: now,
-            })
+            Ok(ConversationInputAdmission::Accepted(
+                ConversationInputReceipt {
+                    id: id.to_dto(EntityKind::ConversationOperation),
+                    conversation_id: row.id.to_dto(EntityKind::Conversation),
+                    request_id: draft.request_id.clone(),
+                    target: draft.target.clone(),
+                    text: draft.text.clone(),
+                    accepted_at: now,
+                },
+            ))
         })
     }
 

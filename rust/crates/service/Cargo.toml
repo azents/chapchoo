@@ -14,6 +14,9 @@ tokio.workspace = true
 zeroize.workspace = true
 url.workspace = true
 parking_lot.workspace = true
+agent-client-protocol.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 
 [dev-dependencies]
 base64.workspace = true

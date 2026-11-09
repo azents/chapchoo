@@ -1,8 +1,14 @@
 //! Private conversation storage; no native effects or credential payloads belong here.
 
+mod answers;
 mod authority;
+mod delivery;
 mod inputs;
+mod native_state;
+mod preparation;
+mod projection;
 mod records;
+mod stops;
 mod supply;
 
 use crate::{
@@ -22,11 +28,41 @@ use diesel::{
 use diesel_async::RunQueryDsl;
 use std::fmt;
 
+pub use answers::{
+    AcceptConversationAnswer, ConversationAnswer, ConversationAnswerAdmission,
+    ConversationAnswerChunk, ConversationAnswerDelivery, ConversationAnswerForwardingAdmission,
+    ConversationAnswerQuestion, ConversationAnswerReceipt, ConversationAnswerReference,
+    ConversationAnswerResult, ConversationAnswerValue, ConversationFormAnswer,
+    ConversationLiveRequestReference, ConversationRequestKind, LiveConversationRequest,
+};
 use authority::{connector, owned_agent};
-pub use inputs::{AcceptConversationInput, ConversationInputReceipt};
+pub use delivery::{
+    ConversationDeliveryTarget, ConversationForwardingAdmission, ConversationForwardingGrant,
+    ConversationInputChunk, ConversationInputDelivery, ConversationInputOutcome,
+    ConversationOperationForwarding,
+};
+pub use inputs::{
+    AcceptConversationInput, ConversationInputAdmission, ConversationInputReceipt,
+    ConversationInputReference,
+};
+pub use native_state::{ConversationForeground, ConversationNativeObservation};
+pub use preparation::{
+    ConversationInputPreparation, ConversationPreparationAdmission, ConversationPreparationFacts,
+    ConversationPreparationFailure, ConversationPreparationOutcome, ConversationPreparationState,
+};
+pub use projection::{
+    ConversationFieldChange, ConversationFieldChunkRead, ConversationFieldMetadata,
+    ConversationFieldRead, ConversationFieldUpdate, ConversationRecordAnchor,
+    ConversationRecordField, ConversationRecordKind, ConversationRecordMetadata,
+    ConversationRecordUpdate, ConversationRegionRead,
+};
 pub use records::{
     CapturedEventPair, EventChunkRead, EventMetadataRead, EventPairMetadata, EventPayloadChunk,
     EventPayloadKind, SourceBinding,
+};
+pub use stops::{
+    AcceptConversationStop, ConversationStopAdmission, ConversationStopReceipt,
+    ConversationStopState, ConversationWorkTarget,
 };
 pub use supply::{HarnessSupplyReceipt, HarnessSupplySelection, SaveHarnessSupply};
 

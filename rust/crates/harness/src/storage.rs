@@ -70,6 +70,9 @@ impl NativeStorage {
     pub(crate) fn installations(&self) -> PathBuf {
         self.root.join("installations")
     }
+    pub(crate) fn capture_root(&self) -> PathBuf {
+        self.root.join("capture")
+    }
     pub(crate) fn command(&self, executable: &Path) -> tokio::process::Command {
         let mut command = tokio::process::Command::new(executable);
         command

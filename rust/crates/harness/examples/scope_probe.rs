@@ -27,8 +27,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let storage = NativeStorage::open(Path::new(args.get(2).ok_or("Missing saved root")?))?;
             let scope = ScopeEvidence::verify(&storage)?;
             if args.get(1).map(String::as_str) == Some("native") {
+                let capture=chapchoo_harness::CaptureLog::create(&storage)?;
                 let owner = chapchoo_harness::NativeOwner::new(storage)?;
-                let started = owner.start(chapchoo_domain::HarnessSupply::Managed,None,std::sync::Arc::new(|_|Ok(()))).await;
+                let started = owner.start(chapchoo_domain::HarnessSupply::Managed,chapchoo_harness::NativeContext::New,capture).await;
                 let cleanup = owner.finish().await?;
                 if cleanup != Retirement::Quiescent { return Err("Native retirement was not verified".into()); }
                 let _context = started?;

@@ -1,6 +1,7 @@
 //! Explicit application orchestration without persistence handles or transport types.
 mod authentication;
 mod computers;
+mod conversation;
 mod error;
 mod mail;
 mod password;
@@ -17,25 +18,48 @@ pub use chapchoo_domain::{
     ProviderSubstrate, TeamKind, TeamRole,
 };
 pub use chapchoo_persistence::{
-    AgentAuthenticationSelection, AgentCreationResult, AgentProfileImage, AgentRemoval,
-    AgentSummary, AuthenticationAcceptedResult, AuthenticationKind, AuthenticationOperation,
-    AuthenticationRequestResult, AuthenticationScope, AuthenticationSummary, ComponentKeyPolicy,
-    ComponentKeyResult, ComponentRoute, ComputerInventorySummary, ComputerRequest, ComputerSummary,
-    ConnectionOwner, ConnectorIdentity, ConnectorSessionResult, ConnectorSource,
-    ControlRegistration, CreateAgentProfile, CreateCloudAgent, CreationOutcome,
-    DeleteAuthentication, DeleteAuthenticationOutcome, DeliveryComputer, DeliveryExecution,
-    DeliverySnapshot, DeviceAuthenticationState, DeviceAuthenticationStatus,
-    DeviceAuthenticationTokens, DeviceAuthorizationDraft, DirectoryPolicy, ExecutionReservation,
-    ExpectedAgentAuthentication, GrantKind, GrantSummary, InvitationStatus, InvitationSummary,
-    LifecycleRequest, MAX_AUTHENTICATION_EXPIRY_MILLIS, ManagedComputer, ManagedResource,
+    AcceptConversationInput, AgentAuthenticationSelection, AgentCreationResult, AgentProfileImage,
+    AgentRemoval, AgentSummary, AuthenticationAcceptedResult, AuthenticationKind,
+    AuthenticationOperation, AuthenticationRequestResult, AuthenticationScope,
+    AuthenticationSummary, ComponentKeyPolicy, ComponentKeyResult, ComponentRoute,
+    ComputerInventorySummary, ComputerRequest, ComputerSummary, ConnectionOwner, ConnectorIdentity,
+    ConnectorSessionResult, ConnectorSource, ControlRegistration, ConversationAnswer,
+    ConversationAnswerChunk, ConversationAnswerDelivery, ConversationAnswerForwardingAdmission,
+    ConversationAnswerResult, ConversationAnswerValue, ConversationDeliveryTarget,
+    ConversationFieldChunkRead, ConversationFieldMetadata, ConversationFieldRead,
+    ConversationForeground, ConversationFormAnswer, ConversationForwardingAdmission,
+    ConversationInputDelivery, ConversationInputOutcome, ConversationInputPreparation,
+    ConversationNativeObservation, ConversationOperationForwarding,
+    ConversationPreparationAdmission, ConversationPreparationFailure,
+    ConversationPreparationOutcome, ConversationPreparationState, ConversationRecordAnchor,
+    ConversationRecordField, ConversationRecordKind, ConversationRecordMetadata,
+    ConversationRegionRead, ConversationRequestKind, ConversationStopReceipt,
+    ConversationStopState, ConversationSummary, ConversationWorkTarget, CreateAgentProfile,
+    CreateCloudAgent, CreationOutcome, DeleteAuthentication, DeleteAuthenticationOutcome,
+    DeliveryComputer, DeliveryExecution, DeliverySnapshot, DeviceAuthenticationState,
+    DeviceAuthenticationStatus, DeviceAuthenticationTokens, DeviceAuthorizationDraft,
+    DirectoryPolicy, EventPayloadChunk, ExecutionReservation, ExpectedAgentAuthentication,
+    GrantKind, GrantSummary, InvitationStatus, InvitationSummary, LifecycleRequest,
+    LiveConversationRequest, MAX_AUTHENTICATION_EXPIRY_MILLIS, ManagedComputer, ManagedResource,
     ManagedResourceKind, MemberSummary, NativeRetirementAdmission, ProofPreview,
     ProviderCapabilities, ProviderChoice, ProviderCredentialResult, ProviderIdentity,
     ProviderInventorySummary, ProviderSource, ReauthenticateTarget, RegisterApiKey,
     RenameAuthentication, ReplaceApiKey, ResolvedRoute, ResourceCursor, ResourceEvidence,
-    ResourceReport, SelectAgentAuthentication, SessionPolicy, SessionResult,
-    StartDeviceAuthentication, TeamPatch, TeamSummary, UpdateAgentProfile, UserSummary,
+    ResourceReport, SaveHarnessSupply, SelectAgentAuthentication, SessionPolicy, SessionResult,
+    SourceBinding, StartDeviceAuthentication, TeamPatch, TeamSummary, UpdateAgentProfile,
+    UserSummary,
 };
 pub use computers::{ComputerPolicy, ComputersService, PreparedComponentConnection};
+pub use conversation::{
+    AcceptedConversationAnswer, AcceptedConversationInput, AcceptedConversationStop,
+    ConversationAnswerAcceptance, ConversationAnswerDraft, ConversationAnswerFuture,
+    ConversationAnswerProcessor, ConversationAnswerService, ConversationInputAcceptance,
+    ConversationInputFuture, ConversationInputOwnership, ConversationInputProcessor,
+    ConversationInputService, ConversationInputStatus, ConversationService, ConversationStopFuture,
+    ConversationStopProcessor, ConversationStopService, EncodedNativeAnswer, NativeAnswerError,
+    NativeNormalizationError, NormalizedCapture, encode_native_answer, normalize_captured_event,
+    validate_conversation_answer,
+};
 pub use error::{DomainReason, InfrastructureReport, ServiceError};
 pub use mail::{MailFailure, MailFuture, MailMessage, MailPurpose, Mailer};
 pub use password::PasswordWork;

@@ -45,9 +45,26 @@ pub use connector_keys::{
     ConnectorIdentity, ConnectorSessionDraft, ConnectorSessionResult, ConnectorSource,
 };
 pub use conversations::{
-    AcceptConversationInput, CapturedEventPair, ConversationInputReceipt, ConversationSummary,
+    AcceptConversationAnswer, AcceptConversationInput, AcceptConversationStop, CapturedEventPair,
+    ConversationAnswer, ConversationAnswerAdmission, ConversationAnswerChunk,
+    ConversationAnswerDelivery, ConversationAnswerForwardingAdmission, ConversationAnswerQuestion,
+    ConversationAnswerReceipt, ConversationAnswerReference, ConversationAnswerResult,
+    ConversationAnswerValue, ConversationDeliveryTarget, ConversationFieldChange,
+    ConversationFieldChunkRead, ConversationFieldMetadata, ConversationFieldRead,
+    ConversationFieldUpdate, ConversationForeground, ConversationFormAnswer,
+    ConversationForwardingAdmission, ConversationForwardingGrant, ConversationInputAdmission,
+    ConversationInputChunk, ConversationInputDelivery, ConversationInputOutcome,
+    ConversationInputPreparation, ConversationInputReceipt, ConversationInputReference,
+    ConversationLiveRequestReference, ConversationNativeObservation,
+    ConversationOperationForwarding, ConversationPreparationAdmission,
+    ConversationPreparationFacts, ConversationPreparationFailure, ConversationPreparationOutcome,
+    ConversationPreparationState, ConversationRecordAnchor, ConversationRecordField,
+    ConversationRecordKind, ConversationRecordMetadata, ConversationRecordUpdate,
+    ConversationRegionRead, ConversationRequestKind, ConversationStopAdmission,
+    ConversationStopReceipt, ConversationStopState, ConversationSummary, ConversationWorkTarget,
     EventChunkRead, EventMetadataRead, EventPairMetadata, EventPayloadChunk, EventPayloadKind,
-    HarnessSupplyReceipt, HarnessSupplySelection, SaveHarnessSupply, SourceBinding,
+    HarnessSupplyReceipt, HarnessSupplySelection, LiveConversationRequest, SaveHarnessSupply,
+    SourceBinding,
 };
 pub use creation_results::AgentCreationResult;
 pub use delivery::{DeliveryComputer, DeliveryExecution, DeliverySnapshot};

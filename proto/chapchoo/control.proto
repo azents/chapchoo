@@ -4,6 +4,7 @@ package chapchoo.control;
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
+import "conversations.proto";
 
 // Component-facing listeners authenticate bearer metadata independently of peers.
 service ProviderAuthentication {
@@ -311,7 +312,13 @@ message ConnectorCommand {
   CallIdentity identity = 1;
   ComputerContext computer = 2;
   uint32 remaining_ms = 3;
-  ObserveConnector observe = 4;
+  oneof operation {
+    ObserveConnector observe = 4;
+    chapchoo.conversations.SetupCommand setup = 5;
+    chapchoo.conversations.InputCommand input = 6;
+    chapchoo.conversations.StopCommand stop = 7;
+    chapchoo.conversations.AnswerCommand answer = 8;
+  }
 }
 enum CommandOutcome {
   COMMAND_OUTCOME_UNSPECIFIED = 0;
@@ -334,6 +341,7 @@ message ConnectorResult {
   CallIdentity identity = 1;
   string execution_id = 2;
   bool ready = 3;
+  optional bool admitted = 4;
 }
 message ProviderFrame {
   oneof payload {

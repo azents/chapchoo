@@ -8,6 +8,10 @@
       "types": "./dist/generated/authentication.d.ts",
       "default": "./dist/generated/authentication.js"
     },
+    "./conversations": {
+      "types": "./dist/generated/conversations.d.ts",
+      "default": "./dist/generated/conversations.js"
+    },
     "./computers": {
       "types": "./dist/generated/computers.d.ts",
       "default": "./dist/generated/computers.js"

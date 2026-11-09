@@ -1,3 +1,13 @@
+#[path = "conversations/answers.rs"]
+mod answers;
+#[path = "conversations/delivery.rs"]
+mod delivery;
+#[path = "conversations/native_state.rs"]
+mod native_state;
+#[path = "conversations/preparation.rs"]
+mod preparation;
+#[path = "conversations/projections.rs"]
+mod projections;
 mod support;
 
 use base64::{Engine, engine::general_purpose::URL_SAFE};
@@ -341,6 +351,12 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
     let source = f.source(&key);
     assert!(
         store
+            .connector_current_conversation(&source)
+            .await?
+            .is_none()
+    );
+    assert!(
+        store
             .current_conversation(&owner, &f.agent.id, f.now)
             .await?
             .is_none()
@@ -408,11 +424,24 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
         text: ConversationText::parse("  first input\n한국어  ".to_owned())?,
     };
     let (one, two) = tokio::join!(
-        store.accept_conversation_input(&owner, &draft, f.now),
-        store.accept_conversation_input(&owner, &draft, f.now)
+        store.admit_conversation_input(&owner, &draft, f.now),
+        store.admit_conversation_input(&owner, &draft, f.now)
     );
-    let first = one?;
-    assert_eq!(first.id, two?.id);
+    use chapchoo_persistence::ConversationInputAdmission as Admission;
+    let (first, existing) = match (one?, two?) {
+        (Admission::Accepted(first), Admission::Existing(existing))
+        | (Admission::Existing(existing), Admission::Accepted(first)) => (first, existing),
+        _ => return Err("Concurrent duplicate received another processing admission".into()),
+    };
+    assert_eq!(
+        store
+            .connector_current_conversation(&source)
+            .await?
+            .ok_or("Missing current conversation")?
+            .id,
+        first.conversation_id
+    );
+    assert_eq!(first.id, existing.id);
     assert_eq!(first.text.as_str(), draft.text.as_str());
     let changed = AcceptConversationInput {
         text: ConversationText::parse("changed".to_owned())?,
@@ -432,6 +461,7 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
     ));
     let s1 = snapshot("snapshot-one")?;
     let native = NativeConversationId::parse("native-context-one".to_owned())?;
+    preparation::initial(store, f, &first, &s1, &native).await?;
     let binding = SourceBinding {
         conversation_id: first.conversation_id.clone(),
         expected_previous: None,
@@ -621,16 +651,23 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
             .await,
         Err(StoreError::Unauthenticated)
     ));
+    delivery::exercise(store, f, &first, &s1, &native).await?;
+    answers::exercise(store, f, &first.conversation_id, &s1, &native).await?;
+    native_state::exercise(store, f, &first.conversation_id, &s1, &native).await?;
     let s2 = snapshot("snapshot-two")?;
     let replacement = SourceBinding {
         conversation_id: first.conversation_id.clone(),
         expected_previous: Some(s1.clone()),
         snapshot: s2.clone(),
-        native_session: native,
+        native_session: native.clone(),
     };
     store
         .bind_conversation_source(&source, &replacement)
         .await?;
+    delivery::replaced(store, f, &first, &s1, &native).await?;
+    preparation::replaced(store, f, &first).await?;
+    native_state::replaced(store, f, &first.conversation_id).await?;
+    answers::replaced(store, f, &first.conversation_id).await?;
     assert!(
         store
             .conversation_input(
@@ -719,6 +756,7 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
         store.bind_conversation_source(&source, &wrong_native).await,
         Err(StoreError::InvalidTransition)
     ));
+    projections::exercise(store, f, &first.conversation_id, &s2).await?;
     store
         .close_connector_connection(
             &f.session,
@@ -879,6 +917,7 @@ macro_rules! preserving_upgrade {
         assert!(!receipts.is_empty() && !credentials.is_empty());
         // Restore the pre-feature schema with real Agent/account/authentication state.
         connection.revert_last_migration($migrations)?;
+        connection.revert_last_migration($migrations)?;
         connection.run_pending_migrations($migrations)?;
         assert!(receipts==diesel::sql_query("SELECT payload_hash AS bytes FROM agent_creation_receipts ORDER BY request_id")
             .load::<RetainedBytes>(connection)?, "Creation fingerprint changed during conversation migration");
@@ -939,7 +978,13 @@ fn postgres_conversation_operations_and_preserving_downgrade_guard() -> Result<(
             fixture.agent.id
         );
         runtime.block_on(exercise(&store, &fixture))?;
+        assert!(
+            connection
+                .revert_last_migration(POSTGRES_MIGRATIONS)
+                .is_err()
+        );
         runtime.block_on(source_write_holds_control_lock(&store, &fixture, &url))?;
+        connection.revert_last_migration(POSTGRES_MIGRATIONS)?;
         assert!(
             connection
                 .revert_last_migration(POSTGRES_MIGRATIONS)

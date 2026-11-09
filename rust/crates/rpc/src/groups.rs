@@ -1,7 +1,8 @@
 //! Runtime-selected public service union. PeerRelay has a separate factory.
 use crate::{
     AccountServices, AuthenticationServices, ComponentAuthenticationServices,
-    ComponentConnectionServices, ComputerServices,
+    ComponentConnectionServices, ComputerServices, ConversationCaptureServices,
+    ConversationServices,
 };
 use tonic::{Status, service::Routes};
 
@@ -56,6 +57,7 @@ impl ServiceGroups {
                 "chapchoo.computers.Computers",
                 "chapchoo.computers.ProviderCatalog",
                 "chapchoo.authentication.Authentications",
+                "chapchoo.conversations.Conversations",
             ]);
         }
         if self.admin {
@@ -73,6 +75,7 @@ impl ServiceGroups {
                 "chapchoo.control.ConnectorAuthentication",
                 "chapchoo.control.ProviderConnection",
                 "chapchoo.control.ConnectorConnection",
+                "chapchoo.conversations.ConnectorCapture",
             ]);
         }
         names
@@ -84,9 +87,11 @@ impl ServiceGroups {
         accounts: Option<&AccountServices>,
         computers: Option<&ComputerServices>,
         authentication: Option<&AuthenticationServices>,
+        conversations: Option<&ConversationServices>,
         components: Option<(
             &ComponentAuthenticationServices,
             &ComponentConnectionServices,
+            &ConversationCaptureServices,
         )>,
     ) -> Result<Routes, Status> {
         if self.is_empty() {
@@ -108,6 +113,13 @@ impl ServiceGroups {
                     Status::failed_precondition("Backend authentication services are required")
                 })?;
                 routes.add_service(authentication.server());
+                routes.add_service(
+                    conversations
+                        .ok_or_else(|| {
+                            Status::failed_precondition("Conversation services are required")
+                        })?
+                        .server(),
+                );
                 routes
                     .add_service(accounts.account_lifecycle_server())
                     .add_service(accounts.teams_server())
@@ -127,13 +139,14 @@ impl ServiceGroups {
             }
         }
         if self.control {
-            let (authentication, connections) = components
+            let (authentication, connections, capture) = components
                 .ok_or_else(|| Status::failed_precondition("Control services are required"))?;
             routes
                 .add_service(authentication.provider_server())
                 .add_service(authentication.connector_server())
                 .add_service(connections.provider_server())
-                .add_service(connections.connector_server());
+                .add_service(connections.connector_server())
+                .add_service(capture.server());
         }
         Ok(routes.routes())
     }

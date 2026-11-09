@@ -1,3 +1,4 @@
+use super::projection::project_records;
 use super::*;
 use crate::ConnectorSource;
 use diesel::sql_types::Integer;
@@ -64,12 +65,20 @@ safe_debug!(EventPayloadChunk);
 
 macro_rules! source_conversation {
     ($connection:expr,$dialect:expr,$source:expr,$id:expr) => {{
+        use $crate::conversations::authority::LockedTeam;
+        let team_sql=match $dialect {
+            Dialect::Postgres => "SELECT t.id FROM teams t JOIN agents a ON a.team_id=t.id JOIN conversations c ON c.agent_id=a.id JOIN memberships m ON m.team_id=t.id AND m.user_id=a.owner_user_id WHERE c.id=? FOR NO KEY UPDATE OF t",
+            Dialect::Sqlite => "SELECT t.id FROM teams t JOIN agents a ON a.team_id=t.id JOIN conversations c ON c.agent_id=a.id JOIN memberships m ON m.team_id=t.id AND m.user_id=a.owner_user_id WHERE c.id=?",
+        };
+        diesel::sql_query($dialect.query(team_sql)).bind::<IdentitySql,_>($id)
+            .get_result::<LockedTeam>($connection).await.optional()?.ok_or(StoreError::NotFound)?;
         let context=connector!($connection,$dialect,$source);
         diesel::sql_query($dialect.query("SELECT c.* FROM conversations c JOIN agents a ON a.id=c.agent_id JOIN memberships m ON m.user_id=a.owner_user_id AND m.team_id=a.team_id WHERE c.id=? AND a.computer_id=?"))
             .bind::<IdentitySql,_>($id).bind::<IdentitySql,_>(context.computer_id)
             .get_result::<ConversationRow>($connection).await.optional()?.ok_or(StoreError::NotFound)?
     }};
 }
+pub(super) use source_conversation;
 #[derive(diesel::QueryableByName)]
 struct ExistingPair {
     #[diesel(sql_type=BigInt)]
@@ -95,6 +104,37 @@ struct ChunkRow {
 }
 
 impl Store {
+    /// Discover the current product conversation of this exact execution. Reading
+    /// absence never creates a conversation or starts native work.
+    pub async fn connector_current_conversation(
+        &self,
+        source: &ConnectorSource<'_>,
+    ) -> Result<Option<ConversationSummary>, StoreError> {
+        let session = EntityId::from_dto(EntityKind::ConnectorSession, source.session_id)?;
+        operation!(self, |connection, dialect| {
+            let initial=diesel::sql_query(dialect.query("SELECT c.* FROM conversations c JOIN agent_conversations ac ON ac.conversation_id=c.id AND ac.agent_id=c.agent_id JOIN agents a ON a.id=c.agent_id JOIN computer_executions e ON e.computer_id=a.computer_id JOIN connector_sessions s ON s.execution_id=e.id WHERE s.id=?"))
+                .bind::<IdentitySql,_>(session).get_result::<ConversationRow>(connection).await.optional()?;
+            let Some(initial) = initial else {
+                let _ = connector!(connection, dialect, source);
+                return Ok(None);
+            };
+            let row = source_conversation!(connection, dialect, source, initial.id);
+            let current=diesel::sql_query(dialect.query("SELECT c.* FROM conversations c JOIN agent_conversations ac ON ac.conversation_id=c.id AND ac.agent_id=c.agent_id WHERE c.id=?"))
+                .bind::<IdentitySql,_>(row.id).get_result::<ConversationRow>(connection).await.optional()?.ok_or(StoreError::Conflict)?;
+            Ok(Some(current.summary()?))
+        })
+    }
+    /// Current execution-bound source facts for server-owned normalization.
+    pub async fn connector_conversation(
+        &self,
+        source: &ConnectorSource<'_>,
+        conversation_id: &str,
+    ) -> Result<ConversationSummary, StoreError> {
+        let id = EntityId::from_dto(EntityKind::Conversation, conversation_id)?;
+        operation!(self, |connection, dialect| {
+            source_conversation!(connection, dialect, source, id).summary()
+        })
+    }
     pub async fn bind_conversation_source(
         &self,
         source: &ConnectorSource<'_>,
@@ -118,7 +158,39 @@ impl Store {
             {
                 return Err(StoreError::Conflict);
             }
+            if row.source_snapshot.is_none() {
+                let known=diesel::sql_query(dialect.query("SELECT CAST(count(*) AS BIGINT) AS ordinal FROM conversation_input_preparation p JOIN conversation_inputs i ON i.id=p.operation_id WHERE i.conversation_id=? AND p.preparation_state='READY' AND (p.ready_snapshot<>? OR p.ready_native_session<>?)"))
+                    .bind::<IdentitySql,_>(id).bind::<Text,_>(binding.snapshot.as_str()).bind::<Text,_>(binding.native_session.as_str())
+                    .get_result::<ExistingPair>(connection).await?;
+                if known.ordinal != 0 {
+                    return Err(StoreError::Conflict);
+                }
+            }
             if row.source_snapshot.is_some() {
+                diesel::sql_query(
+                    dialect.query("DELETE FROM conversation_native_state WHERE conversation_id=?"),
+                )
+                .bind::<IdentitySql, _>(id)
+                .execute(connection)
+                .await?;
+                diesel::sql_query(
+                    dialect.query("DELETE FROM conversation_stops WHERE conversation_id=?"),
+                )
+                .bind::<IdentitySql, _>(id)
+                .execute(connection)
+                .await?;
+                diesel::sql_query(
+                    dialect.query("DELETE FROM conversation_requests WHERE conversation_id=?"),
+                )
+                .bind::<IdentitySql, _>(id)
+                .execute(connection)
+                .await?;
+                diesel::sql_query(
+                    dialect.query("DELETE FROM conversation_records WHERE conversation_id=?"),
+                )
+                .bind::<IdentitySql, _>(id)
+                .execute(connection)
+                .await?;
                 // D19 replaces independently admitted inputs too; no hidden archive remains.
                 diesel::sql_query(
                     dialect.query("DELETE FROM conversation_inputs WHERE conversation_id=?"),
@@ -146,6 +218,29 @@ impl Store {
         source: &ConnectorSource<'_>,
         conversation_id: &str,
         pair: &CapturedEventPair,
+    ) -> Result<ConversationSummary, StoreError> {
+        self.ingest_pair(source, conversation_id, pair, &[]).await
+    }
+    /// Pair, cursor and normalized record fields are one completed publication.
+    pub async fn ingest_conversation_records(
+        &self,
+        source: &ConnectorSource<'_>,
+        conversation_id: &str,
+        pair: &CapturedEventPair,
+        records: &[ConversationRecordUpdate],
+    ) -> Result<ConversationSummary, StoreError> {
+        if super::projection::validate(records)? != pair.normalized {
+            return Err(StoreError::InvalidInput);
+        }
+        self.ingest_pair(source, conversation_id, pair, records)
+            .await
+    }
+    async fn ingest_pair(
+        &self,
+        source: &ConnectorSource<'_>,
+        conversation_id: &str,
+        pair: &CapturedEventPair,
+        records: &[ConversationRecordUpdate],
     ) -> Result<ConversationSummary, StoreError> {
         if pair.raw.is_empty()
             || pair.normalized.is_empty()
@@ -181,6 +276,7 @@ impl Store {
                 .bind::<IdentitySql,_>(id).bind::<Text,_>(pair.snapshot.as_str()).bind::<BigInt,_>(pair.position.ordinal())
                 .bind::<Text,_>(pair.position.occurrence().as_str()).bind::<Binary,_>(&pair.raw).bind::<Binary,_>(&pair.normalized)
                 .execute(connection).await?;
+            project_records!(connection, dialect, id, pair, records);
             diesel::sql_query(
                 dialect.query(
                     "UPDATE conversations SET source_ordinal=?,source_event_id=? WHERE id=?",

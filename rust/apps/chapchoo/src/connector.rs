@@ -1,4 +1,6 @@
 //! Independently authenticated execution connectivity; never substrate power proof.
+mod capture_sync;
+mod operations;
 use crate::AppError;
 use chapchoo_crypto::BearerSecret;
 use chapchoo_protocol::control::{
@@ -60,8 +62,21 @@ pub async fn run(
 ) -> Result<(), AppError> {
     // This owner survives every operational key/stream replacement. Reads and
     // connectivity do not start native work; source-qualified commands do later.
-    let primary = reconnect(endpoint_url, session_id, initial_key, stop, &native).await;
-    let cleanup = native.finish().await;
+    let mut capture_sync = capture_sync::CaptureSync::new(native.handle());
+    let mut operations = operations::Operations::new(native.handle());
+    let primary = reconnect(
+        endpoint_url,
+        session_id,
+        initial_key,
+        stop,
+        &mut capture_sync,
+        &mut operations,
+    )
+    .await;
+    let (capture_cleanup, operation_cleanup, cleanup) =
+        tokio::join!(capture_sync.finish(), operations.finish(), native.finish());
+    let primary = crate::completion::complete(primary, capture_cleanup);
+    let primary = crate::completion::complete(primary, operation_cleanup);
     match (primary, cleanup) {
         (Err(primary), Err(cleanup)) => Err(ConnectorCleanupFailure { primary, cleanup }.into()),
         (Err(primary), Ok(_)) => Err(primary),
@@ -95,7 +110,8 @@ async fn reconnect(
     session_id: String,
     initial_key: BearerSecret,
     stop: CancellationToken,
-    _native: &chapchoo_harness::NativeOwner,
+    capture_sync: &mut capture_sync::CaptureSync,
+    operations: &mut operations::Operations,
 ) -> Result<(), AppError> {
     let channel = endpoint(endpoint_url)?.connect_lazy();
     let mut authentication = ConnectorAuthenticationClient::new(channel.clone())
@@ -118,20 +134,22 @@ async fn reconnect(
             &mut key,
             &mut proactive,
             &stop,
+            (capture_sync, operations),
         )
         .await;
-        if stop.is_cancelled() {
-            return Ok(());
-        }
         if let Err(error) = outcome
-            && error.downcast_ref::<Status>().is_some_and(|e| {
-                matches!(
-                    e.code(),
-                    tonic::Code::Unauthenticated | tonic::Code::PermissionDenied
-                )
-            })
+            && (error.downcast_ref::<tokio::task::JoinError>().is_some()
+                || error.downcast_ref::<Status>().is_some_and(|e| {
+                    matches!(
+                        e.code(),
+                        tonic::Code::Unauthenticated | tonic::Code::PermissionDenied
+                    )
+                }))
         {
             return Err(error);
+        }
+        if stop.is_cancelled() {
+            return Ok(());
         }
         // Reconnect is a new stream admission, never resumption of old calls.
         tokio::select! {_=stop.cancelled()=>return Ok(()),_=tokio::time::sleep(Duration::from_secs(1))=>{}}
@@ -154,7 +172,9 @@ async fn connected(
     key: &mut BearerSecret,
     proactive: &mut tokio::time::Instant,
     stop: &CancellationToken,
+    workers: (&mut capture_sync::CaptureSync, &mut operations::Operations),
 ) -> Result<(), AppError> {
+    let (capture_sync, operations) = workers;
     let (sender, receiver) = mpsc::channel(8);
     sender
         .send(wire::ConnectorFrame {
@@ -165,7 +185,7 @@ async fn connected(
             )),
         })
         .await?;
-    let mut client = ConnectorConnectionClient::new(channel)
+    let mut client = ConnectorConnectionClient::new(channel.clone())
         .max_decoding_message_size(64 * 1024)
         .max_encoding_message_size(64 * 1024);
     // Streaming lifetime has no unary ten-second timeout. Hello and individual
@@ -194,9 +214,19 @@ async fn connected(
     let renewal = tokio::time::sleep_until(*proactive);
     tokio::pin!(renewal);
     let mut last_heartbeat = tokio::time::Instant::now();
+    let mut capture_tick = tokio::time::interval(Duration::from_millis(500));
+    capture_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     loop {
         tokio::select! {
             _=stop.cancelled()=>return Ok(()),
+            _=capture_tick.tick()=>{
+                capture_sync.schedule(channel.clone(),chapchoo_protocol::conversations::CaptureSource {
+                    session_id:session.into(),control_id:connected.instance_id.clone(),connection_id:connected.connection_id.clone(),
+                },key)?;
+                operations.publish(channel.clone(),chapchoo_protocol::conversations::CaptureSource {
+                    session_id:session.into(),control_id:connected.instance_id.clone(),connection_id:connected.connection_id.clone(),
+                },key)?;
+            }
             _=&mut renewal=>{
                 let result=authentication.refresh(request(wire::ConnectorKeyRequest{session_id:session.into(),request_id:mutation_id()?},key)?).await?.into_inner();
                 *key=BearerSecret::parse(result.token)?;
@@ -219,7 +249,32 @@ async fn connected(
                         check.set_timeout(Duration::from_millis(u64::from(command.remaining_ms.min(10_000))));
                         if authentication.check_command(check).await.is_err(){continue;}
                         let context=command.computer.ok_or("Connector Computer context is missing")?;
-                        sender.try_send(wire::ConnectorFrame{payload:Some(wire::connector_frame::Payload::Result(wire::ConnectorResult{identity:command.identity,execution_id:context.execution_id,ready:true}))})?;
+                        let admitted=match command.operation {
+                            Some(wire::connector_command::Operation::Observe(_))=>None,
+                            Some(wire::connector_command::Operation::Stop(stop_command))=>{
+                                let mut client=chapchoo_protocol::conversations::connector_capture_client::ConnectorCaptureClient::new(channel.clone())
+                                    .max_decoding_message_size(64*1024).max_encoding_message_size(64*1024);
+                                let check=request(chapchoo_protocol::conversations::StopCheck {source:Some(chapchoo_protocol::conversations::CaptureSource {session_id:session.into(),control_id:connected.instance_id.clone(),connection_id:connected.connection_id.clone()}),command:Some(stop_command.clone())},key)?;
+                                if client.check_stop(check).await.is_err() {Some(false)} else {Some(operations.stop(stop_command)?)}
+                            },
+                            Some(wire::connector_command::Operation::Answer(answer))=>Some(operations.answer(answer,channel.clone(),chapchoo_protocol::conversations::CaptureSource {
+                                session_id:session.into(),control_id:connected.instance_id.clone(),connection_id:connected.connection_id.clone(),
+                            },key)?),
+                            Some(wire::connector_command::Operation::Input(input))=>Some(operations.input(input,channel.clone(),chapchoo_protocol::conversations::CaptureSource {
+                                session_id:session.into(),control_id:connected.instance_id.clone(),connection_id:connected.connection_id.clone(),
+                            },key)?),
+                            Some(wire::connector_command::Operation::Setup(setup))=>{
+                                let mut client=chapchoo_protocol::conversations::connector_capture_client::ConnectorCaptureClient::new(channel.clone())
+                                    .max_decoding_message_size(64*1024).max_encoding_message_size(64*1024);
+                                let check=request(chapchoo_protocol::conversations::SetupCheck {
+                                    source:Some(chapchoo_protocol::conversations::CaptureSource {session_id:session.into(),control_id:connected.instance_id.clone(),connection_id:connected.connection_id.clone()}),
+                                    command:Some(setup.clone()),
+                                },key)?;
+                                if client.check_setup(check).await.is_err() {Some(false)} else {Some(operations.setup(setup)?)}
+                            },
+                            None=>continue,
+                        };
+                        sender.try_send(wire::ConnectorFrame{payload:Some(wire::connector_frame::Payload::Result(wire::ConnectorResult{identity:command.identity,execution_id:context.execution_id,ready:true,admitted}))})?;
                     }
                     Some(wire::control_frame::Payload::Cancel(_))=>{},
                     _=>return Err("Unexpected Connector frame".into()),

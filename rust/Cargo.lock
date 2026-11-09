@@ -685,11 +685,14 @@ dependencies = [
 name = "chapchoo-service"
 version = "0.1.0"
 dependencies = [
+ "agent-client-protocol",
  "base64 0.22.1",
  "chapchoo-crypto",
  "chapchoo-domain",
  "chapchoo-persistence",
  "parking_lot",
+ "serde",
+ "serde_json",
  "tempfile",
  "tokio",
  "url",

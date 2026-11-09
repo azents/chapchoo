@@ -1,3 +1,17 @@
+#[path = "component_auth/answer_wire.rs"]
+mod answer_wire;
+#[path = "component_auth/capture.rs"]
+mod capture;
+#[path = "component_auth/input_owner.rs"]
+mod input_owner;
+#[path = "component_auth/input_wire.rs"]
+mod input_wire;
+#[path = "component_auth/native_state.rs"]
+mod native_state;
+#[path = "component_auth/owner_input.rs"]
+mod owner_input;
+#[path = "component_auth/owner_records.rs"]
+mod owner_records;
 mod support;
 
 use base64::{Engine, engine::general_purpose::URL_SAFE};
@@ -115,6 +129,37 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
         let admission = Arc::new(AtomicBool::new(true));
         let connections =
             ComponentConnectionServices::new(app.clone(), control.id.clone(), admission.clone());
+        let core = Arc::new(chapchoo_service::ConversationService::new(store.clone()));
+        let captured =
+            chapchoo_rpc::ConversationCaptureServices::new(core.clone(), admission.clone());
+        let processor = Arc::new(chapchoo_rpc::ConversationControlProcessor::new(
+            app.clone(),
+            core.clone(),
+            chapchoo_rpc::PeerDelivery::new(app.clone()),
+            admission.clone(),
+        ));
+        let owner_rpc = chapchoo_rpc::ConversationServices::new(
+            core.clone(),
+            Arc::new(chapchoo_service::ConversationInputService::new(
+                store.clone(),
+                processor.clone(),
+                4,
+            )?),
+            Arc::new(chapchoo_service::ConversationStopService::new(
+                store.clone(),
+                processor.clone(),
+            )?),
+            Arc::new(chapchoo_service::ConversationAnswerService::new(
+                core, processor,
+            )?),
+            admission.clone(),
+        );
+        let owner_cleanup = owner_rpc.clone();
+        let owner_stopped = fixture.shutdown();
+        fixture.server(async move {
+            let _ = owner_stopped.await;
+            owner_cleanup.finish().await
+        });
         let services = ComponentAuthenticationServices::new(
             app.clone(),
             control.id.clone(),
@@ -135,13 +180,15 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
                 .add_service(services.provider_server())
                 .add_service(services.connector_server())
                 .add_service(connections.connector_server())
+                .add_service(captured.server())
+                .add_service(owner_rpc.server())
                 .serve_with_incoming_shutdown(TcpListenerStream::new(listener), async {
                     let _ = stopped.await;
                 }),
         );
         let mut provider = ProviderAuthenticationClient::connect(endpoint.clone()).await?;
         let mut connector = ConnectorAuthenticationClient::connect(endpoint.clone()).await?;
-        let mut connection_client = ConnectorConnectionClient::connect(endpoint).await?;
+        let mut connection_client = ConnectorConnectionClient::connect(endpoint.clone()).await?;
         let first = provider
             .exchange(exchange_request("issue", owner.expose())?)
             .await?
@@ -389,6 +436,20 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
                 &exchanged.token,
             )?)
             .await?;
+        capture::exercise(capture::Context {
+            store: &store,
+            owner: &user.token.digest(),
+            agent: &created,
+            endpoint: &endpoint,
+            source: chapchoo_protocol::conversations::CaptureSource {
+                session_id: bootstrap.session_id.clone(),
+                control_id: connected.instance_id.clone(),
+                connection_id: connected.connection_id.clone(),
+            },
+            key: &exchanged.token,
+            user_key: user.token.expose(),
+        })
+        .await?;
         let proof = BootstrapProviderPermit::new("provider".into())?.authenticated();
         store
             .revoke_provider_key(
@@ -448,7 +509,9 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
                             execution_id,
                         }),
                         remaining_ms: 5_000,
-                        observe: Some(wire::ObserveConnector {}),
+                        operation: Some(wire::connector_command::Operation::Observe(
+                            wire::ObserveConnector {},
+                        )),
                     },
                     tokio::time::Instant::now() + Duration::from_secs(5),
                 )
@@ -467,6 +530,7 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
                         identity: command.identity,
                         execution_id: bootstrap.execution_id.clone(),
                         ready: true,
+                        admitted: None,
                     },
                 )),
             })

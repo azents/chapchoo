@@ -229,7 +229,12 @@ async fn start_backends(
     } else {
         None
     };
-    let app = Arc::new(ComputersService::new(store).with_policy(application.computers)?);
+    let conversation_core = Arc::new(chapchoo_service::ConversationService::new(store.clone()));
+    let capture = chapchoo_rpc::ConversationCaptureServices::new(
+        conversation_core.clone(),
+        admission.clone(),
+    );
+    let app = Arc::new(ComputersService::new(store.clone()).with_policy(application.computers)?);
     let computers = ComputerServices::new(app.clone()).with_admission(admission.clone());
     if groups.contains(ServiceGroup::Control) {
         let standalone = if options.standalone_docker {
@@ -250,7 +255,7 @@ async fn start_backends(
             config.cipher.clone(),
         )?;
         let (mut plane, incoming) = ControlPlane::new(
-            app,
+            app.clone(),
             options
                 .peer_advertise
                 .as_deref()
@@ -310,10 +315,53 @@ async fn start_backends(
         tasks.spawn(plane.monitor(admission.clone(), stop.clone()));
         tasks.spawn(plane.reconciler(admission.clone(), stop.clone()));
     }
+    let conversations = if groups.contains(ServiceGroup::Client) {
+        let delivery = control.as_ref().map_or_else(
+            || chapchoo_rpc::PeerDelivery::new(app.clone()),
+            ControlPlane::conversation_delivery,
+        );
+        let processor = Arc::new(chapchoo_rpc::ConversationControlProcessor::new(
+            app.clone(),
+            conversation_core.clone(),
+            delivery,
+            admission.clone(),
+        ));
+        let input = Arc::new(chapchoo_service::ConversationInputService::new(
+            store.clone(),
+            processor.clone(),
+            32,
+        )?);
+        let stops = Arc::new(chapchoo_service::ConversationStopService::new(
+            store,
+            processor.clone(),
+        )?);
+        let answers = Arc::new(chapchoo_service::ConversationAnswerService::new(
+            conversation_core.clone(),
+            processor,
+        )?);
+        let services = chapchoo_rpc::ConversationServices::new(
+            conversation_core,
+            input,
+            stops,
+            answers,
+            admission.clone(),
+        );
+        let owned = services.clone();
+        let shutdown = stop.clone();
+        tasks.spawn(async move {
+            shutdown.cancelled().await;
+            owned.close();
+            owned.finish().await?;
+            Ok(())
+        });
+        Some(services)
+    } else {
+        None
+    };
     let rpc = AccountServices::new(service).with_admission(admission.clone());
     let components = control
         .as_ref()
-        .map(|plane| (&plane.authentication, &plane.connections));
+        .map(|plane| (&plane.authentication, &plane.connections, &capture));
     let authentication_rpc = authentication.as_ref().map(|service| {
         AuthenticationServices::new(service.clone()).with_admission(admission.clone())
     });
@@ -321,6 +369,7 @@ async fn start_backends(
         Some(&rpc),
         Some(&computers),
         authentication_rpc.as_ref(),
+        conversations.as_ref(),
         components,
     )?;
     let health = HealthServer::new(HealthService {
