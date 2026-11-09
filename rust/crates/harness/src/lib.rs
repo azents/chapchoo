@@ -3,7 +3,9 @@ mod preparation;
 mod runtime;
 mod storage;
 
-pub use preparation::{AppliedSupply, Freshness, Preparer};
+pub use preparation::{
+    AppliedSupply, Freshness, NativeComponentVersions, NativePreparationObservation, Preparer,
+};
 pub use runtime::{
     InteractiveRequest, InteractiveResponse, NativeOwner, NativePromptAcceptance, Retirement,
     ScopeEvidence, SessionEventRecorder,

@@ -28,6 +28,20 @@ pub enum Freshness {
     TransientLookupFailure,
 }
 
+/// Exact selected component identities, with no credential or filesystem data.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NativeComponentVersions {
+    pub node: String,
+    pub adapter: String,
+    pub codex: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NativePreparationObservation {
+    pub freshness: Freshness,
+    pub versions: NativeComponentVersions,
+}
+
 /// An exact complete combination, retained until physical retirement.
 #[derive(Clone)]
 pub struct AppliedSupply {
@@ -36,11 +50,13 @@ pub struct AppliedSupply {
     pub(crate) adapter: PathBuf,
     pub(crate) codex: PathBuf,
     pub freshness: Freshness,
+    pub versions: NativeComponentVersions,
 }
 impl fmt::Debug for AppliedSupply {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("AppliedSupply")
             .field("freshness", &self.freshness)
+            .field("versions", &self.versions)
             .finish_non_exhaustive()
     }
 }
@@ -134,6 +150,7 @@ impl Preparer {
                 return Err(Error::Incompatible);
             }
             applied.codex = path.to_owned();
+            applied.versions.codex = version;
         }
         self.collect(&applied.lease)?;
         Ok(applied)
@@ -387,6 +404,11 @@ impl Preparer {
             adapter: root.join(format!("node_modules/{ADAPTER}/dist/index.js")),
             codex: root.join(format!("node_modules/{CODEX}/bin/codex.js")),
             freshness: Freshness::Current,
+            versions: NativeComponentVersions {
+                node: complete.node_version,
+                adapter: complete.adapter_version,
+                codex: complete.codex_version,
+            },
         })
     }
 

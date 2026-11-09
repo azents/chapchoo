@@ -16,11 +16,15 @@ fn transient_cache_fallback_never_masks_integrity_or_compatibility_failure() -> 
                 .ok_or("Cache name")?,
         )?,
     )?;
+    let selected = preparer.eligible_result(Err(Error::Transient), "linux-x64")?;
+    assert_eq!(selected.freshness, Freshness::TransientLookupFailure);
     assert_eq!(
-        preparer
-            .eligible_result(Err(Error::Transient), "linux-x64")?
-            .freshness,
-        Freshness::TransientLookupFailure
+        selected.versions,
+        NativeComponentVersions {
+            node: "v24.0.0".into(),
+            adapter: "2.5.0".into(),
+            codex: "0.165.0".into(),
+        }
     );
     assert!(matches!(
         preparer.eligible_result(Err(Error::Integrity), "linux-x64"),

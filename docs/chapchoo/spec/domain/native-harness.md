@@ -36,6 +36,12 @@ the latest complete combination protect their complete self-contained closure.
 Collection removes only inactive superseded owned installation directories;
 native context, credentials, captures and workspace are outside deletion.
 
+The applied descriptor retains exact Node, adapter and Codex versions. Existing
+mode records the actual probed CLI version rather than the managed CLI's version.
+A read-only owner preparation query exposes these nonsecret identities and the
+freshness outcome from the physically started combination; it never acquires,
+starts or refreshes anything. An idle owner reports no applied preparation.
+
 Explicit existing CLI mode checks its absolute local path and compatible actual
 version. It uses the managed adapter/runtime but never overwrites or silently
 replaces the owner's CLI. Applied supply stays fixed through work completion and
@@ -49,6 +55,8 @@ responders and applied installation lease belong to the execution actor, not a
 server waiter. A bounded command queue retains admitted work after a caller drops
 its response receiver. Prompt acceptance preserves its exact native message ID;
 it is not completion. Normal task completion does not shut down the owner.
+After a possibly published prompt loses its acknowledgement, later prompt
+admission is fenced until physical retirement; timeout does not grant replay.
 
 Session resume requests retained history from `start` and fails without creating
 a fresh context if restoration fails. Original incoming session update, permission

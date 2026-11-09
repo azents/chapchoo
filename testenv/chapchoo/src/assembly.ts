@@ -137,7 +137,9 @@ export class Assembly {
     return {
       ...safeEnvironment(),
       NODE_ENV: "production",
-      SWC_NATIVE_BINDING_CACHE: join(this.directory, "swc-cache"),
+      SWC_NATIVE_BINDING_CACHE:
+        safeEnvironment().SWC_NATIVE_BINDING_CACHE ??
+        join(this.directory, "swc-cache"),
       CHAPCHOO_WEB_HOST: "127.0.0.1",
       CHAPCHOO_PUBLIC_URL: url,
       CHAPCHOO_GENERAL_WEB_URL: this.generalUrl,
@@ -331,7 +333,7 @@ export class Assembly {
         cwd,
         {
           ...safeEnvironment(),
-          SWC_NATIVE_BINDING_CACHE: join(this.directory, "swc-cache"),
+          SWC_NATIVE_BINDING_CACHE: env.SWC_NATIVE_BINDING_CACHE,
         },
         120_000,
       );
@@ -370,8 +372,13 @@ export class Assembly {
         : {}),
     };
     this.kubernetes = await SyntheticKubernetes.create(
-      (session, key, endpoint) =>
-        this.owner.start(
+      async (session, key, endpoint, computerId) => {
+        if (!/^[a-zA-Z0-9_-]+$/.test(computerId)) {
+          throw new Error("Synthetic Connector storage identity is invalid");
+        }
+        const savedRoot = join(this.directory, "connector-saved", computerId);
+        await mkdir(savedRoot, { recursive: true, mode: 0o700 });
+        return this.owner.start(
           "Execution Computer Connector",
           binary,
           ["computer-connector"],
@@ -381,8 +388,10 @@ export class Assembly {
             CHAPCHOO_CONTROL_ENDPOINT: endpoint,
             CHAPCHOO_CONNECTOR_SESSION_ID: session,
             CHAPCHOO_CONNECTOR_INITIAL_KEY: key,
+            CHAPCHOO_COMPUTER_SAVED_ROOT: savedRoot,
           },
-        ),
+        );
+      },
     );
     const kubeconfig = join(this.directory, "fixture-kubeconfig");
     await writeFile(

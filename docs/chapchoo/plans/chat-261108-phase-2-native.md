@@ -139,3 +139,27 @@ Remaining gates: authenticated native session/new/resume and short core model
 confirmation, complete real Docker Provider conversation, supported ARM64
 runtime acceptance and final full-stack validation. Human authentication blocks
 only its dependent live checks, never phase progression.
+
+## Complete-stack correction checkpoint
+
+After all six PRs were submitted, remote verification identified an omitted
+explicit saved root in the synthetic Kubernetes Connector launcher. The fixture
+now provides a private per-Computer saved directory, reused across its execution
+successors; it still does not claim native PID1/security-profile acceptance.
+Prompt acknowledgement loss also fences later phase-2 prompt admission rather
+than reconstructing permission from a timed-out SDK waiter. The user/native
+storage-class fixture correction belongs to this native phase; phase 6 retains
+the ordinary-image-metadata correction and final real Docker evidence.
+Design delta: None.
+
+The actual applied descriptor now retains nonsecret exact component versions,
+including the probed existing CLI version, and exposes them with the preparation
+freshness observation through a read-only native-owner query. The transient-cache
+test checks the retained identities; an idle query test confirms no preparation
+or native start. Carrying this fact into the subsequent source-qualified wire and
+owner UI belongs to phases 3 and 5.
+
+The affected source build, thirteen harness tests, fixture static/unit checks and
+the actual default Computer browser journey passed after these corrections.
+The source-mode fixture also respects an explicitly supplied supported SWC cache
+location rather than overriding it with an unsafe Runtime ancestor.

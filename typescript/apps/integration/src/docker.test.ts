@@ -234,7 +234,9 @@ void test(
         assert.equal(successor.volume, original.volume);
         assert.equal(successor.noCopy, true);
         assert.equal(await docker.readMarker(successor), "saved-original-data");
-        console.info("Native Docker step: restart with empty original storage");
+        console.info(
+          "Native Docker step: restart with empty original user storage",
+        );
         await docker.clearSaved(successor);
         await call(
           computers.requestLifecycle.bind(computers),
@@ -257,7 +259,7 @@ void test(
         assert.notEqual(restarted.container, successor.container);
         assert.equal(restarted.volume, original.volume);
         assert.equal(restarted.noCopy, true);
-        assert.equal(await docker.savedEmpty(restarted), true);
+        assert.equal(await docker.savedUserDataEmpty(restarted), true);
         console.info("Native Docker step: delete and prove native absence");
         await call(
           computers.requestLifecycle.bind(computers),

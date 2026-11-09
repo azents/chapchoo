@@ -157,6 +157,7 @@ impl Pending {
 }
 type Requests = Arc<Mutex<BTreeMap<String, Pending>>>;
 enum Command {
+    Preparation(oneshot::Sender<Option<crate::NativePreparationObservation>>),
     Start {
         supply: HarnessSupply,
         resume: Option<NativeConversationId>,
@@ -203,6 +204,17 @@ impl NativeOwner {
                     command = receiver.recv() => match command { Some(c)=>c, None=>break },
                 };
                 match command {
+                    Command::Preparation(result) => {
+                        let observation =
+                            state
+                                .live
+                                .as_ref()
+                                .map(|live| crate::NativePreparationObservation {
+                                    freshness: live._supply.freshness,
+                                    versions: live._supply.versions.clone(),
+                                });
+                        let _ = result.send(observation);
+                    }
                     Command::Start {
                         supply,
                         resume,
@@ -226,6 +238,11 @@ impl NativeOwner {
                             }
                             _ => Err(Error::NotAdmitted),
                         };
+                        // Publication can precede a lost acknowledgement. Fence
+                        // later prompts until the physical owner is retired.
+                        if matches!(&outcome, Err(Error::Protocol)) {
+                            state.blocked = true;
+                        }
                         let _ = result.send(outcome);
                     }
                     Command::Stop(result) => {
@@ -290,6 +307,14 @@ impl NativeOwner {
             })
             .map_err(|_| Error::NotAdmitted)?;
         rx.await.map_err(|_| Error::Process)?
+    }
+    /// Read the physically started combination without preparing or refreshing it.
+    pub async fn preparation(&self) -> Result<Option<crate::NativePreparationObservation>, Error> {
+        let (result, rx) = oneshot::channel();
+        self.sender
+            .try_send(Command::Preparation(result))
+            .map_err(|_| Error::NotAdmitted)?;
+        rx.await.map_err(|_| Error::Process)
     }
     /// Acknowledges native prompt acceptance only, never completion or consumption.
     pub async fn prompt(&self, text: ConversationText) -> Result<NativePromptAcceptance, Error> {
@@ -705,6 +730,7 @@ mod tests {
     -> Result<(), Box<dyn std::error::Error>> {
         let saved = tempfile::tempdir()?;
         let owner = NativeOwner::new(NativeStorage::open(saved.path())?)?;
+        assert_eq!(owner.preparation().await?, None);
         assert!(owner.pending_requests().await?.is_empty());
         assert!(matches!(owner.stop_work().await, Err(Error::NotAdmitted)));
         assert_eq!(owner.finish().await?, Retirement::NoNativeStarted);
