@@ -7,6 +7,28 @@ use bollard::models::{
 use chapchoo_protocol::control as wire;
 use std::{collections::BTreeMap, fmt};
 
+/// Restricted admission tolerates only predefined descriptive OCI metadata.
+/// Extension/operational labels can trigger host-side effects and are not metadata authority.
+fn inert_image_metadata(key: &str) -> bool {
+    matches!(
+        key,
+        "org.opencontainers.image.created"
+            | "org.opencontainers.image.authors"
+            | "org.opencontainers.image.url"
+            | "org.opencontainers.image.documentation"
+            | "org.opencontainers.image.source"
+            | "org.opencontainers.image.version"
+            | "org.opencontainers.image.revision"
+            | "org.opencontainers.image.vendor"
+            | "org.opencontainers.image.licenses"
+            | "org.opencontainers.image.ref.name"
+            | "org.opencontainers.image.title"
+            | "org.opencontainers.image.description"
+            | "org.opencontainers.image.base.digest"
+            | "org.opencontainers.image.base.name"
+    )
+}
+
 pub struct Bootstrap<'a> {
     pub session: &'a str,
     pub initial_key: &'a str,
@@ -156,7 +178,7 @@ impl Docker {
             .all(|(key, expected)| labels.get(key) == Some(expected))
             && labels
                 .keys()
-                .all(|key| !key.starts_with("chapchoo.io/") || expected_labels.contains_key(key));
+                .all(|key| expected_labels.contains_key(key) || inert_image_metadata(key));
         let policy = host.restart_policy.as_ref().and_then(|policy| policy.name);
         // Image EXPOSE metadata does not publish ports. Enforce publication at
         // HostConfig's PublishAllPorts and PortBindings boundaries below.

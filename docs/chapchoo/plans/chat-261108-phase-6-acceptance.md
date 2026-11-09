@@ -7,7 +7,7 @@ tags: [agent, conversation, runtime, verification, implementation]
 # Phase Execution Plan
 
 - Phase: 6/6, supported-profile integration and final acceptance evidence.
-- Branch/base: `feature/chat-text-6-acceptance` → `feature/chat-text-5-ui` (`076e8ac8c11e3485a4d854157396affbce23983a`).
+- Branch/base: `feature/chat-text-6-acceptance` → `feature/chat-text-5-ui` (`b5c1efa4ed6b2d18239cf6bcc828735e7d378726`).
 - PR boundary: correct the runtime integration finding, exercise the unchanged restricted profile with image metadata, consolidate implemented contracts and honest acceptance limits.
 - Inputs: submitted phases 1–5 (#97–101), full Rust/RPC/frontend gates, model-free actual Docker/browser conversation evidence.
 - Deliverables: benign image metadata does not impersonate ownership or prevent valid native starts; exact reserved ownership labels and all security checks remain enforced; representative Docker lifecycle and conversation checks; requirement/removal evidence and connected Specs.
@@ -55,3 +55,40 @@ The [acceptance boundaries](../notes/chat-261108-implementation-acceptance.md)
 retain requirement/removal evidence and explicit real-authentication, actual
 Codex, architecture/ABI and complete-stack CI/review limits. Final commit hooks
 and PR submission precede any remote CI or independent-review inspection.
+
+## Complete-stack acceptance follow-up
+
+All six PRs have been submitted. The phase-2/3/4/5 corrections are inherited and
+their integrated Rust (393 tests), both-engine live RPC (129 checks each),
+web-core (135 tests), General/Admin unit and production build gates and 32
+affected component checks passed. Mandatory correction commits are pushed.
+
+The primary agent now verifies the existing single Docker/browser journey with
+the current integrated binary and a newly built isolated metadata-bearing image,
+retaining the unchanged restricted runtime and individual owned cleanup.
+The primary also checks latest-SHA CI and automated findings, requests targeted
+read-only re-review from `/root/chat-implementation-reviewer` after integration,
+and updates the acceptance limits from observed evidence.
+
+The deterministic real-consumer/exact-ordinal storage-port append probe is a
+separate liveness result, not successful native timing acceptance or an actual
+database stress run. Record its forced interleaving and quiescent success, keep
+the complete-content/source fence, and do not invent a new storage/feed/version
+authority to hide the limitation. No real authentication/model call, merge,
+deployment or release-platform certification is included. Preserve plans and
+unimplemented snapshot markers while those acceptance prerequisites remain.
+Design delta: None.
+
+### Metadata-admission correction
+
+The automated review identified that the first metadata exception accepted every
+nonreserved label, including operational labels interpreted by host routing,
+update or management tools. Narrow that exception to the predefined descriptive
+[OCI image annotation keys](https://github.com/opencontainers/image-spec/blob/main/annotations.md).
+Do not allow arbitrary extension keys merely because they use an OCI prefix.
+Expected ownership labels keep their exact required values; all other labels
+must fail restricted-profile admission before native start. This restores the
+approved harmless-metadata boundary without adding an adoption path, setting,
+legacy fallback or security-profile relaxation. Prove rejection before/after,
+retain positive standard metadata coverage, run affected/full mandatory gates
+and rebuild the current isolated acceptance image. Design delta: None.
