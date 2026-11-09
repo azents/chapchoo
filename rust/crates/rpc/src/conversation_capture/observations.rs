@@ -40,6 +40,33 @@ pub(super) async fn native(
                 })?)?,
                 foreground,
                 work_id: value.work_id,
+                preparation: value
+                    .preparation
+                    .map(|value| {
+                        use chapchoo_service::{
+                            ConversationNativePreparation, ConversationPreparationFreshness as F,
+                        };
+                        let freshness = match wire::PreparationFreshness::try_from(value.freshness)
+                        {
+                            Ok(wire::PreparationFreshness::Current) => F::Current,
+                            Ok(wire::PreparationFreshness::TransientLookupFailure) => {
+                                F::TransientLookupFailure
+                            }
+                            _ => {
+                                return Err(Status::invalid_argument(
+                                    "Preparation freshness is invalid",
+                                ));
+                            }
+                        };
+                        Ok(ConversationNativePreparation {
+                            freshness,
+                            node: value.node,
+                            adapter: value.adapter,
+                            codex: value.codex,
+                        })
+                    })
+                    .transpose()?,
+                authentication_id: value.authentication_id,
             },
         )
         .await

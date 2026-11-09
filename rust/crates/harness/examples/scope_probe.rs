@@ -23,19 +23,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn()?;
             Ok(())
         },
+        Some("native") => Err("Native conversation checks require the authenticated setup acceptance lane".into()),
         _ => tokio::runtime::Builder::new_current_thread().enable_all().build()?.block_on(async {
             let storage = NativeStorage::open(Path::new(args.get(2).ok_or("Missing saved root")?))?;
             let scope = ScopeEvidence::verify(&storage)?;
-            if args.get(1).map(String::as_str) == Some("native") {
-                let capture=chapchoo_harness::CaptureLog::create(&storage)?;
-                let owner = chapchoo_harness::NativeOwner::new(storage)?;
-                let started = owner.start(chapchoo_domain::HarnessSupply::Managed,chapchoo_harness::NativeContext::New,capture).await;
-                let cleanup = owner.finish().await?;
-                if cleanup != Retirement::Quiescent { return Err("Native retirement was not verified".into()); }
-                let _context = started?;
-                std::io::stdout().write_all(b"Strict ACP v2 native session initialization and whole-scope retirement verified; no prompt/model call.\n")?;
-                return Ok(());
-            }
             if args.get(1).map(String::as_str) == Some("prepare") {
                 let mut preparer = Preparer::new(storage)?;
                 let applied = preparer.prepare(&chapchoo_domain::HarnessSupply::Managed).await?;

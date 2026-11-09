@@ -137,9 +137,16 @@ async fn already_live_setup_preserves_applied_credentials_without_calling_new_pr
                 replay: CaptureReplay::AlreadyCaptured,
             },
             source,
-            Some(provider.clone()),
+            provider.clone(),
         )
         .await;
+    let physical = state.observe()?;
+    assert_eq!(physical.authentication_id.as_deref(), Some("old-record"));
+    let prepared = physical.preparation.ok_or("Missing physical preparation")?;
+    assert_eq!(prepared.freshness, crate::Freshness::Current);
+    assert_eq!(prepared.versions.node, "v24.0.0");
+    assert_eq!(prepared.versions.adapter, "2.6.0");
+    assert_eq!(prepared.versions.codex, "0.165.0");
     let observed = state
         .live
         .as_ref()

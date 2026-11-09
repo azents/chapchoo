@@ -27,6 +27,13 @@ pub(super) async fn exercise(
         position: Some(position.clone()),
         foreground: c::Foreground::Running as i32,
         work_id: Some("work-live".into()),
+        preparation: Some(c::NativePreparation {
+            freshness: c::PreparationFreshness::TransientLookupFailure as i32,
+            node: "24.0.0".into(),
+            adapter: "2.6.0".into(),
+            codex: "0.165.0".into(),
+        }),
+        authentication_id: None,
     };
     assert_eq!(
         client
@@ -70,6 +77,14 @@ pub(super) async fn exercise(
         .await?
         .ok_or("Missing native work observation")?;
     assert_eq!(native.work_id.as_deref(), Some("work-live"));
+    assert_eq!(
+        native
+            .preparation
+            .as_ref()
+            .ok_or("Missing preparation")?
+            .adapter,
+        "2.6.0"
+    );
     let mut owner =
         c::conversations_client::ConversationsClient::connect(context.endpoint.to_owned()).await?;
     let current = owner
@@ -81,6 +96,26 @@ pub(super) async fn exercise(
         )?)
         .await?
         .into_inner();
+    assert_eq!(
+        current.saved_authentication_id.as_deref(),
+        context
+            .agent
+            .authentication
+            .as_ref()
+            .map(|saved| saved.authentication_id.as_str())
+    );
+    let preparation = current
+        .observed_native
+        .as_ref()
+        .and_then(|observed| observed.preparation.as_ref())
+        .ok_or("Missing owner preparation")?;
+    assert_eq!(
+        preparation.freshness,
+        c::PreparationFreshness::TransientLookupFailure as i32
+    );
+    assert_eq!(preparation.node, "24.0.0");
+    assert_eq!(preparation.adapter, "2.6.0");
+    assert_eq!(preparation.codex, "0.165.0");
     assert_eq!(
         current
             .observed_native

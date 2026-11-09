@@ -56,6 +56,8 @@ pub(super) async fn exercise(
                 position: context.state_position.clone(),
                 foreground: ConversationForeground::Running,
                 work_id: Some("fixture-observed-work".into()),
+                preparation: None,
+                authentication_id: None,
             },
         )
         .await?;

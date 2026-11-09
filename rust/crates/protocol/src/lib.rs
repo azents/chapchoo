@@ -22,6 +22,7 @@ pub mod conversations {
     redacted_debug!(
         NativeTarget,
         NativeStateReport,
+        NativePreparation,
         WorkTarget,
         StopCommand,
         StopCheck,

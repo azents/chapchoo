@@ -24,6 +24,13 @@ export const protobufPackage = "chapchoo.conversations";
 
 export const protobufFileName = "conversations.proto";
 
+export enum PreparationFreshness {
+  PREPARATION_FRESHNESS_UNSPECIFIED = 0,
+  PREPARATION_FRESHNESS_CURRENT = 1,
+  PREPARATION_FRESHNESS_TRANSIENT_LOOKUP_FAILURE = 2,
+  UNRECOGNIZED = -1,
+}
+
 export enum InputOwnership {
   INPUT_OWNERSHIP_UNSPECIFIED = 0,
   INPUT_OWNERSHIP_PROCESSING_HERE = 1,
@@ -135,6 +142,7 @@ export interface OwnerConversationRequest {
 export interface OwnerConversation {
   conversation: CaptureState | undefined;
   observedNative: ObservedNative | undefined;
+  savedAuthenticationId?: string | undefined;
 }
 
 export interface ObservedNative {
@@ -142,6 +150,15 @@ export interface ObservedNative {
   position: SourcePosition | undefined;
   foreground: Foreground;
   workId?: string | undefined;
+  preparation: NativePreparation | undefined;
+  authenticationId?: string | undefined;
+}
+
+export interface NativePreparation {
+  freshness: PreparationFreshness;
+  node: string;
+  adapter: string;
+  codex: string;
 }
 
 export interface SavedSupply {
@@ -557,6 +574,8 @@ export interface NativeStateReport {
   position: SourcePosition | undefined;
   foreground: Foreground;
   workId?: string | undefined;
+  preparation: NativePreparation | undefined;
+  authenticationId?: string | undefined;
 }
 
 export interface LiveRequestReport {
@@ -745,7 +764,7 @@ export const OwnerConversationRequest: MessageFns<OwnerConversationRequest> = {
 };
 
 function createBaseOwnerConversation(): OwnerConversation {
-  return { conversation: undefined, observedNative: undefined };
+  return { conversation: undefined, observedNative: undefined, savedAuthenticationId: undefined };
 }
 
 export const OwnerConversation: MessageFns<OwnerConversation> = {
@@ -755,6 +774,9 @@ export const OwnerConversation: MessageFns<OwnerConversation> = {
     }
     if (message.observedNative !== undefined) {
       ObservedNative.encode(message.observedNative, writer.uint32(18).fork()).join();
+    }
+    if (message.savedAuthenticationId !== undefined) {
+      writer.uint32(26).string(message.savedAuthenticationId);
     }
     return writer;
   },
@@ -788,6 +810,14 @@ export const OwnerConversation: MessageFns<OwnerConversation> = {
             message.observedNative = ObservedNative.decode(reader, reader.uint32());
             continue;
           }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.savedAuthenticationId = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -811,12 +841,20 @@ export const OwnerConversation: MessageFns<OwnerConversation> = {
     message.observedNative = (object.observedNative !== undefined && object.observedNative !== null)
       ? ObservedNative.fromPartial(object.observedNative)
       : undefined;
+    message.savedAuthenticationId = object.savedAuthenticationId ?? undefined;
     return message;
   },
 };
 
 function createBaseObservedNative(): ObservedNative {
-  return { target: undefined, position: undefined, foreground: 0, workId: undefined };
+  return {
+    target: undefined,
+    position: undefined,
+    foreground: 0,
+    workId: undefined,
+    preparation: undefined,
+    authenticationId: undefined,
+  };
 }
 
 export const ObservedNative: MessageFns<ObservedNative> = {
@@ -832,6 +870,12 @@ export const ObservedNative: MessageFns<ObservedNative> = {
     }
     if (message.workId !== undefined) {
       writer.uint32(34).string(message.workId);
+    }
+    if (message.preparation !== undefined) {
+      NativePreparation.encode(message.preparation, writer.uint32(50).fork()).join();
+    }
+    if (message.authenticationId !== undefined) {
+      writer.uint32(58).string(message.authenticationId);
     }
     return writer;
   },
@@ -881,6 +925,22 @@ export const ObservedNative: MessageFns<ObservedNative> = {
             message.workId = reader.string();
             continue;
           }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.preparation = NativePreparation.decode(reader, reader.uint32());
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.authenticationId = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -906,6 +966,101 @@ export const ObservedNative: MessageFns<ObservedNative> = {
       : undefined;
     message.foreground = object.foreground ?? 0;
     message.workId = object.workId ?? undefined;
+    message.preparation = (object.preparation !== undefined && object.preparation !== null)
+      ? NativePreparation.fromPartial(object.preparation)
+      : undefined;
+    message.authenticationId = object.authenticationId ?? undefined;
+    return message;
+  },
+};
+
+function createBaseNativePreparation(): NativePreparation {
+  return { freshness: 0, node: "", adapter: "", codex: "" };
+}
+
+export const NativePreparation: MessageFns<NativePreparation> = {
+  encode(message: NativePreparation, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.freshness !== 0) {
+      writer.uint32(8).int32(message.freshness);
+    }
+    if (message.node !== "") {
+      writer.uint32(18).string(message.node);
+    }
+    if (message.adapter !== "") {
+      writer.uint32(26).string(message.adapter);
+    }
+    if (message.codex !== "") {
+      writer.uint32(34).string(message.codex);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): NativePreparation {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseNativePreparation();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.freshness = reader.int32() as any;
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.node = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.adapter = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.codex = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<NativePreparation>, I>>(base?: I): NativePreparation {
+    return NativePreparation.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<NativePreparation>, I>>(object: I): NativePreparation {
+    const message = createBaseNativePreparation();
+    message.freshness = object.freshness ?? 0;
+    message.node = object.node ?? "";
+    message.adapter = object.adapter ?? "";
+    message.codex = object.codex ?? "";
     return message;
   },
 };
@@ -6119,6 +6274,8 @@ function createBaseNativeStateReport(): NativeStateReport {
     position: undefined,
     foreground: 0,
     workId: undefined,
+    preparation: undefined,
+    authenticationId: undefined,
   };
 }
 
@@ -6141,6 +6298,12 @@ export const NativeStateReport: MessageFns<NativeStateReport> = {
     }
     if (message.workId !== undefined) {
       writer.uint32(50).string(message.workId);
+    }
+    if (message.preparation !== undefined) {
+      NativePreparation.encode(message.preparation, writer.uint32(66).fork()).join();
+    }
+    if (message.authenticationId !== undefined) {
+      writer.uint32(74).string(message.authenticationId);
     }
     return writer;
   },
@@ -6206,6 +6369,22 @@ export const NativeStateReport: MessageFns<NativeStateReport> = {
             message.workId = reader.string();
             continue;
           }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.preparation = NativePreparation.decode(reader, reader.uint32());
+            continue;
+          }
+          case 9: {
+            if (tag !== 74) {
+              break;
+            }
+
+            message.authenticationId = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -6235,6 +6414,10 @@ export const NativeStateReport: MessageFns<NativeStateReport> = {
       : undefined;
     message.foreground = object.foreground ?? 0;
     message.workId = object.workId ?? undefined;
+    message.preparation = (object.preparation !== undefined && object.preparation !== null)
+      ? NativePreparation.fromPartial(object.preparation)
+      : undefined;
+    message.authenticationId = object.authenticationId ?? undefined;
     return message;
   },
 };

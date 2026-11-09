@@ -144,7 +144,11 @@ SDK errors and vendor descriptions never enter returned error source chains.
 Definite local non-dispatch, parsed standard OAuth rejection and uncertain
 transport/malformed/unpublishable responses are separate results. Successful
 responses preserve a valid prior refresh token if its replacement is omitted.
-The admitted account remains bound and missing expiry is not invented. These
+The admitted account remains bound and missing expiry is not invented. Before
+publishing a candidate, the adapter checks the complete refreshed bundle against
+the same account-bound native external-token encoder used for execution. An
+opaque or otherwise ineligible access token remains uncertain even when the
+OAuth response envelope succeeded. These
 fixture-backed contracts do not certify actual device-acquired refresh
 compatibility or native adoption.
 

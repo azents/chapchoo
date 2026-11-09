@@ -126,6 +126,10 @@ macro_rules! exercise {
         ))?;
         let refresh_insert = format!("INSERT INTO authentication_refreshes(id,authentication_id,source_nonce,account_id,state,created_at,updated_at) VALUES({refresh},{record},{nonce},'account','POSSIBLE',1,1)");
         connection.batch_execute(&refresh_insert)?;
+        // Refresh preservation belongs to migration 14, not a later additive table.
+        while connection.applied_migrations()?.iter().any(|version| version.to_string().as_str() > "00000000000014") {
+            connection.revert_last_migration(source())?;
+        }
         assert!(connection.revert_last_migration(source()).is_err());
         assert_eq!(connection.applied_migrations()?.len(),14);
         for invalid in [

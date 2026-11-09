@@ -111,7 +111,7 @@ impl State {
     pub(super) async fn setup(
         &mut self,
         operation: NativeSetupOperation,
-        authentication: Option<Arc<dyn NativeAuthenticationProvider>>,
+        authentication: Arc<dyn NativeAuthenticationProvider>,
     ) -> Result<NativeSetupObservation, Error> {
         if let Some(previous) = self.setups.begin(&operation)? {
             return Ok(previous);
@@ -145,7 +145,7 @@ impl State {
     async fn setup_once(
         &mut self,
         operation: &NativeSetupOperation,
-        authentication: Option<Arc<dyn NativeAuthenticationProvider>>,
+        authentication: Arc<dyn NativeAuthenticationProvider>,
     ) -> Result<NativeTextTarget, Error> {
         let retained = self.captured_source().await?;
         let source = match retained {
@@ -197,16 +197,10 @@ impl State {
 }
 impl NativeHandle {
     /// Queue admission returns before preparation; later lookup reads actor-owned facts.
-    pub fn admit_setup(
-        &self,
-        operation: NativeSetupOperation,
-    ) -> Result<tokio::sync::oneshot::Receiver<Result<NativeSetupObservation, Error>>, Error> {
-        self.admit_setup_with_authentication(operation, None)
-    }
     pub fn admit_setup_with_authentication(
         &self,
         operation: NativeSetupOperation,
-        authentication: Option<Arc<dyn NativeAuthenticationProvider>>,
+        authentication: Arc<dyn NativeAuthenticationProvider>,
     ) -> Result<tokio::sync::oneshot::Receiver<Result<NativeSetupObservation, Error>>, Error> {
         valid_id(&operation.operation_id)?;
         let (result, rx) = oneshot::channel();
@@ -227,6 +221,22 @@ impl NativeHandle {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct UnusedAuthentication(Arc<AtomicUsize>);
+    impl NativeAuthenticationProvider for UnusedAuthentication {
+        fn acquire(&self) -> crate::NativeAuthenticationFuture<'_, crate::NativeAuthentication> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Box::pin(async { Err(Error::Authentication) })
+        }
+        fn check<'a>(
+            &'a self,
+            _binding: &'a NativeAuthenticationBinding,
+        ) -> crate::NativeAuthenticationFuture<'a, ()> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Box::pin(async { Err(Error::Authentication) })
+        }
+    }
     #[test]
     fn only_the_exact_known_setup_result_can_release_retained_capacity() -> Result<(), Error> {
         let mut registry = SetupRegistry::default();
@@ -303,11 +313,15 @@ mod tests {
         let storage = NativeStorage::open(saved.path())?;
         let owner = NativeOwner::new(storage.clone())?;
         let handle = owner.handle();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let authentication: Arc<dyn NativeAuthenticationProvider> =
+            Arc::new(UnusedAuthentication(calls.clone()));
         let operation = NativeSetupOperation {
             intent: NativeSetupIntent::Initial { allow_fresh: false },
             ..operation("resume-only")
         };
-        let rx = handle.admit_setup(operation.clone())?;
+        let rx =
+            handle.admit_setup_with_authentication(operation.clone(), authentication.clone())?;
         drop(rx);
         assert!(matches!(
             handle
@@ -317,10 +331,13 @@ mod tests {
         ));
         assert!(!storage.capture_root().join("current").exists());
         assert!(matches!(
-            handle.admit_setup(operation)?.await??,
+            handle
+                .admit_setup_with_authentication(operation, authentication)?
+                .await??,
             NativeSetupObservation::Failed(NativeSetupFailure::SourceUnavailable)
         ));
         assert_eq!(owner.finish().await?, Retirement::NoNativeStarted);
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
         Ok(())
     }
 }

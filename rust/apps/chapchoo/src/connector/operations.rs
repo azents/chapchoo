@@ -141,7 +141,7 @@ impl Operations {
                 supply,
                 intent,
             },
-            Some(authentication),
+            authentication,
         ) {
             Ok(rx) => rx,
             Err(chapchoo_harness::Error::NotAdmitted) => return Ok(false),

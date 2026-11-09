@@ -45,7 +45,10 @@ pub use inputs::{
     AcceptConversationInput, ConversationInputAdmission, ConversationInputReceipt,
     ConversationInputReference,
 };
-pub use native_state::{ConversationForeground, ConversationNativeObservation};
+pub use native_state::{
+    ConversationForeground, ConversationNativeObservation, ConversationNativePreparation,
+    ConversationPreparationFreshness,
+};
 pub use preparation::{
     ConversationInputPreparation, ConversationPreparationAdmission, ConversationPreparationFacts,
     ConversationPreparationFailure, ConversationPreparationOutcome, ConversationPreparationState,

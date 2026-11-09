@@ -21,8 +21,20 @@ service Conversations {
 message OwnerConversationRequest { string agent_id = 1; }
 message OwnerConversation {
   CaptureState conversation = 1; ObservedNative observed_native = 2;
+  optional string saved_authentication_id = 3;
 }
-message ObservedNative { NativeTarget target = 1; SourcePosition position = 2; Foreground foreground = 3; optional string work_id = 4; }
+message ObservedNative {
+  NativeTarget target = 1; SourcePosition position = 2; Foreground foreground = 3; optional string work_id = 4;
+  NativePreparation preparation = 6; optional string authentication_id = 7;
+}
+message NativePreparation {
+  PreparationFreshness freshness = 1; string node = 2; string adapter = 3; string codex = 4;
+}
+enum PreparationFreshness {
+  PREPARATION_FRESHNESS_UNSPECIFIED = 0;
+  PREPARATION_FRESHNESS_CURRENT = 1;
+  PREPARATION_FRESHNESS_TRANSIENT_LOOKUP_FAILURE = 2;
+}
 message SavedSupply { HarnessSupply supply = 1; optional string request_id = 2; }
 message SaveSupplyRequest { string agent_id = 1; string request_id = 2; optional string expected_request_id = 3; HarnessSupply supply = 4; }
 message InputTarget { oneof target { google.protobuf.Empty not_started = 1; string snapshot_id = 2; } }
@@ -259,6 +271,7 @@ enum Foreground {
 message NativeStateReport {
   CaptureSource source = 1; string conversation_id = 2; NativeTarget target = 3;
   SourcePosition position = 4; Foreground foreground = 5; optional string work_id = 6;
+  NativePreparation preparation = 8; optional string authentication_id = 9;
 }
 enum RequestKind { REQUEST_KIND_UNSPECIFIED = 0; REQUEST_KIND_PERMISSION = 1; REQUEST_KIND_FORM = 2; }
 message LiveRequestReport {

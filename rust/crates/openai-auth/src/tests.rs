@@ -395,9 +395,15 @@ async fn public_sdk_refresh_owns_form_grant_and_preserves_omitted_refresh_replac
     let replacement = id_token(
         r#"{"https://api.openai.com/auth":{"chatgpt_account_id":"account-a","chatgpt_plan_type":"new-plan"}}"#,
     );
+    let first_access = id_token(
+        r#"{"marker":"new-access","https://api.openai.com/auth":{"chatgpt_account_id":"account-a"}}"#,
+    );
+    let later_access = id_token(
+        r#"{"marker":"later-access","https://api.openai.com/auth":{"chatgpt_account_id":"account-a"}}"#,
+    );
     let replies = vec![
-        Reply::Json(200, serde_json::json!({"access_token":"new-access","token_type":"Bearer","expires_in":3600}).to_string()),
-        Reply::Json(200, serde_json::json!({"access_token":"later-access","token_type":"bearer","refresh_token":"rotated-refresh","id_token":replacement}).to_string()),
+        Reply::Json(200, serde_json::json!({"access_token":first_access.clone(),"token_type":"Bearer","expires_in":3600}).to_string()),
+        Reply::Json(200, serde_json::json!({"access_token":later_access.clone(),"token_type":"bearer","refresh_token":"rotated-refresh","id_token":replacement}).to_string()),
     ];
     let requests = exercise(replies, None, |client| async move {
         let original = refresh_bundle()?;
@@ -405,13 +411,13 @@ async fn public_sdk_refresh_owns_form_grant_and_preserves_omitted_refresh_replac
         assert_eq!(first.expires_at, Some(3_601_000));
         assert_eq!(first.account_id.as_deref(), Some("account-a"));
         let first_bundle: TokenBundle = serde_json::from_slice(first.secret.expose())?;
-        assert_eq!(first_bundle.access_token, "new-access");
+        assert_eq!(first_bundle.access_token, first_access);
         assert_eq!(first_bundle.refresh_token, "old-refresh");
         let later = client.refresh(&first.secret, "account-a", 2000).await?;
         assert!(later.expires_at.is_none());
         assert_eq!(later.plan_type.as_deref(), Some("new-plan"));
         let later_bundle: TokenBundle = serde_json::from_slice(later.secret.expose())?;
-        assert_eq!(later_bundle.access_token, "later-access");
+        assert_eq!(later_bundle.access_token, later_access);
         assert_eq!(later_bundle.refresh_token, "rotated-refresh");
         assert_eq!(
             format!("{later:?}"),
@@ -450,6 +456,12 @@ async fn refresh_validation_does_not_dispatch_and_unknown_results_never_retry()
             "access_token":id_token(r#"{"https://api.openai.com/auth":{"chatgpt_account_id":"different"}}"#),
             "token_type":"bearer",
         }).to_string()),
+        Reply::Json(200, serde_json::json!({
+            "access_token":"opaque-access",
+            "token_type":"bearer",
+            "refresh_token":"rotated-but-unpublishable",
+            "expires_in":3600,
+        }).to_string()),
     ], None, |client| async move {
         let original = refresh_bundle()?;
         for (bundle, account) in [
@@ -460,7 +472,7 @@ async fn refresh_validation_does_not_dispatch_and_unknown_results_never_retry()
         }
         let rejected = client.refresh(&original, "account-a", 1000).await.err().ok_or("Expected rejection")?;
         assert_eq!(rejected, RefreshProviderFailure::Rejected);
-        for _ in 0..11 {
+        for _ in 0..12 {
             let failure = client.refresh(&original, "account-a", 1000).await.err().ok_or("Expected uncertainty")?;
             assert_eq!(failure, RefreshProviderFailure::Uncertain);
             assert!(!format!("{failure:?}: {failure}").contains("SECRET"));
@@ -468,7 +480,7 @@ async fn refresh_validation_does_not_dispatch_and_unknown_results_never_retry()
         }
         Ok(())
     }).await?;
-    assert_eq!(requests.len(), 12);
+    assert_eq!(requests.len(), 13);
     Ok(())
 }
 #[test]

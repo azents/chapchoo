@@ -334,6 +334,17 @@ source pairs or accepted inputs. Migration 16 extends the typed projection field
 set for tool input/output. SQLite copies all existing identities, bytes and update
 ordinals transactionally into the extended constraint; PostgreSQL changes only
 the check constraint. Both downgrade paths refuse retained new tool fields.
+Migration 17 adds source-qualified native preparation and applied authentication
+details without rewriting earlier observations. Preparation carries freshness
+and exact Node, adapter and Codex versions; authentication retains the record
+identity without a catalogue foreign key or credential material. A deleted
+record cannot erase an observed application or block approved catalogue deletion.
+Unknown historical details are never inferred from saved settings. Within one
+execution/source, stale reports are ignored; equal positions reject changed known
+facts but permit the first explicit fact and preserve known details when omitted.
+A newer captured position may describe a later physical start, even when the
+capture snapshot is reused. Source replacement clears these child observations.
+The paired downgrade refuses retained details rather than discarding them.
 Migration 18 adds/backfills the derived current-body extent index from existing
 field bytes and update ordinals without rewriting those values. Its downgrade
 removes only that index, leaving every original field byte and ordinal intact.

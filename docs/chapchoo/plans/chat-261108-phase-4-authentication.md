@@ -315,3 +315,65 @@ The phase is ready for mandatory commit hooks and PR creation. No real
 credentials, real model call, authenticated restricted-runtime acceptance,
 remote CI/review inspection, merge or deployment is included in this checkpoint.
 The complete six-PR stack precedes remote CI and the assigned independent review.
+
+## Complete-stack correction scope
+
+All six PRs now exist. Correct valid integrated findings within the approved
+baseline, with implementation and validation owned by the primary agent:
+
+- Check a refreshed candidate with the actual native encoder before publishing
+  its protected source. An opaque or otherwise unpublishable access token cannot
+  become an `Updated` source merely because the OAuth SDK accepted its envelope.
+- Remove the public unauthenticated start/setup paths that always fail after
+  authentication became required. Require the composition-supplied provider at
+  the authenticated setup entry; keep idle/read operations effect-free. The
+  model-free scope probe covers preparation/retirement, not an invalid native
+  session start without an authentication authority.
+- Extend the existing exact-source native observation with physically applied
+  preparation freshness/exact component versions (M03 integration) and the
+  applied authentication record identity (M15). Clone both from the same live
+  owner, not from saved settings or a prior credential-delivery attempt. Expose
+  nonsecret owner facts and the current saved selection so changes in another
+  surface do not leave the comparison tied to stale initial page data.
+- Add preserving paired migration 17 for native observation details. Keep
+  migrations 1–16 immutable, retain unknown for older rows, reject destructive
+  downgrade and clear only the correct source-qualified child facts. An applied
+  record may have been deleted; observation storage must not prevent the already
+  approved applied-only deletion or imply instant offline revocation.
+- Keep wire/client generation source-owned. Exercise stale/current/equal-state
+  facts, same-record updates, changed saved selection, deletion, source
+  replacement, read-only behavior, both database engines and actual runtime
+  interfaces. Owner presentation remains phase 5. No credential bytes or source
+  fingerprint is added to owner diagnostics.
+
+The phase-2/3 corrections are inherited. The synthetic authentication fixture now
+supplies exact component versions, fixing its rebased all-target compile error.
+Source/operation admission, trusted-network delivery, native file-only updates,
+whole-scope retirement and no automatic replay remain unchanged. Run focused and
+full affected gates, mandatory hooks and a targeted review of the corrected
+interfaces with the same reviewer after stable integration. Real credentials and
+model calls remain unused. Design delta: None.
+
+### Correction checkpoint
+
+The source-qualified details now traverse the live actor, Connector report,
+transactional Store, owner RPC and generated client. Idle observations also
+compare the exact native source instead of relying on an absent work target.
+The mandatory authentication provider is represented as required throughout
+setup and launch, including the private command path.
+
+Focused validation passed all four both-engine conversation/authentication
+tests and 56 harness tests. Coverage includes first explicit details, equal-known
+conflicts, stale reports, newer physical preparation, saved-selection changes,
+same-record replacement, deletion of an unsaved applied record, source
+replacement and migration downgrade refusal with byte preservation. Live
+Node/Rust RPC checks passed 129 checks per database, and documentation metadata
+and its 18 validator tests passed.
+
+The initial full run exposed a historical auth downgrade assertion targeting
+the newest migration and a migration-test witness filtered out while the source
+was Loading. The test now targets its original migration 14, and the migration
+witness uses an explicitly bound source without claiming Ready. Those failed
+runs are not counted as complete validation. The final immutable diff still
+requires the full mandatory Rust/RPC commit gates; targeted integrated review
+remains pending after dependent UI integration.

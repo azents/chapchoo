@@ -40,7 +40,19 @@ The applied descriptor retains exact Node, adapter and Codex versions. Existing
 mode records the actual probed CLI version rather than the managed CLI's version.
 A read-only owner preparation query exposes these nonsecret identities and the
 freshness outcome from the physically started combination; it never acquires,
-starts or refreshes anything. An idle owner reports no applied preparation.
+starts or refreshes anything. An owner without a live native process reports no
+applied preparation. Foreground Idle is not physical process retirement.
+
+The live observation reads foreground, exact source, preparation and applied
+authentication identity from the same actor-owned physical lifetime. Connector
+publication verifies that source even for Idle, where no work target exists.
+These nonsecret facts accompany ordered captured state; historical reports that
+did not contain them remain unknown. Owner conversation reads also read the
+current saved authentication selection without acquiring credential material.
+Saved selection and a retained applied identity have independent meanings:
+selection changes do not retarget the live process, and a deleted applied record
+does not prove offline native revocation. File publication of newer material from
+the same record does not change that record identity.
 
 Explicit existing CLI mode checks its absolute local path and compatible actual
 version. It uses the managed adapter/runtime but never overwrites or silently

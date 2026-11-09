@@ -217,19 +217,13 @@ enum Command {
     ),
     Setup(
         NativeSetupOperation,
-        Option<Arc<dyn NativeAuthenticationProvider>>,
+        Arc<dyn NativeAuthenticationProvider>,
         oneshot::Sender<Result<NativeSetupObservation, Error>>,
     ),
     SetupObservation(
         String,
         oneshot::Sender<Result<NativeSetupObservation, Error>>,
     ),
-    Start {
-        supply: HarnessSupply,
-        context: NativeContext,
-        source: crate::CaptureLog,
-        result: oneshot::Sender<Result<NativeConversationId, Error>>,
-    },
     Prompt(
         NativeInputOperation,
         OwnedSemaphorePermit,
@@ -369,18 +363,6 @@ impl NativeOwner {
                     Command::SetupObservation(id, result) => {
                         let _ = result.send(state.setups.observe(&id));
                     }
-                    Command::Start {
-                        supply,
-                        context,
-                        source,
-                        result,
-                    } => {
-                        let outcome = tokio::select! {
-                            _ = stopping.cancelled() => Err(Error::Process),
-                            outcome = state.start(supply,context,source,None) => outcome,
-                        };
-                        let _ = result.send(outcome);
-                    }
                     Command::Prompt(operation, _permit, result) => {
                         let outcome = tokio::select! {
                             _=stopping.cancelled()=>Err(Error::DeliveryUncertain),
@@ -455,14 +437,6 @@ impl NativeOwner {
             payload_budget: self.payload_budget.clone(),
         }
     }
-    pub async fn start(
-        &self,
-        supply: HarnessSupply,
-        context: NativeContext,
-        source: crate::CaptureLog,
-    ) -> Result<NativeConversationId, Error> {
-        self.handle().start(supply, context, source).await
-    }
     pub async fn preparation(&self) -> Result<Option<crate::NativePreparationObservation>, Error> {
         self.handle().preparation().await
     }
@@ -500,23 +474,6 @@ impl NativeOwner {
     }
 }
 impl NativeHandle {
-    pub async fn start(
-        &self,
-        supply: HarnessSupply,
-        context: NativeContext,
-        source: crate::CaptureLog,
-    ) -> Result<NativeConversationId, Error> {
-        let (result, rx) = oneshot::channel();
-        self.sender
-            .try_send(Command::Start {
-                supply,
-                context,
-                source,
-                result,
-            })
-            .map_err(|_| Error::NotAdmitted)?;
-        rx.await.map_err(|_| Error::Process)?
-    }
     /// Read the physically started combination without preparing or refreshing it.
     pub async fn preparation(&self) -> Result<Option<crate::NativePreparationObservation>, Error> {
         let (result, rx) = oneshot::channel();
@@ -674,7 +631,13 @@ impl State {
         if live.protocol.is_finished() || self.blocked {
             return Err(Error::Protocol);
         }
-        live.observations.current()
+        let mut observed = live.observations.current()?;
+        observed.preparation = Some(crate::NativePreparationObservation {
+            freshness: live._supply.freshness,
+            versions: live._supply.versions.clone(),
+        });
+        observed.authentication_id = Some(live._authentication.authentication_id.clone());
+        Ok(observed)
     }
     fn stop(&self, target: &NativeWorkTarget) -> Result<(), Error> {
         let live = self.live.as_ref().ok_or(Error::NotAdmitted)?;
@@ -694,7 +657,7 @@ impl State {
         supply: HarnessSupply,
         context: NativeContext,
         source: crate::CaptureLog,
-        authentication: Option<Arc<dyn NativeAuthenticationProvider>>,
+        authentication: Arc<dyn NativeAuthenticationProvider>,
     ) -> Result<NativeConversationId, Error> {
         if self.blocked {
             return Err(Error::RetirementUnknown);
@@ -759,9 +722,8 @@ impl State {
         supply: HarnessSupply,
         context: NativeContext,
         source: crate::CaptureLog,
-        authentication: Option<Arc<dyn NativeAuthenticationProvider>>,
+        authentication: Arc<dyn NativeAuthenticationProvider>,
     ) -> Result<NativeConversationId, Error> {
-        let authentication = authentication.ok_or(Error::Authentication)?;
         let applied = self.preparer.prepare(&supply).await?;
         let admitted = authentication.acquire().await?;
         authentication.check(&admitted.binding).await?;

@@ -36,6 +36,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         "chapchoo.conversations.CaptureStatus",
         "chapchoo.conversations.SetupFailure",
         "chapchoo.conversations.Foreground",
+        "chapchoo.conversations.PreparationFreshness",
         "chapchoo.conversations.RequestKind",
         "chapchoo.conversations.StopState",
         "chapchoo.conversations.InputOwnership",
