@@ -17,7 +17,8 @@ database_enum!(ConversationRecordKind {
 });
 database_enum!(ConversationRecordField {
     Content=>"CONTENT",Title=>"TITLE",Status=>"STATUS",Kind=>"KIND",Locations=>"LOCATIONS",
-    Description=>"DESCRIPTION",Request=>"REQUEST",Foreground=>"FOREGROUND"
+    Description=>"DESCRIPTION",Request=>"REQUEST",Foreground=>"FOREGROUND",
+    ToolInput=>"TOOL_INPUT",ToolOutput=>"TOOL_OUTPUT"
 });
 #[derive(Clone, Serialize, Deserialize)]
 pub enum ConversationFieldChange {

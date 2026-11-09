@@ -258,6 +258,8 @@ fn normalize_update(
             patch(Field::Kind, tool.kind, &mut fields)?;
             patch(Field::Status, tool.status, &mut fields)?;
             patch(Field::Locations, tool.locations, &mut fields)?;
+            patch(Field::ToolInput, tool.raw_input, &mut fields)?;
+            patch(Field::ToolOutput, tool.raw_output, &mut fields)?;
             record(Kind::Tool, &tool.tool_call_id.to_string(), fields)
         }
         schema::SessionUpdate::StateUpdate(state) => record(

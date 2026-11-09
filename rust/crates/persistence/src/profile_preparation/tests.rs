@@ -300,19 +300,17 @@ macro_rules! setup {
 macro_rules! verify {
     ($connection:expr,$postgres:expr,$cipher:expr,$credentials:expr) => {{
         let connection = &mut *$connection;
-        assert_eq!(connection.applied_migrations()?.len(),13);
+        assert_eq!(connection.applied_migrations()?.len(),crate::preparation::VERSIONS.len());
         let source = || if $postgres { POSTGRES_MIGRATIONS } else { SQLITE_MIGRATIONS };
         assert!(connection.transaction::<_, TestError, _>(|connection| {
             // Empty additive conversation/authentication migrations precede the
             // preserving identity migration whose populated downgrade must fail.
-            connection.revert_last_migration(source())?;
-            connection.revert_last_migration(source())?;
-            connection.revert_last_migration(source())?;
-            connection.revert_last_migration(source())?;
-            connection.revert_last_migration(source())?;
+            while connection.applied_migrations()?.iter().any(|version| version.to_string().as_str() >= "00000000000009") {
+                connection.revert_last_migration(source())?;
+            }
             Ok(())
         }).is_err());
-        assert_eq!(connection.applied_migrations()?.len(),13);
+        assert_eq!(connection.applied_migrations()?.len(),crate::preparation::VERSIONS.len());
         let query = "SELECT a.id,a.handle,a.palette_key,i.internal_name FROM agents a JOIN profile_images i ON i.id=a.profile_image_id";
         let profiles = diesel::sql_query(query).load::<Profile>(connection)?;
         assert_eq!(profiles.len(),1);

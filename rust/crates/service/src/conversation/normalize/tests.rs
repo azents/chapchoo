@@ -99,6 +99,37 @@ fn tool_fields_are_independent_patches_not_assistant_prose() -> Result<(), TestE
     Ok(())
 }
 #[test]
+fn tool_raw_input_and_output_are_independent_replacements_and_explicit_clears()
+-> Result<(), TestError> {
+    let first = event(json!({
+        "sessionUpdate":"tool_call_update","toolCallId":"tool",
+        "rawInput":{"path":"notes.txt","limit":9223372036854775807_i64},
+        "rawOutput":{"lines":["first","second"]}
+    }))?;
+    let fields = &first.records[0].fields;
+    assert_eq!(fields.len(), 2);
+    assert_eq!(fields[0].field, Field::ToolInput);
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(bytes(&fields[0].change))?,
+        json!({"path":"notes.txt","limit":9223372036854775807_i64})
+    );
+    assert_eq!(fields[1].field, Field::ToolOutput);
+    let clear = event(json!({
+        "sessionUpdate":"tool_call_update","toolCallId":"tool","rawInput":null
+    }))?;
+    assert_eq!(clear.records[0].fields.len(), 1);
+    assert_eq!(clear.records[0].fields[0].field, Field::ToolInput);
+    assert!(
+        matches!(&clear.records[0].fields[0].change, Change::Replace(value) if value.is_empty())
+    );
+    let status = event(json!({
+        "sessionUpdate":"tool_call_update","toolCallId":"tool","status":"completed"
+    }))?;
+    assert_eq!(status.records[0].fields.len(), 1);
+    assert_eq!(status.records[0].fields[0].field, Field::Status);
+    Ok(())
+}
+#[test]
 fn original_unknown_event_is_retained_without_fabricated_user_records() -> Result<(), TestError> {
     let raw=br#" {"method":"session/update","params":{"sessionId":"native","update":{"sessionUpdate":"_future","unknown":[1,false]}}} "#;
     let result = normalized(raw)?;

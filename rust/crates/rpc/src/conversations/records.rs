@@ -33,7 +33,9 @@ typed_enum!(
         Locations,
         Description,
         Request,
-        Foreground
+        Foreground,
+        ToolInput,
+        ToolOutput
     ]
 );
 fn wire_kind(value: Kind) -> i32 {
@@ -59,6 +61,8 @@ fn wire_field(value: Field) -> i32 {
         Field::Description => wire::RecordField::Description,
         Field::Request => wire::RecordField::Request,
         Field::Foreground => wire::RecordField::Foreground,
+        Field::ToolInput => wire::RecordField::ToolInput,
+        Field::ToolOutput => wire::RecordField::ToolOutput,
     }) as i32
 }
 fn source(value: Option<wire::RecordSource>) -> Result<(wire::RecordSource, SnapshotId), Status> {

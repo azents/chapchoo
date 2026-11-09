@@ -446,5 +446,115 @@ pub(super) async fn exercise(
         )],
     )
     .await?;
+    tool_io(store, f, conversation, &replacement).await?;
+    Ok(())
+}
+
+async fn tool_io(
+    store: &Store,
+    f: &Fixture,
+    conversation: &str,
+    snapshot: &SnapshotId,
+) -> Result<(), TestError> {
+    let input = serde_json::to_vec(&serde_json::json!({
+        "path":"notes.txt", "limit":9223372036854775807_i64
+    }))?;
+    let output = serde_json::to_vec(&serde_json::json!({"lines":["first","second"]}))?;
+    ingest(
+        store,
+        f,
+        conversation,
+        snapshot,
+        2,
+        &[
+            Update {
+                kind: Kind::Tool,
+                native_id: "raw-only".into(),
+                fields: vec![
+                    FieldUpdate {
+                        field: Field::ToolInput,
+                        change: Change::Replace(input.clone()),
+                    },
+                    FieldUpdate {
+                        field: Field::ToolOutput,
+                        change: Change::Replace(output.clone()),
+                    },
+                ],
+            },
+            update(
+                Kind::Assistant,
+                "retained-binary",
+                Change::Replace("한글\0legacy".repeat(4_000).into_bytes()),
+            ),
+        ],
+    )
+    .await?;
+    let record = || ConversationFieldRead {
+        agent_id: &f.agent.id,
+        conversation_id: conversation,
+        snapshot,
+        kind: Kind::Tool,
+        native_id: "raw-only",
+    };
+    for (field, expected) in [(Field::ToolInput, &input), (Field::ToolOutput, &output)] {
+        let chunk = store
+            .conversation_field_chunk(
+                &f.owner.digest(),
+                &ConversationFieldChunkRead {
+                    record: record(),
+                    field,
+                    updated_ordinal: 2,
+                    offset: 0,
+                    length: 32768,
+                },
+                f.now,
+            )
+            .await?;
+        assert_eq!(&chunk.bytes, expected);
+        assert_eq!(chunk.total_bytes, i64::try_from(expected.len())?);
+    }
+    ingest(
+        store,
+        f,
+        conversation,
+        snapshot,
+        3,
+        &[Update {
+            kind: Kind::Tool,
+            native_id: "raw-only".into(),
+            fields: vec![FieldUpdate {
+                field: Field::ToolInput,
+                change: Change::Replace(Vec::new()),
+            }],
+        }],
+    )
+    .await?;
+    let fields = store
+        .conversation_fields(&f.owner.digest(), &record(), f.now)
+        .await?;
+    assert_eq!(fields.len(), 2);
+    assert!(
+        fields
+            .iter()
+            .any(|field| field.field == Field::ToolOutput && field.updated_ordinal == 2)
+    );
+    assert!(fields.iter().any(|field| field.field == Field::ToolInput
+        && field.updated_ordinal == 3
+        && field.bytes == 0));
+    let cleared = store
+        .conversation_field_chunk(
+            &f.owner.digest(),
+            &ConversationFieldChunkRead {
+                record: record(),
+                field: Field::ToolInput,
+                updated_ordinal: 3,
+                offset: 0,
+                length: 32768,
+            },
+            f.now,
+        )
+        .await?;
+    assert!(cleared.bytes.is_empty());
+    assert_eq!(cleared.total_bytes, 0);
     Ok(())
 }

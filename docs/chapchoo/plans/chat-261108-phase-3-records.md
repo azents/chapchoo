@@ -245,3 +245,33 @@ single independent review remain deferred until the complete six-PR stack.
 Existing sample
 Chat and credential-delivery boundaries remain unchanged until their owning
 phases. Design delta: None.
+
+## Complete-stack correction scope
+
+The integrated review requires preserving native tool `rawInput` and `rawOutput`
+independently of content/title/status patches. Extend normalized typed fields,
+bounded owner wire reads and both-engine projection tests with supplied/null/
+undefined/replacement semantics. Preserving migration 16 extends the projection
+field set without rewriting migrations 1–15. The existing phase 4 and 5 migrations
+have no dependency on these new fields, so their insertion into the complete
+stack remains independent. Actual preparation freshness/exact component and
+applied-authentication observations are integrated with phase 4's physical-start
+binding and existing native-state report; owner presentation remains phase 5.
+No applied fact is inferred from saved settings. This keeps the credential and
+actual-start observation changes in one integrated ownership boundary.
+
+The append-between-chunks liveness concern needs a deterministic test before
+continuous large-body streaming is certified; source-replacement and complete
+content fences remain mandatory. This is not authority for a durable browser
+feed, event replay or a new versioning product. Primary owns corrections and
+integrated checks; targeted review returns to the same reviewer after stable
+integration. Design delta: None.
+
+The correction's normalizer subset passed nine tests. Its complete Rust gate
+passed 364 tests with zero failures or ignored tests, including both databases,
+format/Clippy/docs and dependency boundaries. Migration 16 tests preserve existing
+UTF-8/NUL-containing projected bytes and update ordinals, reject destructive
+rollback with new tool fields and verify independent input/output clear semantics.
+Historical downgrade tests now target their original migration explicitly rather
+than assuming a fixed number of latest migrations. Generated clients and document
+metadata are synchronized; mandatory commit hooks remain required before push.

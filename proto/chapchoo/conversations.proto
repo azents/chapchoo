@@ -114,6 +114,7 @@ enum RecordField {
   RECORD_FIELD_UNSPECIFIED = 0; RECORD_FIELD_CONTENT = 1; RECORD_FIELD_TITLE = 2;
   RECORD_FIELD_STATUS = 3; RECORD_FIELD_KIND = 4; RECORD_FIELD_LOCATIONS = 5;
   RECORD_FIELD_DESCRIPTION = 6; RECORD_FIELD_REQUEST = 7; RECORD_FIELD_FOREGROUND = 8;
+  RECORD_FIELD_TOOL_INPUT = 9; RECORD_FIELD_TOOL_OUTPUT = 10;
 }
 message RecordSource { string agent_id = 1; string conversation_id = 2; string snapshot_id = 3; }
 message RecordAnchor { int64 ordinal = 1; int64 index = 2; }

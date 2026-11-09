@@ -809,6 +809,14 @@ struct RetainedBytes {
     bytes: Vec<u8>,
 }
 
+#[derive(diesel::QueryableByName, PartialEq, Eq)]
+struct RetainedProjectedField {
+    #[diesel(sql_type=diesel::sql_types::Text)]
+    metadata: String,
+    #[diesel(sql_type=Binary)]
+    bytes: Vec<u8>,
+}
+
 #[derive(diesel::QueryableByName)]
 struct BackendPid {
     #[diesel(sql_type=diesel::sql_types::Integer)]
@@ -916,13 +924,34 @@ macro_rules! preserving_upgrade {
             .load::<RetainedBytes>(connection)?;
         assert!(!receipts.is_empty() && !credentials.is_empty());
         // Restore the pre-feature schema with real Agent/account/authentication state.
-        connection.revert_last_migration($migrations)?;
-        connection.revert_last_migration($migrations)?;
+        while connection.applied_migrations()?.iter().any(|version| version.to_string().as_str() > "00000000000011") {
+            connection.revert_last_migration($migrations)?;
+        }
         connection.run_pending_migrations($migrations)?;
         assert!(receipts==diesel::sql_query("SELECT payload_hash AS bytes FROM agent_creation_receipts ORDER BY request_id")
             .load::<RetainedBytes>(connection)?, "Creation fingerprint changed during conversation migration");
         assert!(credentials==diesel::sql_query("SELECT ciphertext AS bytes FROM external_authentications ORDER BY current_request_id")
             .load::<RetainedBytes>(connection)?, "Protected authentication changed during conversation migration");
+    }};
+}
+
+macro_rules! preserving_tool_io_upgrade {
+    ($connection:expr,$migrations:expr) => {{
+        let connection=&mut *$connection;
+        while connection.applied_migrations()?.iter().any(|version| version.to_string().as_str() > "00000000000016") {
+            connection.revert_last_migration($migrations)?;
+        }
+        assert!(connection.revert_last_migration($migrations).is_err(), "New tool fields must prevent a destructive downgrade");
+        // Explicitly remove only the new synthetic test fields after proving
+        // the guard; the migration itself may never discard those facts.
+        connection.batch_execute("DELETE FROM conversation_record_fields WHERE field_name IN ('TOOL_INPUT','TOOL_OUTPUT')")?;
+        let query="SELECT record_kind || ':' || native_id || ':' || field_name || ':' || CAST(updated_ordinal AS TEXT) AS metadata, content AS bytes FROM conversation_record_fields ORDER BY conversation_id,record_kind,native_id,field_name";
+        let retained=diesel::sql_query(query).load::<RetainedProjectedField>(connection)?;
+        assert!(!retained.is_empty(), "Preservation requires existing projected data");
+        connection.revert_last_migration($migrations)?;
+        assert!(retained == diesel::sql_query(query).load::<RetainedProjectedField>(connection)?, "Downgrade changed existing projected fields");
+        connection.run_pending_migrations($migrations)?;
+        assert!(retained == diesel::sql_query(query).load::<RetainedProjectedField>(connection)?, "Upgrade changed existing projected fields");
     }};
 }
 
@@ -946,7 +975,7 @@ fn sqlite_conversation_operations_and_preserving_downgrade_guard() -> Result<(),
         fixture.agent.id
     );
     runtime.block_on(exercise(&store, &fixture))?;
-    assert!(connection.revert_last_migration(SQLITE_MIGRATIONS).is_err());
+    preserving_tool_io_upgrade!(&mut connection, SQLITE_MIGRATIONS);
     Ok(())
 }
 #[test]
@@ -978,13 +1007,15 @@ fn postgres_conversation_operations_and_preserving_downgrade_guard() -> Result<(
             fixture.agent.id
         );
         runtime.block_on(exercise(&store, &fixture))?;
-        assert!(
-            connection
-                .revert_last_migration(POSTGRES_MIGRATIONS)
-                .is_err()
-        );
+        preserving_tool_io_upgrade!(&mut connection, POSTGRES_MIGRATIONS);
         runtime.block_on(source_write_holds_control_lock(&store, &fixture, &url))?;
-        connection.revert_last_migration(POSTGRES_MIGRATIONS)?;
+        while connection
+            .applied_migrations()?
+            .iter()
+            .any(|version| version.to_string().as_str() > "00000000000012")
+        {
+            connection.revert_last_migration(POSTGRES_MIGRATIONS)?;
+        }
         assert!(
             connection
                 .revert_last_migration(POSTGRES_MIGRATIONS)

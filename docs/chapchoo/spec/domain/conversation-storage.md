@@ -309,6 +309,12 @@ continuation. Content identity is not a durable browser event cursor. Owner
 admission holds the existing Computer authority lock while these coherent reads
 complete, serializing source mutations without changing global isolation.
 
+Tool calls retain independent normalized `TOOL_INPUT` and `TOOL_OUTPUT` fields
+for actual native raw arguments/results, even when the tool has no content blocks.
+An omitted patch preserves the prior field; explicit null clears it; a supplied
+value replaces that field alone. Ordinary owner field reads return bounded
+normalized JSON values rather than raw protocol envelopes or debug traffic.
+
 ## Schema preparation and cleanup
 
 Forward migration 12 adds saved-supply/request, conversation/current-association,
@@ -317,7 +323,10 @@ identities, protected credential bytes and creation fingerprints are not rewritt
 Migration 13 adds normalized record/field projection, independent setup/input delivery,
 native state and Stop operations,
 and live-request/original-answer tables without rewriting the existing identities,
-source pairs or accepted inputs.
+source pairs or accepted inputs. Migration 16 extends the typed projection field
+set for tool input/output. SQLite copies all existing identities, bytes and update
+ordinals transactionally into the extended constraint; PostgreSQL changes only
+the check constraint. Both downgrade paths refuse retained new tool fields.
 [Explicit preparation/readiness](account-storage.md) includes the new migration
 and product-table binding checks. Downgrade rejects any retained new state.
 Agent removal cascades its owned conversation/supply rows through foreign keys.
