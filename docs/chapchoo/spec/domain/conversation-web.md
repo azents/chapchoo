@@ -48,6 +48,10 @@ have explicit previews and inspectable original base64. Terminal pieces are
 assembled as bytes before text decoding and retain exact base64 independently
 of display replacement characters. Plans, tools, reasoning, locations, notices
 and terminal results remain inspectable activity rather than invented prose.
+Original tool input and output are independent typed fields, including tool-only
+updates without generic content. Their JSON is displayed opaquely with exact
+int64 values; clearing one field does not clear or substitute the other.
+Text plans render their own typed text rather than assuming generic content.
 
 Send uploads exact UTF-8 pieces through the generated owner client. Acceptance,
 preparation, possible forwarding, inserted native identity, steering, known
@@ -55,6 +59,9 @@ failure and missing evidence remain different observations. Original submitted
 text survives navigation through the backend. An exact inserted native message
 ID can associate a visible user record with its retained input details; textual
 similarity is not identity. Steering does not manufacture a native message ID.
+Recovery of a retained Request ID removes its matching local uncertain entry.
+An owner may then intentionally send identical text as a new operation; recovery
+itself never submits another effect or treats text equality as request identity.
 
 Permission/form requests render inline. Original choices, their descriptions,
 schema/field titles and supported adjacent constraints remain inspectable.
@@ -62,7 +69,11 @@ Permission is not preselected. Form drafts distinguish omission, empty strings,
 false, empty selections and exact int64 values. Native defaults may seed a draft;
 only explicit submission accepts it. Standard format feedback is advisory; server
 and native validation remain authoritative, including bounded offline string
-patterns and supported formats. Unsupported required fields cannot be answered
+patterns and supported formats. Native patterns are not compiled or executed as
+unbounded browser regular expressions. A definitive pre-admission validation
+rejection preserves an editable draft for manual correction with a new Request
+ID. Lost/unknown responses keep the responder frozen pending read-only recovery.
+Unsupported required fields cannot be answered
 as an ordinary form. Password-format collection is rejected.
 
 A historical request is not responder authority. Only the matching current live
@@ -72,12 +83,17 @@ source and occurrence. Original choices and selected answers stay expanded rathe
 than being replaced by a summary. Lost mutation responses retain their exact
 operation/source and use read-only result recovery; there is no automatic effect
 retry or browser offline queue.
+Once the retained answer is discovered, it supersedes stale local uncertainty
+warnings and its obsolete read-recovery control without reopening the responder.
 
 Current-work Stop is beside the execution summary and uses the exact native
 source/session/work token. Possible forwarding, cancellation publication and
 rejection remain distinct; publication does not prove termination. It neither
 powers off the Computer nor retires the harness. Computer power controls retain
 their existing eligibility and independent confirmation contracts.
+Stop availability is independent of input upload/sending and general conversation
+reread activity. Current account/Computer admission and the exact observed target
+still apply, and the native owner remains final authority over that work token.
 
 ## Owner supply settings
 
@@ -96,6 +112,16 @@ Saving never powers a Computer, starts/stops/restarts a harness or refreshes nat
 authentication. A retained capture can span physical native starts; the native
 owner freezes its choice for each live process while newer ordered observations
 may describe a later start.
+
+The setup view also shows the reported preparation freshness and exact Node,
+adapter and Codex versions. Cached preparation after a transient lookup failure
+is distinguished from a fresh selection at start. Current saved authentication
+is reread through owner conversation reads, not frozen initial Agent-page data.
+Its comparison with the physically applied record distinguishes a saved future
+selection from the current process; historical unknowns stay unknown. Same-record
+token-file updates do not change that identity, and record deletion is not proof
+of immediate offline native revocation. Credentials and source fingerprints are
+not exposed in this view.
 
 Known rejection preserves the draft and rereads current saved state. An uncertain
 save freezes editing and exposes read-only selection recovery. Only an observed

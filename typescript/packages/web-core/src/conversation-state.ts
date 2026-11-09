@@ -1,4 +1,16 @@
-import type { ConversationRegion } from "./conversation-types.js";
+import type {
+  ConversationRegion,
+  LocalConversationInput,
+} from "./conversation-types.js";
+/** Persisted request identity supersedes local uncertainty without dispatching another operation. */
+export function reconcileLocalConversationInputs(
+  local: LocalConversationInput[],
+  retained: ConversationRegion["inputs"],
+): LocalConversationInput[] {
+  return local.filter(
+    (item) => !retained?.some((input) => input.requestId === item.requestId),
+  );
+}
 /** Newer updates win; a late older-page result only contributes missing or newer records. */
 export function mergeConversationRegion(
   previous: ConversationRegion,

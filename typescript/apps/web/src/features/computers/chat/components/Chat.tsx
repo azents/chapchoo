@@ -78,7 +78,7 @@ export function Chat(props: ChatProps): ReactElement {
   }
   const detailHref = agentPath(p.basePath, p.data.teamHandle, agent.handle);
   const start = agent.computer.actions.find((item) => item.action === "start");
-  const working = props.writable && props.activity === "working";
+  const working = props.stoppable && props.activity === "working";
   const records = props.conversation.region.records;
   const currentPlan = props.conversation.region.latestPlan;
   return (
@@ -319,14 +319,12 @@ export function Chat(props: ChatProps): ReactElement {
               {props.conversation.stop !== "idle" ? (
                 <p role="status">{c[props.conversation.stop]}</p>
               ) : null}
-              {(props.activity === "working" ||
-                props.activity === "requiresAction") &&
-              props.conversation.region.header.workId ? (
+              {props.conversation.region.header.workId ? (
                 <Button
                   variant="default"
                   onClick={props.onStop}
                   disabled={
-                    !props.writable || props.conversation.stop !== "idle"
+                    !props.stoppable || props.conversation.stop !== "idle"
                   }
                   leftSection={<Icon name="stop" />}
                 >
@@ -347,6 +345,10 @@ export function Chat(props: ChatProps): ReactElement {
                   </li>
                 ))}
               </ol>
+            ) : currentPlan?.plan?.type === "text" ? (
+              <ConversationContent
+                parts={[{ type: "text", text: currentPlan.plan.text }]}
+              />
             ) : currentPlan ? (
               <ConversationContent parts={currentPlan.content} />
             ) : null}

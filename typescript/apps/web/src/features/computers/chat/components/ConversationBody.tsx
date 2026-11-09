@@ -372,7 +372,10 @@ export function ConversationQuestion({
   const retained = record.answer?.value ?? draft.answer;
   const completed = retained !== void 0;
   const disabled =
-    !writable || !record.responder || draft.state !== "editing" || completed;
+    !writable ||
+    !record.responder ||
+    (draft.state !== "editing" && draft.state !== "invalid") ||
+    completed;
   const prefix = `question-${encodeURIComponent(record.key)}`;
   const selected =
     retained?.type === "permission" ? retained.optionId : draft.optionId;
@@ -483,10 +486,13 @@ export function ConversationQuestion({
           </Button>
         </Group>
       )}
-      {draft.state === "uncertain" || draft.state === "rejected" ? (
+      {!record.answer &&
+      (draft.state === "uncertain" ||
+        draft.state === "rejected" ||
+        draft.state === "invalid") ? (
         <Text role="alert">{copy[draft.state]}</Text>
       ) : null}
-      {draft.state === "uncertain" || (!record.responder && !record.answer) ? (
+      {!record.answer && (draft.state === "uncertain" || !record.responder) ? (
         <Button variant="subtle" onClick={controls.onRead}>
           {copy.retry}
         </Button>
@@ -568,6 +574,22 @@ export function ConversationBody({
               </summary>
               {record.description ? (
                 <Markdown text={record.description} />
+              ) : null}
+              {record.toolInput ? (
+                <section aria-label={copy.toolInput}>
+                  <Text size="sm" fw={600}>
+                    {copy.toolInput}
+                  </Text>
+                  <pre>{record.toolInput.json}</pre>
+                </section>
+              ) : null}
+              {record.toolOutput ? (
+                <section aria-label={copy.toolOutput}>
+                  <Text size="sm" fw={600}>
+                    {copy.toolOutput}
+                  </Text>
+                  <pre>{record.toolOutput.json}</pre>
+                </section>
               ) : null}
               {record.plan?.type === "items" ? (
                 <ol>

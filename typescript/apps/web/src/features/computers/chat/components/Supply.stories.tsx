@@ -11,7 +11,13 @@ function Fixture({
   locale,
 }: {
   mode:
-    "default" | "different" | "uncertain" | "readonly" | "loading" | "error";
+    | "default"
+    | "current"
+    | "different"
+    | "uncertain"
+    | "readonly"
+    | "loading"
+    | "error";
   locale: string;
 }): ReactElement {
   const copy = supplyCopy(locale);
@@ -44,6 +50,21 @@ function Fixture({
         copy={copy}
         opened
         state={state}
+        observation={
+          mode === "default"
+            ? void 0
+            : {
+                preparation: {
+                  freshness: mode === "different" ? "cached" : "current",
+                  node: "v24.0.0",
+                  adapter: "2.6.0",
+                  codex: "0.165.0",
+                },
+                savedAuthenticationId:
+                  mode === "different" ? "future-record" : "current-record",
+                appliedAuthenticationId: "current-record",
+              }
+        }
         onToggle={() => {}}
         onMode={(type) =>
           setDraft(
@@ -69,6 +90,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const ManagedDefault: Story = {};
+export const CurrentPreparation: Story = { args: { mode: "current" } };
 export const SavedDiffersFromApplied: Story = { args: { mode: "different" } };
 export const UncertainSave: Story = { args: { mode: "uncertain" } };
 export const ReadOnly: Story = { args: { mode: "readonly" } };

@@ -21,6 +21,7 @@ export function Supply({
   copy,
   opened,
   state,
+  observation,
   onToggle,
   onMode,
   onPath,
@@ -46,6 +47,44 @@ export function Supply({
       </Button>
       <Collapse expanded={opened}>
         <Stack gap="md" role="region" aria-label={copy.title}>
+          <section aria-label={copy.preparation}>
+            <Text size="sm" fw={600}>
+              {copy.preparation}
+            </Text>
+            {observation?.preparation ? (
+              <>
+                <Text>
+                  {
+                    copy[
+                      observation.preparation.freshness === "current"
+                        ? "current"
+                        : "cached"
+                    ]
+                  }
+                </Text>
+                <Text size="sm" style={{ overflowWrap: "anywhere" }}>
+                  Node {observation.preparation.node} · ACP{" "}
+                  {observation.preparation.adapter} · Codex{" "}
+                  {observation.preparation.codex}
+                </Text>
+              </>
+            ) : (
+              <Text>{copy.unknown}</Text>
+            )}
+          </section>
+          <section aria-label={copy.authentication}>
+            <Text size="sm" fw={600}>
+              {copy.authentication}
+            </Text>
+            <Text>
+              {!observation?.appliedAuthenticationId
+                ? copy.unknown
+                : observation.appliedAuthenticationId ===
+                    observation.savedAuthenticationId
+                  ? copy.authenticationMatches
+                  : copy.authenticationDiffers}
+            </Text>
+          </section>
           {state.type === "loading" ? (
             <Text role="status">{copy.loading}</Text>
           ) : state.type === "error" ? (
@@ -57,7 +96,7 @@ export function Supply({
             </Group>
           ) : (
             <>
-              <div>
+              <section aria-label={copy.saved}>
                 <Text size="sm" fw={600}>
                   {copy.saved}
                 </Text>
@@ -66,8 +105,8 @@ export function Supply({
                 >
                   {choiceLabel(state.saved.choice, copy.managed)}
                 </Text>
-              </div>
-              <div>
+              </section>
+              <section aria-label={copy.applied}>
                 <Text size="sm" fw={600}>
                   {copy.applied}
                 </Text>
@@ -78,7 +117,7 @@ export function Supply({
                     ? choiceLabel(state.applied, copy.managed)
                     : copy.unknown}
                 </Text>
-              </div>
+              </section>
               {changed ? (
                 <Alert color="blue">{copy.nextStart}</Alert>
               ) : (

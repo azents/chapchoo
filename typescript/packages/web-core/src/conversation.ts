@@ -7,6 +7,7 @@ import {
   AnswerDelivery,
   InputOwnership,
   StopState,
+  PreparationFreshness,
 } from "@chapchoo/rpc-client/conversations";
 import { z } from "zod";
 import {
@@ -16,6 +17,7 @@ import {
   decodePlan,
   decodeQuestion,
   decodeString,
+  decodeToolPayload,
 } from "./conversation-decode.js";
 import { call } from "./rpc.js";
 import { decodeHarnessSupply } from "./conversation-supply.js";
@@ -125,6 +127,27 @@ export function conversationHeader(
     appliedSupply: observed?.appliedSupply
       ? decodeHarnessSupply(observed.appliedSupply)
       : undefined,
+    preparation: observed?.preparation
+      ? {
+          freshness:
+            observed.preparation.freshness ===
+            PreparationFreshness.PREPARATION_FRESHNESS_CURRENT
+              ? "current"
+              : observed.preparation.freshness ===
+                  PreparationFreshness.PREPARATION_FRESHNESS_TRANSIENT_LOOKUP_FAILURE
+                ? "cached"
+                : z.never().parse(observed.preparation.freshness),
+          node: z.string().min(1).max(256).parse(observed.preparation.node),
+          adapter: z
+            .string()
+            .min(1)
+            .max(256)
+            .parse(observed.preparation.adapter),
+          codex: z.string().min(1).max(256).parse(observed.preparation.codex),
+        }
+      : undefined,
+    savedAuthenticationId: value.savedAuthenticationId,
+    appliedAuthenticationId: observed?.authenticationId,
     foreground: !observed
       ? "unavailable"
       : observed.foreground === Foreground.FOREGROUND_IDLE
@@ -210,6 +233,12 @@ export async function readConversationRecord(
     updatedOrdinal: metadata.updatedOrdinal,
     content: (values.get(RecordField.RECORD_FIELD_CONTENT) ?? []).map(
       decodeContent,
+    ),
+    toolInput: decodeToolPayload(
+      values.get(RecordField.RECORD_FIELD_TOOL_INPUT) ?? [],
+    ),
+    toolOutput: decodeToolPayload(
+      values.get(RecordField.RECORD_FIELD_TOOL_OUTPUT) ?? [],
     ),
     title: decodeString(values.get(RecordField.RECORD_FIELD_TITLE) ?? []),
     description: decodeString(

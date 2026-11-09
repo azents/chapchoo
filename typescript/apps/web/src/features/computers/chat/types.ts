@@ -12,7 +12,7 @@ import type {
   ConversationAnswer,
   ConversationRecord,
   ConversationRegion,
-  InputObservation,
+  LocalConversationInput,
 } from "@chapchoo/web-core/conversation-types";
 import type { ReactNode } from "react";
 
@@ -23,13 +23,7 @@ export interface ConversationControls {
   region: ConversationRegion;
   read: "ready" | "loading" | "error";
   readingOlder: boolean;
-  inputs: {
-    text: string;
-    observation: InputObservation | "sending";
-    requestId: string;
-    snapshotId?: string;
-    conversationId?: string;
-  }[];
+  inputs: LocalConversationInput[];
   stop: "idle" | "pending" | "published" | "rejected" | "uncertain";
   drafts: Partial<Record<string, QuestionDraft>>;
   onRead: () => void;
@@ -57,6 +51,7 @@ export interface ChatProps {
   input: string;
   activity: "working" | "requiresAction" | "idle" | "unavailable";
   writable: boolean;
+  stoppable: boolean;
   sendable: boolean;
   status: string;
   opened: boolean;

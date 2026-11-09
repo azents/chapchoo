@@ -40,6 +40,7 @@ export function useSupplyContainer({
   agentId,
   applied,
   unavailable,
+  observation,
 }: SupplyInput): SupplyProps {
   const copy = supplyCopy(useLocale());
   const [opened, setOpened] = useState(false);
@@ -115,6 +116,7 @@ export function useSupplyContainer({
   }
   return {
     copy,
+    observation,
     opened,
     state: saved
       ? {

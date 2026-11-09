@@ -6,6 +6,7 @@ import {
   RecordKind,
   RecordField,
   TypedAnswer,
+  PreparationFreshness,
 } from "@chapchoo/rpc-client/conversations";
 import {
   readConversationBytes,
@@ -15,6 +16,7 @@ import {
   decodeAnswer,
   submitConversationInput,
   submitConversationAnswer,
+  conversationHeader,
 } from "../dist/conversation.js";
 import { mergeConversationRegion } from "../dist/conversation-state.js";
 import {
@@ -97,6 +99,35 @@ function apiFor(content, records = [metadata()]) {
     },
   };
 }
+test("source-qualified preparation and applied authentication remain independent of fresh saved selection", () => {
+  const value = current();
+  value.savedAuthenticationId = "saved-one";
+  value.observedNative.authenticationId = "saved-one";
+  value.observedNative.preparation = {
+    freshness:
+      PreparationFreshness.PREPARATION_FRESHNESS_TRANSIENT_LOOKUP_FAILURE,
+    node: "v24.0.0",
+    adapter: "2.6.0",
+    codex: "0.165.0",
+  };
+  const observed = conversationHeader("agent", value);
+  assert.deepEqual(observed.preparation, {
+    freshness: "cached",
+    node: "v24.0.0",
+    adapter: "2.6.0",
+    codex: "0.165.0",
+  });
+  value.savedAuthenticationId = "saved-two";
+  const fresh = conversationHeader("agent", value);
+  assert.equal(fresh.savedAuthenticationId, "saved-two");
+  assert.equal(fresh.appliedAuthenticationId, "saved-one");
+  assert.deepEqual(fresh.preparation, observed.preparation);
+  const historical = conversationHeader("agent", current());
+  assert.equal(historical.preparation, undefined);
+  assert.equal(historical.appliedAuthenticationId, undefined);
+  value.observedNative.preparation.freshness = 99;
+  assert.throws(() => conversationHeader("agent", value));
+});
 test("bounded bytes preserve UTF-8 split within a code point and recheck the final empty suffix", async () => {
   const value = Buffer.from("다음 🙂 ".repeat(6000));
   const offsets = [];

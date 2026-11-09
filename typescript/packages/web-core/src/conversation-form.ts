@@ -13,7 +13,8 @@ export interface QuestionDraft {
   optionId?: string;
   fields: Partial<Record<string, DraftValue>>;
   errors: Record<string, "required" | "invalid">;
-  state: "editing" | "sending" | "accepted" | "uncertain" | "rejected";
+  state:
+    "editing" | "invalid" | "sending" | "accepted" | "uncertain" | "rejected";
   answer?: ConversationAnswer;
 }
 export function draftField(
@@ -72,15 +73,7 @@ function readFormValue(
           !field.choices.some((choice) => choice.value === value))
       )
         return undefined;
-      try {
-        if (
-          field.pattern !== undefined &&
-          !new RegExp(field.pattern, "u").test(value)
-        )
-          return undefined;
-      } catch {
-        return undefined;
-      }
+      // Native patterns are evaluated only by the bounded server/native validator.
       if (!validConversationFormat(field.format, value)) return undefined;
       return { type: "text", value };
     }

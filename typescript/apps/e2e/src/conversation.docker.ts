@@ -60,7 +60,12 @@ test("owner chats through the official adapter and retains the native typed answ
       exact: true,
     });
     await expect(
-      setup.getByText("Not observed", { exact: true }),
+      setup
+        .getByRole("region", {
+          name: "Observed applied selection",
+          exact: true,
+        })
+        .getByText("Not observed", { exact: true }),
     ).toBeVisible();
     await setup
       .getByRole("radio", { name: "Existing Codex installation", exact: true })

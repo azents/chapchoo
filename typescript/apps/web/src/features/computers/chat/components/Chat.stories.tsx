@@ -34,6 +34,9 @@ function fixtureMessage(
 type FixtureProps = {
   mode:
     | "connected"
+    | "sending"
+    | "readerError"
+    | "textPlan"
     | "stopped"
     | "disconnected"
     | "unknown"
@@ -131,7 +134,8 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
   const floating = useFloatingChat(input, agent.id);
   const copy = chatCopy(locale);
   const c = computerCopy(locale);
-  const writable = mode === "connected" || mode === "empty";
+  const writable =
+    mode === "connected" || mode === "empty" || mode === "textPlan";
   const actions = useComputerActions({
     pending: false,
     submit: () => {},
@@ -224,9 +228,25 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
             workId: activity === "working" ? "work" : void 0,
           },
           records,
+          latestPlan:
+            mode === "textPlan"
+              ? {
+                  key: "plan:text-plan",
+                  nativeId: "text-plan",
+                  kind: "plan",
+                  anchor: { ordinal: 4n, index: 0n },
+                  updatedOrdinal: 4n,
+                  content: [],
+                  locations: [],
+                  plan: {
+                    type: "text",
+                    text: "**First**, inspect the current implementation.",
+                  },
+                }
+              : null,
           renderedAt: initial.renderedAt,
         },
-        read: "ready",
+        read: mode === "readerError" ? "error" : "ready",
         readingOlder: false,
         inputs: [],
         stop: workStop,
@@ -240,8 +260,9 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
         onAnswer: () => {},
       }}
       input={input}
-      activity={activity}
+      activity={mode === "readerError" ? "unavailable" : activity}
       writable={writable}
+      stoppable={writable || mode === "sending" || mode === "readerError"}
       sendable={writable && Boolean(input.trim())}
       status={
         product.error ??
@@ -303,6 +324,15 @@ export const Stale: Story = { args: { mode: "stale" } };
 export const StaleStopped: Story = { args: { mode: "staleStopped" } };
 export const SignedOut: Story = { args: { mode: "signedOut" } };
 export const Empty: Story = { args: { mode: "empty" } };
+export const SendingWithActiveWork: Story = {
+  args: { mode: "sending", locale: "en-US", name: "Corgi" },
+};
+export const ReaderErrorWithActiveWork: Story = {
+  args: { mode: "readerError", locale: "en-US", name: "Corgi" },
+};
+export const TextPlan: Story = {
+  args: { mode: "textPlan", locale: "en-US", name: "Corgi" },
+};
 export const English: Story = { args: { locale: "en-US", name: "Corgi" } };
 export const Japanese: Story = { args: { locale: "ja-JP", name: "コーギー" } };
 export const French: Story = {

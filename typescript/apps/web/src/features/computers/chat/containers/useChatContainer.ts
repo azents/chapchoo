@@ -6,7 +6,9 @@ import {
   initialQuestionDraft,
   reviewQuestionAnswer,
 } from "@chapchoo/web-core/conversation-form";
+import { reconcileLocalConversationInputs } from "@chapchoo/web-core/conversation-state";
 import { useDisplay } from "@chapchoo/web-core/display-context";
+import { TRPCClientError } from "@trpc/client";
 import { useLocale } from "next-intl";
 import { createElement, useContext, useEffect, useRef, useState } from "react";
 import { trpc } from "@/shared/rpc/client";
@@ -88,6 +90,7 @@ export function useChatContainer(props: ChatInput): ChatProps {
     );
     if (recovered) {
       setInput((value) => (value === recovered.text ? "" : value));
+      setInputs((all) => reconcileLocalConversationInputs(all, region.inputs));
     }
   }, [region.header.source?.snapshotId, region.inputs, inputs]);
   const floating = useFloatingChat(
@@ -100,13 +103,15 @@ export function useChatContainer(props: ChatInput): ChatProps {
   }
   const agent = product.data.agent;
   const computer = agent.computer;
-  const writable =
+  const effectAvailable =
     product.access === "authorized" &&
     !product.stale &&
     !product.pending &&
     computer.power === "running" &&
     computer.connector === "connected" &&
-    computer.phase === "completed" &&
+    computer.phase === "completed";
+  const writable =
+    effectAvailable &&
     reader.read === "ready" &&
     region.header.state !== "loading";
   const operation = computerOperation(computer, product.copy);
@@ -165,8 +170,8 @@ export function useChatContainer(props: ChatInput): ChatProps {
     const question = record.question;
     setDrafts((all) => {
       const current = all[key] ?? initialQuestionDraft(question);
-      return current.state === "editing"
-        ? { ...all, [key]: change(current) }
+      return current.state === "editing" || current.state === "invalid"
+        ? { ...all, [key]: { ...change(current), state: "editing" } }
         : all;
     });
   }
@@ -244,7 +249,7 @@ export function useChatContainer(props: ChatInput): ChatProps {
       !record.responder ||
       record.answer ||
       !draft ||
-      draft.state !== "editing" ||
+      (draft.state !== "editing" && draft.state !== "invalid") ||
       answerBusy.current.has(key)
     ) {
       return;
@@ -282,9 +287,19 @@ export function useChatContainer(props: ChatInput): ChatProps {
           answer: value,
         },
       }));
-    } catch {
+    } catch (error) {
       // A missing response does not make a single-use native responder reusable.
-      setDrafts((all) => ({ ...all, [key]: { ...draft, state: "uncertain" } }));
+      const data: unknown =
+        error instanceof TRPCClientError ? error.data : null;
+      const invalid =
+        typeof data === "object" &&
+        data !== null &&
+        "code" in data &&
+        data.code === "BAD_REQUEST";
+      setDrafts((all) => ({
+        ...all,
+        [key]: { ...draft, state: invalid ? "invalid" : "uncertain" },
+      }));
     } finally {
       answerBusy.current.delete(key);
     }
@@ -293,7 +308,7 @@ export function useChatContainer(props: ChatInput): ChatProps {
   async function stopWork(): Promise<void> {
     const { native: source, conversationId, workId } = region.header;
     if (
-      !writable ||
+      !effectAvailable ||
       !source ||
       !conversationId ||
       !workId ||
@@ -401,6 +416,11 @@ export function useChatContainer(props: ChatInput): ChatProps {
       key: agent.id,
       agentId: agent.id,
       applied: region.header.appliedSupply,
+      observation: {
+        preparation: region.header.preparation,
+        savedAuthenticationId: region.header.savedAuthenticationId,
+        appliedAuthenticationId: region.header.appliedAuthenticationId,
+      },
       unavailable: product.access !== "authorized" || product.stale,
     }),
     secondaryOverlay,
@@ -410,6 +430,8 @@ export function useChatContainer(props: ChatInput): ChatProps {
     activity:
       reader.read === "error" ? "unavailable" : region.header.foreground,
     writable: writable && !sendMutation.isPending,
+    stoppable:
+      effectAvailable && Boolean(region.header.native && region.header.workId),
     sendable:
       writable &&
       !sendMutation.isPending &&

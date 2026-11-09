@@ -133,12 +133,74 @@ test("user text stays plain while distinct assistant utterances render Markdown 
     "rel",
     "noopener noreferrer",
   );
-  await page.locator('[data-kind="tool"] summary').click();
+  await page
+    .locator('[data-kind="tool"] summary')
+    .filter({ hasText: "Update notes" })
+    .click();
   await expect(page.getByText("previous line", { exact: true })).toBeVisible();
   await page.locator('[data-kind="terminal"] summary').first().click();
   await expect(
     page.getByText("Complete output", { exact: true }),
   ).toBeVisible();
+});
+
+test("tool-only original input and output render as independent complete fields", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 844 });
+  await page.goto(
+    "/iframe.html?id=chat-conversation-body--content&viewMode=story",
+  );
+  await page
+    .locator('[data-kind="tool"] summary')
+    .filter({ hasText: "Read note" })
+    .click();
+  await expect(
+    page.getByRole("region", { name: "Tool input", exact: true }),
+  ).toContainText("9223372036854775807");
+  await expect(
+    page.getByRole("region", { name: "Tool output", exact: true }),
+  ).toContainText("complete tool-only result");
+  await expect(
+    page.getByRole("region", { name: "Tool output", exact: true }),
+  ).toContainText('"enabled":false');
+  await expect
+    .poll(() =>
+      page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+    )
+    .toBe(true);
+});
+
+test("a retained answer supersedes local uncertainty and its read-recovery controls", async ({
+  page,
+}) => {
+  await page.goto(
+    "/iframe.html?id=chat-conversation-body--retained-after-uncertainty&viewMode=story",
+  );
+  await expect(page.getByRole("status")).toHaveText("Response delivered");
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Read again", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText("owner@example.com", { exact: true }),
+  ).toBeVisible();
+});
+
+test("a definitive validation rejection keeps the original form editable for manual correction", async ({
+  page,
+}) => {
+  await page.goto(
+    "/iframe.html?id=chat-conversation-body--validation-rejected&viewMode=story",
+  );
+  await expect(page.getByRole("alert")).toHaveText("Check this answer");
+  const note = page.getByRole("textbox", { name: "Release note", exact: true });
+  await expect(note).toBeEnabled();
+  await note.fill("Corrected manually");
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Send answers", exact: true }),
+  ).toBeEnabled();
 });
 
 for (const story of [

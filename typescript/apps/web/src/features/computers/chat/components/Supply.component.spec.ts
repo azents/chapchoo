@@ -57,8 +57,45 @@ test("an absent applied observation does not pretend the saved managed default i
   await page.goto(
     "/iframe.html?id=computers-chat-supply--managed-default&viewMode=story",
   );
-  await expect(page.getByText("Not observed", { exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", { name: "Observed applied selection", exact: true })
+      .getByText("Not observed", { exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByRole("radio", { name: "Managed preparation", exact: true }),
   ).toBeChecked();
+});
+
+test("exact cached preparation and changed authentication stay distinct from saved supply", async ({
+  page,
+}) => {
+  await page.goto(
+    "/iframe.html?id=computers-chat-supply--saved-differs-from-applied&viewMode=story",
+  );
+  const preparation = page.getByRole("region", {
+    name: "Applied preparation",
+    exact: true,
+  });
+  await expect(preparation).toContainText("Cached after lookup failure");
+  await expect(preparation).toContainText(
+    "Node v24.0.0 · ACP 2.6.0 · Codex 0.165.0",
+  );
+  await expect(
+    page.getByRole("region", { name: "Applied authentication", exact: true }),
+  ).toContainText("differs from the running process");
+});
+
+test("historical unknown details never infer preparation or authentication from a managed default", async ({
+  page,
+}) => {
+  await page.goto(
+    "/iframe.html?id=computers-chat-supply--managed-default&viewMode=story",
+  );
+  await expect(
+    page.getByRole("region", { name: "Applied preparation", exact: true }),
+  ).toHaveText("Applied preparationNot observed");
+  await expect(
+    page.getByRole("region", { name: "Applied authentication", exact: true }),
+  ).toHaveText("Applied authenticationNot observed");
 });

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { parse } from "lossless-json";
+import { parse, stringify } from "lossless-json";
 import type {
   Choice,
   ContentPart,
@@ -90,6 +90,15 @@ export function decodeLines(bytes: Uint8Array): unknown[] {
 export function decodeString(values: unknown[]): string | undefined {
   if (!values.length) return undefined;
   return z.string().parse(values.at(-1));
+}
+/** Tool I/O is opaque display data; preserve exact integers without interpreting its schema. */
+export function decodeToolPayload(
+  values: unknown[],
+): { json: string } | undefined {
+  if (!values.length) return undefined;
+  const json = stringify(values.at(-1), null, 2);
+  if (json === undefined) throw new Error("Tool payload is invalid");
+  return { json };
 }
 const titled = z.looseObject({
   const: z.string(),

@@ -10,6 +10,101 @@ import {
   readConversationRecord,
 } from "../dist/conversation.js";
 import { TypedAnswer } from "@chapchoo/rpc-client/conversations";
+import { reconcileLocalConversationInputs } from "../dist/conversation-state.js";
+
+test("native pattern evaluation stays at the bounded server while ordinary browser constraints remain active", () => {
+  const question = {
+    type: "form",
+    title: "Native pattern",
+    fields: [
+      {
+        name: "value",
+        type: "text",
+        title: "Value",
+        required: true,
+        pattern: "(",
+        minLength: 2,
+      },
+    ],
+  };
+  const draft = initialQuestionDraft(question);
+  draft.fields.value = { type: "text", value: "editable" };
+  assert.equal(
+    reviewQuestionAnswer(question, draft).answer?.type,
+    "formAccept",
+  );
+  draft.fields.value.value = "x";
+  assert.deepEqual(reviewQuestionAnswer(question, draft).errors, {
+    value: "invalid",
+  });
+});
+
+test("retained request recovery removes its local uncertainty without conflating a new same-text operation", () => {
+  const recovered = {
+    requestId: "recovered",
+    text: "same text",
+    observation: "uncertain",
+  };
+  const unresolved = { ...recovered, requestId: "different-operation" };
+  const retained = [{ requestId: "recovered" }];
+  assert.deepEqual(reconcileLocalConversationInputs([recovered], retained), []);
+  assert.deepEqual(
+    reconcileLocalConversationInputs([recovered, unresolved], retained),
+    [unresolved],
+  );
+});
+
+test("tool-only original input and output remain independent with exact integers and clear semantics", async () => {
+  const payloads = new Map([
+    [9, Buffer.from('{"limit":9223372036854775807,"enabled":false}\n')],
+    [10, Buffer.from('["result",0]\n')],
+  ]);
+  const api = {
+    fields: async () => ({
+      fields: [...payloads].map(([field, bytes]) => ({
+        field,
+        updatedOrdinal: 2n,
+        totalBytes: BigInt(bytes.length),
+      })),
+    }),
+    readField: async ({ field, offset, length }) => {
+      const bytes = payloads.get(field);
+      return {
+        content: bytes.subarray(offset, offset + length),
+        offset,
+        totalBytes: BigInt(bytes.length),
+      };
+    },
+  };
+  const read = () =>
+    readConversationRecord(
+      api,
+      {
+        agentId: "agent",
+        state: "ready",
+        source: {
+          agentId: "agent",
+          conversationId: "conversation",
+          snapshotId: "snapshot",
+        },
+      },
+      {
+        kind: 4,
+        nativeId: "raw-tool",
+        anchor: { ordinal: 1n, index: 0n },
+        updatedOrdinal: 2n,
+      },
+    );
+  const record = await read();
+  assert.deepEqual(record.content, []);
+  assert.match(record.toolInput.json, /9223372036854775807/);
+  assert.match(record.toolInput.json, /"enabled": false/);
+  assert.match(record.toolOutput.json, /"result"/);
+  payloads.set(9, Buffer.alloc(0));
+  const cleared = await read();
+  assert.equal(cleared.toolInput, undefined);
+  assert.deepEqual(cleared.toolOutput, record.toolOutput);
+});
 test("arbitrary form keys remain own fields rather than inherited defaults or object prototype mutations", () => {
   const question = {
     type: "form",

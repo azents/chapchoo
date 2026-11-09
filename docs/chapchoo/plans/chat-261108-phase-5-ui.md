@@ -7,7 +7,7 @@ tags: [agent, conversation, frontend, implementation]
 # Phase Execution Plan
 
 - Phase: 5/6, actual conversation UI and minimal assembled acceptance.
-- Branch/base: `feature/chat-text-5-ui` → `feature/chat-text-4-auth` (`d67c6ebd787dd2039ba283fa90b02a545fefb711`).
+- Branch/base: `feature/chat-text-5-ui` → `feature/chat-text-4-auth` (`1efa5a8eca7181bffc89518fac629c2e6efddbb1`).
 - PR boundary: private owner SSR/hydrated conversation reads, generated-client adapters, exact text/answer/Stop mutations and real activity/request presentation, replacing production samples.
 - Inputs: phases 1–4 (#97–100); generated Conversations owner service, protected request sessions, existing Agent layout and Computer controls.
 - Deliverables: complete normalized text and activity, recent/older navigation, coalesced visible-region rereads and reconnect reread, exact operation result handling, inline native permission/form answers and retained original answers.
@@ -111,3 +111,77 @@ General provider image-label handling remains in Phase 6 runtime acceptance,
 without relaxing ownership or security checks. No production test mode or
 security-profile relaxation is authorized. These changes complete M05/REQ-15
 within approved authority; Design delta remains None.
+
+## Complete-stack correction scope
+
+All six PRs exist; remote checks and the assigned complete-stack review are now
+active. Phases 2–4 corrections are inherited. The primary agent directly owns
+these approved-contract corrections:
+
+- Reconcile matching local uncertain input with recovered retained input. Clear
+  its uncertainty guard so an intentional later operation may submit identical
+  text; never replay the recovered operation.
+- Keep Stop readiness independent of text upload/sending and unrelated reader
+  activity. Preserve exact observed work/source identity, current owner admission
+  and final native-owner validation.
+- Delegate native regular-expression pattern validation to the existing bounded
+  server/native authority rather than running an unbounded browser RegExp. A
+  known definitive validation rejection permits manual correction, not automatic
+  mutation replay or reuse of an uncertain responder.
+- Prefer retained answer facts over obsolete local uncertain warnings/recovery
+  controls, and render text plans from their typed text field.
+- Decode and render independent typed tool input/output, exact preparation
+  freshness/versions and current saved-versus-physically-applied authentication
+  facts. Unknown historical observations stay unknown; no secret bytes or
+  credential-source fingerprint enters UI.
+- Add focused web-core/component regressions and static meaningful stories.
+  Run affected package/app checks, full frontend gates and mandatory hooks,
+  then propagate the correction to phase 6.
+
+Continuous append-between-chunks liveness remains an independent deterministic
+investigation. Preserve complete-content and source fences; no new durable feed,
+versioning or storage authority is approved. Reuse the same sole reviewer only
+after integration stabilizes. Real authenticated model acceptance, merge and
+deployment remain outside this correction. Design delta: None.
+
+### Correction checkpoint
+
+The corrected UI and source-qualified observation decoder are integrated.
+Recovered retained input removes only matching local Request identities; a
+different unresolved operation with identical text remains uncertain. Stop
+retains its exact observed work target independently of sending and general
+reader errors. Definite validation errors remain manually editable, while
+unknown response delivery never reopens a responder. Tool I/O, text plans and
+retained answers use their own typed fields. Setup presents exact preparation
+and saved/applied authentication comparison without credential material.
+
+Verified integrated evidence:
+
+- Full Rust quality gate: 393 passed, zero failed/ignored across 66 result blocks.
+- Actual Node/Rust RPC: 129 checks on each SQLite and PostgreSQL.
+- Web-core: 135 tests; General-web: 27; Admin-web: 20, all passing.
+- All-package typecheck: 14 successful tasks. General/Admin production builds
+  passed after the final Stop rendering correction (unchanged tasks used their
+  content-addressed cache).
+- Storybook built and the Chat/ConversationBody/Supply component subset passed
+  32 tests, including independent Stop during sending/read failure, editable
+  definite validation rejection, retained-answer recovery, tool-only exact
+  input/output with mobile overflow checks, preparation and authentication.
+- The existing single Docker/browser journey uses the newly scoped applied
+  observation region, not an ambiguous count of all unknown diagnostic fields.
+  Latest assembled execution remains phase-6 validation, not an implied pass.
+
+The first component invocation used the wrong existing textbox accessible name;
+the locator was corrected and the complete affected subset rerun. The first unit
+invocation omitted this Runtime's supported private SWC cache override; supplying
+that environment fixed the prerequisite without relaxing cache validation.
+Mandatory commit hooks, latest-SHA remote CI and targeted single-reviewer
+re-review remain delivery gates.
+
+The independent large-body probe ran the actual web-core consumer against a
+deterministic exact-ordinal storage port: twenty forced appends between its first
+and second chunks prevented complete reads of a 103,800-byte body; a quiescent
+read then completed. This is a reproduced scheduling/liveness boundary, not a
+native-frequency measurement or an actual-database stress run. Existing DB
+tests separately verify the changing-field fence. No new read/storage authority
+or safety relaxation was introduced as a workaround.

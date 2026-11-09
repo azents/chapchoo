@@ -1,6 +1,46 @@
 import { computerCopy } from "@chapchoo/web-core/computer-messages";
 import { expect, test } from "@playwright/test";
 
+for (const story of [
+  "sending-with-active-work",
+  "reader-error-with-active-work",
+]) {
+  test(`current-work Stop remains available independently of the composer/read state: ${story}`, async ({
+    page,
+  }) => {
+    await page.goto(
+      `/iframe.html?id=chat-conversation--${story}&viewMode=story`,
+    );
+    await expect(
+      page.getByRole("textbox", { name: "Message", exact: true }),
+    ).toBeDisabled();
+    await page.getByRole("button", { name: /Corgi.*Activity/ }).click();
+    const activity = page.getByRole("dialog", {
+      name: "Activity",
+      exact: true,
+    });
+    const stop = activity.getByRole("button", {
+      name: "Stop work",
+      exact: true,
+    });
+    await expect(stop).toBeEnabled();
+    await stop.click();
+    await expect(activity.getByRole("status")).toHaveText("Cancellation sent");
+  });
+}
+
+test("a native text plan uses its typed text instead of empty generic content", async ({
+  page,
+}) => {
+  await page.goto(
+    "/iframe.html?id=chat-conversation--text-plan&viewMode=story",
+  );
+  await page.getByRole("button", { name: /Corgi.*Activity/ }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Activity", exact: true }),
+  ).toContainText("First, inspect the current implementation.");
+});
+
 test("nested Computer dialogs retain activity and return focus on Escape", async ({
   page,
 }) => {

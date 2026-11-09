@@ -119,6 +119,8 @@ function Fixture({
     | "retained"
     | "unavailable"
     | "uncertain"
+    | "retainedUncertain"
+    | "validationRejected"
     | "loading"
     | "error"
     | "content";
@@ -141,12 +143,17 @@ function Fixture({
       owner: { type: "text", value: "owner@example.com" },
     },
   };
-  if (mode === "retained") {
+  if (mode === "retained" || mode === "retainedUncertain") {
     request.answer = { value: retained, delivery: "delivered" };
   }
   const [draft, setDraft] = useState<QuestionDraft>({
     ...initialQuestionDraft(question),
-    state: mode === "uncertain" ? "uncertain" : "editing",
+    state:
+      mode === "uncertain" || mode === "retainedUncertain"
+        ? "uncertain"
+        : mode === "validationRejected"
+          ? "invalid"
+          : "editing",
   });
   const records =
     mode === "content"
@@ -181,6 +188,17 @@ function Fixture({
             ]),
             title: "Update notes",
             status: "completed",
+          },
+          {
+            ...record("tool", "raw-tool", 5n, []),
+            title: "Read note",
+            status: "completed",
+            toolInput: {
+              json: '{"path":"notes.txt","limit":9223372036854775807}',
+            },
+            toolOutput: {
+              json: '{"lines":["complete tool-only result"],"enabled":false}',
+            },
           },
           {
             ...record("terminal", "terminal", 5n, []),
@@ -219,7 +237,12 @@ function Fixture({
     onLatest: () => {},
     onHistory: () => {},
     onQuestionOption: (_record, optionId) =>
-      setDraft((value) => ({ ...value, optionId, errors: {} })),
+      setDraft((value) => ({
+        ...value,
+        optionId,
+        errors: {},
+        state: "editing",
+      })),
     onQuestionField: (_record, name, value) =>
       setDraft((current) => {
         const fields = { ...current.fields };
@@ -230,6 +253,7 @@ function Fixture({
           ...current,
           fields: value === null ? fields : { ...fields, [name]: value },
           errors: {},
+          state: "editing",
         };
       }),
     onAnswer: (_record, explicit) => {
@@ -268,6 +292,12 @@ export const Permission: Story = { args: { mode: "permission" } };
 export const Retained: Story = { args: { mode: "retained" } };
 export const Unavailable: Story = { args: { mode: "unavailable" } };
 export const Uncertain: Story = { args: { mode: "uncertain" } };
+export const RetainedAfterUncertainty: Story = {
+  args: { mode: "retainedUncertain" },
+};
+export const ValidationRejected: Story = {
+  args: { mode: "validationRejected" },
+};
 export const Loading: Story = { args: { mode: "loading" } };
 export const Error: Story = { args: { mode: "error" } };
 export const Content: Story = { args: { mode: "content" } };

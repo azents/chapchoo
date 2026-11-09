@@ -23,6 +23,8 @@ export interface ChatCopy {
   plan: string;
   execution: string;
   tools: string;
+  toolInput: string;
+  toolOutput: string;
   thought: string;
   terminal: string;
   notice: string;
@@ -84,6 +86,8 @@ const en: ChatCopy = {
   plan: "Current plan",
   execution: "Agent work",
   tools: "Tool activity",
+  toolInput: "Tool input",
+  toolOutput: "Tool output",
   thought: "Reasoning",
   terminal: "Terminal",
   notice: "Notice",
@@ -156,6 +160,8 @@ const ko: ChatCopy = {
   plan: "현재 계획",
   execution: "에이전트 작업",
   tools: "도구 작업",
+  toolInput: "도구 입력",
+  toolOutput: "도구 출력",
   thought: "추론",
   terminal: "터미널",
   notice: "알림",
@@ -228,6 +234,8 @@ const ja: ChatCopy = {
   plan: "現在の計画",
   execution: "エージェントの作業",
   tools: "ツールの動作",
+  toolInput: "ツールの入力",
+  toolOutput: "ツールの出力",
   thought: "推論",
   terminal: "ターミナル",
   notice: "通知",
@@ -300,6 +308,8 @@ const fr: ChatCopy = {
   plan: "Plan actuel",
   execution: "Travail de l’agent",
   tools: "Activité des outils",
+  toolInput: "Entrée de l’outil",
+  toolOutput: "Sortie de l’outil",
   thought: "Raisonnement",
   terminal: "Terminal",
   notice: "Notification",

@@ -15,8 +15,21 @@ export interface SupplyCopy {
   savedNotice: string;
   uncertain: string;
   rejected: string;
+  preparation: string;
+  current: string;
+  cached: string;
+  authentication: string;
+  authenticationMatches: string;
+  authenticationDiffers: string;
 }
 const en: SupplyCopy = {
+  preparation: "Applied preparation",
+  current: "Fresh at start",
+  cached: "Cached after lookup failure",
+  authentication: "Applied authentication",
+  authenticationMatches: "Using the saved authentication selection",
+  authenticationDiffers:
+    "The saved authentication differs from the running process. It applies on the next native start.",
   title: "Codex setup",
   managed: "Managed preparation",
   existing: "Existing Codex installation",
@@ -38,6 +51,13 @@ const en: SupplyCopy = {
     "Selection was not saved. Review the current selection and try again.",
 };
 const ko: SupplyCopy = {
+  preparation: "실행에 적용된 준비",
+  current: "시작 시 최신 조회 확인",
+  cached: "조회 실패로 보존된 준비 사용",
+  authentication: "실행에 적용된 인증",
+  authenticationMatches: "현재 저장된 인증을 사용 중입니다",
+  authenticationDiffers:
+    "저장된 인증이 실행 중인 인증과 다릅니다. 새 Codex 프로세스가 시작될 때 적용됩니다.",
   title: "Codex 실행 설정",
   managed: "자동 준비",
   existing: "기존 Codex 설치 사용",
@@ -59,6 +79,13 @@ const ko: SupplyCopy = {
     "선택을 저장하지 못했습니다. 현재 선택을 확인하고 다시 시도해 주세요.",
 };
 const ja: SupplyCopy = {
+  preparation: "適用された準備",
+  current: "起動時に最新を確認",
+  cached: "取得失敗後にキャッシュを使用",
+  authentication: "適用された認証",
+  authenticationMatches: "保存されている認証を使用中",
+  authenticationDiffers:
+    "保存された認証は実行中の認証と異なります。次のネイティブ起動時に適用されます。",
   title: "Codex 実行設定",
   managed: "自動準備",
   existing: "既存の Codex を使用",
@@ -80,6 +107,13 @@ const ja: SupplyCopy = {
     "選択を保存できませんでした。現在の選択を確認して、もう一度お試しください。",
 };
 const fr: SupplyCopy = {
+  preparation: "Préparation appliquée",
+  current: "À jour au démarrage",
+  cached: "Cache utilisé après un échec de recherche",
+  authentication: "Authentification appliquée",
+  authenticationMatches: "Utilise l’authentification enregistrée",
+  authenticationDiffers:
+    "L’authentification enregistrée diffère de celle en cours. Elle s’appliquera au prochain démarrage natif.",
   title: "Configuration de Codex",
   managed: "Préparation automatique",
   existing: "Installation Codex existante",

@@ -144,6 +144,8 @@ export interface ConversationRecord {
   description?: string;
   status?: string;
   toolKind?: string;
+  toolInput?: { json: string };
+  toolOutput?: { json: string };
   terminal?: {
     text: string;
     base64: string;
@@ -173,6 +175,15 @@ export interface ConversationHeader {
   foreground: "unavailable" | "idle" | "working" | "requiresAction";
   workId?: string;
   appliedSupply?: HarnessSupplyChoice;
+  preparation?: NativePreparation;
+  savedAuthenticationId?: string;
+  appliedAuthenticationId?: string;
+}
+export interface NativePreparation {
+  freshness: "current" | "cached";
+  node: string;
+  adapter: string;
+  codex: string;
 }
 export interface ConversationRegion {
   header: ConversationHeader;
@@ -188,6 +199,13 @@ export interface ConversationRegion {
     requestId: string;
     observation: "pending" | "published" | "rejected" | "uncertain";
   };
+}
+export interface LocalConversationInput {
+  text: string;
+  observation: InputObservation | "sending";
+  requestId: string;
+  snapshotId?: string;
+  conversationId?: string;
 }
 export const inputHistoryAnchor = z
   .object({ acceptedAt: z.bigint(), requestId: z.string().min(1).max(128) })
