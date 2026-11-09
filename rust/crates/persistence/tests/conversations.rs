@@ -1,0 +1,853 @@
+mod support;
+
+use base64::{Engine, engine::general_purpose::URL_SAFE};
+use chapchoo_crypto::{
+    BearerSecret, BootstrapProviderPermit, CredentialCipher, ExternalSecret, PasswordCost,
+    PasswordHasher, RootKey,
+};
+use chapchoo_domain::{
+    ConversationSource, ConversationTarget, ConversationText, EmailAddress, EventOccurrenceId,
+    ExistingCodexPath, HarnessSupply, MembershipRole, NativeConversationId, Password,
+    ProviderKeyRequestId, ProviderSubstrate, SnapshotId, SourcePosition,
+};
+use chapchoo_persistence::{
+    AcceptConversationInput, AuthenticationAcceptedResult, AuthenticationScope, CapturedEventPair,
+    ComponentKeyDraft, ComponentKeyPolicy, ComputerRequest, ConnectorSessionDraft, ConnectorSource,
+    CreateAgentProfile, CreateCloudAgent, CreateTeam, CreationOutcome, DirectoryPolicy,
+    EventChunkRead, EventMetadataRead, EventPayloadKind, ExecutionDraft, ExecutionResources,
+    GrantDraft, InviteMember, NewAccount, NewSession, POSTGRES_MIGRATIONS, ProviderCapabilities,
+    ProviderOwner, ProviderSource, RegisterApiKey, SQLITE_MIGRATIONS, SaveHarnessSupply,
+    SessionPolicy, SourceBinding, Store, StoreError, prepare_postgres, prepare_sqlite,
+};
+use diesel::{Connection, RunQueryDsl, connection::SimpleConnection, sql_types::Binary};
+use diesel_async::{AsyncPgConnection, async_connection_wrapper::AsyncConnectionWrapper};
+use diesel_migrations::MigrationHarness;
+use std::{
+    error::Error,
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
+
+type TestError = Box<dyn Error + Send + Sync>;
+fn cipher() -> Result<Arc<CredentialCipher>, TestError> {
+    Ok(Arc::new(CredentialCipher::new(RootKey::parse(
+        URL_SAFE.encode([57; 32]),
+    )?)?))
+}
+fn now() -> Result<i64, TestError> {
+    Ok(SystemTime::now()
+        .duration_since(UNIX_EPOCH)?
+        .as_millis()
+        .try_into()?)
+}
+fn snapshot(value: &str) -> Result<SnapshotId, TestError> {
+    Ok(SnapshotId::parse(value.to_owned())?)
+}
+fn position(ordinal: i64, id: &str) -> Result<SourcePosition, TestError> {
+    Ok(SourcePosition::new(
+        ordinal,
+        EventOccurrenceId::parse(id.to_owned())?,
+    )?)
+}
+struct Fixture {
+    owner: BearerSecret,
+    other: BearerSecret,
+    agent: chapchoo_persistence::AgentSummary,
+    other_agent: String,
+    team_id: String,
+    session: String,
+    control: String,
+    connection: String,
+    connector: BearerSecret,
+    now: i64,
+}
+impl Fixture {
+    fn source<'a>(&'a self, key: &'a chapchoo_crypto::SecretDigest) -> ConnectorSource<'a> {
+        ConnectorSource {
+            session_id: &self.session,
+            control_id: &self.control,
+            connection_id: &self.connection,
+            credential: key,
+        }
+    }
+}
+async fn fixture(store: &Store) -> Result<Fixture, TestError> {
+    let now = now()?;
+    let mut tokens = Vec::new();
+    for index in 0..2 {
+        let token = BearerSecret::generate()?;
+        let proof = BearerSecret::generate()?;
+        let account = NewAccount {
+            email: EmailAddress::parse(&format!("conversation{index}@example.invalid"))?,
+            password: PasswordHasher::new(PasswordCost::new(10)?)
+                .hash(&Password::parse("Aa1!conversation".to_owned())?)?,
+            session: NewSession {
+                token: BearerSecret::parse(token.expose().to_owned())?,
+            },
+            display: None,
+        };
+        if index == 0 {
+            store
+                .initialize_admin(
+                    &proof.digest(),
+                    &proof,
+                    &account,
+                    now,
+                    SessionPolicy::default(),
+                )
+                .await?;
+        } else {
+            store
+                .issue_email_signup_grant(
+                    &account.email,
+                    &GrantDraft {
+                        proof: proof.digest(),
+                        expires_at: now + 60_000,
+                    },
+                    now,
+                )
+                .await?;
+            store
+                .redeem_signup(&proof.digest(), &account, now, SessionPolicy::default())
+                .await?;
+        }
+        tokens.push(token);
+    }
+    let other = tokens.pop().ok_or("Missing other caller")?;
+    let owner = tokens.pop().ok_or("Missing owner")?;
+    let team = store
+        .create_team(
+            &owner.digest(),
+            &CreateTeam {
+                name: "Conversation".to_owned(),
+                handle: "conversation".to_owned(),
+            },
+            now,
+        )
+        .await?;
+    let invitation = store
+        .invite_member(
+            &owner.digest(),
+            &InviteMember {
+                team_id: team.id.clone(),
+                recipient: EmailAddress::parse("conversation1@example.invalid")?,
+                signup: None,
+            },
+            now,
+        )
+        .await?;
+    store
+        .process_invitation(&other.digest(), &invitation.invitation.id, true, now)
+        .await?;
+    let other_user = store.current_identity(&other.digest(), now).await?.id;
+    store
+        .set_member_role(
+            &owner.digest(),
+            &team.id,
+            &other_user,
+            MembershipRole::Manager,
+            now,
+        )
+        .await?;
+    let authentication = match store
+        .register_external_api_key(
+            &owner.digest(),
+            &RegisterApiKey {
+                scope: AuthenticationScope::Team {
+                    team_id: team.id.clone(),
+                },
+                request_id: "conversation-auth".to_owned(),
+                name: String::new(),
+                key: ExternalSecret::new(b"synthetic-never-used-model-key".to_vec())?,
+            },
+            now,
+        )
+        .await?
+    {
+        AuthenticationAcceptedResult::Record { authentication_id } => authentication_id,
+        _ => return Err("Expected authentication record".into()),
+    };
+    let permit = BootstrapProviderPermit::new("conversation-provider".to_owned())?.authenticated();
+    let provider = store
+        .rotate_provider_key(
+            ProviderOwner::Bootstrap {
+                proof: &permit,
+                name: "Conversation fixture",
+                substrate: &ProviderSubstrate::Kubernetes,
+                capabilities: ProviderCapabilities {
+                    create: true,
+                    start: true,
+                    stop: true,
+                    restart: true,
+                },
+            },
+            "conversation-provider",
+            &ComponentKeyDraft {
+                request_id: ProviderKeyRequestId::new(now, "conversation-provider-key")?
+                    .as_str()
+                    .to_owned(),
+                token: BearerSecret::generate()?,
+            },
+            ComponentKeyPolicy::default(),
+            now,
+        )
+        .await?;
+    let control = store
+        .register_control("http://127.0.0.1:1", DirectoryPolicy::default())
+        .await?;
+    let prepared = store
+        .prepare_provider_connection(
+            &provider.provider_id,
+            &provider.key.token.digest(),
+            &control.id,
+        )
+        .await?;
+    store
+        .admit_provider_connection(
+            &provider.provider_id,
+            &provider.key.token.digest(),
+            prepared.expected.as_ref(),
+            &prepared.owner,
+            DirectoryPolicy::default(),
+        )
+        .await?;
+    let image = store
+        .agent_profile_images(&owner.digest(), None, 1, now)
+        .await?
+        .pop()
+        .ok_or("Missing profile image")?
+        .id;
+    let agent = match store
+        .create_cloud_agent(
+            &owner.digest(),
+            &CreateCloudAgent {
+                team_id: team.id.clone(),
+                request_id: "conversation-create".to_owned(),
+                provider_id: provider.provider_id.clone(),
+                name: "Conversation fixture".to_owned(),
+                authentication_id: authentication.clone(),
+                profile: CreateAgentProfile {
+                    handle: "chat-fixture".to_owned(),
+                    image_id: image.clone(),
+                    palette_key: "sage".to_owned(),
+                },
+            },
+            now,
+        )
+        .await?
+    {
+        CreationOutcome::Present(agent) => *agent,
+        _ => return Err("Expected Agent".into()),
+    };
+    let other_agent = match store
+        .create_cloud_agent(
+            &other.digest(),
+            &CreateCloudAgent {
+                team_id: team.id.clone(),
+                request_id: "conversation-other".to_owned(),
+                provider_id: provider.provider_id.clone(),
+                name: "Other private Agent".to_owned(),
+                authentication_id: authentication,
+                profile: CreateAgentProfile {
+                    handle: "other-chat".to_owned(),
+                    image_id: image,
+                    palette_key: "sage".to_owned(),
+                },
+            },
+            now,
+        )
+        .await?
+    {
+        CreationOutcome::Present(agent) => agent.id,
+        _ => return Err("Expected other private Agent".into()),
+    };
+    let provider_key = provider.key.token.digest();
+    let source = ProviderSource {
+        provider_id: &provider.provider_id,
+        control_id: &control.id,
+        connection_id: &prepared.owner.connection_id,
+        credential: &provider_key,
+    };
+    let reservation = store
+        .reserve_execution(
+            &source,
+            ComputerRequest {
+                computer_id: &agent.computer.id,
+                request_id: &agent.computer.current_request_id,
+            },
+            &ExecutionDraft {
+                native: ExecutionResources::Kubernetes {
+                    namespace: "fixture".to_owned(),
+                    pod_name: "conversation-pod".to_owned(),
+                    bootstrap_secret_name: "conversation-bootstrap".to_owned(),
+                    saved_pvc_name: "conversation-pvc".to_owned(),
+                },
+            },
+        )
+        .await?;
+    let initial = store
+        .issue_connector_session_from_source(
+            &source,
+            &reservation.execution_id,
+            &ConnectorSessionDraft {
+                request_id: "conversation-session".to_owned(),
+                initial_key: BearerSecret::generate()?,
+            },
+            now,
+        )
+        .await?;
+    let key = store
+        .exchange_connector_key(
+            &initial.id,
+            &initial.initial_key.digest(),
+            &ComponentKeyDraft {
+                request_id: "conversation-key".to_owned(),
+                token: BearerSecret::generate()?,
+            },
+            ComponentKeyPolicy::default(),
+            now,
+        )
+        .await?;
+    let prepared = store
+        .prepare_connector_connection(&initial.id, &key.token.digest(), &control.id)
+        .await?;
+    store
+        .admit_connector_connection(
+            &initial.id,
+            &key.token.digest(),
+            prepared.expected.as_ref(),
+            &prepared.owner,
+            DirectoryPolicy::default(),
+        )
+        .await?;
+    Ok(Fixture {
+        owner,
+        other,
+        agent,
+        other_agent,
+        team_id: team.id,
+        session: initial.id,
+        control: control.id,
+        connection: prepared.owner.connection_id,
+        connector: key.token,
+        now,
+    })
+}
+
+async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
+    let owner = f.owner.digest();
+    let other = f.other.digest();
+    let key = f.connector.digest();
+    let source = f.source(&key);
+    assert!(
+        store
+            .current_conversation(&owner, &f.agent.id, f.now)
+            .await?
+            .is_none()
+    );
+    assert!(matches!(
+        store.current_conversation(&other, &f.agent.id, f.now).await,
+        Err(StoreError::NotFound)
+    ));
+    let default = store.harness_supply(&owner, &f.agent.id, f.now).await?;
+    assert_eq!(default.supply, HarnessSupply::Managed);
+    assert!(default.saved.is_none());
+    let saved = SaveHarnessSupply {
+        agent_id: f.agent.id.clone(),
+        request_id: "existing-supply".to_owned(),
+        expected_request_id: None,
+        supply: HarnessSupply::Existing(ExistingCodexPath::parse("/tools/owner-codex".to_owned())?),
+    };
+    let (first, again) = tokio::join!(
+        store.save_harness_supply(&owner, &saved, f.now),
+        store.save_harness_supply(&owner, &saved, f.now)
+    );
+    assert_eq!(first?.request_id, again?.request_id);
+    assert!(matches!(
+        store.harness_supply(&other, &f.agent.id, f.now).await,
+        Err(StoreError::NotFound)
+    ));
+    assert!(matches!(
+        store.save_harness_supply(&other, &saved, f.now).await,
+        Err(StoreError::NotFound)
+    ));
+    store
+        .save_harness_supply(
+            &owner,
+            &SaveHarnessSupply {
+                agent_id: f.agent.id.clone(),
+                request_id: "managed-supply".to_owned(),
+                expected_request_id: Some("existing-supply".to_owned()),
+                supply: HarnessSupply::Managed,
+            },
+            f.now,
+        )
+        .await?;
+    store.save_harness_supply(&owner, &saved, f.now).await?;
+    assert_eq!(
+        store
+            .harness_supply(&owner, &f.agent.id, f.now)
+            .await?
+            .supply,
+        HarnessSupply::Managed
+    );
+    assert_eq!(
+        store
+            .agent(&owner, &f.agent.id, f.now)
+            .await?
+            .computer
+            .current_request_id,
+        f.agent.computer.current_request_id
+    );
+
+    let draft = AcceptConversationInput {
+        agent_id: f.agent.id.clone(),
+        conversation_id: None,
+        request_id: "first-input".to_owned(),
+        target: ConversationTarget::NotStarted,
+        text: ConversationText::parse("  first input\n한국어  ".to_owned())?,
+    };
+    let (one, two) = tokio::join!(
+        store.accept_conversation_input(&owner, &draft, f.now),
+        store.accept_conversation_input(&owner, &draft, f.now)
+    );
+    let first = one?;
+    assert_eq!(first.id, two?.id);
+    assert_eq!(first.text.as_str(), draft.text.as_str());
+    let changed = AcceptConversationInput {
+        text: ConversationText::parse("changed".to_owned())?,
+        ..AcceptConversationInput {
+            agent_id: draft.agent_id.clone(),
+            conversation_id: None,
+            request_id: draft.request_id.clone(),
+            target: draft.target.clone(),
+            text: draft.text.clone(),
+        }
+    };
+    assert!(matches!(
+        store
+            .accept_conversation_input(&owner, &changed, f.now)
+            .await,
+        Err(StoreError::Conflict)
+    ));
+    let s1 = snapshot("snapshot-one")?;
+    let native = NativeConversationId::parse("native-context-one".to_owned())?;
+    let binding = SourceBinding {
+        conversation_id: first.conversation_id.clone(),
+        expected_previous: None,
+        snapshot: s1.clone(),
+        native_session: native.clone(),
+    };
+    assert!(matches!(
+        store
+            .bind_conversation_source(&source, &binding)
+            .await?
+            .source,
+        ConversationSource::Loading { .. }
+    ));
+    // Initial source binding is not replacement: accepted input survives it.
+    assert!(
+        store
+            .conversation_input(
+                &owner,
+                &f.agent.id,
+                &first.conversation_id,
+                "first-input",
+                f.now
+            )
+            .await?
+            .is_some()
+    );
+    assert_eq!(
+        store
+            .accept_conversation_input(&owner, &draft, f.now)
+            .await?
+            .id,
+        first.id
+    );
+    let fresh = AcceptConversationInput {
+        agent_id: f.agent.id.clone(),
+        conversation_id: Some(first.conversation_id.clone()),
+        request_id: "during-loading".to_owned(),
+        target: ConversationTarget::Snapshot(s1.clone()),
+        text: ConversationText::parse("next".to_owned())?,
+    };
+    assert!(matches!(
+        store.accept_conversation_input(&owner, &fresh, f.now).await,
+        Err(StoreError::InvalidTransition)
+    ));
+    let pair = CapturedEventPair {
+        snapshot: s1.clone(),
+        position: position(1, "z-first")?,
+        raw: vec![b'r'; 70_001],
+        normalized: vec![b'n'; 80_003],
+    };
+    store
+        .ingest_conversation_pair(&source, &first.conversation_id, &pair)
+        .await?;
+    assert_eq!(
+        store
+            .ingest_conversation_pair(&source, &first.conversation_id, &pair)
+            .await?
+            .source
+            .position()
+            .ok_or("Missing cursor")?
+            .ordinal(),
+        1
+    );
+    let conflict = CapturedEventPair {
+        snapshot: s1.clone(),
+        position: pair.position.clone(),
+        raw: b"changed".to_vec(),
+        normalized: pair.normalized.clone(),
+    };
+    assert!(matches!(
+        store
+            .ingest_conversation_pair(&source, &first.conversation_id, &conflict)
+            .await,
+        Err(StoreError::Conflict)
+    ));
+    let gap = CapturedEventPair {
+        snapshot: s1.clone(),
+        position: position(3, "gap")?,
+        raw: b"raw".to_vec(),
+        normalized: b"normalized".to_vec(),
+    };
+    assert!(matches!(
+        store
+            .ingest_conversation_pair(&source, &first.conversation_id, &gap)
+            .await,
+        Err(StoreError::Conflict)
+    ));
+    assert!(matches!(
+        store
+            .complete_conversation_source(
+                &source,
+                &first.conversation_id,
+                &s1,
+                Some(&position(2, "missing")?)
+            )
+            .await,
+        Err(StoreError::InvalidTransition)
+    ));
+    store
+        .complete_conversation_source(&source, &first.conversation_id, &s1, Some(&pair.position))
+        .await?;
+    assert!(matches!(
+        store
+            .bind_conversation_source(&source, &binding)
+            .await?
+            .source,
+        ConversationSource::Ready { .. }
+    ));
+    store
+        .accept_conversation_input(&owner, &fresh, f.now)
+        .await?;
+    let second = CapturedEventPair {
+        snapshot: s1.clone(),
+        position: position(2, "a-second")?,
+        raw: b"second".to_vec(),
+        normalized: b"second-normalized".to_vec(),
+    };
+    store
+        .ingest_conversation_pair(&source, &first.conversation_id, &second)
+        .await?;
+    let metadata = store
+        .conversation_event_metadata(
+            &owner,
+            &EventMetadataRead {
+                agent_id: &f.agent.id,
+                conversation_id: &first.conversation_id,
+                snapshot: &s1,
+                after: None,
+                limit: 10,
+            },
+            f.now,
+        )
+        .await?;
+    assert_eq!(metadata.len(), 2);
+    assert_eq!(metadata[0].position.occurrence().as_str(), "z-first");
+    assert_eq!(metadata[1].position.occurrence().as_str(), "a-second");
+    for (kind, expected) in [
+        (EventPayloadKind::Raw, &pair.raw),
+        (EventPayloadKind::Normalized, &pair.normalized),
+    ] {
+        let mut bytes = Vec::new();
+        let mut offset = 0;
+        while bytes.len() < expected.len() {
+            let chunk = store
+                .conversation_event_chunk(
+                    &owner,
+                    &EventChunkRead {
+                        agent_id: &f.agent.id,
+                        conversation_id: &first.conversation_id,
+                        snapshot: &s1,
+                        occurrence: pair.position.occurrence(),
+                        kind,
+                        offset,
+                        length: 32768,
+                    },
+                    f.now,
+                )
+                .await?;
+            assert_eq!(chunk.offset, offset);
+            assert_eq!(chunk.total_bytes, i64::try_from(expected.len())?);
+            assert!(!chunk.bytes.is_empty());
+            offset += u32::try_from(chunk.bytes.len())?;
+            bytes.extend(chunk.bytes);
+        }
+        assert_eq!(&bytes, expected);
+    }
+    assert!(matches!(
+        store
+            .conversation_event_metadata(
+                &other,
+                &EventMetadataRead {
+                    agent_id: &f.agent.id,
+                    conversation_id: &first.conversation_id,
+                    snapshot: &s1,
+                    after: None,
+                    limit: 10
+                },
+                f.now
+            )
+            .await,
+        Err(StoreError::NotFound)
+    ));
+    let wrong = BearerSecret::generate()?.digest();
+    assert!(matches!(
+        store
+            .bind_conversation_source(&f.source(&wrong), &binding)
+            .await,
+        Err(StoreError::Unauthenticated)
+    ));
+    let s2 = snapshot("snapshot-two")?;
+    let replacement = SourceBinding {
+        conversation_id: first.conversation_id.clone(),
+        expected_previous: Some(s1.clone()),
+        snapshot: s2.clone(),
+        native_session: native,
+    };
+    store
+        .bind_conversation_source(&source, &replacement)
+        .await?;
+    assert!(
+        store
+            .conversation_input(
+                &owner,
+                &f.agent.id,
+                &first.conversation_id,
+                "first-input",
+                f.now
+            )
+            .await?
+            .is_none()
+    );
+    assert!(
+        store
+            .conversation_input(
+                &owner,
+                &f.agent.id,
+                &first.conversation_id,
+                "during-loading",
+                f.now
+            )
+            .await?
+            .is_none()
+    );
+    assert!(matches!(
+        store
+            .conversation_event_metadata(
+                &owner,
+                &EventMetadataRead {
+                    agent_id: &f.agent.id,
+                    conversation_id: &first.conversation_id,
+                    snapshot: &s1,
+                    after: None,
+                    limit: 10
+                },
+                f.now
+            )
+            .await,
+        Err(StoreError::Conflict)
+    ));
+    assert!(matches!(
+        store
+            .ingest_conversation_pair(&source, &first.conversation_id, &pair)
+            .await,
+        Err(StoreError::Conflict)
+    ));
+    store
+        .complete_conversation_source(&source, &first.conversation_id, &s2, None)
+        .await?;
+    assert!(matches!(
+        store.accept_conversation_input(&owner, &draft, f.now).await,
+        Err(StoreError::InvalidTransition)
+    ));
+    assert!(matches!(
+        store.accept_conversation_input(&owner, &fresh, f.now).await,
+        Err(StoreError::InvalidTransition)
+    ));
+    assert!(
+        store
+            .conversation_event_metadata(
+                &owner,
+                &EventMetadataRead {
+                    agent_id: &f.agent.id,
+                    conversation_id: &first.conversation_id,
+                    snapshot: &s2,
+                    after: None,
+                    limit: 10
+                },
+                f.now
+            )
+            .await?
+            .is_empty()
+    );
+    assert_eq!(
+        store
+            .harness_supply(&owner, &f.agent.id, f.now)
+            .await?
+            .supply,
+        HarnessSupply::Managed
+    );
+    let wrong_native = SourceBinding {
+        native_session: NativeConversationId::parse("new-context-is-not-restoration".to_owned())?,
+        ..replacement
+    };
+    assert!(matches!(
+        store.bind_conversation_source(&source, &wrong_native).await,
+        Err(StoreError::InvalidTransition)
+    ));
+    store
+        .close_connector_connection(
+            &f.session,
+            &key,
+            &chapchoo_persistence::ConnectionOwner {
+                control_id: f.control.clone(),
+                connection_id: f.connection.clone(),
+            },
+        )
+        .await?;
+    assert!(matches!(
+        store
+            .complete_conversation_source(&source, &first.conversation_id, &s2, None)
+            .await,
+        Err(StoreError::Unauthenticated)
+    ));
+    assert!(matches!(
+        store.harness_supply(&owner, &f.other_agent, f.now).await,
+        Err(StoreError::NotFound)
+    ));
+    store
+        .save_harness_supply(
+            &other,
+            &SaveHarnessSupply {
+                agent_id: f.other_agent.clone(),
+                request_id: "other-managed".to_owned(),
+                expected_request_id: None,
+                supply: HarnessSupply::Managed,
+            },
+            f.now,
+        )
+        .await?;
+    store.leave_team(&other, &f.team_id, f.now).await?;
+    assert!(matches!(
+        store.harness_supply(&other, &f.other_agent, f.now).await,
+        Err(StoreError::NotFound)
+    ));
+    assert!(matches!(
+        store
+            .current_conversation(&other, &f.other_agent, f.now)
+            .await,
+        Err(StoreError::NotFound)
+    ));
+    Ok(())
+}
+
+#[derive(PartialEq, Eq, diesel::QueryableByName)]
+struct RetainedBytes {
+    #[diesel(sql_type=Binary)]
+    bytes: Vec<u8>,
+}
+
+macro_rules! preserving_upgrade {
+    ($connection:expr,$migrations:expr) => {{
+        let connection=&mut *$connection;
+        let receipts=diesel::sql_query("SELECT payload_hash AS bytes FROM agent_creation_receipts ORDER BY request_id")
+            .load::<RetainedBytes>(connection)?;
+        let credentials=diesel::sql_query("SELECT ciphertext AS bytes FROM external_authentications ORDER BY current_request_id")
+            .load::<RetainedBytes>(connection)?;
+        assert!(!receipts.is_empty() && !credentials.is_empty());
+        // Restore the pre-feature schema with real Agent/account/authentication state.
+        connection.revert_last_migration($migrations)?;
+        connection.run_pending_migrations($migrations)?;
+        assert!(receipts==diesel::sql_query("SELECT payload_hash AS bytes FROM agent_creation_receipts ORDER BY request_id")
+            .load::<RetainedBytes>(connection)?, "Creation fingerprint changed during conversation migration");
+        assert!(credentials==diesel::sql_query("SELECT ciphertext AS bytes FROM external_authentications ORDER BY current_request_id")
+            .load::<RetainedBytes>(connection)?, "Protected authentication changed during conversation migration");
+    }};
+}
+
+#[test]
+fn sqlite_conversation_operations_and_preserving_downgrade_guard() -> Result<(), TestError> {
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("conversation.sqlite");
+    let cipher = cipher()?;
+    prepare_sqlite(&path, &cipher)?;
+    let runtime = tokio::runtime::Runtime::new()?;
+    let store = runtime.block_on(Store::connect_sqlite(path.clone(), cipher.clone()))?;
+    let fixture = runtime.block_on(fixture(&store))?;
+    let mut connection = diesel::SqliteConnection::establish(path.to_str().ok_or("Invalid path")?)?;
+    connection.batch_execute("PRAGMA foreign_keys=ON")?;
+    preserving_upgrade!(&mut connection, SQLITE_MIGRATIONS);
+    prepare_sqlite(&path, &cipher)?;
+    assert_eq!(
+        runtime
+            .block_on(store.agent(&fixture.owner.digest(), &fixture.agent.id, fixture.now))?
+            .id,
+        fixture.agent.id
+    );
+    runtime.block_on(exercise(&store, &fixture))?;
+    assert!(connection.revert_last_migration(SQLITE_MIGRATIONS).is_err());
+    Ok(())
+}
+#[test]
+fn postgres_conversation_operations_and_preserving_downgrade_guard() -> Result<(), TestError> {
+    let base = std::env::var("CHAPCHOO_TEST_POSTGRES_URL")
+        .map_err(|_| "Disposable PostgreSQL is required")?;
+    let mut control = AsyncConnectionWrapper::<AsyncPgConnection>::establish(&base)?;
+    let suffix = BearerSecret::generate()?.digest().as_bytes()[..8]
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect::<String>();
+    let schema = format!("conversation_{suffix}");
+    control.batch_execute(&format!("CREATE SCHEMA {schema}"))?;
+    let separator = if base.contains('?') { '&' } else { '?' };
+    let url = format!("{base}{separator}options=-csearch_path%3D{schema}");
+    let result = (|| -> Result<(), TestError> {
+        let cipher = cipher()?;
+        prepare_postgres(&url, &cipher)?;
+        let runtime = tokio::runtime::Runtime::new()?;
+        let store = runtime.block_on(Store::connect_postgres(url.clone(), cipher.clone()))?;
+        let fixture = runtime.block_on(fixture(&store))?;
+        let mut connection = AsyncConnectionWrapper::<AsyncPgConnection>::establish(&url)?;
+        preserving_upgrade!(&mut connection, POSTGRES_MIGRATIONS);
+        prepare_postgres(&url, &cipher)?;
+        assert_eq!(
+            runtime
+                .block_on(store.agent(&fixture.owner.digest(), &fixture.agent.id, fixture.now))?
+                .id,
+            fixture.agent.id
+        );
+        runtime.block_on(exercise(&store, &fixture))?;
+        assert!(
+            connection
+                .revert_last_migration(POSTGRES_MIGRATIONS)
+                .is_err()
+        );
+        Ok(())
+    })();
+    let cleanup = control.batch_execute(&format!("DROP SCHEMA {schema} CASCADE"));
+    support::combine(result, cleanup.map_err(Into::into)).map(|_| ())
+}

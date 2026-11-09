@@ -17,6 +17,7 @@
 mod agent_profile;
 mod computer;
 mod computer_resource;
+mod conversation;
 mod display;
 mod email;
 mod handle;
@@ -35,6 +36,10 @@ pub use computer_resource::{
     DockerContainerId, DockerDaemonId, DockerVolumeIdentity, InvalidNativeResource, KubernetesUid,
     ManagedResourceKind, NativeAllocation, NativeAllocationWitness, NativeIdentity,
     NativeReservation, NativeScope, ProviderKind, ProviderSubstrate, ResourceRole,
+};
+pub use conversation::{
+    ConversationSource, ConversationTarget, ConversationText, EventOccurrenceId, ExistingCodexPath,
+    HarnessSupply, InvalidConversationValue, NativeConversationId, SnapshotId, SourcePosition,
 };
 pub use display::{DisplayPatch, DisplaySettings, InvalidDisplaySettings};
 pub use email::{EmailAddress, InvalidEmail};

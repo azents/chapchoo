@@ -7,6 +7,7 @@ mod component_keys;
 mod computer_executions;
 mod computers;
 mod connector_keys;
+mod conversations;
 mod creation_results;
 mod delivery;
 mod directory;
@@ -42,6 +43,11 @@ pub use computers::{
 };
 pub use connector_keys::{
     ConnectorIdentity, ConnectorSessionDraft, ConnectorSessionResult, ConnectorSource,
+};
+pub use conversations::{
+    AcceptConversationInput, CapturedEventPair, ConversationInputReceipt, ConversationSummary,
+    EventChunkRead, EventMetadataRead, EventPairMetadata, EventPayloadChunk, EventPayloadKind,
+    HarnessSupplyReceipt, HarnessSupplySelection, SaveHarnessSupply, SourceBinding,
 };
 pub use creation_results::AgentCreationResult;
 pub use delivery::{DeliveryComputer, DeliveryExecution, DeliverySnapshot};

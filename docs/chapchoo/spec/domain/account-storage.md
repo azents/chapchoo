@@ -11,6 +11,9 @@ The Store owns durable account identities, schema preparation and installation k
 The persistence library exposes explicit preparation/readiness and completed
 account/team/session operations with owned asynchronous pool leases. The
 [RPC and operator composition](account-rpc.md) calls these library boundaries.
+The [conversation storage foundation](conversation-storage.md) adds private
+Agent supply, accepted text and source-bound event pairs through internal Store
+operations; it does not register a public conversation service or launch Codex.
 
 Preparation embeds separate SQLite/PostgreSQL migrations. PostgreSQL stores
 native Team-kind, membership-role, grant-kind and invitation-status enums;

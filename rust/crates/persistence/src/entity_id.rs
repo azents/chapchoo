@@ -42,6 +42,8 @@ pub(crate) enum EntityKind {
     ProfileImage,
     Authentication,
     AuthenticationAttempt,
+    Conversation,
+    ConversationOperation,
 }
 
 impl EntityKind {
@@ -63,6 +65,8 @@ impl EntityKind {
             Self::ProfileImage => "PI",
             Self::Authentication => "HA",
             Self::AuthenticationAttempt => "HD",
+            Self::Conversation => "CV",
+            Self::ConversationOperation => "CO",
         }
     }
 }
@@ -161,7 +165,7 @@ mod tests {
         id: EntityId,
     }
 
-    const KINDS: [EntityKind; 16] = [
+    const KINDS: [EntityKind; 18] = [
         EntityKind::User,
         EntityKind::Team,
         EntityKind::Agent,
@@ -178,6 +182,8 @@ mod tests {
         EntityKind::ProfileImage,
         EntityKind::Authentication,
         EntityKind::AuthenticationAttempt,
+        EntityKind::Conversation,
+        EntityKind::ConversationOperation,
     ];
 
     #[test]
