@@ -354,6 +354,7 @@ pub(super) async fn exercise(
             .ordinal(),
         6
     );
+    append_reads_finish(store, f, conversation, snapshot).await?;
     let current = store
         .current_conversation(&f.owner.digest(), &f.agent.id, f.now)
         .await?
@@ -446,6 +447,28 @@ pub(super) async fn exercise(
         )],
     )
     .await?;
+    assert!(matches!(
+        store
+            .conversation_field_chunk(
+                &f.owner.digest(),
+                &ConversationFieldChunkRead {
+                    record: ConversationFieldRead {
+                        agent_id: &f.agent.id,
+                        conversation_id: conversation,
+                        snapshot: &replacement,
+                        kind: Kind::Assistant,
+                        native_id: "append-stream",
+                    },
+                    field: Field::Content,
+                    updated_ordinal: 29,
+                    offset: 0,
+                    length: 32768,
+                },
+                f.now
+            )
+            .await,
+        Err(StoreError::Conflict)
+    ));
     tool_io(store, f, conversation, &replacement).await?;
     Ok(())
 }
@@ -556,5 +579,163 @@ async fn tool_io(
         .await?;
     assert!(cleared.bytes.is_empty());
     assert_eq!(cleared.total_bytes, 0);
+    Ok(())
+}
+
+async fn append_reads_finish(
+    store: &Store,
+    f: &Fixture,
+    conversation: &str,
+    snapshot: &SnapshotId,
+) -> Result<(), TestError> {
+    let actor = f.owner.digest();
+    let record = || ConversationFieldRead {
+        agent_id: &f.agent.id,
+        conversation_id: conversation,
+        snapshot,
+        kind: Kind::Assistant,
+        native_id: "append-stream",
+    };
+    let read = |ordinal, offset| ConversationFieldChunkRead {
+        record: record(),
+        field: Field::Content,
+        updated_ordinal: ordinal,
+        offset,
+        length: 32768,
+    };
+    let mut running = "한글\0complete body ".repeat(8_000).into_bytes();
+    assert!(running.len() > 2 * 32768);
+    ingest(
+        store,
+        f,
+        conversation,
+        snapshot,
+        7,
+        &[update(
+            Kind::Assistant,
+            "append-stream",
+            Change::Replace(running.clone()),
+        )],
+    )
+    .await?;
+    for next in 8..28 {
+        let metadata = store
+            .conversation_fields(&actor, &record(), f.now)
+            .await?
+            .into_iter()
+            .find(|field| field.field == Field::Content)
+            .ok_or("Missing body metadata")?;
+        let expected = running.clone();
+        let first = store
+            .conversation_field_chunk(&actor, &read(metadata.updated_ordinal, 0), f.now)
+            .await?;
+        assert_eq!(first.bytes.len(), 32768);
+        let delta = format!(" next-{next}\0").into_bytes();
+        ingest(
+            store,
+            f,
+            conversation,
+            snapshot,
+            next,
+            &[update(
+                Kind::Assistant,
+                "append-stream",
+                Change::Append(delta.clone()),
+            )],
+        )
+        .await?;
+        running.extend(delta);
+        let mut complete = first.bytes;
+        while complete.len() < expected.len() {
+            let piece = store
+                .conversation_field_chunk(
+                    &actor,
+                    &read(metadata.updated_ordinal, u32::try_from(complete.len())?),
+                    f.now,
+                )
+                .await?;
+            assert_eq!(piece.total_bytes, metadata.bytes);
+            assert!(!piece.bytes.is_empty() && piece.bytes.len() <= 32768);
+            complete.extend(piece.bytes);
+        }
+        let end = store
+            .conversation_field_chunk(
+                &actor,
+                &read(metadata.updated_ordinal, u32::try_from(complete.len())?),
+                f.now,
+            )
+            .await?;
+        assert!(end.bytes.is_empty());
+        assert_eq!(end.total_bytes, i64::try_from(expected.len())?);
+        assert_eq!(
+            complete, expected,
+            "Append invalidated a complete prior body extent"
+        );
+    }
+    assert!(matches!(
+        store
+            .conversation_field_chunk(&actor, &read(27, u32::try_from(running.len() + 1)?), f.now)
+            .await,
+        Err(StoreError::InvalidInput)
+    ));
+    assert!(matches!(
+        store
+            .conversation_field_chunk(&f.other.digest(), &read(27, 0), f.now)
+            .await,
+        Err(StoreError::NotFound)
+    ));
+    assert!(matches!(
+        store
+            .conversation_field_chunk(&actor, &read(999, 0), f.now)
+            .await,
+        Err(StoreError::Conflict)
+    ));
+    let first = store
+        .conversation_field_chunk(&actor, &read(27, 0), f.now)
+        .await?;
+    assert_eq!(first.bytes.len(), 32768);
+    ingest(
+        store,
+        f,
+        conversation,
+        snapshot,
+        28,
+        &[update(
+            Kind::Assistant,
+            "append-stream",
+            Change::Replace(b"replacement".to_vec()),
+        )],
+    )
+    .await?;
+    assert!(matches!(
+        store
+            .conversation_field_chunk(&actor, &read(27, 32768), f.now)
+            .await,
+        Err(StoreError::Conflict)
+    ));
+    ingest(
+        store,
+        f,
+        conversation,
+        snapshot,
+        29,
+        &[update(
+            Kind::Assistant,
+            "append-stream",
+            Change::Replace(Vec::new()),
+        )],
+    )
+    .await?;
+    assert!(matches!(
+        store
+            .conversation_field_chunk(&actor, &read(28, 0), f.now)
+            .await,
+        Err(StoreError::Conflict)
+    ));
+    let empty = store
+        .conversation_field_chunk(&actor, &read(29, 0), f.now)
+        .await?;
+    assert!(empty.bytes.is_empty());
+    assert_eq!(empty.total_bytes, 0);
     Ok(())
 }

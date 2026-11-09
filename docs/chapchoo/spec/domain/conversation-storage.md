@@ -135,8 +135,9 @@ Owner record regions return at most 25 typed metadata entries, newest first,
 with an explicit older-record anchor. Field metadata identifies the field update
 and complete byte length; body continuations read at most 32 KiB, preserving
 newline-delimited normalized values and explicitly cleared empty fields. A
-continuation binds the same source snapshot, record and field update. A changed
-source/content identity conflicts rather than mixing two bodies. Neither the
+continuation binds the same source snapshot, record and captured field extent.
+Later appends preserve that finite body view; replacement or source changes
+conflict rather than mixing two bodies. Neither the
 raw captured RPC envelope nor a durable browser feed is exposed by these APIs.
 
 Setup has separate durable possible-forwarding and outcome facts, available
@@ -304,8 +305,14 @@ measured latency.
 Normalized region reads return at most 25 metadata records using first-seen
 keyset anchors. Per-record fields are separately bounded by the supported field
 set. Content continuations read at most 32 KiB and bind the exact snapshot,
-record/field and last content-update ordinal; source/content change fails the
-continuation. Content identity is not a durable browser event cursor. Owner
+record/field and an existing captured ordinal. The current-body extent index
+records the server-derived byte end at each append in the same ingestion
+transaction. A read finishes at its observed end even while later appends arrive.
+Replace/clear removes earlier extents, and source replacement cascades them;
+those changed body identities fail continuation rather than mixing bytes.
+Only current body bytes are retained by this projection, not an archive of
+replaced bodies. Extents reuse captured ordinals, not a new revision counter,
+reader token, authorization grant or durable browser event cursor. Owner
 admission holds the existing Computer authority lock while these coherent reads
 complete, serializing source mutations without changing global isolation.
 
@@ -327,8 +334,12 @@ source pairs or accepted inputs. Migration 16 extends the typed projection field
 set for tool input/output. SQLite copies all existing identities, bytes and update
 ordinals transactionally into the extended constraint; PostgreSQL changes only
 the check constraint. Both downgrade paths refuse retained new tool fields.
+Migration 18 adds/backfills the derived current-body extent index from existing
+field bytes and update ordinals without rewriting those values. Its downgrade
+removes only that index, leaving every original field byte and ordinal intact.
 [Explicit preparation/readiness](account-storage.md) includes the new migration
-and product-table binding checks. Downgrade rejects any retained new state.
+and product-table binding checks. Downgrades reject loss of original new facts;
+derived extent metadata can be removed without discarding their underlying bytes.
 Agent removal cascades its owned conversation/supply rows through foreign keys.
 Source replacement is narrower and cannot erase saved supply or credentials.
 

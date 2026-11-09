@@ -138,6 +138,12 @@ macro_rules! project_records {
                 diesel::sql_query($dialect.query(&query)).bind::<IdentitySql,_>($id)
                     .bind::<Text,_>(record.kind.database()).bind::<Text,_>(&record.native_id).bind::<Text,_>(field.field.database())
                     .bind::<Binary,_>(bytes).bind::<BigInt,_>($pair.position.ordinal()).execute($connection).await?;
+                if !append {
+                    diesel::sql_query($dialect.query("DELETE FROM conversation_field_extents WHERE conversation_id=? AND record_kind=? AND native_id=? AND field_name=?"))
+                        .bind::<IdentitySql,_>($id).bind::<Text,_>(record.kind.database()).bind::<Text,_>(&record.native_id).bind::<Text,_>(field.field.database()).execute($connection).await?;
+                }
+                diesel::sql_query($dialect.query("INSERT INTO conversation_field_extents(conversation_id,record_kind,native_id,field_name,ordinal,total_bytes) SELECT conversation_id,record_kind,native_id,field_name,updated_ordinal,CAST(length(content) AS BIGINT) FROM conversation_record_fields WHERE conversation_id=? AND record_kind=? AND native_id=? AND field_name=?"))
+                    .bind::<IdentitySql,_>($id).bind::<Text,_>(record.kind.database()).bind::<Text,_>(&record.native_id).bind::<Text,_>(field.field.database()).execute($connection).await?;
             }
         }
     }};
@@ -230,8 +236,8 @@ impl Store {
             if row.source_snapshot.as_deref() != Some(read.snapshot.as_str()) {
                 return Err(StoreError::Conflict);
             }
-            let rows=diesel::sql_query(dialect.query("SELECT field_name,updated_ordinal,CAST(length(content) AS BIGINT) AS bytes FROM conversation_record_fields WHERE conversation_id=? AND record_kind=? AND native_id=? ORDER BY field_name"))
-                .bind::<IdentitySql,_>(id).bind::<Text,_>(read.kind.database()).bind::<Text,_>(read.native_id).load::<FieldRow>(connection).await?;
+            let rows=diesel::sql_query(dialect.query("SELECT f.field_name,f.updated_ordinal,CAST(length(f.content) AS BIGINT) AS bytes FROM conversation_record_fields f JOIN conversation_records r USING(conversation_id,record_kind,native_id) WHERE f.conversation_id=? AND f.record_kind=? AND f.native_id=? AND r.source_snapshot=? ORDER BY f.field_name"))
+                .bind::<IdentitySql,_>(id).bind::<Text,_>(read.kind.database()).bind::<Text,_>(read.native_id).bind::<Text,_>(read.snapshot.as_str()).load::<FieldRow>(connection).await?;
             rows.into_iter()
                 .map(|r| {
                     Ok(ConversationFieldMetadata {
@@ -243,7 +249,8 @@ impl Store {
                 .collect()
         })
     }
-    /// Bind every chunk to the same source and last content update, never mix bodies.
+    /// Read a complete body extent at one captured ordinal despite later appends.
+    /// Replacement deletes its old extent; source and owner admission remain current.
     pub async fn conversation_field_chunk(
         &self,
         actor: &SecretDigest,
@@ -261,6 +268,8 @@ impl Store {
             bytes: Option<Vec<u8>>,
             #[diesel(sql_type=BigInt)]
             total_bytes: i64,
+            #[diesel(sql_type=BigInt)]
+            current_bytes: i64,
         }
         operation!(self, |connection, dialect| {
             let _ = owned_agent!(connection, dialect, actor, agent, now);
@@ -273,10 +282,10 @@ impl Store {
             }
             let query = match dialect {
                 Dialect::Postgres => {
-                    "SELECT substring(content FROM ? FOR ?) AS bytes,CAST(length(content) AS BIGINT) AS total_bytes FROM conversation_record_fields WHERE conversation_id=? AND record_kind=? AND native_id=? AND field_name=? AND updated_ordinal=?"
+                    "SELECT substring(f.content FROM ? FOR ?) AS bytes,e.total_bytes,CAST(length(f.content) AS BIGINT) AS current_bytes FROM conversation_record_fields f JOIN conversation_field_extents e USING(conversation_id,record_kind,native_id,field_name) JOIN conversation_records r USING(conversation_id,record_kind,native_id) WHERE f.conversation_id=? AND f.record_kind=? AND f.native_id=? AND f.field_name=? AND e.ordinal=? AND r.source_snapshot=?"
                 }
                 Dialect::Sqlite => {
-                    "SELECT substr(content,?,?) AS bytes,CAST(length(content) AS BIGINT) AS total_bytes FROM conversation_record_fields WHERE conversation_id=? AND record_kind=? AND native_id=? AND field_name=? AND updated_ordinal=?"
+                    "SELECT substr(f.content,?,?) AS bytes,e.total_bytes,CAST(length(f.content) AS BIGINT) AS current_bytes FROM conversation_record_fields f JOIN conversation_field_extents e USING(conversation_id,record_kind,native_id,field_name) JOIN conversation_records r USING(conversation_id,record_kind,native_id) WHERE f.conversation_id=? AND f.record_kind=? AND f.native_id=? AND f.field_name=? AND e.ordinal=? AND r.source_snapshot=?"
                 }
             };
             let offset = i32::try_from(read.offset)
@@ -292,20 +301,31 @@ impl Store {
                 .bind::<Text, _>(read.record.native_id)
                 .bind::<Text, _>(read.field.database())
                 .bind::<BigInt, _>(read.updated_ordinal)
+                .bind::<Text, _>(read.record.snapshot.as_str())
                 .get_result::<Chunk>(connection)
                 .await
                 .optional()?
                 .ok_or(StoreError::Conflict)?;
+            if chunk.total_bytes < 0 || chunk.current_bytes < chunk.total_bytes {
+                return Err(StoreError::Integrity);
+            }
             if i64::from(read.offset) > chunk.total_bytes {
                 return Err(StoreError::InvalidInput);
             }
-            let bytes = if i64::from(read.offset) == chunk.total_bytes {
-                // SQLite's empty computed BLOB is represented by a null data
-                // pointer. Only an exactly empty suffix permits empty decoding.
-                chunk.bytes.unwrap_or_default()
+            let remaining = usize::try_from(chunk.total_bytes - i64::from(read.offset))
+                .map_err(|_| StoreError::Integrity)?;
+            let expected =
+                remaining.min(usize::try_from(read.length).map_err(|_| StoreError::InvalidInput)?);
+            let mut bytes = if expected == 0 {
+                Vec::new()
             } else {
                 chunk.bytes.ok_or(StoreError::Integrity)?
             };
+            if bytes.len() < expected {
+                return Err(StoreError::Integrity);
+            }
+            // Later appended bytes are outside this complete, server-derived extent.
+            bytes.truncate(expected);
             Ok(EventPayloadChunk {
                 bytes,
                 offset: read.offset,

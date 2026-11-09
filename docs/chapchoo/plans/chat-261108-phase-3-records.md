@@ -275,3 +275,31 @@ rollback with new tool fields and verify independent input/output clear semantic
 Historical downgrade tests now target their original migration explicitly rather
 than assuming a fixed number of latest migrations. Generated clients and document
 metadata are synchronized; mandatory commit hooks remain required before push.
+
+## M10 current-body continuation correction
+
+The same reviewer classified the deterministic append-between-chunks failure as
+a remaining P2 for REQ-3/11 and M10. Complete reads must finish under subsequent
+appends; a limitation note is not a substitute.
+
+Keep the current normalized BLOB as the sole byte projection and add a derived
+current-body extent index keyed by the existing captured field ordinal. In the
+same ingestion transaction, Append retains earlier byte ends and records its new
+end; Replace/clear deletes earlier ends before recording the new body. Source
+replacement cascades the field and its extent metadata. Chunk reads use the
+server-derived end at their existing source/body identity, not the latest end or
+an untrusted client length. Every continuation retains owner/Team/source checks
+and the 32-KiB wire bound. No replaced-body archive, new revision counter, reader
+token, long-lived authentication, database transaction or feed is introduced.
+
+Preserving paired migration 18 adds/backfills only this derived index from
+existing field bytes and ordinals; historical migrations and bytes remain
+unchanged. Phase 5 will assemble the coherent metadata view it initially read,
+advance known-record hints to the maximum observed field ordinal, and preserve
+the final source check without rejecting a later append. Replacement/source
+changes must still reject affected continuations.
+
+Primary owns both-engine repeated append-between-chunks regression, replacement/
+clear/source/authorization/empty-suffix checks, preserving migration checks,
+affected full gates and hooks, stack propagation and the same reviewer's targeted
+re-review after integration. Design delta: None.

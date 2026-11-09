@@ -955,6 +955,25 @@ macro_rules! preserving_tool_io_upgrade {
     }};
 }
 
+macro_rules! preserving_extent_upgrade {
+    ($connection:expr,$migrations:expr) => {{
+        let connection = &mut *$connection;
+        while connection.applied_migrations()?.iter().any(|version| version.to_string().as_str() > "00000000000018") {
+            connection.revert_last_migration($migrations)?;
+        }
+        let query="SELECT record_kind || ':' || native_id || ':' || field_name || ':' || CAST(updated_ordinal AS TEXT) AS metadata, content AS bytes FROM conversation_record_fields ORDER BY conversation_id,record_kind,native_id,field_name";
+        let retained=diesel::sql_query(query).load::<RetainedProjectedField>(connection)?;
+        assert!(!retained.is_empty());
+        connection.revert_last_migration($migrations)?;
+        assert!(retained==diesel::sql_query(query).load::<RetainedProjectedField>(connection)?, "Extent downgrade changed original field bytes/ordinals");
+        connection.run_pending_migrations($migrations)?;
+        assert!(retained==diesel::sql_query(query).load::<RetainedProjectedField>(connection)?, "Extent upgrade changed original field bytes/ordinals");
+        #[derive(diesel::QueryableByName)]
+        struct InvalidExtents { #[diesel(sql_type=diesel::sql_types::BigInt)] n: i64 }
+        assert_eq!(diesel::sql_query("SELECT count(*) AS n FROM conversation_record_fields f LEFT JOIN conversation_field_extents e USING(conversation_id,record_kind,native_id,field_name) WHERE e.ordinal IS NULL OR e.ordinal<>f.updated_ordinal OR e.total_bytes<>length(f.content)").get_result::<InvalidExtents>(connection)?.n,0);
+    }};
+}
+
 #[test]
 fn sqlite_conversation_operations_and_preserving_downgrade_guard() -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
@@ -975,6 +994,7 @@ fn sqlite_conversation_operations_and_preserving_downgrade_guard() -> Result<(),
         fixture.agent.id
     );
     runtime.block_on(exercise(&store, &fixture))?;
+    preserving_extent_upgrade!(&mut connection, SQLITE_MIGRATIONS);
     preserving_tool_io_upgrade!(&mut connection, SQLITE_MIGRATIONS);
     Ok(())
 }
@@ -1007,6 +1027,7 @@ fn postgres_conversation_operations_and_preserving_downgrade_guard() -> Result<(
             fixture.agent.id
         );
         runtime.block_on(exercise(&store, &fixture))?;
+        preserving_extent_upgrade!(&mut connection, POSTGRES_MIGRATIONS);
         preserving_tool_io_upgrade!(&mut connection, POSTGRES_MIGRATIONS);
         runtime.block_on(source_write_holds_control_lock(&store, &fixture, &url))?;
         while connection
