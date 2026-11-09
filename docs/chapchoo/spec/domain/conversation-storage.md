@@ -51,7 +51,9 @@ Source mutations admit the current Connector credential, exact Control/connectio
 non-draining live Control, unrevoked session, unretired current execution and
 Computer. The Agent must belong to that Computer and its owner must still have
 Team membership. Row locking and fresh source reads fence mutations that completed
-while admission waited; a detached earlier connection is not authority.
+while admission waited; a detached earlier connection is not authority. The
+Control's shared row lock remains held through commit, so a concurrent drain
+cannot withdraw that authority before the source operation finishes.
 
 Initial source binding preserves the input that initiated setup. A different
 snapshot must name the expected previous snapshot and retain the same bound

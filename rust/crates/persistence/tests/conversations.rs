@@ -771,6 +771,104 @@ struct RetainedBytes {
     bytes: Vec<u8>,
 }
 
+#[derive(diesel::QueryableByName)]
+struct BackendPid {
+    #[diesel(sql_type=diesel::sql_types::Integer)]
+    pid: i32,
+}
+#[derive(diesel::QueryableByName)]
+struct LockWait {
+    #[diesel(sql_type=diesel::sql_types::Bool)]
+    blocked: bool,
+}
+
+async fn source_write_holds_control_lock(
+    store: &Store,
+    fixture: &Fixture,
+    url: &str,
+) -> Result<(), TestError> {
+    use diesel_async::{AsyncConnection, SimpleAsyncConnection};
+    let key = fixture.connector.digest();
+    let prepared = store
+        .prepare_connector_connection(&fixture.session, &key, &fixture.control)
+        .await?;
+    store
+        .admit_connector_connection(
+            &fixture.session,
+            &key,
+            prepared.expected.as_ref(),
+            &prepared.owner,
+            DirectoryPolicy::default(),
+        )
+        .await?;
+    let current = store
+        .current_conversation(&fixture.owner.digest(), &fixture.agent.id, fixture.now)
+        .await?
+        .ok_or("Missing conversation for lock regression")?;
+    let binding = SourceBinding {
+        conversation_id: current.id,
+        expected_previous: current.source.snapshot().cloned(),
+        snapshot: snapshot("control-lock-proof")?,
+        native_session: current.native_session_id.ok_or("Missing native context")?,
+    };
+    let mut blocker = AsyncPgConnection::establish(url).await?;
+    let pid: BackendPid = diesel_async::RunQueryDsl::get_result(
+        diesel::sql_query("SELECT pg_backend_pid() AS pid"),
+        &mut blocker,
+    )
+    .await?;
+    blocker.batch_execute("BEGIN; SELECT c.id FROM conversations c JOIN agents a ON a.id=c.agent_id WHERE a.handle='chat-fixture' FOR UPDATE OF c").await?;
+    let store = store.clone();
+    let session = fixture.session.clone();
+    let control = fixture.control.clone();
+    let connection = prepared.owner.connection_id;
+    let writer = tokio::spawn(async move {
+        store
+            .bind_conversation_source(
+                &ConnectorSource {
+                    session_id: &session,
+                    control_id: &control,
+                    connection_id: &connection,
+                    credential: &key,
+                },
+                &binding,
+            )
+            .await
+    });
+    let mut observer = AsyncPgConnection::establish(url).await?;
+    // An authoritative database lock witness, not a sleep or scheduling guess.
+    let queued=tokio::time::timeout(std::time::Duration::from_secs(5),async {
+        loop {
+            let blocked:LockWait=diesel_async::RunQueryDsl::get_result(
+                diesel::sql_query("SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid))) AS blocked")
+                    .bind::<diesel::sql_types::Integer,_>(pid.pid),&mut observer,
+            ).await?;
+            if blocked.blocked { return Ok::<(),TestError>(()); }
+        }
+    }).await;
+    // drain_control requires this same exclusive row lock. NOWAIT gives a
+    // deterministic observation while the source writer waits on its final row.
+    let probe=observer.batch_execute("SELECT id FROM control_instances WHERE endpoint='http://127.0.0.1:1' FOR UPDATE NOWAIT").await;
+    let release = blocker.batch_execute("ROLLBACK").await;
+    let completed = writer.await;
+    let queued = queued
+        .map_err(|_| TestError::from("Source write never reached its locked conversation row"))
+        .and_then(|result| result);
+    let validation = support::combine(queued, release.map_err(Into::into)).map(|_| ());
+    let completed = completed
+        .map_err(TestError::from)
+        .and_then(|result| result.map_err(Into::into))
+        .map(|_| ());
+    support::combine(validation, completed)?;
+    assert!(
+        probe.as_ref().is_err_and(|error| error
+            .to_string()
+            .contains("could not obtain lock on row in relation \"control_instances\"")),
+        "Source write did not retain Control authority until commit: {probe:?}"
+    );
+    Ok(())
+}
+
 macro_rules! preserving_upgrade {
     ($connection:expr,$migrations:expr) => {{
         let connection=&mut *$connection;
@@ -841,6 +939,7 @@ fn postgres_conversation_operations_and_preserving_downgrade_guard() -> Result<(
             fixture.agent.id
         );
         runtime.block_on(exercise(&store, &fixture))?;
+        runtime.block_on(source_write_holds_control_lock(&store, &fixture, &url))?;
         assert!(
             connection
                 .revert_last_migration(POSTGRES_MIGRATIONS)

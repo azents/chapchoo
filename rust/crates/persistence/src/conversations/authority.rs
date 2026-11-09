@@ -119,6 +119,9 @@ macro_rules! connector {
             .await
             .optional()?
             .ok_or(StoreError::Unauthenticated)?;
+        // Keep Control withdrawal ordered after this completed source operation,
+        // rather than merely observing its draining flag before the final write.
+        let _ = $crate::directory::live_control!($connection, $dialect, source.control_id);
         let row = diesel::sql_query($dialect.query(CONNECTOR_QUERY))
             .bind::<IdentitySql, _>(EntityId::from_dto(
                 EntityKind::ConnectorSession,
