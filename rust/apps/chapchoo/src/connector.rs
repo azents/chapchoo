@@ -56,6 +56,46 @@ pub async fn run(
     session_id: String,
     initial_key: BearerSecret,
     stop: CancellationToken,
+    native: chapchoo_harness::NativeOwner,
+) -> Result<(), AppError> {
+    // This owner survives every operational key/stream replacement. Reads and
+    // connectivity do not start native work; source-qualified commands do later.
+    let primary = reconnect(endpoint_url, session_id, initial_key, stop, &native).await;
+    let cleanup = native.finish().await;
+    match (primary, cleanup) {
+        (Err(primary), Err(cleanup)) => Err(ConnectorCleanupFailure { primary, cleanup }.into()),
+        (Err(primary), Ok(_)) => Err(primary),
+        (Ok(()), Err(cleanup)) => Err(cleanup.into()),
+        (Ok(()), Ok(_)) => Ok(()),
+    }
+}
+struct ConnectorCleanupFailure {
+    primary: AppError,
+    cleanup: chapchoo_harness::Error,
+}
+impl std::fmt::Debug for ConnectorCleanupFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ConnectorCleanupFailure")
+            .field("cleanup", &self.cleanup)
+            .finish_non_exhaustive()
+    }
+}
+impl std::fmt::Display for ConnectorCleanupFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Connector failed and native retirement is unconfirmed")
+    }
+}
+impl std::error::Error for ConnectorCleanupFailure {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(self.primary.as_ref())
+    }
+}
+async fn reconnect(
+    endpoint_url: &str,
+    session_id: String,
+    initial_key: BearerSecret,
+    stop: CancellationToken,
+    _native: &chapchoo_harness::NativeOwner,
 ) -> Result<(), AppError> {
     let channel = endpoint(endpoint_url)?.connect_lazy();
     let mut authentication = ConnectorAuthenticationClient::new(channel.clone())

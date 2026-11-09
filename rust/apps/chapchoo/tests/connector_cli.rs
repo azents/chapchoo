@@ -177,6 +177,7 @@ async fn connector_process_exchanges_connects_and_observes_independently_of_prov
                 .env_clear()
                 .env("CHAPCHOO_CONTROL_ENDPOINT", &endpoint)
                 .env("CHAPCHOO_CONNECTOR_SESSION_ID", &session.id)
+                .env("CHAPCHOO_COMPUTER_SAVED_ROOT", dir.path())
                 .env(
                     "CHAPCHOO_CONNECTOR_INITIAL_KEY",
                     session.initial_key.expose(),

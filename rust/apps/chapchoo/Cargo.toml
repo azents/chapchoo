@@ -17,6 +17,7 @@ chapchoo-openai-auth.workspace = true
 chapchoo-protocol.workspace = true
 chapchoo-kubernetes.workspace = true
 chapchoo-docker.workspace = true
+chapchoo-harness.workspace = true
 prost-types.workspace = true
 clap.workspace = true
 tokio = { workspace = true, features = ["fs"] }

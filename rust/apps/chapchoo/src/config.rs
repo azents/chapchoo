@@ -177,6 +177,8 @@ pub struct ConnectorOptions {
     pub endpoint: String,
     #[arg(long, env = "CHAPCHOO_CONNECTOR_SESSION_ID")]
     pub session_id: String,
+    #[arg(long, env = "CHAPCHOO_COMPUTER_SAVED_ROOT")]
+    pub saved_root: PathBuf,
 }
 pub fn connector_initial_key() -> Result<BearerSecret, ConfigError> {
     BearerSecret::parse(required("CHAPCHOO_CONNECTOR_INITIAL_KEY")?)

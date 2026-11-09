@@ -538,13 +538,20 @@ async fn pod_creation_is_last_and_uses_the_verified_independent_pvc_and_bootstra
         valid["metadata"]["uid"] = json!("created");
         valid
     };
-    for container_override in [false, true] {
+    for profile_override in 0..4 {
         let mut insecure = valid.clone();
-        if container_override {
-            insecure["spec"]["containers"][0]["securityContext"]["seccompProfile"] =
-                json!({"type":"Unconfined"});
-        } else {
-            insecure["spec"]["securityContext"]["seccompProfile"] = json!({"type":"Unconfined"});
+        match profile_override {
+            0 => {
+                insecure["spec"]["containers"][0]["securityContext"]["seccompProfile"] =
+                    json!({"type":"Unconfined"})
+            }
+            1 => {
+                insecure["spec"]["securityContext"]["seccompProfile"] = json!({"type":"Unconfined"})
+            }
+            2 => insecure["spec"]["shareProcessNamespace"] = json!(true),
+            _ => {
+                insecure["spec"]["containers"][0]["env"][3]["value"] = json!("/another-saved-root")
+            }
         }
         let (api, calls) = fixture(vec![
             reply(

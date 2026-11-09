@@ -130,7 +130,16 @@ async fn execute(cli: Cli) -> Result<(), AppError> {
             let initial = config::connector_initial_key()?;
             let stop = tokio_util::sync::CancellationToken::new();
             let mut signal = runtime::Termination::new()?;
-            let task = connector::run(&options.endpoint, options.session_id, initial, stop.clone());
+            let native = chapchoo_harness::NativeOwner::new(
+                chapchoo_harness::NativeStorage::open(&options.saved_root)?,
+            )?;
+            let task = connector::run(
+                &options.endpoint,
+                options.session_id,
+                initial,
+                stop.clone(),
+                native,
+            );
             tokio::pin!(task);
             tokio::select! {
                 result=&mut task=>result?,

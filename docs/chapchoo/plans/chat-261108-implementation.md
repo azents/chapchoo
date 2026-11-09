@@ -43,6 +43,13 @@ PR titles use `Codex conversation [n/6]: <phase>`. Root owns all implementation,
 integration and validation. The one reviewer examines each complete stable phase
 diff against its phase contract and the approved baseline, not isolated fragments.
 
+Execution timing follows the requester's latest instruction: implement and open
+all six phase PRs before inspecting remote CI, requesting further independent
+reviews, or inspecting/responding to automated reviews. Local checks and commit
+hooks remain mandatory. After the complete stack exists, review each integrated
+phase with the assigned reviewer, inspect final-SHA CI and address valid findings
+on the responsible branch with dependent rebases. Do not merge or deploy.
+
 ## Data, Interfaces and Removal Obligations
 
 - Preserve existing User/Team/Agent/Computer/authentication identities and accepted
@@ -94,15 +101,16 @@ Install locked pnpm packages when needed, not arbitrary manifests.
   live checks pending until the requester can sign in. Do not request passwords/tokens
   in chat, extract ambient credentials or weaken security to make a test run.
   No CI fixture pass certifies a real model call.
-- Each new PR SHA gets CI and review monitoring; valid findings are corrected by
-  root. Resolve addressed automatic review threads, not arbitrary human threads.
+- After all phase PRs exist, inspect every current PR SHA's CI and reviews;
+  root corrects valid findings and resolves addressed automatic review threads,
+  not arbitrary human threads.
 
 ## Checkpoints, Rollout and Cleanup
 
 Each phase plan records branch/base, exact scope, changed contracts, tests and
 remaining gates. Recheck both missing approved work and unauthorized additions at
 phase boundaries. Required contracts/fixtures for the next phase may be prepared
-while CI runs, but do not start that phase before the current PR exists.
+without inspecting remote CI, but do not start that phase before the current PR exists.
 
 Current-system Spec pages describe only activated implementation. The final
 promotion covers Agent ownership, account/conversation storage, Control,

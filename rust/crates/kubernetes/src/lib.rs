@@ -438,7 +438,7 @@ impl Kubernetes {
         if pod.uid.is_some() {
             return Err(Error::Ownership);
         }
-        let environment = [
+        let mut environment: Vec<EnvVar> = [
             ("CHAPCHOO_CONNECTOR_SESSION_ID", "session-id"),
             ("CHAPCHOO_CONNECTOR_INITIAL_KEY", "initial-key"),
             ("CHAPCHOO_CONTROL_ENDPOINT", "control-endpoint"),
@@ -457,12 +457,18 @@ impl Kubernetes {
             ..Default::default()
         })
         .collect();
+        environment.push(EnvVar {
+            name: "CHAPCHOO_COMPUTER_SAVED_ROOT".into(),
+            value: Some(self.config.saved_mount.clone()),
+            ..Default::default()
+        });
         let created = Pod {
             metadata: self.metadata(computer, pod)?,
             spec: Some(PodSpec {
                 service_account_name: Some(self.config.service_account.clone()),
                 automount_service_account_token: Some(false),
                 restart_policy: Some("Always".into()),
+                share_process_namespace: Some(false),
                 security_context: Some(PodSecurityContext {
                     run_as_non_root: Some(true),
                     run_as_user: Some(10001),
@@ -548,6 +554,7 @@ impl Kubernetes {
                 .is_some_and(|v| !v.is_empty())
             || spec.host_network == Some(true)
             || spec.host_pid == Some(true)
+            || spec.share_process_namespace == Some(true)
             || spec.host_ipc == Some(true)
             || spec.restart_policy.as_deref() != Some("Always")
             || !spec.security_context.as_ref().is_some_and(|s| {
@@ -600,7 +607,12 @@ impl Kubernetes {
             return Err(Error::Ownership);
         }
         if !container.env.as_ref().is_some_and(|vars| {
-            vars.len() == 3
+            vars.len() == 4
+                && vars.iter().any(|v| {
+                    v.name == "CHAPCHOO_COMPUTER_SAVED_ROOT"
+                        && v.value.as_deref() == Some(self.config.saved_mount.as_str())
+                        && v.value_from.is_none()
+                })
                 && [
                     ("CHAPCHOO_CONNECTOR_INITIAL_KEY", "initial-key"),
                     ("CHAPCHOO_CONNECTOR_SESSION_ID", "session-id"),
