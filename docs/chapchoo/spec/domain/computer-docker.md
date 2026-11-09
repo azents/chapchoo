@@ -108,6 +108,13 @@ image/command, original saved-volume mount and immutable configuration anchor
 observations and effects. Collision recovery during Prepare compares the original
 Connector session/key/endpoint, not newly allocated bootstrap credentials.
 
+Container ownership checks require every expected reserved `chapchoo.io/` label
+and its exact allocation-witness value, and reject unexpected reserved labels.
+Ordinary metadata inherited from the image, including OCI image annotations,
+may coexist outside that namespace; it supplies no ownership or adoption
+authority. Volume labels remain an exact original map because volumes do not
+inherit image metadata. Missing or changed reserved labels block native effects.
+
 The profile uses UID:GID 10001:10001, read-only root, dropped capabilities,
 no-new-privileges, constrained daemon seccomp and bounded CPU/memory settings.
 It has private PID/IPC, no privileged mode, host binds, devices, Docker socket,
@@ -199,11 +206,15 @@ An explicitly authorized disposable socket is mandatory. The fixture selects
 the existing bridge and supplies a container-reachable fixture Control address,
 not a guest port/tunnel/host-network workaround. The product journey verifies
 non-root initial saved writes, Stop/Start with original data, successor no-copy,
-emptied saved storage across Restart, exact normal cleanup and unrelated canaries.
+emptied user storage across Restart, exact normal cleanup and unrelated canaries.
+The emptiness assertion excludes the Connector-owned `.chapchoo-native` storage
+class; the fixture removes only its own user marker and never deletes native
+context or credentials to make that assertion pass.
 The integration app invokes generated public owner RPC against actual backend/
 Control/Provider/Connector. Support uses public Docker SDK calls and bounded
-test-only exec, never a product exec API or guest Docker credentials. The browser
-suite remains unchanged; no Docker-specific UI journey or Chromium is required.
+test-only exec, never a product exec API or guest Docker credentials. This
+browser-free lifecycle lane does not require Chromium; the separate
+[conversation browser lane](acceptance.md) owns assembled native conversation UI.
 
 Missing required prerequisites fail; no synthetic fallback or skip counts as a
 real lifecycle pass. A workflow or cross-platform archive alone does not establish

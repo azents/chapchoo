@@ -151,6 +151,75 @@ async fn image_expose_metadata_is_not_host_port_publication() -> Result<(), Test
 }
 
 #[tokio::test]
+async fn inherited_image_metadata_does_not_replace_native_ownership() -> Result<(), TestError> {
+    Fixture::run(async |fixture| {
+        let docker = fixture.connect().await?;
+        let prepared = prepare(fixture, &docker).await?;
+        {
+            let mut state = fixture.state.lock().map_err(|_| "Fixture lock")?;
+            let labels = state
+                .container
+                .as_mut()
+                .and_then(|container| container.config.as_mut())
+                .and_then(|config| config.labels.as_mut())
+                .ok_or("Missing labels")?;
+            labels.insert("org.opencontainers.image.title".into(), "Chapchoo".into());
+            labels.insert("fixture.example/build".into(), "isolated".into());
+        }
+        assert!(docker.start_container(prepared).await?.running);
+        Ok(())
+    })
+    .await
+}
+
+#[tokio::test]
+async fn missing_changed_or_extra_reserved_labels_never_authorize_native_start()
+-> Result<(), TestError> {
+    for variant in 0..3 {
+        Fixture::run(async |fixture| {
+            let docker = fixture.connect().await?;
+            let prepared = prepare(fixture, &docker).await?;
+            {
+                let mut state = fixture.state.lock().map_err(|_| "Fixture lock")?;
+                let labels = state
+                    .container
+                    .as_mut()
+                    .and_then(|container| container.config.as_mut())
+                    .and_then(|config| config.labels.as_mut())
+                    .ok_or("Missing labels")?;
+                labels.insert("org.opencontainers.image.title".into(), "Chapchoo".into());
+                match variant {
+                    0 => {
+                        labels.remove("chapchoo.io/execution");
+                    }
+                    1 => {
+                        labels.insert("chapchoo.io/provider".into(), "foreign".into());
+                    }
+                    _ => {
+                        labels.insert("chapchoo.io/unknown".into(), "foreign".into());
+                    }
+                }
+            }
+            assert!(matches!(
+                docker.start_container(prepared).await,
+                Err(Error::Ownership)
+            ));
+            assert_eq!(
+                fixture
+                    .state
+                    .lock()
+                    .map_err(|_| "Fixture lock")?
+                    .container_actions,
+                ["create"]
+            );
+            Ok(())
+        })
+        .await?;
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn ambiguous_native_start_cannot_be_cleared_by_running_observation_or_old_server_fact()
 -> Result<(), TestError> {
     Fixture::run(async |fixture| {
