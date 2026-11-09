@@ -1,7 +1,7 @@
 //! Private conversation storage; no native effects or credential payloads belong here.
 
 mod answers;
-mod authority;
+pub(crate) mod authority;
 mod delivery;
 mod inputs;
 mod native_state;

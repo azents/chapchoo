@@ -12,7 +12,8 @@ try {
   process.exitCode = 75;
   return;
 }
-const child = spawn(executable, process.argv.slice(2), {
+// Initial native login and later file-only updates share this explicit store.
+const child = spawn(executable, ["-c", 'cli_auth_credentials_store="file"', ...process.argv.slice(2)], {
   stdio: "inherit",
   env: { ...process.env, CODEX_PATH: executable },
 });

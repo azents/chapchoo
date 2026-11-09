@@ -129,9 +129,148 @@ material before existing native cleanup admission. Record removal/cancellation
 invokes no external revoke endpoint. [Schema constraints](account-storage.md#external-authentication-storage-foundation)
 protect relationships and empty-only downgrade, not provider validity.
 
+## Internal central-refresh foundation
+
+The service/adapter libraries provide a source-bound central ChatGPT refresh
+operation, composed into Control's execution-only credential service and the
+Connector's actual native-start provider. Catalogue selection and ordinary
+metadata reads still do not refresh, publish files or start native work.
+
+The adapter uses the public `oauth2` refresh-grant API for request construction
+and response parsing, with the existing fixed issuer/client/token route and
+verified-TLS transport. Redirects, automatic transport retries and arbitrary
+issuers remain disabled. The body is bounded to 128 KiB before SDK parsing;
+SDK errors and vendor descriptions never enter returned error source chains.
+Definite local non-dispatch, parsed standard OAuth rejection and uncertain
+transport/malformed/unpublishable responses are separate results. Successful
+responses preserve a valid prior refresh token if its replacement is omitted.
+The admitted account remains bound and missing expiry is not invented. These
+fixture-backed contracts do not certify actual device-acquired refresh
+compatibility or native adoption.
+
+Preserving migration 14 adds one durable refresh attempt per authentication record
+and exact existing protected source nonce. It does not add a credential revision
+counter or change earlier migrations, record IDs, owner mutation identities or
+historical fingerprints. Alias-only changes do not create another credential
+source; replacement, reauthentication and successful refresh do. Current
+owner/scope checks and record locking fence admission and publication. A late
+old-source/account result cannot overwrite manual replacement or recreate a
+deleted record. Narrow failure settlement shares the record lock with publication
+and cannot publish tokens or restore authority. Catalogue deletion retains only
+its existing saved-reference checks; the refresh table cascades rather than
+adding an in-use blocker. Populated new refresh state blocks downgrade.
+
+The process-owned refresh service admits bounded external work independently of
+an abandoned consumer waiter. Concurrent consumers encounter the same durable
+attempt instead of exchanging the same source independently. An attempt still
+possible without this process's work owner is projected uncertain; server
+replacement does not grant another exchange. Completed uncertainty/rejection
+remains tied to that source until explicit owner replacement/reauthentication
+provides a new source. Fresh or unknown-expiry sources can be read internally
+without issuing a refresh. The component service below explicitly composes this
+work owner with execution admission; a metadata query does not invoke it.
+
+## Internal applied-execution boundary
+
+Completed Store operations admit a saved authentication only against an existing
+possible Setup operation and the current private Agent/Team, Connector session,
+Control route, operational key and execution. This admission is intended for
+the actual native launch boundary, not every Setup receipt. It records the
+selected record and saved selection Request identity. Repeated admission for
+that current operation recovers the same record; a new operation compares the
+previous current application before superseding it. A superseded operation
+cannot reclaim current authority or obtain another record by replay.
+
+Credential-bearing operations lock the eligible authentication record before
+final Connector/Computer admission. They then recheck the current route,
+execution, Agent authority and applied identity before returning material or
+publishing a refresh. Initial execution discovery grants no secret authority.
+This preserves the catalogue → Provider → Computer lock order when several
+Agents share one personal authentication record.
+
+Applied provenance belongs to the execution/Agent/conversation lifetime. Source
+replacement may remove input and Setup history without erasing that identity.
+It contains no command-delivery result, native login/adoption assertion, secret
+or replay grant. Initial admission still requires the original live Setup
+permission; a removed input cannot be used to admit a new start.
+
+Current material reads consult the applied record, never the latest saved
+selection. Same-record key replacement changes its protected source while
+preserving the applied identity. An optional exact source equality check rejects
+an older handoff. Each read rechecks current Connector/route/execution, private
+ownership, Team membership and record scope. The server-internal result can still
+contain the protected ChatGPT bundle, so a delivery adapter must convert it to
+short-lived execution material before any wire transfer.
+
+Applied-only provenance adds no catalogue `InUse` blocker. Deleting the last
+unsaved applied record leaves a non-secret identity but denies material reads
+and old-operation admission; it never selects a replacement automatically.
+Existing saved-reference deletion protection remains unchanged.
+
+Execution consumers can also admit and complete the same central refresh under
+current applied-record authority instead of an account session. Account and
+execution consumers share the record/source attempt; they do not get independent
+refresh grants for the same source. Successful publication separately rechecks
+the current execution/route/application, record scope, source, account and
+possible attempt. A saved future selection does not retarget this authority.
+Route loss, manual replacement, application supersession or deletion fences a
+late publication. Narrow non-success settlement cannot restore authority or
+grant an automatic retry.
+
+`AuthenticationRefreshService.current_execution` retains an owned authenticated
+Connector source and application reference in the same bounded work owner as
+account consumers. It does not manufacture an account session. Provider work,
+source coalescing, cancellation independence and explicit close/drain use the
+shared orchestration. A returned protected bundle is still server-internal and
+requires separate execution handoff revalidation/conversion.
+
+## Component credential delivery
+
+Only Control's `ConnectorCapture` service registers the execution credential
+methods. Client/Admin account services do not expose a credential-distribution
+API. Account or Provider tokens cannot replace the exact operational Connector
+source. The existing trusted-network plaintext HTTP boundary is retained; a
+bearer is not transport encryption.
+
+- `GetAuthenticationBinding` recovers non-secret current application provenance.
+  It neither selects nor refreshes a credential.
+- `BeginAuthentication` seals the current saved selection for the exact possible
+  Setup operation, comparing the previous application. It performs no native
+  effect and is intended only for a real native-start caller.
+- `AcquireAuthentication` is the explicit eligible-consumer renewal path.
+  API keys return current metadata without provider I/O. ChatGPT uses the shared
+  refresh owner and rereads the exact resulting applied source before native
+  encoding. Pending/settled observations contain no credential bytes.
+- `ReadAuthentication` transfers at most 32 KiB of the current source's raw API
+  key or converted native external-token file. It never transfers the server's
+  ChatGPT bundle or usable refresh token. The complete supported material is
+  bounded to 64 KiB and is not truncated to the RPC frame limit.
+- `CheckAuthentication` revalidates the exact application/source at final handoff
+  without refresh or native intervention.
+
+Each piece rereads current authority and the requested protected source. Changed
+sources reject continuation or handoff with the existing typed conflict reason;
+the receiver must discard a partial old transfer rather than combine sources.
+Requests/responses retain the 64-KiB frame bound. Sixteen read/materialization
+permits bound database/encoding work, and refresh work has its separate bounded
+lifetime. Debug output omits every credential message field and nested payload.
+API keys are delivered for explicit ACP login; their presence is not a model
+validity/entitlement claim. ChatGPT conversion validates the inspected native
+shape and admitted account, not JWT signatures or live native adoption.
+
+The foreground Control composition owns this service before listener admission
+and closes/drains its refresh work on normal shutdown and partial startup failure.
+The native actor invokes these methods only for a real new launch; exact
+already-live Setup does not replace its authentication. The live update worker
+uses only that applied record and publishes changed-source files without native
+login/reload/restart. Authenticated runtime acceptance,
+immediate file adoption and successful model calls remain outside this component
+transfer's verification boundary.
+
 ## Connections
 
 - [Account RPC](account-rpc.md) — per-call credentials, generated contracts and group isolation.
+- [Control admission](computer-control-rpc.md) — Separate component authority and trusted transport boundary.
 - [Credential primitives](credential-primitives.md) — separate purpose keys, contextual envelopes and zeroizing secrets.
 - [Account storage](account-storage.md) — preserving explicit preparation and retained historical identities.
 - [Private Agent ownership](agent-ownership.md) — independent Agent authority and Team cleanup.

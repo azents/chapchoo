@@ -11,11 +11,21 @@ use std::{fmt, sync::Arc};
 use work::{AuthenticationWork, combined};
 
 mod catalogue;
+mod execution;
 mod provider;
+mod refresh;
 mod work;
+pub use execution::{
+    ExecutionAuthenticationChunk, ExecutionAuthenticationDescriptor,
+    ExecutionAuthenticationProgress, ExecutionAuthenticationService,
+};
 pub use provider::{
-    DeviceApproval, DeviceAuthenticationProvider, DevicePollOutcome, DeviceProviderFailure,
-    DeviceProviderFuture,
+    ChatGptRefreshProvider, DeviceApproval, DeviceAuthenticationProvider, DevicePollOutcome,
+    DeviceProviderFailure, DeviceProviderFuture, NativeTokenEncoder, NativeTokenEncodingFailure,
+    RefreshProviderFailure, RefreshProviderFuture,
+};
+pub use refresh::{
+    AuthenticationRefreshProgress, AuthenticationRefreshService, ExecutionAuthenticationConsumer,
 };
 pub const DEVICE_VERIFICATION_URI: &str = "https://auth.openai.com/codex/device";
 

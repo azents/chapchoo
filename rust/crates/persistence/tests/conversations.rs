@@ -1,5 +1,7 @@
 #[path = "conversations/answers.rs"]
 mod answers;
+#[path = "conversations/authentication.rs"]
+mod authentication;
 #[path = "conversations/delivery.rs"]
 mod delivery;
 #[path = "conversations/native_state.rs"]
@@ -39,6 +41,7 @@ use std::{
 };
 
 type TestError = Box<dyn Error + Send + Sync>;
+static POSTGRES_CONVERSATION_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 fn cipher() -> Result<Arc<CredentialCipher>, TestError> {
     Ok(Arc::new(CredentialCipher::new(RootKey::parse(
         URL_SAFE.encode([57; 32]),
@@ -1000,6 +1003,9 @@ fn sqlite_conversation_operations_and_preserving_downgrade_guard() -> Result<(),
 }
 #[test]
 fn postgres_conversation_operations_and_preserving_downgrade_guard() -> Result<(), TestError> {
+    let _fixture_lock = POSTGRES_CONVERSATION_LOCK
+        .lock()
+        .map_err(|_| "PostgreSQL fixture lock poisoned")?;
     let base = std::env::var("CHAPCHOO_TEST_POSTGRES_URL")
         .map_err(|_| "Disposable PostgreSQL is required")?;
     let mut control = AsyncConnectionWrapper::<AsyncPgConnection>::establish(&base)?;

@@ -9,8 +9,13 @@ mod service;
 mod time;
 
 pub use authentication::{
-    AuthenticationProgress, AuthenticationService, DEVICE_VERIFICATION_URI, DeviceApproval,
+    AuthenticationProgress, AuthenticationRefreshProgress, AuthenticationRefreshService,
+    AuthenticationService, ChatGptRefreshProvider, DEVICE_VERIFICATION_URI, DeviceApproval,
     DeviceAuthenticationProvider, DevicePollOutcome, DeviceProviderFailure, DeviceProviderFuture,
+    ExecutionAuthenticationChunk, ExecutionAuthenticationConsumer,
+    ExecutionAuthenticationDescriptor, ExecutionAuthenticationProgress,
+    ExecutionAuthenticationService, NativeTokenEncoder, NativeTokenEncodingFailure,
+    RefreshProviderFailure, RefreshProviderFuture,
 };
 pub use chapchoo_crypto::{BearerSecret, EmailCode, ExternalSecret, PasswordCost, SecretDigest};
 pub use chapchoo_domain::{
@@ -19,8 +24,9 @@ pub use chapchoo_domain::{
 };
 pub use chapchoo_persistence::{
     AcceptConversationInput, AgentAuthenticationSelection, AgentCreationResult, AgentProfileImage,
-    AgentRemoval, AgentSummary, AuthenticationAcceptedResult, AuthenticationKind,
-    AuthenticationOperation, AuthenticationRequestResult, AuthenticationScope,
+    AgentRemoval, AgentSummary, AppliedExecutionAuthentication, AuthenticationAcceptedResult,
+    AuthenticationCredentialSource, AuthenticationKind, AuthenticationOperation,
+    AuthenticationRefreshState, AuthenticationRequestResult, AuthenticationScope,
     AuthenticationSummary, ComponentKeyPolicy, ComponentKeyResult, ComponentRoute,
     ComputerInventorySummary, ComputerRequest, ComputerSummary, ConnectionOwner, ConnectorIdentity,
     ConnectorSessionResult, ConnectorSource, ControlRegistration, ConversationAnswer,

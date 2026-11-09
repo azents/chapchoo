@@ -24,6 +24,7 @@ pub(crate) const VERSIONS: [&str; 15] = [
     "00000000000011",
     "00000000000012",
     "00000000000013",
+    "00000000000014",
     "00000000000016",
     "00000000000018",
 ];
@@ -76,6 +77,8 @@ fn prepared_product_query() -> String {
         "conversation_input_preparation",
         "conversation_native_state",
         "conversation_stops",
+        "authentication_refreshes",
+        "execution_authentication_applications",
     ];
     let additions = tables
         .iter()

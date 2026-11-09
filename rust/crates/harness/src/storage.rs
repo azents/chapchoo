@@ -3,6 +3,7 @@ use std::{
     fmt, fs,
     os::unix::fs::{DirBuilderExt, PermissionsExt},
     path::{Component, Path, PathBuf},
+    sync::Arc,
 };
 
 /// Canonical, explicit existing saved storage; never inferred from HOME.
@@ -10,6 +11,7 @@ use std::{
 pub struct NativeStorage {
     saved: PathBuf,
     root: PathBuf,
+    pub(crate) saved_handle: Arc<fs::File>,
 }
 impl fmt::Debug for NativeStorage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -33,6 +35,18 @@ impl NativeStorage {
         let storage = Self {
             saved: saved.into(),
             root,
+            saved_handle: Arc::new(
+                nix::fcntl::open(
+                    saved,
+                    nix::fcntl::OFlag::O_RDONLY
+                        | nix::fcntl::OFlag::O_DIRECTORY
+                        | nix::fcntl::OFlag::O_NOFOLLOW
+                        | nix::fcntl::OFlag::O_CLOEXEC,
+                    nix::sys::stat::Mode::empty(),
+                )
+                .map(fs::File::from)
+                .map_err(|_| Error::Storage)?,
+            ),
         };
         for class in [
             "installations",

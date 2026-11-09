@@ -42,6 +42,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         "chapchoo.conversations.AnswerDelivery",
         "chapchoo.conversations.RecordKind",
         "chapchoo.conversations.RecordField",
+        "chapchoo.conversations.ExecutionCredentialKind",
+        "chapchoo.conversations.AuthenticationRefreshObservation",
         "chapchoo.control.ProviderKind",
         "chapchoo.control.ResourceKind",
         "chapchoo.control.ExecutionFact",

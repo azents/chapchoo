@@ -35,6 +35,18 @@ pub mod conversations {
         AnswerChunkRequest,
         AnswerChunk,
         AnswerReport,
+        ExecutionAuthenticationReference,
+        BeginAuthenticationRequest,
+        AppliedAuthentication,
+        OptionalAppliedAuthentication,
+        ExecutionCredentialDescriptor,
+        AuthenticationPending,
+        AuthenticationSettled,
+        ExecutionAuthenticationProgress,
+        execution_authentication_progress::State,
+        AuthenticationReadRequest,
+        AuthenticationPiece,
+        AuthenticationHandoffCheck,
         input_report::Result,
         InitialNativeContext,
         HarnessSupply,
@@ -355,6 +367,42 @@ pub mod control {
 #[cfg(test)]
 mod tests {
     use super::accounts::*;
+    #[test]
+    fn execution_credential_wire_debug_omits_bytes_and_nested_metadata() {
+        use super::conversations as c;
+        let descriptor = c::ExecutionCredentialDescriptor {
+            account_id: Some("private-account-marker".into()),
+            credential_source: vec![91; 24],
+            ..Default::default()
+        };
+        let values: Vec<Box<dyn std::fmt::Debug>> = vec![
+            Box::new(c::AuthenticationPiece {
+                descriptor: Some(descriptor.clone()),
+                content: b"private-key-marker".to_vec(),
+                offset: 0,
+            }),
+            Box::new(c::execution_authentication_progress::State::Current(
+                descriptor.clone(),
+            )),
+            Box::new(c::ExecutionAuthenticationProgress {
+                state: Some(c::execution_authentication_progress::State::Current(
+                    descriptor,
+                )),
+            }),
+        ];
+        for value in values {
+            let rendered = format!("{value:?}");
+            assert!(rendered.ends_with("{ .. }"));
+            for field in [
+                "content",
+                "credential_source",
+                "private-account-marker",
+                "private-key-marker",
+            ] {
+                assert!(!rendered.contains(field));
+            }
+        }
+    }
 
     #[test]
     fn component_and_peer_oneof_debug_never_exposes_fields() {

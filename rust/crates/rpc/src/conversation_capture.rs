@@ -1,6 +1,7 @@
 //! Component-only captured observation transfer; no endpoint dispatches native work.
 mod answers;
 mod assembly;
+mod authentication;
 mod input;
 mod observations;
 mod setup;
@@ -17,7 +18,10 @@ use chapchoo_protocol::conversations::{
     self as wire,
     connector_capture_server::{ConnectorCapture, ConnectorCaptureServer},
 };
-use chapchoo_service::{ConnectorSource, ConversationService, ConversationSummary, SourceBinding};
+use chapchoo_service::{
+    ConnectorSource, ConversationService, ConversationSummary, ExecutionAuthenticationService,
+    SourceBinding,
+};
 use std::{
     sync::{
         Arc,
@@ -32,13 +36,19 @@ pub struct ConversationCaptureServices {
     service: Arc<ConversationService>,
     admission: Arc<AtomicBool>,
     assembly: Arc<assembly::Assembler>,
+    authentication: Arc<ExecutionAuthenticationService>,
 }
 impl ConversationCaptureServices {
-    pub fn new(service: Arc<ConversationService>, admission: Arc<AtomicBool>) -> Self {
+    pub fn new(
+        service: Arc<ConversationService>,
+        admission: Arc<AtomicBool>,
+        authentication: Arc<ExecutionAuthenticationService>,
+    ) -> Self {
         Self {
             service,
             admission,
             assembly: Arc::default(),
+            authentication,
         }
     }
     pub fn server(&self) -> ConnectorCaptureServer<Self> {
@@ -94,6 +104,36 @@ fn state(value: ConversationSummary) -> wire::CaptureState {
 }
 #[tonic::async_trait]
 impl ConnectorCapture for ConversationCaptureServices {
+    async fn get_authentication_binding(
+        &self,
+        request: Request<wire::ExecutionAuthenticationReference>,
+    ) -> Result<Response<wire::OptionalAppliedAuthentication>, Status> {
+        authentication::binding(self, request).await
+    }
+    async fn begin_authentication(
+        &self,
+        request: Request<wire::BeginAuthenticationRequest>,
+    ) -> Result<Response<wire::AppliedAuthentication>, Status> {
+        authentication::begin(self, request).await
+    }
+    async fn acquire_authentication(
+        &self,
+        request: Request<wire::ExecutionAuthenticationReference>,
+    ) -> Result<Response<wire::ExecutionAuthenticationProgress>, Status> {
+        authentication::acquire(self, request).await
+    }
+    async fn read_authentication(
+        &self,
+        request: Request<wire::AuthenticationReadRequest>,
+    ) -> Result<Response<wire::AuthenticationPiece>, Status> {
+        authentication::read(self, request).await
+    }
+    async fn check_authentication(
+        &self,
+        request: Request<wire::AuthenticationHandoffCheck>,
+    ) -> Result<Response<()>, Status> {
+        authentication::check(self, request).await
+    }
     async fn pull_answer(
         &self,
         request: Request<wire::AnswerChunkRequest>,

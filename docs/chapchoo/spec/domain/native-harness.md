@@ -6,9 +6,9 @@ title: "Native preparation and execution-local ownership"
 
 `chapchoo-harness` is a reusable native foundation. The foreground
 [Connector](connector-process.md) owns an idle instance through stream/key
-replacement and explicitly finishes it on process-loop exit. Public conversation
-command routing and authenticated text execution are not activated by this
-foundation.
+replacement and explicitly finishes it on process-loop exit. Source-qualified
+conversation commands and actual-start authentication use separate admission
+boundaries; implemented paths do not certify successful live model execution.
 
 ## Storage, preparation and applied supply
 
@@ -48,6 +48,87 @@ replaces the owner's CLI. Applied supply stays fixed through work completion and
 server-link loss.
 
 ## Protocol and physical ownership
+
+### Execution-only credential file boundary
+
+The library validates API-key material or a server-converted external-token
+file. External-token ingress requires the admitted account, matching access-JWT
+identity fields and an empty refresh token; mixed API-key material and unknown
+fields are rejected. This is schema validation, not JWT signature verification
+or execution authorization. The server retains refresh authority.
+
+The finite blocking publication operation writes only `state/auth.json` beneath
+the explicitly retained saved-root descriptor. Private directory/file descriptors,
+exclusive temporary creation, mode 0600, file sync, handoff identity checks,
+atomic rename and directory sync form its publication boundary. It rejects
+redirected or non-private classes and symlink/special/hard-linked targets rather
+than mutating their referents. Rejection cleans the temporary file. Native
+sessions, workspace and captured events remain separate. Same-UID isolation is
+not claimed.
+
+The actual-start actor now invokes this helper for external-token startup. For
+API keys it first removes only residual owned `auth.json`, then uses explicit ACP
+login rather than initial file seeding. API-key file serialization remains for
+replacement, whose live caller uses the same admitted record. File publication alone
+proves no cache reload, immediate adoption, model entitlement or external revoke.
+
+### Actual-start authentication
+
+An already-live exact resume returns the existing session before any new
+authentication provider call or file operation. A real launch requires a supplied
+`NativeAuthenticationProvider`. After compatible artifact preparation, the
+Connector provider recovers the previous application, admits the saved selection,
+explicitly acquires current material, assembles bounded pieces with an unchanged
+descriptor and performs the final source check. Missing/failed authorization
+refuses launch rather than adopting an old file. Pending/uncertain refresh is not
+an interactive login or a native replay grant.
+
+The actor retains the admitted operation/execution/record/source descriptor for
+the live lifetime. It rechecks that descriptor before and after initial file
+preparation. The finite blocking file job is stored in actor state, awaited by
+reference and cleared only after physical completion. Cancelling a launch or
+partial retirement waiter cannot detach it; retirement drains it before scope
+teardown or successor admission. Saved context and workspace remain untouched.
+
+The launch wrapper explicitly selects native file credential storage. Following
+strict v2 initialization, an API key uses the public SDK `auth/login` operation
+with method `api-key` and explicit `_meta["api-key"].apiKey`; credentials never
+enter argv or the child environment. Only successful login proceeds to New or
+Resume. Rejection reports a body-safe Authentication protocol stage and does not
+fall back to session creation. External-token startup uses the seeded file and
+does not call the unsupported native token-login/callback path.
+
+The foreground diagnostic layer excludes ACP SDK diagnostics independently of
+operator log-filter specificity: the inspected SDK TRACE redacts env/headers,
+not arbitrary login metadata. Product diagnostics retain body-safe categories;
+raw native stderr is drained without publication. Authentication requests and
+responses remain outside session JSONL. These are controlled protocol tests and
+source-backed startup wiring, not authenticated runtime/model acceptance.
+
+### Same-record live publication
+
+The Connector reads the existing live binding without starting native work.
+Its separate coalesced worker explicitly renews/reads only that application;
+it never calls saved-selection admission for an update. An unchanged source
+requires no payload transfer or file write. Changed sources are assembled
+outside the native actor and submitted with the exact preceding binding.
+
+The actor rejects a changed Agent, conversation, start operation, execution,
+record or preceding source. It performs one bounded final server check, then
+serializes the private file replacement through its retained blocking owner.
+It updates its source echo only after completed file publication. An old-route
+result cannot pass the final server check, and an old preceding source cannot
+overwrite a locally published successor. Native protocol termination denies
+publication. Network acquisition/refresh is not serialized inside the actor;
+the final authority check is bounded by the ordinary component call budget.
+
+Both API-key and external-token updates are file-only. No ACP login, cache reload,
+session creation, restart or termination is sent. File JSON has an independent
+bounded zeroizing buffer so escaping a complete 64-KiB raw key does not truncate
+it or fail merely because of JSON overhead. Native adoption still depends on
+native behavior and is not asserted by file publication.
+
+### Session protocol and operation ownership
 
 The public Rust ACP SDK uses strict `Client.v2()`; an incompatible initialization
 fails without a v1 session. Native stdin/stdout/stderr, protocol driver, pending
@@ -174,6 +255,7 @@ acceptance.
 ## Connections
 
 - [Conversation storage](conversation-storage.md) — Independent server input/source facts do not establish native delivery.
+- [Backend authentication](backend-authentication.md) — Protected catalogue sources and server-owned refresh.
 - [Docker profile](computer-docker.md) — Exact saved root, Connector init and private namespace profile.
 - [Kubernetes profile](computer-kubernetes.md) — Saved PVC and rejection of shared process namespaces.
 - [Linux images](account-delivery.md) — The restricted image supplies runtime ABI libraries.
@@ -182,6 +264,7 @@ acceptance.
 
 - [`rust/crates/harness/src/lib.rs`](../../../../rust/crates/harness/src/lib.rs)
 - [`rust/crates/harness/src/runtime.rs`](../../../../rust/crates/harness/src/runtime.rs)
+- [`rust/crates/harness/src/authentication.rs`](../../../../rust/crates/harness/src/authentication.rs)
 - [`rust/crates/harness/src/preparation.rs`](../../../../rust/crates/harness/src/preparation.rs)
 - [`rust/crates/harness/src/capture.rs`](../../../../rust/crates/harness/src/capture.rs)
 - [`rust/crates/harness/examples/scope_probe.rs`](../../../../rust/crates/harness/examples/scope_probe.rs)

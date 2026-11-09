@@ -119,6 +119,26 @@ macro_rules! exercise {
         if !pg {
             assert_eq!(diesel::sql_query("SELECT count(*) AS n FROM pragma_foreign_key_check").get_result::<Count>(connection)?.n,0);
         }
+        connection.run_pending_migrations(source())?;
+        let refresh = identity(6, pg);
+        connection.batch_execute(&format!(
+            "INSERT INTO external_authentications(id,owner_user_id,kind,name,nonce,ciphertext,current_request_id,created_at,updated_at) VALUES({record},{user},'CHATGPT','Refresh',{nonce},{payload},'refresh-record',1,1)"
+        ))?;
+        let refresh_insert = format!("INSERT INTO authentication_refreshes(id,authentication_id,source_nonce,account_id,state,created_at,updated_at) VALUES({refresh},{record},{nonce},'account','POSSIBLE',1,1)");
+        connection.batch_execute(&refresh_insert)?;
+        assert!(connection.revert_last_migration(source()).is_err());
+        assert_eq!(connection.applied_migrations()?.len(),14);
+        for invalid in [
+            format!("UPDATE authentication_refreshes SET state='UNKNOWN' WHERE id={refresh}"),
+            format!("UPDATE authentication_refreshes SET source_nonce={} WHERE id={refresh}",blob(23,pg)),
+            format!("UPDATE authentication_refreshes SET updated_at=0 WHERE id={refresh}"),
+            format!("UPDATE authentication_refreshes SET authentication_id={removed_agent} WHERE id={refresh}"),
+        ] { assert!(connection.batch_execute(&invalid).is_err(),"Invalid refresh contract accepted"); }
+        connection.batch_execute(&format!("DELETE FROM external_authentications WHERE id={record}"))?;
+        assert_eq!(diesel::sql_query("SELECT count(*) AS n FROM authentication_refreshes").get_result::<Count>(connection)?.n,0);
+        connection.revert_last_migration(source())?;
+        connection.run_pending_migrations(source())?;
+        assert_eq!(diesel::sql_query("SELECT count(*) AS n FROM agent_creation_receipts WHERE request_id='historical-create'").get_result::<Count>(connection)?.n,1);
     }};
 }
 
@@ -232,6 +252,12 @@ fn sqlite_external_auth_binary_columns_reject_equal_length_text() -> Result<(), 
             "agent_id,authentication_id,current_request_id,selected_at",
             vec![id, id, "'select'", "1"],
             vec![(0, 16), (1, 16)],
+        ),
+        (
+            "authentication_refreshes",
+            "id,authentication_id,source_nonce,account_id,state,created_at,updated_at",
+            vec![id, id, "zeroblob(24)", "'account'", "'POSSIBLE'", "1", "1"],
+            vec![(0, 16), (1, 16), (2, 24)],
         ),
     ];
     for (table, columns, values, binaries) in cases {

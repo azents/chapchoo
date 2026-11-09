@@ -73,14 +73,17 @@ pub use directory::{
     ResolvedRoute,
 };
 pub use external_auth::{
-    AgentAuthenticationSelection, AuthenticationAcceptedResult, AuthenticationKind,
-    AuthenticationOperation, AuthenticationRequestResult, AuthenticationScope,
+    AgentAuthenticationSelection, AppliedExecutionAuthentication, AuthenticationAcceptedResult,
+    AuthenticationCredentialMaterial, AuthenticationCredentialSource, AuthenticationKind,
+    AuthenticationOperation, AuthenticationRefreshAdmission, AuthenticationRefreshState,
+    AuthenticationRefreshStep, AuthenticationRequestResult, AuthenticationScope,
     AuthenticationSummary, CheckDeviceAdmission, DeleteAuthentication, DeleteAuthenticationOutcome,
     DeviceAuthenticationState, DeviceAuthenticationStatus, DeviceAuthenticationStep,
     DeviceAuthenticationTokens, DeviceAuthorizationDraft, DeviceCheck, DeviceStepFailure,
-    DeviceStepSettlement, ExchangeDeviceAdmission, ExpectedAgentAuthentication,
-    MAX_AUTHENTICATION_EXPIRY_MILLIS, ReauthenticateTarget, RegisterApiKey, RenameAuthentication,
-    ReplaceApiKey, SelectAgentAuthentication, StartDeviceAdmission, StartDeviceAuthentication,
+    DeviceStepSettlement, ExchangeDeviceAdmission, ExecutionAuthenticationMaterial,
+    ExpectedAgentAuthentication, MAX_AUTHENTICATION_EXPIRY_MILLIS, ReauthenticateTarget,
+    RegisterApiKey, RenameAuthentication, ReplaceApiKey, SelectAgentAuthentication,
+    StartDeviceAdmission, StartDeviceAuthentication,
 };
 pub use models::{CredentialSnapshot, UserSummary, VerifiedCredential};
 pub use native_resources::{ManagedResource, ResourceEvidence, ResourceReport};

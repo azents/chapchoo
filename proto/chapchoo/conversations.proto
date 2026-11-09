@@ -156,6 +156,13 @@ service ConnectorCapture {
   rpc ReportStop(StopReport) returns (google.protobuf.Empty);
   rpc PullAnswer(AnswerChunkRequest) returns (AnswerChunk);
   rpc ReportAnswer(AnswerReport) returns (google.protobuf.Empty);
+  // Execution-only model credentials use this trusted component boundary.
+  // These methods are not registered on Client or Admin service groups.
+  rpc GetAuthenticationBinding(ExecutionAuthenticationReference) returns (OptionalAppliedAuthentication);
+  rpc BeginAuthentication(BeginAuthenticationRequest) returns (AppliedAuthentication);
+  rpc AcquireAuthentication(ExecutionAuthenticationReference) returns (ExecutionAuthenticationProgress);
+  rpc ReadAuthentication(AuthenticationReadRequest) returns (AuthenticationPiece);
+  rpc CheckAuthentication(AuthenticationHandoffCheck) returns (google.protobuf.Empty);
 }
 message CaptureSource {
   string session_id = 1;
@@ -273,3 +280,63 @@ message AnswerChunk {
 }
 // Local responder acceptance is not remote consumption or task completion.
 message AnswerReport { CaptureSource source = 1; AnswerCommand command = 2; bool responder_accepted = 3; }
+
+message ExecutionAuthenticationReference {
+  CaptureSource source = 1;
+  string agent_id = 2; string conversation_id = 3; string operation_id = 4;
+}
+message BeginAuthenticationRequest {
+  ExecutionAuthenticationReference target = 1;
+  optional string expected_previous_operation_id = 2;
+}
+// Actual-start configuration provenance, not login validity or native liveness.
+message AppliedAuthentication {
+  string operation_id = 1; string execution_id = 2; string authentication_id = 3;
+}
+message OptionalAppliedAuthentication { AppliedAuthentication applied = 1; }
+enum ExecutionCredentialKind {
+  EXECUTION_CREDENTIAL_KIND_UNSPECIFIED = 0;
+  EXECUTION_CREDENTIAL_KIND_API_KEY = 1;
+  EXECUTION_CREDENTIAL_KIND_CHATGPT_TOKENS = 2;
+}
+message ExecutionCredentialDescriptor {
+  AppliedAuthentication applied = 1;
+  bytes credential_source = 2;
+  ExecutionCredentialKind kind = 3;
+  optional string account_id = 4;
+  optional int64 expires_at_millis = 5;
+  uint32 total_bytes = 6;
+}
+enum AuthenticationRefreshObservation {
+  AUTHENTICATION_REFRESH_OBSERVATION_UNSPECIFIED = 0;
+  AUTHENTICATION_REFRESH_OBSERVATION_POSSIBLE = 1;
+  AUTHENTICATION_REFRESH_OBSERVATION_NOT_DISPATCHED = 2;
+  AUTHENTICATION_REFRESH_OBSERVATION_REJECTED = 3;
+  AUTHENTICATION_REFRESH_OBSERVATION_UNCERTAIN = 4;
+  AUTHENTICATION_REFRESH_OBSERVATION_UPDATED = 5;
+}
+message AuthenticationPending { string attempt_id = 1; }
+message AuthenticationSettled {
+  string attempt_id = 1; AuthenticationRefreshObservation state = 2;
+}
+message ExecutionAuthenticationProgress {
+  oneof state {
+    ExecutionCredentialDescriptor current = 1;
+    AuthenticationPending pending = 2;
+    AuthenticationSettled settled = 3;
+  }
+}
+message AuthenticationReadRequest {
+  ExecutionAuthenticationReference target = 1;
+  bytes credential_source = 2;
+  uint32 offset = 3;
+}
+// At most 32 KiB. Content is the selected raw API key for explicit ACP login,
+// or the converted short-lived native external-token file, never a refresh bundle.
+message AuthenticationPiece {
+  ExecutionCredentialDescriptor descriptor = 1;
+  uint32 offset = 2; bytes content = 3;
+}
+message AuthenticationHandoffCheck {
+  ExecutionAuthenticationReference target = 1; bytes credential_source = 2;
+}

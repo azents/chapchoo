@@ -3,7 +3,8 @@ use chapchoo_rpc::{
     AccountServices, AuthenticationServices, ComputerServices, ServiceGroup, ServiceGroups,
 };
 use chapchoo_service::{
-    AccountsService, AuthenticationService, ComputersService, Mailer, PasswordWork,
+    AccountsService, AuthenticationService, ComputersService, ExecutionAuthenticationService,
+    Mailer, PasswordWork,
 };
 use std::{
     sync::{
@@ -28,6 +29,21 @@ use crate::{
 };
 
 type BackendTasks = JoinSet<Result<(), AppError>>;
+#[derive(Default)]
+struct AuthenticationOwners {
+    device: Option<Arc<AuthenticationService>>,
+    execution: Option<Arc<ExecutionAuthenticationService>>,
+}
+impl AuthenticationOwners {
+    fn close(&self) {
+        if let Some(owner) = &self.device {
+            owner.close();
+        }
+        if let Some(owner) = &self.execution {
+            owner.close();
+        }
+    }
+}
 
 pub async fn serve(config: Option<BackendConfig>, options: ServeOptions) -> Result<(), AppError> {
     if options.groups.is_empty() && options.web.is_none() {
@@ -58,7 +74,7 @@ pub async fn serve(config: Option<BackendConfig>, options: ServeOptions) -> Resu
     let mut general_web = None;
     let mut admin_web = None;
     let mut control_plane = None;
-    let mut authentication = None;
+    let mut authentication = AuthenticationOwners::default();
     let mut signal = Termination::new()?;
     let startup = async {
         if let Some(config) = &config {
@@ -166,9 +182,7 @@ pub async fn serve(config: Option<BackendConfig>, options: ServeOptions) -> Resu
         }
     };
     admission.store(false, Ordering::Release);
-    if let Some(authentication) = &authentication {
-        authentication.close();
-    }
+    authentication.close();
     stop.cancel();
     if let Some(control) = control_plane.take() {
         tasks.spawn(control.shutdown());
@@ -192,7 +206,7 @@ async fn start_backends(
     stop: &CancellationToken,
     tasks: &mut BackendTasks,
     control: &mut Option<ControlPlane>,
-    authentication: &mut Option<Arc<AuthenticationService>>,
+    authentication: &mut AuthenticationOwners,
 ) -> Result<(), AppError> {
     let mut application = ApplicationConfig::load()?;
     let store = config.connect().await?;
@@ -216,9 +230,18 @@ async fn start_backends(
     if groups.contains(ServiceGroup::Client) {
         // Publish the fallible effect owner before any later startup await.
         // Partial startup failure therefore retains the same explicit drain.
-        *authentication = Some(Arc::new(AuthenticationService::new(
+        authentication.device = Some(Arc::new(AuthenticationService::new(
             store.clone(),
             Arc::new(chapchoo_openai_auth::OpenAiDeviceClient::new()?),
+            16,
+        )?));
+    }
+    if groups.contains(ServiceGroup::Control) {
+        let client = Arc::new(chapchoo_openai_auth::OpenAiDeviceClient::new()?);
+        authentication.execution = Some(Arc::new(ExecutionAuthenticationService::new(
+            store.clone(),
+            client.clone(),
+            client,
             16,
         )?));
     }
@@ -230,10 +253,13 @@ async fn start_backends(
         None
     };
     let conversation_core = Arc::new(chapchoo_service::ConversationService::new(store.clone()));
-    let capture = chapchoo_rpc::ConversationCaptureServices::new(
-        conversation_core.clone(),
-        admission.clone(),
-    );
+    let capture = authentication.execution.as_ref().map(|owner| {
+        chapchoo_rpc::ConversationCaptureServices::new(
+            conversation_core.clone(),
+            admission.clone(),
+            owner.clone(),
+        )
+    });
     let app = Arc::new(ComputersService::new(store.clone()).with_policy(application.computers)?);
     let computers = ComputerServices::new(app.clone()).with_admission(admission.clone());
     if groups.contains(ServiceGroup::Control) {
@@ -361,8 +387,9 @@ async fn start_backends(
     let rpc = AccountServices::new(service).with_admission(admission.clone());
     let components = control
         .as_ref()
-        .map(|plane| (&plane.authentication, &plane.connections, &capture));
-    let authentication_rpc = authentication.as_ref().map(|service| {
+        .zip(capture.as_ref())
+        .map(|(plane, capture)| (&plane.authentication, &plane.connections, capture));
+    let authentication_rpc = authentication.device.as_ref().map(|service| {
         AuthenticationServices::new(service.clone()).with_admission(admission.clone())
     });
     let routes = groups.routes(
@@ -470,6 +497,7 @@ struct CleanupFailures {
     general: Result<(), AppError>,
     admin: Result<(), AppError>,
     authentication: Result<(), AppError>,
+    execution_authentication: Result<(), AppError>,
 }
 
 impl CleanupFailures {
@@ -479,13 +507,17 @@ impl CleanupFailures {
             general: Ok(()),
             admin: Ok(()),
             authentication: Ok(()),
+            execution_authentication: Ok(()),
         }
     }
 
     fn finish(self) -> Result<(), AppError> {
         complete(
-            complete(complete(self.backend, self.general), self.admin),
-            self.authentication,
+            complete(
+                complete(complete(self.backend, self.general), self.admin),
+                self.authentication,
+            ),
+            self.execution_authentication,
         )
     }
 }
@@ -512,17 +544,25 @@ async fn join_owned(
     general: &mut Option<WebChild>,
     admin: &mut Option<WebChild>,
     failures: &mut CleanupFailures,
-    authentication: &Option<Arc<AuthenticationService>>,
+    authentication: &AuthenticationOwners,
 ) {
     tokio::join!(
         drain(tasks, &mut failures.backend),
         reap_web(general, &mut failures.general),
         reap_web(admin, &mut failures.admin),
         async {
-            if let Some(authentication) = authentication {
+            if let Some(authentication) = &authentication.device {
                 retain(
                     &mut failures.authentication,
                     authentication.finish().await.map_err(Into::into),
+                );
+            }
+        },
+        async {
+            if let Some(owner) = &authentication.execution {
+                retain(
+                    &mut failures.execution_authentication,
+                    owner.finish().await.map_err(Into::into),
                 );
             }
         }
@@ -533,7 +573,7 @@ async fn cleanup(
     tasks: &mut BackendTasks,
     general: &mut Option<WebChild>,
     admin: &mut Option<WebChild>,
-    authentication: &Option<Arc<AuthenticationService>>,
+    authentication: &AuthenticationOwners,
 ) -> Result<(), AppError> {
     // Completed causes outlive a timed-out join future and its forced successor.
     let mut failures = CleanupFailures::new();
@@ -644,6 +684,19 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn execution_authentication_cleanup_failure_survives_backend_failure() -> Result<(), AppError> {
+        let dropped = Arc::new(AtomicUsize::new(0));
+        let mut failures = CleanupFailures::new();
+        failures.backend = Err(Box::new(RetainedFailure(dropped.clone())));
+        failures.execution_authentication = Err(Box::new(RetainedFailure(dropped.clone())));
+        let retained = failures.finish().err().ok_or("Missing cleanup failures")?;
+        assert_eq!(dropped.load(Ordering::SeqCst), 0);
+        drop(retained);
+        assert_eq!(dropped.load(Ordering::SeqCst), 2);
+        Ok(())
+    }
+
     #[tokio::test]
     async fn completed_causes_survive_cancellation_of_a_partial_join() -> Result<(), AppError> {
         let dropped = Arc::new(AtomicUsize::new(0));
@@ -663,13 +716,14 @@ mod tests {
         let mut failures = CleanupFailures::new();
         let mut general = None;
         let mut admin = None;
+        let authentication = AuthenticationOwners::default();
         {
             let mut join = Box::pin(join_owned(
                 &mut tasks,
                 &mut general,
                 &mut admin,
                 &mut failures,
-                &None,
+                &authentication,
             ));
             std::future::poll_fn(|context| {
                 assert!(join.as_mut().poll(context).is_pending());
@@ -680,7 +734,14 @@ mod tests {
         assert!(failures.backend.is_err());
         assert_eq!(dropped.load(Ordering::SeqCst), 0);
         release.send(()).map_err(|_| "Worker was abandoned")?;
-        join_owned(&mut tasks, &mut general, &mut admin, &mut failures, &None).await;
+        join_owned(
+            &mut tasks,
+            &mut general,
+            &mut admin,
+            &mut failures,
+            &authentication,
+        )
+        .await;
         let failure = failures.finish().err().ok_or("Missing completed cause")?;
         assert_eq!(dropped.load(Ordering::SeqCst), 0);
         drop(failure);

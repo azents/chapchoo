@@ -156,8 +156,18 @@ async fn connector_process_exchanges_connects_and_observes_independently_of_prov
         let state_position=captured.append(r#"{"method":"session/update","params":{"sessionId":"synthetic-native","update":{"sessionUpdate":"state_update","state":"running"}}}"#,None)?;
         let snapshot=captured.snapshot()?;
         drop(captured);
+        let model_client=Arc::new(chapchoo_openai_auth::OpenAiDeviceClient::new()?);
+        let model_authentication=Arc::new(chapchoo_service::ExecutionAuthenticationService::new(
+            store.clone(),model_client.clone(),model_client,4,
+        )?);
+        let model_owner=model_authentication.clone();
+        fixture.cleanup(async move {
+            model_owner.close();
+            model_owner.finish().await.map_err(Into::into)
+        });
         let capture_server=chapchoo_rpc::ConversationCaptureServices::new(
             Arc::new(chapchoo_service::ConversationService::new(store.clone())),Arc::new(AtomicBool::new(true)),
+            model_authentication,
         );
         // Own only a digest of this synthetic child's presented test key. Keep
         // ComponentRoute's private dispatch material behind its normal boundary.

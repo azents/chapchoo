@@ -428,10 +428,13 @@ macro_rules! save_receipt {
     }};
 }
 
+mod applied;
 mod catalogue;
 mod cleanup;
 mod device;
+mod refresh;
 mod selection;
+pub use applied::{AppliedExecutionAuthentication, ExecutionAuthenticationMaterial};
 pub use catalogue::{DeleteAuthentication, RegisterApiKey, RenameAuthentication, ReplaceApiKey};
 pub(crate) use cleanup::{AuthenticationLock, detach_team_authentications};
 pub use device::{
@@ -439,6 +442,10 @@ pub use device::{
     DeviceAuthenticationStep, DeviceAuthenticationTokens, DeviceAuthorizationDraft, DeviceCheck,
     DeviceStepFailure, DeviceStepSettlement, ExchangeDeviceAdmission, ReauthenticateTarget,
     StartDeviceAdmission, StartDeviceAuthentication,
+};
+pub use refresh::{
+    AuthenticationCredentialMaterial, AuthenticationCredentialSource,
+    AuthenticationRefreshAdmission, AuthenticationRefreshState, AuthenticationRefreshStep,
 };
 pub use selection::{
     AgentAuthenticationSelection, ExpectedAgentAuthentication, SelectAgentAuthentication,

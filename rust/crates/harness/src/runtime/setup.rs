@@ -111,14 +111,17 @@ impl State {
     pub(super) async fn setup(
         &mut self,
         operation: NativeSetupOperation,
+        authentication: Option<Arc<dyn NativeAuthenticationProvider>>,
     ) -> Result<NativeSetupObservation, Error> {
         if let Some(previous) = self.setups.begin(&operation)? {
             return Ok(previous);
         }
-        let outcome = match self.setup_once(&operation).await {
+        let outcome = match self.setup_once(&operation, authentication).await {
             Ok(target) => NativeSetupObservation::Ready(target),
             Err(error) => NativeSetupObservation::Failed(match error {
-                Error::NotAdmitted | Error::UnsupportedRuntime => NativeSetupFailure::NotAdmitted,
+                Error::NotAdmitted | Error::UnsupportedRuntime | Error::Authentication => {
+                    NativeSetupFailure::NotAdmitted
+                }
                 Error::Storage
                 | Error::CaptureUnavailable
                 | Error::CaptureCorrupt
@@ -142,6 +145,7 @@ impl State {
     async fn setup_once(
         &mut self,
         operation: &NativeSetupOperation,
+        authentication: Option<Arc<dyn NativeAuthenticationProvider>>,
     ) -> Result<NativeTextTarget, Error> {
         let retained = self.captured_source().await?;
         let source = match retained {
@@ -183,7 +187,7 @@ impl State {
             _ => return Err(Error::CaptureUnavailable),
         };
         let native_session = self
-            .start(operation.supply.clone(), context, source)
+            .start(operation.supply.clone(), context, source, authentication)
             .await?;
         Ok(NativeTextTarget {
             snapshot,
@@ -197,10 +201,17 @@ impl NativeHandle {
         &self,
         operation: NativeSetupOperation,
     ) -> Result<tokio::sync::oneshot::Receiver<Result<NativeSetupObservation, Error>>, Error> {
+        self.admit_setup_with_authentication(operation, None)
+    }
+    pub fn admit_setup_with_authentication(
+        &self,
+        operation: NativeSetupOperation,
+        authentication: Option<Arc<dyn NativeAuthenticationProvider>>,
+    ) -> Result<tokio::sync::oneshot::Receiver<Result<NativeSetupObservation, Error>>, Error> {
         valid_id(&operation.operation_id)?;
         let (result, rx) = oneshot::channel();
         self.sender
-            .try_send(Command::Setup(operation, result))
+            .try_send(Command::Setup(operation, authentication, result))
             .map_err(|_| Error::NotAdmitted)?;
         Ok(rx)
     }

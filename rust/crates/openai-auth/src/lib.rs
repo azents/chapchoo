@@ -1,4 +1,7 @@
-//! Bounded OpenAI device acquisition only, under the approved direct-HTTP exception.
+//! Bounded device acquisition and public-SDK central refresh.
+mod execution;
+mod refresh;
+pub use execution::{ExecutionCredentialError, native_chatgpt_credentials};
 
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chapchoo_service::{
@@ -200,7 +203,7 @@ struct TokenResponse {
     #[zeroize(skip)]
     expires_in: Option<Seconds>,
 }
-#[derive(Serialize, ZeroizeOnDrop)]
+#[derive(Serialize, Deserialize, ZeroizeOnDrop)]
 struct TokenBundle {
     access_token: String,
     refresh_token: String,

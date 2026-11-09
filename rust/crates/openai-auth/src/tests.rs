@@ -7,6 +7,7 @@ use tokio::{
     task::JoinHandle,
 };
 type TestError = Box<dyn Error + Send + Sync>;
+use chapchoo_service::{ChatGptRefreshProvider, RefreshProviderFailure};
 
 #[derive(Debug)]
 struct Request {
@@ -377,5 +378,124 @@ async fn absent_or_malformed_claims_do_not_fabricate_account_identity_or_expiry(
     })
     .await?;
     assert_eq!(requests.len(), 3);
+    Ok(())
+}
+fn refresh_bundle() -> Result<ExternalSecret, TestError> {
+    Ok(ExternalSecret::new(serde_json::to_vec(
+        &serde_json::json!({
+            "access_token":"old-access",
+            "refresh_token":"old-refresh",
+            "id_token":id_token(r#"{"email":"fixture@example.invalid","https://api.openai.com/auth":{"chatgpt_account_id":"account-a"}}"#),
+        }),
+    )?)?)
+}
+#[tokio::test]
+async fn public_sdk_refresh_owns_form_grant_and_preserves_omitted_refresh_replacement()
+-> Result<(), TestError> {
+    let replacement = id_token(
+        r#"{"https://api.openai.com/auth":{"chatgpt_account_id":"account-a","chatgpt_plan_type":"new-plan"}}"#,
+    );
+    let replies = vec![
+        Reply::Json(200, serde_json::json!({"access_token":"new-access","token_type":"Bearer","expires_in":3600}).to_string()),
+        Reply::Json(200, serde_json::json!({"access_token":"later-access","token_type":"bearer","refresh_token":"rotated-refresh","id_token":replacement}).to_string()),
+    ];
+    let requests = exercise(replies, None, |client| async move {
+        let original = refresh_bundle()?;
+        let first = client.refresh(&original, "account-a", 1000).await?;
+        assert_eq!(first.expires_at, Some(3_601_000));
+        assert_eq!(first.account_id.as_deref(), Some("account-a"));
+        let first_bundle: TokenBundle = serde_json::from_slice(first.secret.expose())?;
+        assert_eq!(first_bundle.access_token, "new-access");
+        assert_eq!(first_bundle.refresh_token, "old-refresh");
+        let later = client.refresh(&first.secret, "account-a", 2000).await?;
+        assert!(later.expires_at.is_none());
+        assert_eq!(later.plan_type.as_deref(), Some("new-plan"));
+        let later_bundle: TokenBundle = serde_json::from_slice(later.secret.expose())?;
+        assert_eq!(later_bundle.access_token, "later-access");
+        assert_eq!(later_bundle.refresh_token, "rotated-refresh");
+        assert_eq!(
+            format!("{later:?}"),
+            "DeviceAuthenticationTokens([REDACTED])"
+        );
+        Ok(())
+    })
+    .await?;
+    assert_eq!(requests.len(), 2);
+    for request in &requests {
+        assert_eq!(request.path, "/oauth/token");
+        assert!(request.body.contains("grant_type=refresh_token"));
+        assert!(request.body.contains("refresh_token=old-refresh"));
+        assert!(request.body.contains(CLIENT_ID));
+        assert!(!request.body.contains("access_token"));
+        assert!(!request.body.contains("scope="));
+    }
+    Ok(())
+}
+#[tokio::test]
+async fn refresh_validation_does_not_dispatch_and_unknown_results_never_retry()
+-> Result<(), TestError> {
+    let different =
+        id_token(r#"{"https://api.openai.com/auth":{"chatgpt_account_id":"other-account"}}"#);
+    let requests = exercise(vec![
+        Reply::Json(400, r#"{"error":"invalid_grant","error_description":"SECRET-provider-description"}"#.into()),
+        Reply::Close,
+        Reply::Json(200, "SECRET-invalid-response".into()),
+        Reply::Json(200, serde_json::json!({"access_token":"access","token_type":"bearer","id_token":different}).to_string()),
+        Reply::Json(200, r#"{"access_token":"access","token_type":"bearer","refresh_token":""}"#.into()),
+        Reply::OversizedHeader, Reply::OversizedChunks, Reply::Redirect,
+        Reply::Json(503, "SECRET-unavailable".into()),
+        Reply::Json(400, "SECRET-not-an-oauth-error".into()),
+        Reply::Json(400, r#"{"error":"temporarily_unavailable","error_description":"SECRET-provider-description"}"#.into()),
+        Reply::Json(200, serde_json::json!({
+            "access_token":id_token(r#"{"https://api.openai.com/auth":{"chatgpt_account_id":"different"}}"#),
+            "token_type":"bearer",
+        }).to_string()),
+    ], None, |client| async move {
+        let original = refresh_bundle()?;
+        for (bundle, account) in [
+            (ExternalSecret::new(b"SECRET-malformed-bundle".to_vec())?, "account-a"),
+            (refresh_bundle()?, "other-account"),
+        ] {
+            assert!(matches!(client.refresh(&bundle, account, 1000).await, Err(RefreshProviderFailure::NotDispatched)));
+        }
+        let rejected = client.refresh(&original, "account-a", 1000).await.err().ok_or("Expected rejection")?;
+        assert_eq!(rejected, RefreshProviderFailure::Rejected);
+        for _ in 0..11 {
+            let failure = client.refresh(&original, "account-a", 1000).await.err().ok_or("Expected uncertainty")?;
+            assert_eq!(failure, RefreshProviderFailure::Uncertain);
+            assert!(!format!("{failure:?}: {failure}").contains("SECRET"));
+            assert!(failure.source().is_none());
+        }
+        Ok(())
+    }).await?;
+    assert_eq!(requests.len(), 12);
+    Ok(())
+}
+#[test]
+fn native_external_token_material_excludes_refresh_authority_and_rejects_unknown_accounts()
+-> Result<(), TestError> {
+    let access = id_token(
+        r#"{"email":"fixture@example.invalid","https://api.openai.com/auth":{"chatgpt_account_id":"account-a"}}"#,
+    );
+    let server_id =
+        id_token(r#"{"https://api.openai.com/auth":{"chatgpt_account_id":"account-a"}}"#);
+    let secret = ExternalSecret::new(serde_json::to_vec(&serde_json::json!({
+        "access_token":access, "id_token":server_id, "refresh_token":"SERVER-ONLY-REFRESH",
+    }))?)?;
+    let file = native_chatgpt_credentials(&secret, "account-a")?;
+    let decoded: serde_json::Value = serde_json::from_slice(file.expose())?;
+    assert_eq!(decoded["auth_mode"], "chatgptAuthTokens");
+    assert!(decoded["OPENAI_API_KEY"].is_null());
+    assert_eq!(decoded["tokens"]["id_token"], access);
+    assert_eq!(decoded["tokens"]["access_token"], access);
+    assert_eq!(decoded["tokens"]["account_id"], "account-a");
+    assert_eq!(decoded["tokens"]["refresh_token"], "");
+    assert!(!std::str::from_utf8(file.expose())?.contains("SERVER-ONLY-REFRESH"));
+    assert_eq!(format!("{file:?}"), "ExternalSecret([REDACTED])");
+    assert!(native_chatgpt_credentials(&secret, "other-account").is_err());
+    let unknown = ExternalSecret::new(serde_json::to_vec(&serde_json::json!({
+        "access_token":"opaque-access", "id_token":server_id, "refresh_token":"SERVER-ONLY-REFRESH",
+    }))?)?;
+    assert!(native_chatgpt_credentials(&unknown, "account-a").is_err());
     Ok(())
 }

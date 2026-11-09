@@ -2,7 +2,8 @@ use super::*;
 #[cfg(test)]
 mod tests;
 
-pub(super) async fn connect(
+#[cfg(test)]
+async fn connect(
     transport: impl agent_client_protocol::ConnectTo<Client>,
     requests: Requests,
     observations: Arc<Observations>,
@@ -10,6 +11,26 @@ pub(super) async fn connect(
     done: CancellationToken,
     cwd: std::path::PathBuf,
     context: NativeContext,
+) -> Result<(), agent_client_protocol::Error> {
+    connect_authenticated(
+        transport,
+        requests,
+        observations,
+        ready,
+        done,
+        cwd,
+        (context, None),
+    )
+    .await
+}
+pub(super) async fn connect_authenticated(
+    transport: impl agent_client_protocol::ConnectTo<Client>,
+    requests: Requests,
+    observations: Arc<Observations>,
+    ready: oneshot::Sender<Result<agent_client_protocol::v2::ActiveSession<Agent>, Error>>,
+    done: CancellationToken,
+    cwd: std::path::PathBuf,
+    setup: (NativeContext, Option<NativeCredentials>),
 ) -> Result<(), agent_client_protocol::Error> {
     let permission = requests.clone();
     let forms = requests;
@@ -72,7 +93,7 @@ pub(super) async fn connect(
             agent_client_protocol::on_receive_request!(),
         )
         .connect_with(transport, async move |cx: ConnectionTo<Agent>| {
-            let session = match initialize_session(cx, cwd, context).await {
+            let session = match initialize_session(cx, cwd, setup).await {
                 Ok(session) => session,
                 Err((stage, cause)) => {
                     let _ = ready.send(Err(Error::ProtocolRejected {
@@ -92,12 +113,13 @@ pub(super) async fn connect(
 async fn initialize_session(
     cx: ConnectionTo<Agent>,
     cwd: std::path::PathBuf,
-    context: NativeContext,
+    setup: (NativeContext, Option<NativeCredentials>),
 ) -> Result<
     agent_client_protocol::v2::ActiveSession<Agent>,
     (crate::ProtocolStage, agent_client_protocol::Error),
 > {
     use crate::ProtocolStage;
+    let (context, credentials) = setup;
     let initialize = schema::InitializeRequest::new(
         ProtocolVersion::V2,
         schema::Implementation::new("chapchoo", env!("CARGO_PKG_VERSION")),
@@ -122,6 +144,20 @@ async fn initialize_session(
             agent_client_protocol::Error::invalid_params(),
         ));
     }
+    if let Some(key) = credentials
+        .as_ref()
+        .and_then(NativeCredentials::initial_api_key)
+    {
+        let mut meta = serde_json::Map::new();
+        meta.insert("api-key".into(), serde_json::json!({"apiKey":key}));
+        cx.send_request(schema::LoginAuthRequest::new("api-key").meta(meta))
+            .block_task()
+            .await
+            .map_err(|error| (ProtocolStage::Authentication, error))?;
+    }
+    // Credentials never enter capture. Do not install an external-token callback
+    // or an interactive/native-login fallback.
+    drop(credentials);
     let session = match context {
         NativeContext::Resume {
             session: id,

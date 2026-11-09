@@ -1,5 +1,7 @@
 #[path = "component_auth/answer_wire.rs"]
 mod answer_wire;
+#[path = "component_auth/authentication_wire.rs"]
+mod authentication_wire;
 #[path = "component_auth/capture.rs"]
 mod capture;
 #[path = "component_auth/input_owner.rs"]
@@ -130,8 +132,13 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
         let connections =
             ComponentConnectionServices::new(app.clone(), control.id.clone(), admission.clone());
         let core = Arc::new(chapchoo_service::ConversationService::new(store.clone()));
-        let captured =
-            chapchoo_rpc::ConversationCaptureServices::new(core.clone(), admission.clone());
+        let (execution_authentication, model_provider) =
+            support::authentication::execution(fixture, store.clone())?;
+        let captured = chapchoo_rpc::ConversationCaptureServices::new(
+            core.clone(),
+            admission.clone(),
+            execution_authentication,
+        );
         let processor = Arc::new(chapchoo_rpc::ConversationControlProcessor::new(
             app.clone(),
             core.clone(),
@@ -449,6 +456,23 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
             key: &exchanged.token,
             user_key: user.token.expose(),
         })
+        .await?;
+        authentication_wire::exercise(
+            &capture::Context {
+                store: &store,
+                owner: &user.token.digest(),
+                agent: &created,
+                endpoint: &endpoint,
+                source: chapchoo_protocol::conversations::CaptureSource {
+                    session_id: bootstrap.session_id.clone(),
+                    control_id: connected.instance_id.clone(),
+                    connection_id: connected.connection_id.clone(),
+                },
+                key: &exchanged.token,
+                user_key: user.token.expose(),
+            },
+            &model_provider,
+        )
         .await?;
         let proof = BootstrapProviderPermit::new("provider".into())?.authenticated();
         store

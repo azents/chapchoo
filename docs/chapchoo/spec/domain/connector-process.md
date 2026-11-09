@@ -46,6 +46,28 @@ are reported later, separately from Control queue acknowledgement. The local
 worker retains bounded result reports across reconnect and uses current
 credentials to retry publication, never the native command.
 
+Setup also supplies a narrow authentication provider to the native actor.
+Receiving Setup does not itself select/apply a credential: only a real launch,
+after preparation, calls that provider. Exact already-live reuse preserves the
+existing applied record and file. The provider uses current component authority
+to recover/admit the start application, acquire short-lived native material,
+assemble source-consistent 32-KiB pieces and check final handoff. It never
+extracts an ambient account or sends the server refresh bundle to native.
+Initial API-key login and external-token seeding are described by the
+[native owner](native-harness.md#actual-start-authentication).
+
+A separate coalesced credential worker runs at most one task and checks every
+five seconds while a route is active. Its first local binding read returns
+absence for an idle native owner, without contacting credential RPC or starting
+native work. For a live owner it acquires only the existing applied application
+under the current route/key, skips unchanged source payloads and hands changed
+material to the actor's exact-binding file-publication operation. It does not
+select a new saved record. Network acquisition is outside the actor; only final
+authority checking and serialized publication enter it. Ordinary link,
+uncertain-refresh or eligibility failure does not trigger native restart.
+Shutdown closes scheduling and cancels network waiters, while server refresh
+and local blocking publication retain their respective physical owners.
+
 Input commands carry small operation/source references. The worker pulls the
 sealed original text through authenticated 32-KiB byte reads, validates constant
 identity/size/offset and complete UTF-8 assembly, then rechecks the exact source

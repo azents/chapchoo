@@ -34,6 +34,7 @@ pub struct Provider {
     pub issues: AtomicUsize,
     pub polls: AtomicUsize,
     pub exchanges: AtomicUsize,
+    pub refreshes: AtomicUsize,
 }
 impl DeviceAuthenticationProvider for Provider {
     fn issue(&self, now: i64) -> DeviceProviderFuture<'_, DeviceAuthorizationDraft> {
@@ -80,4 +81,63 @@ impl DeviceAuthenticationProvider for Provider {
             })
         })
     }
+}
+impl chapchoo_service::ChatGptRefreshProvider for Provider {
+    fn refresh<'a>(
+        &'a self,
+        _: &'a ExternalSecret,
+        account: &'a str,
+        now: i64,
+    ) -> chapchoo_service::RefreshProviderFuture<'a> {
+        Box::pin(async move {
+            self.refreshes.fetch_add(1, Ordering::SeqCst);
+            Ok(DeviceAuthenticationTokens {
+                secret: ExternalSecret::new(b"fixture-refreshed-server-bundle".to_vec())
+                    .map_err(|_| chapchoo_service::RefreshProviderFailure::Uncertain)?,
+                account_id: Some(account.into()),
+                email: None,
+                plan_type: None,
+                expires_at: Some(now + 3_600_000),
+            })
+        })
+    }
+}
+impl chapchoo_service::NativeTokenEncoder for Provider {
+    fn encode(
+        &self,
+        _: &ExternalSecret,
+        account: &str,
+    ) -> Result<ExternalSecret, chapchoo_service::NativeTokenEncodingFailure> {
+        if account != "fixture-account" {
+            return Err(chapchoo_service::NativeTokenEncodingFailure);
+        }
+        ExternalSecret::new(br#"{"auth_mode":"chatgptAuthTokens","OPENAI_API_KEY":null,"tokens":{"id_token":"fixture-access.jwt","access_token":"fixture-access.jwt","refresh_token":"","account_id":"fixture-account"}}"#.to_vec())
+            .map_err(|_|chapchoo_service::NativeTokenEncodingFailure)
+    }
+}
+pub fn execution(
+    fixture: &mut super::Fixture,
+    store: chapchoo_persistence::Store,
+) -> Result<
+    (
+        std::sync::Arc<chapchoo_service::ExecutionAuthenticationService>,
+        std::sync::Arc<Provider>,
+    ),
+    Box<dyn std::error::Error + Send + Sync>,
+> {
+    let provider = std::sync::Arc::new(Provider::default());
+    let service = std::sync::Arc::new(chapchoo_service::ExecutionAuthenticationService::new(
+        store,
+        provider.clone(),
+        provider.clone(),
+        4,
+    )?);
+    let owner = service.clone();
+    let stopped = fixture.shutdown();
+    fixture.server(async move {
+        let _ = stopped.await;
+        owner.close();
+        owner.finish().await
+    });
+    Ok((service, provider))
 }

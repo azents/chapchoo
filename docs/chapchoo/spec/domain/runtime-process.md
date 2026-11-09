@@ -24,13 +24,16 @@ Backend task, web reap and signal failures are retained together privately inste
 of replacing an earlier failure with a later cleanup result. Completed forced
 cleanup still reports failure rather than a successful graceful stop.
 
-The Client group also owns the [backend authentication Service](backend-authentication.md).
-Its fixed HTTPS provider client is composed before listener admission; started
-provider calls belong to a bounded task owner, not a browser/RPC waiter.
-Shutdown closes its admission and joins it alongside backend/web cleanup.
-The owner is retained across partial startup failure and cancelled drain futures,
-including already-collected causes. A cleanup deadline is not proof that an
-uncertain provider effect was rolled back.
+The Client group owns device acquisition, while Control owns the separate
+[execution authentication service](backend-authentication.md#component-credential-delivery).
+Their fixed HTTPS provider collaborators and effect owners are composed before
+listener admission. Started provider calls belong to bounded task owners, not
+browser/RPC waiters. Shutdown closes both admissions and joins their work alongside
+backend/web cleanup. Both owners are retained across partial startup failure and
+cancelled drain futures, including already-collected causes. Execution
+authentication cleanup failures remain combined with backend and other cleanup
+failures. A cleanup deadline is not proof that an uncertain provider effect was
+rolled back.
 
 Unary gRPC health for an empty service, either common service or any domain
 service actually registered on the listener rereads read-only database
