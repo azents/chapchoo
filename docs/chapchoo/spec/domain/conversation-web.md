@@ -45,6 +45,32 @@ Same-source updates retain original record order and update the matching native
 message. Viewport anchoring preserves an existing record's screen offset while
 the reader is detached; Jump to latest restores following.
 
+## User-facing execution diagnosis
+
+The status distinguishes a conversation that has not started, missing saved AI
+authentication, startup in progress, reported startup failure, delivery failure,
+unconfirmed delivery and failure to refresh conversation data. Missing native
+observations alone do not prove a failed start. Reported native rejection or
+pre-launch failure names the harness (currently Codex) as failing to start; it
+does not invent token-expiry or network diagnoses. An unavailable saved source
+and uncertain retirement retain their distinct user consequences.
+
+The read owner preserves typed setup results beside retained input operations.
+A separate latest-input observation stays current even when the user pages older
+inputs. The current native foreground observation takes precedence over past
+startup failures. New local submissions supersede older failure feedback without
+replaying it. Authentication setup links to the Agent detail page; read recovery
+only refreshes observations. The composer is disabled when authentication must
+first be selected. Input-level reported startup failures remain readable on
+reentry rather than being reduced to generic delivery failure. Possible setup
+forwarding does not replace known delivery uncertainty in an input label.
+
+Sending and failed text uses the same right-aligned user-bubble presentation as
+native user messages, with smaller adjacent delivery status rather than a second
+body-sized paragraph or diagnostic border. Retained inputs precede newer local
+submissions, so a pending message does not jump above earlier failures. Native
+inserted-message identity still avoids duplicating a confirmed captured message.
+
 ## Text, requests and retained operation facts
 
 User content is whitespace-preserving plain text. Assistant utterances use

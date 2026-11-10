@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./conversation-activity": {
+      "types": "./dist/conversation-activity.d.ts",
+      "default": "./dist/conversation-activity.js"
+    },
     "./conversation-supply-rpc": {
       "types": "./dist/conversation-supply-rpc.d.ts",
       "default": "./dist/conversation-supply-rpc.js"

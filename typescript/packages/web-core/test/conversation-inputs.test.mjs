@@ -161,3 +161,43 @@ test("Stop result observation is read-only and limited to its exact source and c
   assert.equal(stale.stop, undefined);
   assert.equal(reads, 1);
 });
+test("latest startup diagnosis stays current while browsing older failed inputs and survives reentry", async () => {
+  const f = fixture({ started: false, known: true });
+  f.api.inputResult = async ({ requestId }) => ({
+    acceptance: { ...f.acceptance, requestId },
+    ownership: 1,
+    preparation:
+      requestId === "latest" ? { possibleForwarding: {} } : { failed: 3 },
+  });
+  const first = await readConversationRegion(f.api, {
+    agentId: "agent",
+    expectedConversationId: "conversation",
+    knownInputs: [f.acceptance.id],
+  });
+  assert.deepEqual(first.latestInput.preparation, {
+    type: "failed",
+    reason: "nativeRejected",
+  });
+  assert.deepEqual(first.inputs[0].preparation, first.latestInput.preparation);
+  const list = f.api.inputs;
+  f.api.inputs = async (input) =>
+    input.limit === 1
+      ? {
+          inputs: [
+            {
+              acceptance: { ...f.acceptance, requestId: "latest" },
+              totalBytes: 0n,
+            },
+          ],
+        }
+      : list(input);
+  const older = await readConversationRegion(f.api, {
+    agentId: "agent",
+    expectedConversationId: "conversation",
+    knownInputs: [f.acceptance.id],
+    inputBefore: { acceptedAt: 30n, requestId: "cursor" },
+  });
+  assert.deepEqual(older.latestInput.preparation, { type: "preparing" });
+  assert.equal(older.latestInput.requestId, "latest");
+  assert.equal(older.inputs[0].preparation.type, "failed");
+});

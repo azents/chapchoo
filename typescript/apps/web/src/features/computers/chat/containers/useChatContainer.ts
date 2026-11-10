@@ -2,6 +2,7 @@
 import { HeaderControlsContext } from "@chapchoo/ui/AppHeader";
 import { AppNavigationContext } from "@chapchoo/ui/AppNavigation";
 import { computerOperation } from "@chapchoo/web-core/computer-messages";
+import { conversationActivity } from "@chapchoo/web-core/conversation-activity";
 import {
   initialQuestionDraft,
   reviewQuestionAnswer,
@@ -13,7 +14,7 @@ import { useLocale } from "next-intl";
 import { createElement, useContext, useEffect, useRef, useState } from "react";
 import { trpc } from "@/shared/rpc/client";
 import { useAgentsContainer } from "../../containers/useAgentsContainer";
-import { chatCopy } from "../copy";
+import { activityStatus, chatCopy } from "../copy";
 import { SupplyPage } from "../SupplyPage";
 import { useChatFocus } from "./useChatFocus";
 import { useConversationReader } from "./useConversationReader";
@@ -110,10 +111,12 @@ export function useChatContainer(props: ChatInput): ChatProps {
     computer.power === "running" &&
     computer.connector === "connected" &&
     computer.phase === "completed";
+  const activity = conversationActivity(region, inputs);
   const writable =
     effectAvailable &&
     reader.read === "ready" &&
-    region.header.state !== "loading";
+    region.header.state !== "loading" &&
+    activity !== "authenticationRequired";
   const operation = computerOperation(computer, product.copy);
   const status =
     product.error ??
@@ -131,15 +134,7 @@ export function useChatContainer(props: ChatInput): ChatProps {
                 ? copy.error
                 : reader.read === "loading"
                   ? copy.loading
-                  : copy[
-                      region.header.foreground === "unavailable"
-                        ? "unavailable"
-                        : region.header.foreground === "requiresAction"
-                          ? "requiresAction"
-                          : region.header.foreground === "working"
-                            ? "working"
-                            : "idle"
-                    ]);
+                  : activityStatus(copy, activity));
   const scope = JSON.stringify([
     region.header.agentId,
     region.header.conversationId,
@@ -427,8 +422,7 @@ export function useChatContainer(props: ChatInput): ChatProps {
     agentNavigation: navigation?.content,
     conversation,
     input,
-    activity:
-      reader.read === "error" ? "unavailable" : region.header.foreground,
+    activity: reader.read === "error" ? "unavailable" : activity,
     writable: writable && !sendMutation.isPending,
     stoppable:
       effectAvailable && Boolean(region.header.native && region.header.workId),

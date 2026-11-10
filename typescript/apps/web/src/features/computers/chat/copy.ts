@@ -1,3 +1,9 @@
+import type { ConversationActivity } from "@chapchoo/web-core/conversation-activity";
+import type {
+  InputPreparation,
+  RetainedInputView,
+} from "@chapchoo/web-core/conversation-types";
+
 export interface ChatCopy {
   activity: string;
   close: string;
@@ -11,6 +17,15 @@ export interface ChatCopy {
   working: string;
   requiresAction: string;
   unavailable: string;
+  notStarted: string;
+  authenticationRequired: string;
+  starting: string;
+  startFailed: string;
+  sourceUnavailable: string;
+  retirementUnknown: string;
+  deliveryFailed: string;
+  deliveryUnconfirmed: string;
+  authenticationSettings: string;
   stop: string;
   empty: string;
   input: string;
@@ -73,7 +88,16 @@ const en: ChatCopy = {
   idle: "Ready to chat",
   working: "Working",
   requiresAction: "Waiting for your answer",
-  unavailable: "Work status unavailable",
+  unavailable: "Check {harness} connection",
+  notStarted: "Send a message to start",
+  authenticationRequired: "AI authentication required",
+  starting: "Starting {harness}…",
+  startFailed: "{harness} failed to start",
+  sourceUnavailable: "{harness} conversation could not be opened",
+  retirementUnknown: "Previous {harness} process may still be running",
+  deliveryFailed: "Message could not be delivered",
+  deliveryUnconfirmed: "Message delivery not confirmed",
+  authenticationSettings: "Set up AI authentication",
   stop: "Stop work",
   empty: "What shall we work on today?",
   input: "Send a message",
@@ -147,7 +171,16 @@ const ko: ChatCopy = {
   idle: "대화 가능",
   working: "작업 중",
   requiresAction: "답변을 기다리는 중",
-  unavailable: "작업 상태를 확인할 수 없음",
+  unavailable: "{harness} 연결 확인 필요",
+  notStarted: "메시지를 보내 대화 시작",
+  authenticationRequired: "AI 인증 필요",
+  starting: "{harness} 실행 준비 중…",
+  startFailed: "{harness} 실행 실패",
+  sourceUnavailable: "{harness} 대화를 열지 못했습니다",
+  retirementUnknown: "이전 {harness}가 아직 실행 중일 수 있습니다",
+  deliveryFailed: "메시지 전달 실패",
+  deliveryUnconfirmed: "메시지 전달 여부 미확인",
+  authenticationSettings: "AI 인증 설정",
   stop: "작업 중지",
   empty: "오늘은 어떤 일을 함께 해볼까요?",
   input: "메시지 보내기",
@@ -221,7 +254,16 @@ const ja: ChatCopy = {
   idle: "会話できます",
   working: "作業中",
   requiresAction: "回答を待っています",
-  unavailable: "作業状況を確認できません",
+  unavailable: "{harness}の接続を確認してください",
+  notStarted: "メッセージを送って会話を開始",
+  authenticationRequired: "AI認証が必要です",
+  starting: "{harness}を起動しています…",
+  startFailed: "{harness}の起動に失敗しました",
+  sourceUnavailable: "{harness}の会話を開けませんでした",
+  retirementUnknown: "以前の{harness}がまだ実行中の可能性があります",
+  deliveryFailed: "メッセージを配信できませんでした",
+  deliveryUnconfirmed: "メッセージの配信を確認できません",
+  authenticationSettings: "AI認証を設定",
   stop: "作業を停止",
   empty: "今日は何を一緒にしましょうか？",
   input: "メッセージを送る",
@@ -295,7 +337,17 @@ const fr: ChatCopy = {
   idle: "Disponible",
   working: "Travail en cours",
   requiresAction: "En attente de votre réponse",
-  unavailable: "État du travail indisponible",
+  unavailable: "Vérifier la connexion à {harness}",
+  notStarted: "Envoyez un message pour commencer",
+  authenticationRequired: "Authentification IA requise",
+  starting: "Démarrage de {harness}…",
+  startFailed: "Échec du démarrage de {harness}",
+  sourceUnavailable: "Impossible d’ouvrir la conversation {harness}",
+  retirementUnknown:
+    "Le processus {harness} précédent est peut-être encore actif",
+  deliveryFailed: "Échec de l’envoi du message",
+  deliveryUnconfirmed: "Envoi du message non confirmé",
+  authenticationSettings: "Configurer l’authentification IA",
   stop: "Arrêter le travail",
   empty: "Sur quoi allons-nous travailler aujourd’hui ?",
   input: "Envoyer un message",
@@ -365,6 +417,46 @@ export function chatCopy(locale: string): ChatCopy {
       : locale.startsWith("fr")
         ? fr
         : en;
+}
+export function activityStatus(
+  copy: ChatCopy,
+  activity: ConversationActivity,
+): string {
+  return copy[activity].replace("{harness}", copy.codex);
+}
+export function preparationStatus(
+  copy: ChatCopy,
+  preparation?: InputPreparation,
+): string | null {
+  if (preparation?.type === "preparing") {
+    return activityStatus(copy, "starting");
+  }
+  if (preparation?.type !== "failed") {
+    return null;
+  }
+  return activityStatus(
+    copy,
+    preparation.reason === "sourceUnavailable"
+      ? "sourceUnavailable"
+      : preparation.reason === "retirementUnknown"
+        ? "retirementUnknown"
+        : "startFailed",
+  );
+}
+export function inputStatus(
+  copy: ChatCopy,
+  input: Pick<RetainedInputView, "observation" | "preparation">,
+): string {
+  if (input.preparation?.type === "failed") {
+    return (
+      preparationStatus(copy, input.preparation) ?? copy[input.observation]
+    );
+  }
+  // Possible forwarding is historical evidence, not a surviving processing owner.
+  if (input.observation === "uncertain") {
+    return copy.uncertain;
+  }
+  return preparationStatus(copy, input.preparation) ?? copy[input.observation];
 }
 export function nativeStatus(copy: ChatCopy, status: string): string {
   return Object.hasOwn(copy.nativeStatuses, status)

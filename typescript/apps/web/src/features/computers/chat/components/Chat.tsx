@@ -327,6 +327,18 @@ export function Chat(props: ChatProps): ReactElement {
               </span>
               <h2>{c.execution}</h2>
               <p>{props.status}</p>
+              {props.activity === "authenticationRequired" ? (
+                <Button component="a" href={detailHref} variant="default">
+                  {c.authenticationSettings}
+                </Button>
+              ) : props.activity === "startFailed" ||
+                props.activity === "sourceUnavailable" ||
+                props.activity === "retirementUnknown" ||
+                props.activity === "unavailable" ? (
+                <Button variant="default" onClick={props.conversation.onRead}>
+                  {c.retry}
+                </Button>
+              ) : null}
               {props.conversation.stop !== "idle" ? (
                 <p role="status">{c[props.conversation.stop]}</p>
               ) : null}

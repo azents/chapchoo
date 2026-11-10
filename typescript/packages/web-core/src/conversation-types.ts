@@ -193,6 +193,10 @@ export interface ConversationRegion {
   renderedAt: number;
   refill?: boolean;
   inputs?: RetainedInputView[];
+  latestInput?: Pick<
+    RetainedInputView,
+    "requestId" | "observation" | "preparation"
+  >;
   inputOlder?: InputHistoryAnchor;
   latestPlan?: ConversationRecord | null;
   stop?: {
@@ -239,8 +243,20 @@ export interface RetainedInputView {
   acceptedAt: bigint;
   text?: string;
   observation: InputObservation;
+  preparation?: InputPreparation;
   insertedNativeMessageId?: string;
 }
+export type InputPreparation =
+  | { type: "preparing" | "ready" }
+  | {
+      type: "failed";
+      reason:
+        | "notAdmitted"
+        | "launchFailed"
+        | "nativeRejected"
+        | "sourceUnavailable"
+        | "retirementUnknown";
+    };
 export interface InputReceipt {
   requestId: string;
   conversationId: string;

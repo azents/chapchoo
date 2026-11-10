@@ -6,7 +6,7 @@ import {
 import { Button, Group, Image, Stack, Text } from "@mantine/core";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { nativeStatus, permissionScope } from "../copy";
+import { inputStatus, nativeStatus, permissionScope } from "../copy";
 import classes from "./ConversationBody.module.css";
 import type { ChatCopy } from "../copy";
 import type { ConversationControls } from "../types";
@@ -542,9 +542,9 @@ export function ConversationBody({
         >
           {record.kind === "user" || record.kind === "assistant" ? (
             <>
-              <strong>
-                {record.kind === "assistant" ? agentName : copy.message}
-              </strong>
+              {record.kind === "assistant" ? (
+                <strong>{agentName}</strong>
+              ) : null}
               <ConversationContent
                 parts={record.content}
                 plain={record.kind === "user"}
@@ -630,17 +630,6 @@ export function ConversationBody({
           )}
         </article>
       ))}
-      {controls.inputs.map((input) => (
-        <section key={input.requestId} className={classes.pending}>
-          <pre>{input.text}</pre>
-          <Text role="status">{copy[input.observation]}</Text>
-          {input.observation === "uncertain" ? (
-            <Button variant="subtle" onClick={controls.onRead}>
-              {copy.retry}
-            </Button>
-          ) : null}
-        </section>
-      ))}
       {(controls.region.inputs ?? []).map((input) =>
         input.insertedNativeMessageId &&
         controls.region.records.some(
@@ -650,14 +639,21 @@ export function ConversationBody({
         ) ? (
           <details className={classes.pending} key={input.id}>
             <summary>
-              {copy.message} · {copy[input.observation]}
+              {copy.message} · {inputStatus(copy, input)}
             </summary>
             <pre>{input.text}</pre>
           </details>
         ) : (
-          <section className={classes.pending} key={input.id}>
-            <pre>{input.text}</pre>
-            <Text role="status">{copy[input.observation]}</Text>
+          <section className={classes.record} data-kind="user" key={input.id}>
+            <p className={classes.answer}>{input.text}</p>
+            <Text
+              size="xs"
+              c={input.observation === "failed" ? "red" : "dimmed"}
+              ta="right"
+              role="status"
+            >
+              {inputStatus(copy, input)}
+            </Text>
             {input.observation === "uncertain" ? (
               <Button variant="subtle" onClick={controls.onRead}>
                 {copy.retry}
@@ -666,6 +662,28 @@ export function ConversationBody({
           </section>
         ),
       )}
+      {controls.inputs.map((input) => (
+        <section
+          key={input.requestId}
+          className={classes.record}
+          data-kind="user"
+        >
+          <p className={classes.answer}>{input.text}</p>
+          <Text
+            size="xs"
+            c={input.observation === "failed" ? "red" : "dimmed"}
+            ta="right"
+            role="status"
+          >
+            {copy[input.observation]}
+          </Text>
+          {input.observation === "uncertain" ? (
+            <Button variant="subtle" onClick={controls.onRead}>
+              {copy.retry}
+            </Button>
+          ) : null}
+        </section>
+      ))}
     </Stack>
   );
 }
