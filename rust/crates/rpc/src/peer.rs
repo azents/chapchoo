@@ -146,7 +146,7 @@ impl PeerServices {
                 .execution
                 .as_ref()
                 .is_none_or(|e| e.retired_at.is_some())
-            || command.observe.is_none()
+            || command.operation.is_none()
         {
             return Err(Status::failed_precondition(
                 "Connector command does not match current execution",

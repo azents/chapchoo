@@ -1,0 +1,275 @@
+syntax = "proto3";
+package chapchoo.conversations;
+import "google/protobuf/empty.proto";
+// Every owner request rechecks private Agent ownership and current Team admission.
+service Conversations {
+  rpc Current(OwnerConversationRequest) returns (OwnerConversation);
+  rpc GetSupply(OwnerConversationRequest) returns (SavedSupply);
+  rpc SaveSupply(SaveSupplyRequest) returns (SavedSupply);
+  rpc SubmitInput(OwnerInputPiece) returns (OwnerInputProgress);
+  rpc InputResult(OwnerInputResultRequest) returns (OwnerInputStatus);
+  rpc SubmitAnswer(OwnerAnswerPiece) returns (OwnerAnswerProgress);
+  rpc AnswerResult(OwnerAnswerResultRequest) returns (OwnerAnswerStatus);
+  rpc ReadAnswer(OwnerAnswerRead) returns (FieldChunk);
+  rpc LiveRequests(OwnerLiveRequests) returns (LiveRequestList);
+  rpc Records(OwnerRecordsRequest) returns (RecordRegion);
+  rpc Fields(OwnerFieldsRequest) returns (RecordFields);
+  rpc ReadField(OwnerFieldRead) returns (FieldChunk);
+  rpc Stop(OwnerStopRequest) returns (StopReceipt);
+  rpc StopResult(OwnerStopResultRequest) returns (OptionalStopReceipt);
+}
+message OwnerConversationRequest { string agent_id = 1; }
+message OwnerConversation {
+  CaptureState conversation = 1; ObservedNative observed_native = 2;
+}
+message ObservedNative { NativeTarget target = 1; SourcePosition position = 2; Foreground foreground = 3; optional string work_id = 4; }
+message SavedSupply { HarnessSupply supply = 1; optional string request_id = 2; }
+message SaveSupplyRequest { string agent_id = 1; string request_id = 2; optional string expected_request_id = 3; HarnessSupply supply = 4; }
+message InputTarget { oneof target { google.protobuf.Empty not_started = 1; string snapshot_id = 2; } }
+// Incomplete uploads are finite temporary bytes, not accepted product operations.
+// Repeat the exact identity on every piece; each piece is at most 32 KiB.
+message OwnerInputPiece {
+  string agent_id = 1; optional string conversation_id = 2; string request_id = 3;
+  InputTarget target = 4; uint32 total_bytes = 5; uint32 offset = 6; bytes content = 7;
+}
+message InputAcceptance {
+  string id = 1; string conversation_id = 2; string request_id = 3;
+  InputTarget target = 4; int64 accepted_at = 5;
+}
+message OwnerInputProgress {
+  oneof outcome { PieceAccepted uploading = 1; InputAcceptance accepted = 2; }
+}
+message OwnerInputResultRequest {
+  string agent_id = 1; string conversation_id = 2; string request_id = 3;
+}
+enum InputOwnership {
+  INPUT_OWNERSHIP_UNSPECIFIED = 0; INPUT_OWNERSHIP_PROCESSING_HERE = 1;
+  INPUT_OWNERSHIP_NOT_OBSERVED_HERE = 2;
+}
+message InputDelivery {
+  oneof observation {
+    google.protobuf.Empty possible_forwarding = 1; string inserted_native_message_id = 2;
+    google.protobuf.Empty steered = 3; google.protobuf.Empty failed = 4;
+  }
+}
+// Absent acceptance/delivery is missing evidence, never permission to redispatch.
+message OwnerInputStatus {
+  InputAcceptance acceptance = 1; InputOwnership ownership = 2; InputDelivery delivery = 3;
+  InputPreparation preparation = 4;
+}
+// Setup result is not current native liveness, source catch-up or text consumption.
+message InputPreparation {
+  HarnessSupply requested_supply = 1;
+  oneof observation { google.protobuf.Empty possible_forwarding = 2; NativeTarget session_ready = 3; SetupFailure failed = 4; }
+}
+message AnswerStrings { repeated string values = 1; }
+message AnswerValue {
+  oneof value { string text = 1; int64 integer = 2; double number = 3; bool boolean = 4; AnswerStrings strings = 5; }
+}
+message AnswerField { string name = 1; AnswerValue value = 2; }
+message AnswerFields { repeated AnswerField fields = 1; }
+// Missing content, an empty object, false and an empty string remain distinct.
+message FormAcceptance { AnswerFields content = 1; }
+message TypedAnswer {
+  oneof answer {
+    string permission_option_id = 1; google.protobuf.Empty permission_cancelled = 2;
+    FormAcceptance form_accept = 3; google.protobuf.Empty form_decline = 4; google.protobuf.Empty form_cancel = 5;
+  }
+}
+// Complete Protobuf TypedAnswer bytes. No JSON-RPC envelope or live protocol ID.
+message OwnerAnswerPiece {
+  string agent_id = 1; string conversation_id = 2; string request_id = 3; NativeTarget target = 4;
+  string responder_token = 5; uint32 total_bytes = 6; uint32 offset = 7; bytes content = 8;
+}
+enum AnswerDelivery {
+  ANSWER_DELIVERY_UNSPECIFIED = 0; ANSWER_DELIVERY_ACCEPTED = 1;
+  ANSWER_DELIVERY_POSSIBLE_FORWARDING = 2; ANSWER_DELIVERY_RESPONDER_ACCEPTED = 3; ANSWER_DELIVERY_REJECTED = 4;
+}
+message AnswerAcceptance {
+  string id = 1; string conversation_id = 2; string request_id = 3;
+  string responder_token = 4; SourcePosition occurrence = 5; int64 accepted_at = 6; AnswerDelivery delivery = 7;
+}
+message OwnerAnswerProgress { oneof outcome { PieceAccepted uploading = 1; AnswerAcceptance accepted = 2; } }
+message OwnerAnswerResultRequest { string agent_id = 1; string conversation_id = 2; string request_id = 3; }
+message OwnerAnswerStatus { AnswerAcceptance acceptance = 1; }
+// Complete Protobuf TypedAnswer bytes from the immutable retained operation.
+// Reads bind source and operation, including after the live responder closes.
+message OwnerAnswerRead {
+  RecordSource source = 1; string operation_id = 2; uint32 offset = 3; uint32 length = 4;
+}
+message OwnerLiveRequests { string agent_id = 1; string conversation_id = 2; NativeTarget target = 3; }
+// Read the original question/schema using RecordKind REQUEST, native_id equal to
+// occurrence_id and RecordField REQUEST. History alone grants no responder authority.
+message LiveRequest {
+  string responder_token = 1; SourcePosition occurrence = 2; RequestKind kind = 3;
+  optional string answer_request_id = 4;
+}
+message LiveRequestList { repeated LiveRequest requests = 1; }
+enum RecordKind {
+  RECORD_KIND_UNSPECIFIED = 0; RECORD_KIND_USER = 1; RECORD_KIND_ASSISTANT = 2;
+  RECORD_KIND_THOUGHT = 3; RECORD_KIND_TOOL = 4; RECORD_KIND_PLAN = 5;
+  RECORD_KIND_TERMINAL = 6; RECORD_KIND_REQUEST = 7; RECORD_KIND_STATE = 8; RECORD_KIND_NOTICE = 9;
+}
+enum RecordField {
+  RECORD_FIELD_UNSPECIFIED = 0; RECORD_FIELD_CONTENT = 1; RECORD_FIELD_TITLE = 2;
+  RECORD_FIELD_STATUS = 3; RECORD_FIELD_KIND = 4; RECORD_FIELD_LOCATIONS = 5;
+  RECORD_FIELD_DESCRIPTION = 6; RECORD_FIELD_REQUEST = 7; RECORD_FIELD_FOREGROUND = 8;
+  RECORD_FIELD_TOOL_INPUT = 9; RECORD_FIELD_TOOL_OUTPUT = 10;
+}
+message RecordSource { string agent_id = 1; string conversation_id = 2; string snapshot_id = 3; }
+message RecordAnchor { int64 ordinal = 1; int64 index = 2; }
+message OwnerRecordsRequest { RecordSource source = 1; RecordAnchor before = 2; uint32 limit = 3; }
+message RecordMetadata {
+  RecordKind kind = 1; string native_id = 2; RecordAnchor anchor = 3; int64 updated_ordinal = 4;
+}
+// Newest first. Continue older records from the last returned anchor; no durable browser cursor.
+message RecordRegion { repeated RecordMetadata records = 1; }
+message OwnerFieldsRequest { RecordSource source = 1; RecordKind kind = 2; string native_id = 3; }
+message FieldMetadata { RecordField field = 1; int64 updated_ordinal = 2; int64 total_bytes = 3; }
+message RecordFields { repeated FieldMetadata fields = 1; }
+message OwnerFieldRead { OwnerFieldsRequest record = 1; RecordField field = 2; int64 updated_ordinal = 3; uint32 offset = 4; uint32 length = 5; }
+// Complete normalized field bytes, not a captured RPC envelope. JSON values are
+// newline-delimited; clearing a field produces an empty body. Pieces may split UTF-8.
+// Every continuation binds the same source and field update; changes reject the read.
+message FieldChunk { bytes content = 1; uint32 offset = 2; int64 total_bytes = 3; }
+message OwnerStopRequest { string agent_id = 1; string conversation_id = 2; string request_id = 3; WorkTarget target = 4; }
+message OwnerStopResultRequest { string agent_id = 1; string conversation_id = 2; string request_id = 3; }
+enum StopState { STOP_STATE_UNSPECIFIED = 0; STOP_STATE_POSSIBLE_FORWARDING = 1; STOP_STATE_CANCEL_PUBLISHED = 2; STOP_STATE_REJECTED = 3; }
+message StopReceipt { string id = 1; string conversation_id = 2; string request_id = 3; WorkTarget target = 4; StopState state = 5; }
+message OptionalStopReceipt { StopReceipt receipt = 1; }
+
+// Authenticated execution-local captured observations, not native command replay.
+// This service is registered only in the component-facing Control group.
+service ConnectorCapture {
+  rpc Current(CurrentCaptureRequest) returns (CurrentCaptureState);
+  rpc Inspect(CaptureRequest) returns (CaptureState);
+  rpc Bind(BindCaptureRequest) returns (CaptureState);
+  rpc Append(CapturePiece) returns (CapturePieceResult);
+  rpc Complete(CompleteCaptureRequest) returns (CaptureState);
+  rpc CheckSetup(SetupCheck) returns (google.protobuf.Empty);
+  rpc ReportSetup(SetupReport) returns (google.protobuf.Empty);
+  rpc PullInput(InputChunkRequest) returns (InputChunk);
+  rpc ReportInput(InputReport) returns (google.protobuf.Empty);
+  rpc ReportNative(NativeStateReport) returns (google.protobuf.Empty);
+  rpc ReportRequest(LiveRequestReport) returns (google.protobuf.Empty);
+  rpc CheckStop(StopCheck) returns (google.protobuf.Empty);
+  rpc ReportStop(StopReport) returns (google.protobuf.Empty);
+  rpc PullAnswer(AnswerChunkRequest) returns (AnswerChunk);
+  rpc ReportAnswer(AnswerReport) returns (google.protobuf.Empty);
+}
+message CaptureSource {
+  string session_id = 1;
+  string control_id = 2;
+  string connection_id = 3;
+}
+message SourcePosition { int64 ordinal = 1; string occurrence_id = 2; }
+message CaptureRequest { CaptureSource source = 1; string conversation_id = 2; }
+message CurrentCaptureRequest { CaptureSource source = 1; }
+message CurrentCaptureState { CaptureState conversation = 1; }
+enum CaptureStatus {
+  CAPTURE_STATUS_UNSPECIFIED = 0;
+  CAPTURE_STATUS_NOT_STARTED = 1;
+  CAPTURE_STATUS_LOADING = 2;
+  CAPTURE_STATUS_READY = 3;
+}
+message CaptureState {
+  string conversation_id = 1;
+  CaptureStatus status = 2;
+  optional string snapshot_id = 3;
+  optional string native_session_id = 4;
+  SourcePosition position = 5;
+}
+message BindCaptureRequest {
+  CaptureSource source = 1;
+  string conversation_id = 2;
+  optional string expected_previous_snapshot_id = 3;
+  string snapshot_id = 4;
+  string native_session_id = 5;
+}
+// Each raw event is transferred completely, using pieces of at most 32 KiB.
+// A transfer is bounded to 16 MiB and a finite in-process assembly lifetime.
+// Losing assembly state does not publish a pair, move a cursor or replay work.
+message CapturePiece {
+  CaptureSource source = 1;
+  string conversation_id = 2;
+  string snapshot_id = 3;
+  SourcePosition position = 4;
+  string transfer_id = 5;
+  uint32 total_bytes = 6;
+  uint32 offset = 7;
+  bytes content = 8;
+}
+message PieceAccepted { uint32 next_offset = 1; }
+message PairPublished { SourcePosition position = 1; }
+message CapturePieceResult {
+  oneof outcome { PieceAccepted accepted = 1; PairPublished published = 2; }
+}
+// The boundary belongs to one retained CapturePass; append may continue beyond it.
+message CompleteCaptureRequest {
+  CaptureSource source = 1;
+  string conversation_id = 2;
+  string snapshot_id = 3;
+  SourcePosition boundary = 4;
+}
+message NativeTarget { string snapshot_id = 1; string native_session_id = 2; }
+message InitialNativeContext { bool allow_fresh = 1; }
+message HarnessSupply {
+  oneof choice { google.protobuf.Empty managed = 1; string existing_codex_path = 2; }
+}
+message SetupCommand {
+  string agent_id = 1; string conversation_id = 2; string operation_id = 3;
+  HarnessSupply supply = 4;
+  oneof context { InitialNativeContext initial = 5; NativeTarget existing = 6; }
+}
+message SetupCheck { CaptureSource source = 1; SetupCommand command = 2; }
+enum SetupFailure {
+  SETUP_FAILURE_UNSPECIFIED = 0;
+  SETUP_FAILURE_NOT_ADMITTED = 1;
+  SETUP_FAILURE_BEFORE_NATIVE_LAUNCH = 2;
+  SETUP_FAILURE_NATIVE_REJECTED = 3;
+  SETUP_FAILURE_SOURCE_UNAVAILABLE = 4;
+  SETUP_FAILURE_RETIREMENT_UNKNOWN = 5;
+}
+message SetupReport {
+  CaptureSource source = 1;
+  string agent_id = 2; string conversation_id = 3; string operation_id = 4;
+  oneof result { NativeTarget ready = 5; SetupFailure failed = 6; }
+}
+message InputCommand {
+  string agent_id = 1; string conversation_id = 2; string operation_id = 3;
+  NativeTarget target = 4;
+}
+message InputChunkRequest { CaptureSource source = 1; InputCommand command = 2; uint32 offset = 3; }
+message InputChunk { bytes content = 1; uint32 total_bytes = 2; uint32 offset = 3; }
+message InputReport {
+  CaptureSource source = 1; InputCommand command = 2;
+  oneof result { string inserted_native_message_id = 3; google.protobuf.Empty steered = 4; google.protobuf.Empty failed = 5; }
+}
+enum Foreground {
+  FOREGROUND_UNSPECIFIED = 0; FOREGROUND_IDLE = 1; FOREGROUND_RUNNING = 2;
+  FOREGROUND_REQUIRES_ACTION = 3; FOREGROUND_OTHER_ACTIVE = 4;
+}
+message NativeStateReport {
+  CaptureSource source = 1; string conversation_id = 2; NativeTarget target = 3;
+  SourcePosition position = 4; Foreground foreground = 5; optional string work_id = 6;
+}
+enum RequestKind { REQUEST_KIND_UNSPECIFIED = 0; REQUEST_KIND_PERMISSION = 1; REQUEST_KIND_FORM = 2; }
+message LiveRequestReport {
+  CaptureSource source = 1; string conversation_id = 2; NativeTarget target = 3;
+  SourcePosition position = 4; RequestKind kind = 5; string responder_token = 6; bool open = 7;
+}
+message WorkTarget { NativeTarget source = 1; string work_id = 2; }
+message StopCommand { string conversation_id = 1; string operation_id = 2; WorkTarget target = 3; }
+message StopCheck { CaptureSource source = 1; StopCommand command = 2; }
+message StopReport { CaptureSource source = 1; StopCommand command = 2; bool cancel_published = 3; }
+message AnswerCommand {
+  string agent_id = 1; string conversation_id = 2; string operation_id = 3; NativeTarget target = 4;
+}
+message AnswerChunkRequest { CaptureSource source = 1; AnswerCommand command = 2; uint32 offset = 3; }
+// Complete serialized typed product answer, never a historical protocol request ID.
+message AnswerChunk {
+  bytes content = 1; uint32 total_bytes = 2; uint32 offset = 3;
+  string responder_token = 4; SourcePosition occurrence = 5; RequestKind kind = 6;
+}
+// Local responder acceptance is not remote consumption or task completion.
+message AnswerReport { CaptureSource source = 1; AnswerCommand command = 2; bool responder_accepted = 3; }

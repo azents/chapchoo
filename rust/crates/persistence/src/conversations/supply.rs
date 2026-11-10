@@ -29,7 +29,7 @@ safe_debug!(HarnessSupplySelection);
 safe_debug!(HarnessSupplyReceipt);
 
 #[derive(diesel::QueryableByName)]
-struct SupplyRow {
+pub(super) struct SupplyRow {
     #[diesel(sql_type=Text)]
     supply_kind: String,
     #[diesel(sql_type=Nullable<Text>)]
@@ -42,7 +42,7 @@ struct SupplyRow {
     expected_request_id: Option<String>,
 }
 impl SupplyRow {
-    fn supply(&self) -> Result<HarnessSupply, StoreError> {
+    pub(super) fn supply(&self) -> Result<HarnessSupply, StoreError> {
         match (self.supply_kind.as_str(), &self.executable_path) {
             ("MANAGED", None) => Ok(HarnessSupply::Managed),
             ("EXISTING", Some(path)) => Ok(HarnessSupply::Existing(
@@ -51,14 +51,36 @@ impl SupplyRow {
             _ => Err(StoreError::Integrity),
         }
     }
-    fn receipt(&self) -> HarnessSupplyReceipt {
+    pub(super) fn receipt(&self) -> HarnessSupplyReceipt {
         HarnessSupplyReceipt {
             request_id: self.request_id.clone(),
             accepted_at: self.accepted_at,
         }
     }
 }
-const SAVED_SUPPLY: &str = "SELECT supply_kind,executable_path,current_request_id AS request_id,selected_at AS accepted_at,CAST(NULL AS TEXT) AS expected_request_id FROM agent_harness_supplies WHERE agent_id=?";
+pub(super) const SAVED_SUPPLY: &str = "SELECT supply_kind,executable_path,current_request_id AS request_id,selected_at AS accepted_at,CAST(NULL AS TEXT) AS expected_request_id FROM agent_harness_supplies WHERE agent_id=?";
+
+macro_rules! current_supply {
+    ($connection:expr,$dialect:expr,$agent:expr) => {{
+        use $crate::conversations::supply::{SAVED_SUPPLY, SupplyRow};
+        let row = diesel::sql_query($dialect.query(SAVED_SUPPLY))
+            .bind::<IdentitySql, _>($agent)
+            .get_result::<SupplyRow>($connection)
+            .await
+            .optional()?;
+        match row {
+            Some(row) => HarnessSupplySelection {
+                supply: row.supply()?,
+                saved: Some(row.receipt()),
+            },
+            None => HarnessSupplySelection {
+                supply: HarnessSupply::Managed,
+                saved: None,
+            },
+        }
+    }};
+}
+pub(super) use current_supply;
 
 impl Store {
     pub async fn harness_supply(
@@ -70,21 +92,7 @@ impl Store {
         let agent = EntityId::from_dto(EntityKind::Agent, agent_id)?;
         operation!(self, |connection, dialect| {
             let _ = owned_agent!(connection, dialect, actor, agent, now);
-            let row = diesel::sql_query(dialect.query(SAVED_SUPPLY))
-                .bind::<IdentitySql, _>(agent)
-                .get_result::<SupplyRow>(connection)
-                .await
-                .optional()?;
-            match row {
-                Some(row) => Ok(HarnessSupplySelection {
-                    supply: row.supply()?,
-                    saved: Some(row.receipt()),
-                }),
-                None => Ok(HarnessSupplySelection {
-                    supply: HarnessSupply::Managed,
-                    saved: None,
-                }),
-            }
+            Ok(current_supply!(connection, dialect, agent))
         })
     }
 

@@ -47,7 +47,15 @@ fn selectable_group_unions_deduplicate_shared_services_and_exclude_peers() -> Re
             store.clone(), Arc::new(support::authentication::Provider::default()), 1,
         )?);
         let authentication = chapchoo_rpc::AuthenticationServices::new(authentication_service.clone());
-        let app = Arc::new(ComputersService::new(store));
+        let capture=chapchoo_rpc::ConversationCaptureServices::new(Arc::new(chapchoo_service::ConversationService::new(store.clone())),Arc::new(AtomicBool::new(true)));
+        let core=Arc::new(chapchoo_service::ConversationService::new(store.clone()));
+        let app = Arc::new(ComputersService::new(store.clone()));
+        let admission=Arc::new(AtomicBool::new(true));
+        let processor=Arc::new(chapchoo_rpc::ConversationControlProcessor::new(app.clone(),core.clone(),chapchoo_rpc::PeerDelivery::new(app.clone()),admission.clone()));
+        let conversations=chapchoo_rpc::ConversationServices::new(core.clone(),
+            Arc::new(chapchoo_service::ConversationInputService::new(store.clone(),processor.clone(),4)?),
+            Arc::new(chapchoo_service::ConversationStopService::new(store,processor.clone())?),
+            Arc::new(chapchoo_service::ConversationAnswerService::new(core,processor)?),admission);
         let computers = chapchoo_rpc::ComputerServices::new(app.clone());
         let connections = ComponentConnectionServices::new(
             app.clone(),
@@ -76,7 +84,8 @@ fn selectable_group_unions_deduplicate_shared_services_and_exclude_peers() -> Re
                         Some(&account),
                         Some(&computers),
                         Some(&authentication),
-                        Some((&auth, &connections)),
+                        Some(&conversations),
+                        Some((&auth, &connections,&capture)),
                     )?)
                     .serve_with_incoming_shutdown(incoming, async {
                         let _ = stopped.await;
@@ -121,9 +130,15 @@ fn selectable_group_unions_deduplicate_shared_services_and_exclude_peers() -> Re
                 .await
                 .err()
                 .ok_or("Anonymous component request accepted")?;
+            let conversation=chapchoo_protocol::conversations::conversations_client::ConversationsClient::new(channel.clone())
+                .current(chapchoo_protocol::conversations::OwnerConversationRequest::default()).await.err().ok_or("Anonymous conversation request accepted")?;
+            assert_eq!(conversation.code(),if groups.contains(ServiceGroup::Client) {Code::Unauthenticated} else {Code::Unimplemented});
             let catalogue = chapchoo_protocol::authentication::authentications_client::AuthenticationsClient::new(channel.clone())
                 .list(chapchoo_protocol::authentication::ListRequest::default())
                 .await.err().ok_or("Anonymous catalogue request accepted")?;
+            let captured=chapchoo_protocol::conversations::connector_capture_client::ConnectorCaptureClient::new(channel.clone())
+                .inspect(chapchoo_protocol::conversations::CaptureRequest::default()).await.err().ok_or("Anonymous captured source accepted")?;
+            assert_eq!(captured.code(),if groups.contains(ServiceGroup::Control) {Code::Unauthenticated} else {Code::Unimplemented});
             assert_eq!(catalogue.code(), if groups.contains(ServiceGroup::Client) { Code::Unauthenticated } else { Code::Unimplemented });
             assert_eq!(
                 provider.code() == Code::Unimplemented,
@@ -140,18 +155,19 @@ fn selectable_group_unions_deduplicate_shared_services_and_exclude_peers() -> Re
             );
             drop(channel);
         }
-        assert!(ServiceGroups::default().routes(None, None, None, None).is_err());
+        assert!(ServiceGroups::default().routes(None, None, None,None, None).is_err());
         assert!(
             ServiceGroups::new([ServiceGroup::Control])
-                .routes(None, None, None, None)
+                .routes(None, None, None,None, None)
                 .is_err()
         );
         assert!(
             ServiceGroups::new([ServiceGroup::Client])
-                .routes(None, None, None, None)
+                .routes(None, None, None,None, None)
                 .is_err()
         );
         authentication_service.finish().await?;
+        conversations.finish().await?;
         Ok(())
     }))
 }

@@ -27,6 +27,9 @@ pub struct ControlPlane {
     delivery: PeerDelivery,
 }
 impl ControlPlane {
+    pub fn conversation_delivery(&self) -> PeerDelivery {
+        self.delivery.clone()
+    }
     pub async fn new(
         service: Arc<ComputersService>,
         endpoint: &str,

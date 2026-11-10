@@ -9,6 +9,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         protos.join("control.proto"),
         protos.join("computers.proto"),
         protos.join("authentication.proto"),
+        protos.join("conversations.proto"),
     ];
     for source in &sources {
         println!("cargo:rerun-if-changed={}", source.display());
@@ -32,6 +33,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         "chapchoo.authentication.Kind",
         "chapchoo.authentication.Operation",
         "chapchoo.authentication.ProviderFailure",
+        "chapchoo.conversations.CaptureStatus",
+        "chapchoo.conversations.SetupFailure",
+        "chapchoo.conversations.Foreground",
+        "chapchoo.conversations.RequestKind",
+        "chapchoo.conversations.StopState",
+        "chapchoo.conversations.InputOwnership",
+        "chapchoo.conversations.AnswerDelivery",
+        "chapchoo.conversations.RecordKind",
+        "chapchoo.conversations.RecordField",
         "chapchoo.control.ProviderKind",
         "chapchoo.control.ResourceKind",
         "chapchoo.control.ExecutionFact",

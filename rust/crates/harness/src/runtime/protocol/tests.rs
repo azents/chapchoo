@@ -1,4 +1,8 @@
 use super::*;
+#[path = "request_tests.rs"]
+mod request_tests;
+#[path = "steering_tests.rs"]
+mod steering_tests;
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, duplex};
 
@@ -40,6 +44,46 @@ fn initialization(version: u32) -> Value {
     json!({"protocolVersion":version,"info":{"name":"fixture","version":"1"},"capabilities":{"session":{}}})
 }
 #[tokio::test]
+async fn existing_capture_resumes_without_requesting_native_history_again() -> Result<(), TestError>
+{
+    let (sdk, peer) = duplex(65536);
+    let (read, write) = tokio::io::split(sdk);
+    let outgoing = SinkExt::<String>::sink_map_err(
+        FramedWrite::new(write, LinesCodec::new()),
+        std::io::Error::other,
+    );
+    let incoming =
+        FramedRead::new(read, LinesCodec::new()).map(|r| r.map_err(std::io::Error::other));
+    let (ready, rx) = oneshot::channel();
+    let done = CancellationToken::new();
+    let connection = tokio::spawn(connect(
+        Lines::new(outgoing, incoming),
+        Arc::default(),
+        Arc::default(),
+        ready,
+        done.clone(),
+        "/workspace".into(),
+        NativeContext::Resume {
+            session: NativeConversationId::parse("retained".into())?,
+            replay: CaptureReplay::AlreadyCaptured,
+        },
+    ));
+    let (read, mut write) = tokio::io::split(peer);
+    let mut read = BufReader::new(read);
+    let initialize = request(&mut read).await?;
+    reply(&mut write, &initialize, initialization(2)).await?;
+    let resume = request(&mut read).await?;
+    assert_eq!(resume.method, "session/resume");
+    let params: schema::ResumeSessionRequest = serde_json::from_value(resume.params.clone())?;
+    assert_eq!(params.session_id.to_string(), "retained");
+    assert!(params.replay_from.is_none());
+    reply(&mut write, &resume, json!({})).await?;
+    assert_eq!(rx.await??.session_id().to_string(), "retained");
+    done.cancel();
+    connection.await??;
+    Ok(())
+}
+#[tokio::test]
 async fn prompt_ack_retains_owner_and_does_not_require_completion_or_link() -> Result<(), TestError>
 {
     let (sdk, peer) = duplex(65536);
@@ -55,10 +99,11 @@ async fn prompt_ack_retains_owner_and_does_not_require_completion_or_link() -> R
     let connection = tokio::spawn(connect(
         Lines::new(outgoing, incoming),
         Arc::default(),
+        Arc::default(),
         ready,
         done.clone(),
         "/workspace".into(),
-        None,
+        NativeContext::New,
     ));
     let (read, mut write) = tokio::io::split(peer);
     let mut read = BufReader::new(read);
@@ -124,10 +169,11 @@ async fn unsupported_v1_does_not_create_a_fallback_session() -> Result<(), TestE
     let connection = tokio::spawn(connect(
         Lines::new(outgoing, incoming),
         Arc::default(),
+        Arc::default(),
         ready,
         CancellationToken::new(),
         "/workspace".into(),
-        None,
+        NativeContext::New,
     ));
     let (read, mut write) = tokio::io::split(peer);
     let mut read = BufReader::new(read);
@@ -155,10 +201,14 @@ async fn resume_requests_start_replay_and_failure_never_creates_fresh_context()
     let connection = tokio::spawn(connect(
         Lines::new(outgoing, incoming),
         Arc::default(),
+        Arc::default(),
         ready,
         CancellationToken::new(),
         "/workspace".into(),
-        Some(id),
+        NativeContext::Resume {
+            session: id,
+            replay: CaptureReplay::FromStart,
+        },
     ));
     let (read, mut write) = tokio::io::split(peer);
     let mut read = BufReader::new(read);

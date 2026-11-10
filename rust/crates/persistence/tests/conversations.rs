@@ -1,3 +1,13 @@
+#[path = "conversations/answers.rs"]
+mod answers;
+#[path = "conversations/delivery.rs"]
+mod delivery;
+#[path = "conversations/native_state.rs"]
+mod native_state;
+#[path = "conversations/preparation.rs"]
+mod preparation;
+#[path = "conversations/projections.rs"]
+mod projections;
 mod support;
 
 use base64::{Engine, engine::general_purpose::URL_SAFE};
@@ -341,6 +351,12 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
     let source = f.source(&key);
     assert!(
         store
+            .connector_current_conversation(&source)
+            .await?
+            .is_none()
+    );
+    assert!(
+        store
             .current_conversation(&owner, &f.agent.id, f.now)
             .await?
             .is_none()
@@ -408,11 +424,24 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
         text: ConversationText::parse("  first input\n한국어  ".to_owned())?,
     };
     let (one, two) = tokio::join!(
-        store.accept_conversation_input(&owner, &draft, f.now),
-        store.accept_conversation_input(&owner, &draft, f.now)
+        store.admit_conversation_input(&owner, &draft, f.now),
+        store.admit_conversation_input(&owner, &draft, f.now)
     );
-    let first = one?;
-    assert_eq!(first.id, two?.id);
+    use chapchoo_persistence::ConversationInputAdmission as Admission;
+    let (first, existing) = match (one?, two?) {
+        (Admission::Accepted(first), Admission::Existing(existing))
+        | (Admission::Existing(existing), Admission::Accepted(first)) => (first, existing),
+        _ => return Err("Concurrent duplicate received another processing admission".into()),
+    };
+    assert_eq!(
+        store
+            .connector_current_conversation(&source)
+            .await?
+            .ok_or("Missing current conversation")?
+            .id,
+        first.conversation_id
+    );
+    assert_eq!(first.id, existing.id);
     assert_eq!(first.text.as_str(), draft.text.as_str());
     let changed = AcceptConversationInput {
         text: ConversationText::parse("changed".to_owned())?,
@@ -432,6 +461,7 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
     ));
     let s1 = snapshot("snapshot-one")?;
     let native = NativeConversationId::parse("native-context-one".to_owned())?;
+    preparation::initial(store, f, &first, &s1, &native).await?;
     let binding = SourceBinding {
         conversation_id: first.conversation_id.clone(),
         expected_previous: None,
@@ -621,16 +651,23 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
             .await,
         Err(StoreError::Unauthenticated)
     ));
+    delivery::exercise(store, f, &first, &s1, &native).await?;
+    answers::exercise(store, f, &first.conversation_id, &s1, &native).await?;
+    native_state::exercise(store, f, &first.conversation_id, &s1, &native).await?;
     let s2 = snapshot("snapshot-two")?;
     let replacement = SourceBinding {
         conversation_id: first.conversation_id.clone(),
         expected_previous: Some(s1.clone()),
         snapshot: s2.clone(),
-        native_session: native,
+        native_session: native.clone(),
     };
     store
         .bind_conversation_source(&source, &replacement)
         .await?;
+    delivery::replaced(store, f, &first, &s1, &native).await?;
+    preparation::replaced(store, f, &first).await?;
+    native_state::replaced(store, f, &first.conversation_id).await?;
+    answers::replaced(store, f, &first.conversation_id).await?;
     assert!(
         store
             .conversation_input(
@@ -719,6 +756,7 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
         store.bind_conversation_source(&source, &wrong_native).await,
         Err(StoreError::InvalidTransition)
     ));
+    projections::exercise(store, f, &first.conversation_id, &s2).await?;
     store
         .close_connector_connection(
             &f.session,
@@ -767,6 +805,14 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
 
 #[derive(PartialEq, Eq, diesel::QueryableByName)]
 struct RetainedBytes {
+    #[diesel(sql_type=Binary)]
+    bytes: Vec<u8>,
+}
+
+#[derive(diesel::QueryableByName, PartialEq, Eq)]
+struct RetainedProjectedField {
+    #[diesel(sql_type=diesel::sql_types::Text)]
+    metadata: String,
     #[diesel(sql_type=Binary)]
     bytes: Vec<u8>,
 }
@@ -878,12 +924,53 @@ macro_rules! preserving_upgrade {
             .load::<RetainedBytes>(connection)?;
         assert!(!receipts.is_empty() && !credentials.is_empty());
         // Restore the pre-feature schema with real Agent/account/authentication state.
-        connection.revert_last_migration($migrations)?;
+        while connection.applied_migrations()?.iter().any(|version| version.to_string().as_str() > "00000000000011") {
+            connection.revert_last_migration($migrations)?;
+        }
         connection.run_pending_migrations($migrations)?;
         assert!(receipts==diesel::sql_query("SELECT payload_hash AS bytes FROM agent_creation_receipts ORDER BY request_id")
             .load::<RetainedBytes>(connection)?, "Creation fingerprint changed during conversation migration");
         assert!(credentials==diesel::sql_query("SELECT ciphertext AS bytes FROM external_authentications ORDER BY current_request_id")
             .load::<RetainedBytes>(connection)?, "Protected authentication changed during conversation migration");
+    }};
+}
+
+macro_rules! preserving_tool_io_upgrade {
+    ($connection:expr,$migrations:expr) => {{
+        let connection=&mut *$connection;
+        while connection.applied_migrations()?.iter().any(|version| version.to_string().as_str() > "00000000000016") {
+            connection.revert_last_migration($migrations)?;
+        }
+        assert!(connection.revert_last_migration($migrations).is_err(), "New tool fields must prevent a destructive downgrade");
+        // Explicitly remove only the new synthetic test fields after proving
+        // the guard; the migration itself may never discard those facts.
+        connection.batch_execute("DELETE FROM conversation_record_fields WHERE field_name IN ('TOOL_INPUT','TOOL_OUTPUT')")?;
+        let query="SELECT record_kind || ':' || native_id || ':' || field_name || ':' || CAST(updated_ordinal AS TEXT) AS metadata, content AS bytes FROM conversation_record_fields ORDER BY conversation_id,record_kind,native_id,field_name";
+        let retained=diesel::sql_query(query).load::<RetainedProjectedField>(connection)?;
+        assert!(!retained.is_empty(), "Preservation requires existing projected data");
+        connection.revert_last_migration($migrations)?;
+        assert!(retained == diesel::sql_query(query).load::<RetainedProjectedField>(connection)?, "Downgrade changed existing projected fields");
+        connection.run_pending_migrations($migrations)?;
+        assert!(retained == diesel::sql_query(query).load::<RetainedProjectedField>(connection)?, "Upgrade changed existing projected fields");
+    }};
+}
+
+macro_rules! preserving_extent_upgrade {
+    ($connection:expr,$migrations:expr) => {{
+        let connection = &mut *$connection;
+        while connection.applied_migrations()?.iter().any(|version| version.to_string().as_str() > "00000000000018") {
+            connection.revert_last_migration($migrations)?;
+        }
+        let query="SELECT record_kind || ':' || native_id || ':' || field_name || ':' || CAST(updated_ordinal AS TEXT) AS metadata, content AS bytes FROM conversation_record_fields ORDER BY conversation_id,record_kind,native_id,field_name";
+        let retained=diesel::sql_query(query).load::<RetainedProjectedField>(connection)?;
+        assert!(!retained.is_empty());
+        connection.revert_last_migration($migrations)?;
+        assert!(retained==diesel::sql_query(query).load::<RetainedProjectedField>(connection)?, "Extent downgrade changed original field bytes/ordinals");
+        connection.run_pending_migrations($migrations)?;
+        assert!(retained==diesel::sql_query(query).load::<RetainedProjectedField>(connection)?, "Extent upgrade changed original field bytes/ordinals");
+        #[derive(diesel::QueryableByName)]
+        struct InvalidExtents { #[diesel(sql_type=diesel::sql_types::BigInt)] n: i64 }
+        assert_eq!(diesel::sql_query("SELECT count(*) AS n FROM conversation_record_fields f LEFT JOIN conversation_field_extents e USING(conversation_id,record_kind,native_id,field_name) WHERE e.ordinal IS NULL OR e.ordinal<>f.updated_ordinal OR e.total_bytes<>length(f.content)").get_result::<InvalidExtents>(connection)?.n,0);
     }};
 }
 
@@ -907,7 +994,8 @@ fn sqlite_conversation_operations_and_preserving_downgrade_guard() -> Result<(),
         fixture.agent.id
     );
     runtime.block_on(exercise(&store, &fixture))?;
-    assert!(connection.revert_last_migration(SQLITE_MIGRATIONS).is_err());
+    preserving_extent_upgrade!(&mut connection, SQLITE_MIGRATIONS);
+    preserving_tool_io_upgrade!(&mut connection, SQLITE_MIGRATIONS);
     Ok(())
 }
 #[test]
@@ -939,7 +1027,16 @@ fn postgres_conversation_operations_and_preserving_downgrade_guard() -> Result<(
             fixture.agent.id
         );
         runtime.block_on(exercise(&store, &fixture))?;
+        preserving_extent_upgrade!(&mut connection, POSTGRES_MIGRATIONS);
+        preserving_tool_io_upgrade!(&mut connection, POSTGRES_MIGRATIONS);
         runtime.block_on(source_write_holds_control_lock(&store, &fixture, &url))?;
+        while connection
+            .applied_migrations()?
+            .iter()
+            .any(|version| version.to_string().as_str() > "00000000000012")
+        {
+            connection.revert_last_migration(POSTGRES_MIGRATIONS)?;
+        }
         assert!(
             connection
                 .revert_last_migration(POSTGRES_MIGRATIONS)

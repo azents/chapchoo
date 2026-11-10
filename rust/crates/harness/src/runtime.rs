@@ -18,21 +18,52 @@ use serde::Deserialize;
 use std::{collections::BTreeMap, fmt, fs, process::Stdio, sync::Arc, time::Duration};
 use tokio::{
     process::Child,
-    sync::{Mutex, mpsc, oneshot},
+    sync::{Mutex, OwnedSemaphorePermit, Semaphore, mpsc, oneshot},
     task::JoinHandle,
 };
 use tokio_util::{
     codec::{FramedRead, FramedWrite, LinesCodec},
     sync::CancellationToken,
 };
+mod answers;
+mod reported;
+pub use reported::NativeReportedOperation;
+mod inputs;
+use answers::AnswerRegistry;
+pub use answers::{NativeAnswerObservation, NativeAnswerOperation};
+mod observations;
 mod protocol;
+mod requests;
+use inputs::InputRegistry;
+pub use inputs::{NativeInputObservation, NativeInputOperation, NativeTextTarget};
+mod setup;
+mod steering;
+mod stops;
+use observations::Observations;
+pub use observations::{NativeForeground, NativeObservation, NativeWorkTarget};
+use setup::SetupRegistry;
+pub use setup::{
+    NativeSetupFailure, NativeSetupIntent, NativeSetupObservation, NativeSetupOperation,
+};
+pub use stops::NativeStopObservation;
+use stops::StopRegistry;
 
 const MAX_LINE: usize = 16 * 1024 * 1024;
 const MAX_REQUESTS: usize = 32;
 type Recorder = Arc<dyn Fn(&str) -> Result<(), Error> + Send + Sync>;
-
-/// Original incoming event envelope, before SDK deserialization. Never credential traffic.
-pub type SessionEventRecorder = Recorder;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CaptureReplay {
+    FromStart,
+    AlreadyCaptured,
+}
+#[derive(Debug, Clone)]
+pub enum NativeContext {
+    New,
+    Resume {
+        session: NativeConversationId,
+        replay: CaptureReplay,
+    },
+}
 
 /// Actual verified namespace-init substrate, not a provider intention.
 #[derive(Debug)]
@@ -95,9 +126,11 @@ pub enum Retirement {
     Quiescent,
 }
 /// The exact native insertion identity; not a work-completion claim.
-#[derive(Clone)]
-pub struct NativePromptAcceptance {
-    pub native_message_id: String,
+#[derive(Clone, PartialEq, Eq)]
+pub enum NativePromptAcceptance {
+    Inserted { native_message_id: String },
+    Steered,
+    Failed,
 }
 impl fmt::Debug for NativePromptAcceptance {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -110,10 +143,12 @@ impl fmt::Debug for NativePromptAcceptance {
 pub enum InteractiveRequest {
     Permission {
         id: String,
+        occurrence: chapchoo_domain::SourcePosition,
         request: schema::RequestPermissionRequest,
     },
     Form {
         id: String,
+        occurrence: chapchoo_domain::SourcePosition,
         request: schema::CreateElicitationRequest,
     },
 }
@@ -122,6 +157,7 @@ impl fmt::Debug for InteractiveRequest {
         f.write_str("InteractiveRequest([REDACTED])")
     }
 }
+#[derive(Clone)]
 pub enum InteractiveResponse {
     Permission {
         id: String,
@@ -155,28 +191,87 @@ impl Pending {
         }
     }
 }
-type Requests = Arc<Mutex<BTreeMap<String, Pending>>>;
+type Requests = Arc<Mutex<BTreeMap<String, (chapchoo_domain::SourcePosition, Pending)>>>;
 enum Command {
     Preparation(oneshot::Sender<Option<crate::NativePreparationObservation>>),
+    Reported(NativeReportedOperation, oneshot::Sender<Result<(), Error>>),
+    Answer(
+        NativeAnswerOperation,
+        OwnedSemaphorePermit,
+        oneshot::Sender<Result<NativeAnswerObservation, Error>>,
+    ),
+    StopOperation(
+        String,
+        NativeWorkTarget,
+        oneshot::Sender<Result<NativeStopObservation, Error>>,
+    ),
+    Setup(
+        NativeSetupOperation,
+        oneshot::Sender<Result<NativeSetupObservation, Error>>,
+    ),
+    SetupObservation(
+        String,
+        oneshot::Sender<Result<NativeSetupObservation, Error>>,
+    ),
     Start {
         supply: HarnessSupply,
-        resume: Option<NativeConversationId>,
-        record: Recorder,
+        context: NativeContext,
+        source: crate::CaptureLog,
         result: oneshot::Sender<Result<NativeConversationId, Error>>,
     },
     Prompt(
-        ConversationText,
+        NativeInputOperation,
+        OwnedSemaphorePermit,
         oneshot::Sender<Result<NativePromptAcceptance, Error>>,
     ),
-    Stop(oneshot::Sender<Result<(), Error>>),
+    Stop(NativeWorkTarget, oneshot::Sender<Result<(), Error>>),
+    Observe(oneshot::Sender<Result<NativeObservation, Error>>),
+    CapturedSource(oneshot::Sender<Result<Option<crate::CaptureLog>, Error>>),
+    InputObservation {
+        id: String,
+        target: NativeTextTarget,
+        result: oneshot::Sender<Result<NativeInputObservation, Error>>,
+    },
     Requests(oneshot::Sender<Vec<InteractiveRequest>>),
     Respond(InteractiveResponse, oneshot::Sender<Result<(), Error>>),
 }
-/// Execution lifetime owner; bounded operations survive cancellation of their waiter.
+/// Narrow read authority for the current retained copy; it cannot start native work.
+#[derive(Clone)]
+pub struct NativeCaptureReader {
+    sender: mpsc::Sender<Command>,
+}
+impl fmt::Debug for NativeCaptureReader {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("NativeCaptureReader([REDACTED])")
+    }
+}
+impl NativeCaptureReader {
+    pub async fn current_source(&self) -> Result<Option<crate::CaptureLog>, Error> {
+        let (result, rx) = oneshot::channel();
+        self.sender
+            .try_send(Command::CapturedSource(result))
+            .map_err(|_| Error::NotAdmitted)?;
+        rx.await.map_err(|_| Error::Process)?
+    }
+}
+/// Cloneable operation authority, without namespace-retirement ownership.
+#[derive(Clone)]
+pub struct NativeHandle {
+    sender: mpsc::Sender<Command>,
+    payload_budget: Arc<Semaphore>,
+}
+impl fmt::Debug for NativeHandle {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("NativeHandle([REDACTED])")
+    }
+}
+/// The process retains this sole physical lifetime owner while operation handles
+/// are held by stream-independent workers.
 pub struct NativeOwner {
     sender: mpsc::Sender<Command>,
     task: JoinHandle<Result<Retirement, Error>>,
     shutdown: CancellationToken,
+    payload_budget: Arc<Semaphore>,
 }
 impl fmt::Debug for NativeOwner {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -189,120 +284,207 @@ impl NativeOwner {
         let (sender, mut receiver) = mpsc::channel(32);
         let shutdown = CancellationToken::new();
         let stopping = shutdown.clone();
-        let task = tokio::spawn(async move {
-            let mut state = State {
-                storage,
-                preparer,
-                live: None,
-                scope: None,
-                blocked: false,
-            };
-            loop {
-                let command = tokio::select! {
-                    biased;
-                    _ = stopping.cancelled() => break,
-                    command = receiver.recv() => match command { Some(c)=>c, None=>break },
+        let task =
+            tokio::spawn(async move {
+                let mut state = State {
+                    storage,
+                    preparer,
+                    live: None,
+                    scope: None,
+                    blocked: false,
+                    inputs: InputRegistry::default(),
+                    retained_capture: None,
+                    setups: SetupRegistry::default(),
+                    stops: StopRegistry::default(),
+                    answers: AnswerRegistry::default(),
                 };
-                match command {
-                    Command::Preparation(result) => {
-                        let observation =
-                            state
-                                .live
-                                .as_ref()
-                                .map(|live| crate::NativePreparationObservation {
+                loop {
+                    let native_ended = state.live.as_ref().map(|live| live.ended.clone());
+                    let command = tokio::select! {
+                        biased;
+                        _ = stopping.cancelled() => break,
+                        _=async {
+                            match native_ended {
+                                Some(ended)=>ended.cancelled().await,
+                                None=>std::future::pending::<()>().await,
+                            }
+                        }=>{
+                            // Reuse the owned physical shutdown path after a
+                            // protocol/capture failure; never leave unrecorded
+                            // native work running until a later Control command.
+                            state.retire().await?;
+                            continue;
+                        },
+                        command = receiver.recv() => match command { Some(c)=>c, None=>break },
+                    };
+                    match command {
+                        Command::Preparation(result) => {
+                            let observation = state.live.as_ref().map(|live| {
+                                crate::NativePreparationObservation {
                                     freshness: live._supply.freshness,
                                     versions: live._supply.versions.clone(),
-                                });
-                        let _ = result.send(observation);
-                    }
-                    Command::Start {
-                        supply,
-                        resume,
-                        record,
-                        result,
-                    } => {
-                        let outcome = tokio::select! {
-                            _ = stopping.cancelled() => Err(Error::Process),
-                            outcome = state.start(supply,resume,record) => outcome,
-                        };
-                        let _ = result.send(outcome);
-                    }
-                    Command::Prompt(text, result) => {
-                        let outcome = match state.live.as_ref().and_then(|l| l.session.as_ref()) {
-                            Some(session) if !state.blocked && text.as_str().len() <= MAX_LINE => {
-                                tokio::select! {
-                                    _ = stopping.cancelled() => Err(Error::Protocol),
-                                    outcome = tokio::time::timeout(Duration::from_secs(10),session.send_prompt(text.as_str()).block_task()) =>
-                                        outcome.map_err(|_| Error::Protocol).and_then(|r|r.map(|r|NativePromptAcceptance { native_message_id:r.message_id.to_string() }).map_err(|_|Error::Protocol)),
+                                }
+                            });
+                            let _ = result.send(observation);
+                        }
+                        Command::StopOperation(id, target, result) => {
+                            let _ = result.send(state.stop_operation(&id, &target));
+                        }
+                        Command::Setup(operation, result) => {
+                            let outcome = tokio::select! {
+                                _=stopping.cancelled()=>Err(Error::DeliveryUncertain),
+                                outcome=state.setup(operation)=>outcome,
+                            };
+                            let _ = result.send(outcome);
+                        }
+                        Command::SetupObservation(id, result) => {
+                            let _ = result.send(state.setups.observe(&id));
+                        }
+                        Command::Start {
+                            supply,
+                            context,
+                            source,
+                            result,
+                        } => {
+                            let outcome = tokio::select! {
+                                _ = stopping.cancelled() => Err(Error::Process),
+                                outcome = state.start(supply,context,source) => outcome,
+                            };
+                            let _ = result.send(outcome);
+                        }
+                        Command::Prompt(operation, _permit, result) => {
+                            let outcome = tokio::select! {
+                                _=stopping.cancelled()=>Err(Error::DeliveryUncertain),
+                                outcome=state.input(operation)=>outcome,
+                            };
+                            // The operation registry retains possible forwarding
+                            // independently of this SDK acknowledgement waiter.
+                            let _ = result.send(outcome);
+                        }
+                        Command::Stop(target, result) => {
+                            let _ = result.send(state.stop(&target));
+                        }
+                        Command::Observe(result) => {
+                            let _ = result.send(state.observe());
+                        }
+                        Command::CapturedSource(result) => {
+                            let outcome = state.captured_source().await;
+                            let _ = result.send(outcome);
+                        }
+                        Command::InputObservation { id, target, result } => {
+                            let _ = result.send(state.inputs.observe(&id, &target));
+                        }
+                        Command::Requests(result) => {
+                            let mut visible = Vec::new();
+                            if let Some(live) = &state.live
+                                && !state.blocked
+                                && !live.protocol.is_finished()
+                            {
+                                let mut pending = live.requests.lock().await;
+                                pending.retain(|_, (_, r)| !r.cancelled());
+                                for (id, (occurrence, r)) in pending.iter() {
+                                    visible.push(match r {
+                                        Pending::Permission(request, _) => {
+                                            InteractiveRequest::Permission {
+                                                id: id.clone(),
+                                                occurrence: occurrence.clone(),
+                                                request: request.clone(),
+                                            }
+                                        }
+                                        Pending::Form(request, _) => InteractiveRequest::Form {
+                                            id: id.clone(),
+                                            occurrence: occurrence.clone(),
+                                            request: request.clone(),
+                                        },
+                                    });
                                 }
                             }
-                            _ => Err(Error::NotAdmitted),
-                        };
-                        // Publication can precede a lost acknowledgement. Fence
-                        // later prompts until the physical owner is retired.
-                        if matches!(&outcome, Err(Error::Protocol)) {
-                            state.blocked = true;
+                            let _ = result.send(visible);
                         }
-                        let _ = result.send(outcome);
-                    }
-                    Command::Stop(result) => {
-                        let _ = result.send(
-                            state
-                                .live
-                                .as_ref()
-                                .and_then(|l| l.session.as_ref())
-                                .ok_or(Error::NotAdmitted)
-                                .and_then(|s| s.cancel_active_work().map_err(|_| Error::Protocol)),
-                        );
-                    }
-                    Command::Requests(result) => {
-                        let mut visible = Vec::new();
-                        if let Some(live) = &state.live {
-                            let mut pending = live.requests.lock().await;
-                            pending.retain(|_, r| !r.cancelled());
-                            for (id, r) in pending.iter() {
-                                visible.push(match r {
-                                    Pending::Permission(request, _) => {
-                                        InteractiveRequest::Permission {
-                                            id: id.clone(),
-                                            request: request.clone(),
-                                        }
-                                    }
-                                    Pending::Form(request, _) => InteractiveRequest::Form {
-                                        id: id.clone(),
-                                        request: request.clone(),
-                                    },
-                                });
-                            }
+                        Command::Reported(reported, result) => {
+                            let _ = result.send(state.release_reported(reported));
                         }
-                        let _ = result.send(visible);
-                    }
-                    Command::Respond(response, result) => {
-                        let _ = result.send(state.respond(response).await);
+                        Command::Answer(operation, _permit, result) => {
+                            let _ = result.send(state.answer(operation).await);
+                        }
+                        Command::Respond(response, result) => {
+                            let _ = result.send(state.respond(response).await);
+                        }
                     }
                 }
-            }
-            receiver.close();
-            state.retire().await
-        });
+                receiver.close();
+                state.retire().await
+            });
         Ok(Self {
             sender,
             task,
             shutdown,
+            payload_budget: Arc::new(Semaphore::new(32 * 1024 * 1024)),
         })
+    }
+    pub fn handle(&self) -> NativeHandle {
+        NativeHandle {
+            sender: self.sender.clone(),
+            payload_budget: self.payload_budget.clone(),
+        }
     }
     pub async fn start(
         &self,
         supply: HarnessSupply,
-        resume: Option<NativeConversationId>,
-        record: SessionEventRecorder,
+        context: NativeContext,
+        source: crate::CaptureLog,
+    ) -> Result<NativeConversationId, Error> {
+        self.handle().start(supply, context, source).await
+    }
+    pub async fn preparation(&self) -> Result<Option<crate::NativePreparationObservation>, Error> {
+        self.handle().preparation().await
+    }
+    pub async fn prompt(
+        &self,
+        operation: NativeInputOperation,
+    ) -> Result<NativePromptAcceptance, Error> {
+        self.handle().prompt(operation).await
+    }
+    pub async fn stop_work(&self, target: NativeWorkTarget) -> Result<(), Error> {
+        self.handle().stop_work(target).await
+    }
+    pub fn capture_reader(&self) -> NativeCaptureReader {
+        self.handle().capture_reader()
+    }
+    pub async fn observe(&self) -> Result<NativeObservation, Error> {
+        self.handle().observe().await
+    }
+    pub async fn input_observation(
+        &self,
+        id: String,
+        target: NativeTextTarget,
+    ) -> Result<NativeInputObservation, Error> {
+        self.handle().input_observation(id, target).await
+    }
+    pub async fn pending_requests(&self) -> Result<Vec<InteractiveRequest>, Error> {
+        self.handle().pending_requests().await
+    }
+    pub async fn respond(&self, response: InteractiveResponse) -> Result<(), Error> {
+        self.handle().respond(response).await
+    }
+    pub async fn finish(self) -> Result<Retirement, Error> {
+        self.shutdown.cancel();
+        self.task.await.map_err(|_| Error::RetirementUnknown)?
+    }
+}
+impl NativeHandle {
+    pub async fn start(
+        &self,
+        supply: HarnessSupply,
+        context: NativeContext,
+        source: crate::CaptureLog,
     ) -> Result<NativeConversationId, Error> {
         let (result, rx) = oneshot::channel();
         self.sender
             .try_send(Command::Start {
                 supply,
-                resume,
-                record,
+                context,
+                source,
                 result,
             })
             .map_err(|_| Error::NotAdmitted)?;
@@ -317,17 +499,53 @@ impl NativeOwner {
         rx.await.map_err(|_| Error::Process)
     }
     /// Acknowledges native prompt acceptance only, never completion or consumption.
-    pub async fn prompt(&self, text: ConversationText) -> Result<NativePromptAcceptance, Error> {
+    pub async fn prompt(
+        &self,
+        operation: NativeInputOperation,
+    ) -> Result<NativePromptAcceptance, Error> {
+        operation.validate()?;
+        let bytes = u32::try_from(operation.text.as_str().len()).map_err(|_| Error::NotAdmitted)?;
+        let permit = self
+            .payload_budget
+            .clone()
+            .try_acquire_many_owned(bytes)
+            .map_err(|_| Error::NotAdmitted)?;
         let (result, rx) = oneshot::channel();
         self.sender
-            .try_send(Command::Prompt(text, result))
+            .try_send(Command::Prompt(operation, permit, result))
             .map_err(|_| Error::NotAdmitted)?;
         rx.await.map_err(|_| Error::Process)?
     }
-    pub async fn stop_work(&self) -> Result<(), Error> {
+    pub async fn stop_work(&self, target: NativeWorkTarget) -> Result<(), Error> {
         let (result, rx) = oneshot::channel();
         self.sender
-            .try_send(Command::Stop(result))
+            .try_send(Command::Stop(target, result))
+            .map_err(|_| Error::NotAdmitted)?;
+        rx.await.map_err(|_| Error::Process)?
+    }
+    pub fn capture_reader(&self) -> NativeCaptureReader {
+        NativeCaptureReader {
+            sender: self.sender.clone(),
+        }
+    }
+    pub async fn observe(&self) -> Result<NativeObservation, Error> {
+        let (result, rx) = oneshot::channel();
+        self.sender
+            .try_send(Command::Observe(result))
+            .map_err(|_| Error::NotAdmitted)?;
+        rx.await.map_err(|_| Error::Process)?
+    }
+    pub async fn input_observation(
+        &self,
+        id: String,
+        target: NativeTextTarget,
+    ) -> Result<NativeInputObservation, Error> {
+        if id.is_empty() || id.len() > 128 || !id.bytes().all(|b| b.is_ascii_graphic()) {
+            return Err(Error::NotAdmitted);
+        }
+        let (result, rx) = oneshot::channel();
+        self.sender
+            .try_send(Command::InputObservation { id, target, result })
             .map_err(|_| Error::NotAdmitted)?;
         rx.await.map_err(|_| Error::Process)?
     }
@@ -345,10 +563,6 @@ impl NativeOwner {
             .map_err(|_| Error::NotAdmitted)?;
         rx.await.map_err(|_| Error::Process)?
     }
-    pub async fn finish(self) -> Result<Retirement, Error> {
-        self.shutdown.cancel();
-        self.task.await.map_err(|_| Error::RetirementUnknown)?
-    }
 }
 struct State {
     storage: NativeStorage,
@@ -356,32 +570,130 @@ struct State {
     live: Option<Live>,
     scope: Option<ScopeEvidence>,
     blocked: bool,
+    inputs: InputRegistry,
+    retained_capture: Option<crate::CaptureLog>,
+    setups: SetupRegistry,
+    stops: StopRegistry,
+    answers: AnswerRegistry,
 }
 struct Live {
     child: Child,
     protocol: JoinHandle<Result<(), agent_client_protocol::Error>>,
     stderr: JoinHandle<Result<(), std::io::Error>>,
     done: CancellationToken,
+    ended: CancellationToken,
     session: Option<agent_client_protocol::v2::ActiveSession<Agent>>,
     requests: Requests,
     _supply: AppliedSupply,
     _launch: tempfile::TempDir,
+    capture: crate::CaptureLog,
+    observations: Arc<Observations>,
 }
 impl State {
+    async fn captured_source(&mut self) -> Result<Option<crate::CaptureLog>, Error> {
+        if let Some(capture) = &self.retained_capture {
+            return Ok(Some(capture.clone()));
+        }
+        let storage = self.storage.clone();
+        // The actor owns this finite blocking read beyond the caller's waiter.
+        // A missing first copy is absence; an existing corrupt copy is an error.
+        let source = tokio::task::spawn_blocking(move || {
+            match fs::symlink_metadata(storage.capture_root().join("current")) {
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+                Err(_) => Err(Error::CaptureUnavailable),
+                Ok(_) => crate::CaptureLog::open(&storage).map(Some),
+            }
+        })
+        .await
+        .map_err(|_| Error::Process)??;
+        self.retained_capture = source;
+        Ok(self.retained_capture.clone())
+    }
+    async fn input(
+        &mut self,
+        operation: NativeInputOperation,
+    ) -> Result<NativePromptAcceptance, Error> {
+        if let Some(previous) = self.inputs.recover(&operation)? {
+            return Ok(previous);
+        }
+        let live = self.live.as_ref().ok_or(Error::NotAdmitted)?;
+        let session = live.session.as_ref().ok_or(Error::NotAdmitted)?;
+        if self.blocked
+            || live.protocol.is_finished()
+            || session.connection().is_incoming_closed()
+            || live.capture.snapshot()? != operation.target.snapshot
+            || session.session_id().to_string() != operation.target.native_session.as_str()
+        {
+            return Err(Error::NotAdmitted);
+        }
+        if let Some(previous) = self.inputs.begin(&operation)? {
+            return Ok(previous);
+        }
+        let outcome = tokio::time::timeout(
+            Duration::from_secs(10),
+            steering::submit(session, &operation.text),
+        )
+        .await
+        .map_err(|_| Error::DeliveryUncertain)?
+        .map_err(|_| Error::DeliveryUncertain)?;
+        self.inputs
+            .completed(&operation.operation_id, outcome.clone())?;
+        Ok(outcome)
+    }
+    fn observe(&self) -> Result<NativeObservation, Error> {
+        let live = self.live.as_ref().ok_or(Error::NotAdmitted)?;
+        if live.protocol.is_finished() || self.blocked {
+            return Err(Error::Protocol);
+        }
+        live.observations.current()
+    }
+    fn stop(&self, target: &NativeWorkTarget) -> Result<(), Error> {
+        let live = self.live.as_ref().ok_or(Error::NotAdmitted)?;
+        if self.blocked || live.protocol.is_finished() {
+            return Err(Error::NotAdmitted);
+        }
+        live.observations.with_current(target, || {
+            live.session
+                .as_ref()
+                .ok_or(Error::NotAdmitted)?
+                .cancel_active_work()
+                .map_err(|_| Error::Protocol)
+        })
+    }
     async fn start(
         &mut self,
         supply: HarnessSupply,
-        resume: Option<NativeConversationId>,
-        record: Recorder,
+        context: NativeContext,
+        source: crate::CaptureLog,
     ) -> Result<NativeConversationId, Error> {
         if self.blocked {
             return Err(Error::RetirementUnknown);
         }
+        check_source(&context, &source, &self.storage)?;
+        if let Some(retained) = &self.retained_capture
+            && retained.snapshot()? != source.snapshot()?
+        {
+            return Err(Error::CaptureConflict);
+        }
+        self.retained_capture = Some(source.clone());
         if let Some(live) = &mut self.live {
+            if live.capture.snapshot()? != source.snapshot()? {
+                return Err(Error::CaptureConflict);
+            }
             if live.protocol.is_finished()
                 || live.child.try_wait().map_err(|_| Error::Process)?.is_some()
             {
                 return Err(Error::Protocol);
+            }
+            match &context {
+                NativeContext::Resume {
+                    session,
+                    replay: CaptureReplay::AlreadyCaptured,
+                } if live
+                    .session
+                    .as_ref()
+                    .is_some_and(|live| live.session_id().to_string() == session.as_str()) => {}
+                _ => return Err(Error::NotAdmitted),
             }
             return NativeConversationId::parse(
                 live.session
@@ -396,7 +708,7 @@ impl State {
         // Any partially started preparation is owned by this actor. Failure must
         // retire the namespace scope before another start can be attempted.
         self.blocked = true;
-        let result = self.launch(supply, resume, record).await;
+        let result = self.launch(supply, context, source).await;
         match result {
             Ok(id) => {
                 self.blocked = false;
@@ -415,8 +727,8 @@ impl State {
     async fn launch(
         &mut self,
         supply: HarnessSupply,
-        resume: Option<NativeConversationId>,
-        record: Recorder,
+        context: NativeContext,
+        source: crate::CaptureLog,
     ) -> Result<NativeConversationId, Error> {
         let applied = self.preparer.prepare(&supply).await?;
         let launch = tempfile::Builder::new()
@@ -453,6 +765,13 @@ impl State {
                 .await
                 .map(|_| ())
         });
+        let log = source.clone();
+        let observations = Arc::new(Observations::default());
+        let observed = observations.clone();
+        let record: Recorder = Arc::new(move |line| {
+            let position = log.append(line, None)?;
+            observed.captured(line, position)
+        });
         let incoming =
             FramedRead::new(stdout, LinesCodec::new_with_max_length(MAX_LINE)).map(move |line| {
                 let line = line.map_err(std::io::Error::other)?;
@@ -467,23 +786,34 @@ impl State {
         let (ready, ready_rx) = oneshot::channel();
         let done = CancellationToken::new();
         let cwd = self.storage.workspace();
-        let protocol = tokio::spawn(protocol::connect(
+        let ended = CancellationToken::new();
+        let completion = ended.clone();
+        let driver = protocol::connect(
             Lines::new(outgoing, incoming),
             requests.clone(),
+            observations.clone(),
             ready,
             done.clone(),
             cwd,
-            resume,
-        ));
+            context,
+        );
+        let protocol = tokio::spawn(async move {
+            let result = driver.await;
+            completion.cancel();
+            result
+        });
         self.live = Some(Live {
             child,
             protocol,
             stderr,
             done,
+            ended,
             session: None,
             requests,
             _supply: applied,
             _launch: launch,
+            capture: source,
+            observations,
         });
         let session = tokio::time::timeout(Duration::from_secs(30), ready_rx)
             .await
@@ -491,6 +821,14 @@ impl State {
             .map_err(|_| Error::Protocol)??;
         let id = NativeConversationId::parse(session.session_id().to_string())
             .map_err(|_| Error::Protocol)?;
+        self.live
+            .as_ref()
+            .ok_or(Error::Process)?
+            .capture
+            .bind_native(&id)?;
+        let live = self.live.as_ref().ok_or(Error::Process)?;
+        live.observations
+            .bind(live.capture.snapshot()?, id.clone())?;
         self.live.as_mut().ok_or(Error::Process)?.session = Some(session);
         Ok(id)
     }
@@ -503,47 +841,7 @@ impl State {
         if live.protocol.is_finished() || session.connection().is_incoming_closed() {
             return Err(Error::NotAdmitted);
         }
-        let id = match &response {
-            InteractiveResponse::Permission { id, .. } | InteractiveResponse::Form { id, .. } => id,
-        };
-        let mut pending = live.requests.lock().await;
-        let request = pending.get(id).ok_or(Error::NotAdmitted)?;
-        if let Pending::Permission(request, _) = request
-            && &request.session_id != session.session_id()
-        {
-            return Err(Error::NotAdmitted);
-        }
-        if let Pending::Form(request, _) = request {
-            let schema::ElicitationMode::Form(form) = &request.mode else {
-                return Err(Error::NotAdmitted);
-            };
-            let schema::ElicitationScope::Session(scope) = &form.scope else {
-                return Err(Error::NotAdmitted);
-            };
-            if &scope.session_id != session.session_id() {
-                return Err(Error::NotAdmitted);
-            }
-        }
-        if request.cancelled()
-            || !matches!(
-                (request, &response),
-                (
-                    Pending::Permission(..),
-                    InteractiveResponse::Permission { .. }
-                ) | (Pending::Form(..), InteractiveResponse::Form { .. })
-            )
-        {
-            return Err(Error::NotAdmitted);
-        }
-        match (pending.remove(id), response) {
-            (Some(Pending::Permission(_, r)), InteractiveResponse::Permission { response, .. }) => {
-                r.respond(response).map_err(|_| Error::Protocol)
-            }
-            (Some(Pending::Form(_, r)), InteractiveResponse::Form { response, .. }) => {
-                r.respond(response).map_err(|_| Error::Protocol)
-            }
-            _ => Err(Error::NotAdmitted),
-        }
+        requests::respond(&live.requests, session.session_id(), response).await
     }
     async fn retire(&mut self) -> Result<Retirement, Error> {
         if self.scope.is_none() {
@@ -588,6 +886,29 @@ impl State {
             self.blocked = false;
         }
         outcome.map(|_| Retirement::Quiescent)
+    }
+}
+fn check_source(
+    context: &NativeContext,
+    source: &crate::CaptureLog,
+    storage: &NativeStorage,
+) -> Result<(), Error> {
+    if !source.belongs_to(storage) {
+        return Err(Error::CaptureConflict);
+    }
+    let native = source.native_session()?;
+    let empty = source.is_empty()?;
+    match context {
+        NativeContext::New if native.is_none() && empty => Ok(()),
+        NativeContext::Resume {
+            session,
+            replay: CaptureReplay::AlreadyCaptured,
+        } if native.as_ref() == Some(session) => Ok(()),
+        NativeContext::Resume {
+            session,
+            replay: CaptureReplay::FromStart,
+        } if empty && native.as_ref().is_none_or(|id| id == session) => Ok(()),
+        _ => Err(Error::CaptureConflict),
     }
 }
 pub(crate) fn explicit_path(node: &std::path::Path) -> Result<std::ffi::OsString, Error> {
@@ -695,6 +1016,69 @@ async fn retire_scope() -> Result<(), Error> {
 mod tests {
     use super::*;
     #[test]
+    fn context_intent_requires_the_owned_copy_and_does_not_replay_existing_capture()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let dir = tempfile::tempdir()?;
+        let storage = NativeStorage::open(dir.path())?;
+        let log = crate::CaptureLog::create(&storage)?;
+        let id = NativeConversationId::parse("native".into())?;
+        check_source(&NativeContext::New, &log, &storage)?;
+        assert!(matches!(
+            check_source(
+                &NativeContext::Resume {
+                    session: id.clone(),
+                    replay: CaptureReplay::AlreadyCaptured
+                },
+                &log,
+                &storage
+            ),
+            Err(Error::CaptureConflict)
+        ));
+        check_source(
+            &NativeContext::Resume {
+                session: id.clone(),
+                replay: CaptureReplay::FromStart,
+            },
+            &log,
+            &storage,
+        )?;
+        log.bind_native(&id)?;
+        assert!(matches!(
+            check_source(&NativeContext::New, &log, &storage),
+            Err(Error::CaptureConflict)
+        ));
+        log.append(r#"{"method":"session/update","params":{"sessionId":"native","update":{"sessionUpdate":"_future"}}}"#,None)?;
+        assert!(matches!(
+            check_source(
+                &NativeContext::Resume {
+                    session: id.clone(),
+                    replay: CaptureReplay::FromStart
+                },
+                &log,
+                &storage
+            ),
+            Err(Error::CaptureConflict)
+        ));
+        check_source(
+            &NativeContext::Resume {
+                session: id,
+                replay: CaptureReplay::AlreadyCaptured,
+            },
+            &log,
+            &storage,
+        )?;
+        let foreign = tempfile::tempdir()?;
+        assert!(matches!(
+            check_source(
+                &NativeContext::New,
+                &log,
+                &NativeStorage::open(foreign.path())?
+            ),
+            Err(Error::CaptureConflict)
+        ));
+        Ok(())
+    }
+    #[test]
     fn raw_events_survive_unknown_fields_but_credentials_never_enter_capture()
     -> Result<(), Box<dyn std::error::Error>> {
         let observed = std::sync::Mutex::new(Vec::new());
@@ -731,8 +1115,54 @@ mod tests {
         let saved = tempfile::tempdir()?;
         let owner = NativeOwner::new(NativeStorage::open(saved.path())?)?;
         assert_eq!(owner.preparation().await?, None);
+        let operations = owner.handle();
+        assert!(owner.capture_reader().current_source().await?.is_none());
         assert!(owner.pending_requests().await?.is_empty());
-        assert!(matches!(owner.stop_work().await, Err(Error::NotAdmitted)));
+        assert!(matches!(owner.observe().await, Err(Error::NotAdmitted)));
+        let input = NativeInputOperation {
+            operation_id: "unavailable".into(),
+            target: NativeTextTarget {
+                snapshot: chapchoo_domain::SnapshotId::parse("snapshot".into())?,
+                native_session: NativeConversationId::parse("native".into())?,
+            },
+            text: ConversationText::parse("not sent".into())?,
+        };
+        assert!(matches!(
+            owner
+                .input_observation(input.operation_id.clone(), input.target.clone())
+                .await?,
+            NativeInputObservation::Unseen
+        ));
+        assert!(matches!(
+            owner.prompt(input.clone()).await,
+            Err(Error::NotAdmitted)
+        ));
+        assert!(matches!(owner.prompt(input).await, Err(Error::NotAdmitted)));
+        assert_eq!(owner.finish().await?, Retirement::NoNativeStarted);
+        assert!(matches!(
+            operations.observe().await,
+            Err(Error::NotAdmitted)
+        ));
+        Ok(())
+    }
+    #[tokio::test]
+    async fn captured_source_reader_opens_retained_history_without_native_start()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let saved = tempfile::tempdir()?;
+        let storage = NativeStorage::open(saved.path())?;
+        let log = crate::CaptureLog::create(&storage)?;
+        log.bind_native(&NativeConversationId::parse("native".into())?)?;
+        let snapshot = log.snapshot()?;
+        drop(log);
+        let owner = NativeOwner::new(storage)?;
+        let source = owner
+            .capture_reader()
+            .current_source()
+            .await?
+            .ok_or("Missing retained source")?;
+        assert_eq!(source.snapshot()?, snapshot);
+        assert!(source.current_boundary()?.is_some());
+        assert!(matches!(owner.observe().await, Err(Error::NotAdmitted)));
         assert_eq!(owner.finish().await?, Retirement::NoNativeStarted);
         Ok(())
     }

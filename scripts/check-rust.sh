@@ -33,6 +33,7 @@ allowed = {
     "chapchoo-service": {
         "chapchoo-crypto", "chapchoo-domain", "chapchoo-persistence", "tokio",
         "zeroize", "url", "base64", "tempfile", "parking_lot",
+        "agent-client-protocol", "serde", "serde_json",
     },
     "chapchoo-rpc": {
         "chapchoo-crypto", "chapchoo-domain", "chapchoo-protocol", "chapchoo-service",

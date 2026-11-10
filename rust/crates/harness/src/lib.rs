@@ -1,14 +1,20 @@
 //! Execution-local native preparation and physical ownership. No server authority.
+mod capture;
 mod preparation;
 mod runtime;
 mod storage;
 
+pub use capture::{CaptureBoundary, CaptureLog, CapturePass, CapturedEvent};
 pub use preparation::{
     AppliedSupply, Freshness, NativeComponentVersions, NativePreparationObservation, Preparer,
 };
 pub use runtime::{
-    InteractiveRequest, InteractiveResponse, NativeOwner, NativePromptAcceptance, Retirement,
-    ScopeEvidence, SessionEventRecorder,
+    CaptureReplay, InteractiveRequest, InteractiveResponse, NativeAnswerObservation,
+    NativeAnswerOperation, NativeCaptureReader, NativeContext, NativeForeground, NativeHandle,
+    NativeInputObservation, NativeInputOperation, NativeObservation, NativeOwner,
+    NativePromptAcceptance, NativeReportedOperation, NativeSetupFailure, NativeSetupIntent,
+    NativeSetupObservation, NativeSetupOperation, NativeStopObservation, NativeTextTarget,
+    NativeWorkTarget, Retirement, ScopeEvidence,
 };
 pub use storage::NativeStorage;
 
@@ -37,10 +43,20 @@ pub enum Error {
     ProtocolRejected { stage: ProtocolStage, code: i32 },
     #[error("Native operation was not admitted")]
     NotAdmitted,
+    #[error("The native operation conflicts with its original payload or target")]
+    OperationConflict,
+    #[error("Native delivery may have occurred and cannot be replayed")]
+    DeliveryUncertain,
     #[error("Native predecessor retirement is unconfirmed")]
     RetirementUnknown,
     #[error("Native start failed and predecessor retirement is unconfirmed")]
     StartAndRetirement { primary: Box<Error> },
     #[error("Native process operation failed")]
     Process,
+    #[error("The captured source or requested cursor is unavailable")]
+    CaptureUnavailable,
+    #[error("The captured source is incomplete or malformed")]
+    CaptureCorrupt,
+    #[error("The captured source conflicts with its exact binding or occurrence")]
+    CaptureConflict,
 }

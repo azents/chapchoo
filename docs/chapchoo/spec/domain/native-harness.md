@@ -53,17 +53,95 @@ The public Rust ACP SDK uses strict `Client.v2()`; an incompatible initializatio
 fails without a v1 session. Native stdin/stdout/stderr, protocol driver, pending
 responders and applied installation lease belong to the execution actor, not a
 server waiter. A bounded command queue retains admitted work after a caller drops
-its response receiver. Prompt acceptance preserves its exact native message ID;
-it is not completion. Normal task completion does not shut down the owner.
-After a possibly published prompt loses its acknowledgement, later prompt
-admission is fenced until physical retirement; timeout does not grant replay.
+its response receiver. Cloneable operation handles share the same queue and byte
+budget; they do not own namespace retirement. The process retains the sole
+physical lifetime owner and can finish it even while handles remain. A handle
+cannot revive a finished owner. Input has an exact snapshot/native-session target and
+application operation ID. The owner records possible forwarding before the SDK
+operation, retains bounded fingerprints/results through stream replacement and
+never evicts uncertainty to admit another operation. Lookup does not dispatch.
+Absent execution-local evidence is not non-delivery. Identical input under a
+different operation remains independent; changing a retained operation conflicts.
+Queued input bytes have a separate retained memory budget.
+Prompt acceptance preserves its exact native message ID, not completion.
+Losing an acknowledgement leaves that operation's possible-forwarding fence
+intact; timeout never grants replay. Normal completion does not stop the owner.
 
-Session resume requests retained history from `start` and fails without creating
-a fresh context if restoration fails. Original incoming session update, permission
+Input uses the producer's `_session/steering` extension with
+`idleBehavior: promptRequired`. Only explicit `promptRequired/noRunningTurn`
+permits an ordinary prompt. Failed/malformed/unsupported responses, cancelled
+waiters and response loss never permit that transition. Steering acceptance does
+not invent a native user-message ID. Ordinary prompt acceptance preserves its
+exact native insertion ID; neither is completion. Normal task completion does
+not shut down the owner.
+
+Native setup requires the owned captured source. An initial source restore can
+request retained history from `start`; an existing captured copy resumes without
+requesting history again. Restore failure does not create a fresh context.
+Original incoming session update, permission
 and elicitation envelopes reach the capture boundary before typed SDK decoding;
 unknown fields survive. Authentication requests/results are excluded. Pending
 permission/form responders are bounded, cancellation-aware and single-use. The
-client advertises forms only and rejects unsupported elicitation modes.
+client advertises supported flat forms only. Unsupported required fields/modes
+receive a protocol request error rather than a simulated refusal. Request tokens
+are fresh execution-local identities paired with their captured occurrence;
+numeric and string JSON-RPC IDs remain distinct and reuse cannot revive an old
+response target. Responses recheck cancellation, source-bound native session and
+offered permission choices before consuming a single responder. Form responses
+also validate declared supported properties, required presence, value types,
+string lengths, numeric ranges and single/multi-select choices. False, valid empty
+values and optional omission remain intact. Integer-versus-number boundary
+comparison does not round large exact integers. Unsupported required constraints
+receive a request error; unsupported optional values cannot be submitted as if
+validated. An invalid answer leaves the actual responder available for a valid
+response. Local SDK responder acceptance does not prove remote consumption.
+
+Operation-owned responses additionally retain a fingerprint of the exact source,
+native session, captured occurrence, responder token, response kind and original
+typed values. The actor records possible forwarding before checking and consuming
+the responder; it distinguishes local SDK acceptance from known pre-dispatch
+rejection. A generic protocol failure leaves uncertainty. Repeating that
+operation recovers its retained observation, while changing its fingerprint
+conflicts. Retained registries are bounded and reject overflow rather than
+evicting uncertain operations or granting another effect. The Connector can
+release an exact known result only after successful durable result publication,
+while retaining its exclusive invocation lease
+through actor acknowledgement. Setup, input, answer and Stop share this
+known-result release contract; uncertainty and changed-result conflicts remain
+retained. The server's settled checks fence later dispatch, while the lease and
+single command-checking loop fence already-checked local duplicates.
+
+Foreground observations create an execution-local work target that expires on
+idle. Stop verifies its snapshot/session/work identity immediately before native
+cancel publication; a delayed Stop cannot silently target a later known work
+generation. Native state observations are applied at ordered capture ingress,
+not delayed SDK callback completion. Protocol/capture termination reuses physical
+retirement rather than leaving unrecorded work alive.
+
+## Retained captured source
+
+The current capture has an explicit snapshot/native-session manifest and ordered
+JSONL occurrences, with a single writer held through the source lifetime.
+Original UTF-8 envelopes are retained before typed SDK decoding. A supplied actual
+occurrence can recover identical source data; otherwise every occurrence receives
+an independent identity. Native message IDs and JSON-RPC IDs do not become event
+occurrence identities.
+
+Opening a missing, corrupt or partial source fails without truncation, replacement
+or native-gap repair. A finite read pass resolves an exact retained occurrence,
+captures a complete-record boundary and reads only through that boundary while
+append may continue. Its read capacity remains held until the pass is dropped.
+The entire current copy remains retained through server acknowledgements; no
+prefix pruning, rotation or compression is implemented.
+
+A narrow capture reader can reopen an existing retained copy without preparing
+artifacts, starting native work or requiring native PID1 admission. Missing first
+copy is absence; an existing malformed copy is an error. The execution actor owns
+finite blocking open work beyond a cancelled read waiter, retains the same copy
+across native retirement and shares it with later setup. Cheap current boundary
+metadata does not create a finite pass; only `begin` fixes that boundary.
+
+## Restricted physical ownership
 
 Child environment is cleared and rebuilt from the applied descriptor, including
 explicit native HOME/state/TMP, cwd and selected executables. Platform bootstrap
@@ -105,4 +183,5 @@ acceptance.
 - [`rust/crates/harness/src/lib.rs`](../../../../rust/crates/harness/src/lib.rs)
 - [`rust/crates/harness/src/runtime.rs`](../../../../rust/crates/harness/src/runtime.rs)
 - [`rust/crates/harness/src/preparation.rs`](../../../../rust/crates/harness/src/preparation.rs)
+- [`rust/crates/harness/src/capture.rs`](../../../../rust/crates/harness/src/capture.rs)
 - [`rust/crates/harness/examples/scope_probe.rs`](../../../../rust/crates/harness/examples/scope_probe.rs)

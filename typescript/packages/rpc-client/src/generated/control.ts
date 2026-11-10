@@ -20,6 +20,7 @@ import {
   type ServiceError,
   type UntypedServiceImplementation,
 } from "@grpc/grpc-js";
+import { AnswerCommand, InputCommand, SetupCommand, StopCommand } from "./conversations.js";
 import { Empty } from "./google/protobuf/empty.js";
 import { Timestamp } from "./google/protobuf/timestamp.js";
 
@@ -395,7 +396,11 @@ export interface ConnectorCommand {
   identity: CallIdentity | undefined;
   computer: ComputerContext | undefined;
   remainingMs: number;
-  observe: ObserveConnector | undefined;
+  observe?: ObserveConnector | undefined;
+  setup?: SetupCommand | undefined;
+  input?: InputCommand | undefined;
+  stop?: StopCommand | undefined;
+  answer?: AnswerCommand | undefined;
 }
 
 export interface ProviderResult {
@@ -412,6 +417,7 @@ export interface ConnectorResult {
   identity: CallIdentity | undefined;
   executionId: string;
   ready: boolean;
+  admitted?: boolean | undefined;
 }
 
 export interface ProviderFrame {
@@ -4275,7 +4281,16 @@ export const ObserveConnector: MessageFns<ObserveConnector> = {
 };
 
 function createBaseConnectorCommand(): ConnectorCommand {
-  return { identity: undefined, computer: undefined, remainingMs: 0, observe: undefined };
+  return {
+    identity: undefined,
+    computer: undefined,
+    remainingMs: 0,
+    observe: undefined,
+    setup: undefined,
+    input: undefined,
+    stop: undefined,
+    answer: undefined,
+  };
 }
 
 export const ConnectorCommand: MessageFns<ConnectorCommand> = {
@@ -4291,6 +4306,18 @@ export const ConnectorCommand: MessageFns<ConnectorCommand> = {
     }
     if (message.observe !== undefined) {
       ObserveConnector.encode(message.observe, writer.uint32(34).fork()).join();
+    }
+    if (message.setup !== undefined) {
+      SetupCommand.encode(message.setup, writer.uint32(42).fork()).join();
+    }
+    if (message.input !== undefined) {
+      InputCommand.encode(message.input, writer.uint32(50).fork()).join();
+    }
+    if (message.stop !== undefined) {
+      StopCommand.encode(message.stop, writer.uint32(58).fork()).join();
+    }
+    if (message.answer !== undefined) {
+      AnswerCommand.encode(message.answer, writer.uint32(66).fork()).join();
     }
     return writer;
   },
@@ -4340,6 +4367,38 @@ export const ConnectorCommand: MessageFns<ConnectorCommand> = {
             message.observe = ObserveConnector.decode(reader, reader.uint32());
             continue;
           }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.setup = SetupCommand.decode(reader, reader.uint32());
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.input = InputCommand.decode(reader, reader.uint32());
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.stop = StopCommand.decode(reader, reader.uint32());
+            continue;
+          }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.answer = AnswerCommand.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -4366,6 +4425,18 @@ export const ConnectorCommand: MessageFns<ConnectorCommand> = {
     message.remainingMs = object.remainingMs ?? 0;
     message.observe = (object.observe !== undefined && object.observe !== null)
       ? ObserveConnector.fromPartial(object.observe)
+      : undefined;
+    message.setup = (object.setup !== undefined && object.setup !== null)
+      ? SetupCommand.fromPartial(object.setup)
+      : undefined;
+    message.input = (object.input !== undefined && object.input !== null)
+      ? InputCommand.fromPartial(object.input)
+      : undefined;
+    message.stop = (object.stop !== undefined && object.stop !== null)
+      ? StopCommand.fromPartial(object.stop)
+      : undefined;
+    message.answer = (object.answer !== undefined && object.answer !== null)
+      ? AnswerCommand.fromPartial(object.answer)
       : undefined;
     return message;
   },
@@ -4498,7 +4569,7 @@ export const ProviderResult: MessageFns<ProviderResult> = {
 };
 
 function createBaseConnectorResult(): ConnectorResult {
-  return { identity: undefined, executionId: "", ready: false };
+  return { identity: undefined, executionId: "", ready: false, admitted: undefined };
 }
 
 export const ConnectorResult: MessageFns<ConnectorResult> = {
@@ -4511,6 +4582,9 @@ export const ConnectorResult: MessageFns<ConnectorResult> = {
     }
     if (message.ready !== false) {
       writer.uint32(24).bool(message.ready);
+    }
+    if (message.admitted !== undefined) {
+      writer.uint32(32).bool(message.admitted);
     }
     return writer;
   },
@@ -4552,6 +4626,14 @@ export const ConnectorResult: MessageFns<ConnectorResult> = {
             message.ready = reader.bool();
             continue;
           }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.admitted = reader.bool();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -4574,6 +4656,7 @@ export const ConnectorResult: MessageFns<ConnectorResult> = {
       : undefined;
     message.executionId = object.executionId ?? "";
     message.ready = object.ready ?? false;
+    message.admitted = object.admitted ?? undefined;
     return message;
   },
 };

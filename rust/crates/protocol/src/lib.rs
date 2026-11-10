@@ -7,6 +7,107 @@
 //! use chapchoo_persistence::Store;
 //! ```
 
+/// Captured observations contain private conversation content, not Debug fields.
+pub mod conversations {
+    tonic::include_proto!("chapchoo.conversations");
+    macro_rules! redacted_debug {
+        ($($message:ty),+ $(,)?) => {$(
+            impl std::fmt::Debug for $message {
+                fn fmt(&self,f:&mut std::fmt::Formatter<'_>)->std::fmt::Result {
+                    f.debug_struct(stringify!($message)).finish_non_exhaustive()
+                }
+            }
+        )+};
+    }
+    redacted_debug!(
+        NativeTarget,
+        NativeStateReport,
+        WorkTarget,
+        StopCommand,
+        StopCheck,
+        StopReport,
+        LiveRequestReport,
+        InputCommand,
+        InputChunkRequest,
+        InputChunk,
+        InputReport,
+        AnswerCommand,
+        AnswerChunkRequest,
+        AnswerChunk,
+        AnswerReport,
+        input_report::Result,
+        InitialNativeContext,
+        HarnessSupply,
+        harness_supply::Choice,
+        SetupCommand,
+        setup_command::Context,
+        SetupCheck,
+        SetupReport,
+        setup_report::Result,
+        CaptureSource,
+        OwnerConversationRequest,
+        OwnerConversation,
+        ObservedNative,
+        SavedSupply,
+        InputTarget,
+        input_target::Target,
+        OwnerInputPiece,
+        InputAcceptance,
+        OwnerInputProgress,
+        owner_input_progress::Outcome,
+        OwnerInputResultRequest,
+        InputDelivery,
+        input_delivery::Observation,
+        OwnerInputStatus,
+        InputPreparation,
+        input_preparation::Observation,
+        AnswerStrings,
+        AnswerValue,
+        answer_value::Value,
+        AnswerField,
+        AnswerFields,
+        FormAcceptance,
+        TypedAnswer,
+        typed_answer::Answer,
+        OwnerAnswerPiece,
+        AnswerAcceptance,
+        OwnerAnswerProgress,
+        owner_answer_progress::Outcome,
+        OwnerAnswerResultRequest,
+        OwnerAnswerStatus,
+        OwnerAnswerRead,
+        OwnerLiveRequests,
+        LiveRequest,
+        LiveRequestList,
+        RecordSource,
+        RecordAnchor,
+        OwnerRecordsRequest,
+        RecordMetadata,
+        RecordRegion,
+        OwnerFieldsRequest,
+        FieldMetadata,
+        RecordFields,
+        OwnerFieldRead,
+        FieldChunk,
+        SaveSupplyRequest,
+        OwnerStopRequest,
+        OwnerStopResultRequest,
+        StopReceipt,
+        OptionalStopReceipt,
+        SourcePosition,
+        CaptureRequest,
+        CurrentCaptureRequest,
+        CurrentCaptureState,
+        CaptureState,
+        BindCaptureRequest,
+        CapturePiece,
+        PieceAccepted,
+        PairPublished,
+        CapturePieceResult,
+        capture_piece_result::Outcome,
+        CompleteCaptureRequest,
+    );
+}
 /// Backend catalogue and device acquisition; all messages omit fields in Debug.
 pub mod authentication {
     tonic::include_proto!("chapchoo.authentication");
@@ -229,6 +330,7 @@ pub mod control {
         provider_command::Operation,
         ObserveConnector,
         ConnectorCommand,
+        connector_command::Operation,
         ProviderResult,
         ConnectorResult,
         ProviderFrame,

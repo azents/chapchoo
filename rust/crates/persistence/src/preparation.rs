@@ -10,7 +10,7 @@ use std::{error::Error, fs::OpenOptions, path::Path};
 
 pub const SQLITE_MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/sqlite");
 pub const POSTGRES_MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/postgres");
-const VERSIONS: [&str; 12] = [
+pub(crate) const VERSIONS: [&str; 15] = [
     "00000000000001",
     "00000000000002",
     "00000000000003",
@@ -23,6 +23,9 @@ const VERSIONS: [&str; 12] = [
     "00000000000010",
     "00000000000011",
     "00000000000012",
+    "00000000000013",
+    "00000000000016",
+    "00000000000018",
 ];
 const PG_LOCK: i64 = 1_960_261_029;
 #[cfg(test)]
@@ -64,6 +67,15 @@ fn prepared_product_query() -> String {
         "agent_conversations",
         "conversation_inputs",
         "conversation_event_pairs",
+        "conversation_records",
+        "conversation_record_fields",
+        "conversation_field_extents",
+        "conversation_input_delivery",
+        "conversation_requests",
+        "conversation_answers",
+        "conversation_input_preparation",
+        "conversation_native_state",
+        "conversation_stops",
     ];
     let additions = tables
         .iter()

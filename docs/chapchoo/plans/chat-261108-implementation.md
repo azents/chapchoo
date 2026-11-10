@@ -34,7 +34,7 @@ an execution decomposition, not new product/design authority.
 | --- | --- | --- | --- |
 | 1 | Domain and preserving conversation/supply storage with typed source/operation boundary DTOs | M01, M05, M07–12, M18, M20, M22–24, M26 | Current owner/session/Agent authority; no native launch or public conversation service until integrated |
 | 2 | Managed/existing supply, native owner, restricted environment and whole-scope retirement | M02–06, M17, M19, M24–25 | Phase 1 contracts; image/runtime prerequisites; deterministic native process fixture |
-| 3 | Incoming JSONL capture, raw/normalized pairs, source catch-up/replacement, product acceptance and exact dispatch/control/read service | M01, M07–13, M18, M20, M22–23 | Phase 1 storage/contracts + Phase 2 native owner; no uncertain command replay |
+| 3 | Incoming JSONL capture, raw/normalized pairs, source catch-up/replacement, product acceptance and exact dispatch/control/read service | M01, M07–13, M18–20, M22–24, M26 | Phase 1 storage/contracts + Phase 2 native owner; no uncertain command replay |
 | 4 | Public-SDK central refresh, eligible execution credential publication and file-only updates/deletion fences | M14–17, M21, M26 | Existing protected credential catalogue; Phase 2 file owner and Phase 3 exact execution admission |
 | 5 | Actual SSR/hydrated conversation, bounded visible-region reads, composer/Stop/requests, generated adapters and minimal E2E | M01, M05, M10–12, M15–16, M18–19, M23–24, M26 | Phase 3/4 services; remove production samples and simulated success on activation |
 | 6 | Supported-profile integration, final owned-contract acceptance, Spec promotion and removal/plan cleanup | M01–M26 | All preceding phases; actual evidence, final-SHA CI; external prerequisites reported separately |
@@ -106,6 +106,15 @@ Install locked pnpm packages when needed, not arbitrary manifests.
   not arbitrary human threads.
 
 ## Checkpoints, Rollout and Cleanup
+
+Phase 3 implementation is locally integrated: capture/catch-up, preserving
+projections and operation facts, process-owned acceptance, exact setup/input/
+answer/Stop routing and private bounded owner reads/uploads are connected.
+The complete local Rust and generated/live RPC gates pass, including both database
+engines. Actual child-Connector setup/answer/Stop fixtures establish known
+restricted-profile/missing-native-owner rejection and owned shutdown, not real
+model success. Central credential delivery and production Chat replacement remain
+in phases 4 and 5. The approved baseline is byte-identical; Design delta: None.
 
 Each phase plan records branch/base, exact scope, changed contracts, tests and
 remaining gates. Recheck both missing approved work and unauthorized additions at
