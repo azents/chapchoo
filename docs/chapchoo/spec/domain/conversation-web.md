@@ -26,8 +26,12 @@ The client sends bounded known-record/update hints, not a durable cursor.
 Ordinal, paging index and accepted-time request values use canonical int64 decimal
 strings so browser query keys stay JSON-safe; server ingress validates syntax and
 range before restoring exact bigint values. This is not floating-point coercion. It
-assembles complete field bytes before UTF-8 decoding, validates the empty final
-suffix under the same source authority, and rejects changing field revisions.
+assembles complete field bytes before UTF-8 decoding and validates the empty final
+suffix under the same source authority. One initial coherent field metadata view
+selects each finite extent, so appends can continue without starving the observed
+complete body. The returned known ordinal includes the initial field ordinals,
+not later updates. New fields wait for the next poll. Replacing an unread extent
+still rejects the read; a final field read rechecks owner/source authority.
 Recent/older records and retained input pages use source-bound anchors. The
 current plan has its own read even outside the recent region. Selecting history
 in the activity sheet scrolls to its record after the sheet's exit/focus boundary.

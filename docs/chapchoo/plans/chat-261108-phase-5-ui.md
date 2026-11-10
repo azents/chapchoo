@@ -138,11 +138,19 @@ these approved-contract corrections:
   Run affected package/app checks, full frontend gates and mandatory hooks,
   then propagate the correction to phase 6.
 
-Continuous append-between-chunks liveness remains an independent deterministic
-investigation. Preserve complete-content and source fences; no new durable feed,
-versioning or storage authority is approved. Reuse the same sole reviewer only
-after integration stabilizes. Real authenticated model acceptance, merge and
-deployment remain outside this correction. Design delta: None.
+The M10/REQ-3/REQ-11 append-between-chunks correction uses the inherited
+current-body extent index. Save the first coherent field metadata view, read
+each field at that observed ordinal and finite byte length, and advance the
+returned known ordinal to the maximum actually observed initial field ordinal.
+The final field read remains an owner/source fence; later append ordinals or
+new fields wait for the next poll instead of invalidating the complete observed
+body. Replacement of an unread extent still fails. Add twenty deterministic
+append-between-chunks consumer successes, exact complete-content checks, known
+hint advancement and replacement/source regressions. Preserve complete-content
+and source fences; no new durable feed, versioning or storage authority is
+approved. Reuse the same sole reviewer only after integration and affected
+checks stabilize. Real authenticated model acceptance, merge and deployment
+remain outside this correction. Design delta: None.
 
 ### Correction checkpoint
 
@@ -178,10 +186,15 @@ that environment fixed the prerequisite without relaxing cache validation.
 Mandatory commit hooks, latest-SHA remote CI and targeted single-reviewer
 re-review remain delivery gates.
 
-The independent large-body probe ran the actual web-core consumer against a
-deterministic exact-ordinal storage port: twenty forced appends between its first
-and second chunks prevented complete reads of a 103,800-byte body; a quiescent
-read then completed. This is a reproduced scheduling/liveness boundary, not a
-native-frequency measurement or an actual-database stress run. Existing DB
-tests separately verify the changing-field fence. No new read/storage authority
-or safety relaxation was introduced as a workaround.
+The pre-correction 103,800-byte probe reproduced twenty failures while appending
+with the exact-current-ordinal port and a successful quiescent read. The new
+extent-aware consumer probe completes all twenty observed bodies and empty final
+suffixes while appending. The tracked consumer regression also reproduces the
+old final-metadata rejection before the correction, and now passes with complete
+UTF-8/NUL content, a later new field, correct known hints, replacement rejection
+and final source withdrawal. Web-core passes all 137 tests; affected lint/format,
+all-package typecheck, General/Admin unit tests and production builds pass.
+Inherited Store tests separately force twenty append interleavings on each real
+database. These are deterministic contract checks, not native-frequency or live
+model certification. No new read/storage authority or safety relaxation was
+introduced.

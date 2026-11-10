@@ -157,6 +157,109 @@ test("mixed lengths, unexpected offsets and incomplete bodies never publish part
     })),
   );
 });
+test("twenty appending large bodies finish their observed extent and advance only the read known hint", async () => {
+  for (let iteration = 0; iteration < 20; iteration++) {
+    const observedOrdinal = BigInt(2 + iteration * 2);
+    const text = `body-${iteration}: 한글\0🙂 `.repeat(6000);
+    const observed = Buffer.from(JSON.stringify({ type: "text", text }) + "\n");
+    assert.ok(observed.length > 2 * 32768);
+    let currentBody = observed;
+    let appended = false;
+    let fieldReads = 0;
+    const offsets = [];
+    const api = apiFor([]);
+    api.fields = async () => ({
+      fields: [
+        {
+          field: RecordField.RECORD_FIELD_CONTENT,
+          updatedOrdinal: observedOrdinal + (appended ? 1n : 0n),
+          totalBytes: BigInt(currentBody.length),
+        },
+        ...(appended
+          ? [
+              {
+                field: RecordField.RECORD_FIELD_TITLE,
+                updatedOrdinal: observedOrdinal + 1n,
+                totalBytes: 0n,
+              },
+            ]
+          : []),
+      ],
+    });
+    api.readField = async ({ field, updatedOrdinal, offset, length }) => {
+      fieldReads++;
+      offsets.push(offset);
+      assert.equal(field, RecordField.RECORD_FIELD_CONTENT);
+      assert.equal(updatedOrdinal, observedOrdinal);
+      assert.ok(length <= 32768);
+      // Append strictly between the first chunk and its continuation. The port
+      // retains the initial extent over the same current byte projection.
+      if (offset === 0) {
+        currentBody = Buffer.concat([
+          currentBody,
+          Buffer.from(JSON.stringify({ type: "text", text: "later" }) + "\n"),
+        ]);
+        appended = true;
+      }
+      return {
+        offset,
+        totalBytes: BigInt(observed.length),
+        content: currentBody.subarray(
+          offset,
+          Math.min(offset + length, observed.length),
+        ),
+      };
+    };
+    const region = await readConversationRegion(api, { agentId: "agent" });
+    assert.ok(appended);
+    assert.deepEqual(region.records[0].content, [{ type: "text", text }]);
+    assert.equal(region.records[0].updatedOrdinal, observedOrdinal);
+    assert.equal(region.records[0].title, undefined);
+    assert.equal(offsets.at(-1), observed.length);
+    const readsBefore = fieldReads;
+    api.records = async () => ({
+      records: [metadata(undefined, undefined, observedOrdinal)],
+    });
+    const unchanged = await readConversationRegion(api, {
+      agentId: "agent",
+      expectedSnapshotId: "snapshot",
+      expectedConversationId: "conversation",
+      known: [
+        {
+          key: region.records[0].key,
+          updatedOrdinal: region.records[0].updatedOrdinal,
+        },
+      ],
+    });
+    assert.deepEqual(unchanged.records, []);
+    assert.equal(fieldReads, readsBefore);
+  }
+});
+test("replacement of an unread extent and final source withdrawal reject complete publication", async () => {
+  const text = "large🙂".repeat(12000);
+  const replaced = apiFor([{ type: "text", text }]);
+  const read = replaced.readField;
+  replaced.readField = async (request) => {
+    if (request.offset > 0)
+      throw new Error("Observed field extent was replaced");
+    return read(request);
+  };
+  await assert.rejects(
+    readConversationRecord(replaced, header, metadata()),
+    /extent was replaced/,
+  );
+  const withdrawn = apiFor([{ type: "text", text: "complete" }]);
+  const fields = withdrawn.fields;
+  let metadataReads = 0;
+  withdrawn.fields = async () => {
+    if (++metadataReads > 1) throw new Error("Source is no longer readable");
+    return fields();
+  };
+  await assert.rejects(
+    readConversationRecord(withdrawn, header, metadata()),
+    /no longer readable/,
+  );
+});
 test("initial region reads actual complete content; distinct utterance identity is never text deduplication", async () => {
   const api = apiFor(
     [{ type: "text", text: "same" }],

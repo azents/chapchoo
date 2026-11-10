@@ -211,7 +211,8 @@ export async function readConversationRecord(
     throw new Error("Conversation record is invalid");
   const record = { source, kind: metadata.kind, nativeId: metadata.nativeId };
   const values = new Map<RecordField, unknown[]>();
-  for (const field of (await api.fields(record)).fields) {
+  const initialFields = (await api.fields(record)).fields;
+  for (const field of initialFields) {
     const bytes = await readConversationBytes(
       (offset) =>
         api.readField({
@@ -230,7 +231,11 @@ export async function readConversationRecord(
     kind,
     nativeId: metadata.nativeId,
     anchor: metadata.anchor,
-    updatedOrdinal: metadata.updatedOrdinal,
+    updatedOrdinal: initialFields.reduce(
+      (ordinal, field) =>
+        field.updatedOrdinal > ordinal ? field.updatedOrdinal : ordinal,
+      metadata.updatedOrdinal,
+    ),
     content: (values.get(RecordField.RECORD_FIELD_CONTENT) ?? []).map(
       decodeContent,
     ),
@@ -310,14 +315,9 @@ export async function readConversationRecord(
       };
     }
   }
-  // Refuse a body assembled from different updates to independently mutable fields.
-  const after = (await api.fields(record)).fields;
-  const before = values.size;
-  if (
-    after.length !== before ||
-    after.some((field) => field.updatedOrdinal > metadata.updatedOrdinal)
-  )
-    throw new Error("Conversation record changed during read");
+  // Recheck owner/source authority after completing the coherent initial field
+  // extents. Later appends and fields belong to the next poll.
+  await api.fields(record);
   return value;
 }
 export async function readConversationRegion(
