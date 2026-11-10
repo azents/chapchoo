@@ -267,10 +267,13 @@ impl Store {
             if !valid {
                 return Err(StoreError::InvalidTransition);
             }
-            let prior=diesel::sql_query(dialect.query("SELECT CAST(count(*) AS BIGINT) AS n FROM conversation_input_preparation p JOIN conversation_inputs i ON i.id=p.operation_id WHERE i.conversation_id=? AND NOT (p.preparation_state='FAILED' AND p.failure_kind IN ('NOT_ADMITTED','BEFORE_NATIVE_LAUNCH'))"))
+            let prior=diesel::sql_query(dialect.query("SELECT CAST(count(*) AS BIGINT) AS n FROM conversation_input_preparation p JOIN conversation_inputs i ON i.id=p.operation_id WHERE i.conversation_id=? AND NOT (p.preparation_state='FAILED' AND (p.failure_kind IN ('NOT_ADMITTED','BEFORE_NATIVE_LAUNCH','NATIVE_REJECTED') OR (p.failure_kind='SOURCE_UNAVAILABLE' AND p.fresh_native_allowed=FALSE)))"))
                 .bind::<IdentitySql,_>(id).get_result::<PriorStartup>(connection).await?;
             // Seal positive fresh-context permission once, rather than deriving
             // it later from a missing local owner or lost transport result.
+            // A settled explicit rejection is not a native context. A failed
+            // resume-only lookup cannot create one either. Unresolved starts,
+            // retirement uncertainty and session-ready outcomes remain barriers.
             let fresh_native_allowed =
                 target.is_none() && row.native_session_id.is_none() && prior.n == 0;
             let selection = super::supply::current_supply!(connection, dialect, agent);

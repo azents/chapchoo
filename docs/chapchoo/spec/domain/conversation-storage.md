@@ -169,10 +169,16 @@ liveness, source catch-up completion nor text consumption. Known failures and
 changed/late outcomes remain distinct.
 
 Fresh-context permission is sealed at setup admission, not recovered from missing
-local state. An unresolved earlier setup, a known native context or a failure
-without explicit pre-launch/non-admission evidence denies a new fresh context.
-A known pre-launch failure can allow an explicit new operation; it never grants
-another setup dispatch for the original operation. Initial source binding must
+local state. An unresolved earlier setup, a known native context, uncertain
+retirement or a creation-capable source failure denies a new fresh context.
+Known non-admission, pre-launch failure or explicit native rejection after
+successful scope retirement can allow an explicit new operation. A settled
+source-lookup failure from an attempt denied fresh creation does not itself
+establish a new creation barrier; any earlier unresolved attempt still does.
+The native owner additionally requires no bound native session and an empty
+capture before creating a first context. Existing native sessions are resumed,
+never replaced by this permission. None of these outcomes grants another setup
+dispatch for the original operation. Initial source binding must
 agree with any already-known setup session/source. Source replacement clears
 these setup facts with the independently accepted input; it does not replay work.
 
