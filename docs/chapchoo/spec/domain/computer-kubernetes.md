@@ -43,7 +43,10 @@ submits the Pod last. The Pod uses one Computer Connector container, the preserv
 PVC mount and exact Secret-key references. It has an explicit ServiceAccount with
 API token automount disabled, non-root identity, dropped capabilities and
 read-only root and RuntimeDefault seccomp. Collision checks require that Pod
-profile and reject an Unconfined container override. Collision checks verify its supported image, command, mount,
+profile, its exact configured saved-root environment and a non-shared process
+namespace. A shared process namespace is rejected rather than claiming the
+[Connector's native owner](native-harness.md) is namespace init. An Unconfined
+container override is rejected. Collision checks verify its supported image, command, mount,
 bootstrap references and security constraints rather than treating AlreadyExists
 as success. CPU/memory and storage settings remain runtime inputs.
 

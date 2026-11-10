@@ -102,14 +102,16 @@ export class SyntheticKubernetes {
       session: string,
       key: string,
       endpoint: string,
-    ) => OwnedChild,
+      computerId: string,
+    ) => Promise<OwnedChild>,
   ) {}
   static async create(
     startConnector: (
       session: string,
       key: string,
       endpoint: string,
-    ) => OwnedChild,
+      computerId: string,
+    ) => Promise<OwnedChild>,
   ): Promise<SyntheticKubernetes> {
     const fixture = new SyntheticKubernetes(startConnector);
     await new Promise<void>((resolve, reject) => {
@@ -214,10 +216,11 @@ export class SyntheticKubernetes {
         };
         this.connectors.set(
           path,
-          this.startConnector(
+          await this.startConnector(
             decode("session-id"),
             decode("initial-key"),
             decode("control-endpoint"),
+            created.metadata.annotations["chapchoo.io/computer"] ?? "",
           ),
         );
         created.status = { phase: "Running" };

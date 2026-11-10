@@ -350,14 +350,17 @@ export class DockerFixture {
   async readMarker(target: NativeComputer): Promise<string> {
     return this.exec(target, "cat /workspace/acceptance-marker");
   }
-  /** Empty original storage must stay empty on a successor (no image refill). */
+  /** Remove only this fixture's user marker, preserving Connector-owned state. */
   async clearSaved(target: NativeComputer): Promise<void> {
     await this.exec(target, "rm /workspace/acceptance-marker");
   }
-  async savedEmpty(target: NativeComputer): Promise<boolean> {
+  /** User storage must not refill; the Connector owns its separate native class. */
+  async savedUserDataEmpty(target: NativeComputer): Promise<boolean> {
     return (
-      (await this.exec(target, "find /workspace -mindepth 1 -print -quit")) ===
-      ""
+      (await this.exec(
+        target,
+        "find /workspace -mindepth 1 -maxdepth 1 ! -name .chapchoo-native -print -quit",
+      )) === ""
     );
   }
   async containerAbsent(id: string): Promise<boolean> {

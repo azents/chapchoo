@@ -535,12 +535,15 @@ async fn provider_stream_creates_pod_only_after_acknowledged_original_resource_u
         .await?;
     let connector_stop = CancellationToken::new();
     let connector_stopping = connector_stop.clone();
+    let native_storage = tempfile::tempdir()?;
+    let native = chapchoo_harness::NativeOwner::new(chapchoo_harness::NativeStorage::open(native_storage.path())?)?;
     let connector = fixture.worker(connector_stop.clone(), async move {
         crate::connector::run(
             &connector_endpoint,
             session.id,
             session.initial_key,
             connector_stopping,
+            native,
         )
         .await
     });

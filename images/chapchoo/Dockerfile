@@ -39,7 +39,7 @@ RUN test "$(cat /inputs/web-architecture)" = "$TARGETARCH" \
        --node-license /usr/local/LICENSE --output /out/admin
 
 FROM ${RUNTIME_IMAGE} AS runtime-base
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libgcc-s1 \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libgcc-s1 libstdc++6 \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 chapchoo \
     && useradd --no-log-init --create-home --uid 10001 --gid 10001 --shell /usr/sbin/nologin chapchoo \

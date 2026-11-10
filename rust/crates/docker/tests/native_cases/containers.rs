@@ -325,7 +325,7 @@ async fn mismatched_bootstrap_mount_security_and_full_id_are_never_adopted() -> 
             .clone()
             .ok_or("Missing container")?;
         drop(prepared);
-        for variant in 0..11 {
+        for variant in 0..14 {
             let mut value = original.clone();
             match variant {
                 0 => value
@@ -366,9 +366,25 @@ async fn mismatched_bootstrap_mount_security_and_full_id_are_never_adopted() -> 
                 7 => value.image = Some(format!("sha256:{}", "d".repeat(64))),
                 8 => value.image = Some(format!("sha256:{}", "z".repeat(64))),
                 9 => value.host_config.as_mut().ok_or("Host")?.publish_all_ports = Some(true),
-                _ => {
+                10 => {
                     value.host_config.as_mut().ok_or("Host")?.port_bindings =
                         Some([("50051/tcp".into(), None)].into_iter().collect())
+                }
+                11 => value.host_config.as_mut().ok_or("Host")?.init = Some(true),
+                12 => value.host_config.as_mut().ok_or("Host")?.pid_mode = Some("host".into()),
+                _ => {
+                    let env = value
+                        .config
+                        .as_mut()
+                        .ok_or("Config")?
+                        .env
+                        .as_mut()
+                        .ok_or("Env")?;
+                    let saved = env
+                        .iter_mut()
+                        .find(|v| v.starts_with("CHAPCHOO_COMPUTER_SAVED_ROOT="))
+                        .ok_or("Saved root")?;
+                    *saved = "CHAPCHOO_COMPUTER_SAVED_ROOT=/another-root".into();
                 }
             }
             fixture.state.lock().map_err(|_| "Fixture lock")?.container = Some(value);

@@ -114,8 +114,10 @@ It has private PID/IPC, no privileged mode, host binds, devices, Docker socket,
 extra anonymous volumes or published ports. Image `EXPOSE` declarations are
 advisory metadata; the Provider forbids `PublishAllPorts` and every nonempty
 `PortBindings` configuration independently. Only the saved named volume is
-mounted. Initial allocation permits image-directory population; successors use
-no-copy. More narrowly, only an opaque proof from a positively completed fresh
+mounted. The strict bootstrap environment includes the exact configured saved
+root. An injected init process is rejected so the Connector remains namespace
+PID1 for [native ownership](native-harness.md). Initial allocation permits
+image-directory population; successors use no-copy. More narrowly, only an opaque proof from a positively completed fresh
 volume creation permits that initial population. Recovered/existing originals,
 even under an initial-allocation retry, always use no-copy. Image preparation
 captures the actual SHA-256 identity and verifies Linux architecture; container

@@ -97,6 +97,7 @@ real Docker, browser journeys and live cluster rollout.
 - [Provider process](domain/provider-process.md) — DB-free native work, acknowledgements and retained effects.
 - [Provider authentication](domain/provider-authentication.md) — bootstrap policy, SA review, protected/random credentials and internal Trust.
 - [Connector process](domain/connector-process.md) — execution-local connectivity and shutdown.
+- [Native preparation and lifetime](domain/native-harness.md) — internal strict-v2 owner, applied supply and private-scope retirement; no public text activation.
 - [Convergence and restoration](domain/reconciliation.md) — owner precedence, observation and authorized successors.
 - [Peer delivery](domain/peer-delivery.md) — generated memory/network transport, routing and retry limits.
 - [Kubernetes adapter](domain/computer-kubernetes.md) — original PVC, Pod/Secret profile and ordered retirement evidence.

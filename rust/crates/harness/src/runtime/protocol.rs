@@ -1,0 +1,133 @@
+use super::*;
+#[cfg(test)]
+mod tests;
+
+pub(super) async fn connect(
+    transport: impl agent_client_protocol::ConnectTo<Client>,
+    requests: Requests,
+    ready: oneshot::Sender<Result<agent_client_protocol::v2::ActiveSession<Agent>, Error>>,
+    done: CancellationToken,
+    cwd: std::path::PathBuf,
+    resume: Option<NativeConversationId>,
+) -> Result<(), agent_client_protocol::Error> {
+    let permission = requests.clone();
+    let forms = requests;
+    Client
+        .v2()
+        .on_receive_notification(
+            async |_update: schema::UpdateSessionNotification, _cx: ConnectionTo<Agent>| Ok(()),
+            agent_client_protocol::on_receive_notification!(),
+        )
+        .on_receive_request(
+            async move |request: schema::RequestPermissionRequest,
+                        responder: Responder<schema::RequestPermissionResponse>,
+                        _cx: ConnectionTo<Agent>| {
+                let mut pending = permission.lock().await;
+                pending.retain(|_, r| !r.cancelled());
+                let key = responder.id().to_string();
+                if pending.len() >= MAX_REQUESTS || pending.contains_key(&key) {
+                    return Err(agent_client_protocol::Error::internal_error());
+                }
+                pending.insert(key, Pending::Permission(request, responder));
+                Ok(())
+            },
+            agent_client_protocol::on_receive_request!(),
+        )
+        .on_receive_request(
+            async move |request: schema::CreateElicitationRequest,
+                        responder: Responder<schema::CreateElicitationResponse>,
+                        _cx: ConnectionTo<Agent>| {
+                if !matches!(
+                    request.mode,
+                    schema::ElicitationMode::Form(schema::ElicitationFormMode {
+                        scope: schema::ElicitationScope::Session(_),
+                        ..
+                    })
+                ) {
+                    return Err(agent_client_protocol::Error::invalid_params());
+                }
+                let mut pending = forms.lock().await;
+                pending.retain(|_, r| !r.cancelled());
+                let key = responder.id().to_string();
+                if pending.len() >= MAX_REQUESTS || pending.contains_key(&key) {
+                    return Err(agent_client_protocol::Error::internal_error());
+                }
+                pending.insert(key, Pending::Form(request, responder));
+                Ok(())
+            },
+            agent_client_protocol::on_receive_request!(),
+        )
+        .connect_with(transport, async move |cx: ConnectionTo<Agent>| {
+            let session = match initialize_session(cx, cwd, resume).await {
+                Ok(session) => session,
+                Err((stage, cause)) => {
+                    let _ = ready.send(Err(Error::ProtocolRejected {
+                        stage,
+                        code: i32::from(cause.code),
+                    }));
+                    return Err(cause);
+                }
+            };
+            let _ = ready.send(Ok(session));
+            done.cancelled().await;
+            Ok(())
+        })
+        .await
+}
+
+async fn initialize_session(
+    cx: ConnectionTo<Agent>,
+    cwd: std::path::PathBuf,
+    resume: Option<NativeConversationId>,
+) -> Result<
+    agent_client_protocol::v2::ActiveSession<Agent>,
+    (crate::ProtocolStage, agent_client_protocol::Error),
+> {
+    use crate::ProtocolStage;
+    let initialize = schema::InitializeRequest::new(
+        ProtocolVersion::V2,
+        schema::Implementation::new("chapchoo", env!("CARGO_PKG_VERSION")),
+    )
+    .capabilities(schema::ClientCapabilities::new().elicitation(
+        schema::ElicitationCapabilities::new().form(schema::ElicitationFormCapabilities::new()),
+    ));
+    let initialized = cx
+        .send_initialize(initialize)
+        .block_task()
+        .await
+        .map_err(|e| (ProtocolStage::Initialize, e))?;
+    let agent_client_protocol::v2::InitializeOutcome::Initialized(response) = initialized else {
+        return Err((
+            ProtocolStage::Initialize,
+            agent_client_protocol::Error::invalid_params(),
+        ));
+    };
+    if response.protocol_version != ProtocolVersion::V2 || response.capabilities.session.is_none() {
+        return Err((
+            ProtocolStage::Initialize,
+            agent_client_protocol::Error::invalid_params(),
+        ));
+    }
+    let session = match resume {
+        Some(id) => {
+            cx.resume_session_from(
+                schema::ResumeSessionRequest::new(id.as_str(), cwd)
+                    .replay_from(schema::ReplayFrom::Start(schema::ReplayFromStart::new())),
+            )
+            .start_session()
+            .block_task()
+            .await
+            .map_err(|e| (ProtocolStage::Session, e))?
+            .session
+        }
+        None => {
+            cx.build_session(cwd)
+                .start_session()
+                .block_task()
+                .await
+                .map_err(|e| (ProtocolStage::Session, e))?
+                .session
+        }
+    };
+    Ok(session)
+}

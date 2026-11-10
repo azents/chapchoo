@@ -18,7 +18,7 @@ impl fmt::Debug for Bootstrap<'_> {
     }
 }
 impl Bootstrap<'_> {
-    fn environment(&self) -> Result<Vec<String>, Error> {
+    fn environment(&self, saved_root: &str) -> Result<Vec<String>, Error> {
         if [self.session, self.initial_key, self.endpoint]
             .iter()
             .any(|value| {
@@ -42,6 +42,7 @@ impl Bootstrap<'_> {
             format!("CHAPCHOO_CONNECTOR_SESSION_ID={}", self.session),
             format!("CHAPCHOO_CONNECTOR_INITIAL_KEY={}", self.initial_key),
             format!("CHAPCHOO_CONTROL_ENDPOINT={}", self.endpoint),
+            format!("CHAPCHOO_COMPUTER_SAVED_ROOT={saved_root}"),
         ])
     }
 }
@@ -58,11 +59,12 @@ fn environment(values: &[String]) -> Result<BTreeMap<&str, &str>, Error> {
             return Err(Error::Ownership);
         }
     }
-    if selected.len() != 3
+    if selected.len() != 4
         || ![
             "CHAPCHOO_CONNECTOR_SESSION_ID",
             "CHAPCHOO_CONNECTOR_INITIAL_KEY",
             "CHAPCHOO_CONTROL_ENDPOINT",
+            "CHAPCHOO_COMPUTER_SAVED_ROOT",
         ]
         .iter()
         .all(|key| selected.contains_key(key))
@@ -91,7 +93,7 @@ impl Docker {
             user: Some("10001:10001".into()),
             entrypoint: Some(vec!["/opt/chapchoo/chapchoo".into()]),
             cmd: Some(vec!["computer-connector".into()]),
-            env: Some(bootstrap.environment()?),
+            env: Some(bootstrap.environment(&self.config.saved_mount)?),
             labels: Some(self.labels(context, resource)?),
             stop_signal: Some("SIGTERM".into()),
             stop_timeout: Some(30),
@@ -188,6 +190,7 @@ impl Docker {
                 .as_ref()
                 .is_some_and(|value| !value.is_empty())
             || !matches!(host.ipc_mode.as_deref(), Some("private"))
+            || host.init == Some(true)
             || host
                 .userns_mode
                 .as_ref()
@@ -213,8 +216,11 @@ impl Docker {
             return Err(Error::Ownership);
         }
         let vars = environment(config.env.as_deref().ok_or(Error::Ownership)?)?;
+        if vars.get("CHAPCHOO_COMPUTER_SAVED_ROOT") != Some(&self.config.saved_mount.as_str()) {
+            return Err(Error::Ownership);
+        }
         if let Some(bootstrap) = bootstrap {
-            let expected = bootstrap.environment()?;
+            let expected = bootstrap.environment(&self.config.saved_mount)?;
             if vars != environment(&expected)? {
                 return Err(Error::Ownership);
             }

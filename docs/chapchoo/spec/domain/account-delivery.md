@@ -34,6 +34,9 @@ web has the central executable, matching Node and selected standalone app, and
 receives no backend database/key credentials. Runtime supports a read-only root
 with an explicitly writable temporary directory. Database state is separately
 operator-provided, never baked into an image.
+The common runtime includes CA certificates, `libgcc-s1` and `libstdc++6` for
+the supported [managed native runtime](native-harness.md); the backend image
+still does not bake a Node installation or model credential into the artifact.
 
 The standard runtime stages `/workspace` owned by UID:GID 10001:10001. A true
 initial fresh Docker volume can copy that directory's ownership; existing
