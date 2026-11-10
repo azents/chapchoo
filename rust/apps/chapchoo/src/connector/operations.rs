@@ -123,6 +123,7 @@ impl Operations {
         let intent = match command.context.as_ref() {
             Some(c::setup_command::Context::Initial(value)) => NativeSetupIntent::Initial {
                 allow_fresh: value.allow_fresh,
+                require_retained_source: value.require_retained_source,
             },
             Some(c::setup_command::Context::Existing(value)) => {
                 NativeSetupIntent::Existing(NativeTextTarget {

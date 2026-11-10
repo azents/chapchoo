@@ -64,7 +64,7 @@ impl ConversationControlProcessor {
             conversation_id: &input.receipt.conversation_id,
             operation_id: &input.receipt.id,
         };
-        let (execution, supply, fresh) = match self
+        let (execution, supply, fresh, require_retained_source) = match self
             .conversation
             .begin_setup(actor, &route, &draft, AcceptanceTime::System.now()?)
             .await?
@@ -73,8 +73,14 @@ impl ConversationControlProcessor {
                 grant,
                 requested_supply,
                 fresh_native_allowed,
+                require_retained_source,
                 ..
-            } => (grant.execution_id, requested_supply, fresh_native_allowed),
+            } => (
+                grant.execution_id,
+                requested_supply,
+                fresh_native_allowed,
+                require_retained_source,
+            ),
             // A processing task has no authority to repeat another setup grant.
             ConversationPreparationAdmission::Existing(_) => return Ok(()),
         };
@@ -82,6 +88,7 @@ impl ConversationControlProcessor {
             ConversationTarget::NotStarted => {
                 wire::setup_command::Context::Initial(wire::InitialNativeContext {
                     allow_fresh: fresh,
+                    require_retained_source,
                 })
             }
             ConversationTarget::Snapshot(snapshot) => {
