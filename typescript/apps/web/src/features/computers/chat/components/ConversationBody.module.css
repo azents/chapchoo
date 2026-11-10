@@ -1,5 +1,6 @@
 .record {
   min-width: 0;
+  font-size: var(--mantine-font-size-sm);
   scroll-margin-block: var(--mantine-spacing-xl);
   overflow-wrap: anywhere;
 }
@@ -7,22 +8,42 @@
   align-self: flex-end;
   max-width: 90%;
 }
+.record[data-surface="history"] {
+  align-self: stretch;
+  width: 100%;
+  max-width: 100%;
+}
 .userBubble {
-  padding: calc(var(--mantine-spacing-xs) / 2) var(--mantine-spacing-sm);
+  width: fit-content;
+  max-width: 100%;
+  margin-inline-start: auto;
+  padding: var(--mantine-spacing-md) var(--mantine-spacing-lg);
   border-radius: var(--mantine-radius-lg);
   background: var(--mantine-color-default-hover);
 }
+.assistantAuthor {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-sm);
+  margin-block-end: var(--mantine-spacing-xs);
+}
+.authorPortrait { width: 1.5rem; height: 1.5rem; flex-shrink: 0; }
 .userBubble .answer { margin: 0; }
 .userAuthor { margin-block-end: calc(var(--mantine-spacing-xs) / 2); }
 .inputStatus { margin-block-start: calc(var(--mantine-spacing-xs) / 2); }
 .markdown { min-width: 0; overflow-wrap: anywhere; }
+.markdown a,
+.markdown a:visited {
+  color: var(--mantine-color-anchor);
+  text-underline-offset: 0.18em;
+}
 .markdown > :first-child { margin-top: 0; }
 .markdown > :last-child { margin-bottom: 0; }
 .markdown pre, .record pre, .pending pre {
   max-width: 100%;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  font-size: var(--mantine-font-size-sm);
+  font-size: var(--mantine-font-size-xs);
 }
 .markdown table { display: block; max-width: 100%; overflow-x: auto; }
 .markdown blockquote { border-inline-start: solid var(--mantine-color-default-border); padding-inline-start: var(--mantine-spacing-md); margin-inline: 0; }

@@ -35,7 +35,7 @@ export interface ConversationControls {
   onDeleteInput?: (input: RetainedInputView) => void;
   onOlder: () => void;
   onLatest: () => void;
-  onHistory: (record: ConversationRecord) => void;
+  onHistory: (record?: ConversationRecord) => void;
   onQuestionOption: (record: ConversationRecord, optionId: string) => void;
   onQuestionField: (
     record: ConversationRecord,
@@ -61,6 +61,9 @@ export interface ChatProps {
   sendable: boolean;
   status: string;
   opened: boolean;
+  historyOpened: boolean;
+  historyContent: ReactNode;
+  onCloseHistory: () => void;
   navOpened: boolean;
   onOpen: () => void;
   onClose: () => void;

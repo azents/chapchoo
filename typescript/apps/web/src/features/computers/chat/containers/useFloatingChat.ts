@@ -10,6 +10,7 @@ export interface FloatingChat {
   textareaRef: RefObject<HTMLTextAreaElement | null>;
   profileRef: RefObject<HTMLDivElement | null>;
   detached: boolean;
+  unseen: boolean;
   followLatest: () => void;
   preserveHistory: () => void;
 }
@@ -18,6 +19,7 @@ export function useFloatingChat(
   input: string,
   conversationKey: string,
   active = true,
+  updates: readonly { key: string; updatedOrdinal: bigint }[] = [],
 ): FloatingChat {
   const shellRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -32,6 +34,22 @@ export function useFloatingChat(
   const frame = useRef(0);
   const intentFrame = useRef(0);
   const [detached, setDetached] = useState(false);
+  const [unseen, setUnseen] = useState(false);
+  const previousUpdate = useRef(
+    new Map(updates.map((record) => [record.key, record.updatedOrdinal])),
+  );
+  useLayoutEffect(() => {
+    const unseenUpdate = updates.some((record) => {
+      const previous = previousUpdate.current.get(record.key);
+      return previous === void 0 || record.updatedOrdinal > previous;
+    });
+    previousUpdate.current = new Map(
+      updates.map((record) => [record.key, record.updatedOrdinal]),
+    );
+    if (unseenUpdate && !following.current) {
+      setUnseen(true);
+    }
+  }, [updates]);
   const schedulePin = useCallback((): void => {
     cancelAnimationFrame(frame.current);
     frame.current = requestAnimationFrame(() => {
@@ -45,6 +63,7 @@ export function useFloatingChat(
     historyAnchor.current = null;
     following.current = true;
     setDetached(false);
+    setUnseen(false);
     schedulePin();
   }, [schedulePin]);
   useLayoutEffect(() => {
@@ -106,6 +125,9 @@ export function useFloatingChat(
         viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <=
         48;
       setDetached(!following.current);
+      if (following.current) {
+        setUnseen(false);
+      }
     };
     const onIntent = (): void => {
       historyAnchor.current = null;
@@ -137,6 +159,7 @@ export function useFloatingChat(
     textareaRef,
     profileRef,
     detached,
+    unseen,
     followLatest,
     preserveHistory: () => {
       const viewport = viewportRef.current;

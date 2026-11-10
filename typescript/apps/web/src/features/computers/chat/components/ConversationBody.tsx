@@ -1,4 +1,5 @@
 "use client";
+import { CharacterArtwork } from "@chapchoo/ui/CharacterArtwork";
 import {
   draftField,
   initialQuestionDraft,
@@ -8,6 +9,10 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { inputStatus, nativeStatus, permissionScope } from "../copy";
 import classes from "./ConversationBody.module.css";
+import {
+  ContentDisclosure,
+  ConversationRecordDisclosure,
+} from "./ConversationRecord";
 import type { ChatCopy } from "../copy";
 import type { ConversationControls } from "../types";
 import type {
@@ -59,10 +64,8 @@ function UserMessageBody({
 }
 export function ConversationContent({
   parts,
-  plain = false,
 }: {
   parts: ContentPart[];
-  plain?: boolean;
 }): ReactElement {
   const grouped: ContentPart[] = [];
   for (const part of parts) {
@@ -77,13 +80,7 @@ export function ConversationContent({
     <>
       {grouped.map((part, index) =>
         part.type === "text" ? (
-          plain ? (
-            <p key={index} className={classes.answer}>
-              {part.text}
-            </p>
-          ) : (
-            <Markdown key={index} text={part.text} />
-          )
+          <Markdown key={index} text={part.text} />
         ) : part.type === "diff" ? (
           <section key={index}>
             <strong>{part.path}</strong>
@@ -122,10 +119,9 @@ export function ConversationContent({
                 aria-label={part.mimeType}
               />
             ) : null}
-            <details>
-              <summary>Base64</summary>
+            <ContentDisclosure title="Base64">
               <pre>{part.data}</pre>
-            </details>
+            </ContentDisclosure>
           </section>
         ) : (
           <Text key={index} c="dimmed">
@@ -374,11 +370,13 @@ export function ConversationQuestion({
   controls,
   copy,
   writable,
+  idPrefix = "question",
 }: {
   record: ConversationRecord;
   controls: ConversationControls;
   copy: ChatCopy;
   writable: boolean;
+  idPrefix?: string;
 }): ReactElement {
   const question = record.question;
   if (!question || question.type === "unsupported") {
@@ -392,7 +390,7 @@ export function ConversationQuestion({
     !record.responder ||
     (draft.state !== "editing" && draft.state !== "invalid") ||
     completed;
-  const prefix = `question-${encodeURIComponent(record.key)}`;
+  const prefix = `${idPrefix}-${encodeURIComponent(record.key)}`;
   const selected =
     retained?.type === "permission" ? retained.optionId : draft.optionId;
   return (
@@ -521,11 +519,17 @@ export function ConversationBody({
   copy,
   writable,
   agentName,
+  agentProfile,
+  initiallyExpandedKey = null,
+  surface = "transcript",
 }: {
   controls: ConversationControls;
   copy: ChatCopy;
   writable: boolean;
   agentName: string;
+  agentProfile?: { basePath: string; assetKey: string };
+  initiallyExpandedKey?: string | null;
+  surface?: "transcript" | "history";
 }): ReactElement {
   return (
     <Stack gap="lg">
@@ -548,108 +552,146 @@ export function ConversationBody({
       ) : controls.read === "loading" ? (
         <Text role="status">{copy.loading}</Text>
       ) : null}
-      {controls.region.records.map((record) => (
-        <article
-          id={`conversation-${encodeURIComponent(record.key)}`}
-          key={record.key}
-          data-kind={record.kind}
-          aria-label={record.kind === "user" ? copy.you : void 0}
-          className={classes.record}
-          tabIndex={-1}
-        >
-          {record.kind === "user" || record.kind === "assistant" ? (
-            <>
-              {record.kind === "assistant" ? (
-                <>
-                  <strong>{agentName}</strong>
+      {controls.region.records
+        .filter(
+          (record) =>
+            surface === "history" ||
+            record.kind === "user" ||
+            record.kind === "assistant" ||
+            record.kind === "request",
+        )
+        .map((record) => (
+          <article
+            id={`${surface === "history" ? "history" : "conversation"}-${encodeURIComponent(record.key)}`}
+            key={record.key}
+            data-kind={record.kind}
+            data-surface={surface}
+            aria-label={record.kind === "user" ? copy.you : void 0}
+            className={classes.record}
+            tabIndex={-1}
+          >
+            {record.kind === "user" || record.kind === "assistant" ? (
+              surface === "history" ? (
+                <ConversationRecordDisclosure
+                  record={record}
+                  copy={copy}
+                  agentName={agentName}
+                  initiallyOpened={initiallyExpandedKey === record.key}
+                >
                   <ConversationContent parts={record.content} />
-                </>
+                </ConversationRecordDisclosure>
               ) : (
-                <UserMessageBody copy={copy}>
-                  <ConversationContent parts={record.content} plain />
-                </UserMessageBody>
-              )}
-            </>
-          ) : record.kind === "request" ? (
-            <ConversationQuestion
-              record={record}
-              controls={controls}
-              copy={copy}
-              writable={writable && controls.read === "ready"}
-            />
-          ) : record.kind === "state" ? null : (
-            <details>
-              <summary>
-                {record.title ??
-                  (record.kind === "thought"
-                    ? copy.thought
-                    : record.kind === "tool"
-                      ? copy.tools
-                      : record.kind === "plan"
-                        ? copy.plan
-                        : record.kind === "terminal"
-                          ? copy.terminal
-                          : copy.notice)}
-                {record.status ? ` · ${nativeStatus(copy, record.status)}` : ""}
-              </summary>
-              {record.description ? (
-                <Markdown text={record.description} />
-              ) : null}
-              {record.toolInput ? (
-                <section aria-label={copy.toolInput}>
-                  <Text size="sm" fw={600}>
-                    {copy.toolInput}
-                  </Text>
-                  <pre>{record.toolInput.json}</pre>
-                </section>
-              ) : null}
-              {record.toolOutput ? (
-                <section aria-label={copy.toolOutput}>
-                  <Text size="sm" fw={600}>
-                    {copy.toolOutput}
-                  </Text>
-                  <pre>{record.toolOutput.json}</pre>
-                </section>
-              ) : null}
-              {record.plan?.type === "items" ? (
-                <ol>
-                  {record.plan.items.map((item, index) => (
-                    <li key={index}>
-                      {item.content} · {nativeStatus(copy, item.status)}
-                    </li>
-                  ))}
-                </ol>
-              ) : record.plan?.type === "text" ? (
-                <Markdown text={record.plan.text} />
-              ) : null}
-              {record.locations.map((location) => (
-                <pre key={location.path}>
-                  {location.path}
-                  {location.line !== void 0 ? `:${location.line}` : ""}
-                </pre>
-              ))}
-              {record.terminal ? (
                 <>
-                  <pre>{record.terminal.text}</pre>
-                  {record.terminal.exitCode !== void 0 ? (
-                    <p>
-                      {copy.terminal} · {String(record.terminal.exitCode)}
-                    </p>
-                  ) : null}
-                  {record.terminal.signal ? (
-                    <p>{record.terminal.signal}</p>
-                  ) : null}
-                  <details>
-                    <summary>Base64</summary>
-                    <pre>{record.terminal.base64}</pre>
-                  </details>
+                  {record.kind === "assistant" ? (
+                    <>
+                      <div className={classes.assistantAuthor}>
+                        {agentProfile ? (
+                          <CharacterArtwork
+                            basePath={agentProfile.basePath}
+                            assetKey={agentProfile.assetKey}
+                            className={classes.authorPortrait}
+                          />
+                        ) : null}
+                        <strong>{agentName}</strong>
+                      </div>
+                      <ConversationContent parts={record.content} />
+                    </>
+                  ) : (
+                    <UserMessageBody copy={copy}>
+                      <ConversationContent parts={record.content} />
+                    </UserMessageBody>
+                  )}
                 </>
-              ) : null}
-              <ConversationContent parts={record.content} />
-            </details>
-          )}
-        </article>
-      ))}
+              )
+            ) : record.kind === "request" ? (
+              surface === "history" ? (
+                <ConversationRecordDisclosure
+                  record={record}
+                  copy={copy}
+                  agentName={agentName}
+                  initiallyOpened={initiallyExpandedKey === record.key}
+                >
+                  <ConversationQuestion
+                    record={record}
+                    controls={controls}
+                    copy={copy}
+                    writable={false}
+                    idPrefix="history-question"
+                  />
+                </ConversationRecordDisclosure>
+              ) : (
+                <ConversationQuestion
+                  record={record}
+                  controls={controls}
+                  copy={copy}
+                  writable={writable && controls.read === "ready"}
+                  idPrefix="question"
+                />
+              )
+            ) : (
+              <ConversationRecordDisclosure
+                record={record}
+                copy={copy}
+                agentName={agentName}
+                initiallyOpened={initiallyExpandedKey === record.key}
+              >
+                {record.description ? (
+                  <Markdown text={record.description} />
+                ) : null}
+                {record.toolInput ? (
+                  <section aria-label={copy.toolInput}>
+                    <Text size="sm" fw={600}>
+                      {copy.toolInput}
+                    </Text>
+                    <pre>{record.toolInput.json}</pre>
+                  </section>
+                ) : null}
+                {record.toolOutput ? (
+                  <section aria-label={copy.toolOutput}>
+                    <Text size="sm" fw={600}>
+                      {copy.toolOutput}
+                    </Text>
+                    <pre>{record.toolOutput.json}</pre>
+                  </section>
+                ) : null}
+                {record.plan?.type === "items" ? (
+                  <ol>
+                    {record.plan.items.map((item, index) => (
+                      <li key={index}>
+                        {item.content} · {nativeStatus(copy, item.status)}
+                      </li>
+                    ))}
+                  </ol>
+                ) : record.plan?.type === "text" ? (
+                  <Markdown text={record.plan.text} />
+                ) : null}
+                {record.locations.map((location) => (
+                  <pre key={location.path}>
+                    {location.path}
+                    {location.line !== void 0 ? `:${location.line}` : ""}
+                  </pre>
+                ))}
+                {record.terminal ? (
+                  <>
+                    <pre>{record.terminal.text}</pre>
+                    {record.terminal.exitCode !== void 0 ? (
+                      <p>
+                        {copy.terminal} · {String(record.terminal.exitCode)}
+                      </p>
+                    ) : null}
+                    {record.terminal.signal ? (
+                      <p>{record.terminal.signal}</p>
+                    ) : null}
+                    <ContentDisclosure title="Base64">
+                      <pre>{record.terminal.base64}</pre>
+                    </ContentDisclosure>
+                  </>
+                ) : null}
+                <ConversationContent parts={record.content} />
+              </ConversationRecordDisclosure>
+            )}
+          </article>
+        ))}
       {(controls.region.inputs ?? [])
         .filter((input) => !input.deleted)
         .map((input) =>
@@ -659,12 +701,17 @@ export function ConversationBody({
               record.kind === "user" &&
               record.nativeId === input.insertedNativeMessageId,
           ) ? (
-            <details className={classes.pending} key={input.id}>
-              <summary>
-                {copy.message} · {inputStatus(copy, input)}
-              </summary>
-              <pre>{input.text}</pre>
-            </details>
+            surface === "history" ? (
+              <div className={classes.pending} key={input.id}>
+                <ContentDisclosure
+                  title={`${copy.message} · ${inputStatus(copy, input)}`}
+                >
+                  {input.text !== void 0 ? (
+                    <Markdown text={input.text} />
+                  ) : null}
+                </ContentDisclosure>
+              </div>
+            ) : null
           ) : (
             <section
               className={classes.record}
@@ -673,7 +720,7 @@ export function ConversationBody({
               key={input.id}
             >
               <UserMessageBody copy={copy}>
-                <p className={classes.answer}>{input.text}</p>
+                {input.text !== void 0 ? <Markdown text={input.text} /> : null}
               </UserMessageBody>
               <Text
                 size="xs"
@@ -747,7 +794,7 @@ export function ConversationBody({
           aria-label={copy.you}
         >
           <UserMessageBody copy={copy}>
-            <p className={classes.answer}>{input.text}</p>
+            <Markdown text={input.text} />
           </UserMessageBody>
           <Text
             size="xs"

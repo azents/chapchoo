@@ -1,5 +1,26 @@
 import { expect, test } from "@playwright/test";
 
+test("status length is independent of a short Markdown user bubble", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(
+    "/iframe.html?id=chat-conversation-body--input-states&viewMode=story",
+  );
+  const messages = page
+    .locator('[data-kind="user"]')
+    .filter({ has: page.getByText("확인", { exact: true }) });
+  await expect(messages).toHaveCount(2);
+  const widths = await messages.evaluateAll((elements) =>
+    elements.map(
+      (element) => element.querySelector("div")?.getBoundingClientRect().width,
+    ),
+  );
+  expect(widths[0]).toBe(widths[1]);
+  await expect(messages.nth(0).locator("strong")).toHaveText("확인");
+  await expect(messages.nth(1).locator("strong")).toHaveText("확인");
+});
+
 test("permission choices start unselected and remain expanded after an explicit response", async ({
   page,
 }) => {
@@ -114,17 +135,21 @@ test("uncertain response delivery does not offer another effect", async ({
   ).toBeDisabled();
 });
 
-test("user text stays plain while distinct assistant utterances render Markdown and activity remains separate", async ({
+test("user and distinct assistant utterances render safe Markdown with activity separate", async ({
   page,
 }) => {
   await page.goto(
     "/iframe.html?id=chat-conversation-body--content&viewMode=story",
   );
   const user = page.locator('[data-kind="user"]');
-  await expect(user).toContainText(
-    "**This is plain user text**, not Markdown.",
+  await expect(user.locator("strong")).toHaveText("User Markdown");
+  await expect(user.getByRole("listitem")).toHaveCount(2);
+  await expect(user.locator("code")).toHaveText("inline code");
+  await expect(user.locator("script")).toHaveCount(0);
+  await expect(user.getByRole("link")).toHaveAttribute(
+    "rel",
+    "noopener noreferrer",
   );
-  await expect(user.locator("strong")).toHaveCount(0);
   await expect(user).toHaveAttribute("aria-label", "You");
   await expect(page.locator('[data-kind="assistant"]')).toHaveCount(2);
   await expect(
@@ -134,15 +159,6 @@ test("user text stays plain while distinct assistant utterances render Markdown 
     "rel",
     "noopener noreferrer",
   );
-  await page
-    .locator('[data-kind="tool"] summary')
-    .filter({ hasText: "Update notes" })
-    .click();
-  await expect(page.getByText("previous line", { exact: true })).toBeVisible();
-  await page.locator('[data-kind="terminal"] summary').first().click();
-  await expect(
-    page.getByText("Complete output", { exact: true }),
-  ).toBeVisible();
 });
 
 test("tool-only original input and output render as independent complete fields", async ({
@@ -150,12 +166,21 @@ test("tool-only original input and output render as independent complete fields"
 }) => {
   await page.setViewportSize({ width: 320, height: 844 });
   await page.goto(
-    "/iframe.html?id=chat-conversation-body--content&viewMode=story",
+    "/iframe.html?id=chat-conversation-body--history-content&viewMode=story",
   );
   await page
-    .locator('[data-kind="tool"] summary')
+    .locator('[data-kind="tool"] button')
+    .filter({ hasText: "Update notes" })
+    .click();
+  await page
+    .locator('[data-kind="tool"] button')
     .filter({ hasText: "Read note" })
     .click();
+  await page.locator('[data-kind="terminal"] button').first().click();
+  await expect(page.getByText("previous line", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Complete output", { exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByRole("region", { name: "Tool input", exact: true }),
   ).toContainText("9223372036854775807");
