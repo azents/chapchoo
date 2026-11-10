@@ -1,5 +1,31 @@
 //! Current native work is an explicit captured observation, not reconstructed authority.
 use super::*;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ConversationPreparationFreshness {
+    Current,
+    TransientLookupFailure,
+}
+/// Nonsecret facts selected by one physical native start, not saved settings.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ConversationNativePreparation {
+    pub freshness: ConversationPreparationFreshness,
+    pub node: String,
+    pub adapter: String,
+    pub codex: String,
+}
+impl ConversationNativePreparation {
+    fn validate(&self) -> Result<(), StoreError> {
+        for version in [&self.node, &self.adapter, &self.codex] {
+            if version.is_empty() || version.len() > 256 || version.chars().any(char::is_control) {
+                return Err(StoreError::InvalidInput);
+            }
+        }
+        Ok(())
+    }
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConversationForeground {
     Idle,
@@ -32,6 +58,8 @@ pub struct ConversationNativeObservation {
     pub position: SourcePosition,
     pub foreground: ConversationForeground,
     pub work_id: Option<String>,
+    pub preparation: Option<ConversationNativePreparation>,
+    pub authentication_id: Option<String>,
 }
 impl fmt::Debug for ConversationNativeObservation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -54,6 +82,10 @@ pub(super) struct NativeRow {
     foreground: String,
     #[diesel(sql_type=Nullable<Text>)]
     work_id: Option<String>,
+    #[diesel(sql_type=Nullable<Binary>)]
+    preparation_payload: Option<Vec<u8>>,
+    #[diesel(sql_type=Nullable<IdentitySql>)]
+    authentication_id: Option<EntityId>,
 }
 impl NativeRow {
     pub(super) fn observation(&self) -> Result<ConversationNativeObservation, StoreError> {
@@ -72,6 +104,19 @@ impl NativeRow {
             .map_err(|_| StoreError::Integrity)?,
             foreground: ConversationForeground::parse(&self.foreground)?,
             work_id: self.work_id.clone(),
+            preparation: self
+                .preparation_payload
+                .as_deref()
+                .map(|bytes| {
+                    let value: ConversationNativePreparation =
+                        serde_json::from_slice(bytes).map_err(|_| StoreError::Integrity)?;
+                    value.validate().map_err(|_| StoreError::Integrity)?;
+                    Ok::<_, StoreError>(value)
+                })
+                .transpose()?,
+            authentication_id: self
+                .authentication_id
+                .map(|id| id.to_dto(EntityKind::Authentication)),
         })
     }
 }
@@ -83,7 +128,7 @@ struct Pair {
 macro_rules! native_state {
     ($connection:expr,$dialect:expr,$conversation:expr) => {{
         diesel::sql_query(
-            $dialect.query("SELECT * FROM conversation_native_state WHERE conversation_id=?"),
+            $dialect.query("SELECT s.*,d.preparation_payload,d.authentication_id FROM conversation_native_state s LEFT JOIN conversation_native_details d ON d.conversation_id=s.conversation_id WHERE s.conversation_id=?"),
         )
         .bind::<IdentitySql, _>($conversation)
         .get_result::<$crate::conversations::native_state::NativeRow>($connection)
@@ -99,6 +144,14 @@ impl Store {
         conversation_id: &str,
         observation: &ConversationNativeObservation,
     ) -> Result<(), StoreError> {
+        if let Some(preparation) = &observation.preparation {
+            preparation.validate()?;
+        }
+        let authentication = observation
+            .authentication_id
+            .as_deref()
+            .map(|id| EntityId::from_dto(EntityKind::Authentication, id))
+            .transpose()?;
         if observation.foreground == ConversationForeground::Idle {
             if observation.work_id.is_some() {
                 return Err(StoreError::InvalidInput);
@@ -121,24 +174,55 @@ impl Store {
             if pair.is_none_or(|pair| pair.ordinal != observation.position.ordinal()) {
                 return Err(StoreError::InvalidTransition);
             }
+            let mut preparation = observation.preparation.clone();
+            let mut authentication = authentication;
             if let Some(previous) = native_state!(connection, dialect, id) {
                 let old = previous.observation()?;
-                if previous.execution_id == route._execution_id {
+                if previous.execution_id == route._execution_id && old.target == observation.target
+                {
                     if old.position.ordinal() > observation.position.ordinal() {
                         return Ok(());
                     }
-                    if old.position.ordinal() == observation.position.ordinal() {
-                        return if &old == observation {
-                            Ok(())
-                        } else {
-                            Err(StoreError::Conflict)
-                        };
+                    if old.position.ordinal() == observation.position.ordinal()
+                        && (old.position != observation.position
+                            || old.foreground != observation.foreground
+                            || old.work_id != observation.work_id
+                            || old
+                                .preparation
+                                .as_ref()
+                                .zip(preparation.as_ref())
+                                .is_some_and(|(a, b)| a != b)
+                            || previous
+                                .authentication_id
+                                .zip(authentication)
+                                .is_some_and(|(a, b)| a != b))
+                    {
+                        return Err(StoreError::Conflict);
                     }
+                    preparation = preparation.or(old.preparation);
+                    authentication = authentication.or(previous.authentication_id);
                 }
             }
             diesel::sql_query(dialect.query("INSERT INTO conversation_native_state(conversation_id,execution_id,source_snapshot,native_session_id,ordinal,occurrence_id,foreground,work_id) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(conversation_id) DO UPDATE SET execution_id=excluded.execution_id,source_snapshot=excluded.source_snapshot,native_session_id=excluded.native_session_id,ordinal=excluded.ordinal,occurrence_id=excluded.occurrence_id,foreground=excluded.foreground,work_id=excluded.work_id"))
                 .bind::<IdentitySql,_>(id).bind::<IdentitySql,_>(route._execution_id).bind::<Text,_>(observation.target.snapshot.as_str()).bind::<Text,_>(observation.target.native_session.as_str())
                 .bind::<BigInt,_>(observation.position.ordinal()).bind::<Text,_>(observation.position.occurrence().as_str()).bind::<Text,_>(observation.foreground.database()).bind::<Nullable<Text>,_>(observation.work_id.as_deref()).execute(connection).await?;
+            if preparation.is_some() || authentication.is_some() {
+                let payload = preparation
+                    .as_ref()
+                    .map(serde_json::to_vec)
+                    .transpose()
+                    .map_err(|_| StoreError::Integrity)?;
+                diesel::sql_query(dialect.query("INSERT INTO conversation_native_details(conversation_id,preparation_payload,authentication_id) VALUES(?,?,?) ON CONFLICT(conversation_id) DO UPDATE SET preparation_payload=excluded.preparation_payload,authentication_id=excluded.authentication_id"))
+                    .bind::<IdentitySql,_>(id).bind::<Nullable<Binary>,_>(payload).bind::<Nullable<IdentitySql>,_>(authentication).execute(connection).await?;
+            } else {
+                diesel::sql_query(
+                    dialect
+                        .query("DELETE FROM conversation_native_details WHERE conversation_id=?"),
+                )
+                .bind::<IdentitySql, _>(id)
+                .execute(connection)
+                .await?;
+            }
             Ok(())
         })
     }

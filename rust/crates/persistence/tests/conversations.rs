@@ -1,5 +1,7 @@
 #[path = "conversations/answers.rs"]
 mod answers;
+#[path = "conversations/authentication.rs"]
+mod authentication;
 #[path = "conversations/delivery.rs"]
 mod delivery;
 #[path = "conversations/native_state.rs"]
@@ -39,6 +41,7 @@ use std::{
 };
 
 type TestError = Box<dyn Error + Send + Sync>;
+static POSTGRES_CONVERSATION_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 fn cipher() -> Result<Arc<CredentialCipher>, TestError> {
     Ok(Arc::new(CredentialCipher::new(RootKey::parse(
         URL_SAFE.encode([57; 32]),
@@ -974,6 +977,29 @@ macro_rules! preserving_extent_upgrade {
     }};
 }
 
+macro_rules! preserving_native_details_upgrade {
+    ($connection:expr,$migrations:expr) => {{
+        let connection = &mut *$connection;
+        while connection.applied_migrations()?.iter().any(|version| version.to_string().as_str() > "00000000000017") {
+            connection.revert_last_migration($migrations)?;
+        }
+        connection.batch_execute("INSERT INTO conversation_native_state(conversation_id,execution_id,source_snapshot,native_session_id,ordinal,occurrence_id,foreground,work_id) SELECT c.id,p.current_execution_id,c.source_snapshot,c.native_session_id,1,'migration-native-state','IDLE',NULL FROM conversations c JOIN agents a ON a.id=c.agent_id JOIN computers p ON p.id=a.computer_id WHERE a.handle='chat-fixture' AND c.source_snapshot IS NOT NULL ON CONFLICT(conversation_id) DO NOTHING")?;
+        // Existing private BLOBs witness byte preservation; no credential row is referenced.
+        connection.batch_execute("INSERT INTO conversation_native_details(conversation_id,preparation_payload,authentication_id) SELECT s.conversation_id,substr(f.content,1,32768),NULL FROM conversation_native_state s JOIN conversation_record_fields f ON f.conversation_id=s.conversation_id WHERE length(f.content)>0 LIMIT 1")?;
+        let query = "SELECT preparation_payload AS bytes FROM conversation_native_details ORDER BY conversation_id";
+        let retained = diesel::sql_query(query).load::<RetainedBytes>(connection)?;
+        assert!(!retained.is_empty(), "Downgrade guard requires retained details");
+        assert!(connection.revert_last_migration($migrations).is_err(), "Native details must prevent destructive downgrade");
+        assert!(retained == diesel::sql_query(query).load::<RetainedBytes>(connection)?, "Rejected downgrade changed native details");
+        connection.batch_execute("DELETE FROM conversation_native_details")?;
+        let fields = "SELECT record_kind || ':' || native_id || ':' || field_name || ':' || CAST(updated_ordinal AS TEXT) AS metadata, content AS bytes FROM conversation_record_fields ORDER BY conversation_id,record_kind,native_id,field_name";
+        let old = diesel::sql_query(fields).load::<RetainedProjectedField>(connection)?;
+        connection.revert_last_migration($migrations)?;
+        connection.run_pending_migrations($migrations)?;
+        assert!(old == diesel::sql_query(fields).load::<RetainedProjectedField>(connection)?, "Native detail migration changed retained fields");
+    }};
+}
+
 #[test]
 fn sqlite_conversation_operations_and_preserving_downgrade_guard() -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
@@ -995,11 +1021,15 @@ fn sqlite_conversation_operations_and_preserving_downgrade_guard() -> Result<(),
     );
     runtime.block_on(exercise(&store, &fixture))?;
     preserving_extent_upgrade!(&mut connection, SQLITE_MIGRATIONS);
+    preserving_native_details_upgrade!(&mut connection, SQLITE_MIGRATIONS);
     preserving_tool_io_upgrade!(&mut connection, SQLITE_MIGRATIONS);
     Ok(())
 }
 #[test]
 fn postgres_conversation_operations_and_preserving_downgrade_guard() -> Result<(), TestError> {
+    let _fixture_lock = POSTGRES_CONVERSATION_LOCK
+        .lock()
+        .map_err(|_| "PostgreSQL fixture lock poisoned")?;
     let base = std::env::var("CHAPCHOO_TEST_POSTGRES_URL")
         .map_err(|_| "Disposable PostgreSQL is required")?;
     let mut control = AsyncConnectionWrapper::<AsyncPgConnection>::establish(&base)?;
@@ -1028,6 +1058,7 @@ fn postgres_conversation_operations_and_preserving_downgrade_guard() -> Result<(
         );
         runtime.block_on(exercise(&store, &fixture))?;
         preserving_extent_upgrade!(&mut connection, POSTGRES_MIGRATIONS);
+        preserving_native_details_upgrade!(&mut connection, POSTGRES_MIGRATIONS);
         preserving_tool_io_upgrade!(&mut connection, POSTGRES_MIGRATIONS);
         runtime.block_on(source_write_holds_control_lock(&store, &fixture, &url))?;
         while connection

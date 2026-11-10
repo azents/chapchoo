@@ -115,6 +115,20 @@ selection operation or provider HTTP path is activated by schema preparation.
   authentication FK and cascading Agent FK. It stores no token or execution data.
   The referencing index supports transactional in-use checks.
 
+Preserving migration14 adds `authentication_refreshes` and
+`execution_authentication_applications` for the separate
+[central refresh and applied-execution boundaries](backend-authentication.md#internal-central-refresh-foundation).
+Refresh attempts have one record/source-nonce pair and cascade on catalogue
+deletion. Applied provenance stores exact Setup operation, execution, Agent,
+conversation and selected record identities, selection Request and database
+admission time; a partial unique index permits one current application per
+execution. Its operation and authentication identities are retained values,
+not live foreign keys to input history or the catalogue. Thus source replacement
+can remove input history and an unsaved record can be deleted without removing
+applied provenance or adding a runtime deletion blocker. Execution, Agent and
+conversation cleanup still cascade. No secret or outgoing delivery status is
+stored in this table. Populated refresh or application state blocks downgrade.
+
 New-table row counts participate in the first-root binding guard. A down migration
 refuses to erase even an accepted result without a remaining credential. Only
 an empty foundation may be explicitly reverted.

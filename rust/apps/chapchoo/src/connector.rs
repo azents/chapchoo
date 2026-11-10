@@ -1,4 +1,6 @@
 //! Independently authenticated execution connectivity; never substrate power proof.
+mod authentication;
+mod authentication_sync;
 mod capture_sync;
 mod operations;
 use crate::AppError;
@@ -270,7 +272,11 @@ async fn connected(
                                     source:Some(chapchoo_protocol::conversations::CaptureSource {session_id:session.into(),control_id:connected.instance_id.clone(),connection_id:connected.connection_id.clone()}),
                                     command:Some(setup.clone()),
                                 },key)?;
-                                if client.check_setup(check).await.is_err() {Some(false)} else {Some(operations.setup(setup)?)}
+                                if client.check_setup(check).await.is_err() {Some(false)} else {
+                                    Some(operations.setup(setup,channel.clone(),chapchoo_protocol::conversations::CaptureSource {
+                                        session_id:session.into(),control_id:connected.instance_id.clone(),connection_id:connected.connection_id.clone(),
+                                    },key)?)
+                                }
                             },
                             None=>continue,
                         };

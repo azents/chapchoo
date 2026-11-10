@@ -24,9 +24,12 @@ pub enum NativeForeground {
 }
 #[derive(Debug, Clone)]
 pub struct NativeObservation {
+    pub target: Option<NativeTextTarget>,
     pub position: Option<SourcePosition>,
     pub foreground: NativeForeground,
     pub work: Option<NativeWorkTarget>,
+    pub preparation: Option<crate::NativePreparationObservation>,
+    pub authentication_id: Option<String>,
 }
 #[derive(Default)]
 pub(super) struct Observations(SyncMutex<Observed>, tokio::sync::Notify);
@@ -156,8 +159,17 @@ impl Observations {
     pub(super) fn current(&self) -> Result<NativeObservation, Error> {
         let state = self.0.lock().map_err(|_| Error::Protocol)?;
         Ok(NativeObservation {
+            target: state
+                .source
+                .as_ref()
+                .map(|(snapshot, native)| NativeTextTarget {
+                    snapshot: snapshot.clone(),
+                    native_session: native.clone(),
+                }),
             position: state.position.clone(),
             foreground: state.foreground.unwrap_or(NativeForeground::Unknown),
+            preparation: None,
+            authentication_id: None,
             work: match (&state.source, &state.work) {
                 (Some((snapshot, native)), Some(work)) => Some(NativeWorkTarget {
                     snapshot: snapshot.clone(),

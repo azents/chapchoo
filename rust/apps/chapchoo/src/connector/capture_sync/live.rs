@@ -37,6 +37,12 @@ pub(super) async fn publish_live(
     match native.observe().await {
         Ok(observed) => {
             if let Some(position) = observed.position {
+                if observed.target.as_ref().is_none_or(|source| {
+                    source.snapshot.as_str() != target.snapshot_id
+                        || source.native_session.as_str() != target.native_session_id
+                }) {
+                    return Err("Native observed source changed".into());
+                }
                 let foreground = match observed.foreground {
                     NativeForeground::Idle => captured::Foreground::Idle,
                     NativeForeground::Running => captured::Foreground::Running,
@@ -59,6 +65,22 @@ pub(super) async fn publish_live(
                             position: Some(super::position(&position)),
                             foreground: foreground as i32,
                             work_id: observed.work.map(|work| work.work_id),
+                            preparation: observed.preparation.map(|value| {
+                                captured::NativePreparation {
+                                    freshness: match value.freshness {
+                                        chapchoo_harness::Freshness::Current => {
+                                            captured::PreparationFreshness::Current
+                                        }
+                                        chapchoo_harness::Freshness::TransientLookupFailure => {
+                                            captured::PreparationFreshness::TransientLookupFailure
+                                        }
+                                    } as i32,
+                                    node: value.versions.node,
+                                    adapter: value.versions.adapter,
+                                    codex: value.versions.codex,
+                                }
+                            }),
+                            authentication_id: observed.authentication_id,
                         },
                         key,
                     )?)

@@ -3,6 +3,7 @@ mod completion;
 mod config;
 mod connector;
 mod control_plane;
+mod diagnostics;
 mod health;
 mod provider;
 mod provider_auth;
@@ -20,13 +21,7 @@ use std::{backtrace::Backtrace, error::Error, process::ExitCode, time::Duration}
 type AppError = Box<dyn Error + Send + Sync>;
 
 fn main() -> ExitCode {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("chapchoo=info")),
-        )
-        .with_target(true)
-        .init();
+    diagnostics::initialize();
     let cli = Cli::parse();
     let runtime = match tokio::runtime::Builder::new_multi_thread()
         .enable_all()

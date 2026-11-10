@@ -38,6 +38,20 @@ impl fmt::Debug for ConversationService {
     }
 }
 impl ConversationService {
+    /// Owner read only: selecting or inspecting authentication never acquires native credentials.
+    pub async fn saved_authentication_id(
+        &self,
+        actor: &chapchoo_crypto::SecretDigest,
+        agent: &str,
+        now: i64,
+    ) -> Result<Option<String>, ServiceError> {
+        Ok(self
+            .store
+            .agent(actor, agent, now)
+            .await?
+            .authentication
+            .map(|selection| selection.authentication_id))
+    }
     pub async fn retained_answer(
         &self,
         actor: &chapchoo_crypto::SecretDigest,

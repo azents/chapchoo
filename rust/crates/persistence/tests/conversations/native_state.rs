@@ -24,6 +24,8 @@ pub(super) async fn exercise(
         position: position(10, "running-state")?,
         foreground: Foreground::Running,
         work_id: Some("exact-work".into()),
+        preparation: None,
+        authentication_id: None,
     };
     assert!(
         store
@@ -44,6 +46,8 @@ pub(super) async fn exercise(
             position: position(11, "idle-state")?,
             foreground: Foreground::Idle,
             work_id: None,
+            preparation: None,
+            authentication_id: None,
         },
     ] {
         store
@@ -72,6 +76,53 @@ pub(super) async fn exercise(
             .ok_or("Missing native observation")?,
         running
     );
+    // Old reports remain unknown until one physical owner explicitly supplies details.
+    let unknown = running.clone();
+    let preparation = chapchoo_persistence::ConversationNativePreparation {
+        freshness: chapchoo_persistence::ConversationPreparationFreshness::Current,
+        node: "24.0.0".into(),
+        adapter: "2.6.0".into(),
+        codex: "0.165.0".into(),
+    };
+    let running = Observation {
+        preparation: Some(preparation.clone()),
+        authentication_id: Some(
+            f.agent
+                .authentication
+                .as_ref()
+                .ok_or("Missing saved authentication")?
+                .authentication_id
+                .clone(),
+        ),
+        ..running
+    };
+    store
+        .observe_conversation_native(&source, conversation, &running)
+        .await?;
+    store
+        .observe_conversation_native(&source, conversation, &unknown)
+        .await?;
+    assert_eq!(
+        store
+            .conversation_native_observation(&owner, &f.agent.id, conversation, f.now)
+            .await?
+            .ok_or("Missing explicit details")?,
+        running
+    );
+    let conflicting = Observation {
+        preparation: Some(chapchoo_persistence::ConversationNativePreparation {
+            codex: "0.166.0".into(),
+            ..preparation.clone()
+        }),
+        ..running.clone()
+    };
+    assert!(matches!(
+        store
+            .observe_conversation_native(&source, conversation, &conflicting)
+            .await,
+        Err(StoreError::Conflict)
+    ));
+    authentication_changes_preserve_applied(store, f, conversation, &running).await?;
     let work = Target {
         source: target.clone(),
         work_id: "exact-work".into(),
@@ -120,6 +171,13 @@ pub(super) async fn exercise(
         position: position(11, "idle-state")?,
         foreground: Foreground::Idle,
         work_id: None,
+        // A later captured position can describe a later physical start.
+        preparation: Some(chapchoo_persistence::ConversationNativePreparation {
+            freshness:
+                chapchoo_persistence::ConversationPreparationFreshness::TransientLookupFailure,
+            ..preparation
+        }),
+        authentication_id: running.authentication_id.clone(),
     };
     store
         .observe_conversation_native(&source, conversation, &idle)
@@ -192,6 +250,128 @@ pub(super) async fn exercise(
             .computer
             .current_request_id,
         f.agent.computer.current_request_id
+    );
+    Ok(())
+}
+
+async fn authentication_changes_preserve_applied(
+    store: &Store,
+    f: &Fixture,
+    conversation: &str,
+    observed: &Observation,
+) -> Result<(), TestError> {
+    use chapchoo_persistence::{
+        DeleteAuthentication, DeleteAuthenticationOutcome, ExpectedAgentAuthentication,
+        ReplaceApiKey, SelectAgentAuthentication,
+    };
+    let saved = f
+        .agent
+        .authentication
+        .as_ref()
+        .ok_or("Missing authentication")?;
+    let scope = AuthenticationScope::Team {
+        team_id: f.team_id.clone(),
+    };
+    let next = match store
+        .register_external_api_key(
+            &f.owner.digest(),
+            &RegisterApiKey {
+                scope: scope.clone(),
+                request_id: "native-next-record".into(),
+                name: String::new(),
+                key: ExternalSecret::new(b"synthetic-next-native-key".to_vec())?,
+            },
+            f.now,
+        )
+        .await?
+    {
+        AuthenticationAcceptedResult::Record { authentication_id } => authentication_id,
+        _ => return Err("Expected next authentication".into()),
+    };
+    for (actor, agent, request) in [
+        (
+            f.owner.digest(),
+            f.agent.id.as_str(),
+            "native-owner-selection",
+        ),
+        (
+            f.other.digest(),
+            f.other_agent.as_str(),
+            "native-other-selection",
+        ),
+    ] {
+        let selected = store
+            .agent(&actor, agent, f.now)
+            .await?
+            .authentication
+            .ok_or("Missing selection")?;
+        store
+            .select_agent_authentication(
+                &actor,
+                &SelectAgentAuthentication {
+                    agent_id: agent.into(),
+                    request_id: request.into(),
+                    authentication_id: next.clone(),
+                    expected: Some(ExpectedAgentAuthentication {
+                        authentication_id: selected.authentication_id,
+                        request_id: selected.request_id,
+                    }),
+                },
+                f.now,
+            )
+            .await?;
+    }
+    assert_eq!(
+        store
+            .agent(&f.owner.digest(), &f.agent.id, f.now)
+            .await?
+            .authentication
+            .ok_or("Missing fresh selection")?
+            .authentication_id,
+        next
+    );
+    store
+        .replace_external_api_key(
+            &f.owner.digest(),
+            &ReplaceApiKey {
+                scope: scope.clone(),
+                request_id: "native-same-record-update".into(),
+                authentication_id: saved.authentication_id.clone(),
+                expected_request_id: "conversation-auth".into(),
+                key: ExternalSecret::new(b"synthetic-updated-native-key".to_vec())?,
+            },
+            f.now,
+        )
+        .await?;
+    assert_eq!(
+        store
+            .conversation_native_observation(&f.owner.digest(), &f.agent.id, conversation, f.now)
+            .await?
+            .as_ref(),
+        Some(observed)
+    );
+    assert!(matches!(
+        store
+            .delete_external_authentication(
+                &f.owner.digest(),
+                &DeleteAuthentication {
+                    scope,
+                    request_id: "native-delete-applied-only".into(),
+                    authentication_id: saved.authentication_id.clone(),
+                    expected_request_id: "native-same-record-update".into(),
+                },
+                f.now
+            )
+            .await?,
+        DeleteAuthenticationOutcome::Accepted(_)
+    ));
+    // Catalogue mutation and deletion cannot rewrite already observed native facts.
+    assert_eq!(
+        store
+            .conversation_native_observation(&f.owner.digest(), &f.agent.id, conversation, f.now)
+            .await?
+            .as_ref(),
+        Some(observed)
     );
     Ok(())
 }

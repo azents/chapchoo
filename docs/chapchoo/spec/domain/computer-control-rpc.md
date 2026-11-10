@@ -60,6 +60,15 @@ to one execution and remains independent of Provider credential revocation.
 Every control message and oneof has field-free Debug output, including trusted
 session digests and bootstrap payloads.
 
+Control also registers the execution-only credential methods on
+`ConnectorCapture`, under the same exact operational Connector/session/route/
+execution boundary. [Backend authentication](backend-authentication.md#component-credential-delivery)
+owns their saved/applied admission, explicit central renewal, bounded native
+payload pieces and final source check. Client/Admin do not register them.
+These calls do not dispatch native commands, create a capture or turn metadata
+reads into renewal. Credential traffic is separate from session JSONL and does
+not establish native login or model success.
+
 Peer requests carry either the authenticated session digest for fresh owner
 permission checks, or the exact current reconciliation context and live owner.
 An asserted Computer ID alone is insufficient. A live Connector owner takes

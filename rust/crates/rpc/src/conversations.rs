@@ -226,13 +226,21 @@ impl Conversations for ConversationServices {
         let actor = actor(&request)?;
         let value = request.into_inner();
         let now = now()?;
+        let saved_authentication_id = self
+            .conversation
+            .saved_authentication_id(&actor, &value.agent_id, now)
+            .await
+            .map_err(status)?;
         let Some(current) = self
             .conversation
             .owner_conversation(&actor, &value.agent_id, now)
             .await
             .map_err(status)?
         else {
-            return Ok(Response::new(wire::OwnerConversation::default()));
+            return Ok(Response::new(wire::OwnerConversation {
+                saved_authentication_id,
+                ..Default::default()
+            }));
         };
         let observed = self
             .conversation
@@ -260,6 +268,20 @@ impl Conversations for ConversationServices {
                 ConversationForeground::OtherActive => wire::Foreground::OtherActive,
             } as i32,
             work_id: observed.work_id,
+            preparation: observed.preparation.map(|value| wire::NativePreparation {
+                freshness: match value.freshness {
+                    chapchoo_service::ConversationPreparationFreshness::Current => {
+                        wire::PreparationFreshness::Current
+                    }
+                    chapchoo_service::ConversationPreparationFreshness::TransientLookupFailure => {
+                        wire::PreparationFreshness::TransientLookupFailure
+                    }
+                } as i32,
+                node: value.node,
+                adapter: value.adapter,
+                codex: value.codex,
+            }),
+            authentication_id: observed.authentication_id,
         });
         let conversation = wire::CaptureState {
             conversation_id: current.id,
@@ -286,6 +308,7 @@ impl Conversations for ConversationServices {
         Ok(Response::new(wire::OwnerConversation {
             conversation: Some(conversation),
             observed_native,
+            saved_authentication_id,
         }))
     }
     async fn get_supply(

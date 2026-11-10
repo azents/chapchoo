@@ -5,6 +5,8 @@ mod request_tests;
 mod steering_tests;
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, duplex};
+#[path = "authentication_tests.rs"]
+mod authentication_tests;
 
 type TestError = Box<dyn std::error::Error + Send + Sync>;
 #[derive(Deserialize)]

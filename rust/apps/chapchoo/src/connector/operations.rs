@@ -40,6 +40,7 @@ pub(super) struct Operations {
     active: leases::Active,
     payload: Arc<Semaphore>,
     stop: CancellationToken,
+    authentication: super::authentication_sync::AuthenticationSync,
 }
 impl Operations {
     pub(super) fn stop(&mut self, command: c::StopCommand) -> Result<bool, AppError> {
@@ -84,6 +85,7 @@ impl Operations {
     }
     pub(super) fn new(native: NativeHandle) -> Self {
         Self {
+            authentication: super::authentication_sync::AuthenticationSync::new(native.clone()),
             native,
             slots: Arc::new(Semaphore::new(32)),
             tasks: JoinSet::new(),
@@ -96,7 +98,13 @@ impl Operations {
             stop: CancellationToken::new(),
         }
     }
-    pub(super) fn setup(&mut self, command: c::SetupCommand) -> Result<bool, AppError> {
+    pub(super) fn setup(
+        &mut self,
+        command: c::SetupCommand,
+        channel: Channel,
+        origin: c::CaptureSource,
+        key: &BearerSecret,
+    ) -> Result<bool, AppError> {
         let permit = match self.admit(leases::Kind::Setup, &command.operation_id)? {
             Some(permit) => permit,
             None => return Ok(false),
@@ -124,11 +132,17 @@ impl Operations {
             }
             None => return Err("Setup context is required".into()),
         };
-        let rx = match self.native.admit_setup(NativeSetupOperation {
-            operation_id: command.operation_id.clone(),
-            supply,
-            intent,
-        }) {
+        let authentication = Arc::new(super::authentication::Authentication::new(
+            channel, origin, key, &command,
+        )?);
+        let rx = match self.native.admit_setup_with_authentication(
+            NativeSetupOperation {
+                operation_id: command.operation_id.clone(),
+                supply,
+                intent,
+            },
+            authentication,
+        ) {
             Ok(rx) => rx,
             Err(chapchoo_harness::Error::NotAdmitted) => return Ok(false),
             Err(error) => return Err(error.into()),
@@ -314,6 +328,8 @@ impl Operations {
         origin: c::CaptureSource,
         key: &BearerSecret,
     ) -> Result<(), AppError> {
+        self.authentication
+            .schedule(channel.clone(), origin.clone(), key)?;
         while let Some(result) = self.tasks.try_join_next() {
             if let Some(report) = result? {
                 self.pending.push(report);
@@ -406,7 +422,7 @@ impl Operations {
     }
     pub(super) async fn finish(mut self) -> Result<(), AppError> {
         self.stop.cancel();
-        let mut result = Ok(());
+        let mut result = self.authentication.finish().await;
         while let Some(completed) = self.tasks.join_next().await {
             if let Err(error) = completed {
                 result = crate::completion::complete(result, Err(error.into()));

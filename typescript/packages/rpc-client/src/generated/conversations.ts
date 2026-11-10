@@ -24,6 +24,13 @@ export const protobufPackage = "chapchoo.conversations";
 
 export const protobufFileName = "conversations.proto";
 
+export enum PreparationFreshness {
+  PREPARATION_FRESHNESS_UNSPECIFIED = 0,
+  PREPARATION_FRESHNESS_CURRENT = 1,
+  PREPARATION_FRESHNESS_TRANSIENT_LOOKUP_FAILURE = 2,
+  UNRECOGNIZED = -1,
+}
+
 export enum InputOwnership {
   INPUT_OWNERSHIP_UNSPECIFIED = 0,
   INPUT_OWNERSHIP_PROCESSING_HERE = 1,
@@ -111,6 +118,23 @@ export enum RequestKind {
   UNRECOGNIZED = -1,
 }
 
+export enum ExecutionCredentialKind {
+  EXECUTION_CREDENTIAL_KIND_UNSPECIFIED = 0,
+  EXECUTION_CREDENTIAL_KIND_API_KEY = 1,
+  EXECUTION_CREDENTIAL_KIND_CHATGPT_TOKENS = 2,
+  UNRECOGNIZED = -1,
+}
+
+export enum AuthenticationRefreshObservation {
+  AUTHENTICATION_REFRESH_OBSERVATION_UNSPECIFIED = 0,
+  AUTHENTICATION_REFRESH_OBSERVATION_POSSIBLE = 1,
+  AUTHENTICATION_REFRESH_OBSERVATION_NOT_DISPATCHED = 2,
+  AUTHENTICATION_REFRESH_OBSERVATION_REJECTED = 3,
+  AUTHENTICATION_REFRESH_OBSERVATION_UNCERTAIN = 4,
+  AUTHENTICATION_REFRESH_OBSERVATION_UPDATED = 5,
+  UNRECOGNIZED = -1,
+}
+
 export interface OwnerConversationRequest {
   agentId: string;
 }
@@ -118,6 +142,7 @@ export interface OwnerConversationRequest {
 export interface OwnerConversation {
   conversation: CaptureState | undefined;
   observedNative: ObservedNative | undefined;
+  savedAuthenticationId?: string | undefined;
 }
 
 export interface ObservedNative {
@@ -125,6 +150,15 @@ export interface ObservedNative {
   position: SourcePosition | undefined;
   foreground: Foreground;
   workId?: string | undefined;
+  preparation: NativePreparation | undefined;
+  authenticationId?: string | undefined;
+}
+
+export interface NativePreparation {
+  freshness: PreparationFreshness;
+  node: string;
+  adapter: string;
+  codex: string;
 }
 
 export interface SavedSupply {
@@ -540,6 +574,8 @@ export interface NativeStateReport {
   position: SourcePosition | undefined;
   foreground: Foreground;
   workId?: string | undefined;
+  preparation: NativePreparation | undefined;
+  authenticationId?: string | undefined;
 }
 
 export interface LiveRequestReport {
@@ -604,6 +640,74 @@ export interface AnswerReport {
   responderAccepted: boolean;
 }
 
+export interface ExecutionAuthenticationReference {
+  source: CaptureSource | undefined;
+  agentId: string;
+  conversationId: string;
+  operationId: string;
+}
+
+export interface BeginAuthenticationRequest {
+  target: ExecutionAuthenticationReference | undefined;
+  expectedPreviousOperationId?: string | undefined;
+}
+
+/** Actual-start configuration provenance, not login validity or native liveness. */
+export interface AppliedAuthentication {
+  operationId: string;
+  executionId: string;
+  authenticationId: string;
+}
+
+export interface OptionalAppliedAuthentication {
+  applied: AppliedAuthentication | undefined;
+}
+
+export interface ExecutionCredentialDescriptor {
+  applied: AppliedAuthentication | undefined;
+  credentialSource: Buffer;
+  kind: ExecutionCredentialKind;
+  accountId?: string | undefined;
+  expiresAtMillis?: bigint | undefined;
+  totalBytes: number;
+}
+
+export interface AuthenticationPending {
+  attemptId: string;
+}
+
+export interface AuthenticationSettled {
+  attemptId: string;
+  state: AuthenticationRefreshObservation;
+}
+
+export interface ExecutionAuthenticationProgress {
+  current?: ExecutionCredentialDescriptor | undefined;
+  pending?: AuthenticationPending | undefined;
+  settled?: AuthenticationSettled | undefined;
+}
+
+export interface AuthenticationReadRequest {
+  target: ExecutionAuthenticationReference | undefined;
+  credentialSource: Buffer;
+  offset: number;
+}
+
+/**
+ * At most 32 KiB. Content is the selected raw API key for explicit ACP login,
+ * or the converted short-lived native external-token file, never a refresh bundle.
+ */
+export interface AuthenticationPiece {
+  descriptor: ExecutionCredentialDescriptor | undefined;
+  offset: number;
+  content: Buffer;
+}
+
+export interface AuthenticationHandoffCheck {
+  target: ExecutionAuthenticationReference | undefined;
+  credentialSource: Buffer;
+}
+
 function createBaseOwnerConversationRequest(): OwnerConversationRequest {
   return { agentId: "" };
 }
@@ -660,7 +764,7 @@ export const OwnerConversationRequest: MessageFns<OwnerConversationRequest> = {
 };
 
 function createBaseOwnerConversation(): OwnerConversation {
-  return { conversation: undefined, observedNative: undefined };
+  return { conversation: undefined, observedNative: undefined, savedAuthenticationId: undefined };
 }
 
 export const OwnerConversation: MessageFns<OwnerConversation> = {
@@ -670,6 +774,9 @@ export const OwnerConversation: MessageFns<OwnerConversation> = {
     }
     if (message.observedNative !== undefined) {
       ObservedNative.encode(message.observedNative, writer.uint32(18).fork()).join();
+    }
+    if (message.savedAuthenticationId !== undefined) {
+      writer.uint32(26).string(message.savedAuthenticationId);
     }
     return writer;
   },
@@ -703,6 +810,14 @@ export const OwnerConversation: MessageFns<OwnerConversation> = {
             message.observedNative = ObservedNative.decode(reader, reader.uint32());
             continue;
           }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.savedAuthenticationId = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -726,12 +841,20 @@ export const OwnerConversation: MessageFns<OwnerConversation> = {
     message.observedNative = (object.observedNative !== undefined && object.observedNative !== null)
       ? ObservedNative.fromPartial(object.observedNative)
       : undefined;
+    message.savedAuthenticationId = object.savedAuthenticationId ?? undefined;
     return message;
   },
 };
 
 function createBaseObservedNative(): ObservedNative {
-  return { target: undefined, position: undefined, foreground: 0, workId: undefined };
+  return {
+    target: undefined,
+    position: undefined,
+    foreground: 0,
+    workId: undefined,
+    preparation: undefined,
+    authenticationId: undefined,
+  };
 }
 
 export const ObservedNative: MessageFns<ObservedNative> = {
@@ -747,6 +870,12 @@ export const ObservedNative: MessageFns<ObservedNative> = {
     }
     if (message.workId !== undefined) {
       writer.uint32(34).string(message.workId);
+    }
+    if (message.preparation !== undefined) {
+      NativePreparation.encode(message.preparation, writer.uint32(50).fork()).join();
+    }
+    if (message.authenticationId !== undefined) {
+      writer.uint32(58).string(message.authenticationId);
     }
     return writer;
   },
@@ -796,6 +925,22 @@ export const ObservedNative: MessageFns<ObservedNative> = {
             message.workId = reader.string();
             continue;
           }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.preparation = NativePreparation.decode(reader, reader.uint32());
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.authenticationId = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -821,6 +966,101 @@ export const ObservedNative: MessageFns<ObservedNative> = {
       : undefined;
     message.foreground = object.foreground ?? 0;
     message.workId = object.workId ?? undefined;
+    message.preparation = (object.preparation !== undefined && object.preparation !== null)
+      ? NativePreparation.fromPartial(object.preparation)
+      : undefined;
+    message.authenticationId = object.authenticationId ?? undefined;
+    return message;
+  },
+};
+
+function createBaseNativePreparation(): NativePreparation {
+  return { freshness: 0, node: "", adapter: "", codex: "" };
+}
+
+export const NativePreparation: MessageFns<NativePreparation> = {
+  encode(message: NativePreparation, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.freshness !== 0) {
+      writer.uint32(8).int32(message.freshness);
+    }
+    if (message.node !== "") {
+      writer.uint32(18).string(message.node);
+    }
+    if (message.adapter !== "") {
+      writer.uint32(26).string(message.adapter);
+    }
+    if (message.codex !== "") {
+      writer.uint32(34).string(message.codex);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): NativePreparation {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseNativePreparation();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.freshness = reader.int32() as any;
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.node = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.adapter = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.codex = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<NativePreparation>, I>>(base?: I): NativePreparation {
+    return NativePreparation.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<NativePreparation>, I>>(object: I): NativePreparation {
+    const message = createBaseNativePreparation();
+    message.freshness = object.freshness ?? 0;
+    message.node = object.node ?? "";
+    message.adapter = object.adapter ?? "";
+    message.codex = object.codex ?? "";
     return message;
   },
 };
@@ -6034,6 +6274,8 @@ function createBaseNativeStateReport(): NativeStateReport {
     position: undefined,
     foreground: 0,
     workId: undefined,
+    preparation: undefined,
+    authenticationId: undefined,
   };
 }
 
@@ -6056,6 +6298,12 @@ export const NativeStateReport: MessageFns<NativeStateReport> = {
     }
     if (message.workId !== undefined) {
       writer.uint32(50).string(message.workId);
+    }
+    if (message.preparation !== undefined) {
+      NativePreparation.encode(message.preparation, writer.uint32(66).fork()).join();
+    }
+    if (message.authenticationId !== undefined) {
+      writer.uint32(74).string(message.authenticationId);
     }
     return writer;
   },
@@ -6121,6 +6369,22 @@ export const NativeStateReport: MessageFns<NativeStateReport> = {
             message.workId = reader.string();
             continue;
           }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.preparation = NativePreparation.decode(reader, reader.uint32());
+            continue;
+          }
+          case 9: {
+            if (tag !== 74) {
+              break;
+            }
+
+            message.authenticationId = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -6150,6 +6414,10 @@ export const NativeStateReport: MessageFns<NativeStateReport> = {
       : undefined;
     message.foreground = object.foreground ?? 0;
     message.workId = object.workId ?? undefined;
+    message.preparation = (object.preparation !== undefined && object.preparation !== null)
+      ? NativePreparation.fromPartial(object.preparation)
+      : undefined;
+    message.authenticationId = object.authenticationId ?? undefined;
     return message;
   },
 };
@@ -6975,6 +7243,881 @@ export const AnswerReport: MessageFns<AnswerReport> = {
   },
 };
 
+function createBaseExecutionAuthenticationReference(): ExecutionAuthenticationReference {
+  return { source: undefined, agentId: "", conversationId: "", operationId: "" };
+}
+
+export const ExecutionAuthenticationReference: MessageFns<ExecutionAuthenticationReference> = {
+  encode(message: ExecutionAuthenticationReference, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.source !== undefined) {
+      CaptureSource.encode(message.source, writer.uint32(10).fork()).join();
+    }
+    if (message.agentId !== "") {
+      writer.uint32(18).string(message.agentId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(26).string(message.conversationId);
+    }
+    if (message.operationId !== "") {
+      writer.uint32(34).string(message.operationId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ExecutionAuthenticationReference {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseExecutionAuthenticationReference();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.source = CaptureSource.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.agentId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.operationId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ExecutionAuthenticationReference>, I>>(
+    base?: I,
+  ): ExecutionAuthenticationReference {
+    return ExecutionAuthenticationReference.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ExecutionAuthenticationReference>, I>>(
+    object: I,
+  ): ExecutionAuthenticationReference {
+    const message = createBaseExecutionAuthenticationReference();
+    message.source = (object.source !== undefined && object.source !== null)
+      ? CaptureSource.fromPartial(object.source)
+      : undefined;
+    message.agentId = object.agentId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    message.operationId = object.operationId ?? "";
+    return message;
+  },
+};
+
+function createBaseBeginAuthenticationRequest(): BeginAuthenticationRequest {
+  return { target: undefined, expectedPreviousOperationId: undefined };
+}
+
+export const BeginAuthenticationRequest: MessageFns<BeginAuthenticationRequest> = {
+  encode(message: BeginAuthenticationRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.target !== undefined) {
+      ExecutionAuthenticationReference.encode(message.target, writer.uint32(10).fork()).join();
+    }
+    if (message.expectedPreviousOperationId !== undefined) {
+      writer.uint32(18).string(message.expectedPreviousOperationId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): BeginAuthenticationRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseBeginAuthenticationRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.target = ExecutionAuthenticationReference.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.expectedPreviousOperationId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<BeginAuthenticationRequest>, I>>(base?: I): BeginAuthenticationRequest {
+    return BeginAuthenticationRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<BeginAuthenticationRequest>, I>>(object: I): BeginAuthenticationRequest {
+    const message = createBaseBeginAuthenticationRequest();
+    message.target = (object.target !== undefined && object.target !== null)
+      ? ExecutionAuthenticationReference.fromPartial(object.target)
+      : undefined;
+    message.expectedPreviousOperationId = object.expectedPreviousOperationId ?? undefined;
+    return message;
+  },
+};
+
+function createBaseAppliedAuthentication(): AppliedAuthentication {
+  return { operationId: "", executionId: "", authenticationId: "" };
+}
+
+export const AppliedAuthentication: MessageFns<AppliedAuthentication> = {
+  encode(message: AppliedAuthentication, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.operationId !== "") {
+      writer.uint32(10).string(message.operationId);
+    }
+    if (message.executionId !== "") {
+      writer.uint32(18).string(message.executionId);
+    }
+    if (message.authenticationId !== "") {
+      writer.uint32(26).string(message.authenticationId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AppliedAuthentication {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseAppliedAuthentication();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.operationId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.executionId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.authenticationId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<AppliedAuthentication>, I>>(base?: I): AppliedAuthentication {
+    return AppliedAuthentication.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AppliedAuthentication>, I>>(object: I): AppliedAuthentication {
+    const message = createBaseAppliedAuthentication();
+    message.operationId = object.operationId ?? "";
+    message.executionId = object.executionId ?? "";
+    message.authenticationId = object.authenticationId ?? "";
+    return message;
+  },
+};
+
+function createBaseOptionalAppliedAuthentication(): OptionalAppliedAuthentication {
+  return { applied: undefined };
+}
+
+export const OptionalAppliedAuthentication: MessageFns<OptionalAppliedAuthentication> = {
+  encode(message: OptionalAppliedAuthentication, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.applied !== undefined) {
+      AppliedAuthentication.encode(message.applied, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): OptionalAppliedAuthentication {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseOptionalAppliedAuthentication();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.applied = AppliedAuthentication.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<OptionalAppliedAuthentication>, I>>(base?: I): OptionalAppliedAuthentication {
+    return OptionalAppliedAuthentication.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<OptionalAppliedAuthentication>, I>>(
+    object: I,
+  ): OptionalAppliedAuthentication {
+    const message = createBaseOptionalAppliedAuthentication();
+    message.applied = (object.applied !== undefined && object.applied !== null)
+      ? AppliedAuthentication.fromPartial(object.applied)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseExecutionCredentialDescriptor(): ExecutionCredentialDescriptor {
+  return {
+    applied: undefined,
+    credentialSource: Buffer.alloc(0),
+    kind: 0,
+    accountId: undefined,
+    expiresAtMillis: undefined,
+    totalBytes: 0,
+  };
+}
+
+export const ExecutionCredentialDescriptor: MessageFns<ExecutionCredentialDescriptor> = {
+  encode(message: ExecutionCredentialDescriptor, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.applied !== undefined) {
+      AppliedAuthentication.encode(message.applied, writer.uint32(10).fork()).join();
+    }
+    if (message.credentialSource.length !== 0) {
+      writer.uint32(18).bytes(message.credentialSource);
+    }
+    if (message.kind !== 0) {
+      writer.uint32(24).int32(message.kind);
+    }
+    if (message.accountId !== undefined) {
+      writer.uint32(34).string(message.accountId);
+    }
+    if (message.expiresAtMillis !== undefined) {
+      if (BigInt.asIntN(64, message.expiresAtMillis) !== message.expiresAtMillis) {
+        throw new globalThis.Error("value provided for field message.expiresAtMillis of type int64 too large");
+      }
+      writer.uint32(40).int64(message.expiresAtMillis);
+    }
+    if (message.totalBytes !== 0) {
+      writer.uint32(48).uint32(message.totalBytes);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ExecutionCredentialDescriptor {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseExecutionCredentialDescriptor();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.applied = AppliedAuthentication.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.credentialSource = Buffer.from(reader.bytes());
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.kind = reader.int32() as any;
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.accountId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 40) {
+              break;
+            }
+
+            message.expiresAtMillis = reader.int64() as bigint;
+            continue;
+          }
+          case 6: {
+            if (tag !== 48) {
+              break;
+            }
+
+            message.totalBytes = reader.uint32();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ExecutionCredentialDescriptor>, I>>(base?: I): ExecutionCredentialDescriptor {
+    return ExecutionCredentialDescriptor.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ExecutionCredentialDescriptor>, I>>(
+    object: I,
+  ): ExecutionCredentialDescriptor {
+    const message = createBaseExecutionCredentialDescriptor();
+    message.applied = (object.applied !== undefined && object.applied !== null)
+      ? AppliedAuthentication.fromPartial(object.applied)
+      : undefined;
+    message.credentialSource = object.credentialSource ?? Buffer.alloc(0);
+    message.kind = object.kind ?? 0;
+    message.accountId = object.accountId ?? undefined;
+    message.expiresAtMillis = (object.expiresAtMillis !== undefined && object.expiresAtMillis !== null)
+      ? BigInt(object.expiresAtMillis)
+      : undefined;
+    message.totalBytes = object.totalBytes ?? 0;
+    return message;
+  },
+};
+
+function createBaseAuthenticationPending(): AuthenticationPending {
+  return { attemptId: "" };
+}
+
+export const AuthenticationPending: MessageFns<AuthenticationPending> = {
+  encode(message: AuthenticationPending, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.attemptId !== "") {
+      writer.uint32(10).string(message.attemptId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AuthenticationPending {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseAuthenticationPending();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.attemptId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<AuthenticationPending>, I>>(base?: I): AuthenticationPending {
+    return AuthenticationPending.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AuthenticationPending>, I>>(object: I): AuthenticationPending {
+    const message = createBaseAuthenticationPending();
+    message.attemptId = object.attemptId ?? "";
+    return message;
+  },
+};
+
+function createBaseAuthenticationSettled(): AuthenticationSettled {
+  return { attemptId: "", state: 0 };
+}
+
+export const AuthenticationSettled: MessageFns<AuthenticationSettled> = {
+  encode(message: AuthenticationSettled, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.attemptId !== "") {
+      writer.uint32(10).string(message.attemptId);
+    }
+    if (message.state !== 0) {
+      writer.uint32(16).int32(message.state);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AuthenticationSettled {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseAuthenticationSettled();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.attemptId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.state = reader.int32() as any;
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<AuthenticationSettled>, I>>(base?: I): AuthenticationSettled {
+    return AuthenticationSettled.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AuthenticationSettled>, I>>(object: I): AuthenticationSettled {
+    const message = createBaseAuthenticationSettled();
+    message.attemptId = object.attemptId ?? "";
+    message.state = object.state ?? 0;
+    return message;
+  },
+};
+
+function createBaseExecutionAuthenticationProgress(): ExecutionAuthenticationProgress {
+  return { current: undefined, pending: undefined, settled: undefined };
+}
+
+export const ExecutionAuthenticationProgress: MessageFns<ExecutionAuthenticationProgress> = {
+  encode(message: ExecutionAuthenticationProgress, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.current !== undefined) {
+      ExecutionCredentialDescriptor.encode(message.current, writer.uint32(10).fork()).join();
+    }
+    if (message.pending !== undefined) {
+      AuthenticationPending.encode(message.pending, writer.uint32(18).fork()).join();
+    }
+    if (message.settled !== undefined) {
+      AuthenticationSettled.encode(message.settled, writer.uint32(26).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ExecutionAuthenticationProgress {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseExecutionAuthenticationProgress();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.current = ExecutionCredentialDescriptor.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.pending = AuthenticationPending.decode(reader, reader.uint32());
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.settled = AuthenticationSettled.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ExecutionAuthenticationProgress>, I>>(base?: I): ExecutionAuthenticationProgress {
+    return ExecutionAuthenticationProgress.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ExecutionAuthenticationProgress>, I>>(
+    object: I,
+  ): ExecutionAuthenticationProgress {
+    const message = createBaseExecutionAuthenticationProgress();
+    message.current = (object.current !== undefined && object.current !== null)
+      ? ExecutionCredentialDescriptor.fromPartial(object.current)
+      : undefined;
+    message.pending = (object.pending !== undefined && object.pending !== null)
+      ? AuthenticationPending.fromPartial(object.pending)
+      : undefined;
+    message.settled = (object.settled !== undefined && object.settled !== null)
+      ? AuthenticationSettled.fromPartial(object.settled)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseAuthenticationReadRequest(): AuthenticationReadRequest {
+  return { target: undefined, credentialSource: Buffer.alloc(0), offset: 0 };
+}
+
+export const AuthenticationReadRequest: MessageFns<AuthenticationReadRequest> = {
+  encode(message: AuthenticationReadRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.target !== undefined) {
+      ExecutionAuthenticationReference.encode(message.target, writer.uint32(10).fork()).join();
+    }
+    if (message.credentialSource.length !== 0) {
+      writer.uint32(18).bytes(message.credentialSource);
+    }
+    if (message.offset !== 0) {
+      writer.uint32(24).uint32(message.offset);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AuthenticationReadRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseAuthenticationReadRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.target = ExecutionAuthenticationReference.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.credentialSource = Buffer.from(reader.bytes());
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.offset = reader.uint32();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<AuthenticationReadRequest>, I>>(base?: I): AuthenticationReadRequest {
+    return AuthenticationReadRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AuthenticationReadRequest>, I>>(object: I): AuthenticationReadRequest {
+    const message = createBaseAuthenticationReadRequest();
+    message.target = (object.target !== undefined && object.target !== null)
+      ? ExecutionAuthenticationReference.fromPartial(object.target)
+      : undefined;
+    message.credentialSource = object.credentialSource ?? Buffer.alloc(0);
+    message.offset = object.offset ?? 0;
+    return message;
+  },
+};
+
+function createBaseAuthenticationPiece(): AuthenticationPiece {
+  return { descriptor: undefined, offset: 0, content: Buffer.alloc(0) };
+}
+
+export const AuthenticationPiece: MessageFns<AuthenticationPiece> = {
+  encode(message: AuthenticationPiece, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.descriptor !== undefined) {
+      ExecutionCredentialDescriptor.encode(message.descriptor, writer.uint32(10).fork()).join();
+    }
+    if (message.offset !== 0) {
+      writer.uint32(16).uint32(message.offset);
+    }
+    if (message.content.length !== 0) {
+      writer.uint32(26).bytes(message.content);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AuthenticationPiece {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseAuthenticationPiece();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.descriptor = ExecutionCredentialDescriptor.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.offset = reader.uint32();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.content = Buffer.from(reader.bytes());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<AuthenticationPiece>, I>>(base?: I): AuthenticationPiece {
+    return AuthenticationPiece.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AuthenticationPiece>, I>>(object: I): AuthenticationPiece {
+    const message = createBaseAuthenticationPiece();
+    message.descriptor = (object.descriptor !== undefined && object.descriptor !== null)
+      ? ExecutionCredentialDescriptor.fromPartial(object.descriptor)
+      : undefined;
+    message.offset = object.offset ?? 0;
+    message.content = object.content ?? Buffer.alloc(0);
+    return message;
+  },
+};
+
+function createBaseAuthenticationHandoffCheck(): AuthenticationHandoffCheck {
+  return { target: undefined, credentialSource: Buffer.alloc(0) };
+}
+
+export const AuthenticationHandoffCheck: MessageFns<AuthenticationHandoffCheck> = {
+  encode(message: AuthenticationHandoffCheck, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.target !== undefined) {
+      ExecutionAuthenticationReference.encode(message.target, writer.uint32(10).fork()).join();
+    }
+    if (message.credentialSource.length !== 0) {
+      writer.uint32(18).bytes(message.credentialSource);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AuthenticationHandoffCheck {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseAuthenticationHandoffCheck();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.target = ExecutionAuthenticationReference.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.credentialSource = Buffer.from(reader.bytes());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<AuthenticationHandoffCheck>, I>>(base?: I): AuthenticationHandoffCheck {
+    return AuthenticationHandoffCheck.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AuthenticationHandoffCheck>, I>>(object: I): AuthenticationHandoffCheck {
+    const message = createBaseAuthenticationHandoffCheck();
+    message.target = (object.target !== undefined && object.target !== null)
+      ? ExecutionAuthenticationReference.fromPartial(object.target)
+      : undefined;
+    message.credentialSource = object.credentialSource ?? Buffer.alloc(0);
+    return message;
+  },
+};
+
 /** Every owner request rechecks private Agent ownership and current Team admission. */
 export type ConversationsService = typeof ConversationsService;
 export const ConversationsService = {
@@ -7493,6 +8636,66 @@ export const ConnectorCaptureService = {
     responseSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
     responseDeserialize: (value: Buffer): Empty => Empty.decode(value),
   },
+  /**
+   * Execution-only model credentials use this trusted component boundary.
+   * These methods are not registered on Client or Admin service groups.
+   */
+  getAuthenticationBinding: {
+    path: "/chapchoo.conversations.ConnectorCapture/GetAuthenticationBinding" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ExecutionAuthenticationReference): Buffer =>
+      Buffer.from(ExecutionAuthenticationReference.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ExecutionAuthenticationReference =>
+      ExecutionAuthenticationReference.decode(value),
+    responseSerialize: (value: OptionalAppliedAuthentication): Buffer =>
+      Buffer.from(OptionalAppliedAuthentication.encode(value).finish()),
+    responseDeserialize: (value: Buffer): OptionalAppliedAuthentication => OptionalAppliedAuthentication.decode(value),
+  },
+  beginAuthentication: {
+    path: "/chapchoo.conversations.ConnectorCapture/BeginAuthentication" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: BeginAuthenticationRequest): Buffer =>
+      Buffer.from(BeginAuthenticationRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): BeginAuthenticationRequest => BeginAuthenticationRequest.decode(value),
+    responseSerialize: (value: AppliedAuthentication): Buffer =>
+      Buffer.from(AppliedAuthentication.encode(value).finish()),
+    responseDeserialize: (value: Buffer): AppliedAuthentication => AppliedAuthentication.decode(value),
+  },
+  acquireAuthentication: {
+    path: "/chapchoo.conversations.ConnectorCapture/AcquireAuthentication" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ExecutionAuthenticationReference): Buffer =>
+      Buffer.from(ExecutionAuthenticationReference.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ExecutionAuthenticationReference =>
+      ExecutionAuthenticationReference.decode(value),
+    responseSerialize: (value: ExecutionAuthenticationProgress): Buffer =>
+      Buffer.from(ExecutionAuthenticationProgress.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ExecutionAuthenticationProgress =>
+      ExecutionAuthenticationProgress.decode(value),
+  },
+  readAuthentication: {
+    path: "/chapchoo.conversations.ConnectorCapture/ReadAuthentication" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: AuthenticationReadRequest): Buffer =>
+      Buffer.from(AuthenticationReadRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): AuthenticationReadRequest => AuthenticationReadRequest.decode(value),
+    responseSerialize: (value: AuthenticationPiece): Buffer => Buffer.from(AuthenticationPiece.encode(value).finish()),
+    responseDeserialize: (value: Buffer): AuthenticationPiece => AuthenticationPiece.decode(value),
+  },
+  checkAuthentication: {
+    path: "/chapchoo.conversations.ConnectorCapture/CheckAuthentication" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: AuthenticationHandoffCheck): Buffer =>
+      Buffer.from(AuthenticationHandoffCheck.encode(value).finish()),
+    requestDeserialize: (value: Buffer): AuthenticationHandoffCheck => AuthenticationHandoffCheck.decode(value),
+    responseSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
+    responseDeserialize: (value: Buffer): Empty => Empty.decode(value),
+  },
 } as const;
 
 export interface ConnectorCaptureServer extends UntypedServiceImplementation {
@@ -7511,6 +8714,15 @@ export interface ConnectorCaptureServer extends UntypedServiceImplementation {
   reportStop: handleUnaryCall<StopReport, Empty>;
   pullAnswer: handleUnaryCall<AnswerChunkRequest, AnswerChunk>;
   reportAnswer: handleUnaryCall<AnswerReport, Empty>;
+  /**
+   * Execution-only model credentials use this trusted component boundary.
+   * These methods are not registered on Client or Admin service groups.
+   */
+  getAuthenticationBinding: handleUnaryCall<ExecutionAuthenticationReference, OptionalAppliedAuthentication>;
+  beginAuthentication: handleUnaryCall<BeginAuthenticationRequest, AppliedAuthentication>;
+  acquireAuthentication: handleUnaryCall<ExecutionAuthenticationReference, ExecutionAuthenticationProgress>;
+  readAuthentication: handleUnaryCall<AuthenticationReadRequest, AuthenticationPiece>;
+  checkAuthentication: handleUnaryCall<AuthenticationHandoffCheck, Empty>;
 }
 
 export interface ConnectorCaptureClient extends Client {
@@ -7717,6 +8929,85 @@ export interface ConnectorCaptureClient extends Client {
   ): ClientUnaryCall;
   reportAnswer(
     request: AnswerReport,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  /**
+   * Execution-only model credentials use this trusted component boundary.
+   * These methods are not registered on Client or Admin service groups.
+   */
+  getAuthenticationBinding(
+    request: ExecutionAuthenticationReference,
+    callback: (error: ServiceError | null, response: OptionalAppliedAuthentication) => void,
+  ): ClientUnaryCall;
+  getAuthenticationBinding(
+    request: ExecutionAuthenticationReference,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: OptionalAppliedAuthentication) => void,
+  ): ClientUnaryCall;
+  getAuthenticationBinding(
+    request: ExecutionAuthenticationReference,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: OptionalAppliedAuthentication) => void,
+  ): ClientUnaryCall;
+  beginAuthentication(
+    request: BeginAuthenticationRequest,
+    callback: (error: ServiceError | null, response: AppliedAuthentication) => void,
+  ): ClientUnaryCall;
+  beginAuthentication(
+    request: BeginAuthenticationRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: AppliedAuthentication) => void,
+  ): ClientUnaryCall;
+  beginAuthentication(
+    request: BeginAuthenticationRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: AppliedAuthentication) => void,
+  ): ClientUnaryCall;
+  acquireAuthentication(
+    request: ExecutionAuthenticationReference,
+    callback: (error: ServiceError | null, response: ExecutionAuthenticationProgress) => void,
+  ): ClientUnaryCall;
+  acquireAuthentication(
+    request: ExecutionAuthenticationReference,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ExecutionAuthenticationProgress) => void,
+  ): ClientUnaryCall;
+  acquireAuthentication(
+    request: ExecutionAuthenticationReference,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ExecutionAuthenticationProgress) => void,
+  ): ClientUnaryCall;
+  readAuthentication(
+    request: AuthenticationReadRequest,
+    callback: (error: ServiceError | null, response: AuthenticationPiece) => void,
+  ): ClientUnaryCall;
+  readAuthentication(
+    request: AuthenticationReadRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: AuthenticationPiece) => void,
+  ): ClientUnaryCall;
+  readAuthentication(
+    request: AuthenticationReadRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: AuthenticationPiece) => void,
+  ): ClientUnaryCall;
+  checkAuthentication(
+    request: AuthenticationHandoffCheck,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  checkAuthentication(
+    request: AuthenticationHandoffCheck,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  checkAuthentication(
+    request: AuthenticationHandoffCheck,
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: Empty) => void,

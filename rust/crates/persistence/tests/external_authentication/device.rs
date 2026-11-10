@@ -1,4 +1,6 @@
 use super::*;
+#[path = "device/refresh.rs"]
+mod refresh;
 use chapchoo_crypto::SecretDigest;
 use chapchoo_persistence::{
     CheckDeviceAdmission, DeviceAuthenticationState as State, DeviceAuthenticationStatus,
@@ -102,6 +104,7 @@ async fn exercise_device(store: &Store) -> Result<(String, String, String), Test
     let owner = session[0].digest();
     let manager = session[1].digest();
     let stranger = session[3].digest();
+    refresh::exercise(store, &owner, &stranger).await?;
     let personal = AuthenticationScope::Personal;
     let first = start(store, &owner, &personal, "device-success", None).await?;
     let attempt = first.attempt_id();

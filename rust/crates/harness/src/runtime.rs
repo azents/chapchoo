@@ -1,4 +1,5 @@
 use crate::{AppliedSupply, Error, NativeStorage, Preparer};
+use crate::{NativeAuthenticationBinding, NativeAuthenticationProvider, NativeCredentials};
 use agent_client_protocol::{
     Agent, Client, Lines,
     schema::ProtocolVersion,
@@ -26,6 +27,7 @@ use tokio_util::{
     sync::CancellationToken,
 };
 mod answers;
+mod authentication;
 mod reported;
 pub use reported::NativeReportedOperation;
 mod inputs;
@@ -194,6 +196,14 @@ impl Pending {
 type Requests = Arc<Mutex<BTreeMap<String, (chapchoo_domain::SourcePosition, Pending)>>>;
 enum Command {
     Preparation(oneshot::Sender<Option<crate::NativePreparationObservation>>),
+    AuthenticationBinding(oneshot::Sender<Result<Option<NativeAuthenticationBinding>, Error>>),
+    PublishAuthentication {
+        expected: NativeAuthenticationBinding,
+        update: crate::NativeAuthentication,
+        checker: Arc<dyn NativeAuthenticationProvider>,
+        _permit: OwnedSemaphorePermit,
+        result: oneshot::Sender<Result<(), Error>>,
+    },
     Reported(NativeReportedOperation, oneshot::Sender<Result<(), Error>>),
     Answer(
         NativeAnswerOperation,
@@ -207,18 +217,13 @@ enum Command {
     ),
     Setup(
         NativeSetupOperation,
+        Arc<dyn NativeAuthenticationProvider>,
         oneshot::Sender<Result<NativeSetupObservation, Error>>,
     ),
     SetupObservation(
         String,
         oneshot::Sender<Result<NativeSetupObservation, Error>>,
     ),
-    Start {
-        supply: HarnessSupply,
-        context: NativeContext,
-        source: crate::CaptureLog,
-        result: oneshot::Sender<Result<NativeConversationId, Error>>,
-    },
     Prompt(
         NativeInputOperation,
         OwnedSemaphorePermit,
@@ -284,137 +289,141 @@ impl NativeOwner {
         let (sender, mut receiver) = mpsc::channel(32);
         let shutdown = CancellationToken::new();
         let stopping = shutdown.clone();
-        let task =
-            tokio::spawn(async move {
-                let mut state = State {
-                    storage,
-                    preparer,
-                    live: None,
-                    scope: None,
-                    blocked: false,
-                    inputs: InputRegistry::default(),
-                    retained_capture: None,
-                    setups: SetupRegistry::default(),
-                    stops: StopRegistry::default(),
-                    answers: AnswerRegistry::default(),
+        let task = tokio::spawn(async move {
+            let mut state = State {
+                storage,
+                preparer,
+                live: None,
+                scope: None,
+                blocked: false,
+                inputs: InputRegistry::default(),
+                retained_capture: None,
+                setups: SetupRegistry::default(),
+                stops: StopRegistry::default(),
+                answers: AnswerRegistry::default(),
+                credential_write: None,
+            };
+            loop {
+                let native_ended = state.live.as_ref().map(|live| live.ended.clone());
+                let command = tokio::select! {
+                    biased;
+                    _ = stopping.cancelled() => break,
+                    _=async {
+                        match native_ended {
+                            Some(ended)=>ended.cancelled().await,
+                            None=>std::future::pending::<()>().await,
+                        }
+                    }=>{
+                        // Reuse the owned physical shutdown path after a
+                        // protocol/capture failure; never leave unrecorded
+                        // native work running until a later Control command.
+                        state.retire().await?;
+                        continue;
+                    },
+                    command = receiver.recv() => match command { Some(c)=>c, None=>break },
                 };
-                loop {
-                    let native_ended = state.live.as_ref().map(|live| live.ended.clone());
-                    let command = tokio::select! {
-                        biased;
-                        _ = stopping.cancelled() => break,
-                        _=async {
-                            match native_ended {
-                                Some(ended)=>ended.cancelled().await,
-                                None=>std::future::pending::<()>().await,
-                            }
-                        }=>{
-                            // Reuse the owned physical shutdown path after a
-                            // protocol/capture failure; never leave unrecorded
-                            // native work running until a later Control command.
-                            state.retire().await?;
-                            continue;
-                        },
-                        command = receiver.recv() => match command { Some(c)=>c, None=>break },
-                    };
-                    match command {
-                        Command::Preparation(result) => {
-                            let observation = state.live.as_ref().map(|live| {
-                                crate::NativePreparationObservation {
+                match command {
+                    Command::Preparation(result) => {
+                        let observation =
+                            state
+                                .live
+                                .as_ref()
+                                .map(|live| crate::NativePreparationObservation {
                                     freshness: live._supply.freshness,
                                     versions: live._supply.versions.clone(),
-                                }
-                            });
-                            let _ = result.send(observation);
-                        }
-                        Command::StopOperation(id, target, result) => {
-                            let _ = result.send(state.stop_operation(&id, &target));
-                        }
-                        Command::Setup(operation, result) => {
-                            let outcome = tokio::select! {
-                                _=stopping.cancelled()=>Err(Error::DeliveryUncertain),
-                                outcome=state.setup(operation)=>outcome,
-                            };
-                            let _ = result.send(outcome);
-                        }
-                        Command::SetupObservation(id, result) => {
-                            let _ = result.send(state.setups.observe(&id));
-                        }
-                        Command::Start {
-                            supply,
-                            context,
-                            source,
-                            result,
-                        } => {
-                            let outcome = tokio::select! {
-                                _ = stopping.cancelled() => Err(Error::Process),
-                                outcome = state.start(supply,context,source) => outcome,
-                            };
-                            let _ = result.send(outcome);
-                        }
-                        Command::Prompt(operation, _permit, result) => {
-                            let outcome = tokio::select! {
-                                _=stopping.cancelled()=>Err(Error::DeliveryUncertain),
-                                outcome=state.input(operation)=>outcome,
-                            };
-                            // The operation registry retains possible forwarding
-                            // independently of this SDK acknowledgement waiter.
-                            let _ = result.send(outcome);
-                        }
-                        Command::Stop(target, result) => {
-                            let _ = result.send(state.stop(&target));
-                        }
-                        Command::Observe(result) => {
-                            let _ = result.send(state.observe());
-                        }
-                        Command::CapturedSource(result) => {
-                            let outcome = state.captured_source().await;
-                            let _ = result.send(outcome);
-                        }
-                        Command::InputObservation { id, target, result } => {
-                            let _ = result.send(state.inputs.observe(&id, &target));
-                        }
-                        Command::Requests(result) => {
-                            let mut visible = Vec::new();
-                            if let Some(live) = &state.live
-                                && !state.blocked
-                                && !live.protocol.is_finished()
-                            {
-                                let mut pending = live.requests.lock().await;
-                                pending.retain(|_, (_, r)| !r.cancelled());
-                                for (id, (occurrence, r)) in pending.iter() {
-                                    visible.push(match r {
-                                        Pending::Permission(request, _) => {
-                                            InteractiveRequest::Permission {
-                                                id: id.clone(),
-                                                occurrence: occurrence.clone(),
-                                                request: request.clone(),
-                                            }
-                                        }
-                                        Pending::Form(request, _) => InteractiveRequest::Form {
+                                });
+                        let _ = result.send(observation);
+                    }
+                    Command::AuthenticationBinding(result) => {
+                        let _ = result.send(state.current_authentication());
+                    }
+                    Command::PublishAuthentication {
+                        expected,
+                        update,
+                        checker,
+                        _permit,
+                        result,
+                    } => {
+                        let outcome = tokio::select! {
+                            _=stopping.cancelled()=>Err(Error::DeliveryUncertain),
+                            result=state.publish_authentication(expected,update,checker)=>result,
+                        };
+                        let _ = result.send(outcome);
+                    }
+                    Command::StopOperation(id, target, result) => {
+                        let _ = result.send(state.stop_operation(&id, &target));
+                    }
+                    Command::Setup(operation, authentication, result) => {
+                        let outcome = tokio::select! {
+                            _=stopping.cancelled()=>Err(Error::DeliveryUncertain),
+                            outcome=state.setup(operation,authentication)=>outcome,
+                        };
+                        let _ = result.send(outcome);
+                    }
+                    Command::SetupObservation(id, result) => {
+                        let _ = result.send(state.setups.observe(&id));
+                    }
+                    Command::Prompt(operation, _permit, result) => {
+                        let outcome = tokio::select! {
+                            _=stopping.cancelled()=>Err(Error::DeliveryUncertain),
+                            outcome=state.input(operation)=>outcome,
+                        };
+                        let _ = result.send(outcome);
+                    }
+                    Command::Stop(target, result) => {
+                        let _ = result.send(state.stop(&target));
+                    }
+                    Command::Observe(result) => {
+                        let _ = result.send(state.observe());
+                    }
+                    Command::CapturedSource(result) => {
+                        let outcome = state.captured_source().await;
+                        let _ = result.send(outcome);
+                    }
+                    Command::InputObservation { id, target, result } => {
+                        let _ = result.send(state.inputs.observe(&id, &target));
+                    }
+                    Command::Requests(result) => {
+                        let mut visible = Vec::new();
+                        if let Some(live) = &state.live
+                            && !state.blocked
+                            && !live.protocol.is_finished()
+                        {
+                            let mut pending = live.requests.lock().await;
+                            pending.retain(|_, (_, r)| !r.cancelled());
+                            for (id, (occurrence, r)) in pending.iter() {
+                                visible.push(match r {
+                                    Pending::Permission(request, _) => {
+                                        InteractiveRequest::Permission {
                                             id: id.clone(),
                                             occurrence: occurrence.clone(),
                                             request: request.clone(),
-                                        },
-                                    });
-                                }
+                                        }
+                                    }
+                                    Pending::Form(request, _) => InteractiveRequest::Form {
+                                        id: id.clone(),
+                                        occurrence: occurrence.clone(),
+                                        request: request.clone(),
+                                    },
+                                });
                             }
-                            let _ = result.send(visible);
                         }
-                        Command::Reported(reported, result) => {
-                            let _ = result.send(state.release_reported(reported));
-                        }
-                        Command::Answer(operation, _permit, result) => {
-                            let _ = result.send(state.answer(operation).await);
-                        }
-                        Command::Respond(response, result) => {
-                            let _ = result.send(state.respond(response).await);
-                        }
+                        let _ = result.send(visible);
+                    }
+                    Command::Reported(reported, result) => {
+                        let _ = result.send(state.release_reported(reported));
+                    }
+                    Command::Answer(operation, _permit, result) => {
+                        let _ = result.send(state.answer(operation).await);
+                    }
+                    Command::Respond(response, result) => {
+                        let _ = result.send(state.respond(response).await);
                     }
                 }
-                receiver.close();
-                state.retire().await
-            });
+            }
+            receiver.close();
+            state.retire().await
+        });
         Ok(Self {
             sender,
             task,
@@ -427,14 +436,6 @@ impl NativeOwner {
             sender: self.sender.clone(),
             payload_budget: self.payload_budget.clone(),
         }
-    }
-    pub async fn start(
-        &self,
-        supply: HarnessSupply,
-        context: NativeContext,
-        source: crate::CaptureLog,
-    ) -> Result<NativeConversationId, Error> {
-        self.handle().start(supply, context, source).await
     }
     pub async fn preparation(&self) -> Result<Option<crate::NativePreparationObservation>, Error> {
         self.handle().preparation().await
@@ -473,23 +474,6 @@ impl NativeOwner {
     }
 }
 impl NativeHandle {
-    pub async fn start(
-        &self,
-        supply: HarnessSupply,
-        context: NativeContext,
-        source: crate::CaptureLog,
-    ) -> Result<NativeConversationId, Error> {
-        let (result, rx) = oneshot::channel();
-        self.sender
-            .try_send(Command::Start {
-                supply,
-                context,
-                source,
-                result,
-            })
-            .map_err(|_| Error::NotAdmitted)?;
-        rx.await.map_err(|_| Error::Process)?
-    }
     /// Read the physically started combination without preparing or refreshing it.
     pub async fn preparation(&self) -> Result<Option<crate::NativePreparationObservation>, Error> {
         let (result, rx) = oneshot::channel();
@@ -575,6 +559,7 @@ struct State {
     setups: SetupRegistry,
     stops: StopRegistry,
     answers: AnswerRegistry,
+    credential_write: Option<JoinHandle<Result<NativeCredentials, Error>>>,
 }
 struct Live {
     child: Child,
@@ -588,6 +573,7 @@ struct Live {
     _launch: tempfile::TempDir,
     capture: crate::CaptureLog,
     observations: Arc<Observations>,
+    _authentication: NativeAuthenticationBinding,
 }
 impl State {
     async fn captured_source(&mut self) -> Result<Option<crate::CaptureLog>, Error> {
@@ -645,7 +631,13 @@ impl State {
         if live.protocol.is_finished() || self.blocked {
             return Err(Error::Protocol);
         }
-        live.observations.current()
+        let mut observed = live.observations.current()?;
+        observed.preparation = Some(crate::NativePreparationObservation {
+            freshness: live._supply.freshness,
+            versions: live._supply.versions.clone(),
+        });
+        observed.authentication_id = Some(live._authentication.authentication_id.clone());
+        Ok(observed)
     }
     fn stop(&self, target: &NativeWorkTarget) -> Result<(), Error> {
         let live = self.live.as_ref().ok_or(Error::NotAdmitted)?;
@@ -665,6 +657,7 @@ impl State {
         supply: HarnessSupply,
         context: NativeContext,
         source: crate::CaptureLog,
+        authentication: Arc<dyn NativeAuthenticationProvider>,
     ) -> Result<NativeConversationId, Error> {
         if self.blocked {
             return Err(Error::RetirementUnknown);
@@ -708,7 +701,7 @@ impl State {
         // Any partially started preparation is owned by this actor. Failure must
         // retire the namespace scope before another start can be attempted.
         self.blocked = true;
-        let result = self.launch(supply, context, source).await;
+        let result = self.launch(supply, context, source, authentication).await;
         match result {
             Ok(id) => {
                 self.blocked = false;
@@ -729,8 +722,27 @@ impl State {
         supply: HarnessSupply,
         context: NativeContext,
         source: crate::CaptureLog,
+        authentication: Arc<dyn NativeAuthenticationProvider>,
     ) -> Result<NativeConversationId, Error> {
         let applied = self.preparer.prepare(&supply).await?;
+        let admitted = authentication.acquire().await?;
+        authentication.check(&admitted.binding).await?;
+        let binding = admitted.binding;
+        let storage = self.storage.clone();
+        let credentials = admitted.credentials;
+        // State owns physical completion beyond cancellation of this launch.
+        self.credential_write = Some(tokio::task::spawn_blocking(move || {
+            if credentials.initial_api_key().is_some() {
+                storage.clear_credentials()?;
+            } else {
+                storage.publish_credentials(&credentials)?;
+            }
+            Ok(credentials)
+        }));
+        let written = self.credential_write.as_mut().ok_or(Error::Process)?.await;
+        self.credential_write = None;
+        let credentials = written.map_err(|_| Error::Storage)??;
+        authentication.check(&binding).await?;
         let launch = tempfile::Builder::new()
             .prefix("launch-")
             .tempdir_in(self.storage.temporary())
@@ -788,14 +800,14 @@ impl State {
         let cwd = self.storage.workspace();
         let ended = CancellationToken::new();
         let completion = ended.clone();
-        let driver = protocol::connect(
+        let driver = protocol::connect_authenticated(
             Lines::new(outgoing, incoming),
             requests.clone(),
             observations.clone(),
             ready,
             done.clone(),
             cwd,
-            context,
+            (context, Some(credentials)),
         );
         let protocol = tokio::spawn(async move {
             let result = driver.await;
@@ -814,6 +826,7 @@ impl State {
             _launch: launch,
             capture: source,
             observations,
+            _authentication: binding,
         });
         let session = tokio::time::timeout(Duration::from_secs(30), ready_rx)
             .await
@@ -844,7 +857,16 @@ impl State {
         requests::respond(&live.requests, session.session_id(), response).await
     }
     async fn retire(&mut self) -> Result<Retirement, Error> {
+        let publication = match self.credential_write.as_mut() {
+            Some(work) => work
+                .await
+                .map_err(|_| Error::Storage)
+                .and_then(|result| result.map(|_| ())),
+            None => Ok(()),
+        };
+        self.credential_write = None;
         if self.scope.is_none() {
+            publication?;
             return Ok(Retirement::NoNativeStarted);
         }
         self.blocked = true;
@@ -885,7 +907,9 @@ impl State {
         if outcome.is_ok() {
             self.blocked = false;
         }
-        outcome.map(|_| Retirement::Quiescent)
+        outcome?;
+        publication?;
+        Ok(Retirement::Quiescent)
     }
 }
 fn check_source(

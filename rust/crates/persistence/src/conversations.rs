@@ -1,7 +1,7 @@
 //! Private conversation storage; no native effects or credential payloads belong here.
 
 mod answers;
-mod authority;
+pub(crate) mod authority;
 mod delivery;
 mod inputs;
 mod native_state;
@@ -45,7 +45,10 @@ pub use inputs::{
     AcceptConversationInput, ConversationInputAdmission, ConversationInputReceipt,
     ConversationInputReference,
 };
-pub use native_state::{ConversationForeground, ConversationNativeObservation};
+pub use native_state::{
+    ConversationForeground, ConversationNativeObservation, ConversationNativePreparation,
+    ConversationPreparationFreshness,
+};
 pub use preparation::{
     ConversationInputPreparation, ConversationPreparationAdmission, ConversationPreparationFacts,
     ConversationPreparationFailure, ConversationPreparationOutcome, ConversationPreparationState,

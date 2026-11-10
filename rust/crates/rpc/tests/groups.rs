@@ -47,7 +47,8 @@ fn selectable_group_unions_deduplicate_shared_services_and_exclude_peers() -> Re
             store.clone(), Arc::new(support::authentication::Provider::default()), 1,
         )?);
         let authentication = chapchoo_rpc::AuthenticationServices::new(authentication_service.clone());
-        let capture=chapchoo_rpc::ConversationCaptureServices::new(Arc::new(chapchoo_service::ConversationService::new(store.clone())),Arc::new(AtomicBool::new(true)));
+        let (execution_authentication,_)=support::authentication::execution(fixture,store.clone())?;
+        let capture=chapchoo_rpc::ConversationCaptureServices::new(Arc::new(chapchoo_service::ConversationService::new(store.clone())),Arc::new(AtomicBool::new(true)),execution_authentication);
         let core=Arc::new(chapchoo_service::ConversationService::new(store.clone()));
         let app = Arc::new(ComputersService::new(store.clone()));
         let admission=Arc::new(AtomicBool::new(true));
@@ -139,6 +140,10 @@ fn selectable_group_unions_deduplicate_shared_services_and_exclude_peers() -> Re
             let captured=chapchoo_protocol::conversations::connector_capture_client::ConnectorCaptureClient::new(channel.clone())
                 .inspect(chapchoo_protocol::conversations::CaptureRequest::default()).await.err().ok_or("Anonymous captured source accepted")?;
             assert_eq!(captured.code(),if groups.contains(ServiceGroup::Control) {Code::Unauthenticated} else {Code::Unimplemented});
+            let credentials=chapchoo_protocol::conversations::connector_capture_client::ConnectorCaptureClient::new(channel.clone())
+                .acquire_authentication(chapchoo_protocol::conversations::ExecutionAuthenticationReference::default()).await
+                .err().ok_or("Anonymous execution credentials accepted")?;
+            assert_eq!(credentials.code(),if groups.contains(ServiceGroup::Control) {Code::Unauthenticated} else {Code::Unimplemented});
             assert_eq!(catalogue.code(), if groups.contains(ServiceGroup::Client) { Code::Unauthenticated } else { Code::Unimplemented });
             assert_eq!(
                 provider.code() == Code::Unimplemented,

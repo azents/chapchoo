@@ -1,9 +1,14 @@
 //! Execution-local native preparation and physical ownership. No server authority.
+mod authentication;
 mod capture;
 mod preparation;
 mod runtime;
 mod storage;
 
+pub use authentication::{
+    NativeAuthentication, NativeAuthenticationBinding, NativeAuthenticationFuture,
+    NativeAuthenticationProvider, NativeCredentials,
+};
 pub use capture::{CaptureBoundary, CaptureLog, CapturePass, CapturedEvent};
 pub use preparation::{
     AppliedSupply, Freshness, NativeComponentVersions, NativePreparationObservation, Preparer,
@@ -21,6 +26,7 @@ pub use storage::NativeStorage;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProtocolStage {
     Initialize,
+    Authentication,
     Session,
 }
 
@@ -43,6 +49,8 @@ pub enum Error {
     ProtocolRejected { stage: ProtocolStage, code: i32 },
     #[error("Native operation was not admitted")]
     NotAdmitted,
+    #[error("Native authentication material is invalid or unavailable")]
+    Authentication,
     #[error("The native operation conflicts with its original payload or target")]
     OperationConflict,
     #[error("Native delivery may have occurred and cannot be replayed")]
