@@ -494,7 +494,8 @@ fn native_external_token_material_excludes_refresh_authority_and_rejects_unknown
     let secret = ExternalSecret::new(serde_json::to_vec(&serde_json::json!({
         "access_token":access, "id_token":server_id, "refresh_token":"SERVER-ONLY-REFRESH",
     }))?)?;
-    let file = native_chatgpt_credentials(&secret, "account-a")?;
+    let updated_at = 1794276000123;
+    let file = native_chatgpt_credentials(&secret, "account-a", updated_at)?;
     let decoded: serde_json::Value = serde_json::from_slice(file.expose())?;
     assert_eq!(decoded["auth_mode"], "chatgptAuthTokens");
     assert!(decoded["OPENAI_API_KEY"].is_null());
@@ -502,12 +503,24 @@ fn native_external_token_material_excludes_refresh_authority_and_rejects_unknown
     assert_eq!(decoded["tokens"]["access_token"], access);
     assert_eq!(decoded["tokens"]["account_id"], "account-a");
     assert_eq!(decoded["tokens"]["refresh_token"], "");
+    let timestamp: jiff::Timestamp = decoded["last_refresh"]
+        .as_str()
+        .ok_or("Missing native timestamp")?
+        .parse()?;
+    assert_eq!(timestamp.as_millisecond(), updated_at);
+    assert_eq!(
+        file.expose(),
+        native_chatgpt_credentials(&secret, "account-a", updated_at)?.expose(),
+        "The same protected source must have byte-identical bounded reads"
+    );
     assert!(!std::str::from_utf8(file.expose())?.contains("SERVER-ONLY-REFRESH"));
     assert_eq!(format!("{file:?}"), "ExternalSecret([REDACTED])");
-    assert!(native_chatgpt_credentials(&secret, "other-account").is_err());
+    assert!(native_chatgpt_credentials(&secret, "other-account", updated_at).is_err());
     let unknown = ExternalSecret::new(serde_json::to_vec(&serde_json::json!({
         "access_token":"opaque-access", "id_token":server_id, "refresh_token":"SERVER-ONLY-REFRESH",
     }))?)?;
-    assert!(native_chatgpt_credentials(&unknown, "account-a").is_err());
+    assert!(native_chatgpt_credentials(&unknown, "account-a", updated_at).is_err());
+    assert!(native_chatgpt_credentials(&secret, "account-a", i64::MAX).is_err());
+    assert!(native_chatgpt_credentials(&secret, "account-a", -1).is_err());
     Ok(())
 }

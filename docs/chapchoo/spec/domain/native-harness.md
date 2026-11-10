@@ -69,8 +69,13 @@ latest saved choice or native connectivity.
 
 The library validates API-key material or a server-converted external-token
 file. External-token ingress requires the admitted account, matching access-JWT
-identity fields and an empty refresh token; mixed API-key material and unknown
-fields are rejected. This is schema validation, not JWT signature verification
+identity fields, an empty refresh token and a valid RFC 3339 `last_refresh`.
+The native token reader requires that timestamp even for externally managed
+access tokens. The server derives it from the retained application admission
+time, so all bounded reads for one application/source are byte-identical. It is
+native application metadata, not evidence of an OAuth renewal or immediate
+adoption. Mixed API-key material and unknown fields are rejected.
+This is schema validation, not JWT signature verification
 or execution authorization. The server retains refresh authority.
 
 The finite blocking publication operation writes only `state/auth.json` beneath

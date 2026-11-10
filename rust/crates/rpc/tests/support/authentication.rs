@@ -107,11 +107,12 @@ impl chapchoo_service::NativeTokenEncoder for Provider {
         &self,
         _: &ExternalSecret,
         account: &str,
+        _: i64,
     ) -> Result<ExternalSecret, chapchoo_service::NativeTokenEncodingFailure> {
         if account != "fixture-account" {
             return Err(chapchoo_service::NativeTokenEncodingFailure);
         }
-        ExternalSecret::new(br#"{"auth_mode":"chatgptAuthTokens","OPENAI_API_KEY":null,"tokens":{"id_token":"fixture-access.jwt","access_token":"fixture-access.jwt","refresh_token":"","account_id":"fixture-account"}}"#.to_vec())
+        ExternalSecret::new(br#"{"auth_mode":"chatgptAuthTokens","OPENAI_API_KEY":null,"last_refresh":"2026-11-10T02:00:00Z","tokens":{"id_token":"fixture-access.jwt","access_token":"fixture-access.jwt","refresh_token":"","account_id":"fixture-account"}}"#.to_vec())
             .map_err(|_|chapchoo_service::NativeTokenEncodingFailure)
     }
 }

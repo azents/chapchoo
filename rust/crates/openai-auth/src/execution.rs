@@ -5,8 +5,9 @@ impl chapchoo_service::NativeTokenEncoder for OpenAiDeviceClient {
         &self,
         bundle: &ExternalSecret,
         account_id: &str,
+        applied_at: i64,
     ) -> Result<ExternalSecret, chapchoo_service::NativeTokenEncodingFailure> {
-        native_chatgpt_credentials(bundle, account_id)
+        native_chatgpt_credentials(bundle, account_id, applied_at)
             .map_err(|_| chapchoo_service::NativeTokenEncodingFailure)
     }
 }
@@ -24,6 +25,7 @@ struct NativeFile<'a> {
     #[serde(rename = "OPENAI_API_KEY")]
     api_key: Option<&'a str>,
     tokens: NativeTokens<'a>,
+    last_refresh: String,
 }
 #[derive(Serialize)]
 struct NativeTokens<'a> {
@@ -39,7 +41,11 @@ struct NativeTokens<'a> {
 pub fn native_chatgpt_credentials(
     bundle: &ExternalSecret,
     account_id: &str,
+    applied_at: i64,
 ) -> Result<ExternalSecret, ExecutionCredentialError> {
+    if applied_at < 0 {
+        return Err(ExecutionCredentialError);
+    }
     let bundle: TokenBundle =
         serde_json::from_slice(bundle.expose()).map_err(|_| ExecutionCredentialError)?;
     required(account_id, 4096).map_err(|_| ExecutionCredentialError)?;
@@ -58,6 +64,12 @@ pub fn native_chatgpt_credentials(
             refresh_token: "",
             account_id,
         },
+        // The native reader requires this field even for externally managed
+        // access tokens. Use the retained application time so every bounded read
+        // materializes the exact same bytes without granting refresh authority.
+        last_refresh: jiff::Timestamp::from_millisecond(applied_at)
+            .map_err(|_| ExecutionCredentialError)?
+            .to_string(),
     };
     ExternalSecret::new(serde_json::to_vec(&file).map_err(|_| ExecutionCredentialError)?)
         .map_err(|_| ExecutionCredentialError)

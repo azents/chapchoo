@@ -67,6 +67,7 @@ struct ExternalFile<'a> {
     api_key: Option<&'a str>,
     #[serde(borrow)]
     tokens: ExternalTokens<'a>,
+    last_refresh: &'a str,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -105,6 +106,7 @@ impl NativeCredentials {
         let value: ExternalFile<'_> =
             serde_json::from_slice(file.expose()).map_err(|_| Error::Authentication)?;
         if value.auth_mode != "chatgptAuthTokens"
+            || value.last_refresh.parse::<jiff::Timestamp>().is_err()
             || value.api_key.is_some()
             || expected_account.is_empty()
             || expected_account.len() > 4096

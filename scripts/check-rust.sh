@@ -45,7 +45,7 @@ allowed = {
     },
     "chapchoo-openai-auth": {
         "chapchoo-service", "reqwest", "oauth2", "rustls", "rustls-platform-verifier",
-        "serde", "serde_json", "base64", "zeroize", "tokio",
+        "serde", "serde_json", "base64", "zeroize", "tokio", "jiff",
     },
     "chapchoo-kubernetes": {
         "chapchoo-domain", "chapchoo-protocol", "kube", "k8s-openapi", "thiserror", "tokio", "futures-util",
@@ -58,7 +58,7 @@ allowed = {
     "chapchoo-harness": {
         "agent-client-protocol", "chapchoo-domain", "chapchoo-crypto", "tokio", "tokio-util",
         "futures-util", "nix", "reqwest", "rustls", "rustls-platform-verifier",
-        "serde", "serde_json", "sha2", "semver", "flate2", "tar", "tempfile", "thiserror", "zeroize",
+        "serde", "serde_json", "sha2", "semver", "flate2", "tar", "tempfile", "thiserror", "zeroize", "jiff",
     },
     "chapchoo": {
         "chapchoo-crypto", "chapchoo-domain", "chapchoo-persistence", "chapchoo-service",

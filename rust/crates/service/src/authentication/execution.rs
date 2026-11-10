@@ -116,6 +116,7 @@ impl ExecutionAuthenticationService {
                         .account_id
                         .as_deref()
                         .ok_or_else(|| ServiceError::domain(DomainReason::InvalidTransition))?,
+                    material.applied.admitted_at,
                 )
                 .map_err(|_| ServiceError::domain(DomainReason::InvalidTransition))?,
         };

@@ -177,7 +177,7 @@ impl ChatGptRefreshProvider for OpenAiDeviceClient {
                 ExternalSecret::new(serde_json::to_vec(&renewed).map_err(|_| Failure::Uncertain)?)
                     .map_err(|_| Failure::Uncertain)?;
             // Publish only a candidate usable by the same native encoding boundary.
-            native_chatgpt_credentials(&secret, account_id).map_err(|_| Failure::Uncertain)?;
+            native_chatgpt_credentials(&secret, account_id, now).map_err(|_| Failure::Uncertain)?;
             Ok(DeviceAuthenticationTokens {
                 secret,
                 account_id: metadata.account_id,
