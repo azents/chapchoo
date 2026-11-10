@@ -20,6 +20,7 @@ mod computer_resource;
 mod conversation;
 mod display;
 mod email;
+mod form_text;
 mod handle;
 mod password;
 mod provider_request;
@@ -43,6 +44,7 @@ pub use conversation::{
 };
 pub use display::{DisplayPatch, DisplaySettings, InvalidDisplaySettings};
 pub use email::{EmailAddress, InvalidEmail};
+pub use form_text::{FormTextRule, InvalidFormTextRule};
 pub use handle::{Handle, InvalidHandle};
 pub use password::{Password, PasswordPolicyError};
 pub use provider_request::{InvalidProviderKeyRequest, ProviderKeyRequestId};

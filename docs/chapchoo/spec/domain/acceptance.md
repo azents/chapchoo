@@ -17,6 +17,16 @@ cluster. New image/native-architecture acceptance belongs to exact-head CI and
 must be reported separately rather than inferred from source checks. Lower Rust
 lifecycle tests include partial startup, foreign listener isolation and
 resistant-descendant cleanup.
+A separate `@chapchoo/e2e test:conversation` lane requires explicit disposable
+Docker inputs and composes production web listeners with actual backend,
+Provider, Connector and the official ACP adapter. An execution-owned deterministic
+app-server executable is selected through the existing-CLI capability. Its fixed
+synthetic login/output/request never calls a model. The representative journey
+covers native text, an update to the same utterance, a distinct second utterance,
+an explicit typed inline answer and retained state on browser reentry. Missing
+native prerequisites fail. This is deterministic assembled-plumbing coverage,
+not authenticated Codex/model or general compatibility acceptance. Default
+browser scenarios and browser-free native integration remain separate owners.
 Web-core separately owns the actual logout-response HTTP/browser integration.
 Browser delayed-cookie arrival semantics are dependency behavior and are not a
 product acceptance scenario.

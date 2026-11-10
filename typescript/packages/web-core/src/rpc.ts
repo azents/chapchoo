@@ -11,6 +11,7 @@ import {
 } from "@chapchoo/rpc-client/accounts";
 import { Metadata, credentials } from "@grpc/grpc-js";
 import { AuthenticationsClient } from "@chapchoo/rpc-client/authentication";
+import { ConversationsClient } from "@chapchoo/rpc-client/conversations";
 import {
   AgentsClient,
   ComputersClient,
@@ -26,6 +27,7 @@ import type { WebConfig } from "./config.js";
 import { rpcFailure } from "./errors.js";
 
 export interface BackendClients {
+  conversations: ConversationsClient;
   agents: AgentsClient;
   computers: ComputersClient;
   providerCatalog: ProviderCatalogClient;
@@ -59,6 +61,11 @@ export function createBackend(config: WebConfig): BackendClients {
     options,
   );
   const agents = new AgentsClient(endpoint.host, security, options);
+  const conversations = new ConversationsClient(
+    endpoint.host,
+    security,
+    options,
+  );
   const authentications = new AuthenticationsClient(
     endpoint.host,
     security,
@@ -108,6 +115,7 @@ export function createBackend(config: WebConfig): BackendClients {
     options,
   );
   return {
+    conversations,
     agents,
     computers,
     providerCatalog,
@@ -123,6 +131,7 @@ export function createBackend(config: WebConfig): BackendClients {
     accountGrants,
     displayDefaults,
     close(): void {
+      conversations.close();
       agents.close();
       computers.close();
       providerCatalog.close();

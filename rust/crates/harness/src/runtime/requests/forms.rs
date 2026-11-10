@@ -5,8 +5,7 @@ pub(super) fn supported(property: &schema::ElicitationPropertySchema) -> bool {
     use schema::ElicitationPropertySchema as P;
     match property {
         P::String(p) => {
-            p.pattern.is_none()
-                && p.format.is_none()
+            text_rule(p).is_ok()
                 && p.min_length
                     .zip(p.max_length)
                     .is_none_or(|(min, max)| min <= max)
@@ -30,6 +29,19 @@ pub(super) fn supported(property: &schema::ElicitationPropertySchema) -> bool {
         _ => false,
     }
 }
+fn text_rule(
+    p: &schema::StringPropertySchema,
+) -> Result<chapchoo_domain::FormTextRule, chapchoo_domain::InvalidFormTextRule> {
+    let format = match p.format.as_ref() {
+        Some(schema::StringFormat::Email) => Some("email"),
+        Some(schema::StringFormat::Uri) => Some("uri"),
+        Some(schema::StringFormat::Date) => Some("date"),
+        Some(schema::StringFormat::DateTime) => Some("date-time"),
+        Some(schema::StringFormat::Other(value)) => Some(value.as_str()),
+        _ => None,
+    };
+    chapchoo_domain::FormTextRule::parse(p.pattern.as_deref(), format)
+}
 fn value(
     property: &schema::ElicitationPropertySchema,
     value: &schema::ElicitationContentValue,
@@ -41,7 +53,8 @@ fn value(
     match (property, value) {
         (P::String(p), V::String(value)) => {
             let length = value.chars().count();
-            p.min_length.is_none_or(|min| length >= min as usize)
+            text_rule(p).is_ok_and(|rule| rule.accepts(value))
+                && p.min_length.is_none_or(|min| length >= min as usize)
                 && p.max_length.is_none_or(|max| length <= max as usize)
                 && p.enum_values
                     .as_ref()
@@ -186,13 +199,62 @@ mod tests {
     #[test]
     fn unsupported_constraints_do_not_masquerade_as_validated_fields() -> Result<(), TestError> {
         for property in [
-            json!({"type":"string","pattern":"^[a-z]$"}),
-            json!({"type":"string","format":"email"}),
+            json!({"type":"string","pattern":"["}),
+            json!({"type":"string","format":"password"}),
             json!({"type":"array","items":{"type":"object"}}),
             json!({"type":"number","minimum":2,"maximum":1}),
         ] {
             assert!(!supported(&serde_json::from_value(property)?));
         }
+        Ok(())
+    }
+    #[test]
+    fn admitted_pattern_and_format_constraints_are_checked_again_at_the_native_boundary()
+    -> Result<(), TestError> {
+        for (property, valid, invalid) in [
+            (
+                json!({"type":"string","pattern":"^(?=.{3}$)[a-z]+$"}),
+                "abc",
+                "ABC",
+            ),
+            (
+                json!({"type":"string","format":"email"}),
+                "owner@example.com",
+                " owner@example.com ",
+            ),
+            (
+                json!({"type":"string","format":"uri"}),
+                "https://example.com",
+                "/relative",
+            ),
+            (
+                json!({"type":"string","format":"date"}),
+                "2024-02-29",
+                "2025-02-29",
+            ),
+            (
+                json!({"type":"string","format":"date-time"}),
+                "2026-11-09T10:00:00Z",
+                "2026-11-09",
+            ),
+        ] {
+            let property: schema::ElicitationPropertySchema = serde_json::from_value(property)?;
+            assert!(supported(&property));
+            assert!(value(
+                &property,
+                &schema::ElicitationContentValue::String(valid.into())
+            ));
+            assert!(!value(
+                &property,
+                &schema::ElicitationContentValue::String(invalid.into())
+            ));
+        }
+        let property = serde_json::from_value(json!({"type":"string","format":"future-format"}))?;
+        assert!(supported(&property));
+        assert!(value(
+            &property,
+            &schema::ElicitationContentValue::String(" unchanged ".into())
+        ));
         Ok(())
     }
     #[test]

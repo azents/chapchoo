@@ -33,15 +33,15 @@ impl fmt::Debug for ConversationInputReference {
 #[derive(diesel::QueryableByName)]
 pub(super) struct InputReferenceRow {
     #[diesel(sql_type=IdentitySql)]
-    id: EntityId,
+    pub(super) id: EntityId,
     #[diesel(sql_type=IdentitySql)]
-    conversation_id: EntityId,
+    pub(super) conversation_id: EntityId,
     #[diesel(sql_type=Text)]
-    request_id: String,
+    pub(super) request_id: String,
     #[diesel(sql_type=Nullable<Text>)]
-    target_snapshot: Option<String>,
+    pub(super) target_snapshot: Option<String>,
     #[diesel(sql_type=BigInt)]
-    accepted_at: i64,
+    pub(super) accepted_at: i64,
 }
 impl InputReferenceRow {
     pub(super) fn reference(self) -> Result<ConversationInputReference, StoreError> {

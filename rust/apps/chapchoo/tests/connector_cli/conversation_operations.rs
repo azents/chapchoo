@@ -58,6 +58,7 @@ pub(super) async fn exercise(
                 work_id: Some("fixture-observed-work".into()),
                 preparation: None,
                 authentication_id: None,
+                applied_supply: None,
             },
         )
         .await?;

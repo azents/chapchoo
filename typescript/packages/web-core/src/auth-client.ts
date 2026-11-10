@@ -34,6 +34,7 @@ export function invalidatesSession(
       (app === "general"
         ? path.startsWith("teams.") ||
           path.startsWith("invitations.") ||
+          path.startsWith("conversations.") ||
           path.startsWith("authentications.")
         : path.startsWith("signupGrants.") || path.startsWith("resetGrants.")))
   );

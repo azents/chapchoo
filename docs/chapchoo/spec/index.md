@@ -81,7 +81,7 @@ real Docker, browser journeys and live cluster rollout.
 - [Account operations and mail](domain/account-operations.md) — password capacity, acceptance time and single-attempt delivery.
 - [Account RPC](domain/account-rpc.md) — service groups, per-call credentials, wire admission and errors.
 - [Account schema and preparation](domain/account-storage.md) — keys, relationships, original-root binding and readiness.
-- [Private conversation storage](domain/conversation-storage.md) — saved supply, input acceptance and source-bound event pairs; internal storage only, not native execution.
+- [Private conversation storage](domain/conversation-storage.md) — saved/applied supply observations, retained input/answer acceptance and source-bound event pairs.
 - [Account and Team transactions](domain/account-transactions.md) — sessions, grants, invitations, roles and context deletion.
 - [Private Agent ownership](domain/agent-ownership.md) — Team scope, private access and cleanup after leave/delete.
 
@@ -97,7 +97,7 @@ real Docker, browser journeys and live cluster rollout.
 - [Provider process](domain/provider-process.md) — DB-free native work, acknowledgements and retained effects.
 - [Provider authentication](domain/provider-authentication.md) — bootstrap policy, SA review, protected/random credentials and internal Trust.
 - [Connector process](domain/connector-process.md) — execution-local connectivity and shutdown.
-- [Native preparation and lifetime](domain/native-harness.md) — internal strict-v2 owner, applied supply and private-scope retirement; no public text activation.
+- [Native preparation and lifetime](domain/native-harness.md) — strict-v2 owner, applied supply and private-scope retirement.
 - [Convergence and restoration](domain/reconciliation.md) — owner precedence, observation and authorized successors.
 - [Peer delivery](domain/peer-delivery.md) — generated memory/network transport, routing and retry limits.
 - [Kubernetes adapter](domain/computer-kubernetes.md) — original PVC, Pod/Secret profile and ordered retirement evidence.
@@ -115,6 +115,7 @@ real Docker, browser journeys and live cluster rollout.
 - [Display settings](domain/display-settings.md) — independent language/time-zone/region and installation defaults.
 - [Mascot motion](domain/mascot-motion.md) — replay, visibility and reduced-motion ownership.
 - [Computer web](domain/computer-web.md) — truthful projections, bounded observation and read-only inventory.
+- [Private conversation web](domain/conversation-web.md) — SSR/hydrated source-bound records, retained inputs/answers and independent current-work Stop.
 - [Authentication web](domain/authentication-web.md) — scoped AI connections, in-place Device/API-key registration and saved Agent selection.
 - [Design reference](domain/design-reference.md) — Storybook boundaries, promotion and verification.
 

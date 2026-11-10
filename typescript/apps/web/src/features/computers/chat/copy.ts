@@ -3,275 +3,359 @@ export interface ChatCopy {
   close: string;
   message: string;
   send: string;
-  attach: string;
   latest: string;
   menu: string;
   detail: string;
   readOnly: string;
   idle: string;
   working: string;
-  stopped: string;
+  requiresAction: string;
+  unavailable: string;
   stop: string;
   empty: string;
   input: string;
-  today: string;
-  user: string;
-  response: string;
-  after: string;
-  followup: string;
-  eyebrow: string;
-  planTitle: string;
-  planSummary: string;
-  planFooter: string;
-  route: readonly { time: string; title: string; note: string }[];
-  taskTitle: string;
-  taskDescription: string;
-  tasks: readonly string[];
-  tools: string;
-  search: string;
-  read: string;
-  complete: string;
-  inProgress: string;
-  query: string;
-  page: string;
-  hours: string;
   codex: string;
+  loading: string;
+  error: string;
+  retry: string;
+  older: string;
+  history: string;
+  plan: string;
+  execution: string;
+  tools: string;
+  toolInput: string;
+  toolOutput: string;
+  thought: string;
+  terminal: string;
+  notice: string;
+  permission: string;
+  question: string;
+  answer: string;
+  characters: string;
+  items: string;
+  pattern: string;
+  format: string;
+  cancel: string;
+  decline: string;
+  yes: string;
+  no: string;
+  optional: string;
+  required: string;
+  include: string;
+  omitted: string;
+  emptyValue: string;
+  selected: string;
+  invalid: string;
+  unsupported: string;
+  accepted: string;
+  preparing: string;
+  inserted: string;
+  steered: string;
+  failed: string;
+  uncertain: string;
+  sending: string;
+  delivered: string;
+  rejected: string;
+  pending: string;
+  published: string;
+  nativeStatuses: Partial<Record<string, string>>;
+  permissionScopes: Partial<Record<string, string>>;
 }
 const en: ChatCopy = {
   activity: "Activity",
   close: "Close",
   message: "Message",
   send: "Send",
-  attach: "Attach file",
   latest: "Jump to latest",
   menu: "Agents and conversations",
   detail: "Agent details",
   readOnly: "Read-only",
   idle: "Ready to chat",
-  working: "Finding cafés",
-  stopped: "Work stopped",
+  working: "Working",
+  requiresAction: "Waiting for your answer",
+  unavailable: "Work status unavailable",
   stop: "Stop work",
   empty: "What shall we work on today?",
   input: "Send a message",
-  today: "Today, 13:10",
-  user: "I'd like a relaxed walk in Seoul on Saturday afternoon. A quiet café too, without packing too much in!",
-  response:
-    "Let's take it slowly this time. I picked a route with room to stop whenever somewhere catches your eye.",
-  after: "Shall I find a few quieter cafés?",
-  followup: "Yes, find two quiet cafés that open on Saturday.",
-  eyebrow: "SATURDAY WALK",
-  planTitle: "Slowly, through Yeonnam",
-  planSummary: "About 3 hours · 2.4 km · Three relaxed stops",
-  planFooter: "Feel free to choose just the places you like.",
-  route: [
-    {
-      time: "14:00",
-      title: "Gyeongui Line Forest Park",
-      note: "An easy walk in the shade",
-    },
-    {
-      time: "15:00",
-      title: "A quiet neighborhood café",
-      note: "Coffee and a few pages by the window",
-    },
-    {
-      time: "16:00",
-      title: "The lanes of Yeonhui",
-      note: "Small shops, whenever you feel like stopping",
-    },
-  ],
-  taskTitle: "This task",
-  taskDescription: "Checking Saturday hours and the atmosphere.",
-  tasks: [
-    "Find candidate cafés",
-    "Check Saturday opening hours",
-    "Choose two to recommend",
-  ],
-  tools: "Tool calls",
-  search: "Web search",
-  read: "Read page",
-  complete: "Completed",
-  inProgress: "In progress",
-  query: "Quiet cafés in Yeonnam",
-  page: "Café information · Location and hours",
-  hours: "Saturday opening hours",
   codex: "Codex",
+  loading: "Loading conversation…",
+  error: "Conversation could not be updated",
+  retry: "Read again",
+  older: "Load older records",
+  history: "Full history",
+  plan: "Current plan",
+  execution: "Agent work",
+  tools: "Tool activity",
+  toolInput: "Tool input",
+  toolOutput: "Tool output",
+  thought: "Reasoning",
+  terminal: "Terminal",
+  notice: "Notice",
+  permission: "Permission",
+  question: "Question",
+  answer: "Send answers",
+  characters: "Characters",
+  items: "Items",
+  pattern: "Pattern",
+  format: "Format",
+  cancel: "Cancel",
+  decline: "Decline",
+  yes: "Yes",
+  no: "No",
+  optional: "Optional",
+  required: "Required",
+  include: "Provide an answer",
+  omitted: "Not answered",
+  emptyValue: "Empty answer",
+  selected: "Selected",
+  invalid: "Check this answer",
+  unsupported: "This request cannot be answered",
+  accepted: "Accepted",
+  preparing: "Preparing",
+  inserted: "Delivered to the agent",
+  steered: "Steering delivered",
+  failed: "Delivery failed",
+  uncertain: "Delivery not confirmed",
+  sending: "Sending…",
+  delivered: "Response delivered",
+  rejected: "Response rejected",
+  pending: "Stop requested",
+  published: "Cancellation sent",
+  nativeStatuses: {
+    pending: "Not started",
+    in_progress: "Working",
+    completed: "Completed",
+    failed: "Failed",
+    cancelled: "Cancelled",
+  },
+  permissionScopes: {
+    allow_once: "Allow once",
+    allow_always: "Always allow",
+    reject_once: "Reject once",
+    reject_always: "Always reject",
+  },
 };
 const ko: ChatCopy = {
   activity: "작업 상태",
   close: "닫기",
   message: "메시지",
   send: "보내기",
-  attach: "파일 첨부",
   latest: "최신 대화로 이동",
   menu: "에이전트와 대화",
   detail: "에이전트 상세",
   readOnly: "읽기 전용",
   idle: "대화 가능",
-  working: "카페 찾는 중",
-  stopped: "작업 중지",
+  working: "작업 중",
+  requiresAction: "답변을 기다리는 중",
+  unavailable: "작업 상태를 확인할 수 없음",
   stop: "작업 중지",
   empty: "오늘은 어떤 일을 함께 해볼까요?",
   input: "메시지 보내기",
-  today: "오늘, 오후 1:10",
-  user: "토요일 오후에 서울에서 좀 걷고 싶어. 조용한 카페도 들르고, 너무 빡빡하지 않게!",
-  response:
-    "좋아요. 이번엔 많이 하는 것보다, 느긋하게. 걷다가 마음에 드는 곳에서 쉬어갈 수 있게 골라봤어요.",
-  after: "카페는 조용한 곳 위주로 더 찾아볼까요?",
-  followup: "응, 토요일에 여는 조용한 카페로 두 곳만 더 찾아줘.",
-  eyebrow: "SATURDAY WALK",
-  planTitle: "연남동에서, 천천히",
-  planSummary: "약 3시간 · 걷기 2.4km · 여유롭게 세 곳",
-  planFooter: "마음에 드는 곳만 골라도 괜찮아요.",
-  route: [
-    {
-      time: "14:00",
-      title: "경의선숲길 산책",
-      note: "나무 그늘 따라, 가벼운 발걸음으로",
-    },
-    {
-      time: "15:00",
-      title: "골목 안 작은 카페",
-      note: "창가에서 커피 한 잔과 책 몇 장",
-    },
-    {
-      time: "16:00",
-      title: "연희동 골목 구경",
-      note: "작은 가게들을 구경하다가, 내키는 곳에 들러요",
-    },
-  ],
-  taskTitle: "이번 작업",
-  taskDescription: "토요일 영업 여부와 분위기를 확인하고 있어요.",
-  tasks: ["후보 카페 찾기", "토요일 영업 정보 확인", "두 곳 골라 안내하기"],
-  tools: "도구 호출",
-  search: "웹 검색",
-  read: "페이지 읽기",
-  complete: "완료",
-  inProgress: "진행 중",
-  query: "연남동 조용한 카페",
-  page: "카페 안내 · 위치와 영업시간",
-  hours: "토요일 영업 정보",
   codex: "Codex",
+  loading: "대화 불러오는 중…",
+  error: "대화를 갱신하지 못했습니다",
+  retry: "다시 불러오기",
+  older: "이전 기록 불러오기",
+  history: "전체 기록",
+  plan: "현재 계획",
+  execution: "에이전트 작업",
+  tools: "도구 작업",
+  toolInput: "도구 입력",
+  toolOutput: "도구 출력",
+  thought: "추론",
+  terminal: "터미널",
+  notice: "알림",
+  permission: "권한 요청",
+  question: "질문",
+  answer: "답변 보내기",
+  characters: "글자 수",
+  items: "항목 수",
+  pattern: "입력 패턴",
+  format: "형식",
+  cancel: "취소",
+  decline: "거절",
+  yes: "예",
+  no: "아니요",
+  optional: "선택 항목",
+  required: "필수 항목",
+  include: "답변 입력",
+  omitted: "답변하지 않음",
+  emptyValue: "빈 답변",
+  selected: "선택됨",
+  invalid: "답변을 확인해 주세요",
+  unsupported: "이 요청에는 답변할 수 없습니다",
+  accepted: "접수됨",
+  preparing: "준비 중",
+  inserted: "에이전트에 전달됨",
+  steered: "실행 중 지시로 전달됨",
+  failed: "전달 실패",
+  uncertain: "전달 여부를 확인할 수 없음",
+  sending: "보내는 중…",
+  delivered: "응답 전달됨",
+  rejected: "응답이 거부됨",
+  pending: "중지 요청됨",
+  published: "취소 요청 전달됨",
+  nativeStatuses: {
+    pending: "시작 전",
+    in_progress: "진행 중",
+    completed: "완료",
+    failed: "실패",
+    cancelled: "취소됨",
+  },
+  permissionScopes: {
+    allow_once: "한 번 허용",
+    allow_always: "항상 허용",
+    reject_once: "한 번 거절",
+    reject_always: "항상 거절",
+  },
 };
 const ja: ChatCopy = {
   activity: "作業状況",
   close: "閉じる",
   message: "メッセージ",
   send: "送信",
-  attach: "ファイルを添付",
   latest: "最新の会話へ",
   menu: "エージェントと会話",
   detail: "エージェントの詳細",
   readOnly: "閲覧のみ",
   idle: "会話できます",
-  working: "カフェを探しています",
-  stopped: "作業を停止しました",
+  working: "作業中",
+  requiresAction: "回答を待っています",
+  unavailable: "作業状況を確認できません",
   stop: "作業を停止",
   empty: "今日は何を一緒にしましょうか？",
   input: "メッセージを送る",
-  today: "今日 13:10",
-  user: "土曜の午後、ソウルをのんびり歩きたい。静かなカフェにも寄って、予定は詰めすぎずに！",
-  response:
-    "今回は、ゆっくり過ごしましょう。気になる場所で休める、余裕のあるコースを選びました。",
-  after: "静かなカフェをもう少し探しましょうか？",
-  followup: "うん、土曜に開いている静かなカフェを二つ探して。",
-  eyebrow: "SATURDAY WALK",
-  planTitle: "延南洞を、ゆっくり",
-  planSummary: "約3時間 · 徒歩2.4km · 気ままに3か所",
-  planFooter: "気に入った場所だけ選んでも大丈夫です。",
-  route: [
-    {
-      time: "14:00",
-      title: "京義線の森公園を散歩",
-      note: "木陰を気軽な足取りで",
-    },
-    {
-      time: "15:00",
-      title: "路地の小さなカフェ",
-      note: "窓辺でコーヒーと読書",
-    },
-    {
-      time: "16:00",
-      title: "延禧洞の路地巡り",
-      note: "気になる小さなお店に寄り道",
-    },
-  ],
-  taskTitle: "今回の作業",
-  taskDescription: "土曜の営業時間と雰囲気を確認しています。",
-  tasks: [
-    "カフェの候補を探す",
-    "土曜の営業時間を確認する",
-    "おすすめを二つ選ぶ",
-  ],
-  tools: "ツール呼び出し",
-  search: "ウェブ検索",
-  read: "ページを読む",
-  complete: "完了",
-  inProgress: "実行中",
-  query: "延南洞 静かなカフェ",
-  page: "カフェ情報 · 場所と営業時間",
-  hours: "土曜の営業時間",
   codex: "Codex",
+  loading: "会話を読み込み中…",
+  error: "会話を更新できませんでした",
+  retry: "再読み込み",
+  older: "以前の記録を読み込む",
+  history: "すべての記録",
+  plan: "現在の計画",
+  execution: "エージェントの作業",
+  tools: "ツールの動作",
+  toolInput: "ツールの入力",
+  toolOutput: "ツールの出力",
+  thought: "推論",
+  terminal: "ターミナル",
+  notice: "通知",
+  permission: "権限の確認",
+  question: "質問",
+  answer: "回答を送信",
+  characters: "文字数",
+  items: "項目数",
+  pattern: "入力パターン",
+  format: "形式",
+  cancel: "キャンセル",
+  decline: "辞退",
+  yes: "はい",
+  no: "いいえ",
+  optional: "任意",
+  required: "必須",
+  include: "回答する",
+  omitted: "未回答",
+  emptyValue: "空の回答",
+  selected: "選択済み",
+  invalid: "回答を確認してください",
+  unsupported: "このリクエストには回答できません",
+  accepted: "受付済み",
+  preparing: "準備中",
+  inserted: "エージェントへ配信済み",
+  steered: "実行中の指示を配信済み",
+  failed: "配信失敗",
+  uncertain: "配信を確認できません",
+  sending: "送信中…",
+  delivered: "応答を配信済み",
+  rejected: "応答が拒否されました",
+  pending: "停止を要求しました",
+  published: "キャンセルを送信しました",
+  nativeStatuses: {
+    pending: "未開始",
+    in_progress: "進行中",
+    completed: "完了",
+    failed: "失敗",
+    cancelled: "キャンセル済み",
+  },
+  permissionScopes: {
+    allow_once: "今回のみ許可",
+    allow_always: "常に許可",
+    reject_once: "今回のみ拒否",
+    reject_always: "常に拒否",
+  },
 };
 const fr: ChatCopy = {
   activity: "Activité",
   close: "Fermer",
   message: "Message",
   send: "Envoyer",
-  attach: "Joindre un fichier",
   latest: "Aller aux derniers messages",
   menu: "Agents et conversations",
   detail: "Détails de l’agent",
   readOnly: "Lecture seule",
   idle: "Disponible",
-  working: "Recherche de cafés",
-  stopped: "Travail arrêté",
+  working: "Travail en cours",
+  requiresAction: "En attente de votre réponse",
+  unavailable: "État du travail indisponible",
   stop: "Arrêter le travail",
   empty: "Sur quoi allons-nous travailler aujourd’hui ?",
   input: "Envoyer un message",
-  today: "Aujourd’hui, 13 h 10",
-  user: "J’aimerais me promener à Séoul samedi après-midi, avec un café au calme, sans trop charger le programme !",
-  response:
-    "Prenons notre temps. Voici un parcours qui laisse la liberté de s’arrêter dès qu’un endroit vous plaît.",
-  after: "Voulez-vous d’autres cafés au calme ?",
-  followup: "Oui, trouve deux cafés tranquilles ouverts le samedi.",
-  eyebrow: "BALADE DU SAMEDI",
-  planTitle: "Doucement, à Yeonnam",
-  planSummary: "Environ 3 h · 2,4 km à pied · Trois étapes tranquilles",
-  planFooter: "Choisissez simplement les endroits qui vous plaisent.",
-  route: [
-    {
-      time: "14:00",
-      title: "Parc forestier de Gyeongui",
-      note: "Une balade à l’ombre des arbres",
-    },
-    {
-      time: "15:00",
-      title: "Un petit café du quartier",
-      note: "Un café et quelques pages près de la fenêtre",
-    },
-    {
-      time: "16:00",
-      title: "Les ruelles de Yeonhui",
-      note: "De petites boutiques, au gré de vos envies",
-    },
-  ],
-  taskTitle: "Cette tâche",
-  taskDescription: "Vérification des horaires du samedi et de l’ambiance.",
-  tasks: [
-    "Trouver des cafés",
-    "Vérifier les horaires du samedi",
-    "En recommander deux",
-  ],
-  tools: "Appels d’outils",
-  search: "Recherche web",
-  read: "Lire la page",
-  complete: "Terminé",
-  inProgress: "En cours",
-  query: "Cafés tranquilles à Yeonnam",
-  page: "Informations du café · Adresse et horaires",
-  hours: "Horaires du samedi",
   codex: "Codex",
+  loading: "Chargement de la conversation…",
+  error: "Impossible d’actualiser la conversation",
+  retry: "Relire",
+  older: "Charger les anciens éléments",
+  history: "Historique complet",
+  plan: "Plan actuel",
+  execution: "Travail de l’agent",
+  tools: "Activité des outils",
+  toolInput: "Entrée de l’outil",
+  toolOutput: "Sortie de l’outil",
+  thought: "Raisonnement",
+  terminal: "Terminal",
+  notice: "Notification",
+  permission: "Autorisation",
+  question: "Question",
+  answer: "Envoyer les réponses",
+  characters: "Caractères",
+  items: "Éléments",
+  pattern: "Motif",
+  format: "Format",
+  cancel: "Annuler",
+  decline: "Décliner",
+  yes: "Oui",
+  no: "Non",
+  optional: "Facultatif",
+  required: "Obligatoire",
+  include: "Répondre",
+  omitted: "Sans réponse",
+  emptyValue: "Réponse vide",
+  selected: "Sélectionné",
+  invalid: "Vérifiez cette réponse",
+  unsupported: "Cette demande ne peut pas recevoir de réponse",
+  accepted: "Accepté",
+  preparing: "Préparation",
+  inserted: "Transmis à l’agent",
+  steered: "Instruction transmise au travail en cours",
+  failed: "Échec de transmission",
+  uncertain: "Transmission non confirmée",
+  sending: "Envoi…",
+  delivered: "Réponse transmise",
+  rejected: "Réponse rejetée",
+  pending: "Arrêt demandé",
+  published: "Annulation transmise",
+  nativeStatuses: {
+    pending: "Pas encore commencé",
+    in_progress: "En cours",
+    completed: "Terminé",
+    failed: "Échec",
+    cancelled: "Annulé",
+  },
+  permissionScopes: {
+    allow_once: "Autoriser une fois",
+    allow_always: "Toujours autoriser",
+    reject_once: "Refuser une fois",
+    reject_always: "Toujours refuser",
+  },
 };
 export function chatCopy(locale: string): ChatCopy {
   return locale.startsWith("ko")
@@ -281,4 +365,14 @@ export function chatCopy(locale: string): ChatCopy {
       : locale.startsWith("fr")
         ? fr
         : en;
+}
+export function nativeStatus(copy: ChatCopy, status: string): string {
+  return Object.hasOwn(copy.nativeStatuses, status)
+    ? (copy.nativeStatuses[status] ?? status)
+    : status;
+}
+export function permissionScope(copy: ChatCopy, scope: string): string {
+  return Object.hasOwn(copy.permissionScopes, scope)
+    ? (copy.permissionScopes[scope] ?? scope)
+    : scope;
 }

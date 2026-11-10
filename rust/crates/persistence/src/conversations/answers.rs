@@ -283,6 +283,58 @@ macro_rules! answer_operation {
     }};
 }
 impl Store {
+    /// Discover a retained answer without requiring a currently open responder.
+    pub async fn conversation_request_answer(
+        &self,
+        actor: &SecretDigest,
+        agent: &str,
+        conversation: &str,
+        snapshot: &SnapshotId,
+        occurrence: &EventOccurrenceId,
+        now: i64,
+    ) -> Result<Option<ConversationAnswerReference>, StoreError> {
+        let agent = EntityId::from_dto(EntityKind::Agent, agent)?;
+        let conversation = EntityId::from_dto(EntityKind::Conversation, conversation)?;
+        #[derive(diesel::QueryableByName)]
+        struct AnswerId {
+            #[diesel(sql_type=IdentitySql)]
+            id: EntityId,
+            #[diesel(sql_type=Text)]
+            request_id: String,
+            #[diesel(sql_type=Text)]
+            responder_token: String,
+            #[diesel(sql_type=BigInt)]
+            ordinal: i64,
+            #[diesel(sql_type=BigInt)]
+            accepted_at: i64,
+            #[diesel(sql_type=Text)]
+            delivery_state: String,
+        }
+        operation!(self, |connection, dialect| {
+            let _ = owned_agent!(connection, dialect, actor, agent, now);
+            let row = conversation!(connection, dialect, conversation);
+            if row.agent_id != agent {
+                return Err(StoreError::NotFound);
+            }
+            if row.source_snapshot.as_deref() != Some(snapshot.as_str()) {
+                return Err(StoreError::Conflict);
+            }
+            diesel::sql_query(dialect.query(
+                "SELECT a.id,a.request_id,a.responder_token,a.ordinal,a.accepted_at,a.delivery_state FROM conversation_answers a JOIN conversations c ON c.id=a.conversation_id WHERE a.conversation_id=? AND a.occurrence_id=? AND c.source_snapshot=?",
+            )).bind::<IdentitySql,_>(conversation).bind::<Text,_>(occurrence.as_str()).bind::<Text,_>(snapshot.as_str())
+                .get_result::<AnswerId>(connection).await.optional()?.map(|value| {
+                    Ok(ConversationAnswerReference {
+                        id: value.id.to_dto(EntityKind::ConversationOperation),
+                        conversation_id: conversation.to_dto(EntityKind::Conversation),
+                        request_id: value.request_id,
+                        responder_token: value.responder_token,
+                        occurrence: SourcePosition::new(value.ordinal, occurrence.clone()).map_err(|_| StoreError::Integrity)?,
+                        accepted_at: value.accepted_at,
+                        delivery: ConversationAnswerDelivery::parse(&value.delivery_state)?,
+                    })
+                }).transpose()
+        })
+    }
     pub async fn conversation_retained_answer(
         &self,
         actor: &SecretDigest,

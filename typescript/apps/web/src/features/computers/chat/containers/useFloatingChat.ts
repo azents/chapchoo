@@ -11,6 +11,7 @@ export interface FloatingChat {
   profileRef: RefObject<HTMLDivElement | null>;
   detached: boolean;
   followLatest: () => void;
+  preserveHistory: () => void;
 }
 /** Measured overlay clearance and explicit latest-follow intent, independent of status size. */
 export function useFloatingChat(
@@ -25,6 +26,9 @@ export function useFloatingChat(
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
   const following = useRef(true);
+  const historyAnchor = useRef<{ element: HTMLElement; top: number } | null>(
+    null,
+  );
   const frame = useRef(0);
   const intentFrame = useRef(0);
   const [detached, setDetached] = useState(false);
@@ -38,6 +42,7 @@ export function useFloatingChat(
     });
   }, []);
   const followLatest = useCallback((): void => {
+    historyAnchor.current = null;
     following.current = true;
     setDetached(false);
     schedulePin();
@@ -68,6 +73,13 @@ export function useFloatingChat(
       return;
     }
     const measure = (): void => {
+      const anchor = historyAnchor.current;
+      if (anchor?.element.isConnected) {
+        const top =
+          anchor.element.getBoundingClientRect().top -
+          viewport.getBoundingClientRect().top;
+        viewport.scrollTop += top - anchor.top;
+      }
       shell.style.setProperty(
         "--composer-space",
         `${overlay.getBoundingClientRect().height}px`,
@@ -96,6 +108,7 @@ export function useFloatingChat(
       setDetached(!following.current);
     };
     const onIntent = (): void => {
+      historyAnchor.current = null;
       cancelAnimationFrame(frame.current);
       following.current = false;
       cancelAnimationFrame(intentFrame.current);
@@ -104,6 +117,7 @@ export function useFloatingChat(
     viewport.addEventListener("scroll", onScroll, { passive: true });
     viewport.addEventListener("wheel", onIntent, { passive: true });
     viewport.addEventListener("touchstart", onIntent, { passive: true });
+    viewport.addEventListener("keydown", onIntent);
     return (): void => {
       observer.disconnect();
       cancelAnimationFrame(frame.current);
@@ -111,6 +125,7 @@ export function useFloatingChat(
       viewport.removeEventListener("scroll", onScroll);
       viewport.removeEventListener("wheel", onIntent);
       viewport.removeEventListener("touchstart", onIntent);
+      viewport.removeEventListener("keydown", onIntent);
     };
   }, [schedulePin, active]);
   useLayoutEffect(followLatest, [conversationKey, followLatest]);
@@ -123,5 +138,21 @@ export function useFloatingChat(
     profileRef,
     detached,
     followLatest,
+    preserveHistory: () => {
+      const viewport = viewportRef.current;
+      if (viewport) {
+        following.current = false;
+        const top = viewport.getBoundingClientRect().top;
+        const element = [
+          ...viewport.querySelectorAll<HTMLElement>("[data-kind]"),
+        ].find((record) => record.getBoundingClientRect().bottom > top);
+        if (element) {
+          historyAnchor.current = {
+            element,
+            top: element.getBoundingClientRect().top - top,
+          };
+        }
+      }
+    },
   };
 }

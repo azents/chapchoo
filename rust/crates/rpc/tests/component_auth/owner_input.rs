@@ -108,6 +108,92 @@ pub(super) async fn exercise(
     );
     assert_eq!(status.ownership, c::InputOwnership::NotObservedHere as i32);
     assert!(status.delivery.is_none());
+    let scope = c::OwnerInputScope {
+        agent_id: context.agent.id.clone(),
+        conversation_id: conversation.into(),
+        target: Some(c::InputTarget {
+            target: Some(c::input_target::Target::NotStarted(())),
+        }),
+    };
+    let listed = owner
+        .inputs(authenticated(
+            c::OwnerInputsRequest {
+                scope: Some(scope.clone()),
+                before: None,
+                limit: 25,
+            },
+            context.user_key,
+        )?)
+        .await?
+        .into_inner();
+    let listed = listed
+        .inputs
+        .iter()
+        .find(|input| {
+            input
+                .acceptance
+                .as_ref()
+                .is_some_and(|receipt| receipt.id == expected.id)
+        })
+        .ok_or("Missing retained input discovery")?;
+    assert_eq!(listed.total_bytes, i64::try_from(text.len())?);
+    let read = c::OwnerInputRead {
+        scope: Some(scope.clone()),
+        request_id: request_id.into(),
+        offset: 0,
+        length: 32768,
+    };
+    let mut complete = Vec::new();
+    loop {
+        let chunk = owner
+            .read_input(authenticated(
+                c::OwnerInputRead {
+                    offset: u32::try_from(complete.len())?,
+                    ..read.clone()
+                },
+                context.user_key,
+            )?)
+            .await?
+            .into_inner();
+        assert_eq!(chunk.total_bytes, listed.total_bytes);
+        assert!(chunk.content.len() <= 32768);
+        if chunk.content.is_empty() {
+            assert_eq!(complete.len(), text.len());
+            break;
+        }
+        complete.extend(chunk.content);
+    }
+    assert_eq!(String::from_utf8(complete)?, text);
+    assert_eq!(
+        owner
+            .read_input(authenticated(read.clone(), context.key)?)
+            .await
+            .err()
+            .ok_or("Component gained retained input read")?
+            .code(),
+        Code::Unauthenticated
+    );
+    let stale = c::OwnerInputScope {
+        target: Some(c::InputTarget {
+            target: Some(c::input_target::Target::SnapshotId("old-source".into())),
+        }),
+        ..scope
+    };
+    assert_eq!(
+        owner
+            .read_input(authenticated(
+                c::OwnerInputRead {
+                    scope: Some(stale),
+                    ..read
+                },
+                context.user_key
+            )?)
+            .await
+            .err()
+            .ok_or("Stale source read retained input")?
+            .code(),
+        Code::AlreadyExists
+    );
     assert_eq!(
         owner
             .input_result(authenticated(result, context.key)?)

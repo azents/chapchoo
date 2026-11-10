@@ -303,7 +303,7 @@ macro_rules! verify {
         assert_eq!(connection.applied_migrations()?.len(),crate::preparation::VERSIONS.len());
         let source = || if $postgres { POSTGRES_MIGRATIONS } else { SQLITE_MIGRATIONS };
         assert!(connection.transaction::<_, TestError, _>(|connection| {
-            // Empty additive conversation/authentication migrations precede the
+            // Empty additive supply/conversation/authentication migrations precede the
             // preserving identity migration whose populated downgrade must fail.
             while connection.applied_migrations()?.iter().any(|version| version.to_string().as_str() >= "00000000000009") {
                 connection.revert_last_migration(source())?;

@@ -16,6 +16,7 @@
   },
   "include": [
     "src/**/*.ts",
-    "playwright.config.ts"
+    "playwright.config.ts",
+    "playwright.docker.config.ts"
   ]
 }

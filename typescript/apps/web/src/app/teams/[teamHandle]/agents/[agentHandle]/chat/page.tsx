@@ -1,6 +1,6 @@
 import { getPublicConfig } from "@/config";
 import { ChatPage } from "@/features/computers/chat/ChatPage";
-import { loadAgents } from "@/features/computers/server/loadAgents";
+import { loadChat } from "@/features/computers/chat/server/loadChat";
 import type { ReactElement } from "react";
 
 export default async function Page({
@@ -9,12 +9,12 @@ export default async function Page({
   params: Promise<{ teamHandle: string; agentHandle: string }>;
 }): Promise<ReactElement> {
   const { teamHandle, agentHandle } = await params;
-  const initial = await loadAgents(agentHandle, "", teamHandle);
+  const initial = await loadChat(agentHandle, teamHandle);
   return (
     <ChatPage
       basePath={getPublicConfig().publicBasePath}
       key={`${teamHandle}:${agentHandle}`}
-      initial={initial}
+      {...initial}
     />
   );
 }

@@ -60,6 +60,8 @@ pub struct ConversationNativeObservation {
     pub work_id: Option<String>,
     pub preparation: Option<ConversationNativePreparation>,
     pub authentication_id: Option<String>,
+    /// A later physical start may reuse a retained capture; freezing belongs to the native owner.
+    pub applied_supply: Option<HarnessSupply>,
 }
 impl fmt::Debug for ConversationNativeObservation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -86,6 +88,10 @@ pub(super) struct NativeRow {
     preparation_payload: Option<Vec<u8>>,
     #[diesel(sql_type=Nullable<IdentitySql>)]
     authentication_id: Option<EntityId>,
+    #[diesel(sql_type=Nullable<Text>)]
+    applied_supply_kind: Option<String>,
+    #[diesel(sql_type=Nullable<Text>)]
+    applied_executable_path: Option<String>,
 }
 impl NativeRow {
     pub(super) fn observation(&self) -> Result<ConversationNativeObservation, StoreError> {
@@ -117,6 +123,17 @@ impl NativeRow {
             authentication_id: self
                 .authentication_id
                 .map(|id| id.to_dto(EntityKind::Authentication)),
+            applied_supply: match (
+                self.applied_supply_kind.as_deref(),
+                &self.applied_executable_path,
+            ) {
+                (None, None) => None,
+                (Some("MANAGED"), None) => Some(HarnessSupply::Managed),
+                (Some("EXISTING"), Some(path)) => Some(HarnessSupply::Existing(
+                    ExistingCodexPath::parse(path.clone()).map_err(|_| StoreError::Integrity)?,
+                )),
+                _ => return Err(StoreError::Integrity),
+            },
         })
     }
 }
@@ -128,7 +145,7 @@ struct Pair {
 macro_rules! native_state {
     ($connection:expr,$dialect:expr,$conversation:expr) => {{
         diesel::sql_query(
-            $dialect.query("SELECT s.*,d.preparation_payload,d.authentication_id FROM conversation_native_state s LEFT JOIN conversation_native_details d ON d.conversation_id=s.conversation_id WHERE s.conversation_id=?"),
+            $dialect.query("SELECT n.*,d.preparation_payload,d.authentication_id,s.supply_kind AS applied_supply_kind,s.executable_path AS applied_executable_path FROM conversation_native_state n LEFT JOIN conversation_native_details d ON d.conversation_id=n.conversation_id LEFT JOIN conversation_applied_supply s ON s.conversation_id=n.conversation_id WHERE n.conversation_id=?"),
         )
         .bind::<IdentitySql, _>($conversation)
         .get_result::<$crate::conversations::native_state::NativeRow>($connection)
@@ -176,6 +193,7 @@ impl Store {
             }
             let mut preparation = observation.preparation.clone();
             let mut authentication = authentication;
+            let mut supply = observation.applied_supply.clone();
             if let Some(previous) = native_state!(connection, dialect, id) {
                 let old = previous.observation()?;
                 if previous.execution_id == route._execution_id && old.target == observation.target
@@ -195,12 +213,18 @@ impl Store {
                             || previous
                                 .authentication_id
                                 .zip(authentication)
+                                .is_some_and(|(a, b)| a != b)
+                            || old
+                                .applied_supply
+                                .as_ref()
+                                .zip(supply.as_ref())
                                 .is_some_and(|(a, b)| a != b))
                     {
                         return Err(StoreError::Conflict);
                     }
                     preparation = preparation.or(old.preparation);
                     authentication = authentication.or(previous.authentication_id);
+                    supply = supply.or(old.applied_supply);
                 }
             }
             diesel::sql_query(dialect.query("INSERT INTO conversation_native_state(conversation_id,execution_id,source_snapshot,native_session_id,ordinal,occurrence_id,foreground,work_id) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(conversation_id) DO UPDATE SET execution_id=excluded.execution_id,source_snapshot=excluded.source_snapshot,native_session_id=excluded.native_session_id,ordinal=excluded.ordinal,occurrence_id=excluded.occurrence_id,foreground=excluded.foreground,work_id=excluded.work_id"))
@@ -218,6 +242,22 @@ impl Store {
                 diesel::sql_query(
                     dialect
                         .query("DELETE FROM conversation_native_details WHERE conversation_id=?"),
+                )
+                .bind::<IdentitySql, _>(id)
+                .execute(connection)
+                .await?;
+            }
+            if let Some(supply) = &supply {
+                let (kind, path) = match supply {
+                    HarnessSupply::Managed => ("MANAGED", None),
+                    HarnessSupply::Existing(path) => ("EXISTING", Some(path.as_str())),
+                };
+                diesel::sql_query(dialect.query("INSERT INTO conversation_applied_supply(conversation_id,supply_kind,executable_path) VALUES(?,?,?) ON CONFLICT(conversation_id) DO UPDATE SET supply_kind=excluded.supply_kind,executable_path=excluded.executable_path"))
+                    .bind::<IdentitySql,_>(id).bind::<Text,_>(kind).bind::<Nullable<Text>,_>(path).execute(connection).await?;
+            } else {
+                diesel::sql_query(
+                    dialect
+                        .query("DELETE FROM conversation_applied_supply WHERE conversation_id=?"),
                 )
                 .bind::<IdentitySql, _>(id)
                 .execute(connection)

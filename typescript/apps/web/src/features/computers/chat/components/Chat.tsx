@@ -15,7 +15,9 @@ import {
 } from "@mantine/core";
 import { ComputerControls } from "../../components/ComputerControls";
 import { profileStyle } from "../../profilePalette";
+import { nativeStatus } from "../copy";
 import classes from "./Chat.module.css";
+import { ConversationBody, ConversationContent } from "./ConversationBody";
 import type { ChatProps } from "../types";
 import type { ReactElement } from "react";
 
@@ -76,7 +78,9 @@ export function Chat(props: ChatProps): ReactElement {
   }
   const detailHref = agentPath(p.basePath, p.data.teamHandle, agent.handle);
   const start = agent.computer.actions.find((item) => item.action === "start");
-  const working = props.writable && props.activity === "working";
+  const working = props.stoppable && props.activity === "working";
+  const records = props.conversation.region.records;
+  const currentPlan = props.conversation.region.latestPlan;
   return (
     <div className={classes.frame}>
       <aside className={classes.sidebar}>
@@ -173,7 +177,11 @@ export function Chat(props: ChatProps): ReactElement {
               }}
             >
               <div className={classes.conversation} ref={f.contentRef}>
-                {!props.showSample && props.messages.length === 0 ? (
+                {props.conversation.read === "ready" &&
+                props.conversation.region.header.state !== "loading" &&
+                records.length === 0 &&
+                props.conversation.inputs.length === 0 &&
+                !props.conversation.region.inputs?.length ? (
                   <div className={classes.empty}>
                     <CharacterArtwork
                       basePath={p.basePath}
@@ -184,69 +192,12 @@ export function Chat(props: ChatProps): ReactElement {
                     <p>{c.empty}</p>
                   </div>
                 ) : null}
-                {props.showSample ? (
-                  <>
-                    <div className={classes.date}>{c.today}</div>
-                    <div className={classes.message} data-sender="user">
-                      <div className={classes.userBubble}>{c.user}</div>
-                    </div>
-                    <article className={classes.message} data-sender="agent">
-                      <div className={classes.speaker}>
-                        <CharacterArtwork
-                          basePath={p.basePath}
-                          assetKey={agent.profileImage.assetKey}
-                          className={classes.speakerPortrait}
-                        />
-                        <strong>{agent.name}</strong>
-                        <time>13:11</time>
-                      </div>
-                      <div className={classes.response}>
-                        <p>{c.response}</p>
-                        <section className={classes.plan}>
-                          <div className={classes.planTitle}>
-                            <div>
-                              <span className={classes.eyebrow}>
-                                {c.eyebrow}
-                              </span>
-                              <h2>{c.planTitle}</h2>
-                              <p>{c.planSummary}</p>
-                            </div>
-                            <span className={classes.sun}>
-                              <Icon name="sun" />
-                            </span>
-                          </div>
-                          <div className={classes.route}>
-                            {c.route.map((stop) => (
-                              <div className={classes.routeRow} key={stop.time}>
-                                <time>{stop.time}</time>
-                                <div>
-                                  <strong>{stop.title}</strong>
-                                  <p>{stop.note}</p>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                          <div className={classes.planFooter}>
-                            {c.planFooter}
-                          </div>
-                        </section>
-                        <p className={classes.after}>{c.after}</p>
-                      </div>
-                    </article>
-                    <div className={classes.message} data-sender="user">
-                      <div className={classes.userBubble}>{c.followup}</div>
-                    </div>
-                  </>
-                ) : null}
-                {props.messages.map((message) => (
-                  <div
-                    className={classes.message}
-                    data-sender="user"
-                    key={message.id}
-                  >
-                    <div className={classes.userBubble}>{message.text}</div>
-                  </div>
-                ))}
+                <ConversationBody
+                  controls={props.conversation}
+                  copy={c}
+                  writable={props.writable}
+                  agentName={agent.name}
+                />
               </div>
             </ScrollArea>
             <footer className={classes.composerArea} ref={f.overlayRef}>
@@ -257,7 +208,7 @@ export function Chat(props: ChatProps): ReactElement {
                   variant="default"
                   radius="xl"
                   aria-label={c.latest}
-                  onClick={f.followLatest}
+                  onClick={props.conversation.onLatest}
                 >
                   <Box style={{ transform: "rotate(180deg)", display: "flex" }}>
                     <Icon name="arrow" />
@@ -292,14 +243,6 @@ export function Chat(props: ChatProps): ReactElement {
                   }}
                 />
                 <div className={classes.composerActions}>
-                  <ActionIcon
-                    variant="subtle"
-                    size="2.25rem"
-                    aria-label={c.attach}
-                    disabled
-                  >
-                    <Icon name="plus" />
-                  </ActionIcon>
                   <div className={classes.composerRight}>
                     <span>{c.codex}</span>
                     <ActionIcon
@@ -307,7 +250,7 @@ export function Chat(props: ChatProps): ReactElement {
                       className={classes.send}
                       size="2.25rem"
                       aria-label={c.send}
-                      disabled={!props.writable || !props.input.trim()}
+                      disabled={!props.sendable}
                       onClick={props.onSend}
                     >
                       <Icon name="arrow" />
@@ -366,73 +309,82 @@ export function Chat(props: ChatProps): ReactElement {
               agent={agent}
               onDetailsExit={props.focus.nestedClosed}
             />
+            {props.supplyControl}
             <div className={classes.summary}>
               <span>
                 {agent.name} · {c.codex}
               </span>
-              <h2>
-                {working
-                  ? c.working
-                  : props.activity === "stopped"
-                    ? c.stopped
-                    : c.activity}
-              </h2>
-              <p>{working ? c.taskDescription : props.status}</p>
+              <h2>{c.execution}</h2>
+              <p>{props.status}</p>
+              {props.conversation.stop !== "idle" ? (
+                <p role="status">{c[props.conversation.stop]}</p>
+              ) : null}
+              {props.conversation.region.header.workId ? (
+                <Button
+                  variant="default"
+                  onClick={props.onStop}
+                  disabled={
+                    !props.stoppable || props.conversation.stop !== "idle"
+                  }
+                  leftSection={<Icon name="stop" />}
+                >
+                  {c.stop}
+                </Button>
+              ) : null}
             </div>
             <div className={classes.taskHeading}>
-              <h3>{c.taskTitle}</h3>
-              <span>{working ? "1 / 3" : "—"}</span>
+              {currentPlan ? <h3>{c.plan}</h3> : null}
             </div>
-            <ol className={classes.tasks}>
-              {c.tasks.map((task, index) => (
-                <li
-                  key={task}
-                  data-current={(working && index === 1) || void 0}
-                >
-                  <Icon name={index === 0 ? "check" : "activity"} />
-                  <span>{task}</span>
-                </li>
-              ))}
-            </ol>
-            <details className={classes.tools} open>
-              <summary>
-                {c.tools}
-                <span>3</span>
-              </summary>
-              {[
-                { title: c.search, text: c.query },
-                { title: c.read, text: c.page },
-                { title: c.read, text: c.hours },
-              ].map((tool, index) => (
-                <div className={classes.tool} key={tool.text}>
-                  <div>
-                    <Icon
-                      name={index === 2 && working ? "activity" : "check"}
-                    />
-                    <strong>{tool.title}</strong>
-                    <time>13:{index === 2 ? "13" : "12"}</time>
-                  </div>
-                  <p>{tool.text}</p>
-                  <small>
-                    {index === 2
-                      ? working
-                        ? c.inProgress
-                        : c.stopped
-                      : c.complete}
-                  </small>
-                </div>
-              ))}
-            </details>
-            {working ? (
-              <Button
-                fullWidth
-                variant="default"
-                onClick={props.onStop}
-                leftSection={<Icon name="stop" />}
-              >
-                {c.stop}
-              </Button>
+            {currentPlan?.plan?.type === "items" ? (
+              <ol className={classes.tasks}>
+                {currentPlan.plan.items.map((item, index) => (
+                  <li key={index}>
+                    <span>
+                      {item.content} · {nativeStatus(c, item.status)}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            ) : currentPlan?.plan?.type === "text" ? (
+              <ConversationContent
+                parts={[{ type: "text", text: currentPlan.plan.text }]}
+              />
+            ) : currentPlan ? (
+              <ConversationContent parts={currentPlan.content} />
             ) : null}
+            <details className={classes.tools} open>
+              <summary>{c.history}</summary>
+              {records
+                .filter(
+                  (record) =>
+                    record.kind !== "user" &&
+                    record.kind !== "assistant" &&
+                    record.kind !== "state",
+                )
+                .reverse()
+                .map((record) => (
+                  <Button
+                    key={record.key}
+                    fullWidth
+                    variant="subtle"
+                    onClick={() => props.conversation.onHistory(record)}
+                  >
+                    {record.title ??
+                      (record.kind === "tool"
+                        ? c.tools
+                        : record.kind === "thought"
+                          ? c.thought
+                          : record.kind === "request"
+                            ? (record.question?.title ?? c.question)
+                            : record.kind === "plan"
+                              ? c.plan
+                              : c.notice)}
+                    {record.status
+                      ? ` · ${nativeStatus(c, record.status)}`
+                      : ""}
+                  </Button>
+                ))}
+            </details>
           </div>
         </Drawer>
         <ConfirmationDialog

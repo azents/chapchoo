@@ -9,7 +9,8 @@ and captured raw/normalized event pairs. These are internal completed Store
 operations and authenticated component transfer. The client service exposes
 current observations, saved supply, text upload/acceptance/delivery observations,
 typed answer upload/results, live responder references, normalized record reads
-and exact-work Stop. The real Chat UI remains unactivated.
+and exact-work Stop. The [Chat reader](conversation-web.md) consumes these owner
+contracts without exposing raw captured RPC envelopes.
 No model execution is established
 by these storage or routing contracts. [Backend authentication](backend-authentication.md)
 still owns saved credential records separately.
@@ -28,6 +29,17 @@ file usability or publisher verification. Saving compares the expected accepted
 selection Request ID and retains an exact request result. Repeating an old accepted
 save returns its receipt without restoring an old selection. A save does not
 change the Computer request or launch/stop/apply anything to a running process.
+
+The current native observation separately retains an optional actual-start supply
+choice. Its additive child table belongs to that execution/source-qualified
+native state and is removed with source replacement. Migration 15 preserves all
+existing identities and leaves old observations unknown instead of copying the
+saved choice. Downgrade refuses nonempty applied-supply state. The native owner
+freezes the choice for one live process; a later ordered state can describe a new
+physical start even when its captured transcript is retained. Older observations
+cannot overwrite newer ones, and an equal captured state cannot change a known
+applied choice. An unknown existing observation may be enriched with its first
+explicit applied fact without changing its work/source meaning.
 
 ## Conversation identity and product input
 
@@ -85,6 +97,10 @@ partial text or grant native replay. Clients query the small acceptance referenc
 after uncertainty; complete receipt recovery still cannot dispatch twice.
 
 Input-result reads select acceptance metadata without loading the submitted body.
+Source-bound input discovery uses accepted-time/request keyset pages, including
+the exact not-started boundary. Separate bounded body reads retain complete
+original bytes and revalidate the same private source on every continuation.
+First native binding preserves the initial input's original not-started target.
 Local processing ownership and durable native delivery observations are separate:
 absence of either is missing evidence, not proof of non-delivery.
 The same result includes the frozen requested supply and separate setup
@@ -140,6 +156,10 @@ Later appends preserve that finite body view; replacement or source changes
 conflict rather than mixing two bodies. Neither the
 raw captured RPC envelope nor a durable browser feed is exposed by these APIs.
 
+Latest-plan discovery is a separate bounded metadata read under the same private
+source, so the plan need not remain within the recent record page. It confers no
+native authority and uses the ordinary field continuation for complete content.
+
 Setup has separate durable possible-forwarding and outcome facts, available
 before a captured source becomes ready. One setup grant binds the current route/
 execution and atomically copies the saved requested supply choice. Later saved
@@ -176,8 +196,10 @@ actual responder and schema again before sending.
 The internal conversation service first reads the original normalized question
 under current private/source authority. It decodes the typed permission or
 supported form, checks the bound native session and validates the original
-offered option, required presence, property types, ranges, string lengths and
-choices. Unsupported optional values cannot pass as validated fields. Pure
+offered option, required presence, property types, ranges, string lengths,
+choices and the shared offline string-pattern/format rules. Pattern compilation
+and backtracking are bounded. Email, URI, date and date-time formats are checked;
+unknown formats remain text and password-format collection is rejected. Unsupported optional values cannot pass as validated fields. Pure
 schema validation happens outside DB locks; final Store acceptance rechecks the
 same immutable captured occurrence and live responder. The original question
 read is internal service data, not a raw browser/debug endpoint.
@@ -207,6 +229,10 @@ original typed values independently of delivery status. Transcoding uses one
 shared reader permit and the bounded original answer; status and live-reference
 reads do not perform that full-body materialization. Source replacement or an
 unknown operation rejects a continuation rather than reading a different answer.
+
+Read-only request-answer discovery binds the exact source and captured request
+occurrence, including after the live responder closes. It returns the retained
+acceptance reference without loading the body or reopening response authority.
 
 Live-request lookup rechecks the exact current source and returns at most 32 open
 responders belonging to the current execution. Its occurrence links to the

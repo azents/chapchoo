@@ -195,6 +195,14 @@ pub(super) async fn exercise(
         assert_eq!(owner.answer_result(authenticated(status, context.key)?).await.err().ok_or("Component gained owner answer read")?.code(), Code::Unauthenticated);
         component.report_request(authenticated(c::LiveRequestReport { open: false, ..live }, context.key)?).await?;
         assert!(owner.live_requests(authenticated(live_read, context.user_key)?).await?.into_inner().requests.is_empty());
+        let lookup = c::OwnerRequestAnswer {
+            source: Some(c::RecordSource { agent_id: context.agent.id.clone(), conversation_id: conversation.into(), snapshot_id: "rpc-source".into() }),
+            occurrence_id: position.occurrence_id.clone(),
+        };
+        let discovered = owner.request_answer(authenticated(lookup.clone(), context.user_key)?).await?.into_inner().acceptance.ok_or("Closed question lost its retained answer")?;
+        assert_eq!(discovered.request_id, "typed-answer");
+        assert_eq!(discovered.delivery, c::AnswerDelivery::ResponderAccepted as i32);
+        assert_eq!(owner.request_answer(authenticated(lookup, context.key)?).await.err().ok_or("Component gained historical answer discovery")?.code(), Code::Unauthenticated);
         let retained = context.store.conversation_answer(context.owner, &context.agent.id, conversation, "typed-answer",
             AcceptanceTime::System.now()?).await?.ok_or("Missing original answer")?;
         assert_eq!(retained.answer, answer);

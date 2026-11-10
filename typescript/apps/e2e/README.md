@@ -28,8 +28,40 @@ that native compiler requirement; do not relax shared-directory permissions.
 
 Docker-native lifecycle/storage checks belong to the separate browser-free
 [`@chapchoo/integration`](../integration/README.md) app and required CI job.
-This browser suite needs no Docker daemon and does not duplicate its UI flow
-for every native substrate.
+The default browser suite needs no Docker daemon and does not duplicate its UI
+flow for every native substrate.
+
+### Native text-conversation acceptance
+
+`pnpm --filter @chapchoo/e2e test:conversation` runs one separate core browser
+journey with the actual Docker Provider, Connector, backend and official ACP
+adapter. It selects the deterministic app-server executable as an explicit
+existing Codex installation. Synthetic login, two native utterances, an update to
+the same utterance, a typed inline answer and retained state on reentry cross the
+production boundaries. This proves assembled plumbing, not real Codex/model
+behavior. Missing Docker/native prerequisites fail rather than skip.
+
+Build an architecture-matched binary directory containing `chapchoo`, then build
+an isolated image from the repository root:
+
+```sh
+docker build --target runtime-base -f images/chapchoo/Dockerfile \
+  -t chapchoo-runtime-base:acceptance .
+docker buildx build --load \
+  --build-context "binary-artifacts=/absolute/path/to/binary-directory" \
+  -f testenv/chapchoo/fixtures/Dockerfile -t chapchoo-conversation:acceptance .
+```
+
+Select only a disposable, authorized daemon using the same
+`CHAPCHOO_INTEGRATION_DOCKER_{AUTHORIZED,SOCKET,IMAGE,CONTROL_HOST}` inputs as the
+browser-free integration app (`AUTHORIZED=disposable`; `CONTROL_HOST` is optional
+when its bridge gateway reaches the fixture host). Set
+`CHAPCHOO_INTEGRATION_BINARY` to the same absolute executable. Clear ambient
+Docker transport variables; Unix socket selection remains explicit. The native
+security profile is unchanged. No real key or model is required. Where the host
+temporary root fails native compiler-cache validation, set
+`SWC_NATIVE_BINDING_CACHE` to a private user-owned cache with trusted ancestors;
+never disable validation or change shared-directory permissions.
 
 `CHAPCHOO_E2E_PACKAGE_ROOT` selects an absolute extracted source-free bundle.
 Package mode never falls back to source builds or host Node. The test substrate

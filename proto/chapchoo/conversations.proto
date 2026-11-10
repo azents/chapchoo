@@ -8,11 +8,15 @@ service Conversations {
   rpc SaveSupply(SaveSupplyRequest) returns (SavedSupply);
   rpc SubmitInput(OwnerInputPiece) returns (OwnerInputProgress);
   rpc InputResult(OwnerInputResultRequest) returns (OwnerInputStatus);
+  rpc Inputs(OwnerInputsRequest) returns (RetainedInputs);
+  rpc ReadInput(OwnerInputRead) returns (FieldChunk);
   rpc SubmitAnswer(OwnerAnswerPiece) returns (OwnerAnswerProgress);
   rpc AnswerResult(OwnerAnswerResultRequest) returns (OwnerAnswerStatus);
+  rpc RequestAnswer(OwnerRequestAnswer) returns (OwnerAnswerStatus);
   rpc ReadAnswer(OwnerAnswerRead) returns (FieldChunk);
   rpc LiveRequests(OwnerLiveRequests) returns (LiveRequestList);
   rpc Records(OwnerRecordsRequest) returns (RecordRegion);
+  rpc LatestPlan(RecordSource) returns (RecordRegion);
   rpc Fields(OwnerFieldsRequest) returns (RecordFields);
   rpc ReadField(OwnerFieldRead) returns (FieldChunk);
   rpc Stop(OwnerStopRequest) returns (StopReceipt);
@@ -25,6 +29,7 @@ message OwnerConversation {
 }
 message ObservedNative {
   NativeTarget target = 1; SourcePosition position = 2; Foreground foreground = 3; optional string work_id = 4;
+  HarnessSupply applied_supply = 5;
   NativePreparation preparation = 6; optional string authentication_id = 7;
 }
 message NativePreparation {
@@ -54,6 +59,13 @@ message OwnerInputProgress {
 message OwnerInputResultRequest {
   string agent_id = 1; string conversation_id = 2; string request_id = 3;
 }
+// Read-only discovery binds the exact current source, including not-started input.
+message OwnerInputScope { string agent_id = 1; string conversation_id = 2; InputTarget target = 3; }
+message InputAnchor { int64 accepted_at = 1; string request_id = 2; }
+message OwnerInputsRequest { OwnerInputScope scope = 1; InputAnchor before = 2; uint32 limit = 3; }
+message RetainedInput { InputAcceptance acceptance = 1; int64 total_bytes = 2; }
+message RetainedInputs { repeated RetainedInput inputs = 1; }
+message OwnerInputRead { OwnerInputScope scope = 1; string request_id = 2; uint32 offset = 3; uint32 length = 4; }
 enum InputOwnership {
   INPUT_OWNERSHIP_UNSPECIFIED = 0; INPUT_OWNERSHIP_PROCESSING_HERE = 1;
   INPUT_OWNERSHIP_NOT_OBSERVED_HERE = 2;
@@ -104,6 +116,8 @@ message AnswerAcceptance {
 message OwnerAnswerProgress { oneof outcome { PieceAccepted uploading = 1; AnswerAcceptance accepted = 2; } }
 message OwnerAnswerResultRequest { string agent_id = 1; string conversation_id = 2; string request_id = 3; }
 message OwnerAnswerStatus { AnswerAcceptance acceptance = 1; }
+// Historical discovery is source-bound and does not confer live responder authority.
+message OwnerRequestAnswer { RecordSource source = 1; string occurrence_id = 2; }
 // Complete Protobuf TypedAnswer bytes from the immutable retained operation.
 // Reads bind source and operation, including after the live responder closes.
 message OwnerAnswerRead {
@@ -272,6 +286,8 @@ message NativeStateReport {
   CaptureSource source = 1; string conversation_id = 2; NativeTarget target = 3;
   SourcePosition position = 4; Foreground foreground = 5; optional string work_id = 6;
   NativePreparation preparation = 8; optional string authentication_id = 9;
+  // Observed actual-start choice, never the latest saved owner selection.
+  HarnessSupply applied_supply = 7;
 }
 enum RequestKind { REQUEST_KIND_UNSPECIFIED = 0; REQUEST_KIND_PERMISSION = 1; REQUEST_KIND_FORM = 2; }
 message LiveRequestReport {

@@ -87,7 +87,13 @@ export class Assembly {
   static async createDockerIntegration(): Promise<Assembly> {
     return Assembly.createOwned(true);
   }
-  private static async createOwned(realDocker: boolean): Promise<Assembly> {
+  static async createDockerBrowser(): Promise<Assembly> {
+    return Assembly.createOwned(true, true);
+  }
+  private static async createOwned(
+    realDocker: boolean,
+    browser = !realDocker,
+  ): Promise<Assembly> {
     const docker = realDocker ? dockerFixtureConfig() : null;
     const packageRoot = realDocker ? null : installedPackageRoot();
     const nativeBinary = realDocker ? integrationBinary() : null;
@@ -112,7 +118,7 @@ export class Assembly {
         docker,
         nativeBinary,
       );
-      await assembly.start();
+      await assembly.start(browser);
       return assembly;
     } catch (error) {
       if (assembly) {
@@ -148,7 +154,7 @@ export class Assembly {
       CHAPCHOO_BACKEND_URL: `http://127.0.0.1:${port}`,
     };
   }
-  private async start(): Promise<void> {
+  private async start(browser: boolean): Promise<void> {
     if (
       !/^[A-Za-z0-9/_-]+$/.test(this.directory) ||
       this.directory.length > 70
@@ -309,7 +315,7 @@ export class Assembly {
       60_000,
     );
     this.productReady = true;
-    if (this.packageRoot || this.docker) {
+    if (this.packageRoot || !browser) {
       return;
     }
     for (const [name, url, backendPort] of [

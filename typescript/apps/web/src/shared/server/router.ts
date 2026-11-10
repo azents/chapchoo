@@ -15,6 +15,7 @@ import { z } from "zod";
 import { authRouter } from "@/shared/server/auth";
 import { authenticationsRouter } from "@/shared/server/authentications";
 import { computersRouter } from "@/shared/server/computers";
+import { conversationsRouter } from "@/shared/server/conversations";
 import { displayInput } from "@/shared/server/displayInput";
 import { procedure, router } from "@/shared/server/trpc";
 
@@ -28,6 +29,7 @@ const name = z.string().min(1).max(120);
 const handle = z.string().min(3).max(16).refine(validHandle);
 
 export const appRouter = router({
+  conversations: conversationsRouter,
   computers: computersRouter,
   authentications: authenticationsRouter,
   auth: authRouter,

@@ -34,8 +34,9 @@ pub use chapchoo_persistence::{
     ConversationAnswerResult, ConversationAnswerValue, ConversationDeliveryTarget,
     ConversationFieldChunkRead, ConversationFieldMetadata, ConversationFieldRead,
     ConversationForeground, ConversationFormAnswer, ConversationForwardingAdmission,
-    ConversationInputDelivery, ConversationInputOutcome, ConversationInputPreparation,
-    ConversationNativeObservation, ConversationNativePreparation, ConversationOperationForwarding,
+    ConversationInputAnchor, ConversationInputDelivery, ConversationInputOutcome,
+    ConversationInputPreparation, ConversationInputScope, ConversationNativeObservation,
+    ConversationNativePreparation, ConversationOperationForwarding,
     ConversationPreparationAdmission, ConversationPreparationFailure,
     ConversationPreparationFreshness, ConversationPreparationOutcome, ConversationPreparationState,
     ConversationRecordAnchor, ConversationRecordField, ConversationRecordKind,
@@ -51,9 +52,9 @@ pub use chapchoo_persistence::{
     ProviderCapabilities, ProviderChoice, ProviderCredentialResult, ProviderIdentity,
     ProviderInventorySummary, ProviderSource, ReauthenticateTarget, RegisterApiKey,
     RenameAuthentication, ReplaceApiKey, ResolvedRoute, ResourceCursor, ResourceEvidence,
-    ResourceReport, SaveHarnessSupply, SelectAgentAuthentication, SessionPolicy, SessionResult,
-    SourceBinding, StartDeviceAuthentication, TeamPatch, TeamSummary, UpdateAgentProfile,
-    UserSummary,
+    ResourceReport, RetainedConversationInput, SaveHarnessSupply, SelectAgentAuthentication,
+    SessionPolicy, SessionResult, SourceBinding, StartDeviceAuthentication, TeamPatch, TeamSummary,
+    UpdateAgentProfile, UserSummary,
 };
 pub use computers::{ComputerPolicy, ComputersService, PreparedComponentConnection};
 pub use conversation::{

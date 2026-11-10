@@ -57,7 +57,11 @@ the same record does not change that record identity.
 Explicit existing CLI mode checks its absolute local path and compatible actual
 version. It uses the managed adapter/runtime but never overwrites or silently
 replaces the owner's CLI. Applied supply stays fixed through work completion and
-server-link loss.
+server-link loss. The live owner also retains the exact requested managed/existing
+choice from actual start. Returning an already-live session does not replace that
+choice with a newly saved selection. Source-qualified observation reports it
+separately from current foreground work; storage/UI do not infer it from the
+latest saved choice or native connectivity.
 
 ## Protocol and physical ownership
 

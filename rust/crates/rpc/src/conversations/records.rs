@@ -71,6 +71,43 @@ fn source(value: Option<wire::RecordSource>) -> Result<(wire::RecordSource, Snap
         .map_err(|_| Status::invalid_argument("Record snapshot is invalid"))?;
     Ok((value, snapshot))
 }
+pub(super) async fn latest_plan(
+    service: &ConversationServices,
+    request: Request<wire::RecordSource>,
+) -> Result<Response<wire::RecordRegion>, Status> {
+    service.admit()?;
+    let actor = actor(&request)?;
+    let (source, snapshot) = source(Some(request.into_inner()))?;
+    let records = service
+        .conversation
+        .latest_plan(
+            &actor,
+            &ConversationRegionRead {
+                agent_id: &source.agent_id,
+                conversation_id: &source.conversation_id,
+                snapshot: &snapshot,
+                before: None,
+                limit: 1,
+            },
+            now()?,
+        )
+        .await
+        .map_err(status)?;
+    Ok(Response::new(wire::RecordRegion {
+        records: records
+            .into_iter()
+            .map(|record| wire::RecordMetadata {
+                kind: wire::RecordKind::Plan as i32,
+                native_id: record.native_id,
+                anchor: Some(wire::RecordAnchor {
+                    ordinal: record.anchor.ordinal,
+                    index: record.anchor.index,
+                }),
+                updated_ordinal: record.updated_ordinal,
+            })
+            .collect(),
+    }))
+}
 pub(super) async fn region(
     service: &ConversationServices,
     request: Request<wire::OwnerRecordsRequest>,

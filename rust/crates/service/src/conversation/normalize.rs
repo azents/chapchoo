@@ -323,8 +323,7 @@ pub(super) fn supported(property: &schema::ElicitationPropertySchema) -> bool {
     use schema::ElicitationPropertySchema as P;
     match property {
         P::String(p) => {
-            p.pattern.is_none()
-                && p.format.is_none()
+            text_rule(p).is_ok()
                 && p.min_length
                     .zip(p.max_length)
                     .is_none_or(|(min, max)| min <= max)
@@ -347,6 +346,19 @@ pub(super) fn supported(property: &schema::ElicitationPropertySchema) -> bool {
         }
         _ => false,
     }
+}
+pub(super) fn text_rule(
+    p: &schema::StringPropertySchema,
+) -> Result<chapchoo_domain::FormTextRule, chapchoo_domain::InvalidFormTextRule> {
+    let format = match p.format.as_ref() {
+        Some(schema::StringFormat::Email) => Some("email"),
+        Some(schema::StringFormat::Uri) => Some("uri"),
+        Some(schema::StringFormat::Date) => Some("date"),
+        Some(schema::StringFormat::DateTime) => Some("date-time"),
+        Some(schema::StringFormat::Other(value)) => Some(value.as_str()),
+        _ => None,
+    };
+    chapchoo_domain::FormTextRule::parse(p.pattern.as_deref(), format)
 }
 #[cfg(test)]
 mod tests;

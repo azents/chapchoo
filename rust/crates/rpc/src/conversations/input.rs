@@ -10,7 +10,7 @@ pub(super) struct Identity {
     conversation: Option<String>,
     target: ConversationTarget,
 }
-fn target(value: Option<wire::InputTarget>) -> Result<ConversationTarget, Status> {
+pub(super) fn target(value: Option<wire::InputTarget>) -> Result<ConversationTarget, Status> {
     match value.and_then(|target| target.target) {
         Some(wire::input_target::Target::NotStarted(())) => Ok(ConversationTarget::NotStarted),
         Some(wire::input_target::Target::SnapshotId(value)) => Ok(ConversationTarget::Snapshot(
@@ -189,5 +189,87 @@ pub(super) async fn result(
         } as i32,
         delivery,
         preparation,
+    }))
+}
+
+pub(super) async fn list(
+    service: &ConversationServices,
+    request: Request<wire::OwnerInputsRequest>,
+) -> Result<Response<wire::RetainedInputs>, Status> {
+    service.admit()?;
+    let actor = actor(&request)?;
+    let value = request.into_inner();
+    let scope = value
+        .scope
+        .ok_or_else(|| Status::invalid_argument("Input scope is required"))?;
+    let target = target(scope.target)?;
+    let before = value
+        .before
+        .map(|value| chapchoo_service::ConversationInputAnchor {
+            accepted_at: value.accepted_at,
+            request_id: value.request_id,
+        });
+    let values = service
+        .conversation
+        .inputs(
+            &actor,
+            &chapchoo_service::ConversationInputScope {
+                agent_id: &scope.agent_id,
+                conversation_id: &scope.conversation_id,
+                target: &target,
+            },
+            before.as_ref(),
+            i64::from(value.limit),
+            now()?,
+        )
+        .await
+        .map_err(status)?;
+    Ok(Response::new(wire::RetainedInputs {
+        inputs: values
+            .into_iter()
+            .map(|value| wire::RetainedInput {
+                acceptance: Some(acceptance(ConversationInputAcceptance {
+                    id: value.reference.id,
+                    conversation_id: value.reference.conversation_id,
+                    request_id: value.reference.request_id,
+                    target: value.reference.target,
+                    accepted_at: value.reference.accepted_at,
+                })),
+                total_bytes: value.bytes,
+            })
+            .collect(),
+    }))
+}
+pub(super) async fn read(
+    service: &ConversationServices,
+    request: Request<wire::OwnerInputRead>,
+) -> Result<Response<wire::FieldChunk>, Status> {
+    service.admit()?;
+    let actor = actor(&request)?;
+    let value = request.into_inner();
+    let scope = value
+        .scope
+        .ok_or_else(|| Status::invalid_argument("Input scope is required"))?;
+    let target = target(scope.target)?;
+    let chunk = service
+        .conversation
+        .input_text(
+            &actor,
+            &chapchoo_service::ConversationInputScope {
+                agent_id: &scope.agent_id,
+                conversation_id: &scope.conversation_id,
+                target: &target,
+            },
+            &value.request_id,
+            value.offset,
+            value.length,
+            now()?,
+        )
+        .await
+        .map_err(status)?;
+    Ok(Response::new(wire::FieldChunk {
+        content: chunk.bytes,
+        offset: chunk.offset,
+        total_bytes: chunk.total_bytes,
     }))
 }

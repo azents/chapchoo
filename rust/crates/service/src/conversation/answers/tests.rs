@@ -1,6 +1,52 @@
 use super::*;
 use chapchoo_domain::{EventOccurrenceId, NativeConversationId};
 use serde_json::json;
+#[test]
+fn native_string_constraints_are_admitted_and_revalidated_before_answer_acceptance()
+-> Result<(), TestError> {
+    for (property, valid, invalid) in [
+        (
+            json!({"type":"string","pattern":"^(?=.{3}$)[a-z]+$"}),
+            "abc",
+            "ABC",
+        ),
+        (
+            json!({"type":"string","format":"email"}),
+            "owner@example.com",
+            " owner@example.com ",
+        ),
+        (
+            json!({"type":"string","format":"uri"}),
+            "https://example.com",
+            "/relative",
+        ),
+        (
+            json!({"type":"string","format":"date"}),
+            "2024-02-29",
+            "2025-02-29",
+        ),
+        (
+            json!({"type":"string","format":"date-time"}),
+            "2026-11-09T10:00:00Z",
+            "2026-11-09",
+        ),
+    ] {
+        let property: schema::ElicitationPropertySchema = serde_json::from_value(property)?;
+        assert!(normalize::supported(&property));
+        assert!(valid_value(&property, &Value::Text(valid.into())));
+        assert!(!valid_value(&property, &Value::Text(invalid.into())));
+    }
+    let unknown = serde_json::from_value(json!({"type":"string","format":"future-format"}))?;
+    assert!(normalize::supported(&unknown));
+    assert!(valid_value(&unknown, &Value::Text(" unchanged ".into())));
+    let password = serde_json::from_value(json!({"type":"string","format":"password"}))?;
+    assert!(!normalize::supported(&password));
+    assert!(!valid_value(
+        &password,
+        &Value::Text("not-collected".into())
+    ));
+    Ok(())
+}
 use std::collections::BTreeMap;
 type TestError = Box<dyn std::error::Error>;
 #[test]
