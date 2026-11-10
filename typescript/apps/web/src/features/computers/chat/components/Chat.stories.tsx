@@ -1,4 +1,5 @@
 import { computerCopy } from "@chapchoo/web-core/computer-messages";
+import { conversationActivity } from "@chapchoo/web-core/conversation-activity";
 import { useState } from "react";
 import { fixtureCatalogue } from "@/shared/authentications/connectionFixture";
 import { AgentNavigation } from "@/shared/navigation/AgentNavigation";
@@ -7,11 +8,14 @@ import { creationCopy } from "../../creationCopy";
 import { computerDetailCopy } from "../../detailCopy";
 import { useChatFocus } from "../containers/useChatFocus";
 import { useFloatingChat } from "../containers/useFloatingChat";
-import { chatCopy } from "../copy";
+import { activityStatus, chatCopy } from "../copy";
 import { Chat } from "./Chat";
 import type { AgentsProps, InitialAgents } from "../../types";
 import type { AgentView } from "@chapchoo/web-core/computer";
-import type { ConversationRecord } from "@chapchoo/web-core/conversation-types";
+import type {
+  ConversationRecord,
+  ConversationRegion,
+} from "@chapchoo/web-core/conversation-types";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import type { ReactElement } from "react";
 function fixtureMessage(
@@ -44,6 +48,11 @@ type FixtureProps = {
     | "staleStopped"
     | "signedOut"
     | "startError"
+    | "nativeFailed"
+    | "pendingOrder"
+    | "authenticationRequired"
+    | "nativeStarting"
+    | "notStarted"
     | "empty";
   locale: string;
   name: string;
@@ -135,7 +144,13 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
   const copy = chatCopy(locale);
   const c = computerCopy(locale);
   const writable =
-    mode === "connected" || mode === "empty" || mode === "textPlan";
+    mode === "connected" ||
+    mode === "empty" ||
+    mode === "textPlan" ||
+    mode === "nativeFailed" ||
+    mode === "pendingOrder" ||
+    mode === "notStarted" ||
+    mode === "nativeStarting";
   const actions = useComputerActions({
     pending: false,
     submit: () => {},
@@ -178,6 +193,67 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
     formatTime: () => "13:10",
   };
   const controlled = useChatFocus(product);
+  const startup = [
+    "nativeFailed",
+    "pendingOrder",
+    "authenticationRequired",
+    "nativeStarting",
+    "notStarted",
+  ].includes(mode);
+  const startupRegion: ConversationRegion = {
+    header: {
+      agentId: agent.id,
+      conversationId: "conversation",
+      state: "notStarted",
+      foreground: "unavailable",
+      savedAuthenticationId:
+        mode === "authenticationRequired" ? void 0 : "saved-auth",
+    },
+    records: [],
+    inputs:
+      mode === "nativeFailed" || mode === "pendingOrder"
+        ? [
+            {
+              id: "failed-input",
+              requestId: "request",
+              conversationId: "conversation",
+              acceptedAt: 1n,
+              text: "안녕하세요",
+              observation: "failed",
+              preparation: { type: "failed", reason: "nativeRejected" },
+            },
+          ]
+        : [],
+    latestInput:
+      mode === "nativeFailed" || mode === "pendingOrder"
+        ? {
+            requestId: "request",
+            observation: "failed",
+            preparation: { type: "failed", reason: "nativeRejected" },
+          }
+        : mode === "nativeStarting"
+          ? {
+              requestId: "request",
+              observation: "preparing",
+              preparation: { type: "preparing" },
+            }
+          : void 0,
+    renderedAt: initial.renderedAt,
+  };
+  const displayedActivity = startup
+    ? conversationActivity(
+        startupRegion,
+        mode === "pendingOrder"
+          ? [
+              {
+                requestId: "new-local",
+                text: "새 메시지",
+                observation: "sending",
+              },
+            ]
+          : [],
+      )
+    : activity;
   return (
     <Chat
       product={controlled.product}
@@ -213,42 +289,53 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
         />
       }
       conversation={{
-        region: {
-          header: {
-            agentId: agent.id,
-            conversationId: "conversation",
-            state: "ready",
-            source: {
-              agentId: agent.id,
-              conversationId: "conversation",
-              snapshotId: "snapshot",
+        region: startup
+          ? startupRegion
+          : {
+              header: {
+                agentId: agent.id,
+                conversationId: "conversation",
+                state: "ready",
+                source: {
+                  agentId: agent.id,
+                  conversationId: "conversation",
+                  snapshotId: "snapshot",
+                },
+                native: { snapshotId: "snapshot", nativeSessionId: "native" },
+                foreground: activity,
+                workId: activity === "working" ? "work" : void 0,
+              },
+              records,
+              latestPlan:
+                mode === "textPlan"
+                  ? {
+                      key: "plan:text-plan",
+                      nativeId: "text-plan",
+                      kind: "plan",
+                      anchor: { ordinal: 4n, index: 0n },
+                      updatedOrdinal: 4n,
+                      content: [],
+                      locations: [],
+                      plan: {
+                        type: "text",
+                        text: "**First**, inspect the current implementation.",
+                      },
+                    }
+                  : null,
+              renderedAt: initial.renderedAt,
             },
-            native: { snapshotId: "snapshot", nativeSessionId: "native" },
-            foreground: activity,
-            workId: activity === "working" ? "work" : void 0,
-          },
-          records,
-          latestPlan:
-            mode === "textPlan"
-              ? {
-                  key: "plan:text-plan",
-                  nativeId: "text-plan",
-                  kind: "plan",
-                  anchor: { ordinal: 4n, index: 0n },
-                  updatedOrdinal: 4n,
-                  content: [],
-                  locations: [],
-                  plan: {
-                    type: "text",
-                    text: "**First**, inspect the current implementation.",
-                  },
-                }
-              : null,
-          renderedAt: initial.renderedAt,
-        },
         read: mode === "readerError" ? "error" : "ready",
         readingOlder: false,
-        inputs: [],
+        inputs:
+          mode === "pendingOrder"
+            ? [
+                {
+                  requestId: "new-local",
+                  text: "새 메시지",
+                  observation: "sending",
+                },
+              ]
+            : [],
         stop: workStop,
         drafts: {},
         onRead: () => {},
@@ -260,7 +347,7 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
         onAnswer: () => {},
       }}
       input={input}
-      activity={mode === "readerError" ? "unavailable" : activity}
+      activity={mode === "readerError" ? "unavailable" : displayedActivity}
       writable={writable}
       stoppable={writable || mode === "sending" || mode === "readerError"}
       sendable={writable && Boolean(input.trim())}
@@ -274,9 +361,9 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
               ? c.disconnected
               : mode === "unknown"
                 ? c.unknown
-                : activity === "working"
-                  ? copy.working
-                  : copy.idle)
+                : mode === "readerError"
+                  ? copy.error
+                  : activityStatus(copy, displayedActivity))
       }
       opened={opened}
       navOpened={navOpened}
@@ -328,6 +415,13 @@ export const Stale: Story = { args: { mode: "stale" } };
 export const StaleStopped: Story = { args: { mode: "staleStopped" } };
 export const SignedOut: Story = { args: { mode: "signedOut" } };
 export const Empty: Story = { args: { mode: "empty" } };
+export const NativeFailed: Story = { args: { mode: "nativeFailed" } };
+export const PendingOrder: Story = { args: { mode: "pendingOrder" } };
+export const AuthenticationRequired: Story = {
+  args: { mode: "authenticationRequired" },
+};
+export const NativeStarting: Story = { args: { mode: "nativeStarting" } };
+export const NotStarted: Story = { args: { mode: "notStarted" } };
 export const SendingWithActiveWork: Story = {
   args: { mode: "sending", locale: "en-US", name: "Corgi" },
 };

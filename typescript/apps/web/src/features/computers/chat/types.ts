@@ -4,6 +4,7 @@ import type { FloatingChat } from "./containers/useFloatingChat";
 import type { ChatCopy } from "./copy";
 import type { AppNavigation } from "@chapchoo/ui/AppNavigation";
 import type { AgentView } from "@chapchoo/web-core/computer";
+import type { ConversationActivity } from "@chapchoo/web-core/conversation-activity";
 import type {
   DraftValue,
   QuestionDraft,
@@ -49,7 +50,7 @@ export interface ChatProps {
   agentNavigation: ReactNode;
   conversation: ConversationControls;
   input: string;
-  activity: "working" | "requiresAction" | "idle" | "unavailable";
+  activity: ConversationActivity;
   writable: boolean;
   stoppable: boolean;
   sendable: boolean;

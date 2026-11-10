@@ -362,6 +362,117 @@ test("unavailable observations keep history readable and input read-only", async
   }
 });
 
+test("confirmed native startup failure is explained without claiming delivery or hiding recovery", async ({
+  page,
+}) => {
+  await page.goto(
+    "/iframe.html?id=chat-conversation--native-failed&viewMode=story",
+  );
+  await expect(
+    page
+      .locator('header button[aria-haspopup="dialog"]')
+      .getByText("Codex 실행 실패", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("log").getByText("Codex 실행 실패", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("작업 상태를 확인할 수 없음", { exact: true }),
+  ).toHaveCount(0);
+  await page
+    .getByRole("button", { name: /코기.*Codex 실행 실패.*작업 상태/ })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "작업 상태", exact: true });
+  await expect(
+    dialog.getByRole("button", { name: "다시 불러오기", exact: true }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByRole("link", { name: "에이전트 상세", exact: true }),
+  ).toHaveAttribute("href", "/teams/my/agents/corgi");
+});
+test("authentication requirement has a reachable setup action, not an unexplained disabled composer", async ({
+  page,
+}) => {
+  await page.goto(
+    "/iframe.html?id=chat-conversation--authentication-required&viewMode=story",
+  );
+  await expect(
+    page
+      .locator('header button[aria-haspopup="dialog"]')
+      .getByText("AI 인증 필요", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("textbox", { name: "메시지", exact: true }),
+  ).toBeDisabled();
+  await page
+    .getByRole("button", { name: /코기.*AI 인증 필요.*작업 상태/ })
+    .click();
+  await expect(
+    page.getByRole("link", { name: "AI 인증 설정", exact: true }),
+  ).toHaveAttribute("href", "/teams/my/agents/corgi");
+});
+test("not-started and preparing conversations never masquerade as execution failure", async ({
+  page,
+}) => {
+  const cases: [string, string][] = [
+    ["not-started", "메시지를 보내 대화 시작"],
+    ["native-starting", "Codex 실행 준비 중…"],
+  ];
+  for (const [story, label] of cases) {
+    await page.goto(
+      `/iframe.html?id=chat-conversation--${story}&viewMode=story`,
+    );
+    await expect(
+      page
+        .locator('header button[aria-haspopup="dialog"]')
+        .getByText(label, { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Codex 실행 실패", { exact: true }),
+    ).toHaveCount(0);
+  }
+});
+test("sending and failed inputs share user bubbles with subdued status and new input below retained history", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(
+    "/iframe.html?id=chat-conversation--pending-order&viewMode=story",
+  );
+  const bubbles = page.getByRole("log").locator('[data-kind="user"]');
+  await expect(bubbles).toHaveCount(2);
+  await expect(bubbles.nth(0)).toContainText("안녕하세요");
+  await expect(bubbles.nth(1)).toContainText("새 메시지");
+  await expect(bubbles.nth(1)).toContainText("보내는 중…");
+  for (const bubble of await bubbles.all()) {
+    await expect(bubble.locator("pre")).toHaveCount(0);
+    expect(
+      await bubble.evaluate((element) => {
+        const style = getComputedStyle(element);
+        const surface = element.children.item(1);
+        const body = surface?.querySelector("p");
+        const author = element.firstElementChild;
+        const status = element.querySelector('[role="status"]');
+        if (!body || !surface || !author || !status) {
+          return false;
+        }
+        return (
+          style.alignSelf === "flex-end" &&
+          style.borderLeftWidth === "0px" &&
+          author.textContent === "나" &&
+          Number.parseFloat(getComputedStyle(surface).borderRadius) > 0 &&
+          getComputedStyle(body).marginTop === "0px" &&
+          getComputedStyle(body).marginBottom === "0px" &&
+          Number.parseFloat(getComputedStyle(surface).paddingTop) <= 4 &&
+          author.getBoundingClientRect().bottom <=
+            surface.getBoundingClientRect().top &&
+          Number.parseFloat(getComputedStyle(status).fontSize) <
+            Number.parseFloat(getComputedStyle(body).fontSize)
+        );
+      }),
+    ).toBeTruthy();
+  }
+});
 test("auth withdrawal replaces the protected conversation surface", async ({
   page,
 }) => {

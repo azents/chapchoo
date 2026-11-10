@@ -6,7 +6,7 @@ import {
 import { Button, Group, Image, Stack, Text } from "@mantine/core";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { nativeStatus, permissionScope } from "../copy";
+import { inputStatus, nativeStatus, permissionScope } from "../copy";
 import classes from "./ConversationBody.module.css";
 import type { ChatCopy } from "../copy";
 import type { ConversationControls } from "../types";
@@ -21,7 +21,7 @@ import type {
   FormValue,
   QuestionField,
 } from "@chapchoo/web-core/conversation-types";
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 
 function Markdown({ text }: { text: string }): ReactElement {
   return (
@@ -39,6 +39,22 @@ function Markdown({ text }: { text: string }): ReactElement {
         {text}
       </ReactMarkdown>
     </div>
+  );
+}
+function UserMessageBody({
+  children,
+  copy,
+}: {
+  children: ReactNode;
+  copy: ChatCopy;
+}): ReactElement {
+  return (
+    <>
+      <Text size="xs" c="dimmed" ta="right" className={classes.userAuthor}>
+        {copy.you}
+      </Text>
+      <div className={classes.userBubble}>{children}</div>
+    </>
   );
 }
 export function ConversationContent({
@@ -537,18 +553,22 @@ export function ConversationBody({
           id={`conversation-${encodeURIComponent(record.key)}`}
           key={record.key}
           data-kind={record.kind}
+          aria-label={record.kind === "user" ? copy.you : void 0}
           className={classes.record}
           tabIndex={-1}
         >
           {record.kind === "user" || record.kind === "assistant" ? (
             <>
-              <strong>
-                {record.kind === "assistant" ? agentName : copy.message}
-              </strong>
-              <ConversationContent
-                parts={record.content}
-                plain={record.kind === "user"}
-              />
+              {record.kind === "assistant" ? (
+                <>
+                  <strong>{agentName}</strong>
+                  <ConversationContent parts={record.content} />
+                </>
+              ) : (
+                <UserMessageBody copy={copy}>
+                  <ConversationContent parts={record.content} plain />
+                </UserMessageBody>
+              )}
             </>
           ) : record.kind === "request" ? (
             <ConversationQuestion
@@ -630,17 +650,6 @@ export function ConversationBody({
           )}
         </article>
       ))}
-      {controls.inputs.map((input) => (
-        <section key={input.requestId} className={classes.pending}>
-          <pre>{input.text}</pre>
-          <Text role="status">{copy[input.observation]}</Text>
-          {input.observation === "uncertain" ? (
-            <Button variant="subtle" onClick={controls.onRead}>
-              {copy.retry}
-            </Button>
-          ) : null}
-        </section>
-      ))}
       {(controls.region.inputs ?? []).map((input) =>
         input.insertedNativeMessageId &&
         controls.region.records.some(
@@ -650,14 +659,29 @@ export function ConversationBody({
         ) ? (
           <details className={classes.pending} key={input.id}>
             <summary>
-              {copy.message} · {copy[input.observation]}
+              {copy.message} · {inputStatus(copy, input)}
             </summary>
             <pre>{input.text}</pre>
           </details>
         ) : (
-          <section className={classes.pending} key={input.id}>
-            <pre>{input.text}</pre>
-            <Text role="status">{copy[input.observation]}</Text>
+          <section
+            className={classes.record}
+            data-kind="user"
+            aria-label={copy.you}
+            key={input.id}
+          >
+            <UserMessageBody copy={copy}>
+              <p className={classes.answer}>{input.text}</p>
+            </UserMessageBody>
+            <Text
+              size="xs"
+              className={classes.inputStatus}
+              c={input.observation === "failed" ? "red" : "dimmed"}
+              ta="right"
+              role="status"
+            >
+              {inputStatus(copy, input)}
+            </Text>
             {input.observation === "uncertain" ? (
               <Button variant="subtle" onClick={controls.onRead}>
                 {copy.retry}
@@ -666,6 +690,32 @@ export function ConversationBody({
           </section>
         ),
       )}
+      {controls.inputs.map((input) => (
+        <section
+          key={input.requestId}
+          className={classes.record}
+          data-kind="user"
+          aria-label={copy.you}
+        >
+          <UserMessageBody copy={copy}>
+            <p className={classes.answer}>{input.text}</p>
+          </UserMessageBody>
+          <Text
+            size="xs"
+            className={classes.inputStatus}
+            c={input.observation === "failed" ? "red" : "dimmed"}
+            ta="right"
+            role="status"
+          >
+            {copy[input.observation]}
+          </Text>
+          {input.observation === "uncertain" ? (
+            <Button variant="subtle" onClick={controls.onRead}>
+              {copy.retry}
+            </Button>
+          ) : null}
+        </section>
+      ))}
     </Stack>
   );
 }

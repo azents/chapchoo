@@ -8,6 +8,7 @@ import {
   InputOwnership,
   StopState,
   PreparationFreshness,
+  SetupFailure,
 } from "@chapchoo/rpc-client/conversations";
 import { z } from "zod";
 import {
@@ -31,6 +32,7 @@ import type {
   ConversationAnchor,
   InputReceipt,
   InputObservation,
+  InputPreparation,
   FormValue,
 } from "./conversation-types.js";
 
@@ -395,8 +397,37 @@ export async function readConversationRegion(
       acceptedAt: receipt.acceptedAt,
       text,
       observation: inputObservation(status),
+      preparation: inputPreparation(status),
       insertedNativeMessageId: status.delivery?.insertedNativeMessageId,
     });
+  }
+  const firstInput = inputs[0];
+  let latestInput: ConversationRegion["latestInput"] = firstInput
+    ? {
+        requestId: firstInput.requestId,
+        observation: firstInput.observation,
+        preparation: firstInput.preparation,
+      }
+    : undefined;
+  // History pagination must not turn an older failure into the current diagnosis.
+  if (inputScope && sameSource && input.inputBefore) {
+    const latest = (
+      await api.inputs({ scope: inputScope, before: undefined, limit: 1 })
+    ).inputs[0]?.acceptance;
+    if (latest) {
+      const status = await api.inputResult({
+        agentId: input.agentId,
+        conversationId: latest.conversationId,
+        requestId: latest.requestId,
+      });
+      latestInput = {
+        requestId: latest.requestId,
+        observation: inputObservation(status),
+        preparation: inputPreparation(status),
+      };
+    } else {
+      latestInput = undefined;
+    }
   }
   const inputLast = retained.at(-1)?.acceptance;
   const inputOlder =
@@ -434,6 +465,7 @@ export async function readConversationRegion(
       header: final,
       records: [],
       inputs: inputs.reverse(),
+      latestInput,
       inputOlder,
       renderedAt: Date.now(),
     };
@@ -495,6 +527,7 @@ export async function readConversationRegion(
     header: final,
     records: records.reverse(),
     inputs: inputs.reverse(),
+    latestInput,
     inputOlder,
     latestPlan,
     stop,
@@ -680,6 +713,30 @@ export function inputObservation(
     return "uncertain";
   if (value.preparation?.possibleForwarding !== undefined) return "preparing";
   return "accepted";
+}
+export function inputPreparation(
+  value: Wire.OwnerInputStatus,
+): InputPreparation | undefined {
+  if (!value.acceptance || !value.preparation) return undefined;
+  const preparation = value.preparation;
+  if (preparation.failed !== undefined) {
+    const reasons: Partial<
+      Record<number, Extract<InputPreparation, { type: "failed" }>["reason"]>
+    > = {
+      [SetupFailure.SETUP_FAILURE_NOT_ADMITTED]: "notAdmitted",
+      [SetupFailure.SETUP_FAILURE_BEFORE_NATIVE_LAUNCH]: "launchFailed",
+      [SetupFailure.SETUP_FAILURE_NATIVE_REJECTED]: "nativeRejected",
+      [SetupFailure.SETUP_FAILURE_SOURCE_UNAVAILABLE]: "sourceUnavailable",
+      [SetupFailure.SETUP_FAILURE_RETIREMENT_UNKNOWN]: "retirementUnknown",
+    };
+    const reason = reasons[preparation.failed];
+    if (!reason) throw new Error("Input preparation failure is invalid");
+    return { type: "failed", reason };
+  }
+  if (preparation.sessionReady) return { type: "ready" };
+  if (preparation.possibleForwarding !== undefined)
+    return { type: "preparing" };
+  return undefined;
 }
 export function stopObservation(
   value: Wire.StopReceipt | undefined,

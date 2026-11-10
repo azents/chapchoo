@@ -6,10 +6,15 @@
 .record[data-kind="user"] {
   align-self: flex-end;
   max-width: 90%;
-  padding: var(--mantine-spacing-md) var(--mantine-spacing-lg);
+}
+.userBubble {
+  padding: calc(var(--mantine-spacing-xs) / 2) var(--mantine-spacing-sm);
   border-radius: var(--mantine-radius-lg);
   background: var(--mantine-color-default-hover);
 }
+.userBubble .answer { margin: 0; }
+.userAuthor { margin-block-end: calc(var(--mantine-spacing-xs) / 2); }
+.inputStatus { margin-block-start: calc(var(--mantine-spacing-xs) / 2); }
 .markdown { min-width: 0; overflow-wrap: anywhere; }
 .markdown > :first-child { margin-top: 0; }
 .markdown > :last-child { margin-bottom: 0; }
