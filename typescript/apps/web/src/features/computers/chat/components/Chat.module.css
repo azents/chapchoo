@@ -291,7 +291,6 @@
 }
 .summary {
   padding: var(--mantine-spacing-xl) 0;
-  border-bottom: 0.0625rem solid var(--chapchoo-color-border);
 }
 .summary > span {
   font-size: var(--mantine-font-size-xs);

@@ -11,6 +11,7 @@ import {
   Box,
   Button,
   Drawer,
+  Group,
   ScrollArea,
 } from "@mantine/core";
 import { ComputerControls } from "../../components/ComputerControls";
@@ -294,6 +295,16 @@ export function Chat(props: ChatProps): ReactElement {
           overlayProps={{ backgroundOpacity: 0.12, blur: 0 }}
         >
           <div style={profileStyle(agent.paletteKey)}>
+            <Group justify="flex-end" mb="md">
+              <Button
+                component="a"
+                href={detailHref}
+                variant="subtle"
+                rightSection={<Icon name="chevron" />}
+              >
+                {c.detail}
+              </Button>
+            </Group>
             {p.stale ? (
               <Alert color="yellow" mb="lg">
                 {p.copy.stale}
@@ -332,9 +343,11 @@ export function Chat(props: ChatProps): ReactElement {
                 </Button>
               ) : null}
             </div>
-            <div className={classes.taskHeading}>
-              {currentPlan ? <h3>{c.plan}</h3> : null}
-            </div>
+            {currentPlan ? (
+              <div className={classes.taskHeading}>
+                <h3>{c.plan}</h3>
+              </div>
+            ) : null}
             {currentPlan?.plan?.type === "items" ? (
               <ol className={classes.tasks}>
                 {currentPlan.plan.items.map((item, index) => (

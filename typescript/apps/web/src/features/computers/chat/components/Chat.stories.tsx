@@ -316,6 +316,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Connected: Story = {};
+export const NoPlanActivity: Story = { args: { mode: "empty" } };
 export const Stopped: Story = { args: { mode: "stopped" } };
 export const FailedStart: Story = { args: { mode: "startError" } };
 export const Disconnected: Story = { args: { mode: "disconnected" } };

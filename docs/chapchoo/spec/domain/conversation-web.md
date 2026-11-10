@@ -33,9 +33,10 @@ complete body. The returned known ordinal includes the initial field ordinals,
 not later updates. New fields wait for the next poll. Replacing an unread extent
 still rejects the read; a final field read rechecks owner/source authority.
 Recent/older records and retained input pages use source-bound anchors. The
-current plan has its own read even outside the recent region. Selecting history
-in the activity sheet scrolls to its record after the sheet's exit/focus boundary.
-Read-only retry never resubmits input, an answer or Stop.
+current plan has its own read even outside the recent region. The activity sheet
+provides a direct link to the current Agent's canonical Team-scoped detail page.
+Selecting history in that sheet scrolls to its record after the sheet's exit/focus
+boundary. Read-only retry never resubmits input, an answer or Stop.
 
 Conversation identity and source snapshot are compared independently. A replaced
 source clears old live content and paging before the new source refills. Ordinary
