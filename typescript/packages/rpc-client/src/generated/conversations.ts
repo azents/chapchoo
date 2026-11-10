@@ -551,6 +551,7 @@ export interface NativeTarget {
 
 export interface InitialNativeContext {
   allowFresh: boolean;
+  requireRetainedSource: boolean;
 }
 
 export interface HarnessSupply {
@@ -6040,13 +6041,16 @@ export const NativeTarget: MessageFns<NativeTarget> = {
 };
 
 function createBaseInitialNativeContext(): InitialNativeContext {
-  return { allowFresh: false };
+  return { allowFresh: false, requireRetainedSource: false };
 }
 
 export const InitialNativeContext: MessageFns<InitialNativeContext> = {
   encode(message: InitialNativeContext, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.allowFresh !== false) {
       writer.uint32(8).bool(message.allowFresh);
+    }
+    if (message.requireRetainedSource !== false) {
+      writer.uint32(16).bool(message.requireRetainedSource);
     }
     return writer;
   },
@@ -6072,6 +6076,14 @@ export const InitialNativeContext: MessageFns<InitialNativeContext> = {
             message.allowFresh = reader.bool();
             continue;
           }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.requireRetainedSource = reader.bool();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -6090,6 +6102,7 @@ export const InitialNativeContext: MessageFns<InitialNativeContext> = {
   fromPartial<I extends Exact<DeepPartial<InitialNativeContext>, I>>(object: I): InitialNativeContext {
     const message = createBaseInitialNativeContext();
     message.allowFresh = object.allowFresh ?? false;
+    message.requireRetainedSource = object.requireRetainedSource ?? false;
     return message;
   },
 };

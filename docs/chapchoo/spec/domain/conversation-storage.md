@@ -175,9 +175,14 @@ Known non-admission, pre-launch failure or explicit native rejection after
 successful scope retirement can allow an explicit new operation. A settled
 source-lookup failure from an attempt denied fresh creation does not itself
 establish a new creation barrier; any earlier unresolved attempt still does.
-The native owner additionally requires no bound native session and an empty
-capture before creating a first context. Existing native sessions are resumed,
-never replaced by this permission. None of these outcomes grants another setup
+Any historical native rejection also seals a retained-source requirement in the
+new grant, since rejection may have occurred while restoring an existing session.
+The native owner may use that retained source but cannot create a replacement if
+it disappears before dequeue. Both creation and preservation permissions are
+persisted and revalidated against the original grant. An existing empty, unbound
+capture permits a first context; a bound native session is resumed, never replaced.
+The additive migration preserves old grants and refuses to downgrade while a
+retained-source fence would be discarded. None of these outcomes grants another setup
 dispatch for the original operation. Initial source binding must
 agree with any already-known setup session/source. Source replacement clears
 these setup facts with the independently accepted input; it does not replay work.

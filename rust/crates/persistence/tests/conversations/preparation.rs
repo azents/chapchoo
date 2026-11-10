@@ -100,12 +100,13 @@ pub(super) async fn initial(
     assert_eq!(granted.1, selection_id);
     assert_eq!(existing.state, State::PossibleForwarding);
     assert!(existing.fresh_native_allowed);
+    assert!(existing.require_retained_source);
     store
         .check_conversation_input_preparation(
             &source,
             &draft,
             &HarnessSupply::Managed,
-            Some(true),
+            Some((true, true)),
             None,
         )
         .await?;
@@ -115,7 +116,19 @@ pub(super) async fn initial(
                 &source,
                 &draft,
                 &HarnessSupply::Managed,
-                Some(false),
+                Some((false, true)),
+                None
+            )
+            .await,
+        Err(StoreError::InvalidTransition)
+    ));
+    assert!(matches!(
+        store
+            .check_conversation_input_preparation(
+                &source,
+                &draft,
+                &HarnessSupply::Managed,
+                Some((true, false)),
                 None
             )
             .await,
@@ -173,7 +186,7 @@ pub(super) async fn initial(
             &source,
             &draft,
             &HarnessSupply::Managed,
-            Some(true),
+            Some((true, true)),
             None,
         )
         .await?;
@@ -183,7 +196,7 @@ pub(super) async fn initial(
                 &source,
                 &draft,
                 &HarnessSupply::Existing(ExistingCodexPath::parse("/next/codex".into())?),
-                Some(true),
+                Some((true, true)),
                 None
             )
             .await,

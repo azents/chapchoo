@@ -52,6 +52,7 @@ pub struct ConversationPreparationFacts {
     pub requested_supply: HarnessSupply,
     pub selection_request_id: Option<String>,
     pub fresh_native_allowed: bool,
+    pub require_retained_source: bool,
     pub state: ConversationPreparationState,
 }
 pub enum ConversationPreparationAdmission {
@@ -60,6 +61,7 @@ pub enum ConversationPreparationAdmission {
         requested_supply: HarnessSupply,
         selection_request_id: Option<String>,
         fresh_native_allowed: bool,
+        require_retained_source: bool,
     },
     Existing(ConversationPreparationFacts),
 }
@@ -94,6 +96,8 @@ struct PreparationRow {
     failure_kind: Option<String>,
     #[diesel(sql_type=diesel::sql_types::Bool)]
     fresh_native_allowed: bool,
+    #[diesel(sql_type=diesel::sql_types::Bool)]
+    require_retained_source: bool,
 }
 impl PreparationRow {
     fn state(&self) -> Result<ConversationPreparationState, StoreError> {
@@ -135,6 +139,7 @@ impl PreparationRow {
             requested_supply: supply,
             selection_request_id: self.selection_request_id.clone(),
             fresh_native_allowed: self.fresh_native_allowed,
+            require_retained_source: self.require_retained_source,
             state: self.state()?,
         })
     }
@@ -190,7 +195,7 @@ impl Store {
         source: &crate::ConnectorSource<'_>,
         draft: &ConversationInputPreparation<'_>,
         supply: &HarnessSupply,
-        fresh: Option<bool>,
+        fresh: Option<(bool, bool)>,
         target: Option<&ConversationDeliveryTarget>,
     ) -> Result<(), StoreError> {
         let (agent, id, operation) = ids(draft)?;
@@ -213,8 +218,9 @@ impl Store {
                 return Err(StoreError::Conflict);
             }
             match (input.target_snapshot.as_deref(), fresh, target) {
-                (None, Some(allowed), None)
+                (None, Some((allowed, require_retained)), None)
                     if allowed == previous.fresh_native_allowed
+                        && require_retained == previous.require_retained_source
                         && row.source_snapshot.is_none() => {}
                 (Some(snapshot), None, Some(target))
                     if snapshot == target.snapshot.as_str()
@@ -276,15 +282,20 @@ impl Store {
             // retirement uncertainty and session-ready outcomes remain barriers.
             let fresh_native_allowed =
                 target.is_none() && row.native_session_id.is_none() && prior.n == 0;
+            let rejected=diesel::sql_query(dialect.query("SELECT CAST(count(*) AS BIGINT) AS n FROM conversation_input_preparation p JOIN conversation_inputs i ON i.id=p.operation_id WHERE i.conversation_id=? AND p.preparation_state='FAILED' AND p.failure_kind='NATIVE_REJECTED'"))
+                .bind::<IdentitySql,_>(id).get_result::<PriorStartup>(connection).await?;
+            // Rejection can follow restoration too. Recovery may use the retained
+            // capture, but never manufacture its replacement if that copy is lost.
+            let require_retained_source = rejected.n > 0;
             let selection = super::supply::current_supply!(connection, dialect, agent);
             let selection_request_id = selection.saved.map(|receipt| receipt.request_id);
             let (kind, path) = match &selection.supply {
                 HarnessSupply::Managed => ("MANAGED", None),
                 HarnessSupply::Existing(path) => ("EXISTING", Some(path.as_str())),
             };
-            diesel::sql_query(dialect.query("INSERT INTO conversation_input_preparation(operation_id,execution_id,supply_kind,executable_path,selection_request_id,fresh_native_allowed,preparation_state) VALUES(?,?,?,?,?,?,'POSSIBLE')"))
+            diesel::sql_query(dialect.query("INSERT INTO conversation_input_preparation(operation_id,execution_id,supply_kind,executable_path,selection_request_id,fresh_native_allowed,require_retained_source,preparation_state) VALUES(?,?,?,?,?,?,?,'POSSIBLE')"))
                 .bind::<IdentitySql,_>(operation).bind::<IdentitySql,_>(route._execution_id).bind::<Text,_>(kind).bind::<Nullable<Text>,_>(path)
-                .bind::<Nullable<Text>,_>(selection_request_id.as_deref()).bind::<diesel::sql_types::Bool,_>(fresh_native_allowed).execute(connection).await?;
+                .bind::<Nullable<Text>,_>(selection_request_id.as_deref()).bind::<diesel::sql_types::Bool,_>(fresh_native_allowed).bind::<diesel::sql_types::Bool,_>(require_retained_source).execute(connection).await?;
             Ok(ConversationPreparationAdmission::Granted {
                 grant: ConversationForwardingGrant {
                     execution_id: route._execution_id.to_dto(EntityKind::Execution),
@@ -293,6 +304,7 @@ impl Store {
                 requested_supply: selection.supply,
                 selection_request_id,
                 fresh_native_allowed,
+                require_retained_source,
             })
         })
     }
