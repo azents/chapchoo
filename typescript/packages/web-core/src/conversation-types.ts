@@ -242,6 +242,7 @@ export interface RetainedInputView {
   conversationId: string;
   acceptedAt: bigint;
   text?: string;
+  deleted?: boolean;
   observation: InputObservation;
   preparation?: InputPreparation;
   insertedNativeMessageId?: string;

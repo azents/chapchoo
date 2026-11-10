@@ -61,6 +61,7 @@ pub struct ConversationInputStatus {
     pub acceptance: ConversationInputAcceptance,
     pub ownership: ConversationInputOwnership,
     pub delivery: Option<chapchoo_persistence::ConversationInputDelivery>,
+    pub deleted: bool,
 }
 #[derive(Clone)]
 pub struct ConversationInputService {
@@ -182,6 +183,7 @@ impl ConversationInputService {
             )
             .await?;
         Ok(Some(ConversationInputStatus {
+            deleted: receipt.deleted,
             acceptance: receipt.into(),
             ownership,
             delivery,

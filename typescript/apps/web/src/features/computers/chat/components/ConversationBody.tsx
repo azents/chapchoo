@@ -650,46 +650,95 @@ export function ConversationBody({
           )}
         </article>
       ))}
-      {(controls.region.inputs ?? []).map((input) =>
-        input.insertedNativeMessageId &&
-        controls.region.records.some(
-          (record) =>
-            record.kind === "user" &&
-            record.nativeId === input.insertedNativeMessageId,
-        ) ? (
-          <details className={classes.pending} key={input.id}>
-            <summary>
-              {copy.message} · {inputStatus(copy, input)}
-            </summary>
-            <pre>{input.text}</pre>
-          </details>
-        ) : (
-          <section
-            className={classes.record}
-            data-kind="user"
-            aria-label={copy.you}
-            key={input.id}
-          >
-            <UserMessageBody copy={copy}>
-              <p className={classes.answer}>{input.text}</p>
-            </UserMessageBody>
-            <Text
-              size="xs"
-              className={classes.inputStatus}
-              c={input.observation === "failed" ? "red" : "dimmed"}
-              ta="right"
-              role="status"
+      {(controls.region.inputs ?? [])
+        .filter((input) => !input.deleted)
+        .map((input) =>
+          input.insertedNativeMessageId &&
+          controls.region.records.some(
+            (record) =>
+              record.kind === "user" &&
+              record.nativeId === input.insertedNativeMessageId,
+          ) ? (
+            <details className={classes.pending} key={input.id}>
+              <summary>
+                {copy.message} · {inputStatus(copy, input)}
+              </summary>
+              <pre>{input.text}</pre>
+            </details>
+          ) : (
+            <section
+              className={classes.record}
+              data-kind="user"
+              aria-label={copy.you}
+              key={input.id}
             >
-              {inputStatus(copy, input)}
-            </Text>
-            {input.observation === "uncertain" ? (
-              <Button variant="subtle" onClick={controls.onRead}>
-                {copy.retry}
-              </Button>
-            ) : null}
-          </section>
-        ),
-      )}
+              <UserMessageBody copy={copy}>
+                <p className={classes.answer}>{input.text}</p>
+              </UserMessageBody>
+              <Text
+                size="xs"
+                className={classes.inputStatus}
+                c={input.observation === "failed" ? "red" : "dimmed"}
+                ta="right"
+                role="status"
+              >
+                {inputStatus(copy, input)}
+              </Text>
+              {input.observation === "failed" &&
+              controls.onRetryInput &&
+              controls.onDeleteInput ? (
+                <Group justify="flex-end" gap="xs">
+                  <Button
+                    size="compact-xs"
+                    variant="subtle"
+                    disabled={
+                      !writable ||
+                      controls.inputAction?.requestId === input.requestId ||
+                      !input.text
+                    }
+                    onClick={() => controls.onRetryInput?.(input)}
+                  >
+                    {copy.retryMessage}
+                  </Button>
+                  <Button
+                    size="compact-xs"
+                    variant="subtle"
+                    color="red"
+                    disabled={
+                      !controls.inputDeletable ||
+                      controls.inputAction?.requestId === input.requestId
+                    }
+                    onClick={() => controls.onDeleteInput?.(input)}
+                  >
+                    {copy.deleteMessage}
+                  </Button>
+                </Group>
+              ) : null}
+              {controls.inputAction?.requestId === input.requestId ? (
+                <Text size="xs" role="status">
+                  {controls.inputAction.state === "deleting"
+                    ? copy.deletingMessage
+                    : copy.deleteUnconfirmed}
+                </Text>
+              ) : null}
+              {controls.inputAction?.requestId === input.requestId &&
+              controls.inputAction.state === "uncertain" ? (
+                <Button
+                  size="compact-xs"
+                  variant="subtle"
+                  onClick={controls.onRead}
+                >
+                  {copy.retry}
+                </Button>
+              ) : null}
+              {input.observation === "uncertain" ? (
+                <Button variant="subtle" onClick={controls.onRead}>
+                  {copy.retry}
+                </Button>
+              ) : null}
+            </section>
+          ),
+        )}
       {controls.inputs.map((input) => (
         <section
           key={input.requestId}

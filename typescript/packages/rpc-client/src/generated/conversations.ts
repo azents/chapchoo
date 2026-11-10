@@ -233,6 +233,12 @@ export interface OwnerInputsRequest {
 export interface RetainedInput {
   acceptance: InputAcceptance | undefined;
   totalBytes: bigint;
+  deleted: boolean;
+}
+
+export interface OwnerDeleteInput {
+  scope: OwnerInputScope | undefined;
+  requestId: string;
 }
 
 export interface RetainedInputs {
@@ -259,6 +265,7 @@ export interface OwnerInputStatus {
   ownership: InputOwnership;
   delivery: InputDelivery | undefined;
   preparation: InputPreparation | undefined;
+  deleted: boolean;
 }
 
 /** Setup result is not current native liveness, source catch-up or text consumption. */
@@ -1991,7 +1998,7 @@ export const OwnerInputsRequest: MessageFns<OwnerInputsRequest> = {
 };
 
 function createBaseRetainedInput(): RetainedInput {
-  return { acceptance: undefined, totalBytes: 0n };
+  return { acceptance: undefined, totalBytes: 0n, deleted: false };
 }
 
 export const RetainedInput: MessageFns<RetainedInput> = {
@@ -2004,6 +2011,9 @@ export const RetainedInput: MessageFns<RetainedInput> = {
         throw new globalThis.Error("value provided for field message.totalBytes of type int64 too large");
       }
       writer.uint32(16).int64(message.totalBytes);
+    }
+    if (message.deleted !== false) {
+      writer.uint32(24).bool(message.deleted);
     }
     return writer;
   },
@@ -2037,6 +2047,14 @@ export const RetainedInput: MessageFns<RetainedInput> = {
             message.totalBytes = reader.int64() as bigint;
             continue;
           }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.deleted = reader.bool();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2060,6 +2078,76 @@ export const RetainedInput: MessageFns<RetainedInput> = {
     message.totalBytes = (object.totalBytes !== undefined && object.totalBytes !== null)
       ? BigInt(object.totalBytes)
       : 0n;
+    message.deleted = object.deleted ?? false;
+    return message;
+  },
+};
+
+function createBaseOwnerDeleteInput(): OwnerDeleteInput {
+  return { scope: undefined, requestId: "" };
+}
+
+export const OwnerDeleteInput: MessageFns<OwnerDeleteInput> = {
+  encode(message: OwnerDeleteInput, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.scope !== undefined) {
+      OwnerInputScope.encode(message.scope, writer.uint32(10).fork()).join();
+    }
+    if (message.requestId !== "") {
+      writer.uint32(18).string(message.requestId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): OwnerDeleteInput {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseOwnerDeleteInput();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.scope = OwnerInputScope.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.requestId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<OwnerDeleteInput>, I>>(base?: I): OwnerDeleteInput {
+    return OwnerDeleteInput.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<OwnerDeleteInput>, I>>(object: I): OwnerDeleteInput {
+    const message = createBaseOwnerDeleteInput();
+    message.scope = (object.scope !== undefined && object.scope !== null)
+      ? OwnerInputScope.fromPartial(object.scope)
+      : undefined;
+    message.requestId = object.requestId ?? "";
     return message;
   },
 };
@@ -2310,7 +2398,7 @@ export const InputDelivery: MessageFns<InputDelivery> = {
 };
 
 function createBaseOwnerInputStatus(): OwnerInputStatus {
-  return { acceptance: undefined, ownership: 0, delivery: undefined, preparation: undefined };
+  return { acceptance: undefined, ownership: 0, delivery: undefined, preparation: undefined, deleted: false };
 }
 
 export const OwnerInputStatus: MessageFns<OwnerInputStatus> = {
@@ -2326,6 +2414,9 @@ export const OwnerInputStatus: MessageFns<OwnerInputStatus> = {
     }
     if (message.preparation !== undefined) {
       InputPreparation.encode(message.preparation, writer.uint32(34).fork()).join();
+    }
+    if (message.deleted !== false) {
+      writer.uint32(40).bool(message.deleted);
     }
     return writer;
   },
@@ -2375,6 +2466,14 @@ export const OwnerInputStatus: MessageFns<OwnerInputStatus> = {
             message.preparation = InputPreparation.decode(reader, reader.uint32());
             continue;
           }
+          case 5: {
+            if (tag !== 40) {
+              break;
+            }
+
+            message.deleted = reader.bool();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2402,6 +2501,7 @@ export const OwnerInputStatus: MessageFns<OwnerInputStatus> = {
     message.preparation = (object.preparation !== undefined && object.preparation !== null)
       ? InputPreparation.fromPartial(object.preparation)
       : undefined;
+    message.deleted = object.deleted ?? false;
     return message;
   },
 };
@@ -8802,6 +8902,15 @@ export const ConversationsService = {
     responseSerialize: (value: FieldChunk): Buffer => Buffer.from(FieldChunk.encode(value).finish()),
     responseDeserialize: (value: Buffer): FieldChunk => FieldChunk.decode(value),
   },
+  deleteInput: {
+    path: "/chapchoo.conversations.Conversations/DeleteInput" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: OwnerDeleteInput): Buffer => Buffer.from(OwnerDeleteInput.encode(value).finish()),
+    requestDeserialize: (value: Buffer): OwnerDeleteInput => OwnerDeleteInput.decode(value),
+    responseSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
+    responseDeserialize: (value: Buffer): Empty => Empty.decode(value),
+  },
   submitAnswer: {
     path: "/chapchoo.conversations.Conversations/SubmitAnswer" as const,
     requestStream: false as const,
@@ -8913,6 +9022,7 @@ export interface ConversationsServer extends UntypedServiceImplementation {
   inputResult: handleUnaryCall<OwnerInputResultRequest, OwnerInputStatus>;
   inputs: handleUnaryCall<OwnerInputsRequest, RetainedInputs>;
   readInput: handleUnaryCall<OwnerInputRead, FieldChunk>;
+  deleteInput: handleUnaryCall<OwnerDeleteInput, Empty>;
   submitAnswer: handleUnaryCall<OwnerAnswerPiece, OwnerAnswerProgress>;
   answerResult: handleUnaryCall<OwnerAnswerResultRequest, OwnerAnswerStatus>;
   requestAnswer: handleUnaryCall<OwnerRequestAnswer, OwnerAnswerStatus>;
@@ -9031,6 +9141,21 @@ export interface ConversationsClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: FieldChunk) => void,
+  ): ClientUnaryCall;
+  deleteInput(
+    request: OwnerDeleteInput,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  deleteInput(
+    request: OwnerDeleteInput,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  deleteInput(
+    request: OwnerDeleteInput,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: Empty) => void,
   ): ClientUnaryCall;
   submitAnswer(
     request: OwnerAnswerPiece,

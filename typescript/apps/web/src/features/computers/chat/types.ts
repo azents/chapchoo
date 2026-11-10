@@ -14,6 +14,7 @@ import type {
   ConversationRecord,
   ConversationRegion,
   LocalConversationInput,
+  RetainedInputView,
 } from "@chapchoo/web-core/conversation-types";
 import type { ReactNode } from "react";
 
@@ -28,6 +29,10 @@ export interface ConversationControls {
   stop: "idle" | "pending" | "published" | "rejected" | "uncertain";
   drafts: Partial<Record<string, QuestionDraft>>;
   onRead: () => void;
+  inputAction?: { requestId: string; state: "deleting" | "uncertain" };
+  inputDeletable?: boolean;
+  onRetryInput?: (input: RetainedInputView) => void;
+  onDeleteInput?: (input: RetainedInputView) => void;
   onOlder: () => void;
   onLatest: () => void;
   onHistory: (record: ConversationRecord) => void;

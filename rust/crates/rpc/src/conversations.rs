@@ -176,6 +176,12 @@ impl Conversations for ConversationServices {
     ) -> Result<Response<wire::FieldChunk>, Status> {
         input::read(self, request).await
     }
+    async fn delete_input(
+        &self,
+        request: Request<wire::OwnerDeleteInput>,
+    ) -> Result<Response<()>, Status> {
+        input::delete(self, request).await
+    }
     async fn latest_plan(
         &self,
         request: Request<wire::RecordSource>,

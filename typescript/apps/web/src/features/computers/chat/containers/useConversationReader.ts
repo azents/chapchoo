@@ -1,5 +1,8 @@
 "use client";
-import { mergeConversationRegion } from "@chapchoo/web-core/conversation-state";
+import {
+  markConversationInputDeleted,
+  mergeConversationRegion,
+} from "@chapchoo/web-core/conversation-state";
 import { useDocumentVisibility, useWindowEvent } from "@mantine/hooks";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { trpc } from "@/shared/rpc/client";
@@ -24,6 +27,11 @@ export function useConversationReader(
   refresh: () => void;
   older: () => void;
   latest: () => void;
+  markInputDeleted: (
+    id: string,
+    conversationId: string,
+    snapshotId?: string,
+  ) => void;
 } {
   const utils = trpc.useUtils();
   const stopRef = useRef(stopLookup);
@@ -180,6 +188,15 @@ export function useConversationReader(
     read,
     readingOlder,
     refresh: request,
+    markInputDeleted: (id, conversationId, snapshotId) => {
+      current.current = markConversationInputDeleted(
+        current.current,
+        id,
+        conversationId,
+        snapshotId,
+      );
+      setRegion(current.current);
+    },
     older: () => {
       if (
         (!current.current.older && !current.current.inputOlder) ||

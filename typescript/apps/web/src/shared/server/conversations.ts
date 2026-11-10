@@ -125,6 +125,37 @@ export const conversationsRouter = router({
         ),
       ),
     ),
+  deleteInput: procedure
+    .input(
+      z
+        .object({
+          source: z
+            .object({
+              agentId: id,
+              conversationId: id,
+              snapshotId: z.string().min(1).max(512).optional(),
+            })
+            .strict(),
+          requestId: id,
+        })
+        .strict(),
+    )
+    .mutation(({ ctx, input }) =>
+      attempt(() =>
+        ctx.session.authenticated((token) =>
+          conversationApi(ctx.backend.conversations, token).deleteInput({
+            scope: {
+              agentId: input.source.agentId,
+              conversationId: input.source.conversationId,
+              target: input.source.snapshotId
+                ? { snapshotId: input.source.snapshotId }
+                : { notStarted: {} },
+            },
+            requestId: input.requestId,
+          }),
+        ),
+      ),
+    ),
   inputResult: procedure.input(operation).query(({ ctx, input }) =>
     attempt(() =>
       ctx.session.authenticated(async (token) => {
@@ -134,6 +165,7 @@ export const conversationsRouter = router({
         ).inputResult(input);
         return {
           observation: inputObservation(result),
+          deleted: result.deleted,
           receipt: result.acceptance
             ? {
                 id: result.acceptance.id,

@@ -473,6 +473,33 @@ test("sending and failed inputs share user bubbles with subdued status and new i
     ).toBeTruthy();
   }
 });
+test("confirmed failed messages expose explicit retry and delete without retrying uncertainty", async ({
+  page,
+}) => {
+  await page.goto(
+    "/iframe.html?id=chat-conversation--native-failed&viewMode=story",
+  );
+  const log = page.getByRole("log");
+  await expect(
+    log.getByRole("button", { name: "재시도", exact: true }),
+  ).toBeEnabled();
+  await expect(
+    log.getByRole("button", { name: "삭제", exact: true }),
+  ).toBeEnabled();
+  await log.getByRole("button", { name: "재시도", exact: true }).click();
+  await expect(log.locator('[data-kind="user"]')).toHaveCount(2);
+  await expect(log.locator('[data-kind="user"]').last()).toContainText(
+    "보내는 중…",
+  );
+  await log.getByRole("button", { name: "삭제", exact: true }).click();
+  await expect(
+    log.getByRole("button", { name: "재시도", exact: true }),
+  ).toHaveCount(0);
+  await expect(log.locator('[data-kind="user"]')).toHaveCount(1);
+  await expect(log.locator('[data-kind="user"]').first()).toContainText(
+    "보내는 중…",
+  );
+});
 test("auth withdrawal replaces the protected conversation surface", async ({
   page,
 }) => {
