@@ -1,6 +1,57 @@
 import { computerCopy } from "@chapchoo/web-core/computer-messages";
 import { expect, test } from "@playwright/test";
 
+for (const width of [390, 1280]) {
+  test(`activity exposes Agent details and a single no-plan history boundary at ${width}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto(
+      "/iframe.html?id=chat-conversation--no-plan-activity&viewMode=story",
+    );
+    await page.getByRole("button", { name: /코기.*작업 상태/ }).click();
+    const activity = page.getByRole("dialog", {
+      name: "작업 상태",
+      exact: true,
+    });
+    const details = activity.getByRole("link", {
+      name: "에이전트 상세",
+      exact: true,
+    });
+    await expect(details).toBeVisible();
+    await expect(details).toHaveAttribute("href", "/teams/my/agents/corgi");
+    await expect(activity.getByRole("heading", { level: 3 })).toHaveCount(0);
+    const history = activity
+      .locator("details")
+      .filter({ hasText: "전체 기록" });
+    await expect(history).toBeVisible();
+    const boundaries = await history.evaluate((element) => {
+      const summary = element.previousElementSibling;
+      return {
+        historyTop: getComputedStyle(element).borderTopStyle,
+        summaryBottom: summary
+          ? getComputedStyle(summary).borderBottomStyle
+          : null,
+        previousHeading: summary?.querySelector("h2")?.textContent,
+      };
+    });
+    expect(boundaries).toEqual({
+      historyTop: "solid",
+      summaryBottom: "none",
+      previousHeading: "에이전트 작업",
+    });
+    await expect
+      .poll(() =>
+        activity.evaluate(
+          (element) => element.scrollWidth <= element.clientWidth,
+        ),
+      )
+      .toBe(true);
+    await details.focus();
+    await expect(details).toBeFocused();
+  });
+}
+
 for (const story of [
   "sending-with-active-work",
   "reader-error-with-active-work",
