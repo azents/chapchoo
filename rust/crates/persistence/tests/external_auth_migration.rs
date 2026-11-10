@@ -43,6 +43,10 @@ macro_rules! exercise {
         let connection = &mut *$connection;
         let source = || $source;
         let pg = $postgres;
+        // This historical test owns migrations 10/11, not later additive features.
+        while connection.applied_migrations()?.len() > 11 {
+            connection.revert_last_migration(source())?;
+        }
         // Restore the required-alias schema, then exercise the original catalogue migration.
         connection.revert_last_migration(source())?;
         connection.revert_last_migration(source())?;
@@ -60,6 +64,9 @@ macro_rules! exercise {
              INSERT INTO agent_creation_receipts(owner_user_id,request_id,payload_hash,assigned_agent_id,team_id) VALUES({user},'historical-create',{hash},{removed_agent},{team})"
         ))?;
         connection.run_pending_migrations(source())?;
+        while connection.applied_migrations()?.len() > 11 {
+            connection.revert_last_migration(source())?;
+        }
         assert_eq!(connection.applied_migrations()?.len(),11);
         assert_eq!(diesel::sql_query(format!("SELECT count(*) AS n FROM agent_creation_receipts WHERE owner_user_id={user} AND request_id='historical-create' AND payload_hash={hash} AND assigned_agent_id={removed_agent} AND team_id={team}")).get_result::<Count>(connection)?.n,1);
         assert_eq!(diesel::sql_query("SELECT count(*) AS n FROM external_authentications").get_result::<Count>(connection)?.n,0);
@@ -72,6 +79,9 @@ macro_rules! exercise {
         connection.batch_execute(&format!("UPDATE external_authentications SET name='Synthetic' WHERE id={record}"))?;
         connection.revert_last_migration(source())?;
         connection.run_pending_migrations(source())?;
+        while connection.applied_migrations()?.len() > 11 {
+            connection.revert_last_migration(source())?;
+        }
         assert_eq!(diesel::sql_query(format!("SELECT count(*) AS n FROM external_authentications WHERE id={record} AND name='Synthetic' AND nonce={nonce} AND ciphertext={payload} AND current_request_id='register' AND created_at=1")).get_result::<Count>(connection)?.n,1);
         for invalid in [
             format!("UPDATE external_authentications SET owner_user_id=NULL WHERE id={record}"),
@@ -102,6 +112,9 @@ macro_rules! exercise {
         connection.batch_execute("DELETE FROM external_auth_requests")?;
         connection.revert_last_migration(source())?;
         connection.run_pending_migrations(source())?;
+        while connection.applied_migrations()?.len() > 11 {
+            connection.revert_last_migration(source())?;
+        }
         assert_eq!(diesel::sql_query("SELECT count(*) AS n FROM agent_creation_receipts WHERE request_id='historical-create'").get_result::<Count>(connection)?.n,1);
         if !pg {
             assert_eq!(diesel::sql_query("SELECT count(*) AS n FROM pragma_foreign_key_check").get_result::<Count>(connection)?.n,0);

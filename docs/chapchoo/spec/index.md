@@ -81,6 +81,7 @@ real Docker, browser journeys and live cluster rollout.
 - [Account operations and mail](domain/account-operations.md) — password capacity, acceptance time and single-attempt delivery.
 - [Account RPC](domain/account-rpc.md) — service groups, per-call credentials, wire admission and errors.
 - [Account schema and preparation](domain/account-storage.md) — keys, relationships, original-root binding and readiness.
+- [Private conversation storage](domain/conversation-storage.md) — saved supply, input acceptance and source-bound event pairs; internal storage only, not native execution.
 - [Account and Team transactions](domain/account-transactions.md) — sessions, grants, invitations, roles and context deletion.
 - [Private Agent ownership](domain/agent-ownership.md) — Team scope, private access and cleanup after leave/delete.
 
