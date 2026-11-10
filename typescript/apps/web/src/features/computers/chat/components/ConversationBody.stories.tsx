@@ -143,6 +143,7 @@ function Fixture({
     | "review"
     | "media"
     | "inputs"
+    | "captured"
     | "content";
   locale: string;
   surface: "transcript" | "history";
@@ -207,61 +208,67 @@ function Fixture({
           ]
         : mode === "inputs"
           ? []
-          : mode === "content"
+          : mode === "captured"
             ? [
-                record("user", "user", 1n, [
-                  {
-                    type: "text",
-                    text: "**User Markdown** with [a user reference](https://example.com/user).\n\n- First request\n- Second request\n\n`inline code`\n\n<script>alert('not executable')</script>",
-                  },
+                record("user", "native-user", 1n, [
+                  { type: "text", text: "ㅎㅇ" },
                 ]),
-                record("assistant", "assistant-one", 2n, [
-                  {
-                    type: "text",
-                    text: "## First utterance\n\nA **streamed** answer with [a reference](https://example.com).\n",
-                  },
-                  {
-                    type: "text",
-                    text: "\n| Item | Value |\n| --- | --- |\n| Complete | Untruncated |",
-                  },
-                ]),
-                record("assistant", "assistant-two", 3n, [
-                  { type: "text", text: "A distinct assistant utterance." },
-                ]),
-                {
-                  ...record("tool", "tool", 4n, [
+              ]
+            : mode === "content"
+              ? [
+                  record("user", "user", 1n, [
                     {
-                      type: "diff",
-                      path: "/workspace/notes.txt",
-                      oldText: "previous line",
-                      newText: "new line",
+                      type: "text",
+                      text: "**User Markdown** with [a user reference](https://example.com/user).\n\n- First request\n- Second request\n\n`inline code`\n\n<script>alert('not executable')</script>",
                     },
                   ]),
-                  title: "Update notes",
-                  status: "completed",
-                },
-                {
-                  ...record("tool", "raw-tool", 5n, []),
-                  title: "Read note",
-                  status: "completed",
-                  toolInput: {
-                    json: '{"path":"notes.txt","limit":9223372036854775807}',
+                  record("assistant", "assistant-one", 2n, [
+                    {
+                      type: "text",
+                      text: "## First utterance\n\nA **streamed** answer with [a reference](https://example.com).\n",
+                    },
+                    {
+                      type: "text",
+                      text: "\n| Item | Value |\n| --- | --- |\n| Complete | Untruncated |",
+                    },
+                  ]),
+                  record("assistant", "assistant-two", 3n, [
+                    { type: "text", text: "A distinct assistant utterance." },
+                  ]),
+                  {
+                    ...record("tool", "tool", 4n, [
+                      {
+                        type: "diff",
+                        path: "/workspace/notes.txt",
+                        oldText: "previous line",
+                        newText: "new line",
+                      },
+                    ]),
+                    title: "Update notes",
+                    status: "completed",
                   },
-                  toolOutput: {
-                    json: '{"lines":["complete tool-only result"],"enabled":false}',
+                  {
+                    ...record("tool", "raw-tool", 5n, []),
+                    title: "Read note",
+                    status: "completed",
+                    toolInput: {
+                      json: '{"path":"notes.txt","limit":9223372036854775807}',
+                    },
+                    toolOutput: {
+                      json: '{"lines":["complete tool-only result"],"enabled":false}',
+                    },
                   },
-                },
-                {
-                  ...record("terminal", "terminal", 5n, []),
-                  title: "printf",
-                  terminal: {
-                    text: "Complete output\n",
-                    base64: "Q29tcGxldGUgb3V0cHV0Cg==",
-                    exitCode: 0,
+                  {
+                    ...record("terminal", "terminal", 5n, []),
+                    title: "printf",
+                    terminal: {
+                      text: "Complete output\n",
+                      base64: "Q29tcGxldGUgb3V0cHV0Cg==",
+                      exitCode: 0,
+                    },
                   },
-                },
-              ]
-            : [request];
+                ]
+              : [request];
   const controls: ConversationControls = {
     region: {
       header: {
@@ -276,6 +283,28 @@ function Fixture({
         foreground: "requiresAction",
       },
       records: mode === "loading" ? [] : records,
+      inputs:
+        mode === "captured"
+          ? [
+              {
+                id: "captured-input",
+                requestId: "captured",
+                conversationId: "conversation",
+                acceptedAt: 1n,
+                text: "ㅎㅇ",
+                observation: "inserted",
+                insertedNativeMessageId: "native-user",
+              },
+              {
+                id: "unmatched-failed-input",
+                requestId: "unmatched-failed",
+                conversationId: "conversation",
+                acceptedAt: 2n,
+                text: "전달되지 않은 메시지",
+                observation: "failed",
+              },
+            ]
+          : [],
       renderedAt: 1,
     },
     read: mode === "loading" ? "loading" : mode === "error" ? "error" : "ready",
@@ -408,6 +437,9 @@ export const ReviewHistory: Story = {
 };
 export const Media: Story = { args: { mode: "media", locale: "ko-KR" } };
 export const InputStates: Story = { args: { mode: "inputs", locale: "ko-KR" } };
+export const CapturedHistory: Story = {
+  args: { mode: "captured", locale: "ko-KR", surface: "history" },
+};
 export const Korean: Story = { args: { locale: "ko-KR" } };
 export const Japanese: Story = { args: { locale: "ja-JP" } };
 export const French: Story = { args: { locale: "fr-FR" } };

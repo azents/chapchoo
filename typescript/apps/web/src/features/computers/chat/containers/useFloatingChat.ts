@@ -111,7 +111,12 @@ export function useFloatingChat(
             shell.getBoundingClientRect().top,
         )}px`,
       );
+      shell.toggleAttribute(
+        "data-short-scroll",
+        content.offsetHeight <= viewport.clientHeight,
+      );
       if (following.current) {
+        viewport.scrollTop = viewport.scrollHeight;
         schedulePin();
       }
     };

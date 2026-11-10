@@ -149,6 +149,7 @@
 .timelineShell {
   --composer-space: 8rem;
   --profile-space: 9rem;
+  --chat-scroll-travel: calc(var(--mantine-spacing-4xl) * 3);
   position: relative;
   flex: 1;
   min-height: 0;
@@ -164,7 +165,8 @@
 }
 .viewport {
   width: 100%;
-  overscroll-behavior-y: contain;
+  overscroll-behavior-x: none;
+  overscroll-behavior-y: auto;
   touch-action: pan-y pinch-zoom;
   overflow-anchor: none;
   scrollbar-width: none;
@@ -183,6 +185,17 @@
 }
 .scrollbar[data-orientation="vertical"] {
   bottom: var(--composer-space);
+}
+/* Mantine wraps transcript children in an auto-height content box, so a
+   percentage on the transcript itself does not resolve. Short transcripts
+   add travel above the resting position; the latest pin hides that travel. */
+.timelineShell[data-short-scroll] .scrollContent {
+  min-height: calc(100% + var(--chat-scroll-travel));
+}
+.timelineShell[data-short-scroll] .scrollContent::before {
+  content: "";
+  display: block;
+  height: var(--chat-scroll-travel);
 }
 .conversation {
   max-width: 53.375rem;
@@ -383,7 +396,13 @@
   justify-content: space-between;
   width: 100%;
 }
-.recentFade { mask-image: linear-gradient(to bottom, transparent, black var(--mantine-spacing-xl)); }
+.recentFade {
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    black var(--mantine-spacing-xl)
+  );
+}
 .srOnly {
   position: absolute;
   width: 0.0625rem;

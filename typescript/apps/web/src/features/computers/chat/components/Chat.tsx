@@ -176,10 +176,11 @@ export function Chat(props: ChatProps): ReactElement {
               className={classes.scrollRoot}
               viewportRef={f.viewportRef}
               type="hover"
-              overscrollBehavior="contain"
+              overscrollBehavior="auto"
               classNames={{
                 viewport: classes.viewport,
                 scrollbar: classes.scrollbar,
+                content: classes.scrollContent,
               }}
               viewportProps={{
                 role: "log",

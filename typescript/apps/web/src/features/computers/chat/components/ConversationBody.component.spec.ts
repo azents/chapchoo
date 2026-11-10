@@ -229,6 +229,21 @@ test("a definitive validation rejection keeps the original form editable for man
   ).toBeEnabled();
 });
 
+test("history shows a captured user message without a second delivery row", async ({
+  page,
+}) => {
+  await page.goto(
+    "/iframe.html?id=chat-conversation-body--captured-history&viewMode=story",
+  );
+  await expect(page.getByRole("button", { name: "나 ㅎㅇ" })).toBeVisible();
+  await expect(page.getByText("메시지 · 에이전트에 전달됨")).toHaveCount(0);
+  const unmatched = page
+    .getByRole("region", { name: "나" })
+    .filter({ hasText: "전달되지 않은 메시지" });
+  await expect(unmatched).toBeVisible();
+  await expect(unmatched.getByText("전달 실패", { exact: true })).toBeVisible();
+});
+
 for (const story of [
   "form",
   "permission",
