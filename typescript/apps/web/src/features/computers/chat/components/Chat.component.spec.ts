@@ -2,6 +2,43 @@ import { computerCopy } from "@chapchoo/web-core/computer-messages";
 import { expect, test } from "@playwright/test";
 
 for (const width of [390, 1280]) {
+  test(`composer keeps Codex and Send at its original right edge at ${width}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto(
+      "/iframe.html?id=chat-conversation--composer-empty&viewMode=story",
+    );
+    const input = page.getByRole("textbox", { name: "Message", exact: true });
+    const send = page.getByRole("button", { name: "Send", exact: true });
+    await expect(input).toBeEnabled();
+    await expect(send).toBeDisabled();
+    await input.fill("Keep the existing composer");
+    await expect(send).toBeEnabled();
+    await expect
+      .poll(() =>
+        send.evaluate((button) => {
+          const composer = button.closest("footer");
+          const label = button.previousElementSibling;
+          if (!composer || !label) {
+            return false;
+          }
+          const bounds = composer.getBoundingClientRect();
+          const sendBounds = button.getBoundingClientRect();
+          const labelBounds = label.getBoundingClientRect();
+          return (
+            label.textContent === "Codex" &&
+            labelBounds.left > bounds.left + bounds.width / 2 &&
+            labelBounds.right <= sendBounds.left &&
+            sendBounds.right <= bounds.right
+          );
+        }),
+      )
+      .toBe(true);
+  });
+}
+
+for (const width of [390, 1280]) {
   test(`activity exposes Agent details and a single no-plan history boundary at ${width}`, async ({
     page,
   }) => {
