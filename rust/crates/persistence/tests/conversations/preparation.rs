@@ -283,7 +283,7 @@ pub(super) async fn initial(
             &AcceptConversationInput {
                 agent_id: f.agent.id.clone(),
                 conversation_id: Some(first.conversation_id.clone()),
-                request_id: "setup-failed".into(),
+                request_id: "zz-setup-failed".into(),
                 target: ConversationTarget::NotStarted,
                 text: ConversationText::parse("another explicit input".into())?,
             },
@@ -317,7 +317,7 @@ pub(super) async fn initial(
     };
     assert!(matches!(
         store
-            .delete_failed_conversation_input(&f.other.digest(), &scope, "setup-failed", f.now)
+            .delete_failed_conversation_input(&f.other.digest(), &scope, "zz-setup-failed", f.now)
             .await,
         Err(StoreError::NotFound)
     ));
@@ -333,27 +333,76 @@ pub(super) async fn initial(
     };
     assert!(matches!(
         store
-            .delete_failed_conversation_input(&owner, &stale_scope, "setup-failed", f.now)
+            .delete_failed_conversation_input(&owner, &stale_scope, "zz-setup-failed", f.now)
             .await,
         Err(StoreError::Conflict)
     ));
+    assert_eq!(
+        store
+            .latest_conversation_input(&owner, &scope, f.now)
+            .await?
+            .ok_or("Missing newest input")?
+            .reference
+            .request_id,
+        "zz-setup-failed"
+    );
     store
-        .delete_failed_conversation_input(&owner, &scope, "setup-failed", f.now)
+        .delete_failed_conversation_input(&owner, &scope, "zz-setup-failed", f.now)
         .await?;
     store
-        .delete_failed_conversation_input(&owner, &scope, "setup-failed", f.now)
+        .delete_failed_conversation_input(&owner, &scope, "zz-setup-failed", f.now)
         .await?;
-    let deleted = store
+    let listed = store
         .conversation_inputs(&owner, &scope, None, 25, f.now)
-        .await?
-        .into_iter()
-        .find(|item| item.reference.request_id == "setup-failed")
+        .await?;
+    let deleted = listed
+        .iter()
+        .find(|item| item.reference.request_id == "zz-setup-failed")
         .ok_or("Missing deletion tombstone")?;
+    assert_eq!(listed[0].reference.request_id, "zz-setup-failed");
     assert!(deleted.deleted);
     assert_eq!(deleted.bytes, 0);
+    let live = store
+        .latest_conversation_input(&owner, &scope, f.now)
+        .await?
+        .ok_or("Missing earlier live input")?;
+    assert_eq!(live.reference.request_id, "unresolved-start");
+    assert!(!live.deleted);
     assert!(matches!(
         store
-            .conversation_input_text(&owner, &scope, "setup-failed", 0, 1, f.now)
+            .latest_conversation_input(&owner, &stale_scope, f.now)
+            .await,
+        Err(StoreError::Conflict)
+    ));
+    let older = store
+        .conversation_inputs(
+            &owner,
+            &scope,
+            Some(&chapchoo_persistence::ConversationInputAnchor {
+                accepted_at: deleted.reference.accepted_at,
+                request_id: deleted.reference.request_id.clone(),
+            }),
+            25,
+            f.now,
+        )
+        .await?;
+    assert!(
+        older
+            .iter()
+            .all(|item| item.reference.request_id != "zz-setup-failed")
+    );
+    assert_eq!(
+        store
+            .latest_conversation_input(&owner, &scope, f.now)
+            .await?
+            .ok_or("Missing live input after an older page")?
+            .reference
+            .request_id,
+        "unresolved-start"
+    );
+    assert!(matches!(
+        store
+            .conversation_input_text(&owner, &scope, "zz-setup-failed", 0, 1, f.now)
             .await,
         Err(StoreError::NotFound)
     ));
@@ -364,7 +413,7 @@ pub(super) async fn initial(
                 &AcceptConversationInput {
                     agent_id: f.agent.id.clone(),
                     conversation_id: Some(first.conversation_id.clone()),
-                    request_id: "setup-failed".into(),
+                    request_id: "zz-setup-failed".into(),
                     target: ConversationTarget::NotStarted,
                     text: ConversationText::parse("another explicit input".into())?,
                 },

@@ -51,6 +51,30 @@ impl Store {
         limit: i64,
         now: i64,
     ) -> Result<Vec<RetainedConversationInput>, StoreError> {
+        self.conversation_inputs_filtered(actor, scope, before, limit, now, false)
+            .await
+    }
+    pub async fn latest_conversation_input(
+        &self,
+        actor: &SecretDigest,
+        scope: &ConversationInputScope<'_>,
+        now: i64,
+    ) -> Result<Option<RetainedConversationInput>, StoreError> {
+        Ok(self
+            .conversation_inputs_filtered(actor, scope, None, 1, now, true)
+            .await?
+            .into_iter()
+            .next())
+    }
+    async fn conversation_inputs_filtered(
+        &self,
+        actor: &SecretDigest,
+        scope: &ConversationInputScope<'_>,
+        before: Option<&ConversationInputAnchor>,
+        limit: i64,
+        now: i64,
+        present_only: bool,
+    ) -> Result<Vec<RetainedConversationInput>, StoreError> {
         if !(1..=25).contains(&limit) {
             return Err(StoreError::InvalidInput);
         }
@@ -82,10 +106,10 @@ impl Store {
             matches(&row, scope, agent)?;
             let query = match dialect {
                 Dialect::Postgres => {
-                    "SELECT i.id,i.request_id,i.target_snapshot,i.accepted_at,CAST(COALESCE(octet_length(i.submitted_text),0) AS BIGINT) AS bytes,(i.deleted_at IS NOT NULL) AS deleted FROM conversation_inputs i JOIN conversations c ON c.id=i.conversation_id WHERE i.conversation_id=? AND (c.source_snapshot=? OR (c.source_snapshot IS NULL AND ? IS NULL)) AND (i.accepted_at<? OR (i.accepted_at=? AND i.request_id<?)) ORDER BY i.accepted_at DESC,i.request_id DESC LIMIT ?"
+                    "SELECT i.id,i.request_id,i.target_snapshot,i.accepted_at,CAST(COALESCE(octet_length(i.submitted_text),0) AS BIGINT) AS bytes,(i.deleted_at IS NOT NULL) AS deleted FROM conversation_inputs i JOIN conversations c ON c.id=i.conversation_id WHERE i.conversation_id=? AND (c.source_snapshot=? OR (c.source_snapshot IS NULL AND ? IS NULL)) AND (i.accepted_at<? OR (i.accepted_at=? AND i.request_id<?)) AND (?=FALSE OR i.deleted_at IS NULL) ORDER BY i.accepted_at DESC,i.request_id DESC LIMIT ?"
                 }
                 Dialect::Sqlite => {
-                    "SELECT i.id,i.request_id,i.target_snapshot,i.accepted_at,CAST(COALESCE(length(CAST(i.submitted_text AS BLOB)),0) AS BIGINT) AS bytes,(i.deleted_at IS NOT NULL) AS deleted FROM conversation_inputs i JOIN conversations c ON c.id=i.conversation_id WHERE i.conversation_id=? AND (c.source_snapshot=? OR (c.source_snapshot IS NULL AND ? IS NULL)) AND (i.accepted_at<? OR (i.accepted_at=? AND i.request_id<?)) ORDER BY i.accepted_at DESC,i.request_id DESC LIMIT ?"
+                    "SELECT i.id,i.request_id,i.target_snapshot,i.accepted_at,CAST(COALESCE(length(CAST(i.submitted_text AS BLOB)),0) AS BIGINT) AS bytes,(i.deleted_at IS NOT NULL) AS deleted FROM conversation_inputs i JOIN conversations c ON c.id=i.conversation_id WHERE i.conversation_id=? AND (c.source_snapshot=? OR (c.source_snapshot IS NULL AND ? IS NULL)) AND (i.accepted_at<? OR (i.accepted_at=? AND i.request_id<?)) AND (?=FALSE OR i.deleted_at IS NULL) ORDER BY i.accepted_at DESC,i.request_id DESC LIMIT ?"
                 }
             };
             let snapshot = scope.target.snapshot().map(SnapshotId::as_str);
@@ -96,6 +120,7 @@ impl Store {
                 .bind::<BigInt, _>(time)
                 .bind::<BigInt, _>(time)
                 .bind::<Text, _>(request)
+                .bind::<diesel::sql_types::Bool, _>(present_only)
                 .bind::<BigInt, _>(limit)
                 .load::<Row>(connection)
                 .await?;

@@ -358,15 +358,14 @@ export async function readConversationRegion(
           : { notStarted: {} },
       }
     : undefined;
-  const retained = inputScope
-    ? (
-        await api.inputs({
-          scope: inputScope,
-          before: sameSource ? input.inputBefore : undefined,
-          limit: 24,
-        })
-      ).inputs
-    : [];
+  const retainedPage = inputScope
+    ? await api.inputs({
+        scope: inputScope,
+        before: sameSource ? input.inputBefore : undefined,
+        limit: 24,
+      })
+    : { inputs: [], latest: undefined };
+  const retained = retainedPage.inputs;
   const inputs: NonNullable<ConversationRegion["inputs"]> = [];
   for (const item of retained) {
     if (!item.acceptance || !inputScope)
@@ -404,7 +403,10 @@ export async function readConversationRegion(
       insertedNativeMessageId: status.delivery?.insertedNativeMessageId,
     });
   }
-  const firstInput = inputs[0]?.deleted ? undefined : inputs[0];
+  const newest = retainedPage.latest;
+  const firstInput = newest
+    ? inputs.find((item) => !item.deleted && item.id === newest.id)
+    : undefined;
   let latestInput: ConversationRegion["latestInput"] = firstInput
     ? {
         requestId: firstInput.requestId,
@@ -412,26 +414,20 @@ export async function readConversationRegion(
         preparation: firstInput.preparation,
       }
     : undefined;
-  // History pagination must not turn an older failure into the current diagnosis.
-  if (inputScope && sameSource && input.inputBefore) {
-    const latestItem = (
-      await api.inputs({ scope: inputScope, before: undefined, limit: 1 })
-    ).inputs[0];
-    const latest = latestItem?.deleted ? undefined : latestItem?.acceptance;
-    if (latest) {
-      const status = await api.inputResult({
-        agentId: input.agentId,
-        conversationId: latest.conversationId,
-        requestId: latest.requestId,
-      });
-      latestInput = {
-        requestId: latest.requestId,
-        observation: inputObservation(status),
-        preparation: inputPreparation(status),
-      };
-    } else {
-      latestInput = undefined;
-    }
+  // The source-qualified latest live operation is independent of history pages.
+  if (newest && !firstInput) {
+    const status = await api.inputResult({
+      agentId: input.agentId,
+      conversationId: newest.conversationId,
+      requestId: newest.requestId,
+    });
+    latestInput = status.deleted
+      ? undefined
+      : {
+          requestId: newest.requestId,
+          observation: inputObservation(status),
+          preparation: inputPreparation(status),
+        };
   }
   const inputLast = retained.at(-1)?.acceptance;
   const inputOlder =

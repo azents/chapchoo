@@ -225,7 +225,30 @@ pub(super) async fn list(
         )
         .await
         .map_err(status)?;
+    let latest = service
+        .conversation
+        .latest_input(
+            &actor,
+            &chapchoo_service::ConversationInputScope {
+                agent_id: &scope.agent_id,
+                conversation_id: &scope.conversation_id,
+                target: &target,
+            },
+            now()?,
+        )
+        .await
+        .map_err(status)?
+        .map(|value| {
+            acceptance(ConversationInputAcceptance {
+                id: value.reference.id,
+                conversation_id: value.reference.conversation_id,
+                request_id: value.reference.request_id,
+                target: value.reference.target,
+                accepted_at: value.reference.accepted_at,
+            })
+        });
     Ok(Response::new(wire::RetainedInputs {
+        latest,
         inputs: values
             .into_iter()
             .map(|value| wire::RetainedInput {
