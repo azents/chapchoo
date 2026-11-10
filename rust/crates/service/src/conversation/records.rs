@@ -30,6 +30,17 @@ impl ConversationService {
             .conversation_inputs(actor, scope, before, limit, now)
             .await?)
     }
+    pub async fn latest_input(
+        &self,
+        actor: &SecretDigest,
+        scope: &chapchoo_persistence::ConversationInputScope<'_>,
+        now: i64,
+    ) -> Result<Option<chapchoo_persistence::RetainedConversationInput>, ServiceError> {
+        Ok(self
+            .store
+            .latest_conversation_input(actor, scope, now)
+            .await?)
+    }
     pub async fn input_text(
         &self,
         actor: &SecretDigest,

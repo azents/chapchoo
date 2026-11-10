@@ -66,7 +66,8 @@ message InputAnchor { int64 accepted_at = 1; string request_id = 2; }
 message OwnerInputsRequest { OwnerInputScope scope = 1; InputAnchor before = 2; uint32 limit = 3; }
 message RetainedInput { InputAcceptance acceptance = 1; int64 total_bytes = 2; bool deleted = 3; }
 message OwnerDeleteInput { OwnerInputScope scope = 1; string request_id = 2; }
-message RetainedInputs { repeated RetainedInput inputs = 1; }
+// `latest` is the newest non-deleted acceptance for this exact source, independent of `before`.
+message RetainedInputs { repeated RetainedInput inputs = 1; InputAcceptance latest = 2; }
 message OwnerInputRead { OwnerInputScope scope = 1; string request_id = 2; uint32 offset = 3; uint32 length = 4; }
 enum InputOwnership {
   INPUT_OWNERSHIP_UNSPECIFIED = 0; INPUT_OWNERSHIP_PROCESSING_HERE = 1;

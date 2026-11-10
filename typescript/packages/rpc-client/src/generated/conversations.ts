@@ -241,8 +241,10 @@ export interface OwnerDeleteInput {
   requestId: string;
 }
 
+/** `latest` is the newest non-deleted acceptance for this exact source, independent of `before`. */
 export interface RetainedInputs {
   inputs: RetainedInput[];
+  latest: InputAcceptance | undefined;
 }
 
 export interface OwnerInputRead {
@@ -2153,13 +2155,16 @@ export const OwnerDeleteInput: MessageFns<OwnerDeleteInput> = {
 };
 
 function createBaseRetainedInputs(): RetainedInputs {
-  return { inputs: [] };
+  return { inputs: [], latest: undefined };
 }
 
 export const RetainedInputs: MessageFns<RetainedInputs> = {
   encode(message: RetainedInputs, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     for (const v of message.inputs) {
       RetainedInput.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.latest !== undefined) {
+      InputAcceptance.encode(message.latest, writer.uint32(18).fork()).join();
     }
     return writer;
   },
@@ -2185,6 +2190,14 @@ export const RetainedInputs: MessageFns<RetainedInputs> = {
             message.inputs.push(RetainedInput.decode(reader, reader.uint32()));
             continue;
           }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.latest = InputAcceptance.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2203,6 +2216,9 @@ export const RetainedInputs: MessageFns<RetainedInputs> = {
   fromPartial<I extends Exact<DeepPartial<RetainedInputs>, I>>(object: I): RetainedInputs {
     const message = createBaseRetainedInputs();
     message.inputs = object.inputs?.map((e) => RetainedInput.fromPartial(e)) || [];
+    message.latest = (object.latest !== undefined && object.latest !== null)
+      ? InputAcceptance.fromPartial(object.latest)
+      : undefined;
     return message;
   },
 };

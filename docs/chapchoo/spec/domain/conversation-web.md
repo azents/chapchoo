@@ -78,7 +78,9 @@ and uncertain retirement retain their distinct user consequences.
 
 The read owner preserves typed setup results beside retained input operations.
 A separate latest-input observation stays current even when the user pages older
-inputs. The current native foreground observation takes precedence over past
+inputs. It follows the newest non-deleted operation for the exact source, so
+deleting a newer failure does not hide an earlier accepted or preparing
+operation. The current native foreground observation takes precedence over past
 startup failures. New local submissions supersede older failure feedback without
 replaying it. Authentication setup links to the Agent detail page; read recovery
 only refreshes observations. The composer is disabled when authentication must

@@ -114,8 +114,11 @@ private owner, Team, exact conversation and original source before clearing the
 body. It preserves the accepted operation identity and outcome; the same Request
 ID remains consumed and is rejected before deleted-body decoding. Deletion is
 idempotent and does not cancel work or erase native transcript records. Bounded
-lists expose bodyless deletion tombstones, body reads exclude removed content,
-and exact input-result recovery includes deletion state. Downgrade is rejected
+lists expose bodyless deletion tombstones and, independently of the page anchor,
+the newest non-deleted acceptance for that exact private source. A newer
+tombstone does not replace an earlier live operation as that selection. Body
+reads exclude removed content, and exact input-result recovery includes
+deletion state. Downgrade is rejected
 while removed bodies cannot be restored. Logical deletion does not erase storage
 pages or backups.
 

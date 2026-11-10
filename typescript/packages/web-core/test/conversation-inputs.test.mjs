@@ -33,7 +33,10 @@ function fixture({ started = true, known = false } = {}) {
       }),
       inputs: async (input) => {
         reads.push({ type: "list", input });
-        return { inputs: [{ acceptance, totalBytes: BigInt(bytes.length) }] };
+        return {
+          inputs: [{ acceptance, totalBytes: BigInt(bytes.length) }],
+          latest: acceptance,
+        };
       },
       readInput: async (input) => {
         assert.equal(known, false);
@@ -233,17 +236,15 @@ test("latest startup diagnosis stays current while browsing older failed inputs 
   });
   assert.deepEqual(first.inputs[0].preparation, first.latestInput.preparation);
   const list = f.api.inputs;
-  f.api.inputs = async (input) =>
-    input.limit === 1
-      ? {
-          inputs: [
-            {
-              acceptance: { ...f.acceptance, requestId: "latest" },
-              totalBytes: 0n,
-            },
-          ],
-        }
-      : list(input);
+  f.api.inputs = async (input) => ({
+    ...(await list(input)),
+    latest: {
+      ...f.acceptance,
+      id: "latest-operation",
+      requestId: "latest",
+      acceptedAt: 40n,
+    },
+  });
   const older = await readConversationRegion(f.api, {
     agentId: "agent",
     expectedConversationId: "conversation",
@@ -253,4 +254,68 @@ test("latest startup diagnosis stays current while browsing older failed inputs 
   assert.deepEqual(older.latestInput.preparation, { type: "preparing" });
   assert.equal(older.latestInput.requestId, "latest");
   assert.equal(older.inputs[0].preparation.type, "failed");
+});
+test("a newer deleted failure does not hide an earlier preparing input", async () => {
+  const f = fixture({ started: false, known: true });
+  const live = {
+    ...f.acceptance,
+    id: "live-operation",
+    requestId: "live",
+    acceptedAt: 20n,
+  };
+  const tombstone = {
+    ...f.acceptance,
+    id: "deleted-operation",
+    requestId: "zz-deleted",
+    acceptedAt: 20n,
+  };
+  f.api.inputResult = async ({ requestId }) => ({
+    acceptance: requestId === "live" ? live : tombstone,
+    ownership: 1,
+    deleted: requestId !== "live",
+    preparation:
+      requestId === "live" ? { possibleForwarding: {} } : { failed: 3 },
+  });
+  f.api.inputs = async () => ({
+    inputs: [
+      { acceptance: tombstone, totalBytes: 0n, deleted: true },
+      { acceptance: live, totalBytes: 4n, deleted: false },
+    ],
+    latest: live,
+  });
+  const current = await readConversationRegion(f.api, {
+    agentId: "agent",
+    expectedConversationId: "conversation",
+    knownInputs: [live.id],
+  });
+  assert.equal(current.latestInput.requestId, "live");
+  assert.deepEqual(current.latestInput.preparation, { type: "preparing" });
+  assert.equal(
+    current.inputs.find((item) => item.requestId === "zz-deleted").deleted,
+    true,
+  );
+  assert.equal(
+    markConversationInputDeleted(current, tombstone.id, "conversation")
+      .latestInput.requestId,
+    "live",
+  );
+  f.api.inputs = async () => ({
+    inputs: [{ acceptance: tombstone, totalBytes: 0n, deleted: true }],
+    latest: live,
+  });
+  const older = await readConversationRegion(f.api, {
+    agentId: "agent",
+    expectedConversationId: "conversation",
+    knownInputs: [tombstone.id],
+    inputBefore: { acceptedAt: 20n, requestId: "zz-deleted" },
+  });
+  assert.equal(older.latestInput.requestId, "live");
+  assert.equal(
+    older.inputs.some((item) => item.requestId === "live"),
+    false,
+  );
+  assert.equal(
+    mergeConversationRegion(current, older).latestInput.requestId,
+    "live",
+  );
 });
