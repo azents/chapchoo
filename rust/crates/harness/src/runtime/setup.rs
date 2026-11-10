@@ -2,7 +2,10 @@
 use super::*;
 #[derive(Clone, PartialEq, Eq)]
 pub enum NativeSetupIntent {
-    Initial { allow_fresh: bool },
+    Initial {
+        allow_fresh: bool,
+        require_retained_source: bool,
+    },
     Existing(NativeTextTarget),
 }
 #[derive(Clone, PartialEq, Eq)]
@@ -153,7 +156,10 @@ impl State {
             None => {
                 if !matches!(
                     operation.intent,
-                    NativeSetupIntent::Initial { allow_fresh: true }
+                    NativeSetupIntent::Initial {
+                        allow_fresh: true,
+                        require_retained_source: false
+                    }
                 ) {
                     return Err(Error::CaptureUnavailable);
                 }
@@ -167,25 +173,7 @@ impl State {
             }
         };
         let snapshot = source.snapshot()?;
-        let native = source.native_session()?;
-        let context = match (&operation.intent, native) {
-            (NativeSetupIntent::Existing(expected), Some(session))
-                if expected.snapshot == snapshot && expected.native_session == session =>
-            {
-                NativeContext::Resume {
-                    session,
-                    replay: CaptureReplay::AlreadyCaptured,
-                }
-            }
-            (NativeSetupIntent::Initial { .. }, Some(session)) => NativeContext::Resume {
-                session,
-                replay: CaptureReplay::AlreadyCaptured,
-            },
-            (NativeSetupIntent::Initial { allow_fresh: true }, None) if source.is_empty()? => {
-                NativeContext::New
-            }
-            _ => return Err(Error::CaptureUnavailable),
-        };
+        let context = retained_context(&operation.intent, &source)?;
         let native_session = self
             .start(operation.supply.clone(), context, source, authentication)
             .await?;
@@ -194,6 +182,34 @@ impl State {
             native_session,
         })
     }
+}
+fn retained_context(
+    intent: &NativeSetupIntent,
+    source: &crate::CaptureLog,
+) -> Result<NativeContext, Error> {
+    let snapshot = source.snapshot()?;
+    let native = source.native_session()?;
+    Ok(match (intent, native) {
+        (NativeSetupIntent::Existing(expected), Some(session))
+            if expected.snapshot == snapshot && expected.native_session == session =>
+        {
+            NativeContext::Resume {
+                session,
+                replay: CaptureReplay::AlreadyCaptured,
+            }
+        }
+        (NativeSetupIntent::Initial { .. }, Some(session)) => NativeContext::Resume {
+            session,
+            replay: CaptureReplay::AlreadyCaptured,
+        },
+        (
+            NativeSetupIntent::Initial {
+                allow_fresh: true, ..
+            },
+            None,
+        ) if source.is_empty()? => NativeContext::New,
+        _ => return Err(Error::CaptureUnavailable),
+    })
 }
 impl NativeHandle {
     /// Queue admission returns before preparation; later lookup reads actor-owned facts.
@@ -243,7 +259,10 @@ mod tests {
         let operation = NativeSetupOperation {
             operation_id: "operation".into(),
             supply: HarnessSupply::Managed,
-            intent: NativeSetupIntent::Initial { allow_fresh: true },
+            intent: NativeSetupIntent::Initial {
+                allow_fresh: true,
+                require_retained_source: false,
+            },
         };
         registry.begin(&operation)?;
         let rejected = NativeSetupObservation::Failed(NativeSetupFailure::NotAdmitted);
@@ -270,7 +289,10 @@ mod tests {
         NativeSetupOperation {
             operation_id: id.into(),
             supply: HarnessSupply::Managed,
-            intent: NativeSetupIntent::Initial { allow_fresh: true },
+            intent: NativeSetupIntent::Initial {
+                allow_fresh: true,
+                require_retained_source: false,
+            },
         }
     }
     #[test]
@@ -284,7 +306,10 @@ mod tests {
             Some(NativeSetupObservation::PossibleForwarding)
         ));
         let changed = NativeSetupOperation {
-            intent: NativeSetupIntent::Initial { allow_fresh: false },
+            intent: NativeSetupIntent::Initial {
+                allow_fresh: false,
+                require_retained_source: false,
+            },
             ..first.clone()
         };
         assert!(matches!(
@@ -317,7 +342,10 @@ mod tests {
         let authentication: Arc<dyn NativeAuthenticationProvider> =
             Arc::new(UnusedAuthentication(calls.clone()));
         let operation = NativeSetupOperation {
-            intent: NativeSetupIntent::Initial { allow_fresh: false },
+            intent: NativeSetupIntent::Initial {
+                allow_fresh: false,
+                require_retained_source: false,
+            },
             ..operation("resume-only")
         };
         let rx =
@@ -338,6 +366,50 @@ mod tests {
         ));
         assert_eq!(owner.finish().await?, Retirement::NoNativeStarted);
         assert_eq!(calls.load(Ordering::SeqCst), 0);
+        Ok(())
+    }
+    #[tokio::test]
+    async fn recovery_grant_cannot_replace_a_missing_retained_capture() -> Result<(), TestError> {
+        let saved = tempfile::tempdir()?;
+        let storage = NativeStorage::open(saved.path())?;
+        let capture = crate::CaptureLog::create(&storage)?;
+        let intent = NativeSetupIntent::Initial {
+            allow_fresh: true,
+            require_retained_source: true,
+        };
+        assert!(matches!(
+            retained_context(&intent, &capture)?,
+            NativeContext::New
+        ));
+        let session = NativeConversationId::parse("existing-native-context".into())?;
+        capture.bind_native(&session)?;
+        assert!(
+            matches!(retained_context(&intent, &capture)?, NativeContext::Resume { session: found, .. } if found == session)
+        );
+        drop(capture);
+        fs::remove_dir_all(storage.capture_root().join("current"))?;
+        let owner = NativeOwner::new(storage.clone())?;
+        let calls = Arc::new(AtomicUsize::new(0));
+        let authentication: Arc<dyn NativeAuthenticationProvider> =
+            Arc::new(UnusedAuthentication(calls.clone()));
+        let result = owner
+            .handle()
+            .admit_setup_with_authentication(
+                NativeSetupOperation {
+                    operation_id: "recovery-after-source-loss".into(),
+                    supply: HarnessSupply::Managed,
+                    intent,
+                },
+                authentication,
+            )?
+            .await??;
+        assert!(matches!(
+            result,
+            NativeSetupObservation::Failed(NativeSetupFailure::SourceUnavailable)
+        ));
+        assert!(!storage.capture_root().join("current").exists());
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        assert_eq!(owner.finish().await?, Retirement::NoNativeStarted);
         Ok(())
     }
 }

@@ -52,6 +52,7 @@ pub(super) async fn initial(
         operation_id: &no_native.id,
         ..draft
     };
+    rejected_initial_recovery(store, f, &route, &draft).await?;
     assert!(matches!(
         store
             .begin_conversation_input_preparation(&owner, &route, &no_native, f.now)
@@ -99,12 +100,13 @@ pub(super) async fn initial(
     assert_eq!(granted.1, selection_id);
     assert_eq!(existing.state, State::PossibleForwarding);
     assert!(existing.fresh_native_allowed);
+    assert!(existing.require_retained_source);
     store
         .check_conversation_input_preparation(
             &source,
             &draft,
             &HarnessSupply::Managed,
-            Some(true),
+            Some((true, true)),
             None,
         )
         .await?;
@@ -114,7 +116,19 @@ pub(super) async fn initial(
                 &source,
                 &draft,
                 &HarnessSupply::Managed,
-                Some(false),
+                Some((false, true)),
+                None
+            )
+            .await,
+        Err(StoreError::InvalidTransition)
+    ));
+    assert!(matches!(
+        store
+            .check_conversation_input_preparation(
+                &source,
+                &draft,
+                &HarnessSupply::Managed,
+                Some((true, false)),
                 None
             )
             .await,
@@ -172,7 +186,7 @@ pub(super) async fn initial(
             &source,
             &draft,
             &HarnessSupply::Managed,
-            Some(true),
+            Some((true, true)),
             None,
         )
         .await?;
@@ -182,7 +196,7 @@ pub(super) async fn initial(
                 &source,
                 &draft,
                 &HarnessSupply::Existing(ExistingCodexPath::parse("/next/codex".into())?),
-                Some(true),
+                Some((true, true)),
                 None
             )
             .await,
@@ -295,6 +309,100 @@ pub(super) async fn initial(
         .await?;
     assert!(
         matches!(store.begin_conversation_input_preparation(&owner,&route,&failed,f.now).await?,Admission::Existing(facts) if facts.state==State::Known(Outcome::Failed(Failure::SourceUnavailable)))
+    );
+    Ok(())
+}
+async fn rejected_initial_recovery(
+    store: &Store,
+    f: &Fixture,
+    route: &chapchoo_persistence::ResolvedRoute,
+    draft: &Draft<'_>,
+) -> Result<(), TestError> {
+    let owner = f.owner.digest();
+    let key = f.connector.digest();
+    let source = f.source(&key);
+    let mut operations = Vec::new();
+    for request_id in ["initial-rejected", "resume-denied", "retry-rejected"] {
+        let input = store
+            .accept_conversation_input(
+                &owner,
+                &AcceptConversationInput {
+                    agent_id: f.agent.id.clone(),
+                    conversation_id: Some(draft.conversation_id.into()),
+                    request_id: request_id.into(),
+                    target: ConversationTarget::NotStarted,
+                    text: ConversationText::parse("explicit new input".into())?,
+                },
+                f.now,
+            )
+            .await?;
+        operations.push(input);
+    }
+    let first = Draft {
+        operation_id: &operations[0].id,
+        ..*draft
+    };
+    let denied = Draft {
+        operation_id: &operations[1].id,
+        ..*draft
+    };
+    let retry = Draft {
+        operation_id: &operations[2].id,
+        ..*draft
+    };
+    assert!(matches!(
+        store
+            .begin_conversation_input_preparation(&owner, route, &first, f.now)
+            .await?,
+        Admission::Granted {
+            fresh_native_allowed: true,
+            ..
+        }
+    ));
+    assert!(matches!(
+        store
+            .begin_conversation_input_preparation(&owner, route, &denied, f.now)
+            .await?,
+        Admission::Granted {
+            fresh_native_allowed: false,
+            ..
+        }
+    ));
+    store
+        .complete_conversation_input_preparation(
+            &source,
+            &denied,
+            &Outcome::Failed(Failure::SourceUnavailable),
+        )
+        .await?;
+    // A resume-only lookup failure cannot clear an unresolved creation attempt.
+    assert!(matches!(
+        store
+            .begin_conversation_input_preparation(&owner, route, &retry, f.now)
+            .await?,
+        Admission::Granted {
+            fresh_native_allowed: false,
+            ..
+        }
+    ));
+    store
+        .complete_conversation_input_preparation(
+            &source,
+            &retry,
+            &Outcome::Failed(Failure::SourceUnavailable),
+        )
+        .await?;
+    store
+        .complete_conversation_input_preparation(
+            &source,
+            &first,
+            &Outcome::Failed(Failure::NativeRejected),
+        )
+        .await?;
+    // The old operation remains settled; only a new explicit input can start.
+    assert!(
+        matches!(store.begin_conversation_input_preparation(&owner, route, &first, f.now).await?,
+        Admission::Existing(facts) if facts.state == State::Known(Outcome::Failed(Failure::NativeRejected)))
     );
     Ok(())
 }

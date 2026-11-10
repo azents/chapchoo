@@ -245,7 +245,7 @@ message CompleteCaptureRequest {
   SourcePosition boundary = 4;
 }
 message NativeTarget { string snapshot_id = 1; string native_session_id = 2; }
-message InitialNativeContext { bool allow_fresh = 1; }
+message InitialNativeContext { bool allow_fresh = 1; bool require_retained_source = 2; }
 message HarnessSupply {
   oneof choice { google.protobuf.Empty managed = 1; string existing_codex_path = 2; }
 }

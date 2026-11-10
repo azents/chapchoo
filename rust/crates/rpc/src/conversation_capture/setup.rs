@@ -33,7 +33,10 @@ pub(super) async fn check(
         None => return Err(Status::invalid_argument("Requested supply is required")),
     };
     let (fresh, existing) = match command.context {
-        Some(wire::setup_command::Context::Initial(value)) => (Some(value.allow_fresh), None),
+        Some(wire::setup_command::Context::Initial(value)) => (
+            Some((value.allow_fresh, value.require_retained_source)),
+            None,
+        ),
         Some(wire::setup_command::Context::Existing(value)) => (None, Some(target(value)?)),
         None => return Err(Status::invalid_argument("Setup context intent is required")),
     };

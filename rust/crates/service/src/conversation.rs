@@ -277,7 +277,7 @@ impl ConversationService {
         source: &ConnectorSource<'_>,
         draft: &chapchoo_persistence::ConversationInputPreparation<'_>,
         supply: &chapchoo_domain::HarnessSupply,
-        fresh: Option<bool>,
+        fresh: Option<(bool, bool)>,
         target: Option<&chapchoo_persistence::ConversationDeliveryTarget>,
     ) -> Result<(), ServiceError> {
         Ok(self

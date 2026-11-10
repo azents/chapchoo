@@ -976,6 +976,39 @@ macro_rules! preserving_tool_io_upgrade {
     }};
 }
 
+macro_rules! preserving_setup_source_upgrade {
+    ($connection:expr,$migrations:expr) => {{
+        let connection = &mut *$connection;
+        // Exercise the actual guard SQL with synthetic active fences. The
+        // completed conversation fixture has already retired its source facts.
+        connection.batch_execute("CREATE TEMP TABLE conversation_input_preparation (require_retained_source BOOLEAN NOT NULL, payload TEXT NOT NULL); INSERT INTO conversation_input_preparation VALUES(TRUE,'preserved')")?;
+        let down = include_str!("../migrations/sqlite/00000000000019_setup_source_fence/down.sql");
+        assert!(connection.transaction::<(), diesel::result::Error, _>(|connection| {
+            connection.batch_execute(down)
+        }).is_err(), "A retained setup-source fence must prevent a destructive downgrade");
+        connection.batch_execute("UPDATE conversation_input_preparation SET require_retained_source=FALSE")?;
+        connection.batch_execute(down)?;
+        #[derive(diesel::QueryableByName)]
+        struct GuardPayload {
+            #[diesel(sql_type=diesel::sql_types::Text)]
+            payload: String,
+        }
+        assert_eq!(diesel::sql_query("SELECT payload FROM conversation_input_preparation").get_result::<GuardPayload>(connection)?.payload, "preserved");
+        connection.batch_execute("DROP TABLE conversation_input_preparation")?;
+        let query = "SELECT request_id AS metadata, submitted_text AS bytes FROM conversation_inputs ORDER BY request_id";
+        #[derive(diesel::QueryableByName, PartialEq)]
+        struct RetainedInputText {
+            #[diesel(sql_type=diesel::sql_types::Text)]
+            metadata: String,
+            #[diesel(sql_type=diesel::sql_types::Text)]
+            bytes: String,
+        }
+        let retained = diesel::sql_query(query).load::<RetainedInputText>(connection)?;
+        connection.revert_last_migration($migrations)?;
+        connection.run_pending_migrations($migrations)?;
+        assert!(retained == diesel::sql_query(query).load::<RetainedInputText>(connection)?);
+    }};
+}
 macro_rules! preserving_extent_upgrade {
     ($connection:expr,$migrations:expr) => {{
         let connection = &mut *$connection;
@@ -1038,6 +1071,7 @@ fn sqlite_conversation_operations_and_preserving_downgrade_guard() -> Result<(),
         fixture.agent.id
     );
     runtime.block_on(exercise(&store, &fixture))?;
+    preserving_setup_source_upgrade!(&mut connection, SQLITE_MIGRATIONS);
     preserving_extent_upgrade!(&mut connection, SQLITE_MIGRATIONS);
     preserving_native_details_upgrade!(&mut connection, SQLITE_MIGRATIONS);
     preserving_tool_io_upgrade!(&mut connection, SQLITE_MIGRATIONS);
@@ -1075,6 +1109,7 @@ fn postgres_conversation_operations_and_preserving_downgrade_guard() -> Result<(
             fixture.agent.id
         );
         runtime.block_on(exercise(&store, &fixture))?;
+        preserving_setup_source_upgrade!(&mut connection, POSTGRES_MIGRATIONS);
         preserving_extent_upgrade!(&mut connection, POSTGRES_MIGRATIONS);
         preserving_native_details_upgrade!(&mut connection, POSTGRES_MIGRATIONS);
         preserving_tool_io_upgrade!(&mut connection, POSTGRES_MIGRATIONS);
