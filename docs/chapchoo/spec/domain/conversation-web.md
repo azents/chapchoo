@@ -39,7 +39,10 @@ current plan has its own read even outside the recent region. The activity sheet
 provides a direct link to the current Agent's canonical Team-scoped detail page.
 The sheet previews five recent records in chronological order, with a transparent
 top fade when older records exist. Preview and full history reuse the same compact
-row design. Selection enters a separate full-height history view at that record.
+row design. Selection enters a separate full-height history view at that record and keeps
+keyboard focus on the selected entry after the activity sheet finishes closing.
+Opening history without a selection also leaves focus inside that view. Closing
+the sheet back to the transcript restores the status control.
 User and assistant conversation is included; records expand from a short opening
 preview to their full content. Older-page insertion preserves the visible reading
 anchor, and latest-follow can be restored explicitly. The history reader unmounts

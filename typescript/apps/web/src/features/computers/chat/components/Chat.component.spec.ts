@@ -115,6 +115,47 @@ test("a native text plan uses its typed text instead of empty generic content", 
   ).toContainText("First, inspect the current implementation.");
 });
 
+test("selected history entry keeps focus after the activity sheet exits", async ({
+  page,
+}) => {
+  await page.goto("/iframe.html?id=chat-conversation--english&viewMode=story");
+  await page.getByRole("button", { name: /Corgi.*Activity/ }).click();
+  const activity = page.getByRole("dialog", { name: "Activity", exact: true });
+  await activity
+    .getByRole("button", { name: /I am checking the opening hours/ })
+    .click();
+  const history = page.getByRole("dialog", {
+    name: "Full history",
+    exact: true,
+  });
+  await expect(history).toBeVisible();
+  await expect(activity).toBeHidden();
+  await expect(
+    page.locator('[id="history-assistant%3Aassistant-two"]'),
+  ).toBeFocused();
+});
+
+test("full history keeps focus inside its dialog after the activity sheet exits", async ({
+  page,
+}) => {
+  await page.goto("/iframe.html?id=chat-conversation--english&viewMode=story");
+  await page.getByRole("button", { name: /Corgi.*Activity/ }).click();
+  const activity = page.getByRole("dialog", { name: "Activity", exact: true });
+  await activity
+    .getByRole("button", { name: "Full history", exact: true })
+    .click();
+  const history = page.getByRole("dialog", {
+    name: "Full history",
+    exact: true,
+  });
+  await expect(activity).toBeHidden();
+  await expect
+    .poll(() =>
+      history.evaluate((dialog) => dialog.contains(document.activeElement)),
+    )
+    .toBe(true);
+});
+
 test("nested Computer dialogs retain activity and return focus on Escape", async ({
   page,
 }) => {
