@@ -124,7 +124,7 @@ test("user text stays plain while distinct assistant utterances render Markdown 
   await expect(user).toContainText(
     "**This is plain user text**, not Markdown.",
   );
-  await expect(user.locator("strong")).toHaveCount(1);
+  await expect(user.locator("strong")).toHaveCount(0);
   await expect(page.locator('[data-kind="assistant"]')).toHaveCount(2);
   await expect(
     page.getByRole("heading", { name: "First utterance" }),
