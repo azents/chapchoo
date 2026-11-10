@@ -27,6 +27,10 @@ an explicit typed inline answer and retained state on browser reentry. Missing
 native prerequisites fail. This is deterministic assembled-plumbing coverage,
 not authenticated Codex/model or general compatibility acceptance. Default
 browser scenarios and browser-free native integration remain separate owners.
+The [conversation acceptance boundaries](../../notes/chat-261108-implementation-acceptance.md)
+separate implemented owned contracts, deterministic/native evidence and the
+remaining authenticated CLI, architecture/ABI, CI and review gates. Fixture
+success alone does not mark the approved snapshot implemented.
 Web-core separately owns the actual logout-response HTTP/browser integration.
 Browser delayed-cookie arrival semantics are dependency behavior and are not a
 product acceptance scenario.

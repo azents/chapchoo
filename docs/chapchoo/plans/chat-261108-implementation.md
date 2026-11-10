@@ -107,14 +107,22 @@ Install locked pnpm packages when needed, not arbitrary manifests.
 
 ## Checkpoints, Rollout and Cleanup
 
-Phase 3 implementation is locally integrated: capture/catch-up, preserving
-projections and operation facts, process-owned acceptance, exact setup/input/
-answer/Stop routing and private bounded owner reads/uploads are connected.
-The complete local Rust and generated/live RPC gates pass, including both database
-engines. Actual child-Connector setup/answer/Stop fixtures establish known
-restricted-profile/missing-native-owner rejection and owned shutdown, not real
-model success. Central credential delivery and production Chat replacement remain
-in phases 4 and 5. The approved baseline is byte-identical; Design delta: None.
+Phases 1–5 are submitted as PRs #97–101. Their domain, native ownership,
+captured records/operation facts, central credential publication and actual
+SSR/hydrated conversation are integrated. Phase 6 corrects benign image-metadata
+handling without changing reserved ownership or the restricted profile. The
+complete local Rust/RPC/workspace gates and metadata-bearing actual Docker
+lifecycle and representative native/browser conversation pass. Original volume,
+no-copy, unrelated canaries and individual cleanup are verified for those runs.
+The approved baseline remains unchanged; Design delta: None.
+
+The [acceptance report](../notes/chat-261108-implementation-acceptance.md)
+records requirement/removal evidence, failed attempts separately from corrected
+reruns and the remaining actual-authenticated-Codex, architecture/ABI and
+complete-stack CI/review gates. Real credentials/model calls remain unused.
+All six PRs must exist before inspecting remote CI or requesting the assigned
+independent review; passing deterministic fixtures does not complete live support
+acceptance, authorize merge/deployment or justify removing these active plans.
 
 Each phase plan records branch/base, exact scope, changed contracts, tests and
 remaining gates. Recheck both missing approved work and unauthorized additions at

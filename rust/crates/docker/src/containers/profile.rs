@@ -7,6 +7,28 @@ use bollard::models::{
 use chapchoo_protocol::control as wire;
 use std::{collections::BTreeMap, fmt};
 
+/// Restricted admission tolerates only predefined descriptive OCI metadata.
+/// Extension/operational labels can trigger host-side effects and are not metadata authority.
+fn inert_image_metadata(key: &str) -> bool {
+    matches!(
+        key,
+        "org.opencontainers.image.created"
+            | "org.opencontainers.image.authors"
+            | "org.opencontainers.image.url"
+            | "org.opencontainers.image.documentation"
+            | "org.opencontainers.image.source"
+            | "org.opencontainers.image.version"
+            | "org.opencontainers.image.revision"
+            | "org.opencontainers.image.vendor"
+            | "org.opencontainers.image.licenses"
+            | "org.opencontainers.image.ref.name"
+            | "org.opencontainers.image.title"
+            | "org.opencontainers.image.description"
+            | "org.opencontainers.image.base.digest"
+            | "org.opencontainers.image.base.name"
+    )
+}
+
 pub struct Bootstrap<'a> {
     pub session: &'a str,
     pub initial_key: &'a str,
@@ -147,6 +169,16 @@ impl Docker {
         let initial = target.initial;
         let config = value.config.as_ref().ok_or(Error::Ownership)?;
         let host = value.host_config.as_ref().ok_or(Error::Ownership)?;
+        let expected_labels = self.labels(context, resource)?;
+        let labels = config.labels.as_ref().ok_or(Error::Ownership)?;
+        // Engine inherits ordinary image metadata; only our reserved namespace
+        // supplies ownership authority, with every expected value still exact.
+        let ownership_matches = expected_labels
+            .iter()
+            .all(|(key, expected)| labels.get(key) == Some(expected))
+            && labels
+                .keys()
+                .all(|key| expected_labels.contains_key(key) || inert_image_metadata(key));
         let policy = host.restart_policy.as_ref().and_then(|policy| policy.name);
         // Image EXPOSE metadata does not publish ports. Enforce publication at
         // HostConfig's PublishAllPorts and PortBindings boundaries below.
@@ -158,7 +190,7 @@ impl Docker {
                         .as_deref()
                         .is_some_and(|expected| expected != image)
             })
-            || config.labels.as_ref() != Some(&self.labels(context, resource)?)
+            || !ownership_matches
             || config.image.as_deref() != value.image.as_deref()
             || config.user.as_deref() != Some("10001:10001")
             || config.entrypoint.as_deref() != Some(&["/opt/chapchoo/chapchoo".into()])
