@@ -112,8 +112,10 @@ Container ownership checks require every expected reserved `chapchoo.io/` label
 and its exact allocation-witness value, and reject unexpected reserved labels.
 Only the [predefined descriptive OCI image annotation keys](https://github.com/opencontainers/image-spec/blob/main/annotations.md)
 may be inherited as extra container labels. Operational and undefined keys,
-including arbitrary extensions under the OCI prefix, block native effects.
-These descriptions supply no ownership or adoption authority. Volume labels remain an exact original map because volumes do not
+including arbitrary extensions under the OCI prefix, fail profile validation
+before native start. Rejection does not erase an already created allocation or
+prove that host-side tooling ignored its creation. These descriptions supply no
+ownership or adoption authority. Volume labels remain an exact original map because volumes do not
 inherit image metadata. Missing or changed reserved labels block native effects.
 
 The profile uses UID:GID 10001:10001, read-only root, dropped capabilities,

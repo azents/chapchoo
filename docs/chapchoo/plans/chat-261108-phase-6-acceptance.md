@@ -70,14 +70,20 @@ The primary also checks latest-SHA CI and automated findings, requests targeted
 read-only re-review from `/root/chat-implementation-reviewer` after integration,
 and updates the acceptance limits from observed evidence.
 
-The deterministic real-consumer/exact-ordinal storage-port append probe is a
-separate liveness result, not successful native timing acceptance or an actual
-database stress run. Record its forced interleaving and quiescent success, keep
-the complete-content/source fence, and do not invent a new storage/feed/version
-authority to hide the limitation. No real authentication/model call, merge,
-deployment or release-platform certification is included. Preserve plans and
-unimplemented snapshot markers while those acceptance prerequisites remain.
-Design delta: None.
+The deterministic exact-current-ordinal probe reproduced append starvation and
+is retained as pre-correction evidence. Phase 3 now indexes finite ends over the
+same current BLOB and phase 5 assembles one coherent initial field view without
+rejecting later append metadata. Both actual databases each pass twenty forced
+append interleavings with complete UTF-8/NUL content and empty EOF; the actual
+consumer's extent-aware 103,800-byte probe completes 20/20 while appending.
+Replacement, clear, source, owner and invalid-offset fences remain enforced.
+The full integrated Rust gate (393), both-engine RPC (129 each), web-core (137),
+General/Admin unit tests, all-package typecheck and production builds pass.
+This resolves the reproduced schedule without a body archive, reader platform
+or new feed/token authority, and does not certify native frequency/performance.
+No real authentication/model call, merge, deployment or release-platform
+certification is included. Preserve plans and unimplemented snapshot markers
+while those acceptance prerequisites remain. Design delta: None.
 
 ### Metadata-admission correction
 
@@ -92,3 +98,19 @@ approved harmless-metadata boundary without adding an adoption path, setting,
 legacy fallback or security-profile relaxation. Prove rejection before/after,
 retain positive standard metadata coverage, run affected/full mandatory gates
 and rebuild the current isolated acceptance image. Design delta: None.
+
+### Extent-correction runtime checkpoint
+
+The fresh integrated executable and restricted-profile image at `8ab27a4` pass
+the representative official-adapter Docker/browser journey and normal individual
+cleanup. Exact-image remaining containers are independently zero. Initial reads
+are zero; first output including preparation is 63,797 ms, answer update 2,356 ms,
+online reread 203 ms and reentry 654 ms. This is synthetic app-server plumbing,
+not real credentials, model timing or platform certification.
+
+An environment-guard rejection before creation and a Runtime-interrupted web
+build before Provider start are retained separately as unsuccessful attempts.
+The successful fresh-fixture run does not retroactively validate them. The same
+sole reviewer's targeted extent/assembly re-review at `8ab27a4` cleared the
+REQ-3/REQ-11/M10 P2 with no remaining must-fix findings. Final latest-SHA remote
+CI remains an independent delivery check, not merge or deployment authorization.

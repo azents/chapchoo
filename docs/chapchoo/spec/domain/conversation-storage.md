@@ -338,9 +338,10 @@ Replace/clear removes earlier extents, and source replacement cascades them;
 those changed body identities fail continuation rather than mixing bytes.
 Only current body bytes are retained by this projection, not an archive of
 replaced bodies. Extents reuse captured ordinals, not a new revision counter,
-reader token, authorization grant or durable browser event cursor. Owner
-admission holds the existing Computer authority lock while these coherent reads
-complete, serializing source mutations without changing global isolation.
+reader token, authorization grant or durable browser event cursor. Each unary
+Store read holds the existing Computer authority lock through its own coherent
+query, serializing source mutations for that call without changing global
+isolation. A multi-chunk caller holds no database transaction between calls.
 
 Tool calls retain independent normalized `TOOL_INPUT` and `TOOL_OUTPUT` fields
 for actual native raw arguments/results, even when the tool has no content blocks.

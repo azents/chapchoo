@@ -103,6 +103,44 @@ supply remained distinct without restarting the live native session.
 This is another synthetic app-server run, not a real Codex/model call, platform
 certification or repeated performance benchmark.
 
+## Post-correction current-code rerun
+
+The complete representative journey and individual cleanup passed again using
+the code at `8ab27a43ce667583367abf1f2a95c95c3be3c63c` and a freshly compiled
+development executable in image
+`sha256:e93b0caa30dd94d5972b60a67d977bc51a84d91c424f3636fe838742d8675031`.
+The image deliberately carries the standard OCI title and exact source-revision
+labels. The narrowed restricted-profile rule admits those descriptive labels,
+not operational or arbitrary OCI-prefixed extensions.
+
+This run includes the corrected authentication/startup and source-qualified
+observation wire, incoming tool field storage, owner recovery, finite-body extent
+reads and initial-view UI assembly.
+It still uses the explicit synthetic app-server through the official adapter;
+no real credential or model request was introduced.
+
+| Observation | Result |
+| --- | --- |
+| Initial region reads | 0 |
+| Input to first visible assistant, including preparation | 63,797 ms |
+| Answer to visible update | 2,356 ms |
+| Completed response to visible update upper measurement | 376 ms |
+| Online reread | 203 ms |
+| Navigation reentry | 654 ms |
+| Region HTTP reads | 63 |
+
+These remain one-run plumbing observations, not a model performance benchmark.
+Normal individual cleanup passed and an independent exact-image query found no
+remaining containers. An earlier attempt was blocked by the explicit Docker
+transport-environment guard before resource creation; another was interrupted
+by a Runtime restart during web build, before the fixture's Docker Provider
+started. Neither attempt is counted as passed or retroactively certified by this
+successful fresh-fixture run. The restart cause was not established.
+The [large-body forced-append correction](chat-261108-implementation-acceptance.md#deterministic-large-body-read-correction)
+is verified separately by twenty forced interleavings on each real database and
+the actual consumer. This short representative journey alone is not evidence of
+large-body scheduling behavior.
+
 ## References
 
 - [Private conversation web](../spec/domain/conversation-web.md)
