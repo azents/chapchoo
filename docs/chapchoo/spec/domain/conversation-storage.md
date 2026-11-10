@@ -108,6 +108,17 @@ possible/session-ready/failure evidence. A known setup failure is not collapsed
 into absent text-delivery evidence; session-ready still does not prove current
 native liveness, completed source catch-up or text consumption.
 
+An owner can logically delete an input only after confirmed setup or delivery
+failure, with no possible or successful native delivery. The transaction checks
+private owner, Team, exact conversation and original source before clearing the
+body. It preserves the accepted operation identity and outcome; the same Request
+ID remains consumed and is rejected before deleted-body decoding. Deletion is
+idempotent and does not cancel work or erase native transcript records. Bounded
+lists expose bodyless deletion tombstones, body reads exclude removed content,
+and exact input-result recovery includes deletion state. Downgrade is rejected
+while removed bodies cannot be restored. Logical deletion does not erase storage
+pages or backups.
+
 The concrete internal Control processor uses current owner/Computer authority and
 PeerDelivery, obtains setup admission once, then sends only the sealed small setup
 intent. It observes actual setup results and finite source readiness before

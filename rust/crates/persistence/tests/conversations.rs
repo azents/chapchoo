@@ -976,6 +976,21 @@ macro_rules! preserving_tool_io_upgrade {
     }};
 }
 
+macro_rules! preserving_deleted_inputs_upgrade {
+    ($connection:expr,$migrations:expr,$down:expr) => {{
+        let connection = &mut *$connection;
+        connection.batch_execute("CREATE TEMP TABLE conversation_inputs (id TEXT PRIMARY KEY,submitted_text TEXT,deleted_at BIGINT CONSTRAINT input_deleted_body CHECK((submitted_text IS NULL)=(deleted_at IS NOT NULL))); INSERT INTO conversation_inputs VALUES('guard-fixture',NULL,1)")?;
+        assert!(connection.transaction::<(),diesel::result::Error,_>(|connection| {
+            connection.batch_execute($down)
+        }).is_err(),
+            "Deleted input bodies cannot be restored by downgrade");
+        connection.batch_execute("UPDATE conversation_inputs SET submitted_text='synthetic restored fixture',deleted_at=NULL")?;
+        connection.batch_execute($down)?;
+        connection.batch_execute("DROP TABLE conversation_inputs")?;
+        connection.revert_last_migration($migrations)?;
+        connection.run_pending_migrations($migrations)?;
+    }};
+}
 macro_rules! preserving_setup_source_upgrade {
     ($connection:expr,$migrations:expr) => {{
         let connection = &mut *$connection;
@@ -1071,6 +1086,11 @@ fn sqlite_conversation_operations_and_preserving_downgrade_guard() -> Result<(),
         fixture.agent.id
     );
     runtime.block_on(exercise(&store, &fixture))?;
+    preserving_deleted_inputs_upgrade!(
+        &mut connection,
+        SQLITE_MIGRATIONS,
+        include_str!("../migrations/sqlite/00000000000020_deleted_inputs/down.sql")
+    );
     preserving_setup_source_upgrade!(&mut connection, SQLITE_MIGRATIONS);
     preserving_extent_upgrade!(&mut connection, SQLITE_MIGRATIONS);
     preserving_native_details_upgrade!(&mut connection, SQLITE_MIGRATIONS);
@@ -1109,6 +1129,11 @@ fn postgres_conversation_operations_and_preserving_downgrade_guard() -> Result<(
             fixture.agent.id
         );
         runtime.block_on(exercise(&store, &fixture))?;
+        preserving_deleted_inputs_upgrade!(
+            &mut connection,
+            POSTGRES_MIGRATIONS,
+            include_str!("../migrations/postgres/00000000000020_deleted_inputs/down.sql")
+        );
         preserving_setup_source_upgrade!(&mut connection, POSTGRES_MIGRATIONS);
         preserving_extent_upgrade!(&mut connection, POSTGRES_MIGRATIONS);
         preserving_native_details_upgrade!(&mut connection, POSTGRES_MIGRATIONS);

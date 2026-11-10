@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readConversationRegion } from "../dist/conversation.js";
-import { mergeConversationRegion } from "../dist/conversation-state.js";
+import {
+  markConversationInputDeleted,
+  mergeConversationRegion,
+} from "../dist/conversation-state.js";
 function fixture({ started = true, known = false } = {}) {
   const text = `  Original 🙂 ${"가".repeat(22000)}\n `;
   const bytes = Buffer.from(text);
@@ -102,6 +105,56 @@ test("active updates reuse immutable cached input text while refreshing only act
   );
   assert.equal(merged.inputs[0].text, "unchanged original");
   assert.equal(merged.inputs[0].observation, "uncertain");
+});
+test("deleted input bodies are not reread and a tombstone removes cached text after reentry", async () => {
+  const f = fixture({ started: false, known: true });
+  f.api.inputs = async () => ({
+    inputs: [{ acceptance: f.acceptance, totalBytes: 0n, deleted: true }],
+  });
+  const result = await readConversationRegion(f.api, { agentId: "agent" });
+  assert.equal(result.inputs[0].deleted, true);
+  assert.equal(result.inputs[0].text, undefined);
+  assert.equal(result.latestInput, undefined);
+  const merged = mergeConversationRegion(
+    {
+      ...result,
+      inputs: [
+        { ...result.inputs[0], deleted: false, text: "must not return" },
+      ],
+    },
+    result,
+  );
+  assert.equal(merged.inputs[0].deleted, true);
+  assert.equal(merged.inputs[0].text, undefined);
+  assert.equal(
+    markConversationInputDeleted(merged, merged.inputs[0].id, "another"),
+    merged,
+  );
+  const restored = {
+    ...result,
+    inputs: [{ ...result.inputs[0], text: "cached body", deleted: false }],
+  };
+  const ack = markConversationInputDeleted(
+    restored,
+    result.inputs[0].id,
+    "conversation",
+  );
+  assert.equal(ack.inputs[0].deleted, true);
+  assert.equal(ack.inputs[0].text, undefined);
+  assert.equal(
+    mergeConversationRegion(ack, restored).inputs[0].text,
+    undefined,
+  );
+  assert.equal(
+    mergeConversationRegion(ack, { ...restored, inputs: [] }).inputs[0].text,
+    undefined,
+  );
+  const paged = await readConversationRegion(f.api, {
+    agentId: "agent",
+    expectedConversationId: "conversation",
+    inputBefore: { acceptedAt: 1n, requestId: "old" },
+  });
+  assert.equal(paged.latestInput, undefined);
 });
 test("source replacement discards cached retained inputs instead of reviving initial-target receipts", () => {
   const f = fixture();

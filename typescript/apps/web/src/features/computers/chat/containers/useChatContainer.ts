@@ -24,6 +24,7 @@ import type { QuestionDraft } from "@chapchoo/web-core/conversation-form";
 import type {
   ConversationAnswer,
   ConversationRecord,
+  RetainedInputView,
 } from "@chapchoo/web-core/conversation-types";
 
 export function useChatContainer(props: ChatInput): ChatProps {
@@ -50,11 +51,17 @@ export function useChatContainer(props: ChatInput): ChatProps {
     state: ConversationControls["stop"];
   } | null>(null);
   const inputBusy = useRef(false);
+  const deletionBusy = useRef(false);
+  const [inputAction, setInputAction] =
+    useState<ConversationControls["inputAction"]>();
   const answerBusy = useRef(new Set<string>());
   const stopBusy = useRef(false);
   const historyFocus = useRef<string | null>(null);
   const utils = trpc.useUtils();
   const sendMutation = trpc.conversations.send.useMutation({ retry: false });
+  const deleteMutation = trpc.conversations.deleteInput.useMutation({
+    retry: false,
+  });
   const answerMutation = trpc.conversations.answer.useMutation({
     retry: false,
   });
@@ -170,19 +177,19 @@ export function useChatContainer(props: ChatInput): ChatProps {
         : all;
     });
   }
-  async function send(): Promise<void> {
+  async function send(retryText?: string): Promise<void> {
+    const text = retryText ?? input;
     if (
       !writable ||
       inputBusy.current ||
-      !input.trim() ||
+      !text.trim() ||
       inputs.some(
-        (item) => item.text === input && item.observation === "uncertain",
+        (item) => item.text === text && item.observation === "uncertain",
       )
     ) {
       return;
     }
     inputBusy.current = true;
-    const text = input;
     const requestId = crypto.randomUUID();
     const target = {
       agentId: agent.id,
@@ -213,7 +220,9 @@ export function useChatContainer(props: ChatInput): ChatProps {
             : item,
         ),
       );
-      setInput((current) => (current === text ? "" : current));
+      if (retryText === void 0) {
+        setInput((current) => (current === text ? "" : current));
+      }
       floating.followLatest();
     } catch {
       setInputs((all) =>
@@ -227,6 +236,84 @@ export function useChatContainer(props: ChatInput): ChatProps {
       inputBusy.current = false;
     }
     await refreshAfterEffect();
+  }
+  function currentFailedInput(
+    value: RetainedInputView,
+  ): RetainedInputView | null {
+    return (
+      region.inputs?.find(
+        (item) =>
+          item.id === value.id &&
+          item.requestId === value.requestId &&
+          item.conversationId === region.header.conversationId &&
+          item.observation === "failed" &&
+          !item.deleted,
+      ) ?? null
+    );
+  }
+  async function deleteInput(value: RetainedInputView): Promise<void> {
+    const current = currentFailedInput(value);
+    if (
+      !current ||
+      deletionBusy.current ||
+      product.access !== "authorized" ||
+      product.stale ||
+      reader.read !== "ready"
+    ) {
+      return;
+    }
+    deletionBusy.current = true;
+    const snapshotId = region.header.source?.snapshotId;
+    setInputAction({ requestId: current.requestId, state: "deleting" });
+    try {
+      await deleteMutation.mutateAsync({
+        source: {
+          agentId: agent.id,
+          conversationId: current.conversationId,
+          snapshotId: region.header.source?.snapshotId,
+        },
+        requestId: current.requestId,
+      });
+      reader.markInputDeleted(current.id, current.conversationId, snapshotId);
+      setInputAction(void 0);
+    } catch {
+      // Lost delete responses recover through read-only tombstone observations.
+      setInputAction({ requestId: current.requestId, state: "uncertain" });
+    } finally {
+      deletionBusy.current = false;
+    }
+    await refreshAfterEffect();
+  }
+  async function recoverDeletion(): Promise<void> {
+    if (inputAction?.state === "uncertain") {
+      const current = region.inputs?.find(
+        (item) => item.requestId === inputAction.requestId,
+      );
+      if (current && current.conversationId === region.header.conversationId) {
+        const snapshot = region.header.source?.snapshotId;
+        try {
+          const result = await utils.conversations.inputResult.fetch(
+            {
+              agentId: agent.id,
+              conversationId: current.conversationId,
+              requestId: current.requestId,
+            },
+            { staleTime: 0, retry: false },
+          );
+          if (result.deleted) {
+            reader.markInputDeleted(
+              current.id,
+              current.conversationId,
+              snapshot,
+            );
+          }
+          setInputAction(void 0);
+        } catch {
+          // Keep uncertainty until the exact operation can be read.
+        }
+      }
+    }
+    reader.refresh();
   }
   async function answer(
     record: ConversationRecord,
@@ -372,7 +459,23 @@ export function useChatContainer(props: ChatInput): ChatProps {
             typeof entry[0] === "string" && entry[1] !== null,
         ),
     ),
-    onRead: reader.refresh,
+    onRead: () => {
+      void recoverDeletion();
+    },
+    inputAction,
+    inputDeletable:
+      product.access === "authorized" &&
+      !product.stale &&
+      reader.read === "ready",
+    onRetryInput: (value) => {
+      const current = currentFailedInput(value);
+      if (current?.text && inputAction?.state !== "deleting") {
+        void send(current.text);
+      }
+    },
+    onDeleteInput: (value) => {
+      void deleteInput(value);
+    },
     onOlder: () => {
       floating.preserveHistory();
       reader.older();

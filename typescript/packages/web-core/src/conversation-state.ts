@@ -36,10 +36,21 @@ export function mergeConversationRegion(
   );
   for (const input of incoming.inputs ?? []) {
     const old = inputs.get(input.id);
-    inputs.set(input.id, { ...input, text: input.text ?? old?.text });
+    const deleted = input.deleted || old?.deleted;
+    inputs.set(input.id, {
+      ...input,
+      deleted,
+      text: deleted ? undefined : (input.text ?? old?.text),
+    });
   }
   return {
     ...incoming,
+    latestInput: [...inputs.values()].some(
+      (item) =>
+        item.deleted && item.requestId === incoming.latestInput?.requestId,
+    )
+      ? undefined
+      : incoming.latestInput,
     inputs: [...inputs.values()].sort((a, b) =>
       a.acceptedAt < b.acceptedAt
         ? -1
@@ -58,5 +69,29 @@ export function mergeConversationRegion(
               ? 1
               : 0,
     ),
+  };
+}
+/** Only acknowledged deletion or an exact tombstone read may call this. */
+export function markConversationInputDeleted(
+  region: ConversationRegion,
+  id: string,
+  conversationId: string,
+  snapshotId?: string,
+): ConversationRegion {
+  if (
+    region.header.conversationId !== conversationId ||
+    region.header.source?.snapshotId !== snapshotId
+  )
+    return region;
+  const deleted = region.inputs?.find((item) => item.id === id);
+  return {
+    ...region,
+    inputs: region.inputs?.map((input) =>
+      input.id === id ? { ...input, deleted: true, text: undefined } : input,
+    ),
+    latestInput:
+      region.latestInput?.requestId === deleted?.requestId
+        ? undefined
+        : region.latestInput,
   };
 }

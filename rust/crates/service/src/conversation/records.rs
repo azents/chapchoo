@@ -44,6 +44,18 @@ impl ConversationService {
             .conversation_input_text(actor, scope, request, offset, length, now)
             .await?)
     }
+    pub async fn delete_input(
+        &self,
+        actor: &SecretDigest,
+        scope: &chapchoo_persistence::ConversationInputScope<'_>,
+        request: &str,
+        now: i64,
+    ) -> Result<(), ServiceError> {
+        Ok(self
+            .store
+            .delete_failed_conversation_input(actor, scope, request, now)
+            .await?)
+    }
     pub async fn records(
         &self,
         actor: &SecretDigest,

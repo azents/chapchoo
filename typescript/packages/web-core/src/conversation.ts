@@ -44,6 +44,7 @@ export interface ConversationApi {
   latestPlan(value: Wire.RecordSource): Promise<Wire.RecordRegion>;
   inputs(value: Wire.OwnerInputsRequest): Promise<Wire.RetainedInputs>;
   readInput(value: Wire.OwnerInputRead): Promise<Wire.FieldChunk>;
+  deleteInput(value: Wire.OwnerDeleteInput): Promise<unknown>;
   fields(value: Wire.OwnerFieldsRequest): Promise<Wire.RecordFields>;
   readField(value: Wire.OwnerFieldRead): Promise<Wire.FieldChunk>;
   liveRequests(value: Wire.OwnerLiveRequests): Promise<Wire.LiveRequestList>;
@@ -83,6 +84,7 @@ export function conversationApi(
     readAnswer: (value) => call(client.readAnswer.bind(client), value, token),
     submitInput: (value) => call(client.submitInput.bind(client), value, token),
     inputResult: (value) => call(client.inputResult.bind(client), value, token),
+    deleteInput: (value) => call(client.deleteInput.bind(client), value, token),
     submitAnswer: (value) =>
       call(client.submitAnswer.bind(client), value, token),
     answerResult: (value) =>
@@ -371,7 +373,7 @@ export async function readConversationRegion(
       throw new Error("Retained input is invalid");
     const receipt = item.acceptance;
     const text =
-      sameSource && input.knownInputs?.includes(receipt.id)
+      item.deleted || (sameSource && input.knownInputs?.includes(receipt.id))
         ? undefined
         : new TextDecoder("utf-8", { fatal: true }).decode(
             await readConversationBytes(
@@ -396,12 +398,13 @@ export async function readConversationRegion(
       requestId: receipt.requestId,
       acceptedAt: receipt.acceptedAt,
       text,
+      deleted: item.deleted,
       observation: inputObservation(status),
       preparation: inputPreparation(status),
       insertedNativeMessageId: status.delivery?.insertedNativeMessageId,
     });
   }
-  const firstInput = inputs[0];
+  const firstInput = inputs[0]?.deleted ? undefined : inputs[0];
   let latestInput: ConversationRegion["latestInput"] = firstInput
     ? {
         requestId: firstInput.requestId,
@@ -411,9 +414,10 @@ export async function readConversationRegion(
     : undefined;
   // History pagination must not turn an older failure into the current diagnosis.
   if (inputScope && sameSource && input.inputBefore) {
-    const latest = (
+    const latestItem = (
       await api.inputs({ scope: inputScope, before: undefined, limit: 1 })
-    ).inputs[0]?.acceptance;
+    ).inputs[0];
+    const latest = latestItem?.deleted ? undefined : latestItem?.acceptance;
     if (latest) {
       const status = await api.inputResult({
         agentId: input.agentId,

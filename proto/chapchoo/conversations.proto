@@ -10,6 +10,7 @@ service Conversations {
   rpc InputResult(OwnerInputResultRequest) returns (OwnerInputStatus);
   rpc Inputs(OwnerInputsRequest) returns (RetainedInputs);
   rpc ReadInput(OwnerInputRead) returns (FieldChunk);
+  rpc DeleteInput(OwnerDeleteInput) returns (google.protobuf.Empty);
   rpc SubmitAnswer(OwnerAnswerPiece) returns (OwnerAnswerProgress);
   rpc AnswerResult(OwnerAnswerResultRequest) returns (OwnerAnswerStatus);
   rpc RequestAnswer(OwnerRequestAnswer) returns (OwnerAnswerStatus);
@@ -63,7 +64,8 @@ message OwnerInputResultRequest {
 message OwnerInputScope { string agent_id = 1; string conversation_id = 2; InputTarget target = 3; }
 message InputAnchor { int64 accepted_at = 1; string request_id = 2; }
 message OwnerInputsRequest { OwnerInputScope scope = 1; InputAnchor before = 2; uint32 limit = 3; }
-message RetainedInput { InputAcceptance acceptance = 1; int64 total_bytes = 2; }
+message RetainedInput { InputAcceptance acceptance = 1; int64 total_bytes = 2; bool deleted = 3; }
+message OwnerDeleteInput { OwnerInputScope scope = 1; string request_id = 2; }
 message RetainedInputs { repeated RetainedInput inputs = 1; }
 message OwnerInputRead { OwnerInputScope scope = 1; string request_id = 2; uint32 offset = 3; uint32 length = 4; }
 enum InputOwnership {
@@ -80,6 +82,7 @@ message InputDelivery {
 message OwnerInputStatus {
   InputAcceptance acceptance = 1; InputOwnership ownership = 2; InputDelivery delivery = 3;
   InputPreparation preparation = 4;
+  bool deleted = 5;
 }
 // Setup result is not current native liveness, source catch-up or text consumption.
 message InputPreparation {

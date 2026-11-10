@@ -75,6 +75,7 @@ pub mod conversations {
         RetainedInput,
         RetainedInputs,
         OwnerInputRead,
+        OwnerDeleteInput,
         InputDelivery,
         input_delivery::Observation,
         OwnerInputStatus,

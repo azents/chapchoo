@@ -34,6 +34,10 @@ export interface ChatCopy {
   loading: string;
   error: string;
   retry: string;
+  retryMessage: string;
+  deleteMessage: string;
+  deletingMessage: string;
+  deleteUnconfirmed: string;
   older: string;
   history: string;
   plan: string;
@@ -107,6 +111,10 @@ const en: ChatCopy = {
   loading: "Loading conversation…",
   error: "Conversation could not be updated",
   retry: "Read again",
+  retryMessage: "Retry",
+  deleteMessage: "Delete",
+  deletingMessage: "Deleting…",
+  deleteUnconfirmed: "Deletion not confirmed",
   older: "Load older records",
   history: "Full history",
   plan: "Current plan",
@@ -191,6 +199,10 @@ const ko: ChatCopy = {
   loading: "대화 불러오는 중…",
   error: "대화를 갱신하지 못했습니다",
   retry: "다시 불러오기",
+  retryMessage: "재시도",
+  deleteMessage: "삭제",
+  deletingMessage: "삭제 중…",
+  deleteUnconfirmed: "삭제 여부 미확인",
   older: "이전 기록 불러오기",
   history: "전체 기록",
   plan: "현재 계획",
@@ -275,6 +287,10 @@ const ja: ChatCopy = {
   loading: "会話を読み込み中…",
   error: "会話を更新できませんでした",
   retry: "再読み込み",
+  retryMessage: "再送信",
+  deleteMessage: "削除",
+  deletingMessage: "削除中…",
+  deleteUnconfirmed: "削除を確認できません",
   older: "以前の記録を読み込む",
   history: "すべての記録",
   plan: "現在の計画",
@@ -360,6 +376,10 @@ const fr: ChatCopy = {
   loading: "Chargement de la conversation…",
   error: "Impossible d’actualiser la conversation",
   retry: "Relire",
+  retryMessage: "Réessayer",
+  deleteMessage: "Supprimer",
+  deletingMessage: "Suppression…",
+  deleteUnconfirmed: "Suppression non confirmée",
   older: "Charger les anciens éléments",
   history: "Historique complet",
   plan: "Plan actuel",

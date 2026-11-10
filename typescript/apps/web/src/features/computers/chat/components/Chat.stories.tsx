@@ -140,6 +140,8 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
   const [detailsOpened, setDetailsOpened] = useState(false);
   const [activity, setActivity] = useState<"working" | "idle">("working");
   const [workStop, setWorkStop] = useState<"idle" | "published">("idle");
+  const [failedDeleted, setFailedDeleted] = useState(false);
+  const [retrySubmitted, setRetrySubmitted] = useState(false);
   const floating = useFloatingChat(input, agent.id);
   const copy = chatCopy(locale);
   const c = computerCopy(locale);
@@ -219,6 +221,7 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
               conversationId: "conversation",
               acceptedAt: 1n,
               text: "안녕하세요",
+              deleted: failedDeleted,
               observation: "failed",
               preparation: { type: "failed", reason: "nativeRejected" },
             },
@@ -326,8 +329,15 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
             },
         read: mode === "readerError" ? "error" : "ready",
         readingOlder: false,
-        inputs:
-          mode === "pendingOrder"
+        inputs: retrySubmitted
+          ? [
+              {
+                requestId: "explicit-new-retry",
+                text: "안녕하세요",
+                observation: "sending",
+              },
+            ]
+          : mode === "pendingOrder"
             ? [
                 {
                   requestId: "new-local",
@@ -337,6 +347,9 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
               ]
             : [],
         stop: workStop,
+        inputDeletable: true,
+        onRetryInput: () => setRetrySubmitted(true),
+        onDeleteInput: () => setFailedDeleted(true),
         drafts: {},
         onRead: () => {},
         onOlder: () => {},

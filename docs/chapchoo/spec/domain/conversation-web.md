@@ -96,6 +96,17 @@ Recovery of a retained Request ID removes its matching local uncertain entry.
 An owner may then intentionally send identical text as a new operation; recovery
 itself never submits another effect or treats text equality as request identity.
 
+Confirmed failed outgoing inputs expose intentional retry and deletion actions.
+Retry copies retained text into ordinary Send with a new Request ID; it does not
+replay an uncertain operation or change the old outcome. Delete clears the
+original submitted body and hides the entry after an authoritative response,
+while retaining the operation evidence described in
+[conversation storage](conversation-storage.md). It does not require a running
+Computer. Pending or lost delete responses stay read-only recoverable through
+the exact input result. A successful acknowledgement clears the source-qualified
+cached operation even outside the current page. Tombstones merge monotonically,
+so late bounded reads cannot restore deleted text or its latest-failure status.
+
 Permission/form requests render inline. Original choices, their descriptions,
 schema/field titles and supported adjacent constraints remain inspectable.
 Permission is not preselected. Form drafts distinguish omission, empty strings,

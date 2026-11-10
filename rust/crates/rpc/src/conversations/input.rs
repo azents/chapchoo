@@ -182,6 +182,7 @@ pub(super) async fn result(
         }),
     });
     Ok(Response::new(wire::OwnerInputStatus {
+        deleted: value.deleted,
         acceptance: Some(acceptance(value.acceptance)),
         ownership: match value.ownership {
             ConversationInputOwnership::ProcessingHere => wire::InputOwnership::ProcessingHere,
@@ -236,9 +237,37 @@ pub(super) async fn list(
                     accepted_at: value.reference.accepted_at,
                 })),
                 total_bytes: value.bytes,
+                deleted: value.deleted,
             })
             .collect(),
     }))
+}
+pub(super) async fn delete(
+    service: &ConversationServices,
+    request: Request<wire::OwnerDeleteInput>,
+) -> Result<Response<()>, Status> {
+    service.admit()?;
+    let actor = actor(&request)?;
+    let value = request.into_inner();
+    let scope = value
+        .scope
+        .ok_or_else(|| Status::invalid_argument("Input scope is required"))?;
+    let target = target(scope.target)?;
+    service
+        .conversation
+        .delete_input(
+            &actor,
+            &chapchoo_service::ConversationInputScope {
+                agent_id: &scope.agent_id,
+                conversation_id: &scope.conversation_id,
+                target: &target,
+            },
+            &value.request_id,
+            now()?,
+        )
+        .await
+        .map_err(status)?;
+    Ok(Response::new(()))
 }
 pub(super) async fn read(
     service: &ConversationServices,

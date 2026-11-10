@@ -310,6 +310,74 @@ pub(super) async fn initial(
     assert!(
         matches!(store.begin_conversation_input_preparation(&owner,&route,&failed,f.now).await?,Admission::Existing(facts) if facts.state==State::Known(Outcome::Failed(Failure::SourceUnavailable)))
     );
+    let scope = chapchoo_persistence::ConversationInputScope {
+        agent_id: &f.agent.id,
+        conversation_id: &first.conversation_id,
+        target: &ConversationTarget::NotStarted,
+    };
+    assert!(matches!(
+        store
+            .delete_failed_conversation_input(&f.other.digest(), &scope, "setup-failed", f.now)
+            .await,
+        Err(StoreError::NotFound)
+    ));
+    assert!(matches!(
+        store
+            .delete_failed_conversation_input(&owner, &scope, "unresolved-start", f.now)
+            .await,
+        Err(StoreError::InvalidTransition)
+    ));
+    let stale_scope = chapchoo_persistence::ConversationInputScope {
+        target: &ConversationTarget::Snapshot(snapshot.clone()),
+        ..scope
+    };
+    assert!(matches!(
+        store
+            .delete_failed_conversation_input(&owner, &stale_scope, "setup-failed", f.now)
+            .await,
+        Err(StoreError::Conflict)
+    ));
+    store
+        .delete_failed_conversation_input(&owner, &scope, "setup-failed", f.now)
+        .await?;
+    store
+        .delete_failed_conversation_input(&owner, &scope, "setup-failed", f.now)
+        .await?;
+    let deleted = store
+        .conversation_inputs(&owner, &scope, None, 25, f.now)
+        .await?
+        .into_iter()
+        .find(|item| item.reference.request_id == "setup-failed")
+        .ok_or("Missing deletion tombstone")?;
+    assert!(deleted.deleted);
+    assert_eq!(deleted.bytes, 0);
+    assert!(matches!(
+        store
+            .conversation_input_text(&owner, &scope, "setup-failed", 0, 1, f.now)
+            .await,
+        Err(StoreError::NotFound)
+    ));
+    assert!(matches!(
+        store
+            .accept_conversation_input(
+                &owner,
+                &AcceptConversationInput {
+                    agent_id: f.agent.id.clone(),
+                    conversation_id: Some(first.conversation_id.clone()),
+                    request_id: "setup-failed".into(),
+                    target: ConversationTarget::NotStarted,
+                    text: ConversationText::parse("another explicit input".into())?,
+                },
+                f.now
+            )
+            .await,
+        Err(StoreError::InvalidTransition)
+    ));
+    // Deleting content must not delete the effect/admission result.
+    assert!(
+        matches!(store.begin_conversation_input_preparation(&owner, &route, &failed, f.now).await?,
+        Admission::Existing(facts) if facts.state == State::Known(Outcome::Failed(Failure::SourceUnavailable)))
+    );
     Ok(())
 }
 async fn rejected_initial_recovery(
