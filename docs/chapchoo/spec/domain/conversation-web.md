@@ -66,8 +66,10 @@ reentry rather than being reduced to generic delivery failure. Possible setup
 forwarding does not replace known delivery uncertainty in an input label.
 
 Sending and failed text uses the same right-aligned user-bubble presentation as
-native user messages, with smaller adjacent delivery status rather than a second
-body-sized paragraph or diagnostic border. Retained inputs precede newer local
+native user messages: a localized author label above a compact plain-text body,
+with smaller delivery status below the bubble rather than a second body-sized
+paragraph or diagnostic border. Paragraph default margins do not add empty space
+inside the user bubble. Retained inputs precede newer local
 submissions, so a pending message does not jump above earlier failures. Native
 inserted-message identity still avoids duplicating a confirmed captured message.
 

@@ -449,14 +449,23 @@ test("sending and failed inputs share user bubbles with subdued status and new i
     expect(
       await bubble.evaluate((element) => {
         const style = getComputedStyle(element);
-        const body = element.querySelector("p");
+        const surface = element.children.item(1);
+        const body = surface?.querySelector("p");
+        const author = element.firstElementChild;
         const status = element.querySelector('[role="status"]');
+        if (!body || !surface || !author || !status) {
+          return false;
+        }
         return (
           style.alignSelf === "flex-end" &&
           style.borderLeftWidth === "0px" &&
-          Number.parseFloat(style.borderRadius) > 0 &&
-          body &&
-          status &&
+          author.textContent === "나" &&
+          Number.parseFloat(getComputedStyle(surface).borderRadius) > 0 &&
+          getComputedStyle(body).marginTop === "0px" &&
+          getComputedStyle(body).marginBottom === "0px" &&
+          Number.parseFloat(getComputedStyle(surface).paddingTop) <= 4 &&
+          author.getBoundingClientRect().bottom <=
+            surface.getBoundingClientRect().top &&
           Number.parseFloat(getComputedStyle(status).fontSize) <
             Number.parseFloat(getComputedStyle(body).fontSize)
         );
