@@ -261,6 +261,11 @@ lifetime. Debug output omits every credential message field and nested payload.
 API keys are delivered for explicit ACP login; their presence is not a model
 validity/entitlement claim. ChatGPT conversion validates the inspected native
 shape and admitted account, not JWT signatures or live native adoption.
+The refresh-free native file includes RFC 3339 `last_refresh`, derived from the
+existing applied-execution admission instant. That stable input is reused for
+every piece and descriptor rematerialization; wall-clock encoding or catalogue
+rename timestamps cannot change bytes within one application/source read.
+The field satisfies the native token reader and does not grant refresh authority.
 
 The foreground Control composition owns this service before listener admission
 and closes/drains its refresh work on normal shutdown and partial startup failure.

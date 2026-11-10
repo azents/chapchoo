@@ -613,6 +613,7 @@ dependencies = [
  "chapchoo-domain",
  "flate2",
  "futures-util",
+ "jiff",
  "nix",
  "reqwest",
  "rustls",
@@ -664,6 +665,7 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "chapchoo-service",
+ "jiff",
  "oauth2",
  "reqwest",
  "rustls",

@@ -51,6 +51,7 @@ fn key(value: &str) -> Result<NativeCredentials, TestError> {
 fn tokens(account: &str, refresh: &str) -> Result<ExternalSecret, TestError> {
     Ok(ExternalSecret::new(serde_json::to_vec(&json!({
         "auth_mode":"chatgptAuthTokens","OPENAI_API_KEY":null,
+        "last_refresh":"2026-11-10T02:00:00Z",
         "tokens":{"id_token":"synthetic.access.jwt","access_token":"synthetic.access.jwt",
             "refresh_token":refresh,"account_id":account}
     }))?)?)
@@ -63,15 +64,47 @@ fn ingress_rejects_refresh_authority_wrong_accounts_and_ambiguous_material() -> 
             .is_err()
     );
     assert!(NativeCredentials::external_token_file(tokens("other", "")?, "account").is_err());
-    let unexpected = ExternalSecret::new(br#"{"auth_mode":"chatgptAuthTokens","OPENAI_API_KEY":null,"tokens":{"id_token":"x","access_token":"x","refresh_token":"","account_id":"account"},"server_bundle":"forbidden"}"#.to_vec())?;
+    let unexpected = ExternalSecret::new(br#"{"auth_mode":"chatgptAuthTokens","OPENAI_API_KEY":null,"last_refresh":"2026-11-10T02:00:00Z","tokens":{"id_token":"x","access_token":"x","refresh_token":"","account_id":"account"},"server_bundle":"forbidden"}"#.to_vec())?;
     assert!(NativeCredentials::external_token_file(unexpected, "account").is_err());
-    let mixed = ExternalSecret::new(br#"{"auth_mode":"chatgptAuthTokens","OPENAI_API_KEY":"key","tokens":{"id_token":"x","access_token":"x","refresh_token":"","account_id":"account"}}"#.to_vec())?;
+    let mixed = ExternalSecret::new(br#"{"auth_mode":"chatgptAuthTokens","OPENAI_API_KEY":"key","last_refresh":"2026-11-10T02:00:00Z","tokens":{"id_token":"x","access_token":"x","refresh_token":"","account_id":"account"}}"#.to_vec())?;
     assert!(NativeCredentials::external_token_file(mixed, "account").is_err());
     for value in [" \t ", "key\nsecret", "key with spaces", "키"] {
         assert!(key(value).is_err());
     }
     assert!(NativeCredentials::api_key(ExternalSecret::new(vec![0xff])?).is_err());
     let accepted = NativeCredentials::external_token_file(tokens("account", "")?, "account")?;
+    let valid = tokens("account", "")?;
+    let mut invalid: serde_json::Value = serde_json::from_slice(valid.expose())?;
+    invalid
+        .as_object_mut()
+        .ok_or("Expected native object")?
+        .remove("last_refresh");
+    assert!(
+        NativeCredentials::external_token_file(
+            ExternalSecret::new(serde_json::to_vec(&invalid)?)?,
+            "account"
+        )
+        .is_err()
+    );
+    for value in [
+        serde_json::Value::Null,
+        json!(""),
+        json!("not-a-timestamp"),
+        json!(123),
+    ] {
+        invalid["last_refresh"] = value;
+        assert!(
+            NativeCredentials::external_token_file(
+                ExternalSecret::new(serde_json::to_vec(&invalid)?)?,
+                "account"
+            )
+            .is_err()
+        );
+    }
+    let saved = tempfile::tempdir()?;
+    let storage = NativeStorage::open(saved.path())?;
+    storage.publish_credentials(&accepted)?;
+    assert_eq!(fs::read(storage.state().join("auth.json"))?, valid.expose());
     assert!(accepted.initial_api_key().is_none());
     assert_eq!(format!("{accepted:?}"), "NativeCredentials([REDACTED])");
     Ok(())

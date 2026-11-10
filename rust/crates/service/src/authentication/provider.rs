@@ -90,11 +90,14 @@ pub type RefreshProviderFuture<'a> = Pin<
 
 /// Pure provider-to-native schema translation. It performs no I/O or refresh;
 /// execution/source authority is owned by the application service.
+/// `applied_at` is the retained application admission time in epoch milliseconds.
+/// Encoding the same application/source must remain byte-identical across reads.
 pub trait NativeTokenEncoder: Send + Sync {
     fn encode(
         &self,
         bundle: &ExternalSecret,
         account_id: &str,
+        applied_at: i64,
     ) -> Result<ExternalSecret, NativeTokenEncodingFailure>;
 }
 #[derive(Debug, Clone, Copy)]

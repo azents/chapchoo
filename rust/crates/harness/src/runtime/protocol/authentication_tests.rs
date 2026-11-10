@@ -379,7 +379,7 @@ async fn external_file_startup_installs_no_native_token_login_callback() -> Resu
     let (ready, rx) = oneshot::channel();
     let done = CancellationToken::new();
     let credentials=NativeCredentials::external_token_file(ExternalSecret::new(
-        br#"{"auth_mode":"chatgptAuthTokens","OPENAI_API_KEY":null,"tokens":{"id_token":"access.jwt","access_token":"access.jwt","refresh_token":"","account_id":"account"}}"#.to_vec()
+        br#"{"auth_mode":"chatgptAuthTokens","OPENAI_API_KEY":null,"last_refresh":"2026-11-10T02:00:00Z","tokens":{"id_token":"access.jwt","access_token":"access.jwt","refresh_token":"","account_id":"account"}}"#.to_vec()
     )?,"account")?;
     let connection = tokio::spawn(connect_authenticated(
         Lines::new(outgoing, incoming),
