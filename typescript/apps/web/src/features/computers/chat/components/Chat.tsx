@@ -308,7 +308,12 @@ export function Chat(props: ChatProps): ReactElement {
           classNames={{ content: classes.panel, body: classes.panelBody }}
           overlayProps={{ backgroundOpacity: 0.12, blur: 0 }}
         >
-          <div style={profileStyle(agent.paletteKey)}>
+          <div
+            className={classes.activityScroll}
+            role="region"
+            aria-label={c.activity}
+            style={profileStyle(agent.paletteKey)}
+          >
             <Group justify="flex-end" mb="md">
               <Button
                 component="a"
@@ -430,7 +435,7 @@ export function Chat(props: ChatProps): ReactElement {
           size="100dvh"
           returnFocus={false}
           classNames={{
-            content: `${classes.panel} ${classes.historyPanel}`,
+            content: classes.panel,
             body: classes.historyPanelBody,
           }}
         >

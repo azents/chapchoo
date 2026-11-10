@@ -43,7 +43,8 @@ row design. Selection enters a separate full-height history view at that record.
 User and assistant conversation is included; records expand from a short opening
 preview to their full content. Older-page insertion preserves the visible reading
 anchor, and latest-follow can be restored explicitly. The history reader unmounts
-on close and the activity sheet remains the return destination. Read-only retry
+on close and the activity sheet remains the return destination. Sheet headings
+and close actions sit outside their internal scrolling content. Read-only retry
 never resubmits input, an answer or Stop.
 
 Conversation identity and source snapshot are compared independently. A replaced

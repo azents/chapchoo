@@ -1,5 +1,37 @@
 import { expect, test } from "@playwright/test";
 
+test("activity sheet keeps its heading and close action outside the scrolling content", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 600 });
+  await page.goto(
+    "/iframe.html?id=chat-conversation--review-all-records&viewMode=story",
+  );
+  await page.getByRole("button", { name: /코기.*작업 상태/ }).click();
+  const dialog = page.getByRole("dialog", { name: "작업 상태", exact: true });
+  const heading = dialog.getByRole("heading", {
+    name: "작업 상태",
+    exact: true,
+  });
+  const close = dialog.getByRole("button", { name: "닫기", exact: true });
+  const region = dialog.getByRole("region", { name: "작업 상태", exact: true });
+  await expect(heading).toBeVisible();
+  await close.hover();
+  const before = {
+    heading: await heading.boundingBox(),
+    close: await close.boundingBox(),
+  };
+  await region.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expect
+    .poll(() => region.evaluate((element) => element.scrollTop))
+    .toBeGreaterThan(0);
+  expect(await heading.boundingBox()).toEqual(before.heading);
+  expect(await close.boundingBox()).toEqual(before.close);
+  await expect(close).toBeVisible();
+});
+
 for (const width of [390, 1280]) {
   test(`Chat owns the scroll boundary and preserves header/composer at ${width}`, async ({
     page,

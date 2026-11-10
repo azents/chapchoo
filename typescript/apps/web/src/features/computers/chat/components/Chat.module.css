@@ -288,18 +288,27 @@
   pointer-events: auto;
 }
 .panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--chapchoo-color-surfaceWarm);
   border-radius: var(--mantine-radius-lg) var(--mantine-radius-lg) 0 0;
 }
 .panelBody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
   max-width: 52rem;
   margin-inline: auto;
   width: 100%;
-  padding: var(--mantine-spacing-xl);
+  padding: 0;
 }
-.historyPanel {
-  display: flex;
-  flex-direction: column;
+.activityScroll {
+  width: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: none;
+  padding: var(--mantine-spacing-xl);
 }
 .historyPanelBody {
   flex: 1;
@@ -440,7 +449,7 @@
     padding-inline: var(--mantine-spacing-md);
     padding-bottom: max(var(--mantine-spacing-sm), env(safe-area-inset-bottom));
   }
-  .panelBody {
+  .activityScroll {
     padding: var(--mantine-spacing-lg);
   }
   .summary {
