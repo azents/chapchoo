@@ -19,6 +19,7 @@ import { profileStyle } from "../../profilePalette";
 import { nativeStatus } from "../copy";
 import classes from "./Chat.module.css";
 import { ConversationBody, ConversationContent } from "./ConversationBody";
+import { RecentConversationRecord } from "./ConversationRecord";
 import type { ChatProps } from "../types";
 import type { ReactElement } from "react";
 
@@ -82,6 +83,12 @@ export function Chat(props: ChatProps): ReactElement {
   const working = props.stoppable && props.activity === "working";
   const records = props.conversation.region.records;
   const currentPlan = props.conversation.region.latestPlan;
+  const showStatus =
+    props.activity !== "idle" ||
+    p.stale ||
+    Boolean(p.error) ||
+    agent.computer.power !== "running" ||
+    agent.computer.connector !== "connected";
   return (
     <div className={classes.frame}>
       <aside className={classes.sidebar}>
@@ -124,13 +131,14 @@ export function Chat(props: ChatProps): ReactElement {
                   ref={props.focus.statusRef}
                   onClick={props.onOpen}
                   aria-haspopup="dialog"
-                  aria-label={`${agent.name} · ${props.status} · ${c.activity}`}
+                  aria-label={`${agent.name}${showStatus ? ` · ${props.status}` : ""} · ${c.activity}`}
                 >
                   <span className={classes.statusLine}>
-                    <Icon name={working ? "activity" : "chat"} />
+                    {showStatus ? (
+                      <Icon name={working ? "activity" : "chat"} />
+                    ) : null}
                     <strong>{agent.name}</strong>
-                    <span>{props.status}</span>
-                    <Icon name="chevron" />
+                    {showStatus ? <span>{props.status}</span> : null}
                   </span>
                 </button>
                 {agent.computer.power === "stopped" ? (
@@ -143,9 +151,11 @@ export function Chat(props: ChatProps): ReactElement {
                   </button>
                 ) : null}
               </div>
-              <span className={classes.srOnly} role="status">
-                {props.status}
-              </span>
+              {showStatus ? (
+                <span className={classes.srOnly} role="status">
+                  {props.status}
+                </span>
+              ) : null}
             </div>
             <div className={classes.right}>
               {props.accountControls}
@@ -198,11 +208,15 @@ export function Chat(props: ChatProps): ReactElement {
                   copy={c}
                   writable={props.writable}
                   agentName={agent.name}
+                  agentProfile={{
+                    basePath: p.basePath,
+                    assetKey: agent.profileImage.assetKey,
+                  }}
                 />
               </div>
             </ScrollArea>
             <footer className={classes.composerArea} ref={f.overlayRef}>
-              {f.detached ? (
+              {f.unseen ? (
                 <ActionIcon
                   className={classes.latest}
                   size="2.25rem"
@@ -294,7 +308,12 @@ export function Chat(props: ChatProps): ReactElement {
           classNames={{ content: classes.panel, body: classes.panelBody }}
           overlayProps={{ backgroundOpacity: 0.12, blur: 0 }}
         >
-          <div style={profileStyle(agent.paletteKey)}>
+          <div
+            className={classes.activityScroll}
+            role="region"
+            aria-label={c.activity}
+            style={profileStyle(agent.paletteKey)}
+          >
             <Group justify="flex-end" mb="md">
               <Button
                 component="a"
@@ -377,40 +396,50 @@ export function Chat(props: ChatProps): ReactElement {
             ) : currentPlan ? (
               <ConversationContent parts={currentPlan.content} />
             ) : null}
-            <details className={classes.tools} open>
-              <summary>{c.history}</summary>
-              {records
-                .filter(
-                  (record) =>
-                    record.kind !== "user" &&
-                    record.kind !== "assistant" &&
-                    record.kind !== "state",
-                )
-                .reverse()
-                .map((record) => (
-                  <Button
+            <section className={classes.tools}>
+              <Button
+                variant="subtle"
+                fullWidth
+                rightSection={<Icon name="chevron" />}
+                onClick={() => props.conversation.onHistory()}
+                classNames={{ inner: classes.historyLinkInner }}
+              >
+                {c.history}
+              </Button>
+              <div
+                className={
+                  records.length > 5 || props.conversation.region.older
+                    ? classes.recentFade
+                    : void 0
+                }
+              >
+                {records.slice(-5).map((record) => (
+                  <RecentConversationRecord
                     key={record.key}
-                    fullWidth
-                    variant="subtle"
-                    onClick={() => props.conversation.onHistory(record)}
-                  >
-                    {record.title ??
-                      (record.kind === "tool"
-                        ? c.tools
-                        : record.kind === "thought"
-                          ? c.thought
-                          : record.kind === "request"
-                            ? (record.question?.title ?? c.question)
-                            : record.kind === "plan"
-                              ? c.plan
-                              : c.notice)}
-                    {record.status
-                      ? ` · ${nativeStatus(c, record.status)}`
-                      : ""}
-                  </Button>
+                    record={record}
+                    copy={c}
+                    agentName={agent.name}
+                    onOpen={() => props.conversation.onHistory(record)}
+                  />
                 ))}
-            </details>
+              </div>
+            </section>
           </div>
+        </Drawer>
+        <Drawer
+          opened={props.historyOpened}
+          onClose={props.onCloseHistory}
+          title={c.history}
+          closeButtonProps={{ "aria-label": c.close }}
+          position="bottom"
+          size="100dvh"
+          returnFocus={false}
+          classNames={{
+            content: classes.panel,
+            body: classes.historyPanelBody,
+          }}
+        >
+          {props.historyContent}
         </Drawer>
         <ConfirmationDialog
           opened={p.confirmation !== null}

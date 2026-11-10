@@ -8,9 +8,14 @@ import { creationCopy } from "../../creationCopy";
 import { computerDetailCopy } from "../../detailCopy";
 import { useChatFocus } from "../containers/useChatFocus";
 import { useFloatingChat } from "../containers/useFloatingChat";
+import { useHistoryScroll } from "../containers/useHistoryScroll";
 import { activityStatus, chatCopy } from "../copy";
 import { Chat } from "./Chat";
+import { ConversationHistory } from "./ConversationHistory";
+import { conversationReviewRecords } from "./conversationReviewFixture";
 import type { AgentsProps, InitialAgents } from "../../types";
+import type { ChatCopy } from "../copy";
+import type { ConversationControls } from "../types";
 import type { AgentView } from "@chapchoo/web-core/computer";
 import type {
   ConversationRecord,
@@ -53,10 +58,56 @@ type FixtureProps = {
     | "authenticationRequired"
     | "nativeStarting"
     | "notStarted"
+    | "review"
+    | "unread"
+    | "idle"
     | "empty";
   locale: string;
   name: string;
 };
+function StaticHistory({
+  records,
+  copy,
+  name,
+}: {
+  records: ConversationRecord[];
+  copy: ChatCopy;
+  name: string;
+}): ReactElement {
+  const scroll = useHistoryScroll(null);
+  const controls: ConversationControls = {
+    region: {
+      header: {
+        agentId: "agent",
+        conversationId: "conversation",
+        state: "ready",
+        foreground: "working",
+      },
+      records,
+      renderedAt: 1,
+    },
+    read: "ready",
+    readingOlder: false,
+    inputs: [],
+    drafts: {},
+    stop: "idle",
+    onRead: () => {},
+    onOlder: () => {},
+    onLatest: scroll.followLatest,
+    onHistory: () => {},
+    onQuestionOption: () => {},
+    onQuestionField: () => {},
+    onAnswer: () => {},
+  };
+  return (
+    <ConversationHistory
+      controls={controls}
+      scroll={scroll}
+      copy={copy}
+      agentName={name}
+    />
+  );
+}
 function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
   const stopped =
     mode === "stopped" || mode === "startError" || mode === "staleStopped";
@@ -109,44 +160,62 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
   };
   const [input, setInput] = useState("");
   const [records, setRecords] = useState<ConversationRecord[]>(
-    mode === "empty"
-      ? []
-      : [
-          fixtureMessage(
-            "user",
-            "user-one",
-            "  Plan a quiet afternoon in Seoul.  ",
-            1n,
-          ),
-          fixtureMessage(
-            "assistant",
-            "assistant-one",
-            "Let's leave some room to explore.\n\n**First**, a walk through the park.\n\n" +
-              "A complete retained paragraph for the reading-position fixture.\n\n".repeat(
-                24,
-              ),
-            2n,
-          ),
-          fixtureMessage(
-            "assistant",
-            "assistant-two",
-            "I am checking the opening hours.",
-            3n,
-          ),
-        ],
+    mode === "review"
+      ? conversationReviewRecords
+      : mode === "empty" || mode === "idle"
+        ? []
+        : [
+            fixtureMessage(
+              "user",
+              "user-one",
+              "  Plan a quiet afternoon in Seoul.  ",
+              1n,
+            ),
+            fixtureMessage(
+              "assistant",
+              "assistant-one",
+              "Let's leave some room to explore.\n\n**First**, a walk through the park.\n\n" +
+                "A complete retained paragraph for the reading-position fixture.\n\n".repeat(
+                  24,
+                ),
+              2n,
+            ),
+            fixtureMessage(
+              "assistant",
+              "assistant-two",
+              "I am checking the opening hours.",
+              3n,
+            ),
+          ],
   );
   const [opened, setOpened] = useState(false);
+  const [historyOpened, setHistoryOpened] = useState(false);
   const [navOpened, setNavOpened] = useState(false);
   const [detailsOpened, setDetailsOpened] = useState(false);
-  const [activity, setActivity] = useState<"working" | "idle">("working");
+  const [activity, setActivity] = useState<"working" | "idle">(
+    mode === "idle" ? "idle" : "working",
+  );
   const [workStop, setWorkStop] = useState<"idle" | "published">("idle");
   const [failedDeleted, setFailedDeleted] = useState(false);
   const [retrySubmitted, setRetrySubmitted] = useState(false);
-  const floating = useFloatingChat(input, agent.id);
+  const floating = useFloatingChat(
+    input,
+    agent.id,
+    true,
+    records.filter(
+      (record) =>
+        record.kind === "user" ||
+        record.kind === "assistant" ||
+        record.kind === "request",
+    ),
+  );
   const copy = chatCopy(locale);
   const c = computerCopy(locale);
   const writable =
+    mode === "unread" ||
     mode === "connected" ||
+    mode === "review" ||
+    mode === "idle" ||
     mode === "empty" ||
     mode === "textPlan" ||
     mode === "nativeFailed" ||
@@ -258,153 +327,228 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
       )
     : activity;
   return (
-    <Chat
-      product={controlled.product}
-      focus={controlled.focus}
-      agent={agent}
-      copy={copy}
-      navigation={null}
-      accountControls={null}
-      supplyControl={null}
-      secondaryOverlay={false}
-      agentNavigation={
-        <AgentNavigation
-          basePath=""
-          copy={c}
-          titleHref="/teams/my/agents"
-          createHref="/teams/my/new-agent"
-          createLabel={product.profileCopy.newAgent}
-          allAgentsLabel="All Agents"
-          selectedHandle="corgi"
-          agentHref={(handle) => `/teams/my/agents/${handle}/chat`}
-          status="ready"
-          items={[
-            agent,
-            {
-              ...agent,
-              id: "second",
-              handle: "bichon",
-              name: locale.startsWith("ko") ? "비숑" : "Bichon",
-              profileImage: { id: "bichon", assetKey: "02-bichon" },
-              paletteKey: "lilac",
-            },
-          ]}
-        />
-      }
-      conversation={{
-        region: startup
-          ? startupRegion
-          : {
-              header: {
-                agentId: agent.id,
-                conversationId: "conversation",
-                state: "ready",
-                source: {
+    <>
+      <Chat
+        product={controlled.product}
+        focus={controlled.focus}
+        agent={agent}
+        copy={copy}
+        navigation={null}
+        accountControls={null}
+        supplyControl={null}
+        secondaryOverlay={false}
+        agentNavigation={
+          <AgentNavigation
+            basePath=""
+            copy={c}
+            titleHref="/teams/my/agents"
+            createHref="/teams/my/new-agent"
+            createLabel={product.profileCopy.newAgent}
+            allAgentsLabel="All Agents"
+            selectedHandle="corgi"
+            agentHref={(handle) => `/teams/my/agents/${handle}/chat`}
+            status="ready"
+            items={[
+              agent,
+              {
+                ...agent,
+                id: "second",
+                handle: "bichon",
+                name: locale.startsWith("ko") ? "비숑" : "Bichon",
+                profileImage: { id: "bichon", assetKey: "02-bichon" },
+                paletteKey: "lilac",
+              },
+            ]}
+          />
+        }
+        conversation={{
+          region: startup
+            ? startupRegion
+            : {
+                header: {
                   agentId: agent.id,
                   conversationId: "conversation",
-                  snapshotId: "snapshot",
+                  state: "ready",
+                  source: {
+                    agentId: agent.id,
+                    conversationId: "conversation",
+                    snapshotId: "snapshot",
+                  },
+                  native: { snapshotId: "snapshot", nativeSessionId: "native" },
+                  foreground: activity,
+                  workId: activity === "working" ? "work" : void 0,
                 },
-                native: { snapshotId: "snapshot", nativeSessionId: "native" },
-                foreground: activity,
-                workId: activity === "working" ? "work" : void 0,
+                records,
+                latestPlan:
+                  mode === "textPlan"
+                    ? {
+                        key: "plan:text-plan",
+                        nativeId: "text-plan",
+                        kind: "plan",
+                        anchor: { ordinal: 4n, index: 0n },
+                        updatedOrdinal: 4n,
+                        content: [],
+                        locations: [],
+                        plan: {
+                          type: "text",
+                          text: "**First**, inspect the current implementation.",
+                        },
+                      }
+                    : null,
+                renderedAt: initial.renderedAt,
               },
-              records,
-              latestPlan:
-                mode === "textPlan"
-                  ? {
-                      key: "plan:text-plan",
-                      nativeId: "text-plan",
-                      kind: "plan",
-                      anchor: { ordinal: 4n, index: 0n },
-                      updatedOrdinal: 4n,
-                      content: [],
-                      locations: [],
-                      plan: {
-                        type: "text",
-                        text: "**First**, inspect the current implementation.",
-                      },
-                    }
-                  : null,
-              renderedAt: initial.renderedAt,
-            },
-        read: mode === "readerError" ? "error" : "ready",
-        readingOlder: false,
-        inputs: retrySubmitted
-          ? [
-              {
-                requestId: "explicit-new-retry",
-                text: "안녕하세요",
-                observation: "sending",
-              },
-            ]
-          : mode === "pendingOrder"
+          read: mode === "readerError" ? "error" : "ready",
+          readingOlder: false,
+          inputs: retrySubmitted
             ? [
                 {
-                  requestId: "new-local",
-                  text: "새 메시지",
+                  requestId: "explicit-new-retry",
+                  text: "안녕하세요",
                   observation: "sending",
                 },
               ]
-            : [],
-        stop: workStop,
-        inputDeletable: true,
-        onRetryInput: () => setRetrySubmitted(true),
-        onDeleteInput: () => setFailedDeleted(true),
-        drafts: {},
-        onRead: () => {},
-        onOlder: () => {},
-        onLatest: floating.followLatest,
-        onHistory: () => {},
-        onQuestionOption: () => {},
-        onQuestionField: () => {},
-        onAnswer: () => {},
-      }}
-      input={input}
-      activity={mode === "readerError" ? "unavailable" : displayedActivity}
-      writable={writable}
-      stoppable={writable || mode === "sending" || mode === "readerError"}
-      sendable={writable && Boolean(input.trim())}
-      status={
-        product.error ??
-        (stale
-          ? c.stale
-          : mode === "stopped"
-            ? c.stopped
-            : mode === "disconnected"
-              ? c.disconnected
-              : mode === "unknown"
-                ? c.unknown
-                : mode === "readerError"
-                  ? copy.error
-                  : activityStatus(copy, displayedActivity))
-      }
-      opened={opened}
-      navOpened={navOpened}
-      onOpen={() => setOpened(true)}
-      onClose={() => setOpened(false)}
-      onOpenNav={() => setNavOpened(true)}
-      onCloseNav={() => setNavOpened(false)}
-      onInput={setInput}
-      onSend={() => {
-        if (!writable || !input.trim()) {
-          return;
+            : mode === "pendingOrder"
+              ? [
+                  {
+                    requestId: "new-local",
+                    text: "새 메시지",
+                    observation: "sending",
+                  },
+                ]
+              : [],
+          stop: workStop,
+          inputDeletable: true,
+          onRetryInput: () => setRetrySubmitted(true),
+          onDeleteInput: () => setFailedDeleted(true),
+          drafts: {},
+          onRead: () => {},
+          onOlder: () => {},
+          onLatest: floating.followLatest,
+          onHistory: () => {
+            setOpened(false);
+            setHistoryOpened(true);
+          },
+          onQuestionOption: () => {},
+          onQuestionField: () => {},
+          onAnswer: () => {},
+        }}
+        input={input}
+        activity={mode === "readerError" ? "unavailable" : displayedActivity}
+        writable={writable}
+        stoppable={writable || mode === "sending" || mode === "readerError"}
+        sendable={writable && Boolean(input.trim())}
+        status={
+          product.error ??
+          (stale
+            ? c.stale
+            : mode === "stopped"
+              ? c.stopped
+              : mode === "disconnected"
+                ? c.disconnected
+                : mode === "unknown"
+                  ? c.unknown
+                  : mode === "readerError"
+                    ? copy.error
+                    : activityStatus(copy, displayedActivity))
         }
-        floating.followLatest();
-        setRecords((previous) => [
-          ...previous,
-          fixtureMessage(
-            "user",
-            `user-${previous.length}`,
-            input,
-            BigInt(previous.length + 1),
-          ),
-        ]);
-        setInput("");
-        setActivity("idle");
-      }}
-      onStop={() => setWorkStop("published")}
-      floating={floating}
-    />
+        opened={opened}
+        historyOpened={historyOpened}
+        historyContent={
+          historyOpened ? (
+            <StaticHistory records={records} copy={copy} name={name} />
+          ) : null
+        }
+        onCloseHistory={() => {
+          setHistoryOpened(false);
+          setOpened(true);
+        }}
+        navOpened={navOpened}
+        onOpen={() => setOpened(true)}
+        onClose={() => setOpened(false)}
+        onOpenNav={() => setNavOpened(true)}
+        onCloseNav={() => setNavOpened(false)}
+        onInput={setInput}
+        onSend={() => {
+          if (!writable || !input.trim()) {
+            return;
+          }
+          floating.followLatest();
+          setRecords((previous) => [
+            ...previous,
+            fixtureMessage(
+              "user",
+              `user-${previous.length}`,
+              input,
+              BigInt(previous.length + 1),
+            ),
+          ]);
+          setInput("");
+          setActivity("idle");
+        }}
+        onStop={() => setWorkStop("published")}
+        floating={floating}
+      />
+      {mode === "unread" ? (
+        <div style={{ position: "fixed", top: 0, right: 0, zIndex: 1000 }}>
+          <button
+            type="button"
+            onClick={() =>
+              setRecords((previous) => [
+                ...previous,
+                fixtureMessage(
+                  "assistant",
+                  `remote-${previous.length}`,
+                  `Unread message ${previous.length}`,
+                  BigInt(previous.length + 1),
+                ),
+              ])
+            }
+          >
+            Receive message
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const question: ConversationRecord = {
+                ...fixtureMessage(
+                  "assistant",
+                  `question-${records.length}`,
+                  "",
+                  BigInt(records.length + 1),
+                ),
+                kind: "request",
+                question: { type: "form", title: "New question", fields: [] },
+                responder: { token: "fixture-only" },
+              };
+              setRecords((previous) => [...previous, question]);
+            }}
+          >
+            Receive question
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              setRecords((previous) =>
+                previous.map((record) =>
+                  record.nativeId === "assistant-one"
+                    ? {
+                        ...record,
+                        updatedOrdinal: record.updatedOrdinal + 100n,
+                        content: [
+                          ...record.content,
+                          { type: "text", text: "\nUpdated earlier reply." },
+                        ],
+                      }
+                    : record,
+                ),
+              )
+            }
+          >
+            Update earlier reply
+          </button>
+        </div>
+      ) : null}
+    </>
   );
 }
 const meta = {
@@ -416,6 +560,11 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Connected: Story = {};
+export const UnreadMessages: Story = {
+  args: { mode: "unread", locale: "en-US", name: "Corgi" },
+};
+export const ReviewAllRecords: Story = { args: { mode: "review" } };
+export const Idle: Story = { args: { mode: "idle" } };
 export const NoPlanActivity: Story = { args: { mode: "empty" } };
 export const ComposerEmpty: Story = {
   args: { mode: "empty", locale: "en-US", name: "Corgi" },

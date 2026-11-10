@@ -15,10 +15,12 @@ conversation region through the request-owned server session. The HTML renders
 that region and hydrates the same values. Reads do not create a conversation,
 power on a Computer, prepare an installation or start native work.
 
-One client read owner continues on a one-second cadence while the document is
-visible and the account remains authorized. It coalesces concurrent refreshes,
+The current transcript read owner continues on a one-second cadence while the
+document is visible and the account remains authorized. Full history mounts its
+own source-bound read owner, seeded from the current admitted region, so paging
+older history does not replace current-head polling. Each owner coalesces refreshes,
 allows at most one read in flight, and rereads on focus/online activation.
-Hydration does not issue an immediate duplicate read. Hidden views stop scheduling
+Hydration does not issue an immediate duplicate read. Hidden documents stop scheduling
 new reads. Unmounted owners discard late responses. Request authentication,
 Origin/POST and cookie disposition remain owned by the existing web boundary.
 
@@ -35,8 +37,15 @@ still rejects the read; a final field read rechecks owner/source authority.
 Recent/older records and retained input pages use source-bound anchors. The
 current plan has its own read even outside the recent region. The activity sheet
 provides a direct link to the current Agent's canonical Team-scoped detail page.
-Selecting history in that sheet scrolls to its record after the sheet's exit/focus
-boundary. Read-only retry never resubmits input, an answer or Stop.
+The sheet previews five recent records in chronological order, with a transparent
+top fade when older records exist. Preview and full history reuse the same compact
+row design. Selection enters a separate full-height history view at that record.
+User and assistant conversation is included; records expand from a short opening
+preview to their full content. Older-page insertion preserves the visible reading
+anchor, and latest-follow can be restored explicitly. The history reader unmounts
+on close and the activity sheet remains the return destination. Sheet headings
+and close actions sit outside their internal scrolling content. Read-only retry
+never resubmits input, an answer or Stop.
 
 Conversation identity and source snapshot are compared independently. A replaced
 source clears old live content and paging before the new source refills. Ordinary
@@ -46,6 +55,18 @@ message. Viewport anchoring preserves an existing record's screen offset while
 the reader is detached; Jump to latest restores following.
 
 ## User-facing execution diagnosis
+
+A normal idle header shows only the Agent name. Meaningful work, action-required,
+failure, stale and Computer states remain visible. Chat owns the viewport scroll
+boundary; the header and composer stay available while conversation content
+scrolls internally. The main transcript contains user/assistant conversation and
+necessary questions or permission input. Tool, reasoning, plan, terminal, notice
+and state records belong to the recent preview and full history, not duplicate
+transcript disclosures. A confirmed native user message suppresses its separate
+delivery receipt in the transcript while preserving that evidence in history.
+The down arrow signals new content that arrived while the owner was reading
+above latest, rather than a detached position alone. Reaching latest or selecting
+the arrow acknowledges it.
 
 The status distinguishes a conversation that has not started, missing saved AI
 authentication, startup in progress, reported startup failure, delivery failure,
@@ -66,17 +87,21 @@ reentry rather than being reduced to generic delivery failure. Possible setup
 forwarding does not replace known delivery uncertainty in an input label.
 
 Sending and failed text uses the same right-aligned user-bubble presentation as
-native user messages: a localized author label above a compact plain-text body,
+native user messages: a localized author label above a padded Markdown body,
 with smaller delivery status below the bubble rather than a second body-sized
 paragraph or diagnostic border. Paragraph default margins do not add empty space
-inside the user bubble. Retained inputs precede newer local
+inside the user bubble. Body width is independent of a longer status label.
+Retained inputs precede newer local
 submissions, so a pending message does not jump above earlier failures. Native
 inserted-message identity still avoids duplicating a confirmed captured message.
 
 ## Text, requests and retained operation facts
 
-User content is whitespace-preserving plain text. Assistant utterances use
-Markdown without raw HTML or automatic external-image loading. Supported media
+User content and assistant utterances use Markdown without raw HTML or automatic
+external-image loading. The body uses the small text token; the composer retains
+the normal input size. Assistant authors include the selected Agent profile.
+Links use the common theme color. Disclosure transitions respect reduced motion.
+Supported media
 have explicit previews and inspectable original base64. Terminal pieces are
 assembled as bytes before text decoding and retain exact base64 independently
 of display replacement characters. Plans, tools, reasoning, locations, notices

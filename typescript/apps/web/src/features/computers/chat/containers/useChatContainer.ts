@@ -14,6 +14,7 @@ import { useLocale } from "next-intl";
 import { createElement, useContext, useEffect, useRef, useState } from "react";
 import { trpc } from "@/shared/rpc/client";
 import { useAgentsContainer } from "../../containers/useAgentsContainer";
+import { ConversationHistoryPage } from "../ConversationHistoryPage";
 import { activityStatus, chatCopy } from "../copy";
 import { SupplyPage } from "../SupplyPage";
 import { useChatFocus } from "./useChatFocus";
@@ -24,6 +25,7 @@ import type { QuestionDraft } from "@chapchoo/web-core/conversation-form";
 import type {
   ConversationAnswer,
   ConversationRecord,
+  ConversationRegion,
   RetainedInputView,
 } from "@chapchoo/web-core/conversation-types";
 
@@ -38,6 +40,11 @@ export function useChatContainer(props: ChatInput): ChatProps {
   const copy = chatCopy(useLocale());
   const [input, setInput] = useState("");
   const [opened, setOpened] = useState(false);
+  const [history, setHistory] = useState<{
+    initial: ConversationRegion;
+    key: string | null;
+    olderOnOpen: boolean;
+  } | null>(null);
   const [navOpened, setNavOpened] = useState(false);
   const [inputs, setInputs] = useState<ConversationControls["inputs"]>([]);
   const [drafts, setDrafts] = useState<Partial<Record<string, QuestionDraft>>>(
@@ -56,7 +63,6 @@ export function useChatContainer(props: ChatInput): ChatProps {
     useState<ConversationControls["inputAction"]>();
   const answerBusy = useRef(new Set<string>());
   const stopBusy = useRef(false);
-  const historyFocus = useRef<string | null>(null);
   const utils = trpc.useUtils();
   const sendMutation = trpc.conversations.send.useMutation({ retry: false });
   const deleteMutation = trpc.conversations.deleteInput.useMutation({
@@ -105,6 +111,12 @@ export function useChatContainer(props: ChatInput): ChatProps {
     input,
     `${props.initial.type === "detail" ? props.initial.agent.id : ""}:${region.header.source?.snapshotId ?? ""}`,
     product.access === "authorized",
+    region.records.filter(
+      (record) =>
+        record.kind === "user" ||
+        record.kind === "assistant" ||
+        record.kind === "request",
+    ),
   );
   if (product.data.type !== "detail") {
     throw new Error("Chat requires an admitted Agent detail snapshot");
@@ -477,16 +489,23 @@ export function useChatContainer(props: ChatInput): ChatProps {
       void deleteInput(value);
     },
     onOlder: () => {
-      floating.preserveHistory();
-      reader.older();
+      setHistory({
+        initial: region,
+        key: region.records[0]?.key ?? null,
+        olderOnOpen: true,
+      });
     },
     onLatest: () => {
       reader.latest();
       floating.followLatest();
     },
     onHistory: (record) => {
-      historyFocus.current = record.key;
       setOpened(false);
+      setHistory({
+        initial: region,
+        key: record?.key ?? null,
+        olderOnOpen: false,
+      });
     },
     onQuestionOption: (record, optionId) =>
       changeDraft(record, (draft) => ({ ...draft, optionId, errors: {} })),
@@ -540,26 +559,30 @@ export function useChatContainer(props: ChatInput): ChatProps {
     opened,
     navOpened,
     floating,
-    focus: {
-      ...controlled.focus,
-      activityClosed: () => {
-        const key = historyFocus.current;
-        historyFocus.current = null;
-        if (key === null) {
-          controlled.focus.activityClosed();
-          return;
-        }
-        const element = document.getElementById(
-          `conversation-${encodeURIComponent(key)}`,
-        );
-        const details = element?.querySelector("details");
-        if (details instanceof HTMLDetailsElement) {
-          details.open = true;
-        }
-        element?.scrollIntoView({ block: "center" });
-        element?.focus({ preventScroll: true });
-      },
+    historyOpened: history !== null,
+    historyContent: history
+      ? createElement(ConversationHistoryPage, {
+          initial: history.initial,
+          initialFocus: history.key,
+          olderOnOpen: history.olderOnOpen,
+          deletions: (region.inputs ?? [])
+            .filter((item) => item.deleted)
+            .map((item) => ({
+              id: item.id,
+              conversationId: item.conversationId,
+              snapshotId: region.header.source?.snapshotId,
+            })),
+          copy,
+          agentName: agent.name,
+          inputs,
+          drafts: conversation.drafts,
+        })
+      : null,
+    onCloseHistory: () => {
+      setHistory(null);
+      setOpened(true);
     },
+    focus: controlled.focus,
     onOpen: () => setOpened(true),
     onClose: () => setOpened(false),
     onOpenNav: () => setNavOpened(true),

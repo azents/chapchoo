@@ -39,7 +39,7 @@ for (const width of [390, 1280]) {
 }
 
 for (const width of [390, 1280]) {
-  test(`activity exposes Agent details and a single no-plan history boundary at ${width}`, async ({
+  test(`activity exposes Agent details and opens its separate full history at ${width}`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 844 });
@@ -57,26 +57,6 @@ for (const width of [390, 1280]) {
     });
     await expect(details).toBeVisible();
     await expect(details).toHaveAttribute("href", "/teams/my/agents/corgi");
-    await expect(activity.getByRole("heading", { level: 3 })).toHaveCount(0);
-    const history = activity
-      .locator("details")
-      .filter({ hasText: "전체 기록" });
-    await expect(history).toBeVisible();
-    const boundaries = await history.evaluate((element) => {
-      const summary = element.previousElementSibling;
-      return {
-        historyTop: getComputedStyle(element).borderTopStyle,
-        summaryBottom: summary
-          ? getComputedStyle(summary).borderBottomStyle
-          : null,
-        previousHeading: summary?.querySelector("h2")?.textContent,
-      };
-    });
-    expect(boundaries).toEqual({
-      historyTop: "solid",
-      summaryBottom: "none",
-      previousHeading: "에이전트 작업",
-    });
     await expect
       .poll(() =>
         activity.evaluate(
@@ -86,6 +66,12 @@ for (const width of [390, 1280]) {
       .toBe(true);
     await details.focus();
     await expect(details).toBeFocused();
+    await activity
+      .getByRole("button", { name: "전체 기록", exact: true })
+      .click();
+    await expect(
+      page.getByRole("dialog", { name: "전체 기록", exact: true }),
+    ).toBeVisible();
   });
 }
 
@@ -217,29 +203,57 @@ test("measured input and overlay clearance honor enlarged root text", async ({
     .toBe(true);
 });
 
-test("a wheel at the latest edge does not silently detach following", async ({
-  page,
-}) => {
-  await page.goto("/iframe.html?id=chat-conversation--english&viewMode=story");
-  const log = page.getByRole("log", { name: "Message", exact: true });
-  await log.hover();
-  await page.mouse.wheel(0, 200);
-  const input = page.getByRole("textbox", { name: "Message", exact: true });
-  await input.fill("One\nTwo\nThree\nFour\nFive");
-  await expect
-    .poll(() =>
-      log.evaluate(
-        (element) =>
-          element.scrollHeight - element.clientHeight - element.scrollTop,
-      ),
-    )
-    .toBeLessThan(2);
-  await page.mouse.move(800, 300);
-  await page.mouse.wheel(0, -500);
-  await expect(
-    page.getByRole("button", { name: "Jump to latest", exact: true }),
-  ).toBeVisible();
-});
+for (const trigger of [
+  "Receive message",
+  "Receive question",
+  "Update earlier reply",
+]) {
+  test(`unread content exposes a latest action that acknowledges it: ${trigger}`, async ({
+    page,
+  }) => {
+    await page.goto(
+      "/iframe.html?id=chat-conversation--unread-messages&viewMode=story",
+    );
+    const log = page.getByRole("log", { name: "Message", exact: true });
+    await log.hover();
+    await page.mouse.wheel(0, 200);
+    const input = page.getByRole("textbox", { name: "Message", exact: true });
+    await input.fill("One\nTwo\nThree\nFour\nFive");
+    await expect
+      .poll(() =>
+        log.evaluate(
+          (element) =>
+            element.scrollHeight - element.clientHeight - element.scrollTop,
+        ),
+      )
+      .toBeLessThan(2);
+    await page.mouse.move(800, 300);
+    await page.mouse.wheel(0, -500);
+    await expect
+      .poll(() =>
+        log.evaluate(
+          (element) =>
+            element.scrollHeight - element.clientHeight - element.scrollTop,
+        ),
+      )
+      .toBeGreaterThan(200);
+    await page.getByRole("button", { name: trigger, exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: "Jump to latest", exact: true }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Jump to latest", exact: true })
+      .click();
+    await expect
+      .poll(() =>
+        log.evaluate(
+          (element) =>
+            element.scrollHeight - element.clientHeight - element.scrollTop,
+        ),
+      )
+      .toBeLessThan(2);
+  });
+}
 
 for (const width of [320, 390, 1280]) {
   test(`conversation input, activity and Agent navigation at ${width}`, async ({
@@ -286,26 +300,12 @@ for (const width of [320, 390, 1280]) {
     await log.evaluate((element) => {
       element.scrollTop = 0;
     });
-    await expect(
-      page.getByRole("button", { name: "최신 대화로 이동", exact: true }),
-    ).toBeVisible();
     await input.fill(
       "여러 줄\n입력해도\n이전 대화를\n읽는 위치를\n유지합니다\n여섯째 줄",
     );
     await expect
       .poll(() => log.evaluate((element) => element.scrollTop))
       .toBe(0);
-    await page
-      .getByRole("button", { name: "최신 대화로 이동", exact: true })
-      .click();
-    await expect
-      .poll(() =>
-        log.evaluate(
-          (element) =>
-            element.scrollHeight - element.clientHeight - element.scrollTop,
-        ),
-      )
-      .toBeLessThan(2);
     await input.fill("");
     await main
       .getByRole("button", { name: "에이전트와 대화", exact: true })
@@ -445,7 +445,6 @@ test("sending and failed inputs share user bubbles with subdued status and new i
   await expect(bubbles.nth(1)).toContainText("새 메시지");
   await expect(bubbles.nth(1)).toContainText("보내는 중…");
   for (const bubble of await bubbles.all()) {
-    await expect(bubble.locator("pre")).toHaveCount(0);
     expect(
       await bubble.evaluate((element) => {
         const style = getComputedStyle(element);
@@ -458,12 +457,10 @@ test("sending and failed inputs share user bubbles with subdued status and new i
         }
         return (
           style.alignSelf === "flex-end" &&
-          style.borderLeftWidth === "0px" &&
           author.textContent === "나" &&
           Number.parseFloat(getComputedStyle(surface).borderRadius) > 0 &&
           getComputedStyle(body).marginTop === "0px" &&
           getComputedStyle(body).marginBottom === "0px" &&
-          Number.parseFloat(getComputedStyle(surface).paddingTop) <= 4 &&
           author.getBoundingClientRect().bottom <=
             surface.getBoundingClientRect().top &&
           Number.parseFloat(getComputedStyle(status).fontSize) <

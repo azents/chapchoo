@@ -1,9 +1,15 @@
 .frame {
+  position: fixed;
+  inset: 0;
   height: 100dvh;
   display: flex;
   overflow: hidden;
   background: var(--chapchoo-color-canvas);
   color: var(--chapchoo-color-ink);
+}
+:global(html):has(.frame),
+:global(body):has(.frame) {
+  overscroll-behavior: none;
 }
 .sidebar {
   width: 16.125rem;
@@ -17,6 +23,8 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   flex: 1;
   position: relative;
 }
@@ -280,14 +288,37 @@
   pointer-events: auto;
 }
 .panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--chapchoo-color-surfaceWarm);
   border-radius: var(--mantine-radius-lg) var(--mantine-radius-lg) 0 0;
 }
 .panelBody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
   max-width: 52rem;
   margin-inline: auto;
   width: 100%;
+  padding: 0;
+}
+.activityScroll {
+  width: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: none;
   padding: var(--mantine-spacing-xl);
+}
+.historyPanelBody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  width: 100%;
+  max-width: 52rem;
+  margin-inline: auto;
 }
 .summary {
   padding: var(--mantine-spacing-xl) 0;
@@ -348,17 +379,11 @@
   border-top: 0.0625rem solid var(--chapchoo-color-border);
   margin-bottom: var(--mantine-spacing-xl);
 }
-.tools summary {
-  cursor: pointer;
-  font-size: var(--mantine-font-size-sm);
-  font-weight: 600;
-  padding: var(--mantine-spacing-lg) 0;
+.historyLinkInner {
+  justify-content: space-between;
+  width: 100%;
 }
-.tools summary > span {
-  float: right;
-  font-weight: 400;
-  color: var(--chapchoo-color-muted);
-}
+.recentFade { mask-image: linear-gradient(to bottom, transparent, black var(--mantine-spacing-xl)); }
 .srOnly {
   position: absolute;
   width: 0.0625rem;
@@ -424,7 +449,7 @@
     padding-inline: var(--mantine-spacing-md);
     padding-bottom: max(var(--mantine-spacing-sm), env(safe-area-inset-bottom));
   }
-  .panelBody {
+  .activityScroll {
     padding: var(--mantine-spacing-lg);
   }
   .summary {

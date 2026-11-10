@@ -127,6 +127,7 @@ export const theme = createTheme({
       "#263b4b",
     ],
   },
+  respectReducedMotion: true,
   fontFamily: platformFonts.web,
   fontFamilyMonospace: '"Geist Mono", Menlo, Consolas, monospace',
   headings: {

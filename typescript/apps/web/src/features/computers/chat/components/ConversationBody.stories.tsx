@@ -6,6 +6,7 @@ import { Box } from "@mantine/core";
 import { useState } from "react";
 import { chatCopy } from "../copy";
 import { ConversationBody } from "./ConversationBody";
+import { conversationReviewRecords } from "./conversationReviewFixture";
 import type { ConversationControls } from "../types";
 import type { QuestionDraft } from "@chapchoo/web-core/conversation-form";
 import type {
@@ -70,6 +71,21 @@ const formQuestion: Question = {
       type: "text",
       format: "email",
     },
+    {
+      name: "ratio",
+      title: "Review ratio",
+      required: false,
+      type: "number",
+      minimum: 0,
+      maximum: 1,
+      default: 0.5,
+    },
+    {
+      name: "external",
+      title: "Unsupported field",
+      required: false,
+      type: "unsupported",
+    },
   ],
 };
 const permissionQuestion: Question = {
@@ -112,6 +128,7 @@ function record(
 function Fixture({
   mode,
   locale,
+  surface,
 }: {
   mode:
     | "form"
@@ -123,8 +140,12 @@ function Fixture({
     | "validationRejected"
     | "loading"
     | "error"
+    | "review"
+    | "media"
+    | "inputs"
     | "content";
   locale: string;
+  surface: "transcript" | "history";
 }): ReactElement {
   const copy = chatCopy(locale);
   const question = mode === "permission" ? permissionQuestion : formQuestion;
@@ -156,61 +177,91 @@ function Fixture({
           : "editing",
   });
   const records =
-    mode === "content"
-      ? [
-          record("user", "user", 1n, [
-            {
-              type: "text",
-              text: "  **This is plain user text**, not Markdown.\nNext line  ",
-            },
-          ]),
-          record("assistant", "assistant-one", 2n, [
-            {
-              type: "text",
-              text: "## First utterance\n\nA **streamed** answer with [a reference](https://example.com).\n",
-            },
-            {
-              type: "text",
-              text: "\n| Item | Value |\n| --- | --- |\n| Complete | Untruncated |",
-            },
-          ]),
-          record("assistant", "assistant-two", 3n, [
-            { type: "text", text: "A distinct assistant utterance." },
-          ]),
-          {
-            ...record("tool", "tool", 4n, [
+    mode === "review"
+      ? conversationReviewRecords
+      : mode === "media"
+        ? [
+            record("assistant", "media", 1n, [
               {
-                type: "diff",
-                path: "/workspace/notes.txt",
-                oldText: "previous line",
-                newText: "new line",
+                type: "text",
+                text: "이미지·오디오·리소스·지원하지 않는 콘텐츠의 표시 예시입니다.",
               },
+              {
+                type: "image",
+                mimeType: "image/png",
+                data: "iVBORw0KGgoAAAANSUhEUgAAACAAAAASCAIAAAC1qksFAAAAIklEQVR4nGOsWDGZgZaAiaamj1owasGoBaMWjFowagEUAAAVnwHX+CEdHwAAAABJRU5ErkJggg==",
+              },
+              {
+                type: "audio",
+                mimeType: "audio/wav",
+                data: "UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=",
+              },
+              {
+                type: "resource",
+                title: "일정 문서",
+                uri: "file:///workspace/itinerary.md",
+                text: "공원 산책 → 카페 휴식",
+              },
+              { type: "unsupported", kind: "지원하지 않는 콘텐츠" },
             ]),
-            title: "Update notes",
-            status: "completed",
-          },
-          {
-            ...record("tool", "raw-tool", 5n, []),
-            title: "Read note",
-            status: "completed",
-            toolInput: {
-              json: '{"path":"notes.txt","limit":9223372036854775807}',
-            },
-            toolOutput: {
-              json: '{"lines":["complete tool-only result"],"enabled":false}',
-            },
-          },
-          {
-            ...record("terminal", "terminal", 5n, []),
-            title: "printf",
-            terminal: {
-              text: "Complete output\n",
-              base64: "Q29tcGxldGUgb3V0cHV0Cg==",
-              exitCode: 0,
-            },
-          },
-        ]
-      : [request];
+          ]
+        : mode === "inputs"
+          ? []
+          : mode === "content"
+            ? [
+                record("user", "user", 1n, [
+                  {
+                    type: "text",
+                    text: "**User Markdown** with [a user reference](https://example.com/user).\n\n- First request\n- Second request\n\n`inline code`\n\n<script>alert('not executable')</script>",
+                  },
+                ]),
+                record("assistant", "assistant-one", 2n, [
+                  {
+                    type: "text",
+                    text: "## First utterance\n\nA **streamed** answer with [a reference](https://example.com).\n",
+                  },
+                  {
+                    type: "text",
+                    text: "\n| Item | Value |\n| --- | --- |\n| Complete | Untruncated |",
+                  },
+                ]),
+                record("assistant", "assistant-two", 3n, [
+                  { type: "text", text: "A distinct assistant utterance." },
+                ]),
+                {
+                  ...record("tool", "tool", 4n, [
+                    {
+                      type: "diff",
+                      path: "/workspace/notes.txt",
+                      oldText: "previous line",
+                      newText: "new line",
+                    },
+                  ]),
+                  title: "Update notes",
+                  status: "completed",
+                },
+                {
+                  ...record("tool", "raw-tool", 5n, []),
+                  title: "Read note",
+                  status: "completed",
+                  toolInput: {
+                    json: '{"path":"notes.txt","limit":9223372036854775807}',
+                  },
+                  toolOutput: {
+                    json: '{"lines":["complete tool-only result"],"enabled":false}',
+                  },
+                },
+                {
+                  ...record("terminal", "terminal", 5n, []),
+                  title: "printf",
+                  terminal: {
+                    text: "Complete output\n",
+                    base64: "Q29tcGxldGUgb3V0cHV0Cg==",
+                    exitCode: 0,
+                  },
+                },
+              ]
+            : [request];
   const controls: ConversationControls = {
     region: {
       header: {
@@ -229,7 +280,46 @@ function Fixture({
     },
     read: mode === "loading" ? "loading" : mode === "error" ? "error" : "ready",
     readingOlder: false,
-    inputs: [],
+    inputs:
+      mode === "inputs"
+        ? [
+            {
+              requestId: "sending",
+              text: "전송 중인 메시지",
+              observation: "sending",
+            },
+            {
+              requestId: "preparing",
+              text: "대화 준비 중인 메시지",
+              observation: "preparing",
+            },
+            {
+              requestId: "accepted",
+              text: "접수된 메시지",
+              observation: "accepted",
+            },
+            {
+              requestId: "inserted",
+              text: "전달된 메시지",
+              observation: "inserted",
+            },
+            {
+              requestId: "steered",
+              text: "실행 중 추가로 전달한 메시지",
+              observation: "steered",
+            },
+            {
+              requestId: "failed",
+              text: "**확인**",
+              observation: "failed",
+            },
+            {
+              requestId: "uncertain",
+              text: "**확인**",
+              observation: "uncertain",
+            },
+          ]
+        : [],
     stop: "idle",
     drafts: { [request.key]: draft },
     onRead: () => {},
@@ -273,8 +363,10 @@ function Fixture({
       <ConversationBody
         controls={controls}
         copy={copy}
-        writable={mode !== "unavailable"}
+        writable={mode !== "unavailable" && surface !== "history"}
         agentName="Corgi"
+        agentProfile={{ basePath: "", assetKey: "03-corgi" }}
+        surface={surface}
       />
     </Box>
   );
@@ -282,7 +374,7 @@ function Fixture({
 const meta = {
   title: "Chat/Conversation body",
   component: Fixture,
-  args: { mode: "form", locale: "en-US" },
+  args: { mode: "form", locale: "en-US", surface: "transcript" },
   parameters: { layout: "fullscreen" },
 } satisfies Meta<typeof Fixture>;
 export default meta;
@@ -301,6 +393,21 @@ export const ValidationRejected: Story = {
 export const Loading: Story = { args: { mode: "loading" } };
 export const Error: Story = { args: { mode: "error" } };
 export const Content: Story = { args: { mode: "content" } };
+export const HistoryContent: Story = {
+  args: { mode: "content", surface: "history" },
+};
+export const HistoryForm: Story = { args: { surface: "history" } };
+export const HistoryPermission: Story = {
+  args: { mode: "permission", surface: "history" },
+};
+export const ReviewTranscript: Story = {
+  args: { mode: "review", locale: "ko-KR" },
+};
+export const ReviewHistory: Story = {
+  args: { mode: "review", surface: "history", locale: "ko-KR" },
+};
+export const Media: Story = { args: { mode: "media", locale: "ko-KR" } };
+export const InputStates: Story = { args: { mode: "inputs", locale: "ko-KR" } };
 export const Korean: Story = { args: { locale: "ko-KR" } };
 export const Japanese: Story = { args: { locale: "ja-JP" } };
 export const French: Story = { args: { locale: "fr-FR" } };
