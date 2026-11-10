@@ -296,7 +296,13 @@ export function Chat(props: ChatProps): ReactElement {
         <Drawer
           opened={props.opened}
           returnFocus={false}
-          onExitTransitionEnd={props.focus.activityClosed}
+          // Restore the status opener when this sheet returns to the transcript.
+          onExitTransitionEnd={(): void => {
+            if (props.historyOpened) {
+              return;
+            }
+            props.focus.activityClosed();
+          }}
           closeOnEscape={!p.confirmation && !p.detailsOpened}
           closeOnClickOutside={!p.confirmation && !p.detailsOpened}
           trapFocus={!p.confirmation && !p.detailsOpened}

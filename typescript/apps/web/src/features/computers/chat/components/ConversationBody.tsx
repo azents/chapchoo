@@ -569,6 +569,9 @@ export function ConversationBody({
             aria-label={record.kind === "user" ? copy.you : void 0}
             className={classes.record}
             tabIndex={-1}
+            {...(surface === "history" && initiallyExpandedKey === record.key
+              ? { "data-autofocus": true }
+              : {})}
           >
             {record.kind === "user" || record.kind === "assistant" ? (
               surface === "history" ? (

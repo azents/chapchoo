@@ -69,12 +69,14 @@ function StaticHistory({
   records,
   copy,
   name,
+  focus,
 }: {
   records: ConversationRecord[];
   copy: ChatCopy;
   name: string;
+  focus: string | null;
 }): ReactElement {
-  const scroll = useHistoryScroll(null);
+  const scroll = useHistoryScroll(focus);
   const controls: ConversationControls = {
     region: {
       header: {
@@ -190,6 +192,7 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
   );
   const [opened, setOpened] = useState(false);
   const [historyOpened, setHistoryOpened] = useState(false);
+  const [historyFocus, setHistoryFocus] = useState<string | null>(null);
   const [navOpened, setNavOpened] = useState(false);
   const [detailsOpened, setDetailsOpened] = useState(false);
   const [activity, setActivity] = useState<"working" | "idle">(
@@ -424,8 +427,9 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
           onRead: () => {},
           onOlder: () => {},
           onLatest: floating.followLatest,
-          onHistory: () => {
+          onHistory: (record) => {
             setOpened(false);
+            setHistoryFocus(record?.key ?? null);
             setHistoryOpened(true);
           },
           onQuestionOption: () => {},
@@ -455,7 +459,12 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
         historyOpened={historyOpened}
         historyContent={
           historyOpened ? (
-            <StaticHistory records={records} copy={copy} name={name} />
+            <StaticHistory
+              records={records}
+              copy={copy}
+              name={name}
+              focus={historyFocus}
+            />
           ) : null
         }
         onCloseHistory={() => {
