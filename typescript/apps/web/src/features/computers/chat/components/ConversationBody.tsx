@@ -25,9 +25,22 @@ import type {
   ConversationRecord,
   FormValue,
   QuestionField,
+  RetainedInputView,
 } from "@chapchoo/web-core/conversation-types";
 import type { ReactElement, ReactNode } from "react";
 
+function capturedUserMessage(
+  records: ConversationRecord[],
+  input: RetainedInputView,
+): boolean {
+  const nativeId = input.insertedNativeMessageId;
+  return (
+    nativeId !== void 0 &&
+    records.some(
+      (record) => record.kind === "user" && record.nativeId === nativeId,
+    )
+  );
+}
 function Markdown({ text }: { text: string }): ReactElement {
   return (
     <div className={classes.markdown}>
@@ -696,99 +709,84 @@ export function ConversationBody({
           </article>
         ))}
       {(controls.region.inputs ?? [])
-        .filter((input) => !input.deleted)
-        .map((input) =>
-          input.insertedNativeMessageId &&
-          controls.region.records.some(
-            (record) =>
-              record.kind === "user" &&
-              record.nativeId === input.insertedNativeMessageId,
-          ) ? (
-            surface === "history" ? (
-              <div className={classes.pending} key={input.id}>
-                <ContentDisclosure
-                  title={`${copy.message} · ${inputStatus(copy, input)}`}
-                >
-                  {input.text !== void 0 ? (
-                    <Markdown text={input.text} />
-                  ) : null}
-                </ContentDisclosure>
-              </div>
-            ) : null
-          ) : (
-            <section
-              className={classes.record}
-              data-kind="user"
-              aria-label={copy.you}
-              key={input.id}
+        .filter(
+          (input) =>
+            !input.deleted &&
+            !capturedUserMessage(controls.region.records, input),
+        )
+        .map((input) => (
+          <section
+            className={classes.record}
+            data-kind="user"
+            aria-label={copy.you}
+            key={input.id}
+          >
+            <UserMessageBody copy={copy}>
+              {input.text !== void 0 ? <Markdown text={input.text} /> : null}
+            </UserMessageBody>
+            <Text
+              size="xs"
+              className={classes.inputStatus}
+              c={input.observation === "failed" ? "red" : "dimmed"}
+              ta="right"
+              role="status"
             >
-              <UserMessageBody copy={copy}>
-                {input.text !== void 0 ? <Markdown text={input.text} /> : null}
-              </UserMessageBody>
-              <Text
-                size="xs"
-                className={classes.inputStatus}
-                c={input.observation === "failed" ? "red" : "dimmed"}
-                ta="right"
-                role="status"
-              >
-                {inputStatus(copy, input)}
-              </Text>
-              {input.observation === "failed" &&
-              controls.onRetryInput &&
-              controls.onDeleteInput ? (
-                <Group justify="flex-end" gap="xs">
-                  <Button
-                    size="compact-xs"
-                    variant="subtle"
-                    disabled={
-                      !writable ||
-                      controls.inputAction?.requestId === input.requestId ||
-                      !input.text
-                    }
-                    onClick={() => controls.onRetryInput?.(input)}
-                  >
-                    {copy.retryMessage}
-                  </Button>
-                  <Button
-                    size="compact-xs"
-                    variant="subtle"
-                    color="red"
-                    disabled={
-                      !controls.inputDeletable ||
-                      controls.inputAction?.requestId === input.requestId
-                    }
-                    onClick={() => controls.onDeleteInput?.(input)}
-                  >
-                    {copy.deleteMessage}
-                  </Button>
-                </Group>
-              ) : null}
-              {controls.inputAction?.requestId === input.requestId ? (
-                <Text size="xs" role="status">
-                  {controls.inputAction.state === "deleting"
-                    ? copy.deletingMessage
-                    : copy.deleteUnconfirmed}
-                </Text>
-              ) : null}
-              {controls.inputAction?.requestId === input.requestId &&
-              controls.inputAction.state === "uncertain" ? (
+              {inputStatus(copy, input)}
+            </Text>
+            {input.observation === "failed" &&
+            controls.onRetryInput &&
+            controls.onDeleteInput ? (
+              <Group justify="flex-end" gap="xs">
                 <Button
                   size="compact-xs"
                   variant="subtle"
-                  onClick={controls.onRead}
+                  disabled={
+                    !writable ||
+                    controls.inputAction?.requestId === input.requestId ||
+                    !input.text
+                  }
+                  onClick={() => controls.onRetryInput?.(input)}
                 >
-                  {copy.retry}
+                  {copy.retryMessage}
                 </Button>
-              ) : null}
-              {input.observation === "uncertain" ? (
-                <Button variant="subtle" onClick={controls.onRead}>
-                  {copy.retry}
+                <Button
+                  size="compact-xs"
+                  variant="subtle"
+                  color="red"
+                  disabled={
+                    !controls.inputDeletable ||
+                    controls.inputAction?.requestId === input.requestId
+                  }
+                  onClick={() => controls.onDeleteInput?.(input)}
+                >
+                  {copy.deleteMessage}
                 </Button>
-              ) : null}
-            </section>
-          ),
-        )}
+              </Group>
+            ) : null}
+            {controls.inputAction?.requestId === input.requestId ? (
+              <Text size="xs" role="status">
+                {controls.inputAction.state === "deleting"
+                  ? copy.deletingMessage
+                  : copy.deleteUnconfirmed}
+              </Text>
+            ) : null}
+            {controls.inputAction?.requestId === input.requestId &&
+            controls.inputAction.state === "uncertain" ? (
+              <Button
+                size="compact-xs"
+                variant="subtle"
+                onClick={controls.onRead}
+              >
+                {copy.retry}
+              </Button>
+            ) : null}
+            {input.observation === "uncertain" ? (
+              <Button variant="subtle" onClick={controls.onRead}>
+                {copy.retry}
+              </Button>
+            ) : null}
+          </section>
+        ))}
       {controls.inputs.map((input) => (
         <section
           key={input.requestId}

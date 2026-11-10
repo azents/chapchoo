@@ -61,12 +61,17 @@ the reader is detached; Jump to latest restores following.
 
 A normal idle header shows only the Agent name. Meaningful work, action-required,
 failure, stale and Computer states remain visible. Chat owns the viewport scroll
-boundary; the header and composer stay available while conversation content
+boundary. A conversation shorter than that boundary still has internal travel
+above its resting latest position, and the viewport allows edge overscroll
+instead of containing it. The document itself does not scroll.
+The header and composer stay available while conversation content
 scrolls internally. The main transcript contains user/assistant conversation and
 necessary questions or permission input. Tool, reasoning, plan, terminal, notice
 and state records belong to the recent preview and full history, not duplicate
-transcript disclosures. A confirmed native user message suppresses its separate
-delivery receipt in the transcript while preserving that evidence in history.
+transcript disclosures. A confirmed native user message is the visible message
+in both the transcript and full history; Chat does not repeat a separate
+delivery receipt beside it. An input that has not appeared as that native
+message still shows its delivery status.
 The down arrow signals new content that arrived while the owner was reading
 above latest, rather than a detached position alone. Reaching latest or selecting
 the arrow acknowledges it.
