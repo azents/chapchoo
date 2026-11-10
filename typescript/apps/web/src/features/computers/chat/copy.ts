@@ -8,6 +8,7 @@ export interface ChatCopy {
   activity: string;
   close: string;
   message: string;
+  you: string;
   send: string;
   latest: string;
   menu: string;
@@ -81,6 +82,7 @@ const en: ChatCopy = {
   close: "Close",
   message: "Message",
   send: "Send",
+  you: "You",
   latest: "Jump to latest",
   menu: "Agents and conversations",
   detail: "Agent details",
@@ -163,6 +165,7 @@ const ko: ChatCopy = {
   activity: "작업 상태",
   close: "닫기",
   message: "메시지",
+  you: "나",
   send: "보내기",
   latest: "최신 대화로 이동",
   menu: "에이전트와 대화",
@@ -246,6 +249,7 @@ const ja: ChatCopy = {
   activity: "作業状況",
   close: "閉じる",
   message: "メッセージ",
+  you: "あなた",
   send: "送信",
   latest: "最新の会話へ",
   menu: "エージェントと会話",
@@ -330,6 +334,7 @@ const fr: ChatCopy = {
   close: "Fermer",
   message: "Message",
   send: "Envoyer",
+  you: "Vous",
   latest: "Aller aux derniers messages",
   menu: "Agents et conversations",
   detail: "Détails de l’agent",

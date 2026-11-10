@@ -125,6 +125,7 @@ test("user text stays plain while distinct assistant utterances render Markdown 
     "**This is plain user text**, not Markdown.",
   );
   await expect(user.locator("strong")).toHaveCount(0);
+  await expect(user).toHaveAttribute("aria-label", "You");
   await expect(page.locator('[data-kind="assistant"]')).toHaveCount(2);
   await expect(
     page.getByRole("heading", { name: "First utterance" }),

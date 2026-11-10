@@ -537,6 +537,7 @@ export function ConversationBody({
           id={`conversation-${encodeURIComponent(record.key)}`}
           key={record.key}
           data-kind={record.kind}
+          aria-label={record.kind === "user" ? copy.you : void 0}
           className={classes.record}
           tabIndex={-1}
         >
@@ -644,7 +645,12 @@ export function ConversationBody({
             <pre>{input.text}</pre>
           </details>
         ) : (
-          <section className={classes.record} data-kind="user" key={input.id}>
+          <section
+            className={classes.record}
+            data-kind="user"
+            aria-label={copy.you}
+            key={input.id}
+          >
             <p className={classes.answer}>{input.text}</p>
             <Text
               size="xs"
@@ -667,6 +673,7 @@ export function ConversationBody({
           key={input.requestId}
           className={classes.record}
           data-kind="user"
+          aria-label={copy.you}
         >
           <p className={classes.answer}>{input.text}</p>
           <Text
