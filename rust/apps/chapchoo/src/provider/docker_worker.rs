@@ -64,6 +64,7 @@ impl Worker {
                 if let Some(native) = error.downcast_ref::<Error>() {
                     tracing::warn!(
                         engine = ?native.engine_diagnostic(),
+                        stage = command.computer.as_ref().and_then(|computer| self.adapter.container_progress_diagnostic(&computer.execution_id)),
                         native_docker = %native,
                         "Native Docker lifecycle command failed"
                     );

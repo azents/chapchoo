@@ -133,6 +133,22 @@ fn stopped(state: &ContainerState, never_started: bool) -> bool {
         })
 }
 impl Docker {
+    /// Only local correlation stage, without native names or payloads.
+    pub fn container_progress_diagnostic(&self, execution: &str) -> Option<&'static str> {
+        let records = self.progress.0.lock().ok()?;
+        records.get(execution).map(|record| match record.stage {
+            Stage::Creating => "creating",
+            Stage::Created => "created",
+            Stage::Starting => "starting",
+            Stage::Running => "running",
+            Stage::Updating => "updating",
+            Stage::Updated => "updated",
+            Stage::Stopping => "stopping",
+            Stage::Stopped => "stopped",
+            Stage::Removing => "removing",
+            Stage::Removed => "removed",
+        })
+    }
     pub async fn observe_container_absence(
         &self,
         context: &wire::ComputerContext,
