@@ -248,8 +248,15 @@ test("owner manages one Computer while Admin observes independent cleanup invent
       .getByRole("button", { name: "Close", exact: true })
       .click();
     await owner
+      .getByRole("button", {
+        name: "Activity: Acceptance companion",
+        exact: true,
+      })
+      .click();
+    await owner
+      .getByRole("dialog", { name: "Activity", exact: true })
       .getByRole("link", {
-        name: "Acceptance companion · Agent details",
+        name: "Acceptance companion Agent details",
         exact: true,
       })
       .click();
@@ -358,8 +365,15 @@ test("owner manages one Computer while Admin observes independent cleanup invent
       .click();
     await expect(owner).toHaveURL(chatUrl);
     await owner
+      .getByRole("button", {
+        name: "Activity: Saved companion",
+        exact: true,
+      })
+      .click();
+    await owner
+      .getByRole("dialog", { name: "Activity", exact: true })
       .getByRole("link", {
-        name: "Saved companion · Agent details",
+        name: "Saved companion Agent details",
         exact: true,
       })
       .click();
