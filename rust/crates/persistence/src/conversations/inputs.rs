@@ -226,7 +226,55 @@ impl Store {
                 }
                 return Ok(ConversationInputAdmission::Existing(previous));
             }
-            if owner.desired_state == "DELETING" || !draft.target.matches(&row.source()?) {
+            let source = row.source()?;
+            let joins_startup = if draft.target.matches(&source) {
+                true
+            } else if draft.target != ConversationTarget::NotStarted
+                || matches!(source, ConversationSource::NotStarted)
+            {
+                false
+            } else {
+                #[derive(diesel::QueryableByName)]
+                struct InputCount {
+                    #[diesel(sql_type=BigInt)]
+                    n: i64,
+                }
+                let inputs = diesel::sql_query(dialect.query(
+                    "SELECT CAST(count(*) AS BIGINT) AS n FROM conversation_inputs WHERE conversation_id=?",
+                ))
+                .bind::<IdentitySql, _>(row.id)
+                .get_result::<InputCount>(connection)
+                .await?;
+                #[derive(diesel::QueryableByName)]
+                struct CurrentExecution {
+                    #[diesel(sql_type = Nullable<IdentitySql>)]
+                    current_execution_id: Option<EntityId>,
+                }
+                let execution = diesel::sql_query(
+                    dialect.query("SELECT current_execution_id FROM computers WHERE id=?"),
+                )
+                .bind::<IdentitySql, _>(owner.computer_id)
+                .get_result::<CurrentExecution>(connection)
+                .await?;
+                let Some(execution_id) = execution.current_execution_id else {
+                    return Err(StoreError::InvalidTransition);
+                };
+                let snapshot = row.source_snapshot.clone();
+                let native = row.native_session_id.clone();
+                let startup = diesel::sql_query(dialect.query(
+                    "SELECT CAST(count(*) AS BIGINT) AS n FROM conversation_startups WHERE conversation_id=? AND ((preparation_state='READY' AND ready_snapshot=? AND ready_native_session=?) OR (preparation_state='POSSIBLE' AND execution_id=? AND ? IN ('LOADING','READY') AND (fresh_native_allowed=FALSE OR ?='LOADING')))",
+                ))
+                .bind::<IdentitySql, _>(row.id)
+                .bind::<Nullable<Text>, _>(snapshot.as_deref())
+                .bind::<Nullable<Text>, _>(native.as_deref())
+                .bind::<IdentitySql, _>(execution_id)
+                .bind::<Text, _>(&row.source_state)
+                .bind::<Text, _>(&row.source_state)
+                .get_result::<InputCount>(connection)
+                .await?;
+                inputs.n == 0 && startup.n > 0
+            };
+            if owner.desired_state == "DELETING" || !joins_startup {
                 return Err(StoreError::InvalidTransition);
             }
             if expected.is_none() && draft.target != ConversationTarget::NotStarted {

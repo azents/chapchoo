@@ -7,6 +7,7 @@ import {
   RecordField,
   TypedAnswer,
   PreparationFreshness,
+  SetupFailure,
 } from "@chapchoo/rpc-client/conversations";
 import {
   readConversationBytes,
@@ -127,6 +128,20 @@ test("source-qualified preparation and applied authentication remain independent
   assert.equal(historical.appliedAuthenticationId, undefined);
   value.observedNative.preparation.freshness = 99;
   assert.throws(() => conversationHeader("agent", value));
+});
+test("connection startup preparation is visible without an accepted input", () => {
+  const preparing = current();
+  preparing.startup = { possibleForwarding: {} };
+  assert.deepEqual(conversationHeader("agent", preparing).startup, {
+    type: "preparing",
+  });
+  const failed = current();
+  failed.startup = { failed: SetupFailure.SETUP_FAILURE_NATIVE_REJECTED };
+  assert.deepEqual(conversationHeader("agent", failed).startup, {
+    type: "failed",
+    reason: "nativeRejected",
+  });
+  assert.equal(conversationHeader("agent", current()).startup, undefined);
 });
 test("bounded bytes preserve UTF-8 split within a code point and recheck the final empty suffix", async () => {
   const value = Buffer.from("다음 🙂 ".repeat(6000));

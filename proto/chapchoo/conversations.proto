@@ -27,6 +27,8 @@ message OwnerConversationRequest { string agent_id = 1; }
 message OwnerConversation {
   CaptureState conversation = 1; ObservedNative observed_native = 2;
   optional string saved_authentication_id = 3;
+  // Preparation owned by connection startup, not by an accepted input.
+  InputPreparation startup = 4;
 }
 message ObservedNative {
   NativeTarget target = 1; SourcePosition position = 2; Foreground foreground = 3; optional string work_id = 4;

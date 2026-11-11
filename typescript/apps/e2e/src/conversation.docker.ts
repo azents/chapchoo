@@ -31,6 +31,25 @@ test("owner chats through the official adapter and retains the native typed answ
   });
   try {
     fixture = await nativeConversation(assembly);
+    stage = "prestart-before-first-send";
+    await expect
+      .poll(
+        async () => {
+          const current = await fixture?.current();
+          const target = current?.startup?.sessionReady;
+          stage = `prestart-before-first-send (capture=${current?.conversation?.status ?? "absent"};setup=${current?.startup?.failed ?? (target ? "ready" : current?.startup?.possibleForwarding ? "possible" : "absent")};native=${Boolean(current?.observedNative)})`;
+          return Boolean(
+            target &&
+            current?.conversation?.snapshotId === target.snapshotId &&
+            current.conversation.nativeSessionId === target.nativeSessionId,
+          );
+        },
+        { timeout: 180_000 },
+      )
+      .toBe(true);
+    const prestarted = await fixture.current();
+    const prestartTarget = prestarted.startup?.sessionReady;
+    expect(prestartTarget).toBeDefined();
     stage = "login";
     await page.goto(`${assembly.generalUrl}/login`);
     await page
@@ -60,25 +79,15 @@ test("owner chats through the official adapter and retains the native typed answ
       exact: true,
     });
     await expect(
-      setup
-        .getByRole("region", {
-          name: "Observed applied selection",
-          exact: true,
-        })
-        .getByText("Not observed", { exact: true }),
-    ).toBeVisible();
-    await setup
-      .getByRole("radio", { name: "Existing Codex installation", exact: true })
-      .check();
-    await setup
-      .getByRole("textbox", { name: "Codex executable path", exact: true })
-      .fill("/opt/chapchoo/codex-fixture");
-    await setup
-      .getByRole("button", { name: "Save selection", exact: true })
-      .click();
+      setup.getByRole("radio", {
+        name: "Existing Codex installation",
+        exact: true,
+      }),
+    ).toBeChecked();
+    await expect(message).toBeEmpty();
     await expect(
-      setup.getByText("Selection saved", { exact: true }),
-    ).toBeVisible();
+      page.getByText("First assistant output", { exact: true }),
+    ).toHaveCount(0);
     await page
       .getByRole("dialog", { name: "Activity", exact: true })
       .getByRole("button", { name: "Close", exact: true })
@@ -91,6 +100,11 @@ test("owner chats through the official adapter and retains the native typed answ
       page.getByText("First assistant output", { exact: true }),
     ).toBeVisible({ timeout: 180_000 });
     const inputToFirstMs = Math.round(performance.now() - inputStart);
+    const afterFirstInput = await fixture.current();
+    expect(afterFirstInput.conversation?.conversationId).toBe(
+      prestarted.conversation?.conversationId,
+    );
+    expect(afterFirstInput.observedNative?.target).toEqual(prestartTarget);
     stage = "inline-request";
     await expect(
       page.getByRole("heading", {

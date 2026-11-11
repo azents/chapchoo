@@ -159,8 +159,8 @@ impl Store {
                 return Err(StoreError::Conflict);
             }
             if row.source_snapshot.is_none() {
-                let known=diesel::sql_query(dialect.query("SELECT CAST(count(*) AS BIGINT) AS ordinal FROM conversation_input_preparation p JOIN conversation_inputs i ON i.id=p.operation_id WHERE i.conversation_id=? AND p.preparation_state='READY' AND (p.ready_snapshot<>? OR p.ready_native_session<>?)"))
-                    .bind::<IdentitySql,_>(id).bind::<Text,_>(binding.snapshot.as_str()).bind::<Text,_>(binding.native_session.as_str())
+                let known=diesel::sql_query(dialect.query("SELECT CAST(count(*) AS BIGINT) AS ordinal FROM (SELECT p.ready_snapshot,p.ready_native_session FROM conversation_input_preparation p JOIN conversation_inputs i ON i.id=p.operation_id WHERE i.conversation_id=? AND p.preparation_state='READY' UNION ALL SELECT ready_snapshot,ready_native_session FROM conversation_startups WHERE conversation_id=? AND preparation_state='READY') ready WHERE ready_snapshot<>? OR ready_native_session<>?"))
+                    .bind::<IdentitySql,_>(id).bind::<IdentitySql,_>(id).bind::<Text,_>(binding.snapshot.as_str()).bind::<Text,_>(binding.native_session.as_str())
                     .get_result::<ExistingPair>(connection).await?;
                 if known.ordinal != 0 {
                     return Err(StoreError::Conflict);
@@ -187,6 +187,13 @@ impl Store {
                 .await?;
                 diesel::sql_query(
                     dialect.query("DELETE FROM conversation_records WHERE conversation_id=?"),
+                )
+                .bind::<IdentitySql, _>(id)
+                .execute(connection)
+                .await?;
+                // Source replacement retires all source-local preparation facts.
+                diesel::sql_query(
+                    dialect.query("DELETE FROM conversation_startups WHERE conversation_id=?"),
                 )
                 .bind::<IdentitySql, _>(id)
                 .execute(connection)

@@ -64,6 +64,11 @@ pub enum ConversationPreparationAdmission {
         require_retained_source: bool,
     },
     Existing(ConversationPreparationFacts),
+    /// Setup is already owned by a connection startup. Do not grant another one.
+    ObservedStartup {
+        operation_id: String,
+        facts: ConversationPreparationFacts,
+    },
 }
 macro_rules! safe_debug {($($name:ty),+)=>{$(impl fmt::Debug for $name {
     fn fmt(&self,f:&mut fmt::Formatter<'_>)->fmt::Result {f.write_str(concat!(stringify!($name),"([REDACTED])"))}
@@ -77,7 +82,7 @@ safe_debug!(
 );
 
 #[derive(diesel::QueryableByName)]
-struct PreparationRow {
+pub(crate) struct PreparationRow {
     #[diesel(sql_type=IdentitySql)]
     execution_id: EntityId,
     #[diesel(sql_type=Text)]
@@ -126,7 +131,7 @@ impl PreparationRow {
             },
         )
     }
-    fn facts(&self) -> Result<ConversationPreparationFacts, StoreError> {
+    pub(crate) fn facts(&self) -> Result<ConversationPreparationFacts, StoreError> {
         let supply = match (self.supply_kind.as_str(), &self.executable_path) {
             ("MANAGED", None) => HarnessSupply::Managed,
             ("EXISTING", Some(path)) => HarnessSupply::Existing(
@@ -153,6 +158,29 @@ struct InputTarget {
 struct PriorStartup {
     #[diesel(sql_type=BigInt)]
     n: i64,
+}
+#[derive(diesel::QueryableByName)]
+struct StartupHead {
+    #[diesel(sql_type=IdentitySql)]
+    operation_id: EntityId,
+    #[diesel(sql_type=IdentitySql)]
+    execution_id: EntityId,
+    #[diesel(sql_type=Nullable<IdentitySql>)]
+    ready_connection_id: Option<EntityId>,
+}
+pub(super) fn startup_attempt_sql(predicate: &str) -> String {
+    format!(
+        "SELECT CAST(count(*) AS BIGINT) AS n FROM (
+            SELECT p.preparation_state,p.failure_kind,p.fresh_native_allowed
+            FROM conversation_input_preparation p
+            JOIN conversation_inputs i ON i.id=p.operation_id
+            WHERE i.conversation_id=?
+            UNION ALL
+            SELECT preparation_state,failure_kind,fresh_native_allowed
+            FROM conversation_startups
+            WHERE conversation_id=?
+        ) attempts WHERE {predicate}"
+    )
 }
 macro_rules! input {
     ($connection:expr,$dialect:expr,$conversation:expr,$operation:expr) => {{
@@ -205,9 +233,53 @@ impl Store {
             if row.agent_id != agent {
                 return Err(StoreError::NotFound);
             }
-            let input = input!(connection, dialect, id, operation);
-            let previous =
-                preparation!(connection, dialect, operation).ok_or(StoreError::NotFound)?;
+            let input = diesel::sql_query(dialect.query(
+                "SELECT target_snapshot FROM conversation_inputs WHERE conversation_id=? AND id=?",
+            ))
+            .bind::<IdentitySql, _>(id)
+            .bind::<IdentitySql, _>(operation)
+            .get_result::<InputTarget>(connection)
+            .await
+            .optional()?;
+            let startup = diesel::sql_query(dialect.query(
+                "SELECT execution_id,supply_kind,executable_path,selection_request_id,preparation_state,ready_snapshot,ready_native_session,failure_kind,fresh_native_allowed,require_retained_source FROM conversation_startups WHERE conversation_id=? AND operation_id=?",
+            ))
+            .bind::<IdentitySql, _>(id)
+            .bind::<IdentitySql, _>(operation)
+            .get_result::<PreparationRow>(connection)
+            .await
+            .optional()?;
+            let previous = match (input.is_some(), startup) {
+                (true, Some(_)) => return Err(StoreError::Integrity),
+                (true, None) => {
+                    preparation!(connection, dialect, operation).ok_or(StoreError::NotFound)?
+                }
+                (false, Some(startup)) => startup,
+                (false, None) => return Err(StoreError::NotFound),
+            };
+            if input.is_none() {
+                if route.desired_state != "RUNNING" {
+                    return Err(StoreError::InvalidTransition);
+                }
+                let intent = diesel::sql_query(dialect.query(
+                    "SELECT intended_snapshot,intended_native_session FROM conversation_startups WHERE operation_id=?",
+                ))
+                .bind::<IdentitySql, _>(operation)
+                .get_result::<super::startup::StartupIntent>(connection)
+                .await?;
+                match (
+                    intent.intended_snapshot.as_deref(),
+                    intent.intended_native_session.as_deref(),
+                    fresh,
+                    target,
+                ) {
+                    (None, None, Some(_), None) => {}
+                    (Some(snapshot), Some(native), None, Some(target))
+                        if target.snapshot.as_str() == snapshot
+                            && target.native_session.as_str() == native => {}
+                    _ => return Err(StoreError::Conflict),
+                }
+            }
             if previous.execution_id != route._execution_id
                 || &previous.facts()?.requested_supply != supply
                 || !matches!(
@@ -217,17 +289,27 @@ impl Store {
             {
                 return Err(StoreError::Conflict);
             }
-            match (input.target_snapshot.as_deref(), fresh, target) {
+            let submitted = input
+                .as_ref()
+                .and_then(|input| input.target_snapshot.as_deref());
+            match (submitted, fresh, target) {
                 (None, Some((allowed, require_retained)), None)
                     if allowed == previous.fresh_native_allowed
                         && require_retained == previous.require_retained_source
-                        && row.source_snapshot.is_none() => {}
+                        && (row.source_snapshot.is_none()
+                            || (input.is_none() && row.source_state == "LOADING")) => {}
                 (Some(snapshot), None, Some(target))
                     if snapshot == target.snapshot.as_str()
                         && row.source_snapshot.as_deref() == Some(snapshot)
                         && row.native_session_id.as_deref()
                             == Some(target.native_session.as_str())
                         && row.source_state == "READY" => {}
+                (None, None, Some(target))
+                    if !previous.fresh_native_allowed
+                        && row.source_state == "READY"
+                        && row.source_snapshot.as_deref() == Some(target.snapshot.as_str())
+                        && row.native_session_id.as_deref()
+                            == Some(target.native_session.as_str()) => {}
                 _ => return Err(StoreError::InvalidTransition),
             }
             Ok(())
@@ -260,6 +342,93 @@ impl Store {
                     previous.facts()?,
                 ));
             }
+            let mut retired = false;
+            let covered = loop {
+                let head = diesel::sql_query(dialect.query(
+                    "SELECT operation_id,execution_id,ready_connection_id FROM conversation_startups WHERE conversation_id=? ORDER BY admitted_at DESC, operation_id DESC LIMIT 1",
+                ))
+                .bind::<IdentitySql, _>(id)
+                .get_result::<StartupHead>(connection)
+                .await
+                .optional()?;
+                let Some(head) = head else {
+                    break None;
+                };
+                let facts = diesel::sql_query(dialect.query(
+                    "SELECT execution_id,supply_kind,executable_path,selection_request_id,preparation_state,ready_snapshot,ready_native_session,failure_kind,fresh_native_allowed,require_retained_source FROM conversation_startups WHERE operation_id=?",
+                ))
+                .bind::<IdentitySql, _>(head.operation_id)
+                .get_result::<PreparationRow>(connection)
+                .await?
+                .facts()?;
+                let intent = diesel::sql_query(dialect.query(
+                    "SELECT intended_snapshot,intended_native_session FROM conversation_startups WHERE operation_id=?",
+                ))
+                .bind::<IdentitySql, _>(head.operation_id)
+                .get_result::<super::startup::StartupIntent>(connection)
+                .await?;
+                let intended = match (
+                    intent.intended_snapshot.as_deref(),
+                    intent.intended_native_session.as_deref(),
+                ) {
+                    (Some(snapshot), Some(native)) => Some((snapshot, native)),
+                    (None, None) => None,
+                    _ => return Err(StoreError::Integrity),
+                };
+                let action = super::startup::recover_startup(
+                    Some(&facts),
+                    head.execution_id == route._execution_id,
+                    head.ready_connection_id
+                        == Some(EntityId::from_dto(
+                            EntityKind::Connection,
+                            &expected.component.connection_id,
+                        )?),
+                    &row.source_state,
+                    row.source_snapshot.as_deref(),
+                    row.native_session_id.as_deref(),
+                    intended,
+                )?;
+                if !matches!(action, super::startup::StartupRecovery::RetirePrevious) {
+                    if super::startup::startup_covers_input(
+                        &facts,
+                        head.execution_id == route._execution_id,
+                        head.ready_connection_id
+                            == Some(EntityId::from_dto(
+                                EntityKind::Connection,
+                                &expected.component.connection_id,
+                            )?),
+                        &row.source_state,
+                        row.source_snapshot.as_deref(),
+                        row.native_session_id.as_deref(),
+                        input.target_snapshot.as_deref(),
+                    ) {
+                        break Some((
+                            head.operation_id.to_dto(EntityKind::ConversationOperation),
+                            facts,
+                        ));
+                    }
+                    break None;
+                }
+                if retired {
+                    return Err(StoreError::Conflict);
+                }
+                let changed = diesel::sql_query(dialect.query(
+                    "UPDATE conversation_startups SET preparation_state='FAILED',failure_kind='RETIREMENT_UNKNOWN' WHERE operation_id=? AND preparation_state='POSSIBLE'",
+                ))
+                .bind::<IdentitySql, _>(head.operation_id)
+                .execute(connection)
+                .await?;
+                if changed != 1 {
+                    return Err(StoreError::Conflict);
+                }
+                retired = true;
+            };
+            if let Some((operation_id, facts)) = covered {
+                return Ok(ConversationPreparationAdmission::ObservedStartup {
+                    operation_id,
+                    facts,
+                });
+            }
             let target = input
                 .target_snapshot
                 .map(SnapshotId::parse)
@@ -268,13 +437,16 @@ impl Store {
             let valid = match (&row.source()?, &target) {
                 (ConversationSource::NotStarted, None) => true,
                 (ConversationSource::Ready { snapshot, .. }, Some(target)) => snapshot == target,
+                // A first NotStarted input may resume the retained source when
+                // connection startup does not already own that setup.
+                (ConversationSource::Ready { .. }, None) => true,
                 _ => false,
             };
             if !valid {
                 return Err(StoreError::InvalidTransition);
             }
-            let prior=diesel::sql_query(dialect.query("SELECT CAST(count(*) AS BIGINT) AS n FROM conversation_input_preparation p JOIN conversation_inputs i ON i.id=p.operation_id WHERE i.conversation_id=? AND NOT (p.preparation_state='FAILED' AND (p.failure_kind IN ('NOT_ADMITTED','BEFORE_NATIVE_LAUNCH','NATIVE_REJECTED') OR (p.failure_kind='SOURCE_UNAVAILABLE' AND p.fresh_native_allowed=FALSE)))"))
-                .bind::<IdentitySql,_>(id).get_result::<PriorStartup>(connection).await?;
+            let prior=diesel::sql_query(dialect.query(&startup_attempt_sql("NOT (preparation_state='FAILED' AND (failure_kind IN ('NOT_ADMITTED','BEFORE_NATIVE_LAUNCH','NATIVE_REJECTED') OR (failure_kind='SOURCE_UNAVAILABLE' AND fresh_native_allowed=FALSE)))")))
+                .bind::<IdentitySql,_>(id).bind::<IdentitySql,_>(id).get_result::<PriorStartup>(connection).await?;
             // Seal positive fresh-context permission once, rather than deriving
             // it later from a missing local owner or lost transport result.
             // A settled explicit rejection is not a native context. A failed
@@ -282,8 +454,13 @@ impl Store {
             // retirement uncertainty and session-ready outcomes remain barriers.
             let fresh_native_allowed =
                 target.is_none() && row.native_session_id.is_none() && prior.n == 0;
-            let rejected=diesel::sql_query(dialect.query("SELECT CAST(count(*) AS BIGINT) AS n FROM conversation_input_preparation p JOIN conversation_inputs i ON i.id=p.operation_id WHERE i.conversation_id=? AND p.preparation_state='FAILED' AND p.failure_kind='NATIVE_REJECTED'"))
-                .bind::<IdentitySql,_>(id).get_result::<PriorStartup>(connection).await?;
+            let rejected = diesel::sql_query(dialect.query(&startup_attempt_sql(
+                "preparation_state='FAILED' AND failure_kind='NATIVE_REJECTED'",
+            )))
+            .bind::<IdentitySql, _>(id)
+            .bind::<IdentitySql, _>(id)
+            .get_result::<PriorStartup>(connection)
+            .await?;
             // Rejection can follow restoration too. Recovery may use the retained
             // capture, but never manufacture its replacement if that copy is lost.
             let require_retained_source = rejected.n > 0;
@@ -334,11 +511,50 @@ impl Store {
             if row.agent_id != agent {
                 return Err(StoreError::NotFound);
             }
-            let _ = input!(connection, dialect, id, operation);
-            let previous = preparation!(connection, dialect, operation)
-                .ok_or(StoreError::InvalidTransition)?;
+            let input_exists = diesel::sql_query(dialect.query(
+                "SELECT target_snapshot FROM conversation_inputs WHERE conversation_id=? AND id=?",
+            ))
+            .bind::<IdentitySql, _>(id)
+            .bind::<IdentitySql, _>(operation)
+            .get_result::<InputTarget>(connection)
+            .await
+            .optional()?
+            .is_some();
+            let startup_exists = diesel::sql_query(dialect.query(
+                "SELECT execution_id,supply_kind,executable_path,selection_request_id,preparation_state,ready_snapshot,ready_native_session,failure_kind,fresh_native_allowed,require_retained_source FROM conversation_startups WHERE conversation_id=? AND operation_id=?",
+            ))
+            .bind::<IdentitySql, _>(id)
+            .bind::<IdentitySql, _>(operation)
+            .get_result::<PreparationRow>(connection)
+            .await
+            .optional()?;
+            let previous = match (input_exists, startup_exists) {
+                (true, Some(_)) => return Err(StoreError::Integrity),
+                (true, None) => preparation!(connection, dialect, operation)
+                    .ok_or(StoreError::InvalidTransition)?,
+                (false, Some(startup)) => startup,
+                (false, None) => return Err(StoreError::InvalidTransition),
+            };
             if previous.execution_id != route._execution_id {
                 return Err(StoreError::Conflict);
+            }
+            if !input_exists && let ConversationPreparationOutcome::SessionReady(target) = outcome {
+                let intent = diesel::sql_query(dialect.query(
+                    "SELECT intended_snapshot,intended_native_session FROM conversation_startups WHERE operation_id=?",
+                ))
+                .bind::<IdentitySql, _>(operation)
+                .get_result::<super::startup::StartupIntent>(connection)
+                .await?;
+                match (
+                    intent.intended_snapshot.as_deref(),
+                    intent.intended_native_session.as_deref(),
+                ) {
+                    (None, None) if previous.fresh_native_allowed => {}
+                    (Some(snapshot), Some(native))
+                        if target.snapshot.as_str() == snapshot
+                            && target.native_session.as_str() == native => {}
+                    _ => return Err(StoreError::Conflict),
+                }
             }
             if let ConversationPreparationOutcome::SessionReady(target) = outcome
                 && (row
@@ -359,8 +575,22 @@ impl Store {
                 ConversationPreparationState::Known(_) => return Err(StoreError::Conflict),
                 ConversationPreparationState::PossibleForwarding => {}
             }
-            diesel::sql_query(dialect.query("UPDATE conversation_input_preparation SET preparation_state=?,ready_snapshot=?,ready_native_session=?,failure_kind=? WHERE operation_id=?"))
-                .bind::<Text,_>(state).bind::<Nullable<Text>,_>(snapshot).bind::<Nullable<Text>,_>(native).bind::<Nullable<Text>,_>(failure).bind::<IdentitySql,_>(operation).execute(connection).await?;
+            if input_exists {
+                diesel::sql_query(dialect.query("UPDATE conversation_input_preparation SET preparation_state=?,ready_snapshot=?,ready_native_session=?,failure_kind=? WHERE operation_id=?"))
+                    .bind::<Text,_>(state).bind::<Nullable<Text>,_>(snapshot).bind::<Nullable<Text>,_>(native).bind::<Nullable<Text>,_>(failure).bind::<IdentitySql,_>(operation).execute(connection).await?;
+            } else {
+                let ready_connection = if state == "READY" {
+                    Some(EntityId::from_dto(
+                        EntityKind::Connection,
+                        source.connection_id,
+                    )?)
+                } else {
+                    None
+                };
+                diesel::sql_query(dialect.query("UPDATE conversation_startups SET preparation_state=?,ready_snapshot=?,ready_native_session=?,failure_kind=?,ready_connection_id=? WHERE operation_id=?"))
+                    .bind::<Text,_>(state).bind::<Nullable<Text>,_>(snapshot).bind::<Nullable<Text>,_>(native).bind::<Nullable<Text>,_>(failure)
+                    .bind::<Nullable<IdentitySql>,_>(ready_connection).bind::<IdentitySql,_>(operation).execute(connection).await?;
+            }
             Ok(())
         })
     }

@@ -293,6 +293,22 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @chapchoo/e2e exec playwright install chromium
       - run: pnpm --filter @chapchoo/e2e test:e2e
+      - name: Build the model-free conversation fixture from the same package
+        run: |
+          test -S /var/run/docker.sock
+          docker buildx build --builder default --load --target runtime-base \
+            -f images/chapchoo/Dockerfile -t chapchoo-runtime-base:acceptance .
+          docker buildx build --builder default --load \
+            --build-context "binary-artifacts=$CHAPCHOO_E2E_PACKAGE_ROOT" \
+            -f testenv/chapchoo/fixtures/Dockerfile -t chapchoo-conversation-acceptance:ci .
+      - name: Prepare the real session before Send and reuse it for the first input
+        env:
+          CHAPCHOO_INTEGRATION_DOCKER_AUTHORIZED: disposable
+          CHAPCHOO_INTEGRATION_DOCKER_SOCKET: /var/run/docker.sock
+          CHAPCHOO_INTEGRATION_DOCKER_IMAGE: chapchoo-conversation-acceptance:ci
+        run: |
+          export CHAPCHOO_INTEGRATION_BINARY="$CHAPCHOO_E2E_PACKAGE_ROOT/chapchoo"
+          pnpm --filter @chapchoo/e2e test:conversation
   docker-integration:
     needs: binary-x86
     runs-on: ubuntu-24.04

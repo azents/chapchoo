@@ -298,6 +298,13 @@ impl ComputersService {
     ) -> Result<Option<ResolvedRoute>, ServiceError> {
         Ok(self.store.resolve_connector_route(computer_id).await?)
     }
+    pub async fn running_computer_ids(
+        &self,
+        after: Option<&str>,
+        limit: u32,
+    ) -> Result<Vec<String>, ServiceError> {
+        Ok(self.store.running_computer_ids(after, limit).await?)
+    }
 
     /// Trusted peer handlers supply either a current user session or a separately
     /// verified live reconciliation owner, never an asserted user ID.

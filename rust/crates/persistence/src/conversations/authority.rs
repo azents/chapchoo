@@ -52,6 +52,8 @@ pub(super) use owned_agent;
 pub(crate) struct ConnectorContext {
     #[diesel(sql_type=IdentitySql)]
     pub(crate) computer_id: EntityId,
+    #[diesel(sql_type=Text)]
+    pub(crate) desired_state: String,
     #[diesel(sql_type=IdentitySql,column_name=execution_id)]
     pub(crate) _execution_id: EntityId,
     #[diesel(sql_type=Nullable<Binary>)]
@@ -71,7 +73,7 @@ pub(crate) struct ConnectorContext {
     #[diesel(sql_type=BigInt)]
     pub(crate) control_expires_at: i64,
 }
-pub(crate) const CONNECTOR_QUERY: &str = "SELECT c.id AS computer_id,e.id AS execution_id,s.current_hash,s.previous_hash,s.previous_valid_until,r.credential_hash AS route_hash,s.issued_at,s.expires_at,r.expires_at AS route_expires_at,ct.expires_at AS control_expires_at FROM connector_sessions s JOIN computer_executions e ON e.id=s.execution_id JOIN computers c ON c.id=e.computer_id AND c.current_execution_id=e.id JOIN connector_connections r ON r.computer_id=c.id AND r.session_id=s.id JOIN control_instances ct ON ct.id=r.control_id WHERE s.id=? AND r.control_id=? AND r.connection_id=? AND s.revoked_at IS NULL AND e.retired_at IS NULL AND c.desired_state<>'DELETING' AND ct.draining=FALSE";
+pub(crate) const CONNECTOR_QUERY: &str = "SELECT c.id AS computer_id,c.desired_state,e.id AS execution_id,s.current_hash,s.previous_hash,s.previous_valid_until,r.credential_hash AS route_hash,s.issued_at,s.expires_at,r.expires_at AS route_expires_at,ct.expires_at AS control_expires_at FROM connector_sessions s JOIN computer_executions e ON e.id=s.execution_id JOIN computers c ON c.id=e.computer_id AND c.current_execution_id=e.id JOIN connector_connections r ON r.computer_id=c.id AND r.session_id=s.id JOIN control_instances ct ON ct.id=r.control_id WHERE s.id=? AND r.control_id=? AND r.connection_id=? AND s.revoked_at IS NULL AND e.retired_at IS NULL AND c.desired_state<>'DELETING' AND ct.draining=FALSE";
 macro_rules! connector {
     ($connection:expr,$dialect:expr,$source:expr) => {{
         use $crate::conversations::authority::{CONNECTOR_QUERY, ConnectorContext};

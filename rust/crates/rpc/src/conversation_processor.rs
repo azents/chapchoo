@@ -48,7 +48,7 @@ impl ConversationControlProcessor {
             return Ok(());
         }
         let actor = &input.actor;
-        let agent = self
+        let mut agent = self
             .computers
             .agent(actor, &input.agent_id, AcceptanceTime::System)
             .await?;
@@ -64,10 +64,11 @@ impl ConversationControlProcessor {
             conversation_id: &input.receipt.conversation_id,
             operation_id: &input.receipt.id,
         };
-        let (execution, supply, fresh, require_retained_source) = match self
+        let admission = self
             .conversation
             .begin_setup(actor, &route, &draft, AcceptanceTime::System.now()?)
-            .await?
+            .await?;
+        let (execution, supply, fresh, require_retained_source, startup_operation) = match admission
         {
             ConversationPreparationAdmission::Granted {
                 grant,
@@ -80,61 +81,57 @@ impl ConversationControlProcessor {
                 requested_supply,
                 fresh_native_allowed,
                 require_retained_source,
+                None,
             ),
             // A processing task has no authority to repeat another setup grant.
             ConversationPreparationAdmission::Existing(_) => return Ok(()),
+            ConversationPreparationAdmission::ObservedStartup {
+                operation_id,
+                facts,
+            } => (
+                facts.execution_id,
+                facts.requested_supply,
+                facts.fresh_native_allowed,
+                facts.require_retained_source,
+                Some(operation_id),
+            ),
         };
-        let context = match &input.receipt.target {
-            ConversationTarget::NotStarted => {
-                wire::setup_command::Context::Initial(wire::InitialNativeContext {
-                    allow_fresh: fresh,
-                    require_retained_source,
-                })
-            }
-            ConversationTarget::Snapshot(snapshot) => {
-                let current = self
-                    .conversation
-                    .owner_conversation(actor, &input.agent_id, AcceptanceTime::System.now()?)
-                    .await?
-                    .ok_or_else(|| ServiceError::domain(DomainReason::NotFound))?;
-                if current.source.snapshot() != Some(snapshot) {
-                    return Ok(());
-                }
-                let native = current
-                    .native_session_id
-                    .ok_or_else(|| ServiceError::domain(DomainReason::InvalidTransition))?;
-                wire::setup_command::Context::Existing(wire::NativeTarget {
-                    snapshot_id: snapshot.as_str().into(),
-                    native_session_id: native.as_str().into(),
-                })
-            }
-        };
-        let supply = wire::HarnessSupply {
-            choice: Some(match supply {
-                HarnessSupply::Managed => wire::harness_supply::Choice::Managed(()),
-                HarnessSupply::Existing(path) => {
-                    wire::harness_supply::Choice::ExistingCodexPath(path.as_str().into())
-                }
-            }),
-        };
-        let setup = wire::SetupCommand {
-            agent_id: input.agent_id.clone(),
-            conversation_id: input.receipt.conversation_id.clone(),
-            operation_id: input.receipt.id.clone(),
-            supply: Some(supply),
-            context: Some(context),
-        };
-        if !self
-            .invoke(
-                &input.actor,
-                &agent.computer.id,
-                &agent.computer.current_request_id,
-                &execution,
-                control::connector_command::Operation::Setup(setup),
-            )
-            .await?
-        {
+        let current = self
+            .conversation
+            .owner_conversation(actor, &input.agent_id, AcceptanceTime::System.now()?)
+            .await?;
+        let Some(context) = setup_context(
+            &input.receipt.target,
+            current.as_ref(),
+            fresh,
+            require_retained_source,
+        )?
+        else {
             return Ok(());
+        };
+        let supply = wire_supply(supply);
+        let mut startup_operation = startup_operation;
+        let mut execution = execution;
+        if startup_operation.is_none() {
+            let setup = wire::SetupCommand {
+                agent_id: input.agent_id.clone(),
+                conversation_id: input.receipt.conversation_id.clone(),
+                operation_id: input.receipt.id.clone(),
+                supply: Some(supply),
+                context: Some(context),
+            };
+            if !self
+                .invoke(
+                    &input.actor,
+                    &agent.computer.id,
+                    &agent.computer.current_request_id,
+                    &execution,
+                    control::connector_command::Operation::Setup(setup),
+                )
+                .await?
+            {
+                return Ok(());
+            }
         }
         // Product acceptance has already returned. This finite setup observation
         // budget is not a native task queue or model-completion waiter.
@@ -143,14 +140,108 @@ impl ConversationControlProcessor {
             if !self.admission.load(Ordering::Acquire) || Instant::now() >= deadline {
                 return Ok(());
             }
-            let Some(facts) = self
-                .conversation
-                .setup_facts(actor, &draft, AcceptanceTime::System.now()?)
-                .await?
-            else {
-                return Ok(());
+            let state = if let Some(operation_id) = &startup_operation {
+                let Some(observed) = self
+                    .conversation
+                    .connection_startup(actor, &input.agent_id, AcceptanceTime::System.now()?)
+                    .await?
+                else {
+                    return Ok(());
+                };
+                if &observed.operation_id != operation_id {
+                    return Ok(());
+                }
+                observed.facts.state
+            } else {
+                let Some(facts) = self
+                    .conversation
+                    .setup_facts(actor, &draft, AcceptanceTime::System.now()?)
+                    .await?
+                else {
+                    return Ok(());
+                };
+                facts.state
             };
-            match facts.state {
+            match state {
+                ConversationPreparationState::Known(ConversationPreparationOutcome::Failed(
+                    failure,
+                )) if startup_operation.is_some()
+                    && matches!(
+                        failure,
+                        chapchoo_service::ConversationPreparationFailure::NotAdmitted
+                            | chapchoo_service::ConversationPreparationFailure::BeforeNativeLaunch
+                    ) =>
+                {
+                    agent = self
+                        .computers
+                        .agent(actor, &input.agent_id, AcceptanceTime::System)
+                        .await?;
+                    let Some(route) = self
+                        .computers
+                        .resolve_connector_route(&agent.computer.id)
+                        .await?
+                    else {
+                        return Ok(());
+                    };
+                    match self
+                        .conversation
+                        .begin_setup(actor, &route, &draft, AcceptanceTime::System.now()?)
+                        .await?
+                    {
+                        ConversationPreparationAdmission::Granted {
+                            grant,
+                            requested_supply,
+                            fresh_native_allowed,
+                            require_retained_source,
+                            ..
+                        } => {
+                            execution = grant.execution_id;
+                            startup_operation = None;
+                            let current = self
+                                .conversation
+                                .owner_conversation(
+                                    actor,
+                                    &input.agent_id,
+                                    AcceptanceTime::System.now()?,
+                                )
+                                .await?;
+                            let Some(context) = setup_context(
+                                &input.receipt.target,
+                                current.as_ref(),
+                                fresh_native_allowed,
+                                require_retained_source,
+                            )?
+                            else {
+                                return Ok(());
+                            };
+                            let setup = wire::SetupCommand {
+                                agent_id: input.agent_id.clone(),
+                                conversation_id: input.receipt.conversation_id.clone(),
+                                operation_id: input.receipt.id.clone(),
+                                supply: Some(wire_supply(requested_supply)),
+                                context: Some(context),
+                            };
+                            if !self
+                                .invoke(
+                                    &input.actor,
+                                    &agent.computer.id,
+                                    &agent.computer.current_request_id,
+                                    &execution,
+                                    control::connector_command::Operation::Setup(setup),
+                                )
+                                .await?
+                            {
+                                return Ok(());
+                            }
+                        }
+                        ConversationPreparationAdmission::Existing(_) => return Ok(()),
+                        ConversationPreparationAdmission::ObservedStartup {
+                            operation_id, ..
+                        } => {
+                            startup_operation = Some(operation_id);
+                        }
+                    }
+                }
                 ConversationPreparationState::Known(ConversationPreparationOutcome::Failed(_)) => {
                     return Ok(());
                 }
@@ -182,6 +273,10 @@ impl ConversationControlProcessor {
         else {
             return Ok(());
         };
+        agent = self
+            .computers
+            .agent(actor, &input.agent_id, AcceptanceTime::System)
+            .await?;
         let grant = self
             .conversation
             .begin_input(
@@ -274,6 +369,62 @@ impl ConversationControlProcessor {
                     .is_some_and(|result| result.admitted == Some(true)),
         )
     }
+}
+fn wire_supply(supply: HarnessSupply) -> wire::HarnessSupply {
+    wire::HarnessSupply {
+        choice: Some(match supply {
+            HarnessSupply::Managed => wire::harness_supply::Choice::Managed(()),
+            HarnessSupply::Existing(path) => {
+                wire::harness_supply::Choice::ExistingCodexPath(path.as_str().into())
+            }
+        }),
+    }
+}
+fn setup_context(
+    target: &ConversationTarget,
+    current: Option<&chapchoo_service::ConversationSummary>,
+    fresh: bool,
+    require_retained_source: bool,
+) -> Result<Option<wire::setup_command::Context>, ServiceError> {
+    Ok(Some(match (target, current) {
+        (ConversationTarget::NotStarted, Some(current))
+            if matches!(current.source, ConversationSource::Ready { .. }) =>
+        {
+            let snapshot = current
+                .source
+                .snapshot()
+                .ok_or_else(|| ServiceError::domain(DomainReason::InvalidTransition))?;
+            let native = current
+                .native_session_id
+                .as_ref()
+                .ok_or_else(|| ServiceError::domain(DomainReason::InvalidTransition))?;
+            wire::setup_command::Context::Existing(wire::NativeTarget {
+                snapshot_id: snapshot.as_str().into(),
+                native_session_id: native.as_str().into(),
+            })
+        }
+        (ConversationTarget::NotStarted, _) => {
+            wire::setup_command::Context::Initial(wire::InitialNativeContext {
+                allow_fresh: fresh,
+                require_retained_source,
+            })
+        }
+        (ConversationTarget::Snapshot(snapshot), _) => {
+            let Some(current) = current else {
+                return Ok(None);
+            };
+            if current.source.snapshot() != Some(snapshot) {
+                return Ok(None);
+            }
+            let Some(native) = current.native_session_id.as_ref() else {
+                return Err(ServiceError::domain(DomainReason::InvalidTransition));
+            };
+            wire::setup_command::Context::Existing(wire::NativeTarget {
+                snapshot_id: snapshot.as_str().into(),
+                native_session_id: native.as_str().into(),
+            })
+        }
+    }))
 }
 impl ConversationInputProcessor for ConversationControlProcessor {
     fn process(&self, input: AcceptedConversationInput) -> ConversationInputFuture {

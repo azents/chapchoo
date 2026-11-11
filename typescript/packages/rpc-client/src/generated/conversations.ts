@@ -142,7 +142,11 @@ export interface OwnerConversationRequest {
 export interface OwnerConversation {
   conversation: CaptureState | undefined;
   observedNative: ObservedNative | undefined;
-  savedAuthenticationId?: string | undefined;
+  savedAuthenticationId?:
+    | string
+    | undefined;
+  /** Preparation owned by connection startup, not by an accepted input. */
+  startup: InputPreparation | undefined;
 }
 
 export interface ObservedNative {
@@ -819,7 +823,7 @@ export const OwnerConversationRequest: MessageFns<OwnerConversationRequest> = {
 };
 
 function createBaseOwnerConversation(): OwnerConversation {
-  return { conversation: undefined, observedNative: undefined, savedAuthenticationId: undefined };
+  return { conversation: undefined, observedNative: undefined, savedAuthenticationId: undefined, startup: undefined };
 }
 
 export const OwnerConversation: MessageFns<OwnerConversation> = {
@@ -832,6 +836,9 @@ export const OwnerConversation: MessageFns<OwnerConversation> = {
     }
     if (message.savedAuthenticationId !== undefined) {
       writer.uint32(26).string(message.savedAuthenticationId);
+    }
+    if (message.startup !== undefined) {
+      InputPreparation.encode(message.startup, writer.uint32(34).fork()).join();
     }
     return writer;
   },
@@ -873,6 +880,14 @@ export const OwnerConversation: MessageFns<OwnerConversation> = {
             message.savedAuthenticationId = reader.string();
             continue;
           }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.startup = InputPreparation.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -897,6 +912,9 @@ export const OwnerConversation: MessageFns<OwnerConversation> = {
       ? ObservedNative.fromPartial(object.observedNative)
       : undefined;
     message.savedAuthenticationId = object.savedAuthenticationId ?? undefined;
+    message.startup = (object.startup !== undefined && object.startup !== null)
+      ? InputPreparation.fromPartial(object.startup)
+      : undefined;
     return message;
   },
 };

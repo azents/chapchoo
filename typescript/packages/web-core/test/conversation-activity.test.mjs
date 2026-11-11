@@ -27,6 +27,44 @@ function failure(reason = "nativeRejected") {
 }
 test("missing native state alone is not execution failure; selection, startup and confirmed setup failures differ", () => {
   assert.equal(conversationActivity(region()), "notStarted");
+  assert.equal(
+    conversationActivity(
+      region({
+        header: { ...region().header, startup: { type: "preparing" } },
+      }),
+    ),
+    "starting",
+  );
+  assert.equal(
+    conversationActivity(
+      region({
+        header: {
+          ...region().header,
+          startup: { type: "failed", reason: "nativeRejected" },
+        },
+      }),
+    ),
+    "startFailed",
+  );
+  assert.equal(
+    conversationActivity(
+      region({
+        header: {
+          ...region().header,
+          startup: { type: "failed", reason: "sourceUnavailable" },
+        },
+      }),
+    ),
+    "sourceUnavailable",
+  );
+  const unauthenticated = region({
+    header: {
+      ...region().header,
+      savedAuthenticationId: undefined,
+      startup: { type: "preparing" },
+    },
+  });
+  assert.equal(conversationActivity(unauthenticated), "authenticationRequired");
   const missing = region();
   delete missing.header.savedAuthenticationId;
   assert.equal(conversationActivity(missing), "authenticationRequired");
@@ -68,6 +106,16 @@ test("missing native state alone is not execution failure; selection, startup an
     ),
     "deliveryUnconfirmed",
   );
+});
+test("failed connection startup remains visible during loading and after first acceptance", () => {
+  const value = region();
+  value.header.state = "loading";
+  value.header.startup = { type: "failed", reason: "sourceUnavailable" };
+  assert.equal(conversationActivity(value), "sourceUnavailable");
+  value.latestInput = { requestId: "first", observation: "accepted" };
+  assert.equal(conversationActivity(value), "sourceUnavailable");
+  value.latestInput.preparation = { type: "ready" };
+  assert.equal(conversationActivity(value), "sourceUnavailable");
 });
 test("fresh native observations win over historical failures and missing saved selection", () => {
   for (const foreground of ["idle", "working", "requiresAction"]) {

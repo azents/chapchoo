@@ -176,6 +176,7 @@ export interface ConversationHeader {
   workId?: string;
   appliedSupply?: HarnessSupplyChoice;
   preparation?: NativePreparation;
+  startup?: InputPreparation;
   savedAuthenticationId?: string;
   appliedAuthenticationId?: string;
 }

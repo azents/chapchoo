@@ -49,16 +49,22 @@ selects one initial ongoing conversation; the schema does not impose a permanent
 unique conversation on every Agent. Reading an absent current conversation
 returns absence and does not create one.
 
-First input admission creates the conversation and association in the same
-transaction as its retained input. The exact submitted text is preserved. Request
+If connection startup has not already selected an empty conversation, first
+input admission creates the conversation and association in the same transaction
+as its retained input. A connected desired-running Computer can instead prepare
+the selected empty conversation before the first input through the sealed
+[startup boundary](#connection-time-preparation). The exact submitted text is preserved. Request
 recovery compares its original source target and text; changed input under that
 request conflicts. Receipt recovery never dispatches native work or establishes
 native acceptance. Missing/replaced evidence does not prove non-delivery.
 
 `NOT_STARTED`, `LOADING` and `READY` source states have distinct admission rules.
 A not-started input can bind to initial setup; a bound input retains its exact
-snapshot target. Loading rejects new input, while an already accepted receipt may
-still be read. A prior target cannot be silently reinterpreted against a later
+snapshot target. The first not-started input may join a startup-owned loading
+source or its matching ready source, without changing the receipt's original
+target. A different snapshot or a second not-started input cannot use that
+exception. Other loading sources reject new input, while an already accepted
+receipt may still be read. A prior target cannot be silently reinterpreted against a later
 source after its old receipt has been removed.
 
 Native forwarding has a separate durable boundary. The Store revalidates private
@@ -133,6 +139,52 @@ inventing non-delivery. The backend composes this processor with the shared loca
 PeerDelivery when it owns Control, or ordinary remote delivery otherwise. Client
 service shutdown closes admission and drains input/Stop tasks under the existing
 backend cleanup lifetime.
+
+## Connection-time preparation
+
+The Client composition owns a background reconciler independently of Connector
+stream admission. It reads desired-running Computers in keyset pages of 20, keeps
+at most 20 Computer tasks, and revalidates each current authenticated Connector
+route before admission. The completed transaction locks the affected Teams and
+Computer, rechecks owner membership and creates the selected empty conversation
+when absent. It inserts no input or prompt. Without a saved authentication
+selection it retains only the empty conversation and does not grant native setup.
+Owner reads never run this admission.
+
+A startup operation seals execution, requested supply, fresh/retained permissions
+and any exact retained snapshot/native target in `conversation_startups`.
+Migration 21 adds this independent source-local history without rewriting existing
+inputs, credentials or source bytes; downgrade refuses nonempty startup history.
+It participates in the same fresh-context barrier and native-rejection fence as
+input preparation. Source replacement clears startup facts with the other
+source-local operation state. Retained intent cannot follow a moved source.
+
+Delivery uses reconciliation authority with proof of the current Connector owner;
+Setup is the only command. Queue admission is not native readiness. The worker
+waits for an already-started peer attempt when closing, stops adding subsequent
+work and drains its owned tasks. A panic releases only that task's Computer slot.
+An attempted Computer is reconsidered after 15 seconds. Current unresolved
+operations retain their identity; Connector's invocation lease and native setup
+registry recover identical operation results rather than admitting another native
+launch. A missing route or stopped Computer withholds dispatch without proving
+that an earlier attempt had no effect. Native setup dequeue rechecks desired
+running, exact execution, supply and the sealed source target.
+
+A previous-execution unresolved startup is settled as `RETIREMENT_UNKNOWN`, not
+redispatched or treated as unused fresh permission. READY records also retain the Connector connection that reported them. A new
+current connection is not that witness, even within the same Computer execution:
+it obtains another retained-only Setup for the exact source. An already-live
+native owner reuses its session; a replacement process resumes it. A matching
+ready source may also be resumed on a new execution; missing or failed restoration
+cannot create a replacement. First input processing observes the current startup until its exact
+source is ready and then obtains the ordinary text-forwarding grant. It does not
+send another Setup. Known non-admission/pre-launch failures may use a new ordinary
+setup operation under the combined history barrier.
+
+`OwnerConversation.startup` exposes optional preparation evidence independently
+of accepted input and current native foreground. Authentication absence,
+preparation in progress and known failures remain distinguishable before any
+input. A session-ready startup is not current liveness or text consumption.
 
 ## Observed native work and exact Stop
 

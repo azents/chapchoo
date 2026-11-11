@@ -346,6 +346,31 @@ async fn start_backends(
             || chapchoo_rpc::PeerDelivery::new(app.clone()),
             ControlPlane::conversation_delivery,
         );
+        tasks.spawn({
+            let computers = app.clone();
+            let conversation = conversation_core.clone();
+            let startup_delivery = delivery.clone();
+            let admission = admission.clone();
+            let stop = stop.clone();
+            async move {
+                let (shutdown, shutdown_rx) = tokio::sync::watch::channel(false);
+                let mut worker = std::pin::pin!(chapchoo_rpc::reconcile_connection_startups(
+                    computers,
+                    conversation,
+                    startup_delivery,
+                    admission,
+                    shutdown_rx,
+                ));
+                tokio::select! {
+                    _ = stop.cancelled() => {
+                        let _ = shutdown.send(true);
+                    }
+                    _ = &mut worker => return Ok(()),
+                }
+                worker.await;
+                Ok(())
+            }
+        });
         let processor = Arc::new(chapchoo_rpc::ConversationControlProcessor::new(
             app.clone(),
             conversation_core.clone(),

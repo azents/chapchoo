@@ -284,9 +284,14 @@ impl Store {
             .transpose()?;
         operation!(self, |connection, dialect| {
             let context = context!(connection, dialect, source, ids);
-            let preparation = diesel::sql_query(dialect.query("SELECT p.preparation_state FROM conversation_input_preparation p JOIN conversation_inputs i ON i.id=p.operation_id WHERE p.operation_id=? AND p.execution_id=? AND i.conversation_id=?"))
+            let preparation = diesel::sql_query(dialect.query("SELECT preparation_state FROM (SELECT p.preparation_state FROM conversation_input_preparation p JOIN conversation_inputs i ON i.id=p.operation_id WHERE p.operation_id=? AND p.execution_id=? AND i.conversation_id=? UNION ALL SELECT preparation_state FROM conversation_startups WHERE operation_id=? AND execution_id=? AND conversation_id=?) attempts"))
                 .bind::<IdentitySql,_>(ids.2).bind::<IdentitySql,_>(context.execution_id).bind::<IdentitySql,_>(ids.1)
-                .get_result::<Preparation>(connection).await.optional()?.ok_or(StoreError::NotFound)?;
+                .bind::<IdentitySql,_>(ids.2).bind::<IdentitySql,_>(context.execution_id).bind::<IdentitySql,_>(ids.1)
+                .load::<Preparation>(connection).await?;
+            if preparation.len() > 1 {
+                return Err(StoreError::Integrity);
+            }
+            let preparation = preparation.into_iter().next().ok_or(StoreError::NotFound)?;
             if preparation.preparation_state != "POSSIBLE" {
                 return Err(StoreError::InvalidTransition);
             }

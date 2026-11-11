@@ -12,6 +12,8 @@ mod native_state;
 mod preparation;
 #[path = "conversations/projections.rs"]
 mod projections;
+#[path = "conversations/startup.rs"]
+mod startup;
 mod support;
 
 use base64::{Engine, engine::general_purpose::URL_SAFE};

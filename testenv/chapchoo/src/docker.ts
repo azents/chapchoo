@@ -399,6 +399,25 @@ export class DockerFixture {
     }
     return this.canaryVolume;
   }
+  /** Body-safe owned-resource summary for failed cleanup; never returns native IDs. */
+  async cleanupSummary(): Promise<string> {
+    await this.verifyDaemon();
+    const containers = await native(() =>
+      this.sdk.listContainers({
+        all: true,
+        filters: JSON.stringify({ label: this.productLabels }),
+      }),
+    );
+    const volumes = await native(() =>
+      this.sdk.listVolumes({
+        filters: JSON.stringify({ label: this.productLabels }),
+      }),
+    );
+    const running = containers.filter(
+      (container) => container.State === "running",
+    ).length;
+    return `containers=${containers.length};running=${running};volumes=${volumes.Volumes?.length ?? 0}`;
+  }
   async productAbsent(): Promise<boolean> {
     await this.verifyDaemon();
     const containers = await native(() =>
