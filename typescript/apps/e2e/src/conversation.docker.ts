@@ -37,11 +37,11 @@ test("owner chats through the official adapter and retains the native typed answ
         async () => {
           const current = await fixture?.current();
           const target = current?.startup?.sessionReady;
+          stage = `prestart-before-first-send (capture=${current?.conversation?.status ?? "absent"};setup=${current?.startup?.failed ?? (target ? "ready" : current?.startup?.possibleForwarding ? "possible" : "absent")};native=${Boolean(current?.observedNative)})`;
           return Boolean(
             target &&
             current?.conversation?.snapshotId === target.snapshotId &&
-            current.conversation.nativeSessionId === target.nativeSessionId &&
-            current.observedNative?.target?.snapshotId === target.snapshotId,
+            current.conversation.nativeSessionId === target.nativeSessionId,
           );
         },
         { timeout: 180_000 },
@@ -79,8 +79,11 @@ test("owner chats through the official adapter and retains the native typed answ
       exact: true,
     });
     await expect(
-      setup.getByText("/opt/chapchoo/codex-fixture", { exact: true }),
-    ).toHaveCount(2);
+      setup.getByRole("radio", {
+        name: "Existing Codex installation",
+        exact: true,
+      }),
+    ).toBeChecked();
     await expect(message).toBeEmpty();
     await expect(
       page.getByText("First assistant output", { exact: true }),

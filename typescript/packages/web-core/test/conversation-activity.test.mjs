@@ -114,6 +114,8 @@ test("failed connection startup remains visible during loading and after first a
   assert.equal(conversationActivity(value), "sourceUnavailable");
   value.latestInput = { requestId: "first", observation: "accepted" };
   assert.equal(conversationActivity(value), "sourceUnavailable");
+  value.latestInput.preparation = { type: "ready" };
+  assert.equal(conversationActivity(value), "sourceUnavailable");
 });
 test("fresh native observations win over historical failures and missing saved selection", () => {
   for (const foreground of ["idle", "working", "requiresAction"]) {

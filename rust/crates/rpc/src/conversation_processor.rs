@@ -48,7 +48,7 @@ impl ConversationControlProcessor {
             return Ok(());
         }
         let actor = &input.actor;
-        let agent = self
+        let mut agent = self
             .computers
             .agent(actor, &input.agent_id, AcceptanceTime::System)
             .await?;
@@ -172,6 +172,10 @@ impl ConversationControlProcessor {
                             | chapchoo_service::ConversationPreparationFailure::BeforeNativeLaunch
                     ) =>
                 {
+                    agent = self
+                        .computers
+                        .agent(actor, &input.agent_id, AcceptanceTime::System)
+                        .await?;
                     let Some(route) = self
                         .computers
                         .resolve_connector_route(&agent.computer.id)
@@ -269,6 +273,10 @@ impl ConversationControlProcessor {
         else {
             return Ok(());
         };
+        agent = self
+            .computers
+            .agent(actor, &input.agent_id, AcceptanceTime::System)
+            .await?;
         let grant = self
             .conversation
             .begin_input(

@@ -47,7 +47,10 @@ export function conversationActivity(
   if (header.state === "notStarted" && !header.savedAuthenticationId)
     return "authenticationRequired";
   const latest = region.latestInput;
-  const preparation = latest?.preparation ?? header.startup;
+  const preparation =
+    header.startup?.type === "failed" || header.startup?.type === "preparing"
+      ? header.startup
+      : latest?.preparation;
   if (preparation?.type === "failed") {
     switch (preparation.reason) {
       case "sourceUnavailable":
