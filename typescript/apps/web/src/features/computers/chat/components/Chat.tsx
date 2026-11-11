@@ -201,6 +201,7 @@ export function Chat(props: ChatProps): ReactElement {
                   controls={props.conversation}
                   viewportRef={f.viewportRef}
                   contentRef={f.contentRef}
+                  followingLatest={!f.detached}
                 />
                 {props.conversation.read === "ready" &&
                 props.conversation.region.header.state !== "loading" &&

@@ -35,6 +35,7 @@ export function ConversationHistory({
             controls={controls}
             viewportRef={scroll.viewportRef}
             contentRef={scroll.contentRef}
+            followingLatest={!scroll.detached}
           />
           <ConversationBody
             controls={controls}

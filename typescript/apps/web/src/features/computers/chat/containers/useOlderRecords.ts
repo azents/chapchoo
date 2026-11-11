@@ -7,6 +7,7 @@ export function useOlderRecords(
   controls: ConversationControls,
   viewportRef: RefObject<HTMLDivElement | null>,
   contentRef: RefObject<HTMLDivElement | null>,
+  followingLatest: boolean,
 ): void {
   const current = useRef(controls);
   current.current = controls;
@@ -40,7 +41,7 @@ export function useOlderRecords(
       }
       if (
         viewport &&
-        (viewport.scrollTop <= 64 ||
+        ((!followingLatest && viewport.scrollTop <= 64) ||
           (content && content.offsetHeight <= viewport.clientHeight + 1) ||
           viewport.scrollHeight <= viewport.clientHeight + 1)
       ) {
@@ -68,5 +69,6 @@ export function useOlderRecords(
     controls.paginationReset,
     viewportRef,
     contentRef,
+    followingLatest,
   ]);
 }

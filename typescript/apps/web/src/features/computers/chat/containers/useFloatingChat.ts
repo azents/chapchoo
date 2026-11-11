@@ -66,6 +66,9 @@ export function useFloatingChat(
     following.current = true;
     setDetached(false);
     setUnseen(false);
+    if (viewportRef.current) {
+      viewportRef.current.scrollTop = viewportRef.current.scrollHeight;
+    }
     schedulePin();
   }, [schedulePin]);
   useLayoutEffect(() => {

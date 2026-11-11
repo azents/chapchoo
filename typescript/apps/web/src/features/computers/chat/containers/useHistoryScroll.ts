@@ -126,6 +126,9 @@ export function useHistoryScroll(
       following.current = true;
       setDetached(false);
       setUnseen(false);
+      if (viewportRef.current) {
+        viewportRef.current.scrollTop = viewportRef.current.scrollHeight;
+      }
       pin();
     },
     preserveHistory: () => {
