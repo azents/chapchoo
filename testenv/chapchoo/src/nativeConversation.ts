@@ -45,6 +45,7 @@ async function poll<T>(
 export async function nativeConversation(assembly: Assembly): Promise<{
   chatPath: string;
   current: () => Promise<OwnerConversation>;
+  pendingInputs: () => Promise<number>;
   close: () => Promise<void>;
 }> {
   const docker = assembly.docker;
@@ -232,6 +233,28 @@ export async function nativeConversation(assembly: Assembly): Promise<{
       chatPath: `/teams/my/agents/${agent.handle}/chat`,
       current: () =>
         call(conversations.current.bind(conversations), { agentId: agent.id }),
+      pendingInputs: async () => {
+        const current = await call(conversations.current.bind(conversations), {
+          agentId: agent.id,
+        });
+        const selected = current.conversation;
+        if (!selected?.snapshotId) {
+          throw new Error(
+            "Conversation source is not ready for pending-input inspection",
+          );
+        }
+        const pending = await call(conversations.inputs.bind(conversations), {
+          scope: {
+            agentId: agent.id,
+            conversationId: selected.conversationId,
+            target: { snapshotId: selected.snapshotId },
+          },
+          before: undefined,
+          limit: 25,
+          knownIds: [],
+        });
+        return pending.inputs.length;
+      },
       close,
     };
   } catch (error) {

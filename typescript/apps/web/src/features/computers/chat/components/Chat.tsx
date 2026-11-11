@@ -12,6 +12,7 @@ import {
   Button,
   Drawer,
   Group,
+  Loader,
   ScrollArea,
 } from "@mantine/core";
 import { ComputerControls } from "../../components/ComputerControls";
@@ -84,6 +85,7 @@ export function Chat(props: ChatProps): ReactElement {
   const records = props.conversation.region.records;
   const currentPlan = props.conversation.region.latestPlan;
   const showStatus =
+    props.statusLoading ||
     props.activity !== "idle" ||
     p.stale ||
     Boolean(p.error) ||
@@ -134,11 +136,14 @@ export function Chat(props: ChatProps): ReactElement {
                   aria-label={`${agent.name}${showStatus ? ` · ${props.status}` : ""} · ${c.activity}`}
                 >
                   <span className={classes.statusLine}>
-                    {showStatus ? (
+                    {showStatus && !props.statusLoading ? (
                       <Icon name={working ? "activity" : "chat"} />
                     ) : null}
                     <strong>{agent.name}</strong>
                     {showStatus ? <span>{props.status}</span> : null}
+                    {props.statusLoading ? (
+                      <Loader size="xs" aria-label={c.loading} />
+                    ) : null}
                   </span>
                 </button>
                 {agent.computer.power === "stopped" ? (
@@ -244,7 +249,7 @@ export function Chat(props: ChatProps): ReactElement {
                   placeholder={
                     props.writable
                       ? `${agent.name} · ${c.input}`
-                      : `${props.status} · ${c.readOnly}`
+                      : [props.status, c.readOnly].filter(Boolean).join(" · ")
                   }
                   onChange={(event) => props.onInput(event.target.value)}
                   onKeyDown={(event) => {

@@ -2,6 +2,68 @@ import { computerCopy } from "@chapchoo/web-core/computer-messages";
 import { expect, test } from "@playwright/test";
 
 for (const width of [390, 1280]) {
+  test(`pending input matches native message geometry without lifecycle captions at ${width}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    const measurements: { width: number; height: number }[] = [];
+    for (const [story, opacity] of [
+      ["pending-input", "0.6"],
+      ["input-recorded", "1"],
+    ] as const) {
+      const path = `/iframe.html?id=chat-conversation--${story}&viewMode=story`;
+      await page.goto(path);
+      const message = page
+        .locator('[data-kind="user"]')
+        .filter({ hasText: "두 저장소의 작업 현황을 정리해줘." });
+      await expect(message).toHaveCount(1);
+      // The product uses optional font display. Warm the actual subset before
+      // reloading so first-load fallback selection cannot distort geometry.
+      await page.evaluate(async () => {
+        await document.fonts.load(
+          "14px Pretendard",
+          "두 저장소의 작업 현황을 정리해줘.",
+        );
+        await document.fonts.ready;
+      });
+      await page.reload();
+      await expect(message).toHaveCount(1);
+      await page.evaluate(() => document.fonts.ready);
+      await expect(message).toHaveCSS("opacity", opacity);
+      measurements.push(
+        await message.locator('[class*="userBubble"]').evaluate((bubble) => {
+          const bounds = bubble.getBoundingClientRect();
+          return { width: bounds.width, height: bounds.height };
+        }),
+      );
+      await expect(message.getByRole("status")).toHaveCount(0);
+    }
+    expect(measurements[0]).toEqual(measurements[1]);
+  });
+
+  test(`retained native status has only a spinner during observation refresh at ${width}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto(
+      "/iframe.html?id=chat-conversation--status-refreshing&viewMode=story",
+    );
+    const status = page.getByRole("button", { name: /코기.*작업 중/ });
+    await expect(status).toBeVisible();
+    await expect(status.getByLabel("대화 불러오는 중…")).toBeVisible();
+    await expect(page.getByText("확인되지 않음", { exact: true })).toHaveCount(
+      0,
+    );
+    await expect(page.getByText("상태 확인 중", { exact: true })).toHaveCount(
+      0,
+    );
+    await expect(
+      page.getByRole("textbox", { name: "메시지", exact: true }),
+    ).toBeDisabled();
+  });
+}
+
+for (const width of [390, 1280]) {
   test(`composer keeps Codex and Send at its original right edge at ${width}`, async ({
     page,
   }) => {
@@ -415,7 +477,7 @@ test("confirmed native startup failure is explained without claiming delivery or
       .getByText("Codex 실행 실패", { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("log").getByText("Codex 실행 실패", { exact: true }),
+    page.getByRole("log").getByRole("button", { name: "재시도", exact: true }),
   ).toBeVisible();
   await expect(
     page.getByText("작업 상태를 확인할 수 없음", { exact: true }),
@@ -473,7 +535,7 @@ test("not-started and preparing conversations never masquerade as execution fail
     ).toHaveCount(0);
   }
 });
-test("sending and failed inputs share user bubbles with subdued status and new input below retained history", async ({
+test("sending and failed inputs share dimmed user bubbles without captions and new input below retained history", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -484,16 +546,16 @@ test("sending and failed inputs share user bubbles with subdued status and new i
   await expect(bubbles).toHaveCount(2);
   await expect(bubbles.nth(0)).toContainText("안녕하세요");
   await expect(bubbles.nth(1)).toContainText("새 메시지");
-  await expect(bubbles.nth(1)).toContainText("보내는 중…");
   for (const bubble of await bubbles.all()) {
+    await expect(bubble).toHaveCSS("opacity", "0.6");
+    await expect(bubble.getByRole("status")).toHaveCount(0);
     expect(
       await bubble.evaluate((element) => {
         const style = getComputedStyle(element);
         const surface = element.children.item(1);
         const body = surface?.querySelector("p");
         const author = element.firstElementChild;
-        const status = element.querySelector('[role="status"]');
-        if (!body || !surface || !author || !status) {
+        if (!body || !surface || !author) {
           return false;
         }
         return (
@@ -503,9 +565,7 @@ test("sending and failed inputs share user bubbles with subdued status and new i
           getComputedStyle(body).marginTop === "0px" &&
           getComputedStyle(body).marginBottom === "0px" &&
           author.getBoundingClientRect().bottom <=
-            surface.getBoundingClientRect().top &&
-          Number.parseFloat(getComputedStyle(status).fontSize) <
-            Number.parseFloat(getComputedStyle(body).fontSize)
+            surface.getBoundingClientRect().top
         );
       }),
     ).toBeTruthy();
@@ -526,8 +586,9 @@ test("confirmed failed messages expose explicit retry and delete without retryin
   ).toBeEnabled();
   await log.getByRole("button", { name: "재시도", exact: true }).click();
   await expect(log.locator('[data-kind="user"]')).toHaveCount(2);
-  await expect(log.locator('[data-kind="user"]').last()).toContainText(
-    "보내는 중…",
+  await expect(log.locator('[data-kind="user"]').last()).toHaveCSS(
+    "opacity",
+    "0.6",
   );
   await log.getByRole("button", { name: "삭제", exact: true }).click();
   await expect(
@@ -535,7 +596,11 @@ test("confirmed failed messages expose explicit retry and delete without retryin
   ).toHaveCount(0);
   await expect(log.locator('[data-kind="user"]')).toHaveCount(1);
   await expect(log.locator('[data-kind="user"]').first()).toContainText(
-    "보내는 중…",
+    "안녕하세요",
+  );
+  await expect(log.locator('[data-kind="user"]').first()).toHaveCSS(
+    "opacity",
+    "0.6",
   );
 });
 test("auth withdrawal replaces the protected conversation surface", async ({

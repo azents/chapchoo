@@ -210,7 +210,8 @@ release an exact known result only after successful durable result publication,
 while retaining its exclusive invocation lease
 through actor acknowledgement. Setup, input, answer and Stop share this
 known-result release contract; uncertainty and changed-result conflicts remain
-retained. The server's settled checks fence later dispatch, while the lease and
+retained. The server's settled checks, or denied body/grant reads for a consumed
+input, fence later dispatch, while the lease and
 single command-checking loop fence already-checked local duplicates.
 
 Foreground observations create an execution-local work target that expires on

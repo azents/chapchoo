@@ -287,15 +287,6 @@ function Fixture({
         mode === "captured"
           ? [
               {
-                id: "captured-input",
-                requestId: "captured",
-                conversationId: "conversation",
-                acceptedAt: 1n,
-                text: "ㅎㅇ",
-                observation: "inserted",
-                insertedNativeMessageId: "native-user",
-              },
-              {
                 id: "unmatched-failed-input",
                 requestId: "unmatched-failed",
                 conversationId: "conversation",
@@ -326,16 +317,6 @@ function Fixture({
               requestId: "accepted",
               text: "접수된 메시지",
               observation: "accepted",
-            },
-            {
-              requestId: "inserted",
-              text: "전달된 메시지",
-              observation: "inserted",
-            },
-            {
-              requestId: "steered",
-              text: "실행 중 추가로 전달한 메시지",
-              observation: "steered",
             },
             {
               requestId: "failed",

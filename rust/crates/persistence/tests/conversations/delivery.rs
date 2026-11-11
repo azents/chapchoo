@@ -104,16 +104,18 @@ pub(super) async fn exercise(
     store
         .complete_conversation_input_forwarding(&source, &draft, &outcome)
         .await?;
+    // After pickup, repeated reporting only closes an absent pending operation.
+    // It does not reconstruct a stored success result or another dispatch grant.
+    store
+        .complete_conversation_input_forwarding(&source, &draft, &Outcome::Steered)
+        .await?;
     assert!(matches!(
         store
-            .complete_conversation_input_forwarding(&source, &draft, &Outcome::Steered)
+            .begin_conversation_input_forwarding(&owner, &route, &draft, f.now)
             .await,
-        Err(StoreError::Conflict)
+        Err(StoreError::NotFound)
     ));
-    assert!(
-        matches!(store.begin_conversation_input_forwarding(&owner,&route,&draft,f.now).await?,Admission::Existing(Delivery::Known(known)) if known==outcome)
-    );
-    assert_eq!(
+    assert!(matches!(
         store
             .conversation_input_delivery(
                 &owner,
@@ -122,8 +124,20 @@ pub(super) async fn exercise(
                 &first.id,
                 f.now
             )
-            .await?,
-        Some(Delivery::Known(outcome))
+            .await,
+        Err(StoreError::NotFound)
+    ));
+    assert!(
+        store
+            .conversation_input_reference(
+                &owner,
+                &f.agent.id,
+                &first.conversation_id,
+                &first.request_id,
+                f.now
+            )
+            .await?
+            .is_none()
     );
     assert!(matches!(
         store
@@ -196,7 +210,32 @@ pub(super) async fn exercise(
     ));
     assert!(matches!(
         store.connector_input_chunk(&source, &draft, 0).await,
-        Err(StoreError::Conflict)
+        Err(StoreError::InvalidTransition)
+    ));
+    let scope_target = ConversationTarget::Snapshot(snapshot.clone());
+    let scope = chapchoo_persistence::ConversationInputScope {
+        agent_id: &f.agent.id,
+        conversation_id: &first.conversation_id,
+        target: &scope_target,
+    };
+    let known = vec![first.id.clone(), pending.id.clone()];
+    assert_eq!(
+        store
+            .closed_conversation_inputs(&owner, &scope, &known, f.now)
+            .await?,
+        vec![first.id.clone()]
+    );
+    assert!(matches!(
+        store
+            .closed_conversation_inputs(&f.other.digest(), &scope, &known, f.now)
+            .await,
+        Err(StoreError::NotFound)
+    ));
+    assert!(matches!(
+        store
+            .closed_conversation_inputs(&owner, &scope, &vec![first.id.clone(); 26], f.now)
+            .await,
+        Err(StoreError::InvalidInput)
     ));
     Ok(())
 }

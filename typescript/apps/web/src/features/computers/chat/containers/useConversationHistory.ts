@@ -21,7 +21,12 @@ export interface ConversationHistoryInput {
 export function useConversationHistory(
   props: ConversationHistoryInput,
 ): ConversationHistoryProps {
-  const reader = useConversationReader(props.initial, true);
+  const reader = useConversationReader(
+    props.initial,
+    true,
+    void 0,
+    props.inputs,
+  );
   const scroll = useHistoryScroll(props.initialFocus);
   const { markInputDeleted } = reader;
   const appliedDeletions = useRef(new Set<string>());
@@ -66,6 +71,7 @@ export function useConversationHistory(
             input.snapshotId === reader.region.header.source?.snapshotId,
         ),
         reader.region.inputs,
+        reader.region.closedInputs,
       ),
       drafts: props.drafts,
       stop: "idle",

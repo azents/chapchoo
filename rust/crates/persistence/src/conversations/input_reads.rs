@@ -43,6 +43,47 @@ fn matches(
     Ok(())
 }
 impl Store {
+    pub async fn closed_conversation_inputs(
+        &self,
+        actor: &SecretDigest,
+        scope: &ConversationInputScope<'_>,
+        known: &[String],
+        now: i64,
+    ) -> Result<Vec<String>, StoreError> {
+        if known.len() > 25 {
+            return Err(StoreError::InvalidInput);
+        }
+        let ids = known
+            .iter()
+            .map(|value| EntityId::from_dto(EntityKind::ConversationOperation, value))
+            .collect::<Result<Vec<_>, _>>()?;
+        let agent = EntityId::from_dto(EntityKind::Agent, scope.agent_id)?;
+        let conversation = EntityId::from_dto(EntityKind::Conversation, scope.conversation_id)?;
+        #[derive(diesel::QueryableByName)]
+        struct Count {
+            #[diesel(sql_type=BigInt)]
+            n: i64,
+        }
+        operation!(self, |connection, dialect| {
+            let _ = owned_agent!(connection, dialect, actor, agent, now);
+            let row = conversation!(connection, dialect, conversation);
+            matches(&row, scope, agent)?;
+            let mut closed = Vec::new();
+            for (value, id) in known.iter().zip(&ids) {
+                let count = diesel::sql_query(dialect.query(
+                    "SELECT CAST(count(*) AS BIGINT) AS n FROM conversation_inputs WHERE conversation_id=? AND id=?",
+                ))
+                .bind::<IdentitySql, _>(conversation)
+                .bind::<IdentitySql, _>(*id)
+                .get_result::<Count>(connection)
+                .await?;
+                if count.n == 0 {
+                    closed.push(value.clone());
+                }
+            }
+            Ok(closed)
+        })
+    }
     pub async fn conversation_inputs(
         &self,
         actor: &SecretDigest,

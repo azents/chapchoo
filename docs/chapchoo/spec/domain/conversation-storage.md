@@ -54,18 +54,21 @@ input admission creates the conversation and association in the same transaction
 as its retained input. A connected desired-running Computer can instead prepare
 the selected empty conversation before the first input through the sealed
 [startup boundary](#connection-time-preparation). The exact submitted text is preserved. Request
-recovery compares its original source target and text; changed input under that
-request conflicts. Receipt recovery never dispatches native work or establishes
-native acceptance. Missing/replaced evidence does not prove non-delivery.
+recovery compares its original source target and text while the pending input
+exists; changed input under that request conflicts. Receipt recovery never
+dispatches native work or establishes native acceptance. Missing/replaced
+evidence does not prove non-delivery or authorize automatic resend.
 
 `NOT_STARTED`, `LOADING` and `READY` source states have distinct admission rules.
 A not-started input can bind to initial setup; a bound input retains its exact
-snapshot target. The first not-started input may join a startup-owned loading
-source or its matching ready source, without changing the receipt's original
-target. A different snapshot or a second not-started input cannot use that
-exception. Other loading sources reject new input, while an already accepted
-receipt may still be read. A prior target cannot be silently reinterpreted against a later
-source after its old receipt has been removed.
+snapshot target. When no input is currently pending, a not-started input may join
+a startup-owned loading source or its matching ready source without changing
+its original target. Another concurrent pending not-started input cannot use
+that exception. Other loading sources reject new input, while an already
+accepted receipt may still be read. After consumed-input removal this is not
+a historical first-request counter: another explicit submission can be admitted,
+but setup still uses the exact independently retained source and cannot grant a
+fresh native context from input absence.
 
 Native forwarding has a separate durable boundary. The Store revalidates private
 owner admission and the exact resolved Connector route without requiring its
@@ -73,8 +76,24 @@ bearer secret. One transaction records possible forwarding and returns a single
 execution/session-bound grant. Concurrent or later attempts recover existing
 evidence rather than another grant. A lost waiter or server restart cannot turn
 that committed fact into known non-delivery. Native results retain an actual
-inserted message ID, steering without an invented ID, or failure; changed results
-conflict. Current authenticated source admission fences result publication.
+inserted message ID, steering without an invented ID, or failure. Current
+authenticated source admission fences result publication. Inserted or Steered
+ends the pending input: the transaction deletes its original content, acceptance
+and dependent delivery/preparation rows. Actual native session/captured history
+remains independent. Failed and unresolved operations remain pending facts.
+
+An authenticated same-source successful report for an already absent operation
+acknowledges closure, not reconstructed delivery success. This permits the
+Connector to release a known native result after a lost report ACK; subsequent
+body pulls and forwarding cannot use a removed input. There is no completed-input
+tombstone, counter or archive. Consequently an arbitrary explicit old owner
+submission is no longer recoverable forever and may be a new operation if current
+admission allows it. Missing results never automatically resubmit.
+
+Migration 22 removes legacy successful rows only when their exact native source
+binding independently preserves session authority. Failed, unresolved and
+differently bound historical data is preserved. Its data-only downgrade cannot
+resurrect consumed content; older preserving migration guards still apply.
 
 ### Internal input owner and setup facts
 
@@ -100,12 +119,16 @@ Only complete, valid UTF-8 enters product admission. Partial uploads have a
 retains those permits through the input owner's handoff. Duplicate pieces must
 match retained bytes and identity. Losing temporary upload state does not accept
 partial text or grant native replay. Clients query the small acceptance reference
-after uncertainty; complete receipt recovery still cannot dispatch twice.
+after uncertainty; recovery of an existing pending receipt cannot dispatch twice.
 
 Input-result reads select acceptance metadata without loading the submitted body.
 Source-bound input discovery uses accepted-time/request keyset pages, including
 the exact not-started boundary. Separate bounded body reads retain complete
 original bytes and revalidate the same private source on every continuation.
+Separate exact-presence hints accept at most 25 operation IDs and return only
+those absent under that private source. A missing item in a keyset page is not
+absence evidence. A concurrent successful pickup can end a listed body before
+its next read; the owner observes actual absence instead of inventing uncertainty.
 First native binding preserves the initial input's original not-started target.
 Local processing ownership and durable native delivery observations are separate:
 absence of either is missing evidence, not proof of non-delivery.

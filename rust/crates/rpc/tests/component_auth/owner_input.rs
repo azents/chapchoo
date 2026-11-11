@@ -121,6 +121,7 @@ pub(super) async fn exercise(
                 scope: Some(scope.clone()),
                 before: None,
                 limit: 25,
+                known_ids: vec![],
             },
             context.user_key,
         )?)

@@ -65,11 +65,19 @@ message OwnerInputResultRequest {
 // Read-only discovery binds the exact current source, including not-started input.
 message OwnerInputScope { string agent_id = 1; string conversation_id = 2; InputTarget target = 3; }
 message InputAnchor { int64 accepted_at = 1; string request_id = 2; }
-message OwnerInputsRequest { OwnerInputScope scope = 1; InputAnchor before = 2; uint32 limit = 3; }
+message OwnerInputsRequest {
+  OwnerInputScope scope = 1; InputAnchor before = 2; uint32 limit = 3;
+  // Exact bounded existence checks; omission from a history page is not closure.
+  repeated string known_ids = 4;
+}
 message RetainedInput { InputAcceptance acceptance = 1; int64 total_bytes = 2; bool deleted = 3; }
 message OwnerDeleteInput { OwnerInputScope scope = 1; string request_id = 2; }
 // `latest` is the newest non-deleted acceptance for this exact source, independent of `before`.
-message RetainedInputs { repeated RetainedInput inputs = 1; InputAcceptance latest = 2; }
+message RetainedInputs {
+  repeated RetainedInput inputs = 1; InputAcceptance latest = 2;
+  // No pending row remains for these requested IDs. This is not delivery evidence.
+  repeated string closed_ids = 3;
+}
 message OwnerInputRead { OwnerInputScope scope = 1; string request_id = 2; uint32 offset = 3; uint32 length = 4; }
 enum InputOwnership {
   INPUT_OWNERSHIP_UNSPECIFIED = 0; INPUT_OWNERSHIP_PROCESSING_HERE = 1;

@@ -194,6 +194,7 @@ export interface ConversationRegion {
   renderedAt: number;
   refill?: boolean;
   inputs?: RetainedInputView[];
+  closedInputs?: string[];
   latestInput?: Pick<
     RetainedInputView,
     "requestId" | "observation" | "preparation"
@@ -206,6 +207,7 @@ export interface ConversationRegion {
   };
 }
 export interface LocalConversationInput {
+  id?: string;
   text: string;
   observation: InputObservation | "sending";
   requestId: string;

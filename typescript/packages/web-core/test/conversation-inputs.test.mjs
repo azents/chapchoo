@@ -4,6 +4,7 @@ import { readConversationRegion } from "../dist/conversation.js";
 import {
   markConversationInputDeleted,
   mergeConversationRegion,
+  reconcileLocalConversationInputs,
 } from "../dist/conversation-state.js";
 function fixture({ started = true, known = false } = {}) {
   const text = `  Original 🙂 ${"가".repeat(22000)}\n `;
@@ -79,6 +80,76 @@ test("a not-started accepted input remains completely readable with truthful del
     Buffer.byteLength(f.text),
   );
 });
+test("exact closure removes a consumed cached input without mistaking pagination for deletion", async () => {
+  const f = fixture();
+  const previous = await readConversationRegion(f.api, { agentId: "agent" });
+  f.api.inputs = async (query) => {
+    assert.deepEqual(query.knownIds, [f.acceptance.id]);
+    return { inputs: [], closedIds: [f.acceptance.id] };
+  };
+  const incoming = await readConversationRegion(f.api, {
+    agentId: "agent",
+    expectedSnapshotId: "snapshot",
+    expectedConversationId: "conversation",
+    checkInputs: [f.acceptance.id],
+  });
+  assert.deepEqual(incoming.closedInputs, [f.acceptance.id]);
+  assert.deepEqual(mergeConversationRegion(previous, incoming).inputs, []);
+  assert.equal(
+    mergeConversationRegion(previous, { ...incoming, closedInputs: [] }).inputs
+      .length,
+    1,
+  );
+  const local = [
+    {
+      id: f.acceptance.id,
+      requestId: f.acceptance.requestId,
+      text: "accepted before the first poll",
+      observation: "accepted",
+    },
+  ];
+  assert.deepEqual(
+    reconcileLocalConversationInputs(local, [], incoming.closedInputs),
+    [],
+  );
+  assert.equal(reconcileLocalConversationInputs(local, [], []), local);
+});
+
+test("pickup between listing and status read closes the input rather than fabricating uncertainty", async () => {
+  const f = fixture();
+  f.api.inputResult = async () => ({});
+  f.api.readInput = async () => {
+    throw new Error("Consumed text must not be read");
+  };
+  const result = await readConversationRegion(f.api, { agentId: "agent" });
+  assert.deepEqual(result.inputs, []);
+  assert.deepEqual(result.closedInputs, [f.acceptance.id]);
+  assert.equal(result.latestInput, undefined);
+});
+
+test("pickup during byte transfer is confirmed by an exact read; other failures remain failures", async () => {
+  for (const consumed of [true, false]) {
+    const f = fixture();
+    let transferred = false;
+    f.api.readInput = async () => {
+      transferred = true;
+      throw new Error("Transfer interrupted");
+    };
+    f.api.inputResult = async () =>
+      transferred && consumed ? {} : { acceptance: f.acceptance, ownership: 2 };
+    if (consumed) {
+      const result = await readConversationRegion(f.api, { agentId: "agent" });
+      assert.deepEqual(result.inputs, []);
+      assert.deepEqual(result.closedInputs, [f.acceptance.id]);
+    } else {
+      await assert.rejects(
+        readConversationRegion(f.api, { agentId: "agent" }),
+        /Transfer interrupted/,
+      );
+    }
+  }
+});
+
 test("first native binding retains the original acceptance target without retargeting a mutation", async () => {
   const f = fixture();
   const result = await readConversationRegion(f.api, { agentId: "agent" });
@@ -220,7 +291,12 @@ test("Stop result observation is read-only and limited to its exact source and c
 test("latest startup diagnosis stays current while browsing older failed inputs and survives reentry", async () => {
   const f = fixture({ started: false, known: true });
   f.api.inputResult = async ({ requestId }) => ({
-    acceptance: { ...f.acceptance, requestId },
+    acceptance: {
+      ...f.acceptance,
+      requestId,
+      id: requestId === "latest" ? "latest-operation" : f.acceptance.id,
+      acceptedAt: requestId === "latest" ? 40n : f.acceptance.acceptedAt,
+    },
     ownership: 1,
     preparation:
       requestId === "latest" ? { possibleForwarding: {} } : { failed: 3 },
@@ -255,6 +331,29 @@ test("latest startup diagnosis stays current while browsing older failed inputs 
   assert.equal(older.latestInput.requestId, "latest");
   assert.equal(older.inputs[0].preparation.type, "failed");
 });
+for (const when of ["before-status", "during-body"]) {
+  test(`an explicitly reused consumed Request ID cannot replace an old input's body: ${when}`, async () => {
+    const f = fixture();
+    let reused = when === "before-status";
+    const originalRead = f.api.readInput;
+    f.api.readInput = async (input) => {
+      const result = await originalRead(input);
+      reused = true;
+      return result;
+    };
+    f.api.inputResult = async () => ({
+      acceptance: reused
+        ? { ...f.acceptance, id: "new-operation", acceptedAt: 30n }
+        : f.acceptance,
+      ownership: 1,
+    });
+    const region = await readConversationRegion(f.api, { agentId: "agent" });
+    assert.deepEqual(region.inputs, []);
+    assert.deepEqual(region.closedInputs, [f.acceptance.id]);
+    assert.equal(region.latestInput, undefined);
+  });
+}
+
 test("a newer deleted failure does not hide an earlier preparing input", async () => {
   const f = fixture({ started: false, known: true });
   const live = {

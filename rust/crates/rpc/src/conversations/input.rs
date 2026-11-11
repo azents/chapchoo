@@ -125,7 +125,7 @@ pub(super) async fn result(
     else {
         return Ok(Response::new(wire::OwnerInputStatus::default()));
     };
-    let preparation = service
+    let preparation = match service
         .conversation
         .setup_facts(
             &actor,
@@ -137,34 +137,58 @@ pub(super) async fn result(
             now()?,
         )
         .await
-        .map_err(status)?
-        .map(|facts| {
-            use chapchoo_service::{
-                ConversationPreparationFailure as Failure,
-                ConversationPreparationOutcome as Outcome, ConversationPreparationState as State,
-            };
-            wire::InputPreparation {
-                requested_supply: Some(wire_supply(facts.requested_supply)),
-                observation: Some(match facts.state {
-                    State::PossibleForwarding => {
-                        wire::input_preparation::Observation::PossibleForwarding(())
-                    }
-                    State::Known(Outcome::SessionReady(target)) => {
-                        wire::input_preparation::Observation::SessionReady(native(&target))
-                    }
-                    State::Known(Outcome::Failed(failure)) => {
-                        wire::input_preparation::Observation::Failed(match failure {
-                            Failure::NotAdmitted => wire::SetupFailure::NotAdmitted,
-                            Failure::BeforeNativeLaunch => wire::SetupFailure::BeforeNativeLaunch,
-                            Failure::NativeRejected => wire::SetupFailure::NativeRejected,
-                            Failure::SourceUnavailable => wire::SetupFailure::SourceUnavailable,
-                            Failure::RetirementUnknown => wire::SetupFailure::RetirementUnknown,
-                        }
-                            as i32)
-                    }
-                }),
+    {
+        Ok(facts) => facts,
+        Err(error) if error.reason() == chapchoo_service::DomainReason::NotFound => {
+            // Native pickup may remove the input after its status was read.
+            // Preserve other NotFound causes unless this exact operation ended.
+            let current = service
+                .inputs
+                .input(
+                    &actor,
+                    &query.agent_id,
+                    &query.conversation_id,
+                    &query.request_id,
+                    AcceptanceTime::System,
+                )
+                .await
+                .map_err(status)?;
+            if current
+                .as_ref()
+                .is_none_or(|current| current.acceptance.id != value.acceptance.id)
+            {
+                return Ok(Response::new(wire::OwnerInputStatus::default()));
             }
-        });
+            return Err(status(error));
+        }
+        Err(error) => return Err(status(error)),
+    };
+    let preparation = preparation.map(|facts| {
+        use chapchoo_service::{
+            ConversationPreparationFailure as Failure, ConversationPreparationOutcome as Outcome,
+            ConversationPreparationState as State,
+        };
+        wire::InputPreparation {
+            requested_supply: Some(wire_supply(facts.requested_supply)),
+            observation: Some(match facts.state {
+                State::PossibleForwarding => {
+                    wire::input_preparation::Observation::PossibleForwarding(())
+                }
+                State::Known(Outcome::SessionReady(target)) => {
+                    wire::input_preparation::Observation::SessionReady(native(&target))
+                }
+                State::Known(Outcome::Failed(failure)) => {
+                    wire::input_preparation::Observation::Failed(match failure {
+                        Failure::NotAdmitted => wire::SetupFailure::NotAdmitted,
+                        Failure::BeforeNativeLaunch => wire::SetupFailure::BeforeNativeLaunch,
+                        Failure::NativeRejected => wire::SetupFailure::NativeRejected,
+                        Failure::SourceUnavailable => wire::SetupFailure::SourceUnavailable,
+                        Failure::RetirementUnknown => wire::SetupFailure::RetirementUnknown,
+                    } as i32)
+                }
+            }),
+        }
+    });
     let delivery = value.delivery.map(|delivery| wire::InputDelivery {
         observation: Some(match delivery {
             ConversationInputDelivery::PossibleForwarding => {
@@ -248,6 +272,20 @@ pub(super) async fn list(
             })
         });
     Ok(Response::new(wire::RetainedInputs {
+        closed_ids: service
+            .conversation
+            .closed_inputs(
+                &actor,
+                &chapchoo_service::ConversationInputScope {
+                    agent_id: &scope.agent_id,
+                    conversation_id: &scope.conversation_id,
+                    target: &target,
+                },
+                &value.known_ids,
+                now()?,
+            )
+            .await
+            .map_err(status)?,
         latest,
         inputs: values
             .into_iter()

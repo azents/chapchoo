@@ -2,7 +2,7 @@ use super::*;
 use chapchoo_domain::{ConversationTarget, ConversationText, NativeConversationId, SnapshotId};
 use chapchoo_persistence::{
     AcceptConversationInput, ConversationDeliveryTarget, ConversationForwardingAdmission,
-    ConversationInputDelivery, ConversationInputOutcome, ConversationOperationForwarding,
+    ConversationOperationForwarding,
 };
 use chapchoo_protocol::conversations::{
     self as c, connector_capture_client::ConnectorCaptureClient,
@@ -113,38 +113,48 @@ pub(super) async fn exercise(
     client
         .report_input(authenticated(report, context.key)?)
         .await?;
-    assert!(matches!(
+    assert!(
         context
             .store
-            .conversation_input_delivery(
+            .conversation_input_reference(
                 context.owner,
                 &context.agent.id,
                 conversation,
-                &receipt.id,
+                &receipt.request_id,
                 now
             )
-            .await?,
-        Some(ConversationInputDelivery::Known(
-            ConversationInputOutcome::Steered
-        ))
-    ));
+            .await?
+            .is_none()
+    );
+    // After the pending operation is gone, another successful report only
+    // closes the Connector's report owner. No delivery receipt is recreated.
+    client
+        .report_input(authenticated(
+            c::InputReport {
+                source: Some(context.source.clone()),
+                command: Some(command.clone()),
+                result: Some(c::input_report::Result::InsertedNativeMessageId(
+                    "native-message".into(),
+                )),
+            },
+            context.key,
+        )?)
+        .await?;
     assert_eq!(
         client
-            .report_input(authenticated(
-                c::InputReport {
+            .pull_input(authenticated(
+                c::InputChunkRequest {
                     source: Some(context.source.clone()),
                     command: Some(command),
-                    result: Some(c::input_report::Result::InsertedNativeMessageId(
-                        "invented-id".into()
-                    ))
+                    offset: 0,
                 },
                 context.key
             )?)
             .await
             .err()
-            .ok_or("Changed native outcome accepted")?
+            .ok_or("Consumed input body remained readable")?
             .code(),
-        Code::AlreadyExists
+        Code::FailedPrecondition
     );
     let setup_input = context
         .store

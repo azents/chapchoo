@@ -30,7 +30,7 @@
 .authorPortrait { width: 1.5rem; height: 1.5rem; flex-shrink: 0; }
 .userBubble .answer { margin: 0; }
 .userAuthor { margin-block-end: calc(var(--mantine-spacing-xs) / 2); }
-.inputStatus { margin-block-start: calc(var(--mantine-spacing-xs) / 2); }
+.pendingInput { opacity: 0.6; }
 .markdown { min-width: 0; overflow-wrap: anywhere; }
 .markdown a,
 .markdown a:visited {
