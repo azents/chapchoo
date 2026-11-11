@@ -65,7 +65,11 @@ readable and input is read-only.
 Start uses backend eligibility; visible authenticated views automatically observe
 Computer state at the existing bounded interval (five seconds while pending,
 fifteen seconds when settled), with focus refresh and no full-page reload.
-Read failures retain stale feedback and automatic observation rather than a
+Temporary read/connection gaps retain the known same-source internal state with
+only a spinner, rather than replacing it with a checking caption. Known
+off/start/stop/restart work has priority, and replacement is presented as restart.
+An initial missing internal state is not invented. Presentation retention does
+not restore effect admission. Automatic observation continues without a
 manual Refresh control in the chat status bubble. The activity sheet retains
 existing control/detail functions. Read-only guidance appears in the disabled
 composer placeholder, not a second line in the status bubble. Stop/restart retain captured-request consent.

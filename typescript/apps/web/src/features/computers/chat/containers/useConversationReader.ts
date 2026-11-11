@@ -10,6 +10,7 @@ import type {
   ConversationAnchor,
   ConversationRegion,
   InputHistoryAnchor,
+  LocalConversationInput,
 } from "@chapchoo/web-core/conversation-types";
 
 export function useConversationReader(
@@ -20,6 +21,7 @@ export function useConversationReader(
     requestId: string;
     snapshotId: string;
   },
+  pendingInputs: LocalConversationInput[] = [],
 ): {
   region: ConversationRegion;
   read: "ready" | "loading" | "error";
@@ -35,6 +37,11 @@ export function useConversationReader(
 } {
   const utils = trpc.useUtils();
   const stopRef = useRef(stopLookup);
+  const pendingRef = useRef(pendingInputs);
+  const checkIndex = useRef(0);
+  useEffect(() => {
+    pendingRef.current = pendingInputs;
+  }, [pendingInputs]);
   useEffect(() => {
     stopRef.current = stopLookup;
   }, [stopLookup]);
@@ -81,6 +88,23 @@ export function useConversationReader(
       const inputAnchor = inputBefore.current;
       const snapshot = current.current.header.source?.snapshotId;
       try {
+        const known = (current.current.inputs ?? [])
+          .filter((item) => !item.deleted)
+          .map((item) => item.id);
+        const offset = checkIndex.current % Math.max(known.length, 1);
+        const rotating = [...known.slice(offset), ...known.slice(0, offset)];
+        checkIndex.current = offset + 25;
+        const checkInputs = [
+          ...new Set([
+            ...pendingRef.current
+              .filter(
+                (item) =>
+                  item.conversationId === current.current.header.conversationId,
+              )
+              .flatMap((item) => (item.id ? [item.id] : [])),
+            ...rotating,
+          ]),
+        ].slice(0, 25);
         const incoming = await utils.conversations.region.fetch(
           {
             agentId: initial.header.agentId,
@@ -106,6 +130,7 @@ export function useConversationReader(
               .map((input) => input.id),
             expectedSnapshotId: snapshot,
             expectedConversationId: current.current.header.conversationId,
+            checkInputs,
             stop: stopRef.current,
             known: current.current.records
               .filter(

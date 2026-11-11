@@ -335,6 +335,7 @@ export async function readConversationRegion(
     known?: { key: string; updatedOrdinal: bigint }[];
     inputBefore?: Wire.InputAnchor;
     knownInputs?: string[];
+    checkInputs?: string[];
     stop?: { requestId: string; conversationId: string; snapshotId: string };
   },
 ): Promise<ConversationRegion> {
@@ -364,34 +365,67 @@ export async function readConversationRegion(
         scope: inputScope,
         before: sameSource ? input.inputBefore : undefined,
         limit: 24,
+        knownIds: sameSource ? (input.checkInputs ?? []) : [],
       })
-    : { inputs: [], latest: undefined };
+    : { inputs: [], latest: undefined, closedIds: [] };
+  const closedInputs = new Set(retainedPage.closedIds);
   const retained = retainedPage.inputs;
   const inputs: NonNullable<ConversationRegion["inputs"]> = [];
   for (const item of retained) {
     if (!item.acceptance || !inputScope)
       throw new Error("Retained input is invalid");
     const receipt = item.acceptance;
-    const text =
-      item.deleted || (sameSource && input.knownInputs?.includes(receipt.id))
-        ? undefined
-        : new TextDecoder("utf-8", { fatal: true }).decode(
-            await readConversationBytes(
-              (offset) =>
-                api.readInput({
-                  scope: inputScope,
-                  requestId: receipt.requestId,
-                  offset,
-                  length: pieceBytes,
-                }),
-              item.totalBytes,
-            ),
-          );
-    const status = await api.inputResult({
+    let status = await api.inputResult({
       agentId: input.agentId,
       conversationId: receipt.conversationId,
       requestId: receipt.requestId,
     });
+    if (status.acceptance?.id !== receipt.id) {
+      closedInputs.add(receipt.id);
+      continue;
+    }
+    let text: string | undefined;
+    if (
+      !item.deleted &&
+      !(sameSource && input.knownInputs?.includes(receipt.id))
+    ) {
+      try {
+        text = new TextDecoder("utf-8", { fatal: true }).decode(
+          await readConversationBytes(
+            (offset) =>
+              api.readInput({
+                scope: inputScope,
+                requestId: receipt.requestId,
+                offset,
+                length: pieceBytes,
+              }),
+            item.totalBytes,
+          ),
+        );
+        // A consumed Request ID can be explicitly submitted again. Do not
+        // attach that new operation's body to the old list reference.
+        status = await api.inputResult({
+          agentId: input.agentId,
+          conversationId: receipt.conversationId,
+          requestId: receipt.requestId,
+        });
+        if (status.acceptance?.id !== receipt.id) {
+          closedInputs.add(receipt.id);
+          continue;
+        }
+      } catch (error) {
+        const current = await api.inputResult({
+          agentId: input.agentId,
+          conversationId: receipt.conversationId,
+          requestId: receipt.requestId,
+        });
+        if (current.acceptance?.id !== receipt.id) {
+          closedInputs.add(receipt.id);
+          continue;
+        }
+        throw error;
+      }
+    }
     inputs.push({
       id: receipt.id,
       conversationId: receipt.conversationId,
@@ -422,13 +456,15 @@ export async function readConversationRegion(
       conversationId: newest.conversationId,
       requestId: newest.requestId,
     });
-    latestInput = status.deleted
-      ? undefined
-      : {
-          requestId: newest.requestId,
-          observation: inputObservation(status),
-          preparation: inputPreparation(status),
-        };
+    if (status.acceptance?.id !== newest.id) closedInputs.add(newest.id);
+    latestInput =
+      status.deleted || status.acceptance?.id !== newest.id
+        ? undefined
+        : {
+            requestId: newest.requestId,
+            observation: inputObservation(status),
+            preparation: inputPreparation(status),
+          };
   }
   const inputLast = retained.at(-1)?.acceptance;
   const inputOlder =
@@ -466,6 +502,7 @@ export async function readConversationRegion(
       header: final,
       records: [],
       inputs: inputs.reverse(),
+      closedInputs: [...closedInputs],
       latestInput,
       inputOlder,
       renderedAt: Date.now(),
@@ -528,6 +565,7 @@ export async function readConversationRegion(
     header: final,
     records: records.reverse(),
     inputs: inputs.reverse(),
+    closedInputs: [...closedInputs],
     latestInput,
     inputOlder,
     latestPlan,

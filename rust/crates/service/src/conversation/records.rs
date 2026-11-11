@@ -6,6 +6,18 @@ use chapchoo_persistence::{
     ConversationRecordMetadata, ConversationRegionRead, EventPayloadChunk,
 };
 impl ConversationService {
+    pub async fn closed_inputs(
+        &self,
+        actor: &SecretDigest,
+        scope: &chapchoo_persistence::ConversationInputScope<'_>,
+        known: &[String],
+        now: i64,
+    ) -> Result<Vec<String>, ServiceError> {
+        Ok(self
+            .store
+            .closed_conversation_inputs(actor, scope, known, now)
+            .await?)
+    }
     pub async fn latest_plan(
         &self,
         actor: &SecretDigest,

@@ -6,6 +6,7 @@ import { AgentNavigation } from "@/shared/navigation/AgentNavigation";
 import { useComputerActions } from "../../containers/useComputerActions";
 import { creationCopy } from "../../creationCopy";
 import { computerDetailCopy } from "../../detailCopy";
+import { chatStatus } from "../chatStatus";
 import { useChatFocus } from "../containers/useChatFocus";
 import { useFloatingChat } from "../containers/useFloatingChat";
 import { useHistoryScroll } from "../containers/useHistoryScroll";
@@ -61,6 +62,12 @@ type FixtureProps = {
     | "review"
     | "unread"
     | "idle"
+    | "pendingInput"
+    | "inputRecorded"
+    | "computerStarting"
+    | "computerStopping"
+    | "computerRestarting"
+    | "statusRefreshing"
     | "empty";
   locale: string;
   name: string;
@@ -123,14 +130,33 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
     paletteKey: "teal",
     authentication: null,
     computer: {
-      operation: "start",
-      intent: "running",
+      operation:
+        mode === "computerRestarting"
+          ? "restart"
+          : mode === "computerStopping"
+            ? "stop"
+            : "start",
+      intent: mode === "computerStopping" ? "stopped" : "running",
       requestId: "request",
-      power: stopped ? "stopped" : mode === "unknown" ? "unknown" : "running",
+      power: stopped
+        ? "stopped"
+        : mode === "unknown" ||
+            mode.startsWith("computer") ||
+            mode === "statusRefreshing"
+          ? "unknown"
+          : "running",
       lastKnownPower: "running",
-      phase: "completed",
+      phase:
+        mode === "computerStarting"
+          ? "accepted"
+          : mode === "computerStopping" || mode === "computerRestarting"
+            ? "retiring"
+            : "completed",
       management: "connected",
-      connector: mode === "disconnected" ? "disconnected" : "connected",
+      connector:
+        mode === "disconnected" || mode === "statusRefreshing"
+          ? "disconnected"
+          : "connected",
       saved: "verified",
       observedAt: 1793854800000,
       actions: [
@@ -162,33 +188,65 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
   };
   const [input, setInput] = useState("");
   const [records, setRecords] = useState<ConversationRecord[]>(
-    mode === "review"
-      ? conversationReviewRecords
-      : mode === "empty" || mode === "idle"
-        ? []
-        : [
-            fixtureMessage(
-              "user",
-              "user-one",
-              "  Plan a quiet afternoon in Seoul.  ",
-              1n,
-            ),
-            fixtureMessage(
-              "assistant",
-              "assistant-one",
-              "Let's leave some room to explore.\n\n**First**, a walk through the park.\n\n" +
-                "A complete retained paragraph for the reading-position fixture.\n\n".repeat(
-                  24,
+    [
+      "pendingInput",
+      "inputRecorded",
+      "computerStarting",
+      "computerStopping",
+      "computerRestarting",
+      "statusRefreshing",
+    ].includes(mode)
+      ? [
+          fixtureMessage(
+            "user",
+            "visual-user",
+            "안녕, 지금 대화할 수 있어?",
+            1n,
+          ),
+          fixtureMessage(
+            "assistant",
+            "visual-assistant",
+            "네, 준비됐어요. 무엇을 도와드릴까요?",
+            2n,
+          ),
+          ...(mode === "inputRecorded"
+            ? [
+                fixtureMessage(
+                  "user",
+                  "visual-recorded",
+                  "두 저장소의 작업 현황을 정리해줘.",
+                  3n,
                 ),
-              2n,
-            ),
-            fixtureMessage(
-              "assistant",
-              "assistant-two",
-              "I am checking the opening hours.",
-              3n,
-            ),
-          ],
+              ]
+            : []),
+        ]
+      : mode === "review"
+        ? conversationReviewRecords
+        : mode === "empty" || mode === "idle"
+          ? []
+          : [
+              fixtureMessage(
+                "user",
+                "user-one",
+                "  Plan a quiet afternoon in Seoul.  ",
+                1n,
+              ),
+              fixtureMessage(
+                "assistant",
+                "assistant-one",
+                "Let's leave some room to explore.\n\n**First**, a walk through the park.\n\n" +
+                  "A complete retained paragraph for the reading-position fixture.\n\n".repeat(
+                    24,
+                  ),
+                2n,
+              ),
+              fixtureMessage(
+                "assistant",
+                "assistant-two",
+                "I am checking the opening hours.",
+                3n,
+              ),
+            ],
   );
   const [opened, setOpened] = useState(false);
   const [historyOpened, setHistoryOpened] = useState(false);
@@ -215,6 +273,8 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
   const copy = chatCopy(locale);
   const c = computerCopy(locale);
   const writable =
+    mode === "pendingInput" ||
+    mode === "inputRecorded" ||
     mode === "unread" ||
     mode === "connected" ||
     mode === "review" ||
@@ -329,6 +389,16 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
           : [],
       )
     : activity;
+  const presentation = chatStatus({
+    computer: agent.computer,
+    activity: mode === "readerError" ? "unavailable" : displayedActivity,
+    foreground: startup ? startupRegion.header.foreground : activity,
+    read: mode === "readerError" ? "error" : "ready",
+    stale,
+    error: product.error,
+    computerCopy: c,
+    activityLabel: (value) => activityStatus(copy, value),
+  });
   return (
     <>
       <Chat
@@ -402,23 +472,32 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
               },
           read: mode === "readerError" ? "error" : "ready",
           readingOlder: false,
-          inputs: retrySubmitted
-            ? [
-                {
-                  requestId: "explicit-new-retry",
-                  text: "안녕하세요",
-                  observation: "sending",
-                },
-              ]
-            : mode === "pendingOrder"
+          inputs:
+            mode === "pendingInput"
               ? [
                   {
-                    requestId: "new-local",
-                    text: "새 메시지",
-                    observation: "sending",
+                    requestId: "visual-pending",
+                    text: "두 저장소의 작업 현황을 정리해줘.",
+                    observation: "accepted",
                   },
                 ]
-              : [],
+              : retrySubmitted
+                ? [
+                    {
+                      requestId: "explicit-new-retry",
+                      text: "안녕하세요",
+                      observation: "sending",
+                    },
+                  ]
+                : mode === "pendingOrder"
+                  ? [
+                      {
+                        requestId: "new-local",
+                        text: "새 메시지",
+                        observation: "sending",
+                      },
+                    ]
+                  : [],
           stop: workStop,
           inputDeletable: true,
           onRetryInput: () => setRetrySubmitted(true),
@@ -441,20 +520,8 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
         writable={writable}
         stoppable={writable || mode === "sending" || mode === "readerError"}
         sendable={writable && Boolean(input.trim())}
-        status={
-          product.error ??
-          (stale
-            ? c.stale
-            : mode === "stopped"
-              ? c.stopped
-              : mode === "disconnected"
-                ? c.disconnected
-                : mode === "unknown"
-                  ? c.unknown
-                  : mode === "readerError"
-                    ? copy.error
-                    : activityStatus(copy, displayedActivity))
-        }
+        status={presentation.label}
+        statusLoading={presentation.refreshing}
         opened={opened}
         historyOpened={historyOpened}
         historyContent={
@@ -586,6 +653,14 @@ export const Stale: Story = { args: { mode: "stale" } };
 export const StaleStopped: Story = { args: { mode: "staleStopped" } };
 export const SignedOut: Story = { args: { mode: "signedOut" } };
 export const Empty: Story = { args: { mode: "empty" } };
+export const PendingInput: Story = { args: { mode: "pendingInput" } };
+export const InputRecorded: Story = { args: { mode: "inputRecorded" } };
+export const ComputerStarting: Story = { args: { mode: "computerStarting" } };
+export const ComputerStopping: Story = { args: { mode: "computerStopping" } };
+export const ComputerRestarting: Story = {
+  args: { mode: "computerRestarting" },
+};
+export const StatusRefreshing: Story = { args: { mode: "statusRefreshing" } };
 export const NativeFailed: Story = { args: { mode: "nativeFailed" } };
 export const PendingOrder: Story = { args: { mode: "pendingOrder" } };
 export const AuthenticationRequired: Story = {

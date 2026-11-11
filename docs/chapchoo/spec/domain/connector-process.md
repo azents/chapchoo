@@ -95,7 +95,10 @@ publication, the command-checking Connector loop
 enqueues release of only the matching known native result. A background report
 task cannot release it while an earlier command check is still awaiting its
 response. The lease remains held through native release acknowledgement; later
-commands are fenced by the server's settled operation checks. An uncertain or
+commands are fenced by the server's settled operation checks or, for a consumed
+input, the absence of any body/forwarding grant. A repeated successful input
+report after a lost ACK closes an already absent pending operation under current
+source authority; it does not recreate a receipt or assert another effect. An uncertain or
 different native result is never released. A refused report does not authorize
 native-fact release: a transport status alone is not proof of irreversible source
 fencing. This recycles acknowledged capacity without

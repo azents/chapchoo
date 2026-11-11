@@ -112,6 +112,63 @@ impl Report {
 mod tests {
     use super::*;
     #[tokio::test]
+    async fn input_report_retry_holds_invocation_until_ordered_closure() -> Result<(), AppError> {
+        let temporary = tempfile::tempdir()?;
+        let native = chapchoo_harness::NativeOwner::new(chapchoo_harness::NativeStorage::open(
+            temporary.path(),
+        )?)?;
+        let mut operations = Operations::new(native.handle());
+        let id = "consumed-input";
+        let permit = operations
+            .admit(leases::Kind::Input, id)?
+            .ok_or("Missing permit")?;
+        let report = Report::Input(c::InputReport {
+            source: None,
+            command: Some(c::InputCommand {
+                agent_id: "agent".into(),
+                conversation_id: "conversation".into(),
+                operation_id: id.into(),
+                target: Some(c::NativeTarget {
+                    snapshot_id: "source".into(),
+                    native_session_id: "native".into(),
+                }),
+            }),
+            result: Some(c::input_report::Result::Steered(())),
+        });
+        let mut publication = Publication::default();
+        publication.record(
+            (report, permit),
+            Err(tonic::Status::unavailable("Lost ACK")),
+        );
+        assert!(publication.settled.is_empty());
+        assert!(operations.admit(leases::Kind::Input, id)?.is_none());
+        let retry = publication.failed.pop().ok_or("Missing report retry")?;
+        publication.record(retry, Ok(()));
+        operations.settled.extend(publication.settled);
+        assert!(operations.admit(leases::Kind::Input, id)?.is_none());
+        // Only the command-checking loop can order registry release. An
+        // already absent native fact is also an idempotent closure.
+        operations.publish(
+            tonic::transport::Endpoint::from_static("http://127.0.0.1:1").connect_lazy(),
+            c::CaptureSource::default(),
+            &BearerSecret::generate()?,
+        )?;
+        assert!(operations.admit(leases::Kind::Input, id)?.is_none());
+        assert!(
+            operations
+                .releasing
+                .join_next()
+                .await
+                .ok_or("Missing release")??
+                .is_none()
+        );
+        assert!(operations.admit(leases::Kind::Input, id)?.is_some());
+        operations.finish().await?;
+        native.finish().await?;
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn refused_publication_never_releases_known_native_facts() -> Result<(), AppError> {
         let temporary = tempfile::tempdir()?;
         let native = chapchoo_harness::NativeOwner::new(chapchoo_harness::NativeStorage::open(

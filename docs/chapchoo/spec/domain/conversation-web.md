@@ -70,15 +70,23 @@ necessary questions or permission input. Tool, reasoning, plan, terminal, notice
 and state records belong to the recent preview and full history, not duplicate
 transcript disclosures. A confirmed native user message is the visible message
 in both the transcript and full history; Chat does not repeat a separate
-delivery receipt beside it. An input that has not appeared as that native
-message still shows its delivery status.
+delivery receipt beside it. Pending input disappears at actual native
+Inserted/Steered acceptance independently of when native history appears.
+There is no ID association, text matching or message morphing between them;
+a short natural display gap is allowed.
 The down arrow signals new content that arrived while the owner was reading
 above latest, rather than a detached position alone. Reaching latest or selecting
 the arrow acknowledges it.
 
 The status distinguishes a conversation that has not started, missing saved AI
 authentication, startup in progress, reported startup failure, delivery failure,
-unconfirmed delivery and failure to refresh conversation data. Missing native
+unconfirmed delivery. Known Computer off/start/stop/restart states take
+precedence; replacement is restart to the user. During temporary read errors,
+stale reads, unknown current power or Connector disconnection, the same-source
+retained native foreground remains visible with only a spinner. Cold absence
+has an empty label plus spinner, not an invented internal state or generic
+checking caption. Retained presentation never restores Send, answer or Stop
+authority. Missing native
 observations alone do not prove a failed start. Reported native rejection or
 pre-launch failure names the harness (currently Codex) as failing to start; it
 does not invent token-expiry or network diagnoses. An unavailable saved source
@@ -101,14 +109,13 @@ first be selected. Input-level reported startup failures remain readable on
 reentry rather than being reduced to generic delivery failure. Possible setup
 forwarding does not replace known delivery uncertainty in an input label.
 
-Sending and failed text uses the same right-aligned user-bubble presentation as
-native user messages: a localized author label above a padded Markdown body,
-with smaller delivery status below the bubble rather than a second body-sized
-paragraph or diagnostic border. Paragraph default margins do not add empty space
-inside the user bubble. Body width is independent of a longer status label.
+Pending and failed text uses the same right-aligned user-bubble presentation as
+native user messages: a localized author label above a padded Markdown body.
+Pending input alone has opacity 0.6 and no delivery/lifecycle caption. Explicit
+failure recovery actions remain separate. Paragraph default margins do not add
+empty space inside the user bubble.
 Retained inputs precede newer local
-submissions, so a pending message does not jump above earlier failures. Native
-inserted-message identity still avoids duplicating a confirmed captured message.
+submissions, so a pending message does not jump above earlier failures.
 
 ## Text, requests and retained operation facts
 
@@ -127,14 +134,20 @@ int64 values; clearing one field does not clear or substitute the other.
 Text plans render their own typed text rather than assuming generic content.
 
 Send uploads exact UTF-8 pieces through the generated owner client. Acceptance,
-preparation, possible forwarding, inserted native identity, steering, known
-failure and missing evidence remain different observations. Original submitted
-text survives navigation through the backend. An exact inserted native message
-ID can associate a visible user record with its retained input details; textual
-similarity is not identity. Steering does not manufacture a native message ID.
+preparation, possible forwarding, known failure and missing evidence remain
+different pending observations. Original submitted text survives navigation
+until actual Inserted/Steered pickup ends that input. Native history is not
+fabricated or correlated to its deleted input. Steering does not manufacture a
+native message ID.
 Recovery of a retained Request ID removes its matching local uncertain entry.
 An owner may then intentionally send identical text as a new operation; recovery
 itself never submits another effect or treats text equality as request identity.
+Readers send at most 25 exact known-input IDs per continuation, prioritizing
+locally accepted IDs and rotating cached IDs. A source-qualified absence removes
+that exact local/cached bubble even if pickup preceded its first list poll;
+page omission alone does not. Each read owner serializes reads, and applies
+closures only to its admitted conversation/source without a permanent closure
+ledger.
 
 Confirmed failed outgoing inputs expose intentional retry and deletion actions.
 Retry copies retained text into ordinary Send with a new Request ID; it does not

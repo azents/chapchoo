@@ -6,10 +6,14 @@ import type {
 export function reconcileLocalConversationInputs(
   local: LocalConversationInput[],
   retained: ConversationRegion["inputs"],
+  closed: string[] = [],
 ): LocalConversationInput[] {
-  return local.filter(
-    (item) => !retained?.some((input) => input.requestId === item.requestId),
+  const remaining = local.filter(
+    (item) =>
+      !(item.id && closed.includes(item.id)) &&
+      !retained?.some((input) => input.requestId === item.requestId),
   );
+  return remaining.length === local.length ? local : remaining;
 }
 /** Newer updates win; a late older-page result only contributes missing or newer records. */
 export function mergeConversationRegion(
@@ -32,9 +36,12 @@ export function mergeConversationRegion(
       records.set(record.key, record);
   }
   const inputs = new Map(
-    (previous.inputs ?? []).map((input) => [input.id, input]),
+    (previous.inputs ?? [])
+      .filter((input) => !incoming.closedInputs?.includes(input.id))
+      .map((input) => [input.id, input]),
   );
   for (const input of incoming.inputs ?? []) {
+    if (incoming.closedInputs?.includes(input.id)) continue;
     const old = inputs.get(input.id);
     const deleted = input.deleted || old?.deleted;
     inputs.set(input.id, {

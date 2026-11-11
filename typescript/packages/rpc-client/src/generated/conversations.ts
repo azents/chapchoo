@@ -232,6 +232,8 @@ export interface OwnerInputsRequest {
   scope: OwnerInputScope | undefined;
   before: InputAnchor | undefined;
   limit: number;
+  /** Exact bounded existence checks; omission from a history page is not closure. */
+  knownIds: string[];
 }
 
 export interface RetainedInput {
@@ -248,7 +250,11 @@ export interface OwnerDeleteInput {
 /** `latest` is the newest non-deleted acceptance for this exact source, independent of `before`. */
 export interface RetainedInputs {
   inputs: RetainedInput[];
-  latest: InputAcceptance | undefined;
+  latest:
+    | InputAcceptance
+    | undefined;
+  /** No pending row remains for these requested IDs. This is not delivery evidence. */
+  closedIds: string[];
 }
 
 export interface OwnerInputRead {
@@ -1935,7 +1941,7 @@ export const InputAnchor: MessageFns<InputAnchor> = {
 };
 
 function createBaseOwnerInputsRequest(): OwnerInputsRequest {
-  return { scope: undefined, before: undefined, limit: 0 };
+  return { scope: undefined, before: undefined, limit: 0, knownIds: [] };
 }
 
 export const OwnerInputsRequest: MessageFns<OwnerInputsRequest> = {
@@ -1948,6 +1954,9 @@ export const OwnerInputsRequest: MessageFns<OwnerInputsRequest> = {
     }
     if (message.limit !== 0) {
       writer.uint32(24).uint32(message.limit);
+    }
+    for (const v of message.knownIds) {
+      writer.uint32(34).string(v!);
     }
     return writer;
   },
@@ -1989,6 +1998,14 @@ export const OwnerInputsRequest: MessageFns<OwnerInputsRequest> = {
             message.limit = reader.uint32();
             continue;
           }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.knownIds.push(reader.string());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2013,6 +2030,7 @@ export const OwnerInputsRequest: MessageFns<OwnerInputsRequest> = {
       ? InputAnchor.fromPartial(object.before)
       : undefined;
     message.limit = object.limit ?? 0;
+    message.knownIds = object.knownIds?.map((e) => e) || [];
     return message;
   },
 };
@@ -2173,7 +2191,7 @@ export const OwnerDeleteInput: MessageFns<OwnerDeleteInput> = {
 };
 
 function createBaseRetainedInputs(): RetainedInputs {
-  return { inputs: [], latest: undefined };
+  return { inputs: [], latest: undefined, closedIds: [] };
 }
 
 export const RetainedInputs: MessageFns<RetainedInputs> = {
@@ -2183,6 +2201,9 @@ export const RetainedInputs: MessageFns<RetainedInputs> = {
     }
     if (message.latest !== undefined) {
       InputAcceptance.encode(message.latest, writer.uint32(18).fork()).join();
+    }
+    for (const v of message.closedIds) {
+      writer.uint32(26).string(v!);
     }
     return writer;
   },
@@ -2216,6 +2237,14 @@ export const RetainedInputs: MessageFns<RetainedInputs> = {
             message.latest = InputAcceptance.decode(reader, reader.uint32());
             continue;
           }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.closedIds.push(reader.string());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2237,6 +2266,7 @@ export const RetainedInputs: MessageFns<RetainedInputs> = {
     message.latest = (object.latest !== undefined && object.latest !== null)
       ? InputAcceptance.fromPartial(object.latest)
       : undefined;
+    message.closedIds = object.closedIds?.map((e) => e) || [];
     return message;
   },
 };

@@ -339,7 +339,7 @@ async fn exercise(
         .complete_conversation_input_preparation(
             &next_source,
             &resume_draft,
-            &Outcome::SessionReady(target),
+            &Outcome::SessionReady(target.clone()),
         )
         .await?;
     assert!(matches!(
@@ -349,6 +349,50 @@ async fn exercise(
             .pop(),
         Some(Startup::Settled { .. })
     ));
+    store
+        .complete_conversation_input_forwarding(
+            &next_source,
+            &chapchoo_persistence::ConversationOperationForwarding {
+                agent_id: &f.agent.id,
+                conversation_id: &conversation_id,
+                operation_id: &first.id,
+                target: &target,
+            },
+            &chapchoo_persistence::ConversationInputOutcome::Steered,
+        )
+        .await?;
+    assert!(
+        store
+            .conversation_input_reference(
+                &owner,
+                &f.agent.id,
+                &conversation_id,
+                &first.request_id,
+                f.now
+            )
+            .await?
+            .is_none()
+    );
+    let subsequent = store
+        .accept_conversation_input(
+            &owner,
+            &AcceptConversationInput {
+                agent_id: f.agent.id.clone(),
+                conversation_id: Some(conversation_id.clone()),
+                request_id: "after-consumed-input".into(),
+                target: ConversationTarget::NotStarted,
+                text: ConversationText::parse("A new explicit input".into())?,
+            },
+            f.now,
+        )
+        .await?;
+    assert!(
+        matches!(store.begin_conversation_input_preparation(&owner, &next_route, &Draft {
+            agent_id: &f.agent.id,
+            conversation_id: &conversation_id,
+            operation_id: &subsequent.id,
+        }, f.now).await?, Admission::ObservedStartup { facts, .. } if !facts.fresh_native_allowed && facts.state == State::Known(Outcome::SessionReady(target)))
+    );
     Ok(())
 }
 
@@ -370,6 +414,12 @@ fn sqlite_connection_startup_and_first_input() -> Result<(), TestError> {
             .bind::<diesel::sql_types::Text, _>(desired).execute(&mut connection)?;
         Ok(())
     }))?;
+    assert_eq!(
+        connection
+            .revert_last_migration(SQLITE_MIGRATIONS)?
+            .to_string(),
+        "00000000000022"
+    );
     assert!(connection.revert_last_migration(SQLITE_MIGRATIONS).is_err());
     Ok(())
 }
@@ -409,6 +459,12 @@ fn postgres_connection_startup_and_first_input() -> Result<(), TestError> {
                 }).join().map_err(|_| "Desired-state fixture worker failed")?
             })
         }))?;
+        assert_eq!(
+            connection
+                .revert_last_migration(POSTGRES_MIGRATIONS)?
+                .to_string(),
+            "00000000000022"
+        );
         assert!(
             connection
                 .revert_last_migration(POSTGRES_MIGRATIONS)

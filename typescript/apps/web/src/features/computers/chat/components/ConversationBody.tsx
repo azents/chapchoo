@@ -7,7 +7,7 @@ import {
 import { Button, Group, Image, Stack, Text } from "@mantine/core";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { inputStatus, nativeStatus, permissionScope } from "../copy";
+import { nativeStatus, permissionScope } from "../copy";
 import classes from "./ConversationBody.module.css";
 import {
   ContentDisclosure,
@@ -25,22 +25,9 @@ import type {
   ConversationRecord,
   FormValue,
   QuestionField,
-  RetainedInputView,
 } from "@chapchoo/web-core/conversation-types";
 import type { ReactElement, ReactNode } from "react";
 
-function capturedUserMessage(
-  records: ConversationRecord[],
-  input: RetainedInputView,
-): boolean {
-  const nativeId = input.insertedNativeMessageId;
-  return (
-    nativeId !== void 0 &&
-    records.some(
-      (record) => record.kind === "user" && record.nativeId === nativeId,
-    )
-  );
-}
 function Markdown({ text }: { text: string }): ReactElement {
   return (
     <div className={classes.markdown}>
@@ -709,14 +696,10 @@ export function ConversationBody({
           </article>
         ))}
       {(controls.region.inputs ?? [])
-        .filter(
-          (input) =>
-            !input.deleted &&
-            !capturedUserMessage(controls.region.records, input),
-        )
+        .filter((input) => !input.deleted)
         .map((input) => (
           <section
-            className={classes.record}
+            className={`${classes.record} ${classes.pendingInput}`}
             data-kind="user"
             aria-label={copy.you}
             key={input.id}
@@ -724,15 +707,6 @@ export function ConversationBody({
             <UserMessageBody copy={copy}>
               {input.text !== void 0 ? <Markdown text={input.text} /> : null}
             </UserMessageBody>
-            <Text
-              size="xs"
-              className={classes.inputStatus}
-              c={input.observation === "failed" ? "red" : "dimmed"}
-              ta="right"
-              role="status"
-            >
-              {inputStatus(copy, input)}
-            </Text>
             {input.observation === "failed" &&
             controls.onRetryInput &&
             controls.onDeleteInput ? (
@@ -790,22 +764,13 @@ export function ConversationBody({
       {controls.inputs.map((input) => (
         <section
           key={input.requestId}
-          className={classes.record}
+          className={`${classes.record} ${classes.pendingInput}`}
           data-kind="user"
           aria-label={copy.you}
         >
           <UserMessageBody copy={copy}>
             <Markdown text={input.text} />
           </UserMessageBody>
-          <Text
-            size="xs"
-            className={classes.inputStatus}
-            c={input.observation === "failed" ? "red" : "dimmed"}
-            ta="right"
-            role="status"
-          >
-            {copy[input.observation]}
-          </Text>
           {input.observation === "uncertain" ? (
             <Button variant="subtle" onClick={controls.onRead}>
               {copy.retry}

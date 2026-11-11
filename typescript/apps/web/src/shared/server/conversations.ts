@@ -80,6 +80,7 @@ export const conversationsRouter = router({
             .optional(),
           inputBefore: conversationReadInputAnchor.optional(),
           knownInputs: z.array(id).max(24).optional(),
+          checkInputs: z.array(id).max(25).optional(),
           stop: z
             .object({
               requestId: id,

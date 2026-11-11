@@ -60,6 +60,7 @@ export interface ChatProps {
   stoppable: boolean;
   sendable: boolean;
   status: string;
+  statusLoading?: boolean;
   opened: boolean;
   historyOpened: boolean;
   historyContent: ReactNode;

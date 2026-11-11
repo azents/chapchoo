@@ -172,7 +172,7 @@ impl ConversationInputService {
         } else {
             ConversationInputOwnership::NotObservedHere
         };
-        let delivery = self
+        let delivery = match self
             .store
             .conversation_input_delivery(
                 actor,
@@ -181,7 +181,28 @@ impl ConversationInputService {
                 &receipt.id,
                 clock.now()?,
             )
-            .await?;
+            .await
+        {
+            Ok(value) => value,
+            Err(chapchoo_persistence::StoreError::NotFound) => {
+                if self
+                    .store
+                    .conversation_input_reference(
+                        actor,
+                        agent_id,
+                        conversation_id,
+                        request_id,
+                        clock.now()?,
+                    )
+                    .await?
+                    .is_none_or(|current| current.id != receipt.id)
+                {
+                    return Ok(None);
+                }
+                return Err(chapchoo_persistence::StoreError::NotFound.into());
+            }
+            Err(error) => return Err(error.into()),
+        };
         Ok(Some(ConversationInputStatus {
             deleted: receipt.deleted,
             acceptance: receipt.into(),

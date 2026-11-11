@@ -279,7 +279,8 @@ impl Store {
             ))
         })
     }
-    /// Publish actual native evidence under the same current execution/source.
+    /// Successful native pickup ends pending-input ownership. The report ACK
+    /// closes the operation; it is not a permanent delivery receipt.
     pub async fn complete_conversation_input_forwarding(
         &self,
         source: &crate::ConnectorSource<'_>,
@@ -301,16 +302,48 @@ impl Store {
             let row = super::records::source_conversation!(connection, dialect, source, id);
             let route = connector!(connection, dialect, source);
             current(&row, agent, draft.target)?;
-            let _ = input!(connection, dialect, id, operation_id);
+            let pending = diesel::sql_query(dialect.query(
+                "SELECT id,conversation_id,request_id,target_snapshot,accepted_at,(deleted_at IS NOT NULL) AS deleted FROM conversation_inputs WHERE id=? AND conversation_id=?",
+            ))
+            .bind::<IdentitySql, _>(operation_id)
+            .bind::<IdentitySql, _>(id)
+            .get_result::<super::inputs::InputReferenceRow>(connection)
+            .await
+            .optional()?;
+            let consumed = !matches!(outcome, ConversationInputOutcome::Failed);
+            if pending.is_none() {
+                // A lost ACK may repeat a successful report after removal.
+                // No pending operation remains to deliver, recover or replay.
+                return if consumed {
+                    Ok(())
+                } else {
+                    Err(StoreError::NotFound)
+                };
+            }
             let previous = delivery!(connection, dialect, operation_id)
                 .ok_or(StoreError::InvalidTransition)?;
             if !previous.matches(route._execution_id, draft.target) {
                 return Err(StoreError::Conflict);
             }
             match previous.delivery()? {
-                ConversationInputDelivery::Known(previous) if &previous == outcome => return Ok(()),
+                ConversationInputDelivery::Known(previous) if &previous == outcome => {
+                    if !consumed {
+                        return Ok(());
+                    }
+                }
                 ConversationInputDelivery::Known(_) => return Err(StoreError::Conflict),
                 ConversationInputDelivery::PossibleForwarding => {}
+            }
+            if consumed {
+                diesel::sql_query(
+                    dialect
+                        .query("DELETE FROM conversation_inputs WHERE id=? AND conversation_id=?"),
+                )
+                .bind::<IdentitySql, _>(operation_id)
+                .bind::<IdentitySql, _>(id)
+                .execute(connection)
+                .await?;
+                return Ok(());
             }
             diesel::sql_query(dialect.query("UPDATE conversation_input_delivery SET delivery_state=?,native_message_id=? WHERE operation_id=?"))
                 .bind::<Text,_>(state).bind::<Nullable<Text>,_>(message).bind::<IdentitySql,_>(operation_id)

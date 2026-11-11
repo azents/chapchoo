@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("status length is independent of a short Markdown user bubble", async ({
+test("pending Markdown user bubbles are dimmed and have no lifecycle caption", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -19,6 +19,15 @@ test("status length is independent of a short Markdown user bubble", async ({
   expect(widths[0]).toBe(widths[1]);
   await expect(messages.nth(0).locator("strong")).toHaveText("확인");
   await expect(messages.nth(1).locator("strong")).toHaveText("확인");
+  for (const message of await messages.all()) {
+    await expect(message).toHaveCSS("opacity", "0.6");
+  }
+  await expect(page.getByText("Delivery failed", { exact: true })).toHaveCount(
+    0,
+  );
+  await expect(
+    page.getByText("Delivery not confirmed", { exact: true }),
+  ).toHaveCount(0);
 });
 
 test("permission choices start unselected and remain expanded after an explicit response", async ({
@@ -241,7 +250,10 @@ test("history shows a captured user message without a second delivery row", asyn
     .getByRole("region", { name: "나" })
     .filter({ hasText: "전달되지 않은 메시지" });
   await expect(unmatched).toBeVisible();
-  await expect(unmatched.getByText("전달 실패", { exact: true })).toBeVisible();
+  await expect(unmatched).toHaveCSS("opacity", "0.6");
+  await expect(unmatched.getByText("전달 실패", { exact: true })).toHaveCount(
+    0,
+  );
 });
 
 for (const story of [

@@ -1,7 +1,6 @@
 "use client";
 import { HeaderControlsContext } from "@chapchoo/ui/AppHeader";
 import { AppNavigationContext } from "@chapchoo/ui/AppNavigation";
-import { computerOperation } from "@chapchoo/web-core/computer-messages";
 import { conversationActivity } from "@chapchoo/web-core/conversation-activity";
 import {
   initialQuestionDraft,
@@ -14,6 +13,7 @@ import { useLocale } from "next-intl";
 import { createElement, useContext, useEffect, useRef, useState } from "react";
 import { trpc } from "@/shared/rpc/client";
 import { useAgentsContainer } from "../../containers/useAgentsContainer";
+import { chatStatus } from "../chatStatus";
 import { ConversationHistoryPage } from "../ConversationHistoryPage";
 import { activityStatus, chatCopy } from "../copy";
 import { SupplyPage } from "../SupplyPage";
@@ -76,6 +76,7 @@ export function useChatContainer(props: ChatInput): ChatProps {
     props.initialConversation,
     product.access === "authorized",
     stop ?? void 0,
+    inputs,
   );
   const region = reader.region;
   const previousSnapshot = useRef(
@@ -104,9 +105,16 @@ export function useChatContainer(props: ChatInput): ChatProps {
     );
     if (recovered) {
       setInput((value) => (value === recovered.text ? "" : value));
-      setInputs((all) => reconcileLocalConversationInputs(all, region.inputs));
     }
-  }, [region.header.source?.snapshotId, region.inputs, inputs]);
+    setInputs((all) =>
+      reconcileLocalConversationInputs(all, region.inputs, region.closedInputs),
+    );
+  }, [
+    region.header.source?.snapshotId,
+    region.inputs,
+    region.closedInputs,
+    inputs,
+  ]);
   const floating = useFloatingChat(
     input,
     `${props.initial.type === "detail" ? props.initial.agent.id : ""}:${region.header.source?.snapshotId ?? ""}`,
@@ -136,24 +144,17 @@ export function useChatContainer(props: ChatInput): ChatProps {
     reader.read === "ready" &&
     region.header.state !== "loading" &&
     activity !== "authenticationRequired";
-  const operation = computerOperation(computer, product.copy);
-  const status =
-    product.error ??
-    (product.stale
-      ? product.copy.stale
-      : computer.phase !== "completed"
-        ? operation.label
-        : computer.power === "stopped"
-          ? `${product.detailCopy.computer} · ${product.copy.stopped}`
-          : computer.power === "unknown"
-            ? `${product.detailCopy.computer} · ${product.copy.unknown}`
-            : computer.connector !== "connected"
-              ? product.copy[computer.connector]
-              : reader.read === "error"
-                ? copy.error
-                : reader.read === "loading"
-                  ? copy.loading
-                  : activityStatus(copy, activity));
+  const presentation = chatStatus({
+    computer,
+    activity,
+    foreground: region.header.foreground,
+    read: reader.read,
+    stale: product.stale,
+    error: product.error,
+    computerCopy: product.copy,
+    activityLabel: (value) => activityStatus(copy, value),
+  });
+  const status = presentation.label;
   const scope = JSON.stringify([
     region.header.agentId,
     region.header.conversationId,
@@ -226,6 +227,7 @@ export function useChatContainer(props: ChatInput): ChatProps {
           item.requestId === requestId
             ? {
                 ...item,
+                id: receipt.id,
                 observation: "accepted",
                 conversationId: receipt.conversationId,
               }
@@ -556,6 +558,7 @@ export function useChatContainer(props: ChatInput): ChatProps {
         (item) => item.text === input && item.observation === "uncertain",
       ),
     status,
+    statusLoading: presentation.refreshing,
     opened,
     navOpened,
     floating,

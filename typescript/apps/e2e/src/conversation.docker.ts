@@ -133,6 +133,9 @@ test("owner chats through the official adapter and retains the native typed answ
       ),
     ).toBeVisible();
     const answerToUpdateMs = Math.round(performance.now() - answerStart);
+    stage = "input-handoff";
+    const activeFixture = fixture;
+    await expect.poll(() => activeFixture.pendingInputs()).toBe(0);
     const responseToVisibleUpperMs = Math.max(
       0,
       Math.round(performance.now() - lastReadCompleted),

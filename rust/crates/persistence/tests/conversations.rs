@@ -2,6 +2,8 @@
 mod answers;
 #[path = "conversations/authentication.rs"]
 mod authentication;
+#[path = "conversations/consumed_migration.rs"]
+mod consumed_migration;
 #[path = "conversations/delivery.rs"]
 mod delivery;
 #[path = "conversations/input_reads.rs"]
