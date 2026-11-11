@@ -7,6 +7,9 @@ test("activity sheet keeps its heading and close action outside the scrolling co
   await page.goto(
     "/iframe.html?id=chat-conversation--review-all-records&viewMode=story",
   );
+  const originalBodyOverflow = await page
+    .locator("body")
+    .evaluate((element) => getComputedStyle(element).overflow);
   await page.getByRole("button", { name: /코기.*작업 상태/ }).click();
   const dialog = page.getByRole("dialog", { name: "작업 상태", exact: true });
   const heading = dialog.getByRole("heading", {
@@ -14,9 +17,26 @@ test("activity sheet keeps its heading and close action outside the scrolling co
     exact: true,
   });
   const close = dialog.getByRole("button", { name: "닫기", exact: true });
-  const region = dialog.getByRole("region", { name: "작업 상태", exact: true });
+  const region = dialog.locator('[class*="panelBody"]');
   await expect(heading).toBeVisible();
   await close.hover();
+  await expect(page.locator("body")).toHaveCSS("overflow", "hidden");
+  await expect(dialog).toHaveCSS("overflow", "clip");
+  await expect(region).toHaveCSS("overflow-y", "auto");
+  await expect(region).toHaveCSS("overscroll-behavior-y", "auto");
+  const bar = await dialog.locator("header").boundingBox();
+  const body = await region.boundingBox();
+  expect(body?.y).toBeCloseTo((bar?.y ?? 0) + (bar?.height ?? 0), 0);
+  const detail = dialog.getByRole("link", {
+    name: "코기 에이전트 상세",
+    exact: true,
+  });
+  await expect(detail).toContainText("코기");
+  await expect(detail).toContainText("에이전트 상세");
+  await expect(detail).toHaveAttribute("href", "/teams/my/agents/corgi");
+  expect((await detail.boundingBox())?.y).toBeGreaterThanOrEqual(
+    (bar?.y ?? 0) + (bar?.height ?? 0),
+  );
   const before = {
     heading: await heading.boundingBox(),
     close: await close.boundingBox(),
@@ -29,7 +49,14 @@ test("activity sheet keeps its heading and close action outside the scrolling co
     .toBeGreaterThan(0);
   expect(await heading.boundingBox()).toEqual(before.heading);
   expect(await close.boundingBox()).toEqual(before.close);
+  expect(await dialog.evaluate((element) => element.scrollTop)).toBe(0);
   await expect(close).toBeVisible();
+  await close.click();
+  await expect(dialog).toBeHidden();
+  await expect(page.locator("body")).toHaveCSS(
+    "overflow",
+    originalBodyOverflow,
+  );
 });
 
 test("a short conversation still has scroll travel", async ({ page }) => {

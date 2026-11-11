@@ -11,7 +11,6 @@ import {
   Box,
   Button,
   Drawer,
-  Group,
   Loader,
   ScrollArea,
 } from "@mantine/core";
@@ -317,7 +316,13 @@ export function Chat(props: ChatProps): ReactElement {
           size="min(78dvh, 46rem)"
           title={c.activity}
           closeButtonProps={{ "aria-label": c.close }}
-          classNames={{ content: classes.panel, body: classes.panelBody }}
+          classNames={{
+            content: classes.activityPanel,
+            header: classes.activityHeader,
+            body: classes.panelBody,
+          }}
+          // CSS owns the document lock without canceling native edge gestures.
+          lockScroll={false}
           overlayProps={{ backgroundOpacity: 0.12, blur: 0 }}
         >
           <div
@@ -326,16 +331,18 @@ export function Chat(props: ChatProps): ReactElement {
             aria-label={c.activity}
             style={profileStyle(agent.paletteKey)}
           >
-            <Group justify="flex-end" mb="md">
-              <Button
-                component="a"
-                href={detailHref}
-                variant="subtle"
-                rightSection={<Icon name="chevron" />}
-              >
-                {c.detail}
-              </Button>
-            </Group>
+            <a className={classes.detailIdentity} href={detailHref}>
+              <CharacterArtwork
+                basePath={p.basePath}
+                assetKey={agent.profileImage.assetKey}
+                className={classes.detailPortrait}
+              />
+              <span className={classes.detailIdentityText}>
+                <strong>{agent.name}</strong>
+                <span>{c.detail}</span>
+              </span>
+              <Icon name="chevron" />
+            </a>
             {p.stale ? (
               <Alert color="yellow" mb="lg">
                 {p.copy.stale}

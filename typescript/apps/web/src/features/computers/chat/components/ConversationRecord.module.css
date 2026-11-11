@@ -13,7 +13,9 @@
   text-align: start;
   cursor: pointer;
 }
-.control:hover { background: var(--chapchoo-color-surface-hover); }
+@media (hover: hover) and (pointer: fine) {
+  .control:hover { background: var(--chapchoo-color-surface-hover); }
+}
 .control:focus-visible { outline: 0.125rem solid var(--mantine-color-anchor); outline-offset: 0.125rem; }
 .label { padding: 0; min-width: 0; }
 .summary { display: block; min-width: 0; }
@@ -26,4 +28,9 @@
 .item { border: 0; }
 .content { padding: var(--mantine-spacing-sm) 0 var(--mantine-spacing-lg) var(--mantine-spacing-lg); }
 .recent .summary { flex: 1; }
+.recent {
+  touch-action: pan-y pinch-zoom;
+  -webkit-user-select: none;
+  user-select: none;
+}
 @media (prefers-reduced-motion: reduce) { .chevron { transition: none; } }

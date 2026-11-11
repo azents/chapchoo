@@ -36,7 +36,15 @@ not later updates. New fields wait for the next poll. Replacing an unread extent
 still rejects the read; a final field read rechecks owner/source authority.
 Recent/older records and retained input pages use source-bound anchors. The
 current plan has its own read even outside the recent region. The activity sheet
-provides a direct link to the current Agent's canonical Team-scoped detail page.
+provides a character/name identity row linking to the current Agent's canonical
+Team-scoped detail page. Its top bar and close action are outside the native body
+scroll viewport. The scrollbar starts below that bar, and browser-native body
+edge overscroll does not move the bar. Dragging over recent-record controls pans
+the body; an intentional tap still opens the selected record. Hover highlighting
+is limited to fine hover pointers rather than remaining selected after touch.
+The Activity sheet locks document overflow through its mounted CSS scope instead
+of a JavaScript wheel/touch boundary canceler. Closing it removes that scope;
+focus trapping and nested control dialogs retain their existing ownership.
 The sheet previews five recent records in chronological order, with a transparent
 top fade when older records exist. Preview and full history reuse the same compact
 row design. Selection enters a separate full-height history view at that record and keeps
