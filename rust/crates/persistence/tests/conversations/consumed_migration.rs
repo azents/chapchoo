@@ -7,6 +7,13 @@ async fn exercise(
     mut sql: impl FnMut(&str) -> Result<(), TestError>,
     postgres: bool,
 ) -> Result<(), TestError> {
+    let downgrade = if postgres {
+        include_str!("../../migrations/postgres/00000000000022_consumed_inputs/down.sql")
+    } else {
+        include_str!("../../migrations/sqlite/00000000000022_consumed_inputs/down.sql")
+    };
+    // Model the old schema before its completion rows are seeded.
+    sql(downgrade)?;
     let owner = f.owner.digest();
     let key = f.connector.digest();
     let source = f.source(&key);
@@ -135,11 +142,65 @@ async fn exercise(
             .await?
             .is_some()
     );
-    sql(if postgres {
-        include_str!("../../migrations/postgres/00000000000022_consumed_inputs/down.sql")
-    } else {
-        include_str!("../../migrations/sqlite/00000000000022_consumed_inputs/down.sql")
-    })?;
+    // Old connected writers can complete after the pre-upgrade sweep. Their
+    // UPDATE and INSERT success representations must consume atomically too.
+    for (name, write) in [
+        (
+            "late-inserted",
+            "UPDATE conversation_input_delivery SET delivery_state='INSERTED',native_message_id='late-native-message' WHERE operation_id IN (SELECT id FROM conversation_inputs WHERE request_id='late-inserted')",
+        ),
+        (
+            "late-steered",
+            "UPDATE conversation_input_delivery SET delivery_state='STEERED' WHERE operation_id IN (SELECT id FROM conversation_inputs WHERE request_id='late-steered')",
+        ),
+        (
+            "late-insert",
+            "INSERT INTO conversation_input_delivery(operation_id,execution_id,source_snapshot,native_session_id,delivery_state) SELECT i.id,d.execution_id,d.source_snapshot,d.native_session_id,'STEERED' FROM conversation_inputs i CROSS JOIN conversation_input_delivery d WHERE i.request_id='late-insert' AND d.operation_id=(SELECT id FROM conversation_inputs WHERE request_id='legacy-possible')",
+        ),
+    ] {
+        let receipt = store
+            .accept_conversation_input(
+                &owner,
+                &AcceptConversationInput {
+                    agent_id: f.agent.id.clone(),
+                    conversation_id: Some(first.conversation_id.clone()),
+                    request_id: name.into(),
+                    target: ConversationTarget::Snapshot(snapshot.clone()),
+                    text: ConversationText::parse(format!("Late {name}"))?,
+                },
+                f.now,
+            )
+            .await?;
+        if name != "late-insert" {
+            store
+                .begin_conversation_input_forwarding(
+                    &owner,
+                    &route,
+                    &ConversationOperationForwarding {
+                        agent_id: &f.agent.id,
+                        conversation_id: &first.conversation_id,
+                        operation_id: &receipt.id,
+                        target: &target,
+                    },
+                    f.now,
+                )
+                .await?;
+        }
+        sql(write)?;
+        assert!(
+            store
+                .conversation_input_reference(
+                    &owner,
+                    &f.agent.id,
+                    &first.conversation_id,
+                    name,
+                    f.now
+                )
+                .await?
+                .is_none()
+        );
+    }
+    sql(downgrade)?;
     assert!(
         store
             .conversation_input_reference(

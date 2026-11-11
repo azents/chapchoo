@@ -90,10 +90,14 @@ tombstone, counter or archive. Consequently an arbitrary explicit old owner
 submission is no longer recoverable forever and may be a new operation if current
 admission allows it. Missing results never automatically resubmit.
 
-Migration 22 removes legacy successful rows only when their exact native source
-binding independently preserves session authority. Failed, unresolved and
-differently bound historical data is preserved. Its data-only downgrade cannot
-resurrect consumed content; older preserving migration guards still apply.
+Migration 22 first installs a database terminal guard, then removes legacy
+successful rows only when their exact native source binding independently
+preserves session authority. An old connected writer completing after the
+pre-upgrade sweep is consumed in its own successful write transaction too;
+backend rollout timing cannot leave a new completed receipt behind. Failed,
+unresolved and differently bound historical data is preserved. Downgrade removes
+the guard but cannot resurrect consumed content; older preserving migration
+guards still apply.
 
 ### Internal input owner and setup facts
 
