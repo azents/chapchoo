@@ -186,10 +186,15 @@ test("tool-only original input and output render as independent complete fields"
     .filter({ hasText: "Read note" })
     .click();
   await page.locator('[data-kind="terminal"] button').first().click();
-  await expect(page.getByText("previous line", { exact: true })).toBeVisible();
   await expect(
-    page.getByText("Complete output", { exact: true }),
+    page.getByText("− previous line", { exact: true }),
   ).toBeVisible();
+  await expect(
+    page
+      .locator('[data-kind="terminal"] pre')
+      .filter({ hasText: "Complete output" }),
+  ).toBeVisible();
+  await page.locator("summary").filter({ hasText: "Tool input" }).click();
   await expect(
     page.getByRole("region", { name: "Tool input", exact: true }),
   ).toContainText("9223372036854775807");

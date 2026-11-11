@@ -117,14 +117,9 @@ export function useChatContainer(props: ChatInput): ChatProps {
   ]);
   const floating = useFloatingChat(
     input,
-    `${props.initial.type === "detail" ? props.initial.agent.id : ""}:${region.header.source?.snapshotId ?? ""}`,
+    `${region.header.conversationId}:${region.header.source?.snapshotId ?? ""}`,
     product.access === "authorized",
-    region.records.filter(
-      (record) =>
-        record.kind === "user" ||
-        record.kind === "assistant" ||
-        record.kind === "request",
-    ),
+    region.records,
   );
   if (product.data.type !== "detail") {
     throw new Error("Chat requires an admitted Agent detail snapshot");
@@ -491,11 +486,8 @@ export function useChatContainer(props: ChatInput): ChatProps {
       void deleteInput(value);
     },
     onOlder: () => {
-      setHistory({
-        initial: region,
-        key: region.records[0]?.key ?? null,
-        olderOnOpen: true,
-      });
+      floating.preserveHistory();
+      reader.older();
     },
     onLatest: () => {
       reader.latest();

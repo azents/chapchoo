@@ -14,6 +14,7 @@ import { activityStatus, chatCopy } from "../copy";
 import { Chat } from "./Chat";
 import { ConversationHistory } from "./ConversationHistory";
 import { conversationReviewRecords } from "./conversationReviewFixture";
+import { conversationReviewRecords as presentationRecords } from "./recordPresentationFixture";
 import type { AgentsProps, InitialAgents } from "../../types";
 import type { ChatCopy } from "../copy";
 import type { ConversationControls } from "../types";
@@ -60,6 +61,8 @@ type FixtureProps = {
     | "nativeStarting"
     | "notStarted"
     | "review"
+    | "presentation"
+    | "pagination"
     | "unread"
     | "idle"
     | "pendingInput"
@@ -72,6 +75,7 @@ type FixtureProps = {
   locale: string;
   name: string;
   initialActivityOpened?: boolean;
+  underfilled?: boolean;
 };
 function StaticHistory({
   records,
@@ -123,6 +127,7 @@ function Fixture({
   locale,
   name,
   initialActivityOpened = false,
+  underfilled = false,
 }: FixtureProps): ReactElement {
   const stopped =
     mode === "stopped" || mode === "startError" || mode === "staleStopped";
@@ -226,8 +231,19 @@ function Fixture({
               ]
             : []),
         ]
-      : mode === "review"
-        ? conversationReviewRecords
+      : mode === "review" || mode === "presentation" || mode === "pagination"
+        ? mode === "presentation"
+          ? presentationRecords
+          : mode === "pagination"
+            ? Array.from({ length: underfilled ? 1 : 30 }, (_, index) =>
+                fixtureMessage(
+                  "assistant",
+                  `page-${index + (underfilled ? 40 : 11)}`,
+                  `Message ${index + (underfilled ? 40 : 11)}`,
+                  BigInt(index + (underfilled ? 40 : 11)),
+                ),
+              )
+            : conversationReviewRecords
         : mode === "empty" || mode === "idle"
           ? []
           : [
@@ -254,6 +270,8 @@ function Fixture({
               ),
             ],
   );
+  const [older, setOlder] = useState(mode === "pagination");
+  const [pageStart, setPageStart] = useState(underfilled ? 40 : 11);
   const [opened, setOpened] = useState(initialActivityOpened);
   const [historyOpened, setHistoryOpened] = useState(false);
   const [historyFocus, setHistoryFocus] = useState<string | null>(null);
@@ -265,17 +283,7 @@ function Fixture({
   const [workStop, setWorkStop] = useState<"idle" | "published">("idle");
   const [failedDeleted, setFailedDeleted] = useState(false);
   const [retrySubmitted, setRetrySubmitted] = useState(false);
-  const floating = useFloatingChat(
-    input,
-    agent.id,
-    true,
-    records.filter(
-      (record) =>
-        record.kind === "user" ||
-        record.kind === "assistant" ||
-        record.kind === "request",
-    ),
-  );
+  const floating = useFloatingChat(input, agent.id, true, records);
   const copy = chatCopy(locale);
   const c = computerCopy(locale);
   const writable =
@@ -458,6 +466,9 @@ function Fixture({
                   workId: activity === "working" ? "work" : void 0,
                 },
                 records,
+                older: older
+                  ? { ordinal: BigInt(pageStart), index: 0n }
+                  : void 0,
                 latestPlan:
                   mode === "textPlan"
                     ? {
@@ -510,7 +521,23 @@ function Fixture({
           onDeleteInput: () => setFailedDeleted(true),
           drafts: {},
           onRead: () => {},
-          onOlder: () => {},
+          onOlder: () => {
+            floating.preserveHistory();
+            const start = Math.max(1, pageStart - 10);
+            setRecords((current) => [
+              ...Array.from({ length: pageStart - start }, (_, index) =>
+                fixtureMessage(
+                  "assistant",
+                  `page-${index + start}`,
+                  `Message ${index + start}`,
+                  BigInt(index + start),
+                ),
+              ),
+              ...current,
+            ]);
+            setPageStart(start);
+            setOlder(start > 1);
+          },
           onLatest: floating.followLatest,
           onHistory: (record) => {
             setOpened(false);
@@ -570,7 +597,7 @@ function Fixture({
         onStop={() => setWorkStop("published")}
         floating={floating}
       />
-      {mode === "unread" ? (
+      {mode === "unread" || mode === "pagination" ? (
         <div style={{ position: "fixed", top: 0, right: 0, zIndex: 1000 }}>
           <button
             type="button"
@@ -581,7 +608,7 @@ function Fixture({
                   "assistant",
                   `remote-${previous.length}`,
                   `Unread message ${previous.length}`,
-                  BigInt(previous.length + 1),
+                  (previous.at(-1)?.anchor.ordinal ?? 0n) + 1n,
                 ),
               ])
             }
@@ -646,6 +673,18 @@ export const UnreadMessages: Story = {
   args: { mode: "unread", locale: "en-US", name: "Corgi" },
 };
 export const ReviewAllRecords: Story = { args: { mode: "review" } };
+export const RecordPresentation: Story = { args: { mode: "presentation" } };
+export const UnderfilledPagination: Story = {
+  args: {
+    mode: "pagination",
+    underfilled: true,
+    locale: "en-US",
+    name: "Corgi",
+  },
+};
+export const AutomaticPagination: Story = {
+  args: { mode: "pagination", locale: "en-US", name: "Corgi" },
+};
 export const ActivitySheet: Story = {
   args: { mode: "review", initialActivityOpened: true },
 };

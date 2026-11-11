@@ -53,6 +53,9 @@ export function useConversationReader(
   const current = useRef(initial);
   const before = useRef<ConversationAnchor | null>(null);
   const inputBefore = useRef<InputHistoryAnchor | null>(null);
+  const paged = useRef(false);
+  const retryHead = useRef(false);
+  const pageError = useRef(false);
   const [readingOlder, setReadingOlder] = useState(false);
   const busy = useRef(false);
   const queued = useRef(false);
@@ -84,8 +87,10 @@ export function useConversationReader(
       }
       clearTimeout(timer.current ?? void 0);
       busy.current = true;
-      const anchor = before.current;
-      const inputAnchor = inputBefore.current;
+      // Failed page reads yield the next cadence to the current head. Retain
+      // the page request for the following cadence instead of starving live data.
+      const anchor = retryHead.current ? null : before.current;
+      const inputAnchor = retryHead.current ? null : inputBefore.current;
       const snapshot = current.current.header.source?.snapshotId;
       try {
         const known = (current.current.inputs ?? [])
@@ -157,27 +162,60 @@ export function useConversationReader(
           incoming.header.source?.snapshotId !==
             current.current.header.source?.snapshotId;
         if (changedSource || incoming.header.state === "loading") {
+          paged.current = false;
+          retryHead.current = false;
+          pageError.current = false;
           before.current = null;
           inputBefore.current = null;
           setReadingOlder(false);
           current.current = incoming;
           setRegion(incoming);
         } else if (
-          anchor === before.current &&
-          inputAnchor === inputBefore.current
+          (!anchor && !inputAnchor) ||
+          (anchor === before.current && inputAnchor === inputBefore.current)
         ) {
-          current.current = mergeConversationRegion(current.current, incoming);
+          const previous = current.current;
+          const merged = mergeConversationRegion(previous, incoming);
+          // A missing page cursor requests the latest backend window. Once a
+          // stream is exhausted, that window must not revive its older cursor.
+          current.current = {
+            ...merged,
+            older: anchor
+              ? incoming.older
+              : paged.current || inputBefore.current || before.current
+                ? previous.older
+                : incoming.older,
+            inputOlder: inputAnchor
+              ? incoming.inputOlder
+              : paged.current || inputBefore.current || before.current
+                ? previous.inputOlder
+                : incoming.inputOlder,
+          };
+          if (anchor || inputAnchor) {
+            pageError.current = false;
+            paged.current = true;
+            before.current = null;
+            inputBefore.current = null;
+            setReadingOlder(false);
+          }
           setRegion(current.current);
         }
+        retryHead.current = false;
         setRead(
           incoming.refill || incoming.header.state === "loading"
             ? "loading"
-            : "ready",
+            : pageError.current
+              ? "error"
+              : "ready",
         );
         if (incoming.refill) {
           queued.current = true;
         }
       } catch {
+        retryHead.current = Boolean(anchor || inputAnchor);
+        if (anchor || inputAnchor) {
+          pageError.current = true;
+        }
         if (hasOwner()) {
           setRead("error");
         }
@@ -223,14 +261,13 @@ export function useConversationReader(
       setRegion(current.current);
     },
     older: () => {
-      if (
-        (!current.current.older && !current.current.inputOlder) ||
-        busy.current
-      ) {
+      if (!current.current.older && !current.current.inputOlder) {
         return;
       }
-      before.current = current.current.older ?? before.current;
-      inputBefore.current = current.current.inputOlder ?? inputBefore.current;
+      // Admit the page even during an in-flight latest poll. run() queues it;
+      // the stale latest result cannot consume or replace the page request.
+      before.current = current.current.older ?? null;
+      inputBefore.current = current.current.inputOlder ?? null;
       setReadingOlder(true);
       setRead("loading");
       refresh.current();
@@ -238,6 +275,8 @@ export function useConversationReader(
     latest: () => {
       before.current = null;
       inputBefore.current = null;
+      retryHead.current = false;
+      pageError.current = false;
       setReadingOlder(false);
       queued.current = true;
       refresh.current();

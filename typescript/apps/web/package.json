@@ -33,8 +33,10 @@
     "react-dom": "^19.3.1",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
+    "remark-parse": "^11.0.0",
     "server-only": "0.0.1",
     "superjson": "^2.2.6",
+    "unified": "^11.0.5",
     "zod": "^4.6.7"
   },
   "devDependencies": {
@@ -45,6 +47,7 @@
     "@storybook/addon-docs": "^10.6.3",
     "@storybook/addon-themes": "^10.6.3",
     "@storybook/nextjs-vite": "^10.6.3",
+    "@types/mdast": "^4.0.4",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",

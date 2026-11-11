@@ -48,7 +48,10 @@ profile surface. Status stays expanded independently of scrolling and opens the
 activity sheet on first activation. The input floats above a measured timeline;
 top/bottom fades and end clearance preserve its readable region. Latest-follow
 remains active until manual scrolling; growing input does not reset a detached
-position, and Jump to latest restores following. Adjacent same-sender messages
+position. Both Chat and full history automatically load older pages near the top.
+Only new native events arriving while detached expose the action to resume
+following, as owned by the [conversation reader](conversation-web.md).
+Adjacent same-sender messages
 use the large gap, sender changes use the double-large gap.
 
 The [conversation reader and controls](conversation-web.md) use actual normalized

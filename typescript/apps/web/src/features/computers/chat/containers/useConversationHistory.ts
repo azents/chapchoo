@@ -27,7 +27,7 @@ export function useConversationHistory(
     void 0,
     props.inputs,
   );
-  const scroll = useHistoryScroll(props.initialFocus);
+  const scroll = useHistoryScroll(props.initialFocus, reader.region);
   const { markInputDeleted } = reader;
   const appliedDeletions = useRef(new Set<string>());
   useEffect(() => {

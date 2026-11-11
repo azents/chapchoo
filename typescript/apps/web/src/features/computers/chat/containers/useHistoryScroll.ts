@@ -1,5 +1,7 @@
 "use client";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { hasRecordArrival } from "../recordArrival";
+import type { ConversationRegion } from "@chapchoo/web-core/conversation-types";
 import type { RefObject } from "react";
 
 export interface HistoryScroll {
@@ -7,12 +9,16 @@ export interface HistoryScroll {
   viewportRef: RefObject<HTMLDivElement | null>;
   contentRef: RefObject<HTMLDivElement | null>;
   detached: boolean;
+  unseen: boolean;
   preserveHistory: () => void;
   followLatest: () => void;
 }
 
 /** Keep the independent history viewport anchored while older records arrive. */
-export function useHistoryScroll(initialFocus: string | null): HistoryScroll {
+export function useHistoryScroll(
+  initialFocus: string | null,
+  region?: ConversationRegion,
+): HistoryScroll {
   const viewportRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const following = useRef(initialFocus === null);
@@ -20,6 +26,22 @@ export function useHistoryScroll(initialFocus: string | null): HistoryScroll {
   const anchor = useRef<{ element: HTMLElement; top: number } | null>(null);
   const frame = useRef(0);
   const [detached, setDetached] = useState(initialFocus !== null);
+  const [unseen, setUnseen] = useState(false);
+  const source = `${region?.header.conversationId ?? ""}:${region?.header.source?.snapshotId ?? ""}`;
+  const tail = region?.records.at(-1)?.anchor ?? null;
+  const lastHead = useRef({ source, tail });
+  useLayoutEffect(() => {
+    const next = { source, tail };
+    if (lastHead.current.source !== source) {
+      anchor.current = null;
+      following.current = true;
+      setDetached(false);
+      setUnseen(false);
+    } else if (hasRecordArrival(lastHead.current, next) && !following.current) {
+      setUnseen(true);
+    }
+    lastHead.current = next;
+  }, [source, tail]);
   const pin = useCallback((): void => {
     cancelAnimationFrame(frame.current);
     frame.current = requestAnimationFrame(() => {
@@ -63,6 +85,9 @@ export function useHistoryScroll(initialFocus: string | null): HistoryScroll {
         viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <=
         48;
       setDetached(!following.current);
+      if (following.current) {
+        setUnseen(false);
+      }
     };
     const onIntent = (): void => {
       anchor.current = null;
@@ -94,16 +119,21 @@ export function useHistoryScroll(initialFocus: string | null): HistoryScroll {
     viewportRef,
     contentRef,
     detached,
+    unseen,
     followLatest: () => {
       anchor.current = null;
       focus.current = null;
       following.current = true;
       setDetached(false);
+      setUnseen(false);
       pin();
     },
     preserveHistory: () => {
       const viewport = viewportRef.current;
       if (!viewport) {
+        return;
+      }
+      if ((contentRef.current?.offsetHeight ?? 0) <= viewport.clientHeight) {
         return;
       }
       following.current = false;
