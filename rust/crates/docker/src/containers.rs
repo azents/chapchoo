@@ -132,6 +132,17 @@ fn stopped(state: &ContainerState, never_started: bool) -> bool {
             state_time(state.started_at.as_deref()).is_some_and(|started| finished >= started)
         })
 }
+fn restarting(state: &ContainerState) -> bool {
+    state.status == Some(Status::RESTARTING)
+        && state.running == Some(true)
+        && state.restarting == Some(true)
+        && state.paused == Some(false)
+        && state.dead == Some(false)
+        && state.pid == Some(0)
+        && state_time(state.finished_at.as_deref()).is_some_and(|finished| {
+            state_time(state.started_at.as_deref()).is_some_and(|started| finished >= started)
+        })
+}
 impl Docker {
     /// Only local correlation stage, without native names or payloads.
     pub fn container_progress_diagnostic(&self, execution: &str) -> Option<&'static str> {
@@ -547,7 +558,7 @@ impl Docker {
         if require_terminal {
             return Err(Error::Uncertain);
         } // Active `always` never proves terminal retirement.
-        if !(running(state) || stopped(state, stage == Some(Stage::Created))) {
+        if !(running(state) || restarting(state) || stopped(state, stage == Some(Stage::Created))) {
             return Err(Error::Uncertain);
         }
         if stage.is_none() {
@@ -601,7 +612,7 @@ impl Docker {
         let state = observed.state.as_ref().ok_or(Error::Uncertain)?;
         self.record(target.clone(), Some(Stage::Updated), Stage::Stopping)?;
         if !stopped(state, target.never_started) {
-            if !running(state) {
+            if !(running(state) || restarting(state)) {
                 return Err(Error::Uncertain);
             }
             let budget = Duration::from_secs(45);
