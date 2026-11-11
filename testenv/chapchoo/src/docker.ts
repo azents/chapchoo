@@ -8,6 +8,7 @@ import {
 import type { CanaryState, CanaryVolumeState } from "./canaryCleanup.js";
 import type { DockerFixtureConfig } from "./config/index.js";
 import {
+  cleanupContainerInspection,
   nativeReadinessStatus,
   runningSuccessor,
 } from "./dockerObservation.js";
@@ -419,8 +420,14 @@ export class DockerFixture {
     const states: string[] = [];
     for (const container of containers.slice(0, 4)) {
       const observed = await native(() =>
-        this.sdk.getContainer(container.Id).inspect(),
+        cleanupContainerInspection(() =>
+          this.sdk.getContainer(container.Id).inspect(),
+        ),
       );
+      if (observed === null) {
+        states.push("absent");
+        continue;
+      }
       if (
         observed.Id !== container.Id ||
         !labelsMatch(observed.Config.Labels, {
