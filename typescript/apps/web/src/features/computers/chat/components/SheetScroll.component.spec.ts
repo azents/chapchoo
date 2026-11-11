@@ -63,70 +63,80 @@ test("a touch swipe over a recent record pans without activating it; a tap still
   await client.detach();
 });
 
-test("activity leaves outward wheel and touch gestures uncanceled at both body edges", async ({
-  page,
-}) => {
-  await page.goto(
-    "/iframe.html?id=chat-conversation--activity-sheet&viewMode=story",
-  );
-  const sheet = page.getByRole("dialog", { name: "작업 상태", exact: true });
-  await sheet.getByRole("button", { name: "닫기", exact: true }).hover();
-  const viewport = sheet.locator('[class*="panelBody"]');
-  for (const edge of ["top", "bottom"] as const) {
-    const canceled = await viewport.evaluate((element, boundary) => {
-      element.scrollTop = boundary === "top" ? 0 : element.scrollHeight;
-      const direction = boundary === "top" ? -1 : 1;
-      const bounds = element.getBoundingClientRect();
-      const x = bounds.x + bounds.width / 2;
-      const y = bounds.y + bounds.height / 2;
-      const start = new Touch({
-        identifier: 1,
-        target: element,
-        clientX: x,
-        clientY: y,
-      });
-      const moved = new Touch({
-        identifier: 1,
-        target: element,
-        clientX: x,
-        clientY: y - direction * 40,
-      });
-      const wheel = !element.dispatchEvent(
-        new WheelEvent("wheel", {
-          deltaY: direction * 120,
-          bubbles: true,
-          cancelable: true,
-        }),
-      );
-      element.dispatchEvent(
-        new TouchEvent("touchstart", {
-          touches: [start],
-          changedTouches: [start],
-          targetTouches: [start],
-          bubbles: true,
-          cancelable: true,
-        }),
-      );
-      const touch = !element.dispatchEvent(
-        new TouchEvent("touchmove", {
-          touches: [moved],
-          changedTouches: [moved],
-          targetTouches: [moved],
-          bubbles: true,
-          cancelable: true,
-        }),
-      );
-      element.dispatchEvent(
-        new TouchEvent("touchend", {
-          touches: [],
-          changedTouches: [moved],
-          targetTouches: [],
-          bubbles: true,
-          cancelable: true,
-        }),
-      );
-      return { wheel, touch };
-    }, edge);
-    expect(canceled, edge).toEqual({ wheel: false, touch: false });
-  }
-});
+for (const surface of ["activity", "history"] as const) {
+  test(`${surface} leaves outward wheel and touch gestures uncanceled at both body edges`, async ({
+    page,
+  }) => {
+    await page.goto(
+      "/iframe.html?id=chat-conversation--activity-sheet&viewMode=story",
+    );
+    if (surface === "history") {
+      await page
+        .getByRole("button", { name: "전체 기록", exact: true })
+        .click();
+    }
+    const sheet = page.getByRole("dialog", {
+      name: surface === "history" ? "전체 기록" : "작업 상태",
+      exact: true,
+    });
+    await sheet.getByRole("button", { name: "닫기", exact: true }).hover();
+    const viewport = sheet.locator("[data-sheet-viewport]");
+    for (const edge of ["top", "bottom"] as const) {
+      const canceled = await viewport.evaluate((element, boundary) => {
+        element.scrollTop = boundary === "top" ? 0 : element.scrollHeight;
+        const direction = boundary === "top" ? -1 : 1;
+        const bounds = element.getBoundingClientRect();
+        const x = bounds.x + bounds.width / 2;
+        const y = bounds.y + bounds.height / 2;
+        const start = new Touch({
+          identifier: 1,
+          target: element,
+          clientX: x,
+          clientY: y,
+        });
+        const moved = new Touch({
+          identifier: 1,
+          target: element,
+          clientX: x,
+          clientY: y - direction * 40,
+        });
+        const wheel = !element.dispatchEvent(
+          new WheelEvent("wheel", {
+            deltaY: direction * 120,
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+        element.dispatchEvent(
+          new TouchEvent("touchstart", {
+            touches: [start],
+            changedTouches: [start],
+            targetTouches: [start],
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+        const touch = !element.dispatchEvent(
+          new TouchEvent("touchmove", {
+            touches: [moved],
+            changedTouches: [moved],
+            targetTouches: [moved],
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+        element.dispatchEvent(
+          new TouchEvent("touchend", {
+            touches: [],
+            changedTouches: [moved],
+            targetTouches: [],
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+        return { wheel, touch };
+      }, edge);
+      expect(canceled, edge).toEqual({ wheel: false, touch: false });
+    }
+  });
+}

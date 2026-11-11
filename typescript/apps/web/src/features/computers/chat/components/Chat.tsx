@@ -4,6 +4,7 @@ import { CharacterArtwork } from "@chapchoo/ui/CharacterArtwork";
 import { ConfirmationDialog } from "@chapchoo/ui/ConfirmationDialog";
 import { ContextSidebar } from "@chapchoo/ui/ContextSidebar";
 import { PageFailure } from "@chapchoo/ui/PageFailure";
+import { Sheet, SheetViewport } from "@chapchoo/ui/Sheet";
 import { agentPath } from "@chapchoo/web-core/workspace";
 import {
   ActionIcon,
@@ -300,7 +301,7 @@ export function Chat(props: ChatProps): ReactElement {
         <Navigation {...props} />
       </Drawer>
       <AgentTheme palette={agent.paletteKey}>
-        <Drawer
+        <Sheet
           opened={props.opened}
           returnFocus={false}
           // Restore the status opener when this sheet returns to the transcript.
@@ -314,154 +315,143 @@ export function Chat(props: ChatProps): ReactElement {
           closeOnClickOutside={!p.confirmation && !p.detailsOpened}
           trapFocus={!p.confirmation && !p.detailsOpened}
           onClose={props.onClose}
-          position="bottom"
           size="min(78dvh, 46rem)"
           title={c.activity}
           closeButtonProps={{ "aria-label": c.close }}
-          classNames={{
-            content: classes.activityPanel,
-            header: classes.activityHeader,
-            body: classes.panelBody,
-          }}
-          // CSS owns the document lock without canceling native edge gestures.
-          lockScroll={false}
           overlayProps={{ backgroundOpacity: 0.12, blur: 0 }}
         >
-          <div
-            className={classes.activityScroll}
-            role="region"
-            aria-label={c.activity}
-            style={profileStyle(agent.paletteKey)}
-          >
-            <a className={classes.detailIdentity} href={detailHref}>
-              <CharacterArtwork
-                basePath={p.basePath}
-                assetKey={agent.profileImage.assetKey}
-                className={classes.detailPortrait}
+          <SheetViewport className={classes.panelBody} fadeTop>
+            <div
+              className={classes.activityScroll}
+              role="region"
+              aria-label={c.activity}
+              style={profileStyle(agent.paletteKey)}
+            >
+              <a className={classes.detailIdentity} href={detailHref}>
+                <CharacterArtwork
+                  basePath={p.basePath}
+                  assetKey={agent.profileImage.assetKey}
+                  className={classes.detailPortrait}
+                />
+                <span className={classes.detailIdentityText}>
+                  <strong>{agent.name}</strong>
+                  <span>{c.detail}</span>
+                </span>
+                <Icon name="chevron" />
+              </a>
+              {p.stale ? (
+                <Alert color="yellow" mb="lg">
+                  {p.copy.stale}
+                </Alert>
+              ) : null}
+              {p.error && !p.confirmation ? (
+                <Alert color="red" mb="lg">
+                  {p.error}
+                </Alert>
+              ) : null}
+              <ComputerControls
+                {...p}
+                agent={agent}
+                onDetailsExit={props.focus.nestedClosed}
               />
-              <span className={classes.detailIdentityText}>
-                <strong>{agent.name}</strong>
-                <span>{c.detail}</span>
-              </span>
-              <Icon name="chevron" />
-            </a>
-            {p.stale ? (
-              <Alert color="yellow" mb="lg">
-                {p.copy.stale}
-              </Alert>
-            ) : null}
-            {p.error && !p.confirmation ? (
-              <Alert color="red" mb="lg">
-                {p.error}
-              </Alert>
-            ) : null}
-            <ComputerControls
-              {...p}
-              agent={agent}
-              onDetailsExit={props.focus.nestedClosed}
-            />
-            {props.supplyControl}
-            <div className={classes.summary}>
-              <span>
-                {agent.name} · {c.codex}
-              </span>
-              <h2>{c.execution}</h2>
-              <p>{props.status}</p>
-              {props.activity === "authenticationRequired" ? (
-                <Button component="a" href={detailHref} variant="default">
-                  {c.authenticationSettings}
-                </Button>
-              ) : props.activity === "startFailed" ||
-                props.activity === "sourceUnavailable" ||
-                props.activity === "retirementUnknown" ||
-                props.activity === "unavailable" ? (
-                <Button variant="default" onClick={props.conversation.onRead}>
-                  {c.retry}
-                </Button>
+              {props.supplyControl}
+              <div className={classes.summary}>
+                <span>
+                  {agent.name} · {c.codex}
+                </span>
+                <h2>{c.execution}</h2>
+                <p>{props.status}</p>
+                {props.activity === "authenticationRequired" ? (
+                  <Button component="a" href={detailHref} variant="default">
+                    {c.authenticationSettings}
+                  </Button>
+                ) : props.activity === "startFailed" ||
+                  props.activity === "sourceUnavailable" ||
+                  props.activity === "retirementUnknown" ||
+                  props.activity === "unavailable" ? (
+                  <Button variant="default" onClick={props.conversation.onRead}>
+                    {c.retry}
+                  </Button>
+                ) : null}
+                {props.conversation.stop !== "idle" ? (
+                  <p role="status">{c[props.conversation.stop]}</p>
+                ) : null}
+                {props.conversation.region.header.workId ? (
+                  <Button
+                    variant="default"
+                    onClick={props.onStop}
+                    disabled={
+                      !props.stoppable || props.conversation.stop !== "idle"
+                    }
+                    leftSection={<Icon name="stop" />}
+                  >
+                    {c.stop}
+                  </Button>
+                ) : null}
+              </div>
+              {currentPlan ? (
+                <div className={classes.taskHeading}>
+                  <h3>{c.plan}</h3>
+                </div>
               ) : null}
-              {props.conversation.stop !== "idle" ? (
-                <p role="status">{c[props.conversation.stop]}</p>
+              {currentPlan?.plan?.type === "items" ? (
+                <ol className={classes.tasks}>
+                  {currentPlan.plan.items.map((item, index) => (
+                    <li key={index}>
+                      <span>
+                        {item.content} · {nativeStatus(c, item.status)}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              ) : currentPlan?.plan?.type === "text" ? (
+                <ConversationContent
+                  parts={[{ type: "text", text: currentPlan.plan.text }]}
+                />
+              ) : currentPlan ? (
+                <ConversationContent parts={currentPlan.content} />
               ) : null}
-              {props.conversation.region.header.workId ? (
+              <section className={classes.tools}>
                 <Button
-                  variant="default"
-                  onClick={props.onStop}
-                  disabled={
-                    !props.stoppable || props.conversation.stop !== "idle"
-                  }
-                  leftSection={<Icon name="stop" />}
+                  variant="subtle"
+                  fullWidth
+                  rightSection={<Icon name="chevron" />}
+                  onClick={() => props.conversation.onHistory()}
+                  classNames={{ inner: classes.historyLinkInner }}
                 >
-                  {c.stop}
+                  {c.history}
                 </Button>
-              ) : null}
+                <div
+                  className={
+                    records.length > 5 || props.conversation.region.older
+                      ? classes.recentFade
+                      : void 0
+                  }
+                >
+                  {records.slice(-5).map((record) => (
+                    <RecentConversationRecord
+                      key={record.key}
+                      record={record}
+                      copy={c}
+                      agentName={agent.name}
+                      onOpen={() => props.conversation.onHistory(record)}
+                    />
+                  ))}
+                </div>
+              </section>
             </div>
-            {currentPlan ? (
-              <div className={classes.taskHeading}>
-                <h3>{c.plan}</h3>
-              </div>
-            ) : null}
-            {currentPlan?.plan?.type === "items" ? (
-              <ol className={classes.tasks}>
-                {currentPlan.plan.items.map((item, index) => (
-                  <li key={index}>
-                    <span>
-                      {item.content} · {nativeStatus(c, item.status)}
-                    </span>
-                  </li>
-                ))}
-              </ol>
-            ) : currentPlan?.plan?.type === "text" ? (
-              <ConversationContent
-                parts={[{ type: "text", text: currentPlan.plan.text }]}
-              />
-            ) : currentPlan ? (
-              <ConversationContent parts={currentPlan.content} />
-            ) : null}
-            <section className={classes.tools}>
-              <Button
-                variant="subtle"
-                fullWidth
-                rightSection={<Icon name="chevron" />}
-                onClick={() => props.conversation.onHistory()}
-                classNames={{ inner: classes.historyLinkInner }}
-              >
-                {c.history}
-              </Button>
-              <div
-                className={
-                  records.length > 5 || props.conversation.region.older
-                    ? classes.recentFade
-                    : void 0
-                }
-              >
-                {records.slice(-5).map((record) => (
-                  <RecentConversationRecord
-                    key={record.key}
-                    record={record}
-                    copy={c}
-                    agentName={agent.name}
-                    onOpen={() => props.conversation.onHistory(record)}
-                  />
-                ))}
-              </div>
-            </section>
-          </div>
-        </Drawer>
-        <Drawer
+          </SheetViewport>
+        </Sheet>
+        <Sheet
           opened={props.historyOpened}
           onClose={props.onCloseHistory}
           title={c.history}
           closeButtonProps={{ "aria-label": c.close }}
-          position="bottom"
           size="100dvh"
           returnFocus={false}
-          classNames={{
-            content: classes.panel,
-            body: classes.historyPanelBody,
-          }}
         >
           {props.historyContent}
-        </Drawer>
+        </Sheet>
         <ConfirmationDialog
           opened={p.confirmation !== null}
           title={

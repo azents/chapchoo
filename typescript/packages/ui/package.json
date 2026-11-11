@@ -36,6 +36,7 @@
     "./Feedback": "./src/Feedback.tsx",
     "./fields": "./src/fields.tsx",
     "./ConfirmationDialog": "./src/ConfirmationDialog.tsx",
+    "./Sheet": "./src/Sheet.tsx",
     "./createReactContainer": "./src/createReactContainer.tsx"
   },
   "scripts": {

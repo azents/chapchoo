@@ -1,5 +1,6 @@
 "use client";
-import { Button, ScrollArea } from "@mantine/core";
+import { SheetViewport } from "@chapchoo/ui/Sheet";
+import { Button } from "@mantine/core";
 import { ConversationBody } from "./ConversationBody";
 import classes from "./ConversationHistory.module.css";
 import type { HistoryScroll } from "../containers/useHistoryScroll";
@@ -21,11 +22,12 @@ export function ConversationHistory({
 }: ConversationHistoryProps): ReactElement {
   return (
     <div className={classes.frame}>
-      <ScrollArea
+      <SheetViewport
         className={classes.scroll}
-        viewportRef={scroll.viewportRef}
-        overscrollBehavior="contain"
-        viewportProps={{ role: "log", "aria-label": copy.history, tabIndex: 0 }}
+        ref={scroll.viewportRef}
+        role="log"
+        aria-label={copy.history}
+        tabIndex={0}
       >
         <div ref={scroll.contentRef} className={classes.content}>
           <ConversationBody
@@ -37,7 +39,7 @@ export function ConversationHistory({
             initiallyExpandedKey={scroll.initialFocus}
           />
         </div>
-      </ScrollArea>
+      </SheetViewport>
       {scroll.detached || controls.readingOlder ? (
         <Button
           className={classes.latest}
