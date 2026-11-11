@@ -301,11 +301,11 @@ impl Worker {
                     )
                     .await?;
                 self.control.check(command).await?;
-                let updated = self.adapter.disable_restart(retiring).await?;
+                let stopped = self.adapter.stop_container(retiring).await?;
                 self.control.check(command).await?;
-                let stopped = self.adapter.stop_container(updated).await?;
+                let updated = self.adapter.disable_restart(stopped).await?;
                 self.control.check(command).await?;
-                let absent = self.adapter.remove_container(stopped).await?;
+                let absent = self.adapter.remove_container(updated).await?;
                 self.control
                     .report(
                         &context,

@@ -269,6 +269,13 @@ async fn exchange(
                     "update" => {
                         state.calls.push("update");
                         assert_eq!(body["RestartPolicy"]["Name"], "no");
+                        assert_eq!(
+                            state
+                                .container
+                                .as_ref()
+                                .ok_or("Missing fixture container")?["State"]["Status"],
+                            "exited"
+                        );
                         state
                             .container
                             .as_mut()
@@ -282,7 +289,7 @@ async fn exchange(
                             .container
                             .as_mut()
                             .ok_or("Missing fixture container")?;
-                        assert_eq!(container["HostConfig"]["RestartPolicy"]["Name"], "no");
+                        assert_eq!(container["HostConfig"]["RestartPolicy"]["Name"], "always");
                         container["State"]["Status"] = json!("exited");
                         container["State"]["Running"] = json!(false);
                         container["State"]["Pid"] = json!(0);
@@ -719,18 +726,18 @@ async fn native_control_journey_acks_allocations_and_preserves_original_volume_w
                             "volume-create",
                             "create",
                             "start",
-                            "update",
                             "stop",
+                            "update",
                             "remove",
                             "create",
                             "start",
-                            "update",
                             "stop",
+                            "update",
                             "remove",
                             "create",
                             "start",
-                            "update",
                             "stop",
+                            "update",
                             "remove",
                             "volume-remove"
                         ]

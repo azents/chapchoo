@@ -108,10 +108,10 @@ async fn capacity_rejects_before_container_submission_and_reuses_only_a_settled_
                 false,
             )
             .await?;
-        let updated = docker.disable_restart(retiring).await?;
-        let stopped = docker.stop_container(updated).await?;
+        let stopped = docker.stop_container(retiring).await?;
+        let updated = docker.disable_restart(stopped).await?;
         assert_eq!(
-            docker.remove_container(stopped).await?.presence,
+            docker.remove_container(updated).await?.presence,
             Presence::Absent
         );
         let recovered = docker
