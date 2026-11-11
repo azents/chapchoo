@@ -28,7 +28,7 @@ test("activity sheet keeps its heading and close action outside the scrolling co
   const body = await region.boundingBox();
   expect(body?.y).toBeCloseTo((bar?.y ?? 0) + (bar?.height ?? 0), 0);
   const detail = dialog.getByRole("link", {
-    name: "에이전트 상세",
+    name: "코기 에이전트 상세",
     exact: true,
   });
   await expect(detail).toContainText("코기");

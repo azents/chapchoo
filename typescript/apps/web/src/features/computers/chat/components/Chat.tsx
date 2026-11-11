@@ -331,11 +331,7 @@ export function Chat(props: ChatProps): ReactElement {
             aria-label={c.activity}
             style={profileStyle(agent.paletteKey)}
           >
-            <a
-              className={classes.detailIdentity}
-              href={detailHref}
-              aria-label={c.detail}
-            >
+            <a className={classes.detailIdentity} href={detailHref}>
               <CharacterArtwork
                 basePath={p.basePath}
                 assetKey={agent.profileImage.assetKey}

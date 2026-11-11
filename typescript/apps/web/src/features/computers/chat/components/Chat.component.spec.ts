@@ -114,7 +114,7 @@ for (const width of [390, 1280]) {
       exact: true,
     });
     const details = activity.getByRole("link", {
-      name: "에이전트 상세",
+      name: "코기 에이전트 상세",
       exact: true,
     });
     await expect(details).toBeVisible();
@@ -490,7 +490,7 @@ test("confirmed native startup failure is explained without claiming delivery or
     dialog.getByRole("button", { name: "다시 불러오기", exact: true }),
   ).toBeVisible();
   await expect(
-    dialog.getByRole("link", { name: "에이전트 상세", exact: true }),
+    dialog.getByRole("link", { name: "코기 에이전트 상세", exact: true }),
   ).toHaveAttribute("href", "/teams/my/agents/corgi");
 });
 test("authentication requirement has a reachable setup action, not an unexplained disabled composer", async ({
