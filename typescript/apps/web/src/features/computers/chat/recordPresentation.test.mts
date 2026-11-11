@@ -100,3 +100,37 @@ void test("ACP kind controls subjects; unknown kinds and malformed raw data rema
     "Run checks",
   );
 });
+
+void test("request previews show retained question context before repeating its title", () => {
+  const r: ConversationRecord = {
+    ...record(),
+    kind: "request",
+    question: {
+      type: "form",
+      title: "Release details",
+      description: "Choose the **release target**.",
+      fields: [],
+    },
+  };
+  assert.equal(recordPreview(r), "Choose the release target.");
+  assert.equal(
+    recordPreview({
+      ...r,
+      question: {
+        type: "permission",
+        title: "Run a command?",
+        options: [],
+        locations: [],
+        content: [{ type: "text", text: "`pnpm test`" }],
+      },
+    }),
+    "pnpm test",
+  );
+  assert.equal(
+    recordPreview({
+      ...r,
+      question: { type: "unsupported", title: "Unknown request" },
+    }),
+    "Unknown request",
+  );
+});

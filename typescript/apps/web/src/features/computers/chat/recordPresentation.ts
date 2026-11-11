@@ -119,6 +119,14 @@ export function recordPreview(record: ConversationRecord): string {
     record.kind === "tool"
       ? (target ?? record.title ?? contentText(record.content))
       : contentText(record.content);
+  const question = record.question;
+  const questionPreview =
+    question && question.type !== "unsupported"
+      ? question.description ||
+        (question.type === "permission"
+          ? contentText(question.content)
+          : question.schemaTitle)
+      : "";
   return plainPreview(
     text ||
       record.terminal?.text ||
@@ -126,7 +134,8 @@ export function recordPreview(record: ConversationRecord): string {
       (record.plan?.type === "text"
         ? record.plan.text
         : record.plan?.items.map((item) => item.content).join(" · ")) ||
-      record.question?.title ||
+      questionPreview ||
+      question?.title ||
       "",
   );
 }
