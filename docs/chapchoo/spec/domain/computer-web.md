@@ -33,7 +33,8 @@ Mac enrollment UI remain outside the implemented surface.
 
 List cards and successful creation enter the Agent's `/chat` route. It uses the
 same exact-Team/individual-owner SSR admission and hydrated detail observation.
-The saved character links to the retained detail page for profile editing and
+The header character opens the [conversation activity sheet](conversation-web.md),
+whose identity row links to the retained detail page for profile editing and
 destructive administration. Sidebar rows show real private Agents with saved
 artwork, names and handles; they navigate by handle. The bounded supplementary
 list does not block the primary Agent. It shows at most five Agents in default

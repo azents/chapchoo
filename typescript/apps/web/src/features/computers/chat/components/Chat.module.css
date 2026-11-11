@@ -77,6 +77,8 @@
     0 0.125rem 0.5rem color-mix(in srgb, var(--profile-ink) 4%, transparent);
 }
 .portrait {
+  padding: 0;
+  cursor: pointer;
   width: 4.125rem;
   height: 4.125rem;
   display: grid;

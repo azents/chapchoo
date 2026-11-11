@@ -2,6 +2,33 @@ import { computerCopy } from "@chapchoo/web-core/computer-messages";
 import { expect, test } from "@playwright/test";
 
 for (const width of [390, 1280]) {
+  test(`Agent portrait opens Activity and keeps details inside the sheet at ${width}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto("/iframe.html?id=chat-conversation--idle&viewMode=story");
+    const profile = page.getByRole("button", {
+      name: "작업 상태: 코기",
+      exact: true,
+    });
+    await profile.click();
+    const activity = page.getByRole("dialog", {
+      name: "작업 상태",
+      exact: true,
+    });
+    await expect(activity).toBeVisible();
+    await expect(
+      activity.getByRole("link", { name: "코기 에이전트 상세", exact: true }),
+    ).toHaveAttribute("href", "/teams/my/agents/corgi");
+    await activity.getByRole("button", { name: "닫기", exact: true }).click();
+    await expect(activity).toBeHidden();
+    await profile.focus();
+    await profile.press("Enter");
+    await expect(activity).toBeVisible();
+  });
+}
+
+for (const width of [390, 1280]) {
   test(`pending input matches native message geometry without lifecycle captions at ${width}`, async ({
     page,
   }) => {
@@ -629,7 +656,10 @@ test("localized status and long identity remain usable on narrow screens", async
         page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
       )
       .toBe(true);
-    await page.locator('button[aria-haspopup="dialog"]').click();
+    await page
+      .locator('header button[aria-haspopup="dialog"]')
+      .filter({ has: page.locator("strong") })
+      .click();
     await expect(page.getByRole("dialog")).toBeVisible();
     await expect
       .poll(() =>
