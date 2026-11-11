@@ -17,6 +17,7 @@ const model = "fixture-model";
 let authenticated = false;
 let active = false;
 let primaryUsed = false;
+let primaryStarted = false;
 const helperThreads = new Set();
 let cwd = "/workspace";
 const turn = (status) => ({ id: turnId, items: [], status, error: null });
@@ -181,6 +182,11 @@ function request(id, method, params) {
     case "thread/start":
       if (!authenticated || typeof params?.cwd !== "string")
         throw new Error("Fixture thread was not admitted");
+      if (params.ephemeral !== true) {
+        if (primaryStarted)
+          throw new Error("Fixture primary thread was started twice");
+        primaryStarted = true;
+      }
       cwd = params.cwd;
       reply(id, {
         thread:
@@ -253,7 +259,11 @@ function request(id, method, params) {
         active ||
         primaryUsed ||
         params?.threadId !== threadId ||
-        !Array.isArray(params.input)
+        !Array.isArray(params.input) ||
+        params.input.length !== 1 ||
+        params.input[0]?.type !== "text" ||
+        params.input[0]?.text !==
+          "Exercise the deterministic native conversation"
       )
         throw new Error("Fixture turn was not admitted");
       primaryUsed = true;

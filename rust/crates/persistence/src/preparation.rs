@@ -10,7 +10,7 @@ use std::{error::Error, fs::OpenOptions, path::Path};
 
 pub const SQLITE_MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/sqlite");
 pub const POSTGRES_MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/postgres");
-pub(crate) const VERSIONS: [&str; 20] = [
+pub(crate) const VERSIONS: [&str; 21] = [
     "00000000000001",
     "00000000000002",
     "00000000000003",
@@ -31,6 +31,7 @@ pub(crate) const VERSIONS: [&str; 20] = [
     "00000000000018",
     "00000000000019",
     "00000000000020",
+    "00000000000021",
 ];
 const PG_LOCK: i64 = 1_960_261_029;
 #[cfg(test)]
@@ -79,6 +80,7 @@ fn prepared_product_query() -> String {
         "conversation_requests",
         "conversation_answers",
         "conversation_input_preparation",
+        "conversation_startups",
         "conversation_native_state",
         "conversation_native_details",
         "conversation_applied_supply",
@@ -355,6 +357,8 @@ pub fn sqlite_ready(path: &Path, cipher: &CredentialCipher) -> Result<(), Prepar
         .replace('#', "%23");
     let mut connection = diesel::SqliteConnection::establish(&format!("file:{escaped}?mode=ro"))
         .map_err(PreparationError::Connection)?;
+    // Match ordinary Store leases: a normal short writer is not schema failure.
+    connection.batch_execute("PRAGMA busy_timeout=5000")?;
     if !sqlite_has_binding(&mut connection)? {
         return Err(PreparationError::Unprepared);
     }

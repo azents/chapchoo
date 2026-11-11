@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { Buffer } from "node:buffer";
 import { AuthenticationsClient } from "@chapchoo/rpc-client/authentication";
+import { ConversationsClient } from "@chapchoo/rpc-client/conversations";
 import { Assembly } from "@chapchoo/testenv/assembly";
 import { credentials, Metadata, status } from "@grpc/grpc-js";
 import {
@@ -115,6 +116,11 @@ void test(
       credentials.createInsecure(),
       options,
     );
+    const conversations = new ConversationsClient(
+      endpoint,
+      credentials.createInsecure(),
+      options,
+    );
     let evidence: NativeEvidence | null = null;
     let failure: Error | null = null;
     try {
@@ -171,20 +177,37 @@ void test(
           key.fill(0);
         }
         assert.ok(authenticationId, "Explicit authentication is required");
-        const created = await call(
-          agents.create.bind(agents),
-          {
-            requestId: "create",
-            providerId,
-            authenticationId,
-            name: "Native integration",
-            teamId: team.id,
-            handle: "native-agent",
-            profileImageId: image.id,
-            paletteKey: "sage",
-          },
-          session.token,
-        );
+        const created = await provider.whileSuspended(async () => {
+          const created = await call(
+            agents.create.bind(agents),
+            {
+              requestId: "create",
+              providerId,
+              authenticationId,
+              name: "Native integration",
+              teamId: team.id,
+              handle: "native-agent",
+              profileImageId: image.id,
+              paletteKey: "sage",
+            },
+            session.token,
+          );
+          assert.ok(created.agent, "Agent allocation must be returned");
+          // This journey tests native Computer lifecycle, not harness launch.
+          // Refuse preparation before acquisition/authentication with its fake key.
+          await call(
+            conversations.saveSupply.bind(conversations),
+            {
+              agentId: created.agent.id,
+              requestId: "lifecycle-only-supply",
+              supply: {
+                existingCodexPath: "/opt/chapchoo/lifecycle-only-no-codex",
+              },
+            },
+            session.token,
+          );
+          return created;
+        });
         assert.ok(created.agent, "Agent allocation must be returned");
         console.info("Native Docker step: allocation returned");
         const agentId = created.agent.id;
@@ -334,6 +357,7 @@ void test(
       computers.close();
       catalog.close();
       authentications.close();
+      conversations.close();
       try {
         await assembly.close();
       } catch (cleanup) {

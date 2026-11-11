@@ -46,6 +46,7 @@ pub use connector_keys::{
 };
 pub use conversations::{
     AcceptConversationAnswer, AcceptConversationInput, AcceptConversationStop, CapturedEventPair,
+    ConnectionStartupAdmission, ConnectionStartupContext, ConnectionStartupObservation,
     ConversationAnswer, ConversationAnswerAdmission, ConversationAnswerChunk,
     ConversationAnswerDelivery, ConversationAnswerForwardingAdmission, ConversationAnswerQuestion,
     ConversationAnswerReceipt, ConversationAnswerReference, ConversationAnswerResult,

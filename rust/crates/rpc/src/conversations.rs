@@ -16,8 +16,8 @@ use chapchoo_protocol::conversations::{
 };
 use chapchoo_service::{
     AcceptanceTime, ConversationDeliveryTarget, ConversationForeground, ConversationInputService,
-    ConversationService, ConversationStopReceipt, ConversationStopService, ConversationStopState,
-    ConversationWorkTarget, SaveHarnessSupply,
+    ConversationPreparationFacts, ConversationService, ConversationStopReceipt,
+    ConversationStopService, ConversationStopState, ConversationWorkTarget, SaveHarnessSupply,
 };
 use std::sync::{
     Arc,
@@ -129,6 +129,32 @@ fn native(value: &ConversationDeliveryTarget) -> wire::NativeTarget {
     wire::NativeTarget {
         snapshot_id: value.snapshot.as_str().into(),
         native_session_id: value.native_session.as_str().into(),
+    }
+}
+fn startup_preparation(facts: ConversationPreparationFacts) -> wire::InputPreparation {
+    use chapchoo_service::{
+        ConversationPreparationFailure as Failure, ConversationPreparationOutcome as Outcome,
+        ConversationPreparationState as State,
+    };
+    wire::InputPreparation {
+        requested_supply: Some(wire_supply(facts.requested_supply)),
+        observation: Some(match facts.state {
+            State::PossibleForwarding => {
+                wire::input_preparation::Observation::PossibleForwarding(())
+            }
+            State::Known(Outcome::SessionReady(target)) => {
+                wire::input_preparation::Observation::SessionReady(native(&target))
+            }
+            State::Known(Outcome::Failed(failure)) => {
+                wire::input_preparation::Observation::Failed(match failure {
+                    Failure::NotAdmitted => wire::SetupFailure::NotAdmitted,
+                    Failure::BeforeNativeLaunch => wire::SetupFailure::BeforeNativeLaunch,
+                    Failure::NativeRejected => wire::SetupFailure::NativeRejected,
+                    Failure::SourceUnavailable => wire::SetupFailure::SourceUnavailable,
+                    Failure::RetirementUnknown => wire::SetupFailure::RetirementUnknown,
+                } as i32)
+            }
+        }),
     }
 }
 fn work(value: Option<wire::WorkTarget>) -> Result<ConversationWorkTarget, Status> {
@@ -272,6 +298,12 @@ impl Conversations for ConversationServices {
                 ..Default::default()
             }));
         };
+        let startup = self
+            .conversation
+            .connection_startup(&actor, &value.agent_id, now)
+            .await
+            .map_err(status)?
+            .map(|observed| startup_preparation(observed.facts));
         let observed = self
             .conversation
             .native_observation(&actor, &value.agent_id, &current.id, now)
@@ -340,6 +372,7 @@ impl Conversations for ConversationServices {
             conversation: Some(conversation),
             observed_native,
             saved_authentication_id,
+            startup,
         }))
     }
     async fn get_supply(

@@ -216,6 +216,35 @@ impl ConversationService {
             .begin_conversation_input_preparation(actor, route, draft, now)
             .await?)
     }
+    pub async fn connection_startup(
+        &self,
+        actor: &chapchoo_crypto::SecretDigest,
+        agent_id: &str,
+        now: i64,
+    ) -> Result<Option<chapchoo_persistence::ConnectionStartupObservation>, ServiceError> {
+        Ok(self.store.connection_startup(actor, agent_id, now).await?)
+    }
+    pub async fn admit_connection_startup(
+        &self,
+        computer_id: &str,
+        route: &chapchoo_persistence::ResolvedRoute,
+    ) -> Result<Vec<chapchoo_persistence::ConnectionStartupAdmission>, ServiceError> {
+        Ok(self
+            .store
+            .admit_connection_startup(computer_id, route)
+            .await?)
+    }
+    pub async fn connection_startup_may_dispatch(
+        &self,
+        computer_id: &str,
+        route: &chapchoo_persistence::ResolvedRoute,
+        operation_id: &str,
+    ) -> Result<bool, ServiceError> {
+        Ok(self
+            .store
+            .connection_startup_may_dispatch(computer_id, route, operation_id)
+            .await?)
+    }
     pub async fn setup_facts(
         &self,
         actor: &chapchoo_crypto::SecretDigest,

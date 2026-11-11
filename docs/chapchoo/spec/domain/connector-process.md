@@ -27,8 +27,12 @@ SIGINT/SIGTERM cancels its owned loop under a finite shutdown budget.
 
 One [native owner](native-harness.md) is composed outside the reconnect/key-refresh
 loop and explicitly finished when that loop exits. Constructing this idle owner
-does not prepare or start a harness. Owner conversation services route explicit
-commands separately; ObserveConnector still reports connectivity only.
+does not prepare or start a harness. After the stream is installed, the Client's
+[connection-startup reconciler](conversation-storage.md#connection-time-preparation)
+can send sealed Setup for the selected real conversation without a message.
+It does not await setup inside stream admission. Owner conversation services
+route explicit commands separately; ObserveConnector still reports connectivity
+only.
 
 Setup dequeue additionally checks its current server-sealed intent, saved supply
 and fresh-versus-existing context permission through component RPC. A bounded

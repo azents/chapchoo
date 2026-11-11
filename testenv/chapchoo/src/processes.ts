@@ -105,6 +105,30 @@ export class OwnedChild {
   get running(): boolean {
     return !this.cleaned && (this.role === "service" || !this.ended);
   }
+  /** Keep an owned Unix worker from consuming new work during prerequisite setup. */
+  async whileSuspended<T>(operation: () => Promise<T>): Promise<T> {
+    const pid = this.child.pid;
+    if (!pid || this.ended || this.cleaned || process.platform === "win32") {
+      throw new Error("A live owned Unix worker is required for suspension");
+    }
+    signalGroup(pid, "SIGSTOP");
+    let result: { ok: true; value: T } | { ok: false; error: unknown };
+    try {
+      result = { ok: true, value: await operation() };
+    } catch (error) {
+      result = { ok: false, error };
+    }
+    try {
+      signalGroup(pid, "SIGCONT");
+    } catch (error) {
+      throw new AggregateError(
+        [...(result.ok ? [] : [result.error]), error],
+        "Suspended prerequisite cleanup was unconfirmed",
+      );
+    }
+    if (!result.ok) throw result.error;
+    return result.value;
+  }
   async stop(): Promise<void> {
     if (this.cleaned) {
       return;

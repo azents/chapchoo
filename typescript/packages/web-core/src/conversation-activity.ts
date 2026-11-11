@@ -24,7 +24,6 @@ export function conversationActivity(
 ): ConversationActivity {
   const header = region.header;
   if (header.foreground !== "unavailable") return header.foreground;
-  if (header.state === "loading") return "starting";
   const latestLocal = local
     .filter(
       (item) =>
@@ -48,8 +47,9 @@ export function conversationActivity(
   if (header.state === "notStarted" && !header.savedAuthenticationId)
     return "authenticationRequired";
   const latest = region.latestInput;
-  if (latest?.preparation?.type === "failed") {
-    switch (latest.preparation.reason) {
+  const preparation = latest?.preparation ?? header.startup;
+  if (preparation?.type === "failed") {
+    switch (preparation.reason) {
       case "sourceUnavailable":
         return "sourceUnavailable";
       case "retirementUnknown":
@@ -58,6 +58,8 @@ export function conversationActivity(
         return "startFailed";
     }
   }
+  if (header.state === "loading" || preparation?.type === "preparing")
+    return "starting";
   const observation = latestLocal?.observation ?? latest?.observation;
   if (observation === "preparing" || observation === "accepted")
     return "starting";

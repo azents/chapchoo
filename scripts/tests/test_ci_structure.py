@@ -206,7 +206,9 @@ class CiStructureTests(unittest.TestCase):
         ]:
             self.assertIn(required, native)
         self.assertIn("pnpm --filter @chapchoo/e2e test:e2e", browser)
-        self.assertNotIn("CHAPCHOO_INTEGRATION_DOCKER", browser)
+        self.assertIn("pnpm --filter @chapchoo/e2e test:conversation", browser)
+        self.assertIn("CHAPCHOO_INTEGRATION_DOCKER_AUTHORIZED: disposable", browser)
+        self.assertIn("binary-artifacts=$CHAPCHOO_E2E_PACKAGE_ROOT", browser)
         self.assertNotIn("playwright", native)
         image = (ROOT / "images/chapchoo/Dockerfile").read_text()
         self.assertIn("mkdir -p /opt/chapchoo /workspace", image)

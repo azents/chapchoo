@@ -151,6 +151,7 @@ export function conversationHeader(
         }
       : undefined,
     savedAuthenticationId: value.savedAuthenticationId,
+    startup: preparationView(value.startup),
     appliedAuthenticationId: observed?.authenticationId,
     foreground: !observed
       ? "unavailable"
@@ -717,8 +718,13 @@ export function inputObservation(
 export function inputPreparation(
   value: Wire.OwnerInputStatus,
 ): InputPreparation | undefined {
-  if (!value.acceptance || !value.preparation) return undefined;
-  const preparation = value.preparation;
+  if (!value.acceptance) return undefined;
+  return preparationView(value.preparation);
+}
+function preparationView(
+  preparation: Wire.InputPreparation | undefined,
+): InputPreparation | undefined {
+  if (!preparation) return undefined;
   if (preparation.failed !== undefined) {
     const reasons: Partial<
       Record<number, Extract<InputPreparation, { type: "failed" }>["reason"]>

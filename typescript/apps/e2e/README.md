@@ -36,7 +36,10 @@ flow for every native substrate.
 `pnpm --filter @chapchoo/e2e test:conversation` runs one separate core browser
 journey with the actual Docker Provider, Connector, backend and official ACP
 adapter. It selects the deterministic app-server executable as an explicit
-existing Codex installation. Synthetic login, two native utterances, an update to
+existing Codex installation before releasing its owned Provider to create the
+Computer. It waits for a real selected native session before the first Send and
+checks that the first input retains that exact conversation/native target. The
+fixture refuses a duplicate primary New or a synthetic first prompt. Synthetic login, two native utterances, an update to
 the same utterance, a typed inline answer and retained state on reentry cross the
 production boundaries. This proves assembled plumbing, not real Codex/model
 behavior. Missing Docker/native prerequisites fail rather than skip.

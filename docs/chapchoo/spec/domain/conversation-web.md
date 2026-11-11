@@ -85,6 +85,11 @@ does not invent token-expiry or network diagnoses. An unavailable saved source
 and uncertain retirement retain their distinct user consequences.
 
 The read owner preserves typed setup results beside retained input operations.
+Connection-startup preparation is also carried in the owner header before an
+input exists. It projects starting or the reported failure without synthesizing
+a user message. A startup failure remains visible during source loading and when
+the first accepted input has no independent setup fact. Native foreground still
+wins; saved-authentication absence remains its own actionable condition.
 A separate latest-input observation stays current even when the user pages older
 inputs. It follows the newest non-deleted operation for the exact source, so
 deleting a newer failure does not hide an earlier accepted or preparing

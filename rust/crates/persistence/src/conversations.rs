@@ -9,6 +9,7 @@ mod native_state;
 mod preparation;
 mod projection;
 mod records;
+mod startup;
 mod stops;
 mod supply;
 
@@ -64,6 +65,9 @@ pub use projection::{
 pub use records::{
     CapturedEventPair, EventChunkRead, EventMetadataRead, EventPairMetadata, EventPayloadChunk,
     EventPayloadKind, SourceBinding,
+};
+pub use startup::{
+    ConnectionStartupAdmission, ConnectionStartupContext, ConnectionStartupObservation,
 };
 pub use stops::{
     AcceptConversationStop, ConversationStopAdmission, ConversationStopReceipt,

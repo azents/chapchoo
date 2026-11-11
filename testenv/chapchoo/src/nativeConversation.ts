@@ -5,6 +5,8 @@ import {
   TeamManagementClient,
 } from "@chapchoo/rpc-client/accounts";
 import { AuthenticationsClient } from "@chapchoo/rpc-client/authentication";
+import { ConversationsClient } from "@chapchoo/rpc-client/conversations";
+import type { OwnerConversation } from "@chapchoo/rpc-client/conversations";
 import {
   AgentsClient,
   ComputersClient,
@@ -42,6 +44,7 @@ async function poll<T>(
 /** Disposable prerequisite state uses the same public RPC admission as the UI. */
 export async function nativeConversation(assembly: Assembly): Promise<{
   chatPath: string;
+  current: () => Promise<OwnerConversation>;
   close: () => Promise<void>;
 }> {
   const docker = assembly.docker;
@@ -79,7 +82,20 @@ export async function nativeConversation(assembly: Assembly): Promise<{
     credentials.createInsecure(),
     options,
   );
-  const clients = [auth, teams, agents, computers, catalog, keys];
+  const conversations = new ConversationsClient(
+    endpoint,
+    credentials.createInsecure(),
+    options,
+  );
+  const clients = [
+    auth,
+    teams,
+    agents,
+    computers,
+    catalog,
+    keys,
+    conversations,
+  ];
   let token: string | null = null;
   let agentId: string | null = null;
   let stage = "initialize";
@@ -125,7 +141,7 @@ export async function nativeConversation(assembly: Assembly): Promise<{
     stage = "team";
     const team = (await call(teams.listTeams.bind(teams), {})).items[0];
     if (!team) throw new Error("Conversation fixture requires a personal Team");
-    await assembly.startDockerProvider();
+    const provider = await assembly.startDockerProvider();
     stage = "provider";
     const available = await poll(
       () => call(catalog.list.bind(catalog), { limit: 20 }),
@@ -159,20 +175,32 @@ export async function nativeConversation(assembly: Assembly): Promise<{
     if (!authenticationId)
       throw new Error("Conversation fixture key registration was not observed");
     stage = "create";
-    const agent = (
-      await call(agents.create.bind(agents), {
-        requestId: "conversation-create",
-        providerId,
-        authenticationId,
-        teamId: team.id,
-        handle: "chat-agent",
-        name: "Conversation fixture",
-        profileImageId: image.id,
-        paletteKey: "sage",
-      })
-    ).agent;
-    if (!agent) throw new Error("Conversation fixture Agent was not returned");
-    agentId = agent.id;
+    // Freeze only this owned Provider before creating work. The explicit
+    // deterministic executable must be selected before any Connector can start.
+    const agent = await provider.whileSuspended(async () => {
+      const agent = (
+        await call(agents.create.bind(agents), {
+          requestId: "conversation-create",
+          providerId,
+          authenticationId,
+          teamId: team.id,
+          handle: "chat-agent",
+          name: "Conversation fixture",
+          profileImageId: image.id,
+          paletteKey: "sage",
+        })
+      ).agent;
+      if (!agent)
+        throw new Error("Conversation fixture Agent was not returned");
+      agentId = agent.id;
+      stage = "select-deterministic-executable";
+      await call(conversations.saveSupply.bind(conversations), {
+        agentId,
+        requestId: "conversation-fixture-supply",
+        supply: { existingCodexPath: "/opt/chapchoo/codex-fixture" },
+      });
+      return agent;
+    });
     stage = "connect";
     await poll(
       () => call(agents.get.bind(agents), { agentId: agent.id }),
@@ -192,6 +220,8 @@ export async function nativeConversation(assembly: Assembly): Promise<{
     );
     return {
       chatPath: `/teams/my/agents/${agent.handle}/chat`,
+      current: () =>
+        call(conversations.current.bind(conversations), { agentId: agent.id }),
       close,
     };
   } catch (error) {
