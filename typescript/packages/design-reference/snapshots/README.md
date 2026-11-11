@@ -5,6 +5,14 @@ requirements. Read [AGENTS.md](AGENTS.md) and the `product-design-snapshot` Skil
 New concepts start by copying the current UI, then change only the requested parts,
 iterate with feedback, receive explicit confirmation and produce an independent dump.
 
+## Confirmed Chat records
+
+[Chat record inspection](chat-records/README.md) retains the confirmed
+2026-11-12 KST one-line record list and expanded-command direction as two
+independent real-component DOM/CSS dumps. Open the [mobile list](chat-records/mobile-records.html)
+or [desktop command](chat-records/desktop-command.html). Their fictional data,
+static-control and viewport limits are recorded in the collection index.
+
 ## Confirmed harness setup
 
 [Harness setup](harness-setup/README.md) is the requester-confirmed integrated
