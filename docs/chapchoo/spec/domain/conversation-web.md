@@ -43,9 +43,13 @@ scroll viewport. The scrollbar starts below that bar, and browser-native body
 edge overscroll does not move the bar. Dragging over recent-record controls pans
 the body; an intentional tap still opens the selected record. Hover highlighting
 is limited to fine hover pointers rather than remaining selected after touch.
-The Activity sheet locks document overflow through its mounted CSS scope instead
-of a JavaScript wheel/touch boundary canceler. Closing it removes that scope;
-focus trapping and nested control dialogs retain their existing ownership.
+Activity and full history share the design-system Sheet frame and native body
+viewport. Chrome stays outside scrolling content; body padding is inside that
+viewport rather than creating a second clipping inset below the header. The
+mounted Sheet's CSS scope locks document overflow without a JavaScript wheel/touch
+boundary canceler. Closing it removes that scope; focus trapping and nested
+control dialogs retain their existing ownership. The Activity viewport has a
+transparent top continuation fade; full history is unmasked.
 The sheet previews five recent records in chronological order, with a transparent
 top fade when older records exist. Preview and full history reuse the same compact
 row design. Selection enters a separate full-height history view at that record and keeps

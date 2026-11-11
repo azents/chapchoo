@@ -41,6 +41,8 @@ URLs remain correct. The original mascot prompts/model provenance are under
 - `Feedback`: controlled loading/error/empty/loaded states and individual feedback.
 - `EmailField` / `PasswordField`: controlled input values and callbacks.
 - `ConfirmationDialog`: app-owned action, labels, pending/error and confirmation.
+- `Sheet` / `SheetViewport`: stationary sheet chrome and one native body viewport;
+  follow [Sheet composition](#sheet-composition) for scrolling surfaces.
 - `createReactContainer`: typed state-hook/view connection.
 - `designTokens` / `theme`: common token values and the web Mantine adapter.
 
@@ -48,6 +50,35 @@ No RPC, credentials, cookie storage or business routing live here. Reference
 imports these implementations for equivalent roles; fictional compositions and
 iOS typography representation remain reference-local. Colocated static stories
 are included in both apps' own Storybooks and use the same font/provider setup.
+
+## Sheet composition
+
+Use `Sheet` for bottom-sheet chrome and exactly one `SheetViewport` below it.
+The header is a non-shrinking sibling outside the scroll/overscroll viewport;
+its close action and the scrollbar's upper boundary stay below/inside their
+respective regions. Do not put a sticky header inside the body scroller or add
+another scrolling Drawer/body/ScrollArea around this pair.
+
+```tsx
+<Sheet opened={opened} onClose={close} title="History" size="100dvh">
+  <SheetViewport ref={viewportRef} role="log" aria-label="Records">
+    <RecordList />
+  </SheetViewport>
+</Sheet>
+```
+
+The clipped flex frame has zero body padding, including the theme's Drawer
+padding override. Put page spacing inside the viewport, so overflowing content
+clips immediately under the header rather than at a second inset edge.
+Document overflow is locked by the mounted Sheet's CSS scope. Internal native
+wheel/touch gestures are not canceled; Mantine still owns focus and dismissal.
+Nested modal callers retain their explicit focus/Escape ownership.
+
+`fadeTop` is an explicit viewport opt-in, never a default. Chat Activity uses it
+as an upper-content continuation cue; Full history remains unmasked. Keep layout
+and scrollbar ownership identical with or without the mask. Verify both body
+edges, header/close geometry, lock removal and nested dialogs in component tests;
+physical Safari elasticity still needs device verification.
 
 ## Owned verification
 

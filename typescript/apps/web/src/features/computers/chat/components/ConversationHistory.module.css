@@ -5,8 +5,8 @@
   flex: 1;
   position: relative;
 }
-.scroll { flex: 1; min-height: 0; height: 100%; }
-.content { padding: var(--mantine-spacing-md) var(--mantine-spacing-xl) var(--mantine-spacing-3xl); }
+.scroll { height: 100%; }
+.content { max-width: 52rem; margin-inline: auto; padding: var(--mantine-spacing-md) var(--mantine-spacing-xl) var(--mantine-spacing-3xl); }
 .latest { position: absolute; bottom: var(--mantine-spacing-md); inset-inline-start: 50%; transform: translateX(-50%); }
 @media (max-width: 48em) {
   .content { padding-inline: var(--mantine-spacing-md); }

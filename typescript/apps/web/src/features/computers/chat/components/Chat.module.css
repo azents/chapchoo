@@ -11,10 +11,6 @@
 :global(body):has(.frame) {
   overscroll-behavior: none;
 }
-:global(html):has(.activityPanel),
-:global(body):has(.activityPanel) {
-  overflow: hidden;
-}
 .sidebar {
   width: 16.125rem;
   flex-shrink: 0;
@@ -306,26 +302,6 @@
   transform: translateX(-50%);
   pointer-events: auto;
 }
-.panel {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.panel,
-.activityPanel {
-  background: var(--chapchoo-color-surfaceWarm);
-  border-radius: var(--mantine-radius-lg) var(--mantine-radius-lg) 0 0;
-}
-.activityPanel {
-  display: flex;
-  flex-direction: column;
-  overflow: clip;
-}
-.activityHeader {
-  flex-shrink: 0;
-  position: relative;
-  top: auto;
-}
 .detailIdentity {
   display: flex;
   align-items: center;
@@ -344,12 +320,6 @@
 .detailIdentityText strong { font-size: var(--mantine-font-size-sm); overflow-wrap: anywhere; }
 .detailIdentityText > span { color: var(--chapchoo-color-secondary); font-size: var(--mantine-font-size-xs); }
 .panelBody {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior-y: auto;
-  touch-action: pan-y pinch-zoom;
-  width: 100%;
   padding: 0;
 }
 .activityScroll {
@@ -357,16 +327,6 @@
   max-width: 52rem;
   margin-inline: auto;
   padding: var(--mantine-spacing-xl);
-}
-.historyPanelBody {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  padding: 0;
-  width: 100%;
-  max-width: 52rem;
-  margin-inline: auto;
 }
 .summary {
   padding: var(--mantine-spacing-xl) 0;

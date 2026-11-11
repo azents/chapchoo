@@ -1,0 +1,40 @@
+:global(html):has(.content),
+:global(body):has(.content) {
+  overflow: hidden;
+}
+.inner {
+  inset: 0;
+}
+.content {
+  display: flex;
+  flex-direction: column;
+  overflow: clip;
+  background: var(--chapchoo-color-surfaceWarm);
+  border-radius: var(--mantine-radius-lg) var(--mantine-radius-lg) 0 0;
+}
+.header {
+  position: relative;
+  top: auto;
+  flex-shrink: 0;
+}
+/* Override the theme's doubled Drawer body padding selector: this is a frame. */
+.body.body.body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: clip;
+  padding: 0;
+}
+.viewport {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow-y: auto;
+  overscroll-behavior-y: auto;
+  touch-action: pan-y pinch-zoom;
+}
+.fadeTop {
+  mask-image: linear-gradient(to bottom, transparent, black 1.5rem);
+}

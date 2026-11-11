@@ -1,5 +1,38 @@
 import { expect, test } from "@playwright/test";
 
+test("full history clips at the header boundary and keeps fade exclusive to Activity", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 600 });
+  await page.goto(
+    "/iframe.html?id=chat-conversation--activity-sheet&viewMode=story",
+  );
+  const activity = page.getByRole("dialog", { name: "작업 상태", exact: true });
+  await expect(activity.locator("[data-sheet-viewport]")).not.toHaveCSS(
+    "mask-image",
+    "none",
+  );
+  await activity
+    .getByRole("button", { name: "전체 기록", exact: true })
+    .click();
+  const history = page.getByRole("dialog", { name: "전체 기록", exact: true });
+  const viewport = history.getByRole("log");
+  await history.getByRole("button", { name: "닫기", exact: true }).hover();
+  await expect(viewport).toHaveCSS("mask-image", "none");
+  const header = history.locator("header");
+  const before = await header.boundingBox();
+  const body = await viewport.boundingBox();
+  expect(body?.y).toBeCloseTo((before?.y ?? 0) + (before?.height ?? 0), 0);
+  await viewport.evaluate((e) => {
+    e.scrollTop = 100;
+  });
+  await expect
+    .poll(() => viewport.evaluate((e) => e.scrollTop))
+    .toBeGreaterThan(0);
+  expect(await header.boundingBox()).toEqual(before);
+  expect(await history.evaluate((e) => e.scrollTop)).toBe(0);
+});
+
 test("activity sheet keeps its heading and close action outside the scrolling content", async ({
   page,
 }) => {
