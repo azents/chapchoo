@@ -13,6 +13,8 @@ import {
   ContentDisclosure,
   ConversationRecordDisclosure,
 } from "./ConversationRecord";
+import { RecordDiff } from "./RecordDiff";
+import { ToolRecordDetails } from "./ToolRecordDetails";
 import type { ChatCopy } from "../copy";
 import type { ConversationControls } from "../types";
 import type {
@@ -64,8 +66,10 @@ function UserMessageBody({
 }
 export function ConversationContent({
   parts,
+  rawText = false,
 }: {
   parts: ContentPart[];
+  rawText?: boolean;
 }): ReactElement {
   const grouped: ContentPart[] = [];
   for (const part of parts) {
@@ -80,13 +84,18 @@ export function ConversationContent({
     <>
       {grouped.map((part, index) =>
         part.type === "text" ? (
-          <Markdown key={index} text={part.text} />
+          rawText ? (
+            <pre key={index}>{part.text}</pre>
+          ) : (
+            <Markdown key={index} text={part.text} />
+          )
         ) : part.type === "diff" ? (
-          <section key={index}>
-            <strong>{part.path}</strong>
-            {part.oldText !== void 0 ? <pre>{part.oldText}</pre> : null}
-            <pre>{part.newText}</pre>
-          </section>
+          <RecordDiff
+            key={index}
+            path={part.path}
+            oldText={part.oldText}
+            newText={part.newText}
+          />
         ) : part.type === "resource" ? (
           <section key={index}>
             <strong>{part.title}</strong>
@@ -506,11 +515,6 @@ export function ConversationQuestion({
         draft.state === "invalid") ? (
         <Text role="alert">{copy[draft.state]}</Text>
       ) : null}
-      {!record.answer && (draft.state === "uncertain" || !record.responder) ? (
-        <Button variant="subtle" onClick={controls.onRead}>
-          {copy.retry}
-        </Button>
-      ) : null}
     </section>
   );
 }
@@ -532,24 +536,12 @@ export function ConversationBody({
   surface?: "transcript" | "history";
 }): ReactElement {
   return (
-    <Stack gap="lg">
-      {controls.region.older || controls.region.inputOlder ? (
-        <Button
-          variant="subtle"
-          loading={controls.read === "loading"}
-          onClick={controls.onOlder}
-        >
-          {copy.older}
-        </Button>
-      ) : null}
-      {controls.read === "error" ? (
+    <Stack gap={surface === "history" ? 0 : "lg"}>
+      {controls.read === "error" || controls.olderRead === "error" ? (
         <Group role="alert">
           <Text>{copy.error}</Text>
-          <Button variant="subtle" onClick={controls.onRead}>
-            {copy.retry}
-          </Button>
         </Group>
-      ) : controls.read === "loading" ? (
+      ) : controls.read === "loading" || controls.olderRead === "loading" ? (
         <Text role="status">{copy.loading}</Text>
       ) : null}
       {controls.region.records
@@ -638,59 +630,92 @@ export function ConversationBody({
                 agentName={agentName}
                 initiallyOpened={initiallyExpandedKey === record.key}
               >
-                {record.description ? (
-                  <Markdown text={record.description} />
-                ) : null}
-                {record.toolInput ? (
-                  <section aria-label={copy.toolInput}>
-                    <Text size="sm" fw={600}>
-                      {copy.toolInput}
-                    </Text>
-                    <pre>{record.toolInput.json}</pre>
-                  </section>
-                ) : null}
-                {record.toolOutput ? (
-                  <section aria-label={copy.toolOutput}>
-                    <Text size="sm" fw={600}>
-                      {copy.toolOutput}
-                    </Text>
-                    <pre>{record.toolOutput.json}</pre>
-                  </section>
-                ) : null}
-                {record.plan?.type === "items" ? (
-                  <ol>
-                    {record.plan.items.map((item, index) => (
-                      <li key={index}>
-                        {item.content} · {nativeStatus(copy, item.status)}
-                      </li>
-                    ))}
-                  </ol>
-                ) : record.plan?.type === "text" ? (
-                  <Markdown text={record.plan.text} />
-                ) : null}
-                {record.locations.map((location) => (
-                  <pre key={location.path}>
-                    {location.path}
-                    {location.line !== void 0 ? `:${location.line}` : ""}
-                  </pre>
-                ))}
-                {record.terminal ? (
+                {record.kind === "tool" ? (
+                  <ToolRecordDetails record={record} copy={copy}>
+                    <ConversationContent
+                      parts={record.content}
+                      rawText={[
+                        "read",
+                        "execute",
+                        "search",
+                        "delete",
+                        "move",
+                      ].includes(record.toolKind ?? "")}
+                    />
+                    {record.terminal ? (
+                      <>
+                        <pre>{record.terminal.text}</pre>
+                        {record.terminal.exitCode !== void 0 ? (
+                          <p>
+                            {copy.terminal} · {String(record.terminal.exitCode)}
+                          </p>
+                        ) : null}
+                        {record.terminal.signal ? (
+                          <p>{record.terminal.signal}</p>
+                        ) : null}
+                        <ContentDisclosure title="Base64">
+                          <pre>{record.terminal.base64}</pre>
+                        </ContentDisclosure>
+                      </>
+                    ) : null}
+                  </ToolRecordDetails>
+                ) : (
                   <>
-                    <pre>{record.terminal.text}</pre>
-                    {record.terminal.exitCode !== void 0 ? (
-                      <p>
-                        {copy.terminal} · {String(record.terminal.exitCode)}
-                      </p>
+                    {record.description ? (
+                      <Markdown text={record.description} />
                     ) : null}
-                    {record.terminal.signal ? (
-                      <p>{record.terminal.signal}</p>
+                    {record.toolInput ? (
+                      <section aria-label={copy.toolInput}>
+                        <Text size="sm" fw={600}>
+                          {copy.toolInput}
+                        </Text>
+                        <pre>{record.toolInput.json}</pre>
+                      </section>
                     ) : null}
-                    <ContentDisclosure title="Base64">
-                      <pre>{record.terminal.base64}</pre>
-                    </ContentDisclosure>
+                    {record.toolOutput ? (
+                      <section aria-label={copy.toolOutput}>
+                        <Text size="sm" fw={600}>
+                          {copy.toolOutput}
+                        </Text>
+                        <pre>{record.toolOutput.json}</pre>
+                      </section>
+                    ) : null}
+                    {record.plan?.type === "items" ? (
+                      <ol>
+                        {record.plan.items.map((item, index) => (
+                          <li key={index}>
+                            {item.content} · {nativeStatus(copy, item.status)}
+                          </li>
+                        ))}
+                      </ol>
+                    ) : record.plan?.type === "text" ? (
+                      <Markdown text={record.plan.text} />
+                    ) : null}
+                    {record.locations.map((location) => (
+                      <pre key={location.path}>
+                        {location.path}
+                        {location.line !== void 0 ? `:${location.line}` : ""}
+                      </pre>
+                    ))}
+                    {record.terminal ? (
+                      <>
+                        <pre>{record.terminal.text}</pre>
+                        {record.terminal.exitCode !== void 0 ? (
+                          <p>
+                            {copy.terminal} · {String(record.terminal.exitCode)}
+                          </p>
+                        ) : null}
+                        {record.terminal.signal ? (
+                          <p>{record.terminal.signal}</p>
+                        ) : null}
+                        <ContentDisclosure title="Base64">
+                          <pre>{record.terminal.base64}</pre>
+                        </ContentDisclosure>
+                      </>
+                    ) : null}
+                    <ConversationContent parts={record.content} />
                   </>
-                ) : null}
-                <ConversationContent parts={record.content} />
+                )}
               </ConversationRecordDisclosure>
             )}
           </article>
@@ -744,21 +769,6 @@ export function ConversationBody({
                   : copy.deleteUnconfirmed}
               </Text>
             ) : null}
-            {controls.inputAction?.requestId === input.requestId &&
-            controls.inputAction.state === "uncertain" ? (
-              <Button
-                size="compact-xs"
-                variant="subtle"
-                onClick={controls.onRead}
-              >
-                {copy.retry}
-              </Button>
-            ) : null}
-            {input.observation === "uncertain" ? (
-              <Button variant="subtle" onClick={controls.onRead}>
-                {copy.retry}
-              </Button>
-            ) : null}
           </section>
         ))}
       {controls.inputs.map((input) => (
@@ -771,11 +781,6 @@ export function ConversationBody({
           <UserMessageBody copy={copy}>
             <Markdown text={input.text} />
           </UserMessageBody>
-          {input.observation === "uncertain" ? (
-            <Button variant="subtle" onClick={controls.onRead}>
-              {copy.retry}
-            </Button>
-          ) : null}
         </section>
       ))}
     </Stack>

@@ -1,6 +1,7 @@
 "use client";
 import { SheetViewport } from "@chapchoo/ui/Sheet";
 import { Button } from "@mantine/core";
+import { OlderRecordsContainer } from "../containers/OlderRecordsContainer";
 import { ConversationBody } from "./ConversationBody";
 import classes from "./ConversationHistory.module.css";
 import type { HistoryScroll } from "../containers/useHistoryScroll";
@@ -30,6 +31,12 @@ export function ConversationHistory({
         tabIndex={0}
       >
         <div ref={scroll.contentRef} className={classes.content}>
+          <OlderRecordsContainer
+            controls={controls}
+            viewportRef={scroll.viewportRef}
+            contentRef={scroll.contentRef}
+            followingLatest={!scroll.detached}
+          />
           <ConversationBody
             controls={controls}
             copy={copy}
@@ -40,13 +47,13 @@ export function ConversationHistory({
           />
         </div>
       </SheetViewport>
-      {scroll.detached || controls.readingOlder ? (
+      {scroll.unseen ? (
         <Button
           className={classes.latest}
           variant="default"
           onClick={controls.onLatest}
         >
-          {copy.latest}
+          {copy.records.newEvents}
         </Button>
       ) : null}
     </div>

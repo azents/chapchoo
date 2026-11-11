@@ -24,6 +24,19 @@ Hydration does not issue an immediate duplicate read. Hidden documents stop sche
 new reads. Unmounted owners discard late responses. Request authentication,
 Origin/POST and cookie disposition remain owned by the existing web boundary.
 
+Both the main Chat viewport and full history automatically request older pages
+near the top, including filling an underfull viewport. Page insertion retains the
+visible reading anchor. Latest polling continues after paging and preserves each
+stream's oldest cursor independently; an exhausted native or retained-input stream
+does not restart when its sibling still has pages. A page admitted during an
+in-flight poll is queued, not consumed without execution. An unchanged cursor
+does not trigger repeated automatic page requests. Failed reads recover on the
+normal cadence with truthful error feedback; there are no manual read-reload or
+older-page buttons. These reads never replay Send, an answer, deletion or Stop.
+Paging progress/errors are separate from current-head freshness: a failing older
+page remains visible as a read error without withdrawing Send authority established
+by successful current-head observation and the existing admission checks.
+
 The client sends bounded known-record/update hints, not a durable cursor.
 Ordinal, paging index and accepted-time request values use canonical int64 decimal
 strings so browser query keys stay JSON-safe; server ingress validates syntax and
@@ -56,19 +69,35 @@ row design. Selection enters a separate full-height history view at that record 
 keyboard focus on the selected entry after the activity sheet finishes closing.
 Opening history without a selection also leaves focus inside that view. Closing
 the sheet back to the transcript restores the status control.
-User and assistant conversation is included; records expand from a short opening
-preview to their full content. Older-page insertion preserves the visible reading
-anchor, and latest-follow can be restored explicitly. The history reader unmounts
-on close and the activity sheet remains the return destination. Sheet headings
-and close actions sit outside their internal scrolling content. Read-only retry
-never resubmits input, an answer or Stop.
+User and assistant conversation is included. Each chronological record has an
+independent single-line summary with a left chevron, ACP-kind icon, title, plain
+opening preview and separate status. Opening a record adds its full content
+below without changing the summary geometry. There is no event aggregation.
+Tool icons use the native ACP kind, with a safe generic icon for missing or unknown
+kinds. Recognized structured arguments and native locations provide meaningful
+subjects; unspecified or malformed input remains available as exact raw JSON.
+Read/search/command output, retained before/after edits, locations and other
+typed content remain inspectable without inferred counts or fabricated results.
+User and Agent identity have distinct icons. Preview text strips Markdown through
+its syntax tree; expanded text retains Markdown. Adjacent streaming text chunks
+concatenate verbatim rather than inserting whitespace.
+The entire expanded left gutter, including panel/viewport-edge padding, is a
+native collapse button with a dashed guide. Noninteractive expanded tool content
+also closes its disclosure; links, copy controls, text selection and native
+scrolling remain usable. Closing restores focus to the opener.
+The history reader unmounts on close and the activity sheet remains the return
+destination. Sheet headings and close actions sit outside their scrolling content.
 
 Conversation identity and source snapshot are compared independently. A replaced
 source clears old live content and paging before the new source refills. Ordinary
 loading/error feedback does not fabricate a new conversation or native context.
 Same-source updates retain original record order and update the matching native
 message. Viewport anchoring preserves an existing record's screen offset while
-the reader is detached; Jump to latest restores following.
+the reader is detached. Both viewports follow new events at the bottom. While
+reading above it, only a genuinely newer source-bound native record exposes the
+new-events-below action. Prepending old pages, updating existing streaming content,
+or merely leaving the bottom does not. Selecting that action resumes following;
+there is no always-visible latest action.
 
 ## User-facing execution diagnosis
 
@@ -116,8 +145,8 @@ inputs. It follows the newest non-deleted operation for the exact source, so
 deleting a newer failure does not hide an earlier accepted or preparing
 operation. The current native foreground observation takes precedence over past
 startup failures. New local submissions supersede older failure feedback without
-replaying it. Authentication setup links to the Agent detail page; read recovery
-only refreshes observations. The composer is disabled when authentication must
+replaying it. Authentication setup links to the Agent detail page; automatic read
+recovery only refreshes observations. The composer is disabled when authentication must
 first be selected. Input-level reported startup failures remain readable on
 reentry rather than being reduced to generic delivery failure. Possible setup
 forwarding does not replace known delivery uncertainty in an input label.

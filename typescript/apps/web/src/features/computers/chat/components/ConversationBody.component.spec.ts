@@ -186,10 +186,15 @@ test("tool-only original input and output render as independent complete fields"
     .filter({ hasText: "Read note" })
     .click();
   await page.locator('[data-kind="terminal"] button').first().click();
-  await expect(page.getByText("previous line", { exact: true })).toBeVisible();
   await expect(
-    page.getByText("Complete output", { exact: true }),
+    page.getByText("− previous line", { exact: true }),
   ).toBeVisible();
+  await expect(
+    page
+      .locator('[data-kind="terminal"] pre')
+      .filter({ hasText: "Complete output" }),
+  ).toBeVisible();
+  await page.locator("summary").filter({ hasText: "Tool input" }).click();
   await expect(
     page.getByRole("region", { name: "Tool input", exact: true }),
   ).toContainText("9223372036854775807");
@@ -206,17 +211,12 @@ test("tool-only original input and output render as independent complete fields"
     .toBe(true);
 });
 
-test("a retained answer supersedes local uncertainty and its read-recovery controls", async ({
-  page,
-}) => {
+test("a retained answer supersedes local uncertainty", async ({ page }) => {
   await page.goto(
     "/iframe.html?id=chat-conversation-body--retained-after-uncertainty&viewMode=story",
   );
   await expect(page.getByRole("status")).toHaveText("Response delivered");
   await expect(page.getByRole("alert")).toHaveCount(0);
-  await expect(
-    page.getByRole("button", { name: "Read again", exact: true }),
-  ).toHaveCount(0);
   await expect(
     page.getByText("owner@example.com", { exact: true }),
   ).toBeVisible();

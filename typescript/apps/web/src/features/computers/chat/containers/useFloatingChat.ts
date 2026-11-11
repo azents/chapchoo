@@ -1,5 +1,7 @@
 "use client";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { hasRecordArrival } from "../recordArrival";
+import type { ConversationAnchor } from "@chapchoo/web-core/conversation-types";
 import type { RefObject } from "react";
 
 export interface FloatingChat {
@@ -19,7 +21,7 @@ export function useFloatingChat(
   input: string,
   conversationKey: string,
   active = true,
-  updates: readonly { key: string; updatedOrdinal: bigint }[] = [],
+  updates: readonly { anchor: ConversationAnchor }[] = [],
 ): FloatingChat {
   const shellRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -35,21 +37,21 @@ export function useFloatingChat(
   const intentFrame = useRef(0);
   const [detached, setDetached] = useState(false);
   const [unseen, setUnseen] = useState(false);
-  const previousUpdate = useRef(
-    new Map(updates.map((record) => [record.key, record.updatedOrdinal])),
-  );
+  const previousHead = useRef({
+    source: conversationKey,
+    tail: updates.at(-1)?.anchor ?? null,
+  });
   useLayoutEffect(() => {
-    const unseenUpdate = updates.some((record) => {
-      const previous = previousUpdate.current.get(record.key);
-      return previous === void 0 || record.updatedOrdinal > previous;
-    });
-    previousUpdate.current = new Map(
-      updates.map((record) => [record.key, record.updatedOrdinal]),
-    );
+    const head = {
+      source: conversationKey,
+      tail: updates.at(-1)?.anchor ?? null,
+    };
+    const unseenUpdate = hasRecordArrival(previousHead.current, head);
+    previousHead.current = head;
     if (unseenUpdate && !following.current) {
       setUnseen(true);
     }
-  }, [updates]);
+  }, [updates, conversationKey]);
   const schedulePin = useCallback((): void => {
     cancelAnimationFrame(frame.current);
     frame.current = requestAnimationFrame(() => {
@@ -64,6 +66,9 @@ export function useFloatingChat(
     following.current = true;
     setDetached(false);
     setUnseen(false);
+    if (viewportRef.current) {
+      viewportRef.current.scrollTop = viewportRef.current.scrollHeight;
+    }
     schedulePin();
   }, [schedulePin]);
   useLayoutEffect(() => {
@@ -169,6 +174,9 @@ export function useFloatingChat(
     preserveHistory: () => {
       const viewport = viewportRef.current;
       if (viewport) {
+        if ((contentRef.current?.offsetHeight ?? 0) <= viewport.clientHeight) {
+          return;
+        }
         following.current = false;
         const top = viewport.getBoundingClientRect().top;
         const element = [

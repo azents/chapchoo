@@ -1,6 +1,41 @@
 import { computerCopy } from "@chapchoo/web-core/computer-messages";
 import { expect, test } from "@playwright/test";
 
+test("underfilled Chat loads successive pages without losing bottom follow", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 1800 });
+  await page.goto(
+    "/iframe.html?id=chat-conversation--underfilled-pagination&viewMode=story",
+  );
+  const log = page.getByRole("log", { name: "Message", exact: true });
+  await expect(
+    page.locator('[id="conversation-assistant%3Apage-20"]'),
+  ).toBeAttached();
+  await expect
+    .poll(() =>
+      log.evaluate(
+        (element) =>
+          element.scrollHeight - element.scrollTop - element.clientHeight,
+      ),
+    )
+    .toBeLessThan(2);
+  await page
+    .getByRole("button", { name: "Receive message", exact: true })
+    .click();
+  await expect(
+    page.getByText(/Unread message/, { exact: false }),
+  ).toBeAttached();
+  await expect
+    .poll(() =>
+      log.evaluate(
+        (element) =>
+          element.scrollHeight - element.scrollTop - element.clientHeight,
+      ),
+    )
+    .toBeLessThan(2);
+});
+
 for (const width of [390, 1280]) {
   test(`Agent portrait opens Activity and keeps details inside the sheet at ${width}`, async ({
     page,
@@ -33,29 +68,28 @@ for (const width of [390, 1280]) {
     page,
   }) => {
     await page.setViewportSize({ width, height: 844 });
+    await page.goto(
+      "/iframe.html?id=chat-conversation--pending-input&viewMode=story",
+    );
+    const message = page
+      .locator('[data-kind="user"]')
+      .filter({ hasText: "두 저장소의 작업 현황을 정리해줘." });
+    await expect(message).toHaveCount(1);
+    await page.evaluate(async () => {
+      await document.fonts.load(
+        "14px Pretendard",
+        "두 저장소의 작업 현황을 정리해줘.",
+      );
+      await document.fonts.ready;
+    });
     const measurements: { width: number; height: number }[] = [];
-    for (const [story, opacity] of [
-      ["pending-input", "0.6"],
-      ["input-recorded", "1"],
-    ] as const) {
-      const path = `/iframe.html?id=chat-conversation--${story}&viewMode=story`;
-      await page.goto(path);
-      const message = page
-        .locator('[data-kind="user"]')
-        .filter({ hasText: "두 저장소의 작업 현황을 정리해줘." });
+    for (const opacity of ["0.6", "1"]) {
+      if (opacity === "1") {
+        await page
+          .getByRole("button", { name: "Record pending input", exact: true })
+          .click();
+      }
       await expect(message).toHaveCount(1);
-      // The product uses optional font display. Warm the actual subset before
-      // reloading so first-load fallback selection cannot distort geometry.
-      await page.evaluate(async () => {
-        await document.fonts.load(
-          "14px Pretendard",
-          "두 저장소의 작업 현황을 정리해줘.",
-        );
-        await document.fonts.ready;
-      });
-      await page.reload();
-      await expect(message).toHaveCount(1);
-      await page.evaluate(() => document.fonts.ready);
       await expect(message).toHaveCSS("opacity", opacity);
       measurements.push(
         await message.locator('[class*="userBubble"]').evaluate((bubble) => {
@@ -333,11 +367,7 @@ test("measured input and overlay clearance honor enlarged root text", async ({
     .toBe(true);
 });
 
-for (const trigger of [
-  "Receive message",
-  "Receive question",
-  "Update earlier reply",
-]) {
+for (const trigger of ["Receive message", "Receive question"]) {
   test(`unread content exposes a latest action that acknowledges it: ${trigger}`, async ({
     page,
   }) => {
@@ -369,10 +399,10 @@ for (const trigger of [
       .toBeGreaterThan(200);
     await page.getByRole("button", { name: trigger, exact: true }).click();
     await expect(
-      page.getByRole("button", { name: "Jump to latest", exact: true }),
+      page.getByRole("button", { name: "New events below", exact: true }),
     ).toBeVisible();
     await page
-      .getByRole("button", { name: "Jump to latest", exact: true })
+      .getByRole("button", { name: "New events below", exact: true })
       .click();
     await expect
       .poll(() =>
@@ -384,6 +414,62 @@ for (const trigger of [
       .toBeLessThan(2);
   });
 }
+
+test("updating an existing reply preserves detached reading without a new-event notification", async ({
+  page,
+}) => {
+  await page.goto(
+    "/iframe.html?id=chat-conversation--unread-messages&viewMode=story",
+  );
+  const log = page.getByRole("log", { name: "Message", exact: true });
+  await expect
+    .poll(() => log.evaluate((element) => element.scrollTop))
+    .toBeGreaterThan(0);
+  await log.evaluate((element) => {
+    element.scrollTop = 100;
+  });
+  const before = await log.evaluate((element) => element.scrollTop);
+  await page
+    .getByRole("button", { name: "Update earlier reply", exact: true })
+    .click();
+  await expect(
+    page.getByText("Updated earlier reply.", { exact: false }),
+  ).toBeAttached();
+  await expect(
+    page.getByRole("button", { name: "New events below", exact: true }),
+  ).toHaveCount(0);
+  await expect
+    .poll(() => log.evaluate((element) => element.scrollTop))
+    .toBeCloseTo(before, 0);
+});
+
+test("main Chat automatically prepends older messages and retains its reading anchor", async ({
+  page,
+}) => {
+  await page.goto(
+    "/iframe.html?id=chat-conversation--automatic-pagination&viewMode=story",
+  );
+  const log = page.getByRole("log", { name: "Message", exact: true });
+  await expect
+    .poll(() => log.evaluate((element) => element.scrollTop))
+    .toBeGreaterThan(0);
+  const top = await log.evaluate((element) => {
+    element.scrollTop = 0;
+    return element
+      .querySelector('[id="conversation-assistant%3Apage-11"]')
+      ?.getBoundingClientRect().top;
+  });
+  await expect(
+    page.locator('[id="conversation-assistant%3Apage-1"]'),
+  ).toBeAttached();
+  await expect
+    .poll(() =>
+      page
+        .locator('[id="conversation-assistant%3Apage-11"]')
+        .evaluate((element) => element.getBoundingClientRect().top),
+    )
+    .toBeCloseTo(top ?? 0, 0);
+});
 
 for (const width of [320, 390, 1280]) {
   test(`conversation input, activity and Agent navigation at ${width}`, async ({
@@ -513,9 +599,6 @@ test("confirmed native startup failure is explained without claiming delivery or
     .getByRole("button", { name: /코기.*Codex 실행 실패.*작업 상태/ })
     .click();
   const dialog = page.getByRole("dialog", { name: "작업 상태", exact: true });
-  await expect(
-    dialog.getByRole("button", { name: "다시 불러오기", exact: true }),
-  ).toBeVisible();
   await expect(
     dialog.getByRole("link", { name: "코기 에이전트 상세", exact: true }),
   ).toHaveAttribute("href", "/teams/my/agents/corgi");

@@ -1,3 +1,5 @@
+import { recordCopy } from "./recordCopy.ts";
+import type { RecordCopy } from "./recordCopy";
 import type { ConversationActivity } from "@chapchoo/web-core/conversation-activity";
 import type {
   InputPreparation,
@@ -5,6 +7,7 @@ import type {
 } from "@chapchoo/web-core/conversation-types";
 
 export interface ChatCopy {
+  records: RecordCopy;
   activity: string;
   close: string;
   message: string;
@@ -82,6 +85,7 @@ export interface ChatCopy {
   permissionScopes: Partial<Record<string, string>>;
 }
 const en: ChatCopy = {
+  records: recordCopy("en"),
   activity: "Activity",
   close: "Close",
   message: "Message",
@@ -170,6 +174,7 @@ const en: ChatCopy = {
   },
 };
 const ko: ChatCopy = {
+  records: recordCopy("ko"),
   activity: "작업 상태",
   close: "닫기",
   message: "메시지",
@@ -258,6 +263,7 @@ const ko: ChatCopy = {
   },
 };
 const ja: ChatCopy = {
+  records: recordCopy("ja"),
   activity: "作業状況",
   close: "閉じる",
   message: "メッセージ",
@@ -346,6 +352,7 @@ const ja: ChatCopy = {
   },
 };
 const fr: ChatCopy = {
+  records: recordCopy("fr"),
   activity: "Activité",
   close: "Fermer",
   message: "Message",

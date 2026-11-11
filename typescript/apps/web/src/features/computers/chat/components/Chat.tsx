@@ -17,6 +17,7 @@ import {
 } from "@mantine/core";
 import { ComputerControls } from "../../components/ComputerControls";
 import { profileStyle } from "../../profilePalette";
+import { OlderRecordsContainer } from "../containers/OlderRecordsContainer";
 import { nativeStatus } from "../copy";
 import classes from "./Chat.module.css";
 import { ConversationBody, ConversationContent } from "./ConversationBody";
@@ -196,6 +197,12 @@ export function Chat(props: ChatProps): ReactElement {
               }}
             >
               <div className={classes.conversation} ref={f.contentRef}>
+                <OlderRecordsContainer
+                  controls={props.conversation}
+                  viewportRef={f.viewportRef}
+                  contentRef={f.contentRef}
+                  followingLatest={!f.detached}
+                />
                 {props.conversation.read === "ready" &&
                 props.conversation.region.header.state !== "loading" &&
                 records.length === 0 &&
@@ -230,7 +237,7 @@ export function Chat(props: ChatProps): ReactElement {
                   size="2.25rem"
                   variant="default"
                   radius="xl"
-                  aria-label={c.latest}
+                  aria-label={c.records.newEvents}
                   onClick={props.conversation.onLatest}
                 >
                   <Box style={{ transform: "rotate(180deg)", display: "flex" }}>
@@ -364,13 +371,6 @@ export function Chat(props: ChatProps): ReactElement {
                 {props.activity === "authenticationRequired" ? (
                   <Button component="a" href={detailHref} variant="default">
                     {c.authenticationSettings}
-                  </Button>
-                ) : props.activity === "startFailed" ||
-                  props.activity === "sourceUnavailable" ||
-                  props.activity === "retirementUnknown" ||
-                  props.activity === "unavailable" ? (
-                  <Button variant="default" onClick={props.conversation.onRead}>
-                    {c.retry}
                   </Button>
                 ) : null}
                 {props.conversation.stop !== "idle" ? (
