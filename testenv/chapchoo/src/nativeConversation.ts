@@ -98,6 +98,8 @@ export async function nativeConversation(assembly: Assembly): Promise<{
   ];
   let token: string | null = null;
   let agentId: string | null = null;
+  let provider: Awaited<ReturnType<Assembly["startDockerProvider"]>> | null =
+    null;
   let stage = "initialize";
   const call = <I, O>(method: Unary<I, O>, input: I): Promise<O> =>
     new Promise((resolve, reject) => {
@@ -127,7 +129,15 @@ export async function nativeConversation(assembly: Assembly): Promise<{
           expectedRequestId: "conversation-create",
           action: Action.ACTION_DELETE,
         });
-        await poll(() => docker.productAbsent(), Boolean);
+        try {
+          await poll(() => docker.productAbsent(), Boolean);
+        } catch (error) {
+          const resources = await docker.cleanupSummary();
+          throw new Error(
+            `Conversation cleanup unconfirmed (${resources}); Provider: ${provider?.diagnostic() ?? "not observed"}`,
+            { cause: error },
+          );
+        }
       }
     } finally {
       for (const client of clients) client.close();
@@ -141,7 +151,7 @@ export async function nativeConversation(assembly: Assembly): Promise<{
     stage = "team";
     const team = (await call(teams.listTeams.bind(teams), {})).items[0];
     if (!team) throw new Error("Conversation fixture requires a personal Team");
-    const provider = await assembly.startDockerProvider();
+    provider = await assembly.startDockerProvider();
     stage = "provider";
     const available = await poll(
       () => call(catalog.list.bind(catalog), { limit: 20 }),
