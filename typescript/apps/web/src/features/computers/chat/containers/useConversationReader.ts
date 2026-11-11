@@ -26,6 +26,7 @@ export function useConversationReader(
   region: ConversationRegion;
   read: "ready" | "loading" | "error";
   olderRead: "ready" | "loading" | "error";
+  paginationReset: object;
   readingOlder: boolean;
   refresh: () => void;
   older: () => void;
@@ -60,6 +61,7 @@ export function useConversationReader(
     "ready",
   );
   const [readingOlder, setReadingOlder] = useState(false);
+  const [paginationReset, setPaginationReset] = useState<object>({});
   const busy = useRef(false);
   const queued = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -219,6 +221,12 @@ export function useConversationReader(
           queued.current = true;
         }
       } catch {
+        if (
+          (anchor || inputAnchor) &&
+          (anchor !== before.current || inputAnchor !== inputBefore.current)
+        ) {
+          return;
+        }
         retryHead.current = Boolean(anchor || inputAnchor);
         if (hasOwner()) {
           if (anchor || inputAnchor) {
@@ -258,6 +266,7 @@ export function useConversationReader(
     region,
     read,
     olderRead,
+    paginationReset,
     readingOlder,
     refresh: request,
     markInputDeleted: (id, conversationId, snapshotId) => {
@@ -286,6 +295,7 @@ export function useConversationReader(
       inputBefore.current = null;
       retryHead.current = false;
       setOlderRead("ready");
+      setPaginationReset({});
       setReadingOlder(false);
       queued.current = true;
       refresh.current();

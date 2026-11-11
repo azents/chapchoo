@@ -11,6 +11,9 @@ export function useOlderRecords(
   const current = useRef(controls);
   current.current = controls;
   const requested = useRef<string | null>(null);
+  useEffect(() => {
+    requested.current = null;
+  }, [controls.paginationReset]);
   const cursor = JSON.stringify([
     controls.region.header.conversationId,
     controls.region.header.source?.snapshotId,
@@ -59,5 +62,11 @@ export function useOlderRecords(
       cancelAnimationFrame(frame);
       viewport.removeEventListener("scroll", schedule);
     };
-  }, [cursor, controls.read, viewportRef, contentRef]);
+  }, [
+    cursor,
+    controls.read,
+    controls.paginationReset,
+    viewportRef,
+    contentRef,
+  ]);
 }

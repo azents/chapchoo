@@ -26,6 +26,7 @@ export interface ConversationControls {
   read: "ready" | "loading" | "error";
   readingOlder: boolean;
   olderRead?: "ready" | "loading" | "error";
+  paginationReset?: object;
   inputs: LocalConversationInput[];
   stop: "idle" | "pending" | "published" | "rejected" | "uncertain";
   drafts: Partial<Record<string, QuestionDraft>>;

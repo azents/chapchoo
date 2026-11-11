@@ -171,4 +171,13 @@ test("a persistently failing older page cannot starve new head events", async ({
     page.getByRole("button", { name: "New events below", exact: true }),
   ).toBeVisible();
   await expect.poll(() => pageAttempts).toBeGreaterThanOrEqual(2);
+  await page
+    .getByRole("button", { name: "New events below", exact: true })
+    .click();
+  await expect(page.getByTestId("reader-page")).toHaveText("ready");
+  const canceledAttempts = pageAttempts;
+  await log.evaluate((element) => {
+    element.scrollTop = 0;
+  });
+  await expect.poll(() => pageAttempts).toBeGreaterThan(canceledAttempts);
 });
