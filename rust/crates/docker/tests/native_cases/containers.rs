@@ -133,6 +133,123 @@ async fn normal_native_lifecycle_submits_each_stage_once_and_keeps_original_save
 }
 
 #[tokio::test]
+async fn intentional_retirement_stops_restarting_work_without_claiming_running_or_terminal()
+-> Result<(), TestError> {
+    for restart_at in 0..3 {
+        Fixture::run(async |fixture| {
+            let docker = fixture.connect().await?;
+            let prepared = prepare(fixture, &docker).await?;
+            let resource = prepared.resource().clone();
+            docker.start_container(prepared).await?;
+            let enter_restart = || -> Result<(), TestError> {
+                let mut shared = fixture.state.lock().map_err(|_| "Fixture lock")?;
+                let state = shared
+                    .container
+                    .as_mut()
+                    .and_then(|value| value.state.as_mut())
+                    .ok_or("Missing native state")?;
+                state.status = Some(ContainerStateStatusEnum::RESTARTING);
+                state.running = Some(true);
+                state.restarting = Some(true);
+                state.pid = Some(0);
+                state.exit_code = Some(1);
+                state.finished_at = Some("2026-11-03T06:47:00Z".into());
+                Ok(())
+            };
+            if restart_at == 0 {
+                enter_restart()?;
+                let observed = docker
+                    .observe_container(&context(), &resource, &reserved(true), true, true)
+                    .await?;
+                assert!(!observed.running && !observed.terminal);
+                assert!(
+                    docker
+                        .begin_retirement(&context(), &resource, &reserved(true), true, true, true)
+                        .await
+                        .is_err()
+                );
+            }
+            let retirement = docker
+                .begin_retirement(&context(), &resource, &reserved(true), true, true, false)
+                .await?;
+            if restart_at == 1 {
+                enter_restart()?;
+            }
+            let updated = docker.disable_restart(retirement).await?;
+            if restart_at == 2 {
+                enter_restart()?;
+            }
+            let stopped = docker.stop_container(updated).await?;
+            assert_eq!(
+                docker.remove_container(stopped).await?.presence,
+                Presence::Absent
+            );
+            let state = fixture.state.lock().map_err(|_| "Fixture lock")?;
+            assert_eq!(
+                state.container_actions,
+                ["create", "start", "update", "stop", "remove"]
+            );
+            assert!(state.volume.is_some());
+            assert_eq!(state.removes, 0);
+            Ok(())
+        })
+        .await?;
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn contradictory_restarting_state_cannot_admit_intentional_retirement()
+-> Result<(), TestError> {
+    for variant in 0..7 {
+        Fixture::run(async |fixture| {
+            let docker = fixture.connect().await?;
+            let prepared = prepare(fixture, &docker).await?;
+            let resource = prepared.resource().clone();
+            docker.start_container(prepared).await?;
+            {
+                let mut shared = fixture.state.lock().map_err(|_| "Fixture lock")?;
+                let state = shared
+                    .container
+                    .as_mut()
+                    .and_then(|value| value.state.as_mut())
+                    .ok_or("Missing native state")?;
+                state.status = Some(ContainerStateStatusEnum::RESTARTING);
+                state.restarting = Some(true);
+                state.pid = Some(0);
+                state.finished_at = Some("2026-11-03T06:47:00Z".into());
+                match variant {
+                    0 => state.running = Some(false),
+                    1 => state.paused = Some(true),
+                    2 => state.dead = Some(true),
+                    3 => state.pid = Some(123),
+                    4 => state.status = Some(ContainerStateStatusEnum::RUNNING),
+                    5 => state.finished_at = Some("invalid-time".into()),
+                    _ => state.started_at = Some("2026-11-03T06:48:00Z".into()),
+                }
+            }
+            assert!(
+                docker
+                    .begin_retirement(&context(), &resource, &reserved(true), true, true, false)
+                    .await
+                    .is_err()
+            );
+            assert_eq!(
+                fixture
+                    .state
+                    .lock()
+                    .map_err(|_| "Fixture lock")?
+                    .container_actions,
+                ["create", "start"]
+            );
+            Ok(())
+        })
+        .await?;
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn image_expose_metadata_is_not_host_port_publication() -> Result<(), TestError> {
     Fixture::run(async |fixture| {
         let docker = fixture.connect().await?;

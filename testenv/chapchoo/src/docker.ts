@@ -8,6 +8,7 @@ import {
 import type { CanaryState, CanaryVolumeState } from "./canaryCleanup.js";
 import type { DockerFixtureConfig } from "./config/index.js";
 import {
+  cleanupContainerInspection,
   nativeReadinessStatus,
   runningSuccessor,
 } from "./dockerObservation.js";
@@ -416,7 +417,44 @@ export class DockerFixture {
     const running = containers.filter(
       (container) => container.State === "running",
     ).length;
-    return `containers=${containers.length};running=${running};volumes=${volumes.Volumes?.length ?? 0}`;
+    const states: string[] = [];
+    for (const container of containers.slice(0, 4)) {
+      const observed = await native(() =>
+        cleanupContainerInspection(() =>
+          this.sdk.getContainer(container.Id).inspect(),
+        ),
+      );
+      if (observed === null) {
+        states.push("absent");
+        continue;
+      }
+      if (
+        observed.Id !== container.Id ||
+        !labelsMatch(observed.Config.Labels, {
+          "chapchoo.io/provider": this.providerId,
+        })
+      ) {
+        throw new Error("Cleanup diagnostic resource identity changed");
+      }
+      const state = observed.State;
+      const status = [
+        "created",
+        "running",
+        "paused",
+        "restarting",
+        "removing",
+        "exited",
+        "dead",
+      ].includes(state.Status)
+        ? state.Status
+        : "unknown";
+      const started = Date.parse(state.StartedAt);
+      const finished = Date.parse(state.FinishedAt);
+      states.push(
+        `${status}:pidZero=${state.Pid === 0},paused=${state.Paused === true},restarting=${state.Restarting === true},dead=${state.Dead === true},exit=${Number.isSafeInteger(state.ExitCode) ? state.ExitCode : "invalid"},startedMs=${Number.isFinite(started) ? started : "invalid"},finishedMs=${Number.isFinite(finished) ? finished : "invalid"}`,
+      );
+    }
+    return `containers=${containers.length};running=${running};volumes=${volumes.Volumes?.length ?? 0};states=${states.join("|")}`;
   }
   async productAbsent(): Promise<boolean> {
     await this.verifyDaemon();

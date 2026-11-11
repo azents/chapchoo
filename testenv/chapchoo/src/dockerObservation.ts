@@ -5,6 +5,24 @@ export interface NativeComputer {
   user: string;
   noCopy: boolean;
 }
+/** A listed container may disappear before its bounded diagnostic inspection. */
+export async function cleanupContainerInspection<T>(
+  inspect: () => Promise<T>,
+): Promise<T | null> {
+  try {
+    return await inspect();
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "statusCode" in error &&
+      error.statusCode === 404
+    ) {
+      return null;
+    }
+    throw error;
+  }
+}
 type NativeStatus = "created" | "running" | "exited" | "removing";
 interface NativeReadinessState {
   Status: string;

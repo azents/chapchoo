@@ -31,12 +31,15 @@ struct Bundle {
 
 impl Bundle {
     fn new(mode: &str) -> Result<Self, TestError> {
-        let directory = tempfile::tempdir()?;
+        let executable = Path::new(env!("CARGO_BIN_EXE_chapchoo"));
+        let directory = tempfile::tempdir_in(executable.parent().ok_or("Missing binary parent")?)?;
         let root = directory.path();
         let binary = root.join("chapchoo");
-        std::fs::copy(env!("CARGO_BIN_EXE_chapchoo"), &binary)?;
+        // Link immutable built executables instead of publishing writable copies
+        // immediately before concurrent process launches.
+        std::fs::hard_link(executable, &binary)?;
         let helper = root.join("fixture-helper");
-        std::fs::copy(std::env::current_exe()?, &helper)?;
+        std::fs::hard_link(std::env::current_exe()?, &helper)?;
         let node = root.join("runtime/bin/node");
         std::fs::create_dir_all(node.parent().ok_or("Missing fixture Node parent")?)?;
         // This synthetic lower-layer helper is not a real Node/package test.

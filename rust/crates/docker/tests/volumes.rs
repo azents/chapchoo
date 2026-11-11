@@ -380,6 +380,7 @@ async fn serve(
                     .ok_or("Missing native state")?;
                 value.status = Some(ContainerStateStatusEnum::EXITED);
                 value.running = Some(false);
+                value.restarting = Some(false);
                 value.pid = Some(0);
                 value.finished_at = Some("2026-11-03T06:47:00Z".into());
             }

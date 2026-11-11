@@ -1,10 +1,35 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  cleanupContainerInspection,
   nativeReadinessStatus,
   runningSuccessor,
 } from "./dockerObservation.ts";
 import type { NativeComputer, NativeObservation } from "./dockerObservation.ts";
+
+void test("cleanup inspection preserves a listed-container disappearance without hiding other failures", async () => {
+  const observed = { state: "exited" };
+  assert.equal(
+    await cleanupContainerInspection(() => Promise.resolve(observed)),
+    observed,
+  );
+  assert.equal(
+    await cleanupContainerInspection(() =>
+      Promise.reject(Object.assign(new Error("missing"), { statusCode: 404 })),
+    ),
+    null,
+  );
+  for (const failure of [
+    Object.assign(new Error("forbidden"), { statusCode: 403 }),
+    Object.assign(new Error("engine"), { statusCode: 500 }),
+    new Error("transport"),
+  ]) {
+    await assert.rejects(
+      cleanupContainerInspection(() => Promise.reject(failure)),
+      (error: unknown) => error === failure,
+    );
+  }
+});
 
 const previous: NativeComputer = {
   container: "a".repeat(64),
