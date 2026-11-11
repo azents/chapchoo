@@ -25,6 +25,7 @@ export interface ConversationControls {
   region: ConversationRegion;
   read: "ready" | "loading" | "error";
   readingOlder: boolean;
+  olderRead?: "ready" | "loading" | "error";
   inputs: LocalConversationInput[];
   stop: "idle" | "pending" | "published" | "rejected" | "uncertain";
   drafts: Partial<Record<string, QuestionDraft>>;

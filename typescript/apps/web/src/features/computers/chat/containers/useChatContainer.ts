@@ -445,6 +445,7 @@ export function useChatContainer(props: ChatInput): ChatProps {
     region,
     read: reader.read,
     readingOlder: reader.readingOlder,
+    olderRead: reader.olderRead,
     inputs: inputs.filter(
       (item) =>
         !region.inputs?.some(

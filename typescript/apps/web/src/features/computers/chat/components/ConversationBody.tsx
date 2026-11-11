@@ -537,11 +537,11 @@ export function ConversationBody({
 }): ReactElement {
   return (
     <Stack gap={surface === "history" ? 0 : "lg"}>
-      {controls.read === "error" ? (
+      {controls.read === "error" || controls.olderRead === "error" ? (
         <Group role="alert">
           <Text>{copy.error}</Text>
         </Group>
-      ) : controls.read === "loading" ? (
+      ) : controls.read === "loading" || controls.olderRead === "loading" ? (
         <Text role="status">{copy.loading}</Text>
       ) : null}
       {controls.region.records

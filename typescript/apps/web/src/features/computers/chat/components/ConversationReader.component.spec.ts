@@ -75,7 +75,8 @@ test("a page admitted during a tail poll executes and exhausted streams never re
   await log.evaluate((element) => {
     element.scrollTop = 0;
   });
-  await expect(page.getByTestId("reader-cursors")).toHaveText("11/100/loading");
+  await expect(page.getByTestId("reader-cursors")).toHaveText("11/100/ready");
+  await expect(page.getByTestId("reader-page")).toHaveText("loading");
   await reply(held, {
     ...region(17, 40),
     older: { ordinal: 17n, index: 0n },
@@ -164,6 +165,8 @@ test("a persistently failing older page cannot starve new head events", async ({
   });
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page.locator('[id="history-assistant%3A41"]')).toBeAttached();
+  await expect(page.getByTestId("reader-cursors")).toHaveText("11/100/ready");
+  await expect(page.getByTestId("reader-page")).toHaveText("error");
   await expect(
     page.getByRole("button", { name: "New events below", exact: true }),
   ).toBeVisible();

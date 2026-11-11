@@ -68,29 +68,28 @@ for (const width of [390, 1280]) {
     page,
   }) => {
     await page.setViewportSize({ width, height: 844 });
+    await page.goto(
+      "/iframe.html?id=chat-conversation--pending-input&viewMode=story",
+    );
+    const message = page
+      .locator('[data-kind="user"]')
+      .filter({ hasText: "두 저장소의 작업 현황을 정리해줘." });
+    await expect(message).toHaveCount(1);
+    await page.evaluate(async () => {
+      await document.fonts.load(
+        "14px Pretendard",
+        "두 저장소의 작업 현황을 정리해줘.",
+      );
+      await document.fonts.ready;
+    });
     const measurements: { width: number; height: number }[] = [];
-    for (const [story, opacity] of [
-      ["pending-input", "0.6"],
-      ["input-recorded", "1"],
-    ] as const) {
-      const path = `/iframe.html?id=chat-conversation--${story}&viewMode=story`;
-      await page.goto(path);
-      const message = page
-        .locator('[data-kind="user"]')
-        .filter({ hasText: "두 저장소의 작업 현황을 정리해줘." });
+    for (const opacity of ["0.6", "1"]) {
+      if (opacity === "1") {
+        await page
+          .getByRole("button", { name: "Record pending input", exact: true })
+          .click();
+      }
       await expect(message).toHaveCount(1);
-      // The product uses optional font display. Warm the actual subset before
-      // reloading so first-load fallback selection cannot distort geometry.
-      await page.evaluate(async () => {
-        await document.fonts.load(
-          "14px Pretendard",
-          "두 저장소의 작업 현황을 정리해줘.",
-        );
-        await document.fonts.ready;
-      });
-      await page.reload();
-      await expect(message).toHaveCount(1);
-      await page.evaluate(() => document.fonts.ready);
       await expect(message).toHaveCSS("opacity", opacity);
       measurements.push(
         await message.locator('[class*="userBubble"]').evaluate((bubble) => {

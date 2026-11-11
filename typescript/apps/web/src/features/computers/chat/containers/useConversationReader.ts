@@ -25,6 +25,7 @@ export function useConversationReader(
 ): {
   region: ConversationRegion;
   read: "ready" | "loading" | "error";
+  olderRead: "ready" | "loading" | "error";
   readingOlder: boolean;
   refresh: () => void;
   older: () => void;
@@ -55,7 +56,9 @@ export function useConversationReader(
   const inputBefore = useRef<InputHistoryAnchor | null>(null);
   const paged = useRef(false);
   const retryHead = useRef(false);
-  const pageError = useRef(false);
+  const [olderRead, setOlderRead] = useState<"ready" | "loading" | "error">(
+    "ready",
+  );
   const [readingOlder, setReadingOlder] = useState(false);
   const busy = useRef(false);
   const queued = useRef(false);
@@ -164,7 +167,7 @@ export function useConversationReader(
         if (changedSource || incoming.header.state === "loading") {
           paged.current = false;
           retryHead.current = false;
-          pageError.current = false;
+          setOlderRead("ready");
           before.current = null;
           inputBefore.current = null;
           setReadingOlder(false);
@@ -192,7 +195,7 @@ export function useConversationReader(
                 : incoming.inputOlder,
           };
           if (anchor || inputAnchor) {
-            pageError.current = false;
+            setOlderRead("ready");
             paged.current = true;
             before.current = null;
             inputBefore.current = null;
@@ -201,23 +204,28 @@ export function useConversationReader(
           setRegion(current.current);
         }
         retryHead.current = false;
-        setRead(
-          incoming.refill || incoming.header.state === "loading"
-            ? "loading"
-            : pageError.current
-              ? "error"
+        if (
+          (!anchor && !inputAnchor) ||
+          changedSource ||
+          incoming.header.state === "loading"
+        ) {
+          setRead(
+            incoming.refill || incoming.header.state === "loading"
+              ? "loading"
               : "ready",
-        );
+          );
+        }
         if (incoming.refill) {
           queued.current = true;
         }
       } catch {
         retryHead.current = Boolean(anchor || inputAnchor);
-        if (anchor || inputAnchor) {
-          pageError.current = true;
-        }
         if (hasOwner()) {
-          setRead("error");
+          if (anchor || inputAnchor) {
+            setOlderRead("error");
+          } else {
+            setRead("error");
+          }
         }
       } finally {
         busy.current = false;
@@ -249,6 +257,7 @@ export function useConversationReader(
   return {
     region,
     read,
+    olderRead,
     readingOlder,
     refresh: request,
     markInputDeleted: (id, conversationId, snapshotId) => {
@@ -269,14 +278,14 @@ export function useConversationReader(
       before.current = current.current.older ?? null;
       inputBefore.current = current.current.inputOlder ?? null;
       setReadingOlder(true);
-      setRead("loading");
+      setOlderRead("loading");
       refresh.current();
     },
     latest: () => {
       before.current = null;
       inputBefore.current = null;
       retryHead.current = false;
-      pageError.current = false;
+      setOlderRead("ready");
       setReadingOlder(false);
       queued.current = true;
       refresh.current();

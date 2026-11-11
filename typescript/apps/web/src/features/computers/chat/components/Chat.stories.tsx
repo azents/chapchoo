@@ -283,6 +283,7 @@ function Fixture({
   const [workStop, setWorkStop] = useState<"idle" | "published">("idle");
   const [failedDeleted, setFailedDeleted] = useState(false);
   const [retrySubmitted, setRetrySubmitted] = useState(false);
+  const [nativeRecorded, setNativeRecorded] = useState(false);
   const floating = useFloatingChat(input, agent.id, true, records);
   const copy = chatCopy(locale);
   const c = computerCopy(locale);
@@ -490,7 +491,7 @@ function Fixture({
           read: mode === "readerError" ? "error" : "ready",
           readingOlder: false,
           inputs:
-            mode === "pendingInput"
+            mode === "pendingInput" && !nativeRecorded
               ? [
                   {
                     requestId: "visual-pending",
@@ -597,6 +598,26 @@ function Fixture({
         onStop={() => setWorkStop("published")}
         floating={floating}
       />
+      {mode === "pendingInput" ? (
+        <button
+          type="button"
+          style={{ position: "fixed", top: 0, right: 0, zIndex: 1000 }}
+          onClick={() => {
+            setRecords((previous) => [
+              ...previous,
+              fixtureMessage(
+                "user",
+                "visual-recorded",
+                "두 저장소의 작업 현황을 정리해줘.",
+                3n,
+              ),
+            ]);
+            setNativeRecorded(true);
+          }}
+        >
+          Record pending input
+        </button>
+      ) : null}
       {mode === "unread" || mode === "pagination" ? (
         <div style={{ position: "fixed", top: 0, right: 0, zIndex: 1000 }}>
           <button

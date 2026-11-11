@@ -64,6 +64,7 @@ function Reader(): ReactElement {
     <Box h="100dvh" style={{ display: "flex", flexDirection: "column" }}>
       <Button onClick={reader.refresh}>Poll now</Button>
       <output data-testid="reader-cursors">{`${reader.region.older?.ordinal ?? "end"}/${reader.region.inputOlder?.acceptedAt ?? "end"}/${reader.read}`}</output>
+      <output data-testid="reader-page">{reader.olderRead}</output>
       <ConversationHistory
         controls={controls}
         scroll={scroll}

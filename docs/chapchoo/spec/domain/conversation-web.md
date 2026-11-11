@@ -33,6 +33,9 @@ in-flight poll is queued, not consumed without execution. An unchanged cursor
 does not trigger repeated automatic page requests. Failed reads recover on the
 normal cadence with truthful error feedback; there are no manual read-reload or
 older-page buttons. These reads never replay Send, an answer, deletion or Stop.
+Paging progress/errors are separate from current-head freshness: a failing older
+page remains visible as a read error without withdrawing Send authority established
+by successful current-head observation and the existing admission checks.
 
 The client sends bounded known-record/update hints, not a durable cursor.
 Ordinal, paging index and accepted-time request values use canonical int64 decimal

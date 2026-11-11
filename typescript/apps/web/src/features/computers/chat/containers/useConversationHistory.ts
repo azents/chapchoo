@@ -61,6 +61,7 @@ export function useConversationHistory(
       region: reader.region,
       read: reader.read,
       readingOlder: reader.readingOlder,
+      olderRead: reader.olderRead,
       inputs: reconcileLocalConversationInputs(
         props.inputs.filter(
           (input) =>

@@ -211,17 +211,12 @@ test("tool-only original input and output render as independent complete fields"
     .toBe(true);
 });
 
-test("a retained answer supersedes local uncertainty and its read-recovery controls", async ({
-  page,
-}) => {
+test("a retained answer supersedes local uncertainty", async ({ page }) => {
   await page.goto(
     "/iframe.html?id=chat-conversation-body--retained-after-uncertainty&viewMode=story",
   );
   await expect(page.getByRole("status")).toHaveText("Response delivered");
   await expect(page.getByRole("alert")).toHaveCount(0);
-  await expect(
-    page.getByRole("button", { name: "Read again", exact: true }),
-  ).toHaveCount(0);
   await expect(
     page.getByText("owner@example.com", { exact: true }),
   ).toBeVisible();
