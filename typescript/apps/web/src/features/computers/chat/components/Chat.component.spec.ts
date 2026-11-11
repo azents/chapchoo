@@ -631,5 +631,13 @@ test("localized status and long identity remain usable on narrow screens", async
       .toBe(true);
     await page.locator('button[aria-haspopup="dialog"]').click();
     await expect(page.getByRole("dialog")).toBeVisible();
+    await expect
+      .poll(() =>
+        page
+          .getByRole("dialog")
+          .locator('[class*="panelBody"]')
+          .evaluate((element) => element.scrollWidth <= element.clientWidth),
+      )
+      .toBe(true);
   }
 });

@@ -71,6 +71,7 @@ type FixtureProps = {
     | "empty";
   locale: string;
   name: string;
+  initialActivityOpened?: boolean;
 };
 function StaticHistory({
   records,
@@ -117,7 +118,12 @@ function StaticHistory({
     />
   );
 }
-function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
+function Fixture({
+  mode,
+  locale,
+  name,
+  initialActivityOpened = false,
+}: FixtureProps): ReactElement {
   const stopped =
     mode === "stopped" || mode === "startError" || mode === "staleStopped";
   const stale = mode === "stale" || mode === "staleStopped";
@@ -248,7 +254,7 @@ function Fixture({ mode, locale, name }: FixtureProps): ReactElement {
               ),
             ],
   );
-  const [opened, setOpened] = useState(false);
+  const [opened, setOpened] = useState(initialActivityOpened);
   const [historyOpened, setHistoryOpened] = useState(false);
   const [historyFocus, setHistoryFocus] = useState<string | null>(null);
   const [navOpened, setNavOpened] = useState(false);
@@ -640,6 +646,9 @@ export const UnreadMessages: Story = {
   args: { mode: "unread", locale: "en-US", name: "Corgi" },
 };
 export const ReviewAllRecords: Story = { args: { mode: "review" } };
+export const ActivitySheet: Story = {
+  args: { mode: "review", initialActivityOpened: true },
+};
 export const Idle: Story = { args: { mode: "idle" } };
 export const NoPlanActivity: Story = { args: { mode: "empty" } };
 export const ComposerEmpty: Story = {
