@@ -115,17 +115,19 @@ export function Chat(props: ChatProps): ReactElement {
               </ActionIcon>
             </div>
             <div className={classes.presence} ref={f.profileRef}>
-              <a
+              <button
+                type="button"
                 className={`${classes.portrait} ${classes.glass}`}
-                href={detailHref}
-                aria-label={`${agent.name} · ${c.detail}`}
+                onClick={props.onOpen}
+                aria-haspopup="dialog"
+                aria-label={`${c.activity}: ${agent.name}`}
               >
                 <CharacterArtwork
                   basePath={p.basePath}
                   assetKey={agent.profileImage.assetKey}
                   className={classes.artwork}
                 />
-              </a>
+              </button>
               <div className={`${classes.bubble} ${classes.glass}`}>
                 <button
                   className={classes.status}
