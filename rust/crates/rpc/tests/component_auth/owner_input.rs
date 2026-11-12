@@ -220,5 +220,6 @@ pub(super) async fn exercise(
             .as_str(),
         text
     );
+    super::owner_messages::exercise(context, conversation, &expected.id, &text).await?;
     Ok(())
 }

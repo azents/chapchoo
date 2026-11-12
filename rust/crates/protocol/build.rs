@@ -40,6 +40,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         "chapchoo.conversations.RequestKind",
         "chapchoo.conversations.StopState",
         "chapchoo.conversations.InputOwnership",
+        "chapchoo.conversations.MessageRole",
         "chapchoo.conversations.AnswerDelivery",
         "chapchoo.conversations.RecordKind",
         "chapchoo.conversations.RecordField",

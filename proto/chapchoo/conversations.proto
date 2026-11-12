@@ -11,6 +11,8 @@ service Conversations {
   rpc Inputs(OwnerInputsRequest) returns (RetainedInputs);
   rpc ReadInput(OwnerInputRead) returns (FieldChunk);
   rpc DeleteInput(OwnerDeleteInput) returns (google.protobuf.Empty);
+  rpc Messages(OwnerMessagesRequest) returns (MessageRegion);
+  rpc ReadMessage(OwnerMessageRead) returns (FieldChunk);
   rpc SubmitAnswer(OwnerAnswerPiece) returns (OwnerAnswerProgress);
   rpc AnswerResult(OwnerAnswerResultRequest) returns (OwnerAnswerStatus);
   rpc RequestAnswer(OwnerRequestAnswer) returns (OwnerAnswerStatus);
@@ -24,6 +26,36 @@ service Conversations {
   rpc StopResult(OwnerStopResultRequest) returns (OptionalStopReceipt);
 }
 message OwnerConversationRequest { string agent_id = 1; }
+// Chat scope follows product conversation ownership, not a native snapshot.
+message MessageScope { string agent_id = 1; string conversation_id = 2; }
+message MessageAfter { int64 order = 1; optional int64 through = 2; }
+message OwnerMessagesRequest {
+  MessageScope scope = 1;
+  // Absent window selects the latest page. `after` freezes its first head for catch-up.
+  oneof window { int64 before = 2; MessageAfter after = 3; }
+  uint32 limit = 4;
+}
+enum MessageRole {
+  MESSAGE_ROLE_UNSPECIFIED = 0;
+  MESSAGE_ROLE_USER = 1;
+  MESSAGE_ROLE_AGENT = 2;
+}
+message MessageMetadata {
+  string id = 1; MessageRole role = 2; int64 receipt_order = 3;
+  int64 received_at = 4; int64 total_bytes = 5;
+  // Provenance is not another delivery owner or permanent retry/result API.
+  optional string source_input_id = 6; optional int64 original_accepted_at = 7;
+  // Read-only acknowledgement correlation. Never a publication resend key.
+  optional string source_input_request_id = 8;
+}
+message MessageRegion {
+  repeated MessageMetadata messages = 1;
+  // Finite selected head, including zero for an empty conversation.
+  int64 through = 2;
+}
+message OwnerMessageRead {
+  MessageScope scope = 1; string message_id = 2; uint32 offset = 3; uint32 length = 4;
+}
 message OwnerConversation {
   CaptureState conversation = 1; ObservedNative observed_native = 2;
   optional string saved_authentication_id = 3;

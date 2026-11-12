@@ -13,8 +13,9 @@ allocation witness are different authorities, not alternate entity IDs.
 Every new User, Team, Agent, Computer, Provider, account session, grant,
 invitation, login challenge, execution, Connector session, Control process,
 connection, profile-image, authentication record/attempt, conversation and
-accepted conversation-input identity is a UUIDv7 issued inside its accepting
-Repository operation. Existing acceptance time supplies its timestamp; entropy
+accepted conversation-input or chat-message identity is a UUIDv7 issued inside
+its accepting Repository operation. Account/input acceptance time or chat's
+database receipt time supplies its timestamp; entropy
 failure rejects the operation. Services prepare credentials and native names,
 not proposed entity IDs. An exact accepted-request recovery returns its original
 assigned identities rather than issuing replacements.
@@ -23,10 +24,15 @@ The private `EntityId`/`IdentitySql` boundary stores PostgreSQL native UUID valu
 and SQLite 16-byte BLOB values. Private row projections serialize complete DTO IDs
 as an uppercase kind prefix followed by 22 unpadded Base64URL characters. Prefixes
 are `U`, `T`, `A`, `C`, `P`, `S`, `G`, `I`, `L`, `E`, `CS`, `CT`, `CN`, `PI`,
-`HA`, `HD`, `CV` and `CO` for the respective kinds above. Repository ingress validates the whole canonical
+`HA`, `HD`, `CV`, `CO` and `CM` for the respective kinds above. Repository ingress validates the whole canonical
 representation, expected kind, UUID version and variant. Raw UUID input,
 noncanonical encoding, a different kind and legacy text IDs reject; there is no
 runtime old-ID alias table.
+
+The preserving [chat transfer](conversation-storage.md#independent-chat-receipts)
+projects each retained original input UUID as its new `CM` message identity while
+retaining the original `CO` provenance. This migration issues no new native
+identity and provides no runtime alias or permanent input-request recovery.
 
 Ordinary services, RPC and browser consumers preserve the complete opaque DTO.
 They do not split prefixes, extract UUIDs or reproduce the codec. Database

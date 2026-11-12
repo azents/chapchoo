@@ -5,6 +5,7 @@ pub(crate) mod authority;
 mod delivery;
 mod input_reads;
 mod inputs;
+mod messages;
 mod native_state;
 mod preparation;
 mod projection;
@@ -47,6 +48,11 @@ pub use input_reads::{ConversationInputAnchor, ConversationInputScope, RetainedC
 pub use inputs::{
     AcceptConversationInput, ConversationInputAdmission, ConversationInputReceipt,
     ConversationInputReference,
+};
+pub use messages::{
+    ConversationMessageChunk, ConversationMessageMetadata, ConversationMessageRead,
+    ConversationMessageReceipt, ConversationMessageRegion, ConversationMessageRole,
+    ConversationMessageScope, ConversationMessageWindow, PublishConversationMessage,
 };
 pub use native_state::{
     ConversationForeground, ConversationNativeObservation, ConversationNativePreparation,

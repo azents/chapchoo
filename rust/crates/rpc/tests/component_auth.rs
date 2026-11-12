@@ -12,6 +12,8 @@ mod input_wire;
 mod native_state;
 #[path = "component_auth/owner_input.rs"]
 mod owner_input;
+#[path = "component_auth/owner_messages.rs"]
+mod owner_messages;
 #[path = "component_auth/owner_records.rs"]
 mod owner_records;
 mod support;

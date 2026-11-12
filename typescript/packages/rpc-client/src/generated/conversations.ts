@@ -24,6 +24,13 @@ export const protobufPackage = "chapchoo.conversations";
 
 export const protobufFileName = "conversations.proto";
 
+export enum MessageRole {
+  MESSAGE_ROLE_UNSPECIFIED = 0,
+  MESSAGE_ROLE_USER = 1,
+  MESSAGE_ROLE_AGENT = 2,
+  UNRECOGNIZED = -1,
+}
+
 export enum PreparationFreshness {
   PREPARATION_FRESHNESS_UNSPECIFIED = 0,
   PREPARATION_FRESHNESS_CURRENT = 1,
@@ -137,6 +144,52 @@ export enum AuthenticationRefreshObservation {
 
 export interface OwnerConversationRequest {
   agentId: string;
+}
+
+/** Chat scope follows product conversation ownership, not a native snapshot. */
+export interface MessageScope {
+  agentId: string;
+  conversationId: string;
+}
+
+export interface MessageAfter {
+  order: bigint;
+  through?: bigint | undefined;
+}
+
+export interface OwnerMessagesRequest {
+  scope: MessageScope | undefined;
+  before?: bigint | undefined;
+  after?: MessageAfter | undefined;
+  limit: number;
+}
+
+export interface MessageMetadata {
+  id: string;
+  role: MessageRole;
+  receiptOrder: bigint;
+  receivedAt: bigint;
+  totalBytes: bigint;
+  /** Provenance is not another delivery owner or permanent retry/result API. */
+  sourceInputId?: string | undefined;
+  originalAcceptedAt?:
+    | bigint
+    | undefined;
+  /** Read-only acknowledgement correlation. Never a publication resend key. */
+  sourceInputRequestId?: string | undefined;
+}
+
+export interface MessageRegion {
+  messages: MessageMetadata[];
+  /** Finite selected head, including zero for an empty conversation. */
+  through: bigint;
+}
+
+export interface OwnerMessageRead {
+  scope: MessageScope | undefined;
+  messageId: string;
+  offset: number;
+  length: number;
 }
 
 export interface OwnerConversation {
@@ -824,6 +877,575 @@ export const OwnerConversationRequest: MessageFns<OwnerConversationRequest> = {
   fromPartial<I extends Exact<DeepPartial<OwnerConversationRequest>, I>>(object: I): OwnerConversationRequest {
     const message = createBaseOwnerConversationRequest();
     message.agentId = object.agentId ?? "";
+    return message;
+  },
+};
+
+function createBaseMessageScope(): MessageScope {
+  return { agentId: "", conversationId: "" };
+}
+
+export const MessageScope: MessageFns<MessageScope> = {
+  encode(message: MessageScope, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.agentId !== "") {
+      writer.uint32(10).string(message.agentId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(18).string(message.conversationId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): MessageScope {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseMessageScope();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.agentId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<MessageScope>, I>>(base?: I): MessageScope {
+    return MessageScope.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<MessageScope>, I>>(object: I): MessageScope {
+    const message = createBaseMessageScope();
+    message.agentId = object.agentId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    return message;
+  },
+};
+
+function createBaseMessageAfter(): MessageAfter {
+  return { order: 0n, through: undefined };
+}
+
+export const MessageAfter: MessageFns<MessageAfter> = {
+  encode(message: MessageAfter, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.order !== 0n) {
+      if (BigInt.asIntN(64, message.order) !== message.order) {
+        throw new globalThis.Error("value provided for field message.order of type int64 too large");
+      }
+      writer.uint32(8).int64(message.order);
+    }
+    if (message.through !== undefined) {
+      if (BigInt.asIntN(64, message.through) !== message.through) {
+        throw new globalThis.Error("value provided for field message.through of type int64 too large");
+      }
+      writer.uint32(16).int64(message.through);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): MessageAfter {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseMessageAfter();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.order = reader.int64() as bigint;
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.through = reader.int64() as bigint;
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<MessageAfter>, I>>(base?: I): MessageAfter {
+    return MessageAfter.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<MessageAfter>, I>>(object: I): MessageAfter {
+    const message = createBaseMessageAfter();
+    message.order = (object.order !== undefined && object.order !== null) ? BigInt(object.order) : 0n;
+    message.through = (object.through !== undefined && object.through !== null) ? BigInt(object.through) : undefined;
+    return message;
+  },
+};
+
+function createBaseOwnerMessagesRequest(): OwnerMessagesRequest {
+  return { scope: undefined, before: undefined, after: undefined, limit: 0 };
+}
+
+export const OwnerMessagesRequest: MessageFns<OwnerMessagesRequest> = {
+  encode(message: OwnerMessagesRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.scope !== undefined) {
+      MessageScope.encode(message.scope, writer.uint32(10).fork()).join();
+    }
+    if (message.before !== undefined) {
+      if (BigInt.asIntN(64, message.before) !== message.before) {
+        throw new globalThis.Error("value provided for field message.before of type int64 too large");
+      }
+      writer.uint32(16).int64(message.before);
+    }
+    if (message.after !== undefined) {
+      MessageAfter.encode(message.after, writer.uint32(26).fork()).join();
+    }
+    if (message.limit !== 0) {
+      writer.uint32(32).uint32(message.limit);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): OwnerMessagesRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseOwnerMessagesRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.scope = MessageScope.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.before = reader.int64() as bigint;
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.after = MessageAfter.decode(reader, reader.uint32());
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.limit = reader.uint32();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<OwnerMessagesRequest>, I>>(base?: I): OwnerMessagesRequest {
+    return OwnerMessagesRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<OwnerMessagesRequest>, I>>(object: I): OwnerMessagesRequest {
+    const message = createBaseOwnerMessagesRequest();
+    message.scope = (object.scope !== undefined && object.scope !== null)
+      ? MessageScope.fromPartial(object.scope)
+      : undefined;
+    message.before = (object.before !== undefined && object.before !== null) ? BigInt(object.before) : undefined;
+    message.after = (object.after !== undefined && object.after !== null)
+      ? MessageAfter.fromPartial(object.after)
+      : undefined;
+    message.limit = object.limit ?? 0;
+    return message;
+  },
+};
+
+function createBaseMessageMetadata(): MessageMetadata {
+  return {
+    id: "",
+    role: 0,
+    receiptOrder: 0n,
+    receivedAt: 0n,
+    totalBytes: 0n,
+    sourceInputId: undefined,
+    originalAcceptedAt: undefined,
+    sourceInputRequestId: undefined,
+  };
+}
+
+export const MessageMetadata: MessageFns<MessageMetadata> = {
+  encode(message: MessageMetadata, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    if (message.role !== 0) {
+      writer.uint32(16).int32(message.role);
+    }
+    if (message.receiptOrder !== 0n) {
+      if (BigInt.asIntN(64, message.receiptOrder) !== message.receiptOrder) {
+        throw new globalThis.Error("value provided for field message.receiptOrder of type int64 too large");
+      }
+      writer.uint32(24).int64(message.receiptOrder);
+    }
+    if (message.receivedAt !== 0n) {
+      if (BigInt.asIntN(64, message.receivedAt) !== message.receivedAt) {
+        throw new globalThis.Error("value provided for field message.receivedAt of type int64 too large");
+      }
+      writer.uint32(32).int64(message.receivedAt);
+    }
+    if (message.totalBytes !== 0n) {
+      if (BigInt.asIntN(64, message.totalBytes) !== message.totalBytes) {
+        throw new globalThis.Error("value provided for field message.totalBytes of type int64 too large");
+      }
+      writer.uint32(40).int64(message.totalBytes);
+    }
+    if (message.sourceInputId !== undefined) {
+      writer.uint32(50).string(message.sourceInputId);
+    }
+    if (message.originalAcceptedAt !== undefined) {
+      if (BigInt.asIntN(64, message.originalAcceptedAt) !== message.originalAcceptedAt) {
+        throw new globalThis.Error("value provided for field message.originalAcceptedAt of type int64 too large");
+      }
+      writer.uint32(56).int64(message.originalAcceptedAt);
+    }
+    if (message.sourceInputRequestId !== undefined) {
+      writer.uint32(66).string(message.sourceInputRequestId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): MessageMetadata {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseMessageMetadata();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.role = reader.int32() as any;
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.receiptOrder = reader.int64() as bigint;
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.receivedAt = reader.int64() as bigint;
+            continue;
+          }
+          case 5: {
+            if (tag !== 40) {
+              break;
+            }
+
+            message.totalBytes = reader.int64() as bigint;
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.sourceInputId = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 56) {
+              break;
+            }
+
+            message.originalAcceptedAt = reader.int64() as bigint;
+            continue;
+          }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.sourceInputRequestId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<MessageMetadata>, I>>(base?: I): MessageMetadata {
+    return MessageMetadata.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<MessageMetadata>, I>>(object: I): MessageMetadata {
+    const message = createBaseMessageMetadata();
+    message.id = object.id ?? "";
+    message.role = object.role ?? 0;
+    message.receiptOrder = (object.receiptOrder !== undefined && object.receiptOrder !== null)
+      ? BigInt(object.receiptOrder)
+      : 0n;
+    message.receivedAt = (object.receivedAt !== undefined && object.receivedAt !== null)
+      ? BigInt(object.receivedAt)
+      : 0n;
+    message.totalBytes = (object.totalBytes !== undefined && object.totalBytes !== null)
+      ? BigInt(object.totalBytes)
+      : 0n;
+    message.sourceInputId = object.sourceInputId ?? undefined;
+    message.originalAcceptedAt = (object.originalAcceptedAt !== undefined && object.originalAcceptedAt !== null)
+      ? BigInt(object.originalAcceptedAt)
+      : undefined;
+    message.sourceInputRequestId = object.sourceInputRequestId ?? undefined;
+    return message;
+  },
+};
+
+function createBaseMessageRegion(): MessageRegion {
+  return { messages: [], through: 0n };
+}
+
+export const MessageRegion: MessageFns<MessageRegion> = {
+  encode(message: MessageRegion, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.messages) {
+      MessageMetadata.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.through !== 0n) {
+      if (BigInt.asIntN(64, message.through) !== message.through) {
+        throw new globalThis.Error("value provided for field message.through of type int64 too large");
+      }
+      writer.uint32(16).int64(message.through);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): MessageRegion {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseMessageRegion();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.messages.push(MessageMetadata.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.through = reader.int64() as bigint;
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<MessageRegion>, I>>(base?: I): MessageRegion {
+    return MessageRegion.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<MessageRegion>, I>>(object: I): MessageRegion {
+    const message = createBaseMessageRegion();
+    message.messages = object.messages?.map((e) => MessageMetadata.fromPartial(e)) || [];
+    message.through = (object.through !== undefined && object.through !== null) ? BigInt(object.through) : 0n;
+    return message;
+  },
+};
+
+function createBaseOwnerMessageRead(): OwnerMessageRead {
+  return { scope: undefined, messageId: "", offset: 0, length: 0 };
+}
+
+export const OwnerMessageRead: MessageFns<OwnerMessageRead> = {
+  encode(message: OwnerMessageRead, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.scope !== undefined) {
+      MessageScope.encode(message.scope, writer.uint32(10).fork()).join();
+    }
+    if (message.messageId !== "") {
+      writer.uint32(18).string(message.messageId);
+    }
+    if (message.offset !== 0) {
+      writer.uint32(24).uint32(message.offset);
+    }
+    if (message.length !== 0) {
+      writer.uint32(32).uint32(message.length);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): OwnerMessageRead {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseOwnerMessageRead();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.scope = MessageScope.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.messageId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.offset = reader.uint32();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.length = reader.uint32();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<OwnerMessageRead>, I>>(base?: I): OwnerMessageRead {
+    return OwnerMessageRead.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<OwnerMessageRead>, I>>(object: I): OwnerMessageRead {
+    const message = createBaseOwnerMessageRead();
+    message.scope = (object.scope !== undefined && object.scope !== null)
+      ? MessageScope.fromPartial(object.scope)
+      : undefined;
+    message.messageId = object.messageId ?? "";
+    message.offset = object.offset ?? 0;
+    message.length = object.length ?? 0;
     return message;
   },
 };
@@ -8975,6 +9597,24 @@ export const ConversationsService = {
     responseSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
     responseDeserialize: (value: Buffer): Empty => Empty.decode(value),
   },
+  messages: {
+    path: "/chapchoo.conversations.Conversations/Messages" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: OwnerMessagesRequest): Buffer => Buffer.from(OwnerMessagesRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): OwnerMessagesRequest => OwnerMessagesRequest.decode(value),
+    responseSerialize: (value: MessageRegion): Buffer => Buffer.from(MessageRegion.encode(value).finish()),
+    responseDeserialize: (value: Buffer): MessageRegion => MessageRegion.decode(value),
+  },
+  readMessage: {
+    path: "/chapchoo.conversations.Conversations/ReadMessage" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: OwnerMessageRead): Buffer => Buffer.from(OwnerMessageRead.encode(value).finish()),
+    requestDeserialize: (value: Buffer): OwnerMessageRead => OwnerMessageRead.decode(value),
+    responseSerialize: (value: FieldChunk): Buffer => Buffer.from(FieldChunk.encode(value).finish()),
+    responseDeserialize: (value: Buffer): FieldChunk => FieldChunk.decode(value),
+  },
   submitAnswer: {
     path: "/chapchoo.conversations.Conversations/SubmitAnswer" as const,
     requestStream: false as const,
@@ -9087,6 +9727,8 @@ export interface ConversationsServer extends UntypedServiceImplementation {
   inputs: handleUnaryCall<OwnerInputsRequest, RetainedInputs>;
   readInput: handleUnaryCall<OwnerInputRead, FieldChunk>;
   deleteInput: handleUnaryCall<OwnerDeleteInput, Empty>;
+  messages: handleUnaryCall<OwnerMessagesRequest, MessageRegion>;
+  readMessage: handleUnaryCall<OwnerMessageRead, FieldChunk>;
   submitAnswer: handleUnaryCall<OwnerAnswerPiece, OwnerAnswerProgress>;
   answerResult: handleUnaryCall<OwnerAnswerResultRequest, OwnerAnswerStatus>;
   requestAnswer: handleUnaryCall<OwnerRequestAnswer, OwnerAnswerStatus>;
@@ -9220,6 +9862,36 @@ export interface ConversationsClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  messages(
+    request: OwnerMessagesRequest,
+    callback: (error: ServiceError | null, response: MessageRegion) => void,
+  ): ClientUnaryCall;
+  messages(
+    request: OwnerMessagesRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: MessageRegion) => void,
+  ): ClientUnaryCall;
+  messages(
+    request: OwnerMessagesRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: MessageRegion) => void,
+  ): ClientUnaryCall;
+  readMessage(
+    request: OwnerMessageRead,
+    callback: (error: ServiceError | null, response: FieldChunk) => void,
+  ): ClientUnaryCall;
+  readMessage(
+    request: OwnerMessageRead,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: FieldChunk) => void,
+  ): ClientUnaryCall;
+  readMessage(
+    request: OwnerMessageRead,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: FieldChunk) => void,
   ): ClientUnaryCall;
   submitAnswer(
     request: OwnerAnswerPiece,
