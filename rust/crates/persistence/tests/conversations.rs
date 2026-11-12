@@ -1,3 +1,41 @@
+// Older migration tests must exercise their own historical schema, not stop at
+// the newer chat guard. Prove that guard first, then retire only synthetic chat
+// facts from this fixture. Production downgrade never performs this cleanup.
+macro_rules! isolate_pre_chat_migration {
+    ($connection:expr,$migrations:expr) => {{
+        let connection = &mut *$connection;
+        if connection
+            .applied_migrations()?
+            .iter()
+            .any(|version| version.to_string() == "00000000000023")
+        {
+            #[derive(diesel::QueryableByName)]
+            struct ChatCount {
+                #[diesel(sql_type=diesel::sql_types::BigInt)]
+                n: i64,
+            }
+            let count = diesel::sql_query(
+                "SELECT CAST(count(*) AS BIGINT) AS n FROM conversation_messages",
+            )
+            .get_result::<ChatCount>(connection)?
+            .n;
+            if count > 0 {
+                assert!(
+                    connection.revert_last_migration($migrations).is_err(),
+                    "Accepted chat must prevent downgrade"
+                );
+                connection.batch_execute(
+                    "DELETE FROM conversation_messages; DELETE FROM conversation_message_heads",
+                )?;
+            }
+            assert_eq!(
+                connection.revert_last_migration($migrations)?.to_string(),
+                "00000000000023"
+            );
+        }
+    }};
+}
+
 #[path = "conversations/answers.rs"]
 mod answers;
 #[path = "conversations/authentication.rs"]
@@ -8,6 +46,10 @@ mod consumed_migration;
 mod delivery;
 #[path = "conversations/input_reads.rs"]
 mod input_reads;
+#[path = "conversations/messages.rs"]
+mod messages;
+#[path = "conversations/messages_migration.rs"]
+mod messages_migration;
 #[path = "conversations/native_state.rs"]
 mod native_state;
 #[path = "conversations/preparation.rs"]
@@ -943,6 +985,7 @@ async fn source_write_holds_control_lock(
 macro_rules! preserving_upgrade {
     ($connection:expr,$migrations:expr) => {{
         let connection=&mut *$connection;
+        isolate_pre_chat_migration!(connection,$migrations);
         let receipts=diesel::sql_query("SELECT payload_hash AS bytes FROM agent_creation_receipts ORDER BY request_id")
             .load::<RetainedBytes>(connection)?;
         let credentials=diesel::sql_query("SELECT ciphertext AS bytes FROM external_authentications ORDER BY current_request_id")
@@ -963,6 +1006,7 @@ macro_rules! preserving_upgrade {
 macro_rules! preserving_tool_io_upgrade {
     ($connection:expr,$migrations:expr) => {{
         let connection=&mut *$connection;
+        isolate_pre_chat_migration!(connection,$migrations);
         while connection.applied_migrations()?.iter().any(|version| version.to_string().as_str() > "00000000000016") {
             connection.revert_last_migration($migrations)?;
         }
@@ -983,6 +1027,7 @@ macro_rules! preserving_tool_io_upgrade {
 macro_rules! preserving_deleted_inputs_upgrade {
     ($connection:expr,$migrations:expr,$down:expr) => {{
         let connection = &mut *$connection;
+        isolate_pre_chat_migration!(connection,$migrations);
         connection.batch_execute("CREATE TEMP TABLE conversation_inputs (id TEXT PRIMARY KEY,submitted_text TEXT,deleted_at BIGINT CONSTRAINT input_deleted_body CHECK((submitted_text IS NULL)=(deleted_at IS NOT NULL))); INSERT INTO conversation_inputs VALUES('guard-fixture',NULL,1)")?;
         assert!(connection.transaction::<(),diesel::result::Error,_>(|connection| {
             connection.batch_execute($down)
@@ -998,6 +1043,7 @@ macro_rules! preserving_deleted_inputs_upgrade {
 macro_rules! preserving_setup_source_upgrade {
     ($connection:expr,$migrations:expr) => {{
         let connection = &mut *$connection;
+        isolate_pre_chat_migration!(connection,$migrations);
         // Exercise the actual guard SQL with synthetic active fences. The
         // completed conversation fixture has already retired its source facts.
         connection.batch_execute("CREATE TEMP TABLE conversation_input_preparation (require_retained_source BOOLEAN NOT NULL, payload TEXT NOT NULL); INSERT INTO conversation_input_preparation VALUES(TRUE,'preserved')")?;
@@ -1031,6 +1077,7 @@ macro_rules! preserving_setup_source_upgrade {
 macro_rules! preserving_extent_upgrade {
     ($connection:expr,$migrations:expr) => {{
         let connection = &mut *$connection;
+        isolate_pre_chat_migration!(connection,$migrations);
         while connection.applied_migrations()?.iter().any(|version| version.to_string().as_str() > "00000000000018") {
             connection.revert_last_migration($migrations)?;
         }
@@ -1050,6 +1097,7 @@ macro_rules! preserving_extent_upgrade {
 macro_rules! preserving_native_details_upgrade {
     ($connection:expr,$migrations:expr) => {{
         let connection = &mut *$connection;
+        isolate_pre_chat_migration!(connection,$migrations);
         while connection.applied_migrations()?.iter().any(|version| version.to_string().as_str() > "00000000000017") {
             connection.revert_last_migration($migrations)?;
         }
@@ -1143,6 +1191,7 @@ fn postgres_conversation_operations_and_preserving_downgrade_guard() -> Result<(
         preserving_native_details_upgrade!(&mut connection, POSTGRES_MIGRATIONS);
         preserving_tool_io_upgrade!(&mut connection, POSTGRES_MIGRATIONS);
         runtime.block_on(source_write_holds_control_lock(&store, &fixture, &url))?;
+        isolate_pre_chat_migration!(&mut connection, POSTGRES_MIGRATIONS);
         while connection
             .applied_migrations()?
             .iter()

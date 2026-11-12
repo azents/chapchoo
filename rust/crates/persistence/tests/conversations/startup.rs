@@ -414,6 +414,7 @@ fn sqlite_connection_startup_and_first_input() -> Result<(), TestError> {
             .bind::<diesel::sql_types::Text, _>(desired).execute(&mut connection)?;
         Ok(())
     }))?;
+    isolate_pre_chat_migration!(&mut connection, SQLITE_MIGRATIONS);
     assert_eq!(
         connection
             .revert_last_migration(SQLITE_MIGRATIONS)?
@@ -459,6 +460,7 @@ fn postgres_connection_startup_and_first_input() -> Result<(), TestError> {
                 }).join().map_err(|_| "Desired-state fixture worker failed")?
             })
         }))?;
+        isolate_pre_chat_migration!(&mut connection, POSTGRES_MIGRATIONS);
         assert_eq!(
             connection
                 .revert_last_migration(POSTGRES_MIGRATIONS)?

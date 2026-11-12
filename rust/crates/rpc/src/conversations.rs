@@ -1,6 +1,7 @@
 //! Owner-only conversation observations, saved supply and exact-work Stop.
 mod answers;
 mod input;
+mod messages;
 mod records;
 mod transfer;
 use crate::{
@@ -190,6 +191,18 @@ fn stop_receipt(value: ConversationStopReceipt) -> wire::StopReceipt {
 }
 #[tonic::async_trait]
 impl Conversations for ConversationServices {
+    async fn messages(
+        &self,
+        request: Request<wire::OwnerMessagesRequest>,
+    ) -> Result<Response<wire::MessageRegion>, Status> {
+        messages::list(self, request).await
+    }
+    async fn read_message(
+        &self,
+        request: Request<wire::OwnerMessageRead>,
+    ) -> Result<Response<wire::FieldChunk>, Status> {
+        messages::read(self, request).await
+    }
     async fn inputs(
         &self,
         request: Request<wire::OwnerInputsRequest>,

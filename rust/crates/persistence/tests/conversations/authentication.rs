@@ -512,6 +512,7 @@ fn sqlite_execution_authentication_preserves_applied_identity_and_denies_stale_d
     let fixture = runtime.block_on(fixture(&store))?;
     runtime.block_on(exercise(&store, &fixture))?;
     let mut connection = diesel::SqliteConnection::establish(path.to_str().ok_or("Invalid path")?)?;
+    isolate_pre_chat_migration!(&mut connection, SQLITE_MIGRATIONS);
     while connection
         .applied_migrations()?
         .iter()
@@ -550,6 +551,7 @@ fn postgres_execution_authentication_preserves_applied_identity_and_denies_stale
             &store, &fixture, &url,
         ))?;
         let mut connection = AsyncConnectionWrapper::<AsyncPgConnection>::establish(&url)?;
+        isolate_pre_chat_migration!(&mut connection, POSTGRES_MIGRATIONS);
         while connection
             .applied_migrations()?
             .iter()

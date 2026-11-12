@@ -8,6 +8,11 @@ The General Chat surface presents source-bound native observations and retained
 product operations. It is not a local transcript simulator, a durable browser
 feed or evidence that credentials or a model work.
 
+The independent [chat receipt store](conversation-storage.md#independent-chat-receipts)
+has protected owner reads, but this browser still reads native records and
+temporary inputs. Receipt persistence alone does not switch the main Chat or
+full-history presentation to a message-only source.
+
 ## Initial rendering and active reads
 
 Exact-Team/private-owner route admission loads both the Agent and initial

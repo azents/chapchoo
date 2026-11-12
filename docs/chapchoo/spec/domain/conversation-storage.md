@@ -4,12 +4,13 @@ title: "Private conversation storage and source-bound acceptance"
 
 # Private conversation storage and source-bound acceptance
 
-The persistence library stores private Agent supply choices, accepted text inputs
-and captured raw/normalized event pairs. These are internal completed Store
+The persistence library stores private Agent supply choices, independent chat
+receipts, temporary accepted text inputs and captured raw/normalized event pairs.
+These are internal completed Store
 operations and authenticated component transfer. The client service exposes
 current observations, saved supply, text upload/acceptance/delivery observations,
-typed answer upload/results, live responder references, normalized record reads
-and exact-work Stop. The [Chat reader](conversation-web.md) consumes these owner
+typed answer upload/results, live responder references, chat metadata/body reads,
+normalized record reads and exact-work Stop. The [Chat reader](conversation-web.md) consumes these owner
 contracts without exposing raw captured RPC envelopes.
 No model execution is established
 by these storage or routing contracts. [Backend authentication](backend-authentication.md)
@@ -51,7 +52,10 @@ returns absence and does not create one.
 
 If connection startup has not already selected an empty conversation, first
 input admission creates the conversation and association in the same transaction
-as its retained input. A connected desired-running Computer can instead prepare
+as its retained input and immutable user chat receipt. Failure of either write
+rolls back the whole admission, including any conversation creation and receipt
+order allocation. Exact retained-input recovery adds no second message.
+A connected desired-running Computer can instead prepare
 the selected empty conversation before the first input through the sealed
 [startup boundary](#connection-time-preparation). The exact submitted text is preserved. Request
 recovery compares its original source target and text while the pending input
@@ -85,8 +89,9 @@ remains independent. Failed and unresolved operations remain pending facts.
 An authenticated same-source successful report for an already absent operation
 acknowledges closure, not reconstructed delivery success. This permits the
 Connector to release a known native result after a lost report ACK; subsequent
-body pulls and forwarding cannot use a removed input. There is no completed-input
-tombstone, counter or archive. Consequently an arbitrary explicit old owner
+body pulls and forwarding cannot use a removed input. Independent chat receipts
+preserve accepted text but are not completed-input recovery records.
+Consequently an arbitrary explicit old owner
 submission is no longer recoverable forever and may be a new operation if current
 admission allows it. Missing results never automatically resubmit.
 
@@ -99,7 +104,51 @@ unresolved and differently bound historical data is preserved. Downgrade removes
 the guard but cannot resurrect consumed content; older preserving migration
 guards still apply.
 
-### Internal input owner and setup facts
+## Independent chat receipts
+
+Chat belongs to the product conversation, not its native source, current
+selection or temporary delivery operation. Immutable `USER` and `AGENT` messages
+retain exact UTF-8 text, database receipt time and a positive int64 receipt order.
+New messages have repository-issued `CM` identities. A locked conversation-local
+allocation head serializes both roles until transaction commit; rollback restores
+the head too. Receipt order, not timestamps, native event order or DTO sorting,
+defines the shared stable order.
+
+User receipts retain the original input ID, request nonce and acceptance time
+as provenance without an owning input foreign key. The nonce supports
+acknowledgement correlation after input pickup; it is neither a permanent
+deduplication key nor authority to recover or replay an absent input. Another
+explicit admission with a consumed nonce can produce a new input and message.
+Consumption, failed-input body deletion and native-source replacement leave
+accepted chat unchanged. Captured assistant/model output never appends chat.
+
+Owner `Messages` and `ReadMessage` calls revalidate the current private Agent
+owner, Team membership and exact product conversation on every read. No native
+session or snapshot is required. Metadata pages contain at most 25 entries in
+ascending receipt order: latest and before select the newest matching suffix;
+after selects the oldest matching prefix. A returned `through` head bounds
+newer-page traversal against concurrent appends. Exact message body reads return
+at most 32 KiB per chunk, including arbitrary byte boundaries; consumers assemble
+bytes before UTF-8 decoding. Metadata never loads full bodies.
+
+The Store/service also prepares explicit Agent message publication. It checks
+the current authenticated Connector execution/route and actual Agent/conversation
+ownership independently of native readiness, native IDs or the UI's selected
+conversation. There is no public publication RPC or MCP entrypoint yet; these
+prepared operations do not make ordinary native output user-visible chat.
+
+Explicit schema preparation transfers retained original non-deleted inputs into
+a deterministic prefix ordered by original acceptance time and stored input
+identity. Migration 23 preserves original bytes, input identity, request nonce
+and acceptance time, using the original UUID under the new `CM` projection for
+the transferred message. It neither reconstructs native history nor resends
+input. Already consumed or deleted text is not recreated. A database insert guard
+requires each subsequent input's matching user receipt. Preparation is atomic
+under the existing installation binding; downgrade refuses to discard nonempty
+chat. Native event capture and the current source-based browser presentation
+remain separate from this message store.
+
+## Internal input owner and setup facts
 
 The Store distinguishes newly accepted input from exact receipt recovery in its
 completed admission transaction. `ConversationInputService` reserves a bounded
@@ -151,7 +200,8 @@ lists expose bodyless deletion tombstones and, independently of the page anchor,
 the newest non-deleted acceptance for that exact private source. A newer
 tombstone does not replace an earlier live operation as that selection. Body
 reads exclude removed content, and exact input-result recovery includes
-deletion state. Downgrade is rejected
+deletion state. This removes only temporary delivery content; the independently
+accepted user chat message remains. Downgrade is rejected
 while removed bodies cannot be restored. Logical deletion does not erase storage
 pages or backups.
 
@@ -234,7 +284,8 @@ confirmation step, Computer power change or harness retirement.
 
 Client-only `chapchoo.conversations.Conversations` provides current source/native
 observation, managed/existing saved supply reads/changes, complete text upload,
-input-result lookup, normalized record region/field reads, Stop and Stop-result
+input-result lookup, independent message metadata/body reads, normalized record
+region/field reads, Stop and Stop-result
 lookup. Admin and Control-only groups do not register this owner service.
 Component native/request reports are separate execution-authenticated operations.
 Current reads do not start native work; supplier changes remain next-start only.
@@ -278,7 +329,8 @@ The additive migration preserves old grants and refuses to downgrade while a
 retained-source fence would be discarded. None of these outcomes grants another setup
 dispatch for the original operation. Initial source binding must
 agree with any already-known setup session/source. Source replacement clears
-these setup facts with the independently accepted input; it does not replay work.
+these setup facts with temporary accepted inputs; conversation-owned chat
+receipts remain. It does not replay work.
 
 ## Live requests and original answers
 

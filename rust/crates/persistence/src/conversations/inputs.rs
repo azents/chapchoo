@@ -281,6 +281,19 @@ impl Store {
                 return Err(StoreError::InvalidInput);
             }
             let id = EntityId::generate(now)?;
+            let receipt_now = crate::directory::database_now!(connection, dialect);
+            let _ = super::messages::append_message!(
+                connection,
+                dialect,
+                row.id,
+                super::messages::MessageOrigin::User {
+                    input: id,
+                    request_id: &draft.request_id,
+                    accepted_at: now
+                },
+                draft.text,
+                receipt_now
+            );
             diesel::sql_query(dialect.query("INSERT INTO conversation_inputs(id,conversation_id,request_id,target_snapshot,submitted_text,accepted_at) VALUES(?,?,?,?,?,?)"))
                 .bind::<IdentitySql,_>(id).bind::<IdentitySql,_>(row.id).bind::<Text,_>(&draft.request_id)
                 .bind::<Nullable<Text>,_>(draft.target.snapshot().map(SnapshotId::as_str))

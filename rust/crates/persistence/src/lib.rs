@@ -57,7 +57,10 @@ pub use conversations::{
     ConversationInputAnchor, ConversationInputChunk, ConversationInputDelivery,
     ConversationInputOutcome, ConversationInputPreparation, ConversationInputReceipt,
     ConversationInputReference, ConversationInputScope, ConversationLiveRequestReference,
-    ConversationNativeObservation, ConversationNativePreparation, ConversationOperationForwarding,
+    ConversationMessageChunk, ConversationMessageMetadata, ConversationMessageRead,
+    ConversationMessageReceipt, ConversationMessageRegion, ConversationMessageRole,
+    ConversationMessageScope, ConversationMessageWindow, ConversationNativeObservation,
+    ConversationNativePreparation, ConversationOperationForwarding,
     ConversationPreparationAdmission, ConversationPreparationFacts, ConversationPreparationFailure,
     ConversationPreparationFreshness, ConversationPreparationOutcome, ConversationPreparationState,
     ConversationRecordAnchor, ConversationRecordField, ConversationRecordKind,
@@ -66,7 +69,7 @@ pub use conversations::{
     ConversationStopState, ConversationSummary, ConversationWorkTarget, EventChunkRead,
     EventMetadataRead, EventPairMetadata, EventPayloadChunk, EventPayloadKind,
     HarnessSupplyReceipt, HarnessSupplySelection, LiveConversationRequest,
-    RetainedConversationInput, SaveHarnessSupply, SourceBinding,
+    PublishConversationMessage, RetainedConversationInput, SaveHarnessSupply, SourceBinding,
 };
 pub use creation_results::AgentCreationResult;
 pub use delivery::{DeliveryComputer, DeliveryExecution, DeliverySnapshot};

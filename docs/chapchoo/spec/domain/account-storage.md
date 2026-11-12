@@ -12,13 +12,17 @@ The persistence library exposes explicit preparation/readiness and completed
 account/team/session operations with owned asynchronous pool leases. The
 [RPC and operator composition](account-rpc.md) calls these library boundaries.
 The [conversation storage foundation](conversation-storage.md) adds private
-Agent supply, accepted text and source-bound event pairs through internal Store
-operations; it does not register a public conversation service or launch Codex.
+Agent supply, independent chat receipts, temporary accepted text and source-bound
+event pairs through completed Store operations. The Client composition registers
+the private-owner Conversations service; storage preparation itself launches no
+native work.
 
 Preparation embeds separate SQLite/PostgreSQL migrations. PostgreSQL stores
 native Team-kind, membership-role, grant-kind and invitation-status enums;
 SQLite uses equivalent constrained text. Instants are signed Unix epoch
-milliseconds in BIGINT columns, supplied by the application acceptance boundary.
+milliseconds in BIGINT columns. Account operations use their application
+acceptance boundary; chat uses database receipt time and separately retains the
+original user-input acceptance time.
 
 ## Keys and Relationships
 
@@ -58,7 +62,8 @@ Collaborative handles are immutable, and Team settings update name only. See
   display-default initialization and missing-user backfill commit together under
   that lock. A failed preparation rolls back that invocation's schema/data
   changes; explicit preparation can be rerun.
-- A missing binding with populated product tables fails as an integrity error.
+- A missing binding with populated product tables, including conversation
+  messages and allocation heads, fails as an integrity error.
   No command in this library replaces a bound key or clears user sessions.
 - Preparation detects its environment before the transaction and runs no network
   operation inside it. It creates no user, personal Team, password or login session.

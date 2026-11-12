@@ -206,6 +206,19 @@ pub(super) async fn exercise(context: Context<'_>) -> Result<(), TestError> {
         &text,
     )
     .await?;
+    super::owner_messages::native_output_is_not_chat(
+        &Context {
+            store,
+            owner,
+            agent,
+            endpoint,
+            source: source.clone(),
+            key,
+            user_key,
+        },
+        &conversation,
+    )
+    .await?;
     super::native_state::exercise(
         &Context {
             store,
