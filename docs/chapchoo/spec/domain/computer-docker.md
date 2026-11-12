@@ -156,12 +156,16 @@ Docker `always` keeps unexpected exits in the same execution; transient exited,
 paused, restarting or contradictory observations do not authorize restoration.
 
 Intentional retirement consumes the exact admitted current call in stages:
-inspect ownership and eligible native state, one update to restart policy `no`,
-inspect effective policy, one graceful Stop if required, coherent exited/known-
-never-started proof, one non-force full-ID Remove with anonymous-volume deletion
-disabled, then exact same-daemon absence. A coherently auto-restarting container
+inspect ownership and eligible native state, one graceful Stop for a previously
+started container, coherent exited/known-never-started proof, one update to restart
+policy `no`, inspect effective policy and stopped proof again, one non-force
+full-ID Remove with anonymous-volume deletion disabled, then exact same-daemon
+absence. Explicit Stop settles Engine's restart manager before policy mutation;
+updating a live task can race its exit inside Engine's resource update even when
+only a restart policy was requested. A known-never-started created container
+needs no Stop request. A coherently auto-restarting container
 (status restarting, Running and Restarting true, PID zero, false paused/dead flags
-and ordered positive timestamps) remains eligible for this intentional Update/Stop
+and ordered positive timestamps) remains eligible for this intentional Stop/Update
 sequence. It does not prove Running completion or terminal retirement; Stop must
 still establish the ordinary exited proof before Remove. Each later mutation
 requires a fresh Control check. Grace is

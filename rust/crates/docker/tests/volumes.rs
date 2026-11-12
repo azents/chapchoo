@@ -354,6 +354,18 @@ async fn serve(
                 value.started_at = Some("2026-11-03T06:46:00Z".into());
             }
             "update" => {
+                // Updating a live task can race its exit inside Engine.
+                // Retirement must first cross an acknowledged Stop boundary.
+                if state
+                    .container
+                    .as_ref()
+                    .and_then(|value| value.state.as_ref())
+                    .is_some_and(|value| {
+                        value.running != Some(false) || value.restarting != Some(false)
+                    })
+                {
+                    return message(500);
+                }
                 let body: ContainerUpdateBody = serde_json::from_slice(&body)?;
                 if body.restart_policy.as_ref().and_then(|policy| policy.name)
                     != Some(RestartPolicyNameEnum::NO)

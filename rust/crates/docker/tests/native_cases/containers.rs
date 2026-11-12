@@ -105,10 +105,10 @@ async fn normal_native_lifecycle_submits_each_stage_once_and_keeps_original_save
         let retirement = docker
             .begin_retirement(&context, &resource, &reserved(true), true, true, false)
             .await?;
-        let updated = docker.disable_restart(retirement).await?;
-        let stopped = docker.stop_container(updated).await?;
+        let stopped = docker.stop_container(retirement).await?;
+        let updated = docker.disable_restart(stopped).await?;
         assert_eq!(
-            docker.remove_container(stopped).await?.presence,
+            docker.remove_container(updated).await?.presence,
             Presence::Absent
         );
         assert_eq!(
@@ -122,7 +122,7 @@ async fn normal_native_lifecycle_submits_each_stage_once_and_keeps_original_save
             let state = fixture.state.lock().map_err(|_| "Fixture lock")?;
             assert_eq!(
                 state.container_actions,
-                ["create", "start", "update", "stop", "remove"]
+                ["create", "start", "stop", "update", "remove"]
             );
             assert!(state.volume.is_some());
             assert_eq!(state.removes, 0);
@@ -135,7 +135,7 @@ async fn normal_native_lifecycle_submits_each_stage_once_and_keeps_original_save
 #[tokio::test]
 async fn intentional_retirement_stops_restarting_work_without_claiming_running_or_terminal()
 -> Result<(), TestError> {
-    for restart_at in 0..3 {
+    for restart_at in 0..2 {
         Fixture::run(async |fixture| {
             let docker = fixture.connect().await?;
             let prepared = prepare(fixture, &docker).await?;
@@ -175,19 +175,16 @@ async fn intentional_retirement_stops_restarting_work_without_claiming_running_o
             if restart_at == 1 {
                 enter_restart()?;
             }
-            let updated = docker.disable_restart(retirement).await?;
-            if restart_at == 2 {
-                enter_restart()?;
-            }
-            let stopped = docker.stop_container(updated).await?;
+            let stopped = docker.stop_container(retirement).await?;
+            let updated = docker.disable_restart(stopped).await?;
             assert_eq!(
-                docker.remove_container(stopped).await?.presence,
+                docker.remove_container(updated).await?.presence,
                 Presence::Absent
             );
             let state = fixture.state.lock().map_err(|_| "Fixture lock")?;
             assert_eq!(
                 state.container_actions,
-                ["create", "start", "update", "stop", "remove"]
+                ["create", "start", "stop", "update", "remove"]
             );
             assert!(state.volume.is_some());
             assert_eq!(state.removes, 0);
@@ -196,6 +193,93 @@ async fn intentional_retirement_stops_restarting_work_without_claiming_running_o
         .await?;
     }
     Ok(())
+}
+
+#[tokio::test]
+async fn never_started_created_work_needs_no_stop_before_policy_update() -> Result<(), TestError> {
+    Fixture::run(async |fixture| {
+        let docker = fixture.connect().await?;
+        let prepared = prepare(fixture, &docker).await?;
+        let resource = prepared.resource().clone();
+        drop(prepared);
+        let retirement = docker
+            .begin_retirement(&context(), &resource, &reserved(true), true, false, false)
+            .await?;
+        let stopped = docker.stop_container(retirement).await?;
+        let updated = docker.disable_restart(stopped).await?;
+        docker.remove_container(updated).await?;
+        let shared = fixture.state.lock().map_err(|_| "Fixture lock")?;
+        assert_eq!(shared.container_actions, ["create", "update", "remove"]);
+        Ok(())
+    })
+    .await
+}
+
+#[tokio::test]
+async fn policy_update_requires_the_stopped_proof_to_remain_coherent() -> Result<(), TestError> {
+    Fixture::run(async |fixture| {
+        let docker = fixture.connect().await?;
+        let prepared = prepare(fixture, &docker).await?;
+        let resource = prepared.resource().clone();
+        docker.start_container(prepared).await?;
+        let retirement = docker
+            .begin_retirement(&context(), &resource, &reserved(true), true, true, false)
+            .await?;
+        let stopped = docker.stop_container(retirement).await?;
+        {
+            let mut shared = fixture.state.lock().map_err(|_| "Fixture lock")?;
+            let state = shared
+                .container
+                .as_mut()
+                .and_then(|value| value.state.as_mut())
+                .ok_or("Missing native state")?;
+            state.status = Some(ContainerStateStatusEnum::RESTARTING);
+            state.running = Some(true);
+            state.restarting = Some(true);
+            state.pid = Some(0);
+        }
+        assert!(docker.disable_restart(stopped).await.is_err());
+        let shared = fixture.state.lock().map_err(|_| "Fixture lock")?;
+        assert_eq!(shared.container_actions, ["create", "start", "stop"]);
+        Ok(())
+    })
+    .await
+}
+
+#[tokio::test]
+async fn already_exited_work_still_submits_stop_before_changing_its_restart_policy()
+-> Result<(), TestError> {
+    Fixture::run(async |fixture| {
+        let docker = fixture.connect().await?;
+        let prepared = prepare(fixture, &docker).await?;
+        let resource = prepared.resource().clone();
+        docker.start_container(prepared).await?;
+        let retirement = docker
+            .begin_retirement(&context(), &resource, &reserved(true), true, true, false)
+            .await?;
+        {
+            let mut shared = fixture.state.lock().map_err(|_| "Fixture lock")?;
+            let state = shared
+                .container
+                .as_mut()
+                .and_then(|value| value.state.as_mut())
+                .ok_or("Missing native state")?;
+            state.status = Some(ContainerStateStatusEnum::EXITED);
+            state.running = Some(false);
+            state.pid = Some(0);
+            state.finished_at = Some("2026-11-03T06:47:00Z".into());
+        }
+        let stopped = docker.stop_container(retirement).await?;
+        let updated = docker.disable_restart(stopped).await?;
+        docker.remove_container(updated).await?;
+        let shared = fixture.state.lock().map_err(|_| "Fixture lock")?;
+        assert_eq!(
+            shared.container_actions,
+            ["create", "start", "stop", "update", "remove"]
+        );
+        Ok(())
+    })
+    .await
 }
 
 #[tokio::test]
@@ -443,11 +527,11 @@ async fn ambiguous_update_stop_or_remove_never_replays_or_advances_other_effects
             let retirement = docker
                 .begin_retirement(&context(), &resource, &reserved(true), true, true, false)
                 .await?;
-            let outcome = match docker.disable_restart(retirement).await {
+            let outcome = match docker.stop_container(retirement).await {
                 Err(error) => Err(error),
-                Ok(updated) => match docker.stop_container(updated).await {
+                Ok(stopped) => match docker.disable_restart(stopped).await {
                     Err(error) => Err(error),
-                    Ok(stopped) => docker.remove_container(stopped).await.map(|_| ()),
+                    Ok(updated) => docker.remove_container(updated).await.map(|_| ()),
                 },
             };
             assert!(outcome.is_err());
@@ -467,9 +551,9 @@ async fn ambiguous_update_stop_or_remove_never_replays_or_advances_other_effects
             {
                 let state = fixture.state.lock().map_err(|_| "Fixture lock")?;
                 let expected = match stage {
-                    "update" => vec!["create", "start", "update"],
-                    "stop" => vec!["create", "start", "update", "stop"],
-                    _ => vec!["create", "start", "update", "stop", "remove"],
+                    "update" => vec!["create", "start", "stop", "update"],
+                    "stop" => vec!["create", "start", "stop"],
+                    _ => vec!["create", "start", "stop", "update", "remove"],
                 };
                 assert_eq!(state.container_actions, expected);
             }

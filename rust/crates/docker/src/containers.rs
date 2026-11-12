@@ -566,14 +566,23 @@ impl Docker {
         }
         Ok(Retirement(target))
     }
-    pub async fn disable_restart(&self, retirement: Retirement) -> Result<UpdatedContainer, Error> {
-        let target = retirement.0;
-        let stage = self.stage(&target)?.ok_or(Error::Uncertain)?;
-        if !matches!(stage, Stage::Created | Stage::Running) {
+    pub async fn disable_restart(
+        &self,
+        stopped_token: StoppedContainer,
+    ) -> Result<UpdatedContainer, Error> {
+        let target = stopped_token.0;
+        let observed = self.inspect_target(&target, None, false).await?;
+        if !observed
+            .state
+            .as_ref()
+            .is_some_and(|state| stopped(state, target.never_started))
+        {
             return Err(Error::Uncertain);
         }
-        self.inspect_target(&target, None, false).await?;
-        self.record(target.clone(), Some(stage), Stage::Updating)?;
+        // Updating a live task races its exit inside Engine's resource update.
+        // An acknowledged Stop first cancels its restart manager; only then may
+        // policy update avoid that live-task boundary without replaying a write.
+        self.record(target.clone(), Some(Stage::Stopped), Stage::Updating)?;
         let sdk = self.sdk.clone().with_timeout(REQUEST);
         tokio::time::timeout(
             REQUEST,
@@ -591,28 +600,33 @@ impl Docker {
         .await
         .map_err(|_| Error::Uncertain)??;
         let value = self.inspect_target(&target, None, true).await?;
-        if value
-            .host_config
+        if !value
+            .state
             .as_ref()
-            .and_then(|host| host.restart_policy.as_ref())
-            .and_then(|policy| policy.name)
-            != Some(RestartPolicyNameEnum::NO)
+            .is_some_and(|state| stopped(state, target.never_started))
+            || value
+                .host_config
+                .as_ref()
+                .and_then(|host| host.restart_policy.as_ref())
+                .and_then(|policy| policy.name)
+                != Some(RestartPolicyNameEnum::NO)
         {
             return Err(Error::Uncertain);
         }
         self.record(target.clone(), Some(Stage::Updating), Stage::Updated)?;
         Ok(UpdatedContainer(target))
     }
-    pub async fn stop_container(
-        &self,
-        updated: UpdatedContainer,
-    ) -> Result<StoppedContainer, Error> {
-        let target = updated.0;
-        let observed = self.inspect_target(&target, None, true).await?;
+    pub async fn stop_container(&self, retirement: Retirement) -> Result<StoppedContainer, Error> {
+        let target = retirement.0;
+        let stage = self.stage(&target)?.ok_or(Error::Uncertain)?;
+        if !matches!(stage, Stage::Created | Stage::Running) {
+            return Err(Error::Uncertain);
+        }
+        let observed = self.inspect_target(&target, None, false).await?;
         let state = observed.state.as_ref().ok_or(Error::Uncertain)?;
-        self.record(target.clone(), Some(Stage::Updated), Stage::Stopping)?;
-        if !stopped(state, target.never_started) {
-            if !(running(state) || restarting(state)) {
+        self.record(target.clone(), Some(stage), Stage::Stopping)?;
+        if !target.never_started {
+            if !(running(state) || restarting(state) || stopped(state, false)) {
                 return Err(Error::Uncertain);
             }
             let budget = Duration::from_secs(45);
@@ -632,7 +646,7 @@ impl Docker {
             .await
             .map_err(|_| Error::Uncertain)??;
         }
-        let value = self.inspect_target(&target, None, true).await?;
+        let value = self.inspect_target(&target, None, false).await?;
         if !value
             .state
             .as_ref()
@@ -643,11 +657,8 @@ impl Docker {
         self.record(target.clone(), Some(Stage::Stopping), Stage::Stopped)?;
         Ok(StoppedContainer(target))
     }
-    pub async fn remove_container(
-        &self,
-        stopped_token: StoppedContainer,
-    ) -> Result<Observation, Error> {
-        let target = stopped_token.0;
+    pub async fn remove_container(&self, updated: UpdatedContainer) -> Result<Observation, Error> {
+        let target = updated.0;
         let observed = self.inspect_target(&target, None, true).await?;
         if !observed
             .state
@@ -656,7 +667,7 @@ impl Docker {
         {
             return Err(Error::Uncertain);
         }
-        self.record(target.clone(), Some(Stage::Stopped), Stage::Removing)?;
+        self.record(target.clone(), Some(Stage::Updated), Stage::Removing)?;
         let sdk = self.sdk.clone().with_timeout(REQUEST);
         tokio::time::timeout(
             REQUEST,
