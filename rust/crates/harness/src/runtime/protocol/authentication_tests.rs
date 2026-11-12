@@ -1,4 +1,6 @@
 use super::*;
+#[path = "tools_lifetime_tests.rs"]
+mod tools_lifetime_tests;
 use chapchoo_crypto::ExternalSecret;
 use std::sync::atomic::{AtomicUsize, Ordering};
 struct CountingProvider(AtomicUsize);
@@ -50,6 +52,8 @@ fn state(storage: NativeStorage) -> Result<State, Error> {
         stops: StopRegistry::default(),
         answers: AnswerRegistry::default(),
         credential_write: None,
+        pending_tools: None,
+        cleanup_errors: Vec::new(),
     })
 }
 #[tokio::test]
@@ -132,6 +136,7 @@ async fn already_live_setup_preserves_applied_credentials_without_calling_new_pr
         capture: source.clone(),
         observations: Arc::default(),
         _authentication: binding.clone(),
+        tools: None,
     });
     let result = state
         .start(
@@ -142,6 +147,11 @@ async fn already_live_setup_preserves_applied_credentials_without_calling_new_pr
             },
             source,
             provider.clone(),
+            crate::server_tools::unused_tools(),
+            &crate::NativeToolScope {
+                agent_id: binding.agent_id.clone(),
+                conversation_id: binding.conversation_id.clone(),
+            },
         )
         .await;
     let physical = state.observe()?;
@@ -329,7 +339,7 @@ async fn explicit_api_key_login_precedes_session_and_rejection_never_falls_back(
             ready,
             done.clone(),
             "/workspace".into(),
-            (NativeContext::New, Some(credentials)),
+            (NativeContext::New, Some(credentials), Vec::new()),
         ));
         let (read, mut write) = tokio::io::split(peer);
         let mut read = BufReader::new(read);
@@ -394,6 +404,7 @@ async fn external_file_startup_installs_no_native_token_login_callback() -> Resu
                 replay: CaptureReplay::AlreadyCaptured,
             },
             Some(credentials),
+            Vec::new(),
         ),
     ));
     let (read, mut write) = tokio::io::split(peer);

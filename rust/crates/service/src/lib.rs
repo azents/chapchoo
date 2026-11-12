@@ -5,6 +5,7 @@ mod conversation;
 mod error;
 mod mail;
 mod password;
+mod server_tools;
 mod service;
 mod time;
 
@@ -74,6 +75,12 @@ pub use conversation::{
 pub use error::{DomainReason, InfrastructureReport, ServiceError};
 pub use mail::{MailFailure, MailFuture, MailMessage, MailPurpose, Mailer};
 pub use password::PasswordWork;
+pub use server_tools::{
+    ConversationToolBackend, MAX_TOOL_PAYLOAD, ServerToolBackend, ServerToolFuture,
+    ServerToolObservation, ServerToolOutcome, ServerToolRejection, ServerToolRequest,
+    ServerToolScope, ServerToolValidation, ServerTools, ToolCancellation, ToolInvocation,
+    ToolInvocationControl,
+};
 pub use service::{
     AccountsConfig, AccountsService, CodeChallenge, GrantsPage, IssuedGrant, LoginMethods,
 };

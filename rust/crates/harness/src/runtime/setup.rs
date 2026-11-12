@@ -11,6 +11,7 @@ pub enum NativeSetupIntent {
 #[derive(Clone, PartialEq, Eq)]
 pub struct NativeSetupOperation {
     pub operation_id: String,
+    pub scope: crate::NativeToolScope,
     pub supply: HarnessSupply,
     pub intent: NativeSetupIntent,
 }
@@ -115,16 +116,20 @@ impl State {
         &mut self,
         operation: NativeSetupOperation,
         authentication: Arc<dyn NativeAuthenticationProvider>,
+        tools: Arc<dyn crate::NativeToolsProvider>,
     ) -> Result<NativeSetupObservation, Error> {
+        valid_id(&operation.scope.agent_id)?;
+        valid_id(&operation.scope.conversation_id)?;
         if let Some(previous) = self.setups.begin(&operation)? {
             return Ok(previous);
         }
-        let outcome = match self.setup_once(&operation, authentication).await {
+        let outcome = match self.setup_once(&operation, authentication, tools).await {
             Ok(target) => NativeSetupObservation::Ready(target),
             Err(error) => NativeSetupObservation::Failed(match error {
-                Error::NotAdmitted | Error::UnsupportedRuntime | Error::Authentication => {
-                    NativeSetupFailure::NotAdmitted
-                }
+                Error::NotAdmitted
+                | Error::UnsupportedRuntime
+                | Error::Authentication
+                | Error::OperationConflict => NativeSetupFailure::NotAdmitted,
                 Error::Storage
                 | Error::CaptureUnavailable
                 | Error::CaptureCorrupt
@@ -132,6 +137,9 @@ impl State {
                 Error::Transient | Error::Integrity | Error::Incompatible => {
                     NativeSetupFailure::BeforeNativeLaunch
                 }
+                Error::ToolsProvision(_) => NativeSetupFailure::BeforeNativeLaunch,
+                Error::ToolsVerification(_) => NativeSetupFailure::NativeRejected,
+                Error::ToolsCleanup(_) => NativeSetupFailure::RetirementUnknown,
                 Error::ProtocolRejected { .. } => NativeSetupFailure::NativeRejected,
                 Error::RetirementUnknown | Error::StartAndRetirement { .. } => {
                     NativeSetupFailure::RetirementUnknown
@@ -149,6 +157,7 @@ impl State {
         &mut self,
         operation: &NativeSetupOperation,
         authentication: Arc<dyn NativeAuthenticationProvider>,
+        tools: Arc<dyn crate::NativeToolsProvider>,
     ) -> Result<NativeTextTarget, Error> {
         let retained = self.captured_source().await?;
         let source = match retained {
@@ -175,7 +184,14 @@ impl State {
         let snapshot = source.snapshot()?;
         let context = retained_context(&operation.intent, &source)?;
         let native_session = self
-            .start(operation.supply.clone(), context, source, authentication)
+            .start(
+                operation.supply.clone(),
+                context,
+                source,
+                authentication,
+                tools,
+                &operation.scope,
+            )
             .await?;
         Ok(NativeTextTarget {
             snapshot,
@@ -217,11 +233,12 @@ impl NativeHandle {
         &self,
         operation: NativeSetupOperation,
         authentication: Arc<dyn NativeAuthenticationProvider>,
+        tools: Arc<dyn crate::NativeToolsProvider>,
     ) -> Result<tokio::sync::oneshot::Receiver<Result<NativeSetupObservation, Error>>, Error> {
         valid_id(&operation.operation_id)?;
         let (result, rx) = oneshot::channel();
         self.sender
-            .try_send(Command::Setup(operation, authentication, result))
+            .try_send(Command::Setup(operation, authentication, tools, result))
             .map_err(|_| Error::NotAdmitted)?;
         Ok(rx)
     }
@@ -238,6 +255,12 @@ impl NativeHandle {
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    fn tool_scope() -> crate::NativeToolScope {
+        crate::NativeToolScope {
+            agent_id: "agent".into(),
+            conversation_id: "conversation".into(),
+        }
+    }
 
     struct UnusedAuthentication(Arc<AtomicUsize>);
     impl NativeAuthenticationProvider for UnusedAuthentication {
@@ -258,6 +281,7 @@ mod tests {
         let mut registry = SetupRegistry::default();
         let operation = NativeSetupOperation {
             operation_id: "operation".into(),
+            scope: tool_scope(),
             supply: HarnessSupply::Managed,
             intent: NativeSetupIntent::Initial {
                 allow_fresh: true,
@@ -288,6 +312,7 @@ mod tests {
     fn operation(id: &str) -> NativeSetupOperation {
         NativeSetupOperation {
             operation_id: id.into(),
+            scope: tool_scope(),
             supply: HarnessSupply::Managed,
             intent: NativeSetupIntent::Initial {
                 allow_fresh: true,
@@ -314,6 +339,17 @@ mod tests {
         };
         assert!(matches!(
             registry.begin(&changed),
+            Err(Error::OperationConflict)
+        ));
+        let changed_scope = NativeSetupOperation {
+            scope: crate::NativeToolScope {
+                agent_id: "another-agent".into(),
+                ..tool_scope()
+            },
+            ..first.clone()
+        };
+        assert!(matches!(
+            registry.begin(&changed_scope),
             Err(Error::OperationConflict)
         ));
         registry.completed(
@@ -348,8 +384,11 @@ mod tests {
             },
             ..operation("resume-only")
         };
-        let rx =
-            handle.admit_setup_with_authentication(operation.clone(), authentication.clone())?;
+        let rx = handle.admit_setup_with_authentication(
+            operation.clone(),
+            authentication.clone(),
+            crate::server_tools::unused_tools(),
+        )?;
         drop(rx);
         assert!(matches!(
             handle
@@ -360,7 +399,11 @@ mod tests {
         assert!(!storage.capture_root().join("current").exists());
         assert!(matches!(
             handle
-                .admit_setup_with_authentication(operation, authentication)?
+                .admit_setup_with_authentication(
+                    operation,
+                    authentication,
+                    crate::server_tools::unused_tools()
+                )?
                 .await??,
             NativeSetupObservation::Failed(NativeSetupFailure::SourceUnavailable)
         ));
@@ -397,10 +440,12 @@ mod tests {
             .admit_setup_with_authentication(
                 NativeSetupOperation {
                     operation_id: "recovery-after-source-loss".into(),
+                    scope: tool_scope(),
                     supply: HarnessSupply::Managed,
                     intent,
                 },
                 authentication,
+                crate::server_tools::unused_tools(),
             )?
             .await??;
         assert!(matches!(

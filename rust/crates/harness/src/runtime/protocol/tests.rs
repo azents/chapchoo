@@ -7,6 +7,8 @@ use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, duplex};
 #[path = "authentication_tests.rs"]
 mod authentication_tests;
+#[path = "server_tools_tests.rs"]
+mod server_tools_tests;
 
 type TestError = Box<dyn std::error::Error + Send + Sync>;
 #[derive(Deserialize)]

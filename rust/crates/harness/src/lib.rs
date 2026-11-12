@@ -3,6 +3,7 @@ mod authentication;
 mod capture;
 mod preparation;
 mod runtime;
+mod server_tools;
 mod storage;
 
 pub use authentication::{
@@ -21,6 +22,10 @@ pub use runtime::{
     NativeSetupObservation, NativeSetupOperation, NativeStopObservation, NativeTextTarget,
     NativeWorkTarget, Retirement, ScopeEvidence,
 };
+pub use server_tools::{
+    NativeMcpDeclaration, NativeToolLifetime, NativeToolProvision, NativeToolScope,
+    NativeToolsError, NativeToolsFuture, NativeToolsProvider,
+};
 pub use storage::NativeStorage;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,6 +33,7 @@ pub enum ProtocolStage {
     Initialize,
     Authentication,
     Session,
+    ServerTools,
 }
 
 /// Body-safe classifications. Native output and paths are not error messages.
@@ -51,6 +57,12 @@ pub enum Error {
     NotAdmitted,
     #[error("Native authentication material is invalid or unavailable")]
     Authentication,
+    #[error("Native server tool provision failed")]
+    ToolsProvision(#[source] NativeToolsError),
+    #[error("Native server tool endpoint or catalog was not established")]
+    ToolsVerification(#[source] NativeToolsError),
+    #[error("Native server tool cleanup failed")]
+    ToolsCleanup(#[source] NativeToolsError),
     #[error("The native operation conflicts with its original payload or target")]
     OperationConflict,
     #[error("Native delivery may have occurred and cannot be replayed")]
@@ -58,7 +70,17 @@ pub enum Error {
     #[error("Native predecessor retirement is unconfirmed")]
     RetirementUnknown,
     #[error("Native start failed and predecessor retirement is unconfirmed")]
-    StartAndRetirement { primary: Box<Error> },
+    StartAndRetirement {
+        #[source]
+        primary: Box<Error>,
+        cleanup: Box<Error>,
+    },
+    #[error("Native cleanup retained multiple failures")]
+    CleanupFailed {
+        #[source]
+        primary: Box<Error>,
+        secondary: Box<Error>,
+    },
     #[error("Native process operation failed")]
     Process,
     #[error("The captured source or requested cursor is unavailable")]

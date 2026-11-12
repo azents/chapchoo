@@ -126,6 +126,31 @@ raw native stderr is drained without publication. Authentication requests and
 responses remain outside session JSONL. These are controlled protocol tests and
 source-backed startup wiring, not authenticated runtime/model acceptance.
 
+### Actual-start server tools
+
+Every production setup also supplies a narrow tools provider and seals the
+Agent/conversation in its immutable setup fingerprint. An already-live exact
+lookup validates that original product scope before returning the existing
+session; it acquires neither authentication nor another tools provision.
+
+An actual launch checks scope against its admitted authentication binding and
+retains a tool provision before starting the native process. Strict-v2
+initialization requires advertised HTTP MCP capability. Both New and exact
+Resume carry the same consumer-owned HTTP declaration through public SDK
+builders. Effective initialization/catalog verification is part of the
+remaining thirty-second native startup budget, after the exact native identity
+and capture binding are retained. Failed verification cannot erase that source
+or permit a fresh context. It neither invokes a tool nor asserts no possible
+prior effect.
+
+Retirement first withdraws tool access, then drains native and tool resources
+through explicit fallible completion. Pending provision and cleanup state stay
+with the actor when a waiter is cancelled; independently authorized stages
+continue and combined failures preserve their causes. The
+[server-tools contract](server-tools.md) owns HTTP capability, invocation and
+publication authority; this library owns declaration translation and physical
+native lifetime, not server credentials.
+
 ### Same-record live publication
 
 The Connector reads the existing live binding without starting native work.

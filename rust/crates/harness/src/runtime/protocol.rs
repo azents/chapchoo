@@ -19,7 +19,7 @@ async fn connect(
         ready,
         done,
         cwd,
-        (context, None),
+        (context, None, Vec::new()),
     )
     .await
 }
@@ -30,7 +30,11 @@ pub(super) async fn connect_authenticated(
     ready: oneshot::Sender<Result<agent_client_protocol::v2::ActiveSession<Agent>, Error>>,
     done: CancellationToken,
     cwd: std::path::PathBuf,
-    setup: (NativeContext, Option<NativeCredentials>),
+    setup: (
+        NativeContext,
+        Option<NativeCredentials>,
+        Vec<schema::McpServer>,
+    ),
 ) -> Result<(), agent_client_protocol::Error> {
     let permission = requests.clone();
     let forms = requests;
@@ -113,13 +117,17 @@ pub(super) async fn connect_authenticated(
 async fn initialize_session(
     cx: ConnectionTo<Agent>,
     cwd: std::path::PathBuf,
-    setup: (NativeContext, Option<NativeCredentials>),
+    setup: (
+        NativeContext,
+        Option<NativeCredentials>,
+        Vec<schema::McpServer>,
+    ),
 ) -> Result<
     agent_client_protocol::v2::ActiveSession<Agent>,
     (crate::ProtocolStage, agent_client_protocol::Error),
 > {
     use crate::ProtocolStage;
-    let (context, credentials) = setup;
+    let (context, credentials, mcp) = setup;
     let initialize = schema::InitializeRequest::new(
         ProtocolVersion::V2,
         schema::Implementation::new("chapchoo", env!("CARGO_PKG_VERSION")),
@@ -144,6 +152,20 @@ async fn initialize_session(
             agent_client_protocol::Error::invalid_params(),
         ));
     }
+    if !mcp.is_empty()
+        && response
+            .capabilities
+            .session
+            .as_ref()
+            .and_then(|session| session.mcp.as_ref())
+            .and_then(|mcp| mcp.http.as_ref())
+            .is_none()
+    {
+        return Err((
+            ProtocolStage::ServerTools,
+            agent_client_protocol::Error::invalid_params(),
+        ));
+    }
     if let Some(key) = credentials
         .as_ref()
         .and_then(NativeCredentials::initial_api_key)
@@ -163,7 +185,7 @@ async fn initialize_session(
             session: id,
             replay,
         } => {
-            let request = schema::ResumeSessionRequest::new(id.as_str(), cwd);
+            let request = schema::ResumeSessionRequest::new(id.as_str(), cwd).mcp_servers(mcp);
             let request = match replay {
                 CaptureReplay::FromStart => {
                     request.replay_from(schema::ReplayFrom::Start(schema::ReplayFromStart::new()))
@@ -178,7 +200,7 @@ async fn initialize_session(
                 .session
         }
         NativeContext::New => {
-            cx.build_session(cwd)
+            cx.build_session_from(schema::NewSessionRequest::new(cwd).mcp_servers(mcp))
                 .start_session()
                 .block_task()
                 .await

@@ -57,5 +57,7 @@ Migration 23 on both engines establishes conversation-owned messages and allocat
   document validation passed. The single independent integrated-diff review
   found no actionable material findings and verified the receipt-clock
   correction. One overlapped test invocation produced preparation-lock `Busy`;
-  the final full run was isolated and passed. Commit/PR delivery is next.
+  the final full run was isolated and passed. Commit `49f2150` is open as
+  [PR #123](https://github.com/azents/chapchoo/pull/123), base `main`, after all
+  required commit hooks passed. PR CI remains unsettled.
   No merge, deployment, MCP entrypoint or UI activation is claimed.

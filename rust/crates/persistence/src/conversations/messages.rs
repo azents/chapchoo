@@ -166,6 +166,24 @@ struct BodyChunk {
     total_bytes: i64,
 }
 impl Store {
+    /// Current domain authority for discovery, dispatch and protected disclosure.
+    /// Native restoration/capture IDs are deliberately outside this boundary.
+    pub async fn check_conversation_tool_scope(
+        &self,
+        source: &ConnectorSource<'_>,
+        scope: &ConversationMessageScope<'_>,
+    ) -> Result<(), StoreError> {
+        let agent = EntityId::from_dto(EntityKind::Agent, scope.agent_id)?;
+        let conversation = EntityId::from_dto(EntityKind::Conversation, scope.conversation_id)?;
+        operation!(self, |connection, dialect| {
+            let row = source_conversation!(connection, dialect, source, conversation);
+            if row.agent_id != agent {
+                return Err(StoreError::NotFound);
+            }
+            Ok(())
+        })
+    }
+
     /// One immutable domain receipt; no publication retry/replay key is accepted.
     pub async fn publish_conversation_message(
         &self,

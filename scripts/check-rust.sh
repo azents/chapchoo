@@ -66,6 +66,7 @@ allowed = {
         "tonic", "tonic-health", "tracing", "tracing-subscriber", "thiserror", "zeroize",
         "url", "base64", "tempfile", "chapchoo-protocol", "prost-types", "nix",
         "kube", "k8s-openapi", "tower", "http", "http-body-util", "serde_json",
+        "rmcp", "hyper", "hyper-util", "reqwest", "rustls",
     },
 }
 for name, dependencies in allowed.items():

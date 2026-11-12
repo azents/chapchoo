@@ -10,6 +10,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         protos.join("computers.proto"),
         protos.join("authentication.proto"),
         protos.join("conversations.proto"),
+        protos.join("server_tools.proto"),
     ];
     for source in &sources {
         println!("cargo:rerun-if-changed={}", source.display());
@@ -41,6 +42,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         "chapchoo.conversations.StopState",
         "chapchoo.conversations.InputOwnership",
         "chapchoo.conversations.MessageRole",
+        "chapchoo.server_tools.Rejection",
         "chapchoo.conversations.AnswerDelivery",
         "chapchoo.conversations.RecordKind",
         "chapchoo.conversations.RecordField",

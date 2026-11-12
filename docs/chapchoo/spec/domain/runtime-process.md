@@ -35,6 +35,12 @@ authentication cleanup failures remain combined with backend and other cleanup
 failures. A cleanup deadline is not proof that an uncertain provider effect was
 rolled back.
 
+Control also composes the bounded [server-tools effect owner](server-tools.md)
+before listener admission. Shutdown closes its admission and joins component
+forwarding plus started effects alongside the other cleanup owners. A cancelled
+drain waiter retains owned tasks; timeout does not turn possible publication
+into known nonexecution. Cleanup failures remain combined with the backend cause.
+
 Unary gRPC health for an empty service, either common service or any domain
 service actually registered on the listener rereads read-only database
 readiness with bounded probe capacity. `chapchoo.liveness` reports process

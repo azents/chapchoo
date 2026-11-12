@@ -41,3 +41,32 @@ succeed. Raw SDK/guest/configuration/bootstrap output remains withheld. Product
 cleanup belongs to Control/Provider, not a forced fixture teardown; unresolved
 resources fail cleanup rather than being pruned or hidden. Mac build/distribution
 and real-Mac validation are outside this feature's scope.
+
+## Model-free native server-tools acceptance
+
+`pnpm --filter @chapchoo/integration test:server-tools` is a separate explicit
+acceptance run, not another browser journey. It requires the same disposable
+Engine/current binary inputs plus an image built from
+`testenv/chapchoo/fixtures/native-tools.Dockerfile`. Supply architecture-matched
+`binary-artifacts/chapchoo`, a real compatible `native-artifacts/codex`, and
+`fixture-artifacts/codex-app-server.cjs` from
+`pnpm --filter @chapchoo/testenv build:fixtures`. The fixture bundle uses the
+official MCP SDK; the image performs no package resolution. The real managed
+native startup still acquires the supported Node/adapter/Codex closure from its
+official registries, so registry/network availability is a prerequisite.
+
+The real-native case uses a synthetic API key and submits no input/model turn.
+It proves effective MCP initialization and catalog discovery on New, then
+preserves the exact target when native rejects restoration of its unmaterialized
+empty session. Codex does not persist that rollout until its first user input;
+this test does not claim successful real persisted-session restoration.
+Changing the saved supply before restart distinguishes the successor's durable
+setup result from the original retained Ready observation without manufacturing
+a captured event.
+
+The controlled-native case uses the official adapter plus an explicit deterministic
+app-server fixture and actual SDK HTTP initialization/catalog on both New and
+exact Resume. A later captured native state distinguishes resumed readiness from
+the previous fact. This proves the assembled Connector/harness provision path,
+not genuine Codex history recovery or model-side tool use. Both cases preserve
+the original source identity, admit no input, and use normal product cleanup.

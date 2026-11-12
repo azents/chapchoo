@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test:integration": "pnpm --filter @chapchoo/testenv... build && node --experimental-strip-types --test src/docker.test.ts",
+    "test:server-tools": "pnpm --filter @chapchoo/testenv... build && node --experimental-strip-types --test src/serverTools.test.ts",
     "test:unit": "node --experimental-strip-types --test src/nativeEvidence.test.ts src/readiness.test.ts",
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
