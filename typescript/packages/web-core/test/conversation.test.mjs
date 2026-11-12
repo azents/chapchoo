@@ -11,6 +11,7 @@ import {
 } from "@chapchoo/rpc-client/conversations";
 import {
   readConversationBytes,
+  readConversationActivity,
   readConversationRegion,
   readConversationRecord,
   encodeAnswer,
@@ -100,6 +101,126 @@ function apiFor(content, records = [metadata()]) {
     },
   };
 }
+test("full records read captured native user content without retained or local input rows", async () => {
+  const api = apiFor(
+    [{ type: "text", text: "Actually delivered native input" }],
+    [metadata(RecordKind.RECORD_KIND_USER)],
+  );
+  api.inputs = async () => {
+    throw new Error("Full records do not list temporary input operations");
+  };
+  api.readInput = async () => {
+    throw new Error("Full records do not read retained input bodies");
+  };
+  const result = await readConversationRegion(api, { agentId: "agent" });
+  assert.equal(result.records[0].kind, "user");
+  assert.equal(
+    result.records[0].content[0].text,
+    "Actually delivered native input",
+  );
+  assert.deepEqual(result.inputs, []);
+  assert.equal(result.inputOlder, undefined);
+});
+
+test("live activity controls do not scan native transcript or tool bodies", async () => {
+  const api = apiFor([]);
+  api.records = async () => {
+    throw new Error("No transcript metadata scan");
+  };
+  api.fields = async () => {
+    throw new Error("No transcript body read");
+  };
+  const result = await readConversationActivity(api, { agentId: "agent" });
+  assert.deepEqual(result.records, []);
+  assert.equal(result.header.native.nativeSessionId, "native");
+  assert.equal(result.older, undefined);
+});
+
+test("activity reads original text only for confirmed failed-input recovery, not accepted chat", async () => {
+  const api = apiFor([]);
+  const acceptance = (id) => ({
+    id,
+    requestId: id,
+    conversationId: "conversation",
+    target: { snapshotId: "snapshot" },
+    acceptedAt: 1n,
+  });
+  api.inputs = async () => ({
+    inputs: ["accepted", "failed"].map((id) => ({
+      acceptance: acceptance(id),
+      totalBytes: 4n,
+      deleted: false,
+    })),
+  });
+  api.inputResult = async ({ requestId }) => ({
+    acceptance: acceptance(requestId),
+    delivery:
+      requestId === "failed"
+        ? { failed: {} }
+        : { insertedNativeMessageId: "native-user" },
+  });
+  const bodyReads = [];
+  api.readInput = async ({ requestId, offset, length }) => {
+    bodyReads.push(requestId);
+    const body = Buffer.from("body");
+    return {
+      offset,
+      totalBytes: 4n,
+      content: body.subarray(offset, offset + length),
+    };
+  };
+  const result = await readConversationActivity(api, { agentId: "agent" });
+  assert.deepEqual(bodyReads, ["failed", "failed"]);
+  assert.equal(
+    result.inputs.find((item) => item.id === "accepted").text,
+    undefined,
+  );
+  assert.equal(result.inputs.find((item) => item.id === "failed").text, "body");
+});
+
+test("activity reads the real live question by its captured occurrence without scanning history", async () => {
+  const question = {
+    sessionId: "native",
+    title: "Run the actual command?",
+    subject: { type: "command", command: "printf exact", cwd: "/workspace" },
+    options: [{ optionId: "once", name: "Allow once", kind: "allow_once" }],
+  };
+  const api = apiFor([question]);
+  api.records = async () => {
+    throw new Error("Question controls must not scan history");
+  };
+  api.liveRequests = async () => ({
+    requests: [
+      {
+        responderToken: "actual-responder",
+        occurrence: { ordinal: 7n, occurrenceId: "actual-occurrence" },
+      },
+    ],
+  });
+  api.fields = async (record) => {
+    assert.equal(record.kind, RecordKind.RECORD_KIND_REQUEST);
+    assert.equal(record.nativeId, "actual-occurrence");
+    return {
+      fields: [
+        {
+          field: RecordField.RECORD_FIELD_REQUEST,
+          updatedOrdinal: 7n,
+          totalBytes: BigInt(
+            Buffer.byteLength(JSON.stringify(question) + "\n"),
+          ),
+        },
+      ],
+    };
+  };
+  api.requestAnswer = async () => ({});
+  const result = await readConversationActivity(api, { agentId: "agent" });
+  assert.equal(result.records[0].nativeId, "actual-occurrence");
+  assert.deepEqual(result.records[0].anchor, { ordinal: 7n, index: 0n });
+  assert.equal(result.records[0].responder.token, "actual-responder");
+  assert.equal(result.records[0].question.content[0].text, "printf exact");
+  assert.equal(result.older, undefined);
+});
+
 test("source-qualified preparation and applied authentication remain independent of fresh saved selection", () => {
   const value = current();
   value.savedAuthenticationId = "saved-one";

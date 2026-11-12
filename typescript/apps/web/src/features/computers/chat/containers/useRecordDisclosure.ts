@@ -6,7 +6,6 @@ import type { MouseEvent, ReactNode, RefObject } from "react";
 export interface RecordDisclosureInput {
   record: ConversationRecord;
   copy: ChatCopy;
-  agentName: string;
   children: ReactNode;
   initiallyOpened?: boolean;
 }

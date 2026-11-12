@@ -6,6 +6,7 @@ import {
   initialQuestionDraft,
   reviewQuestionAnswer,
 } from "@chapchoo/web-core/conversation-form";
+import { acknowledgeConversationInputs } from "@chapchoo/web-core/conversation-message-state";
 import { reconcileLocalConversationInputs } from "@chapchoo/web-core/conversation-state";
 import { useDisplay } from "@chapchoo/web-core/display-context";
 import { TRPCClientError } from "@trpc/client";
@@ -20,6 +21,7 @@ import { SupplyPage } from "../SupplyPage";
 import { useChatFocus } from "./useChatFocus";
 import { useConversationReader } from "./useConversationReader";
 import { useFloatingChat } from "./useFloatingChat";
+import { useMessageReader } from "./useMessageReader";
 import type { ChatInput, ChatProps, ConversationControls } from "../types";
 import type { QuestionDraft } from "@chapchoo/web-core/conversation-form";
 import type {
@@ -44,6 +46,7 @@ export function useChatContainer(props: ChatInput): ChatProps {
     initial: ConversationRegion;
     key: string | null;
     olderOnOpen: boolean;
+    initialFetch: boolean;
   } | null>(null);
   const [navOpened, setNavOpened] = useState(false);
   const [inputs, setInputs] = useState<ConversationControls["inputs"]>([]);
@@ -75,13 +78,54 @@ export function useChatContainer(props: ChatInput): ChatProps {
   const reader = useConversationReader(
     props.initialConversation,
     product.access === "authorized",
+    "activity",
     stop ?? void 0,
     inputs,
   );
   const region = reader.region;
+  const messageReader = useMessageReader(
+    props.initialMessages,
+    product.access === "authorized",
+  );
+  // Full records have their own lazy read owner; activity is not a history seed.
+  const recentInitial = useRef<ConversationRegion>({
+    ...props.initialConversation,
+    records: [],
+    older: void 0,
+    inputOlder: void 0,
+  });
+  const recentReader = useConversationReader(
+    recentInitial.current,
+    product.access === "authorized" && opened,
+    "history",
+    void 0,
+    inputs,
+    true,
+  );
   const previousSnapshot = useRef(
     props.initialConversation.header.source?.snapshotId ?? null,
   );
+  useEffect(() => {
+    if (product.access !== "authorized") {
+      return;
+    }
+    const messages = messageReader.region;
+    const agentId = props.initialConversation.header.agentId;
+    const recovered = acknowledgeConversationInputs(inputs, agentId, messages);
+    if (recovered.acknowledged.length) {
+      setInput((value) =>
+        recovered.acknowledged.some((item) => item.text === value) ? "" : value,
+      );
+      setInputs(
+        (all) => acknowledgeConversationInputs(all, agentId, messages).inputs,
+      );
+    }
+  }, [
+    inputs,
+    messageReader.region,
+    product.access,
+    props.initialConversation.header.agentId,
+  ]);
   useEffect(() => {
     const snapshot = region.header.source?.snapshotId ?? null;
     const previous = previousSnapshot.current;
@@ -117,9 +161,13 @@ export function useChatContainer(props: ChatInput): ChatProps {
   ]);
   const floating = useFloatingChat(
     input,
-    `${region.header.conversationId}:${region.header.source?.snapshotId ?? ""}`,
+    messageReader.region.conversationId ?? "",
     product.access === "authorized",
-    region.records,
+    messageReader.region.messages,
+    {
+      source: `${region.header.conversationId}:${region.header.source?.snapshotId ?? ""}`,
+      tail: region.records.at(-1)?.anchor ?? null,
+    },
   );
   if (product.data.type !== "detail") {
     throw new Error("Chat requires an admitted Agent detail snapshot");
@@ -137,6 +185,8 @@ export function useChatContainer(props: ChatInput): ChatProps {
   const writable =
     effectAvailable &&
     reader.read === "ready" &&
+    messageReader.read === "ready" &&
+    region.header.conversationId === messageReader.region.conversationId &&
     region.header.state !== "loading" &&
     activity !== "authenticationRequired";
   const presentation = chatStatus({
@@ -213,6 +263,7 @@ export function useChatContainer(props: ChatInput): ChatProps {
         requestId,
         observation: "sending",
         snapshotId: target.snapshotId,
+        conversationId: target.conversationId,
       },
     ]);
     try {
@@ -237,7 +288,9 @@ export function useChatContainer(props: ChatInput): ChatProps {
       setInputs((all) =>
         all.map((item) =>
           item.requestId === requestId
-            ? { ...item, observation: "uncertain" }
+            ? item.observation === "accepted" && item.id
+              ? item
+              : { ...item, observation: "uncertain" }
             : item,
         ),
       );
@@ -435,11 +488,17 @@ export function useChatContainer(props: ChatInput): ChatProps {
   async function refreshAfterEffect(): Promise<void> {
     // Read failures cannot withdraw an acknowledged effect or authorize replay.
     try {
-      await utils.conversations.region.invalidate();
+      await Promise.all([
+        utils.conversations.activity.invalidate(),
+        utils.conversations.messages.invalidate(),
+        utils.conversations.region.invalidate(),
+      ]);
     } catch {
       // The read owner publishes read failures independently of effect receipts.
     }
     reader.refresh();
+    messageReader.refresh();
+    recentReader.refresh();
   }
   const conversation: ConversationControls = {
     region,
@@ -447,7 +506,11 @@ export function useChatContainer(props: ChatInput): ChatProps {
     readingOlder: reader.readingOlder,
     olderRead: reader.olderRead,
     paginationReset: reader.paginationReset,
-    inputs: inputs.filter(
+    inputs: acknowledgeConversationInputs(
+      inputs,
+      region.header.agentId,
+      messageReader.region,
+    ).inputs.filter(
       (item) =>
         !region.inputs?.some(
           (retained) => retained.requestId === item.requestId,
@@ -498,9 +561,10 @@ export function useChatContainer(props: ChatInput): ChatProps {
     onHistory: (record) => {
       setOpened(false);
       setHistory({
-        initial: region,
+        initial: recentReader.region,
         key: record?.key ?? null,
         olderOnOpen: false,
+        initialFetch: recentReader.read !== "ready",
       });
     },
     onQuestionOption: (record, optionId) =>
@@ -539,6 +603,24 @@ export function useChatContainer(props: ChatInput): ChatProps {
     secondaryOverlay,
     agentNavigation: navigation?.content,
     conversation,
+    messages: {
+      region: messageReader.region,
+      read: messageReader.read,
+      olderRead: messageReader.olderRead,
+      readingOlder: messageReader.readingOlder,
+      paginationReset: messageReader.paginationReset,
+      onRead: messageReader.refresh,
+      onOlder: () => {
+        floating.preserveHistory();
+        messageReader.older();
+      },
+      onLatest: () => {
+        messageReader.latest();
+        floating.followLatest();
+      },
+    },
+    recentRecords: recentReader.region,
+    recentRead: recentReader.read,
     input,
     activity: reader.read === "error" ? "unavailable" : activity,
     writable: writable && !sendMutation.isPending,
@@ -562,17 +644,9 @@ export function useChatContainer(props: ChatInput): ChatProps {
           initial: history.initial,
           initialFocus: history.key,
           olderOnOpen: history.olderOnOpen,
-          deletions: (region.inputs ?? [])
-            .filter((item) => item.deleted)
-            .map((item) => ({
-              id: item.id,
-              conversationId: item.conversationId,
-              snapshotId: region.header.source?.snapshotId,
-            })),
+          initialFetch: history.initialFetch,
           copy,
           agentName: agent.name,
-          inputs,
-          drafts: conversation.drafts,
         })
       : null,
     onCloseHistory: () => {

@@ -39,10 +39,14 @@ adapter. It selects the deterministic app-server executable as an explicit
 existing Codex installation before releasing its owned Provider to create the
 Computer. It waits for a real selected native session before the first Send and
 checks that the first input retains that exact conversation/native target. The
-fixture refuses a duplicate primary New or a synthetic first prompt. Synthetic login, two native utterances, an update to
-the same utterance, a typed inline answer and retained state on reentry cross the
-production boundaries. This proves assembled plumbing, not real Codex/model
-behavior. Missing Docker/native prerequisites fail rather than skip.
+fixture refuses a duplicate primary New or a synthetic first prompt. Synthetic
+login, accepted user input and one intentional official-SDK `publish_text` cross
+the production MCP/RPC and receipt-read boundaries. Ordinary/final native output
+stays out of Chat while actual full records retain its two utterances, update,
+publication input/result and typed inline answer. Reentry checks accepted messages
+in server-rendered HTML before hydration. This proves assembled plumbing, not real
+Codex/model behavior or successful real persisted-context restoration. Missing
+Docker/native prerequisites fail rather than skip.
 
 Build an architecture-matched binary directory containing `chapchoo`, then build
 an isolated image from the repository root:

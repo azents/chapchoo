@@ -116,7 +116,7 @@ real Docker, browser journeys and live cluster rollout.
 - [Display settings](domain/display-settings.md) — independent language/time-zone/region and installation defaults.
 - [Mascot motion](domain/mascot-motion.md) — replay, visibility and reduced-motion ownership.
 - [Computer web](domain/computer-web.md) — truthful projections, bounded observation and read-only inventory.
-- [Private conversation web](domain/conversation-web.md) — SSR/hydrated source-bound records, retained inputs/answers and independent current-work Stop.
+- [Private conversation web](domain/conversation-web.md) — SSR/hydrated receipt-only Chat, separate actual full records, live requests and current-work Stop.
 - [Authentication web](domain/authentication-web.md) — scoped AI connections, in-place Device/API-key registration and saved Agent selection.
 - [Design reference](domain/design-reference.md) — Storybook boundaries, promotion and verification.
 

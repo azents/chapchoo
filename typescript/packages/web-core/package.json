@@ -4,6 +4,18 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./conversation-messages": {
+      "types": "./dist/conversation-messages.d.ts",
+      "default": "./dist/conversation-messages.js"
+    },
+    "./conversation-message-types": {
+      "types": "./dist/conversation-message-types.d.ts",
+      "default": "./dist/conversation-message-types.js"
+    },
+    "./conversation-message-state": {
+      "types": "./dist/conversation-message-state.d.ts",
+      "default": "./dist/conversation-message-state.js"
+    },
     "./conversation-activity": {
       "types": "./dist/conversation-activity.d.ts",
       "default": "./dist/conversation-activity.js"

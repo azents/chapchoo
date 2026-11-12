@@ -1,8 +1,8 @@
 import type { ReactElement } from "react";
 const paths: Record<string, string> = {
   user: "M20 21v-2a6 6 0 0 0-12 0v2M14 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8",
-  assistant:
-    "M9 3h6M12 3v3M5 7h14v12H5zM8 11h.01M16 11h.01M9 15h6M2 10v5M22 10v5",
+  assistant: "M4 5h16M12 5v14M8 19h8",
+  publication: "m22 2-7 20-4-9-9-4 20-7ZM22 2 11 13",
   read: "M5 3h10l4 4v14H5zM14 3v5h5M8 12h8M8 16h6",
   edit: "m15 4 5 5M4 20l4-1L21 6l-5-5L3 14z",
   search: "M10 17a7 7 0 1 0 0-14 7 7 0 0 0 0 14M15 15l6 6",

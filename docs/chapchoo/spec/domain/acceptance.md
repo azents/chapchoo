@@ -22,15 +22,25 @@ Docker inputs and composes production web listeners with actual backend,
 Provider, Connector and the official ACP adapter. An execution-owned deterministic
 app-server executable is selected through the existing-CLI capability. Its fixed
 synthetic login/output/request never calls a model. The representative journey
-covers native text, an update to the same utterance, a distinct second utterance,
-an explicit typed inline answer and retained state on browser reentry. Missing
+checks an accepted user receipt, one intentional official-SDK `publish_text`
+receipt through the real MCP/RPC boundaries, and the absence of automatic
+native/final-output Chat publication. Actual full records retain the two native
+utterances, update, original publication input/result and explicit typed answer.
+Browser reentry checks server-rendered receipt HTML independently of hydration.
+Focused app component tests own receipt-reader races, full-record presentation,
+scoped primary colors, locales and responsive layout rather than duplicating the
+assembled journey. Missing
 native prerequisites fail. This is deterministic assembled-plumbing coverage,
 not authenticated Codex/model or general compatibility acceptance. Default
 browser scenarios and browser-free native integration remain separate owners.
 The [conversation acceptance boundaries](../../notes/chat-261108-implementation-acceptance.md)
 separate implemented owned contracts, deterministic/native evidence and the
 remaining authenticated CLI, architecture/ABI, CI and review gates. Fixture
-success alone does not mark the approved snapshot implemented.
+success alone does not mark the approved snapshot implemented. In particular,
+[server-tools acceptance](server-tools.md#native-provision-and-verification)
+distinguishes real empty native New/restore rejection, controlled exact Resume
+and intentional SDK publication from successful real persisted-context restore
+and real model-side tool use.
 Web-core separately owns the actual logout-response HTTP/browser integration.
 Browser delayed-cookie arrival semantics are dependency behavior and are not a
 product acceptance scenario.

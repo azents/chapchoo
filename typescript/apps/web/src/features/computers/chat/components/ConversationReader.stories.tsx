@@ -35,11 +35,10 @@ const initial: ConversationRegion = {
     content: [{ type: "text", text: `Message ${index + 11}` }],
   })),
   older: { ordinal: 11n, index: 0n },
-  inputOlder: { acceptedAt: 100n, requestId: "input100" },
   renderedAt: 1,
 };
 function Reader(): ReactElement {
-  const reader = useConversationReader(initial, true);
+  const reader = useConversationReader(initial, true, "history");
   const scroll = useHistoryScroll(null, reader.region);
   const controls: ConversationControls = {
     ...reader,

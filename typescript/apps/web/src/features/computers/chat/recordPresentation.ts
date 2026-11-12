@@ -94,7 +94,66 @@ export function recordInput(
     return {};
   }
 }
+const publicationInput = z.looseObject({
+  server: z.literal("chapchoo"),
+  tool: z.literal("publish_text"),
+  arguments: z.unknown().optional(),
+});
+const publicationText = z.looseObject({ text: z.string() });
+const textResult = z.looseObject({ type: z.literal("text"), text: z.string() });
+const publicationOutput = z.looseObject({
+  result: z.looseObject({ content: z.array(z.unknown()).optional() }).nullish(),
+  error: z.looseObject({ message: z.string() }).nullish(),
+});
+function publicationResult(json?: string): string | null {
+  if (json === void 0) {
+    return null;
+  }
+  try {
+    const output = publicationOutput.safeParse(JSON.parse(json));
+    if (!output.success) {
+      return null;
+    }
+    const text = [
+      ...(output.data.result?.content ?? []).flatMap((part) => {
+        const parsed = textResult.safeParse(part);
+        return parsed.success ? [parsed.data.text] : [];
+      }),
+      ...(output.data.error ? [output.data.error.message] : []),
+    ];
+    return text.length ? text.join("\n") : null;
+  } catch {
+    return null;
+  }
+}
+/** Captured invocation intent is not acknowledgement of physical publication. */
+export function recordPublication(
+  record: ConversationRecord,
+): { text?: string; resultText: string | null } | null {
+  if (record.kind !== "tool" || !record.toolInput) {
+    return null;
+  }
+  try {
+    const input = publicationInput.safeParse(JSON.parse(record.toolInput.json));
+    if (!input.success) {
+      return null;
+    }
+    // Extract known display fields without adjudicating domain arguments.
+    // Original payloads, including rejected extra fields, stay inspectable.
+    const body = publicationText.safeParse(input.data.arguments);
+    return {
+      text: body.success ? body.data.text : void 0,
+      resultText: publicationResult(record.toolOutput?.json),
+    };
+  } catch {
+    return null;
+  }
+}
 export function recordPreview(record: ConversationRecord): string {
+  const publication = recordPublication(record);
+  if (publication) {
+    return plainPreview(publication.text ?? "");
+  }
   const input = recordInput(record);
   const path = record.locations[0]?.path ?? input.path ?? input.file_path;
   const kind = toolKind(record.toolKind);

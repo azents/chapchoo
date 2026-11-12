@@ -8,6 +8,8 @@ export interface RecordCopy {
   command: string;
   human: string;
   agent: string;
+  output: string;
+  publicationDetails: string;
   details: string;
 }
 const en: RecordCopy = {
@@ -30,6 +32,8 @@ const en: RecordCopy = {
   command: "Command",
   human: "Human",
   agent: "Agent",
+  output: "Output",
+  publicationDetails: "Message input and result",
   details: "Details",
 };
 const ko: RecordCopy = {
@@ -52,6 +56,8 @@ const ko: RecordCopy = {
   command: "실행한 명령",
   human: "사람",
   agent: "Agent",
+  output: "모델 출력",
+  publicationDetails: "메시지 입력과 결과",
   details: "상세",
 };
 const ja: RecordCopy = {
@@ -74,6 +80,8 @@ const ja: RecordCopy = {
   command: "コマンド",
   human: "ユーザー",
   agent: "Agent",
+  output: "モデル出力",
+  publicationDetails: "メッセージの入力と結果",
   details: "詳細",
 };
 const fr: RecordCopy = {
@@ -96,6 +104,8 @@ const fr: RecordCopy = {
   command: "Commande",
   human: "Personne",
   agent: "Agent",
+  output: "Sortie du modèle",
+  publicationDetails: "Entrée du message et résultat",
   details: "Détails",
 };
 export function recordCopy(locale: string): RecordCopy {

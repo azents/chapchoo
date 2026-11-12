@@ -137,8 +137,9 @@ ownership independently of native readiness, native IDs or the UI's selected
 conversation. The component-only [server-tools boundary](server-tools.md)
 exposes this operation as intentional `publish_text` to the fixed native owner.
 There is no owner-selected recipient or publication retry key. Ordinary native
-output does not append independent chat receipts. The current browser still
-renders native records and temporary inputs through its separate source reader.
+output does not append independent chat receipts. The
+[Chat browser](conversation-web.md) reads these messages separately from actual
+native activity and full-record history.
 
 Explicit schema preparation transfers retained original non-deleted inputs into
 a deterministic prefix ordered by original acceptance time and stored input
@@ -148,8 +149,8 @@ the transferred message. It neither reconstructs native history nor resends
 input. Already consumed or deleted text is not recreated. A database insert guard
 requires each subsequent input's matching user receipt. Preparation is atomic
 under the existing installation binding; downgrade refuses to discard nonempty
-chat. Native event capture and the current source-based browser presentation
-remain separate from this message store.
+chat. Native event capture and full-record browser presentation remain separate
+from message-only Chat.
 
 ## Internal input owner and setup facts
 

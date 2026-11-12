@@ -83,7 +83,7 @@ export function Chat(props: ChatProps): ReactElement {
   const detailHref = agentPath(p.basePath, p.data.teamHandle, agent.handle);
   const start = agent.computer.actions.find((item) => item.action === "start");
   const working = props.stoppable && props.activity === "working";
-  const records = props.conversation.region.records;
+  const records = props.recentRecords.records;
   const currentPlan = props.conversation.region.latestPlan;
   const showStatus =
     props.statusLoading ||
@@ -198,14 +198,15 @@ export function Chat(props: ChatProps): ReactElement {
             >
               <div className={classes.conversation} ref={f.contentRef}>
                 <OlderRecordsContainer
-                  controls={props.conversation}
+                  controls={props.messages}
                   viewportRef={f.viewportRef}
                   contentRef={f.contentRef}
                   followingLatest={!f.detached}
                 />
-                {props.conversation.read === "ready" &&
+                {props.messages.read === "ready" &&
                 props.conversation.region.header.state !== "loading" &&
-                records.length === 0 &&
+                props.messages.region.messages.length === 0 &&
+                props.conversation.region.records.length === 0 &&
                 props.conversation.inputs.length === 0 &&
                 !props.conversation.region.inputs?.length ? (
                   <div className={classes.empty}>
@@ -220,6 +221,7 @@ export function Chat(props: ChatProps): ReactElement {
                 ) : null}
                 <ConversationBody
                   controls={props.conversation}
+                  messages={props.messages}
                   copy={c}
                   writable={props.writable}
                   agentName={agent.name}
@@ -238,7 +240,7 @@ export function Chat(props: ChatProps): ReactElement {
                   variant="default"
                   radius="xl"
                   aria-label={c.records.newEvents}
-                  onClick={props.conversation.onLatest}
+                  onClick={props.messages.onLatest}
                 >
                   <Box style={{ transform: "rotate(180deg)", display: "flex" }}>
                     <Icon name="arrow" />
@@ -423,17 +425,21 @@ export function Chat(props: ChatProps): ReactElement {
                 </Button>
                 <div
                   className={
-                    records.length > 5 || props.conversation.region.older
+                    records.length > 5 || props.recentRecords.older
                       ? classes.recentFade
                       : void 0
                   }
                 >
+                  {props.recentRead !== "ready" ? (
+                    <p role={props.recentRead === "error" ? "alert" : "status"}>
+                      {props.recentRead === "error" ? c.error : c.loading}
+                    </p>
+                  ) : null}
                   {records.slice(-5).map((record) => (
                     <RecentConversationRecord
                       key={record.key}
                       record={record}
                       copy={c}
-                      agentName={agent.name}
                       onOpen={() => props.conversation.onHistory(record)}
                     />
                   ))}

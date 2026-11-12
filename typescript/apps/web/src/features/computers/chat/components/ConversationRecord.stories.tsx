@@ -20,7 +20,7 @@ function Fixture({ preview }: { preview: boolean }): ReactElement {
               key={record.key}
               record={record}
               copy={copy}
-              agentName="코기"
+
               onOpen={() => {}}
             />
           ) : (
@@ -28,7 +28,6 @@ function Fixture({ preview }: { preview: boolean }): ReactElement {
               key={record.key}
               record={record}
               copy={copy}
-              agentName="코기"
             >
               <ConversationContent parts={record.content} />
             </ConversationRecordDisclosure>

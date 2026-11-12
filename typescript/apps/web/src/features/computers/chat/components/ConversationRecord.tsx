@@ -1,9 +1,13 @@
 "use client";
 import { createReactContainer } from "@chapchoo/ui/createReactContainer";
-import { Accordion } from "@mantine/core";
+import { Accordion, useMantineTheme } from "@mantine/core";
 import { useRecordDisclosure } from "../containers/useRecordDisclosure";
 import { nativeStatus } from "../copy";
-import { recordPreview, toolKind } from "../recordPresentation";
+import {
+  recordPreview,
+  recordPublication,
+  toolKind,
+} from "../recordPresentation";
 import classes from "./ConversationRecord.module.css";
 import { RecordIcon } from "./RecordIcon";
 import type {
@@ -28,16 +32,12 @@ function Chevron(): ReactElement {
     </svg>
   );
 }
-export function recordTitle(
-  record: Record,
-  copy: ChatCopy,
-  agentName: string,
-): string {
+export function recordTitle(record: Record, copy: ChatCopy): string {
   if (record.kind === "user") {
     return copy.you;
   }
   if (record.kind === "assistant") {
-    return agentName;
+    return copy.records.output;
   }
   if (record.kind === "tool") {
     return copy.records.kinds[toolKind(record.toolKind)];
@@ -58,14 +58,15 @@ export function recordTitle(
 function RecordSummary({
   record,
   copy,
-  agentName,
 }: {
   record: Record;
   copy: ChatCopy;
-  agentName: string;
 }): ReactElement {
-  const kind =
-    record.kind === "tool"
+  const publication = recordPublication(record) !== null;
+  const message = record.kind === "user" || publication;
+  const kind = publication
+    ? "publication"
+    : record.kind === "tool"
       ? toolKind(record.toolKind)
       : record.kind === "thought"
         ? "think"
@@ -75,9 +76,11 @@ function RecordSummary({
   const role =
     record.kind === "user"
       ? copy.records.human
-      : record.kind === "assistant"
+      : publication
         ? copy.records.agent
-        : void 0;
+        : record.kind === "assistant"
+          ? copy.records.output
+          : void 0;
   return (
     <>
       <span
@@ -88,9 +91,11 @@ function RecordSummary({
         <RecordIcon kind={kind} />
       </span>
       <span className={classes.summary}>
-        <span className={classes.heading}>
-          <strong>{recordTitle(record, copy, agentName)}</strong>
-        </span>
+        {!message ? (
+          <span className={classes.heading}>
+            <strong>{recordTitle(record, copy)}</strong>
+          </span>
+        ) : null}
         <span
           className={`${classes.preview} ${kind === "execute" ? classes.mono : ""}`}
         >
@@ -115,12 +120,10 @@ function RecordSummary({
 export function RecentConversationRecord({
   record,
   copy,
-  agentName,
   onOpen,
 }: {
   record: Record;
   copy: ChatCopy;
-  agentName: string;
   onOpen: () => void;
 }): ReactElement {
   return (
@@ -132,17 +135,19 @@ export function RecentConversationRecord({
       <span className={classes.chevron}>
         <Chevron />
       </span>
-      <RecordSummary record={record} copy={copy} agentName={agentName} />
+      <RecordSummary record={record} copy={copy} />
     </button>
   );
 }
 function RecordDisclosureView({
   record,
   copy,
-  agentName,
   children,
   disclosure,
 }: RecordDisclosureInput & { disclosure: RecordDisclosure }): ReactElement {
+  const theme = useMantineTheme();
+  const publication = recordPublication(record) !== null;
+  const message = record.kind === "user" || publication;
   return (
     <Accordion
       value={disclosure.opened ? record.key : null}
@@ -151,6 +156,11 @@ function RecordDisclosureView({
       chevronPosition="left"
       chevron={<Chevron />}
       transitionDuration={160}
+      className={`${classes.recordRow} ${message ? classes.messageRow : ""}`}
+      data-record-origin={publication ? "publication" : record.kind}
+      style={{
+        "--record-message-primary": `var(--mantine-color-${theme.primaryColor}-filled)`,
+      }}
       classNames={{
         control: classes.control,
         label: classes.label,
@@ -162,7 +172,7 @@ function RecordDisclosureView({
     >
       <Accordion.Item value={record.key}>
         <Accordion.Control ref={disclosure.headerRef}>
-          <RecordSummary record={record} copy={copy} agentName={agentName} />
+          <RecordSummary record={record} copy={copy} />
         </Accordion.Control>
         <Accordion.Panel>
           <div className={classes.detailLayout}>
