@@ -50,6 +50,14 @@ are reported later, separately from Control queue acknowledgement. The local
 worker retains bounded result reports across reconnect and uses current
 credentials to retry publication, never the native command.
 
+Setup also seals the actual Agent/conversation and supplies a consumer-owned
+[tools provider](server-tools.md). Only an actual native launch provisions its
+header-only local HTTP declaration. The idle owner and already-live exact lookup
+do not create another endpoint. A dedicated long-lived tool channel follows
+current operational route/key updates without rebinding capability or recipient;
+withdrawal closes server access during disconnect and shutdown. Native
+retirement owns endpoint invalidation and explicit task/session drain.
+
 Setup also supplies a narrow authentication provider to the native actor.
 Receiving Setup does not itself select/apply a credential: only a real launch,
 after preparation, calls that provider. Exact already-live reuse preserves the

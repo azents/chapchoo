@@ -218,6 +218,7 @@ enum Command {
     Setup(
         NativeSetupOperation,
         Arc<dyn NativeAuthenticationProvider>,
+        Arc<dyn crate::NativeToolsProvider>,
         oneshot::Sender<Result<NativeSetupObservation, Error>>,
     ),
     SetupObservation(
@@ -302,6 +303,8 @@ impl NativeOwner {
                 stops: StopRegistry::default(),
                 answers: AnswerRegistry::default(),
                 credential_write: None,
+                pending_tools: None,
+                cleanup_errors: Vec::new(),
             };
             loop {
                 let native_ended = state.live.as_ref().map(|live| live.ended.clone());
@@ -353,10 +356,10 @@ impl NativeOwner {
                     Command::StopOperation(id, target, result) => {
                         let _ = result.send(state.stop_operation(&id, &target));
                     }
-                    Command::Setup(operation, authentication, result) => {
+                    Command::Setup(operation, authentication, tools, result) => {
                         let outcome = tokio::select! {
                             _=stopping.cancelled()=>Err(Error::DeliveryUncertain),
-                            outcome=state.setup(operation,authentication)=>outcome,
+                            outcome=state.setup(operation,authentication,tools)=>outcome,
                         };
                         let _ = result.send(outcome);
                     }
@@ -560,6 +563,8 @@ struct State {
     stops: StopRegistry,
     answers: AnswerRegistry,
     credential_write: Option<JoinHandle<Result<NativeCredentials, Error>>>,
+    pending_tools: Option<crate::NativeToolProvision>,
+    cleanup_errors: Vec<Error>,
 }
 struct Live {
     child: Child,
@@ -575,6 +580,7 @@ struct Live {
     capture: crate::CaptureLog,
     observations: Arc<Observations>,
     _authentication: NativeAuthenticationBinding,
+    tools: Option<crate::NativeToolProvision>,
 }
 impl State {
     async fn captured_source(&mut self) -> Result<Option<crate::CaptureLog>, Error> {
@@ -660,6 +666,8 @@ impl State {
         context: NativeContext,
         source: crate::CaptureLog,
         authentication: Arc<dyn NativeAuthenticationProvider>,
+        tools: Arc<dyn crate::NativeToolsProvider>,
+        tool_scope: &crate::NativeToolScope,
     ) -> Result<NativeConversationId, Error> {
         if self.blocked {
             return Err(Error::RetirementUnknown);
@@ -672,6 +680,9 @@ impl State {
         }
         self.retained_capture = Some(source.clone());
         if let Some(live) = &mut self.live {
+            if !tool_scope.matches(&live._authentication) {
+                return Err(Error::OperationConflict);
+            }
             if live.capture.snapshot()? != source.snapshot()? {
                 return Err(Error::CaptureConflict);
             }
@@ -703,16 +714,19 @@ impl State {
         // Any partially started preparation is owned by this actor. Failure must
         // retire the namespace scope before another start can be attempted.
         self.blocked = true;
-        let result = self.launch(supply, context, source, authentication).await;
+        let result = self
+            .launch(supply, context, source, authentication, tools, tool_scope)
+            .await;
         match result {
             Ok(id) => {
                 self.blocked = false;
                 Ok(id)
             }
             Err(error) => {
-                if self.retire().await.is_err() {
+                if let Err(cleanup) = self.retire().await {
                     return Err(Error::StartAndRetirement {
                         primary: Box::new(error),
+                        cleanup: Box::new(cleanup),
                     });
                 }
                 Err(error)
@@ -725,11 +739,22 @@ impl State {
         context: NativeContext,
         source: crate::CaptureLog,
         authentication: Arc<dyn NativeAuthenticationProvider>,
+        tools: Arc<dyn crate::NativeToolsProvider>,
+        tool_scope: &crate::NativeToolScope,
     ) -> Result<NativeConversationId, Error> {
         let applied = self.preparer.prepare(&supply).await?;
         let admitted = authentication.acquire().await?;
         authentication.check(&admitted.binding).await?;
         let binding = admitted.binding;
+        if !tool_scope.matches(&binding) {
+            return Err(Error::Authentication);
+        }
+        self.pending_tools = Some(
+            tools
+                .provide(&binding)
+                .await
+                .map_err(Error::ToolsProvision)?,
+        );
         let storage = self.storage.clone();
         let credentials = admitted.credentials;
         // State owns physical completion beyond cancellation of this launch.
@@ -802,6 +827,12 @@ impl State {
         let cwd = self.storage.workspace();
         let ended = CancellationToken::new();
         let completion = ended.clone();
+        let declarations = self
+            .pending_tools
+            .as_ref()
+            .ok_or(Error::NotAdmitted)?
+            .declarations();
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
         let driver = protocol::connect_authenticated(
             Lines::new(outgoing, incoming),
             requests.clone(),
@@ -809,7 +840,7 @@ impl State {
             ready,
             done.clone(),
             cwd,
-            (context, Some(credentials)),
+            (context, Some(credentials), declarations),
         );
         let protocol = tokio::spawn(async move {
             let result = driver.await;
@@ -830,8 +861,9 @@ impl State {
             capture: source,
             observations,
             _authentication: binding,
+            tools: self.pending_tools.take(),
         });
-        let session = tokio::time::timeout(Duration::from_secs(30), ready_rx)
+        let session = tokio::time::timeout_at(deadline, ready_rx)
             .await
             .map_err(|_| Error::Protocol)?
             .map_err(|_| Error::Protocol)??;
@@ -846,6 +878,18 @@ impl State {
         live.observations
             .bind(live.capture.snapshot()?, id.clone())?;
         self.live.as_mut().ok_or(Error::Process)?.session = Some(session);
+        let provision = self
+            .live
+            .as_ref()
+            .and_then(|live| live.tools.as_ref())
+            .ok_or(Error::NotAdmitted)?;
+        tokio::time::timeout_at(deadline, provision.verify())
+            .await
+            .map_err(|_| Error::ProtocolRejected {
+                stage: crate::ProtocolStage::ServerTools,
+                code: -32603,
+            })?
+            .map_err(Error::ToolsVerification)?;
         Ok(id)
     }
     async fn respond(&self, response: InteractiveResponse) -> Result<(), Error> {
@@ -860,6 +904,12 @@ impl State {
         requests::respond(&live.requests, session.session_id(), response).await
     }
     async fn retire(&mut self) -> Result<Retirement, Error> {
+        if let Some(tools) = &self.pending_tools {
+            tools.close();
+        }
+        if let Some(tools) = self.live.as_ref().and_then(|live| live.tools.as_ref()) {
+            tools.close();
+        }
         let publication = match self.credential_write.as_mut() {
             Some(work) => work
                 .await
@@ -868,10 +918,10 @@ impl State {
             None => Ok(()),
         };
         self.credential_write = None;
-        if self.scope.is_none() {
-            publication?;
-            return Ok(Retirement::NoNativeStarted);
+        if let Err(error) = publication {
+            self.cleanup_errors.push(error);
         }
+        let had_scope = self.scope.is_some();
         self.blocked = true;
         if let Some(live) = &mut self.live {
             if let Some(session) = &live.session {
@@ -881,8 +931,31 @@ impl State {
             }
             live.done.cancel();
         }
-        let outcome = retire_scope().await;
-        if outcome.is_ok()
+        let outcome = if had_scope {
+            retire_scope().await
+        } else {
+            Ok(())
+        };
+        let quiescent = outcome.is_ok();
+        if let Err(error) = outcome {
+            self.cleanup_errors.push(error);
+        }
+        if let Some(tools) = &mut self.pending_tools {
+            match tools.finish().await {
+                Ok(()) => self.pending_tools = None,
+                Err(error) => self.cleanup_errors.push(Error::ToolsCleanup(error)),
+            }
+        }
+        if let Some(live) = &mut self.live
+            && let Some(tools) = &mut live.tools
+        {
+            match tools.finish().await {
+                Ok(()) => live.tools = None,
+                Err(error) => self.cleanup_errors.push(Error::ToolsCleanup(error)),
+            }
+        }
+        if quiescent
+            && self.live.as_ref().is_some_and(|live| live.tools.is_none())
             && let Some(live) = self.live.take()
         {
             let Live {
@@ -907,12 +980,24 @@ impl State {
                 let _ = stderr.await;
             }
         }
-        if outcome.is_ok() {
+        if quiescent && self.pending_tools.is_none() && self.cleanup_errors.is_empty() {
             self.blocked = false;
         }
-        outcome?;
-        publication?;
-        Ok(Retirement::Quiescent)
+        let mut errors = std::mem::take(&mut self.cleanup_errors).into_iter();
+        if let Some(mut failure) = errors.next() {
+            for secondary in errors {
+                failure = Error::CleanupFailed {
+                    primary: Box::new(failure),
+                    secondary: Box::new(secondary),
+                };
+            }
+            return Err(failure);
+        }
+        Ok(if had_scope {
+            Retirement::Quiescent
+        } else {
+            Retirement::NoNativeStarted
+        })
     }
 }
 fn check_source(

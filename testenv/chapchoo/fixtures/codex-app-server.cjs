@@ -2,6 +2,8 @@
 // Deterministic native-protocol fixture. This executable never contacts a model.
 // Select it explicitly as an existing CLI in an isolated test Computer only.
 const { createInterface } = require("node:readline");
+const { existsSync, writeFileSync } = require("node:fs");
+const { join } = require("node:path");
 if (process.argv.includes("--version")) {
   process.stdout.write("codex-cli 0.165.0\n");
   return;
@@ -10,6 +12,63 @@ if (!process.argv.includes("app-server")) {
   process.stderr.write("Fixture requires the app-server command.\n");
   process.exitCode = 2;
   return;
+}
+const { Client } = require("@modelcontextprotocol/sdk/client/index.js");
+const {
+  StreamableHTTPClientTransport,
+} = require("@modelcontextprotocol/sdk/client/streamableHttp.js");
+
+// The SDK's public request method selects this fixture's explicit MCP profile;
+// its supported transport owns framing, sessions, parsing and HTTP lifetime.
+class FixtureMcpClient extends Client {
+  request(value, schema, options) {
+    return super.request(
+      value.method === "initialize"
+        ? {
+            ...value,
+            params: { ...value.params, protocolVersion: "2025-06-18" },
+          }
+        : value,
+      schema,
+      options,
+    );
+  }
+}
+let mcp = null;
+let mcpTools = [];
+if (!process.env.CODEX_HOME)
+  throw new Error("Fixture requires its explicit saved native state");
+const retainedThread = join(
+  process.env.CODEX_HOME,
+  "conversation-fixture-thread",
+);
+async function connectMcp(servers) {
+  const definition = servers?.chapchoo;
+  if (
+    !definition ||
+    typeof definition.url !== "string" ||
+    typeof definition.http_headers?.Authorization !== "string"
+  )
+    throw new Error("Fixture requires its explicit server-tools declaration");
+  const client = new FixtureMcpClient(
+    { name: "chapchoo-native-fixture", version: "1.0.0" },
+    { capabilities: {} },
+  );
+  const transport = new StreamableHTTPClientTransport(new URL(definition.url), {
+    requestInit: { headers: definition.http_headers, redirect: "error" },
+    reconnectionOptions: {
+      initialReconnectionDelay: 1000,
+      maxReconnectionDelay: 1000,
+      reconnectionDelayGrowFactor: 1,
+      maxRetries: 0,
+    },
+  });
+  mcp = client;
+  await client.connect(transport);
+  const catalog = await client.listTools();
+  if (catalog.tools.length !== 1 || catalog.tools[0]?.name !== "publish_text")
+    throw new Error("Fixture requires its exact server-tools catalog");
+  mcpTools = catalog.tools;
 }
 const threadId = "fixture-thread";
 const turnId = "fixture-turn";
@@ -91,7 +150,7 @@ function finish(accepted) {
   });
   notify("thread/status/changed", { threadId, status: { type: "idle" } });
 }
-function request(id, method, params) {
+async function request(id, method, params) {
   switch (method) {
     case "initialize":
       reply(id, {
@@ -180,12 +239,24 @@ function request(id, method, params) {
       reply(id, {});
       break;
     case "thread/start":
+    case "thread/resume":
       if (!authenticated || typeof params?.cwd !== "string")
         throw new Error("Fixture thread was not admitted");
       if (params.ephemeral !== true) {
         if (primaryStarted)
           throw new Error("Fixture primary thread was started twice");
+        if (
+          method === "thread/resume" &&
+          (params.threadId !== threadId || !existsSync(retainedThread))
+        )
+          throw new Error("Fixture exact retained thread is unavailable");
         primaryStarted = true;
+        await connectMcp(params.config?.mcp_servers);
+        if (method === "thread/start")
+          writeFileSync(retainedThread, "fixture-thread\n", {
+            flag: "wx",
+            mode: 0o600,
+          });
       }
       cwd = params.cwd;
       reply(id, {
@@ -223,8 +294,32 @@ function request(id, method, params) {
       break;
     case "thread/turns/list":
     case "thread/items/list":
-    case "mcpServerStatus/list":
       reply(id, { data: [], nextCursor: null });
+      break;
+    case "mcpServerStatus/list":
+      reply(id, {
+        data: mcp
+          ? [
+              {
+                name: "chapchoo",
+                runtimeStatus: "connected",
+                pluginId: null,
+                httpOrigin: null,
+                serverInfo: { name: "chapchoo", version: "fixture" },
+                serverCapabilities: { tools: {} },
+                toolListMeta: null,
+                tools: Object.fromEntries(
+                  mcpTools.map((tool) => [tool.name, tool]),
+                ),
+                toolsError: null,
+                resources: [],
+                resourceTemplates: [],
+                authStatus: "bearerToken",
+              },
+            ]
+          : [],
+        nextCursor: null,
+      });
       break;
     case "turn/start":
       // The official adapter creates isolated helper threads for title generation.
@@ -344,7 +439,7 @@ function request(id, method, params) {
   }
 }
 const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
-lines.on("line", (line) => {
+lines.on("line", async (line) => {
   try {
     const value = JSON.parse(line);
     if (!value || typeof value !== "object" || Array.isArray(value))
@@ -364,7 +459,7 @@ lines.on("line", (line) => {
       typeof value.method === "string" &&
       (typeof value.id === "string" || typeof value.id === "number")
     ) {
-      request(value.id, value.method, value.params);
+      await request(value.id, value.method, value.params);
     } else if (typeof value.method !== "string")
       throw new Error("Unexpected fixture response");
   } catch {
@@ -376,4 +471,10 @@ lines.on("line", (line) => {
     lines.close();
     process.stdin.destroy();
   }
+});
+lines.once("close", () => {
+  void mcp?.close().catch(() => {
+    process.stderr.write("Deterministic native fixture MCP cleanup failed.\n");
+    process.exitCode = 3;
+  });
 });

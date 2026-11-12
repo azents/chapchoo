@@ -1,0 +1,55 @@
+syntax = "proto3";
+package chapchoo.server_tools;
+import "google/protobuf/empty.proto";
+import "conversations.proto";
+
+// Current execution component authority, independent of native capture IDs.
+service ServerTools {
+  rpc Catalog(CatalogRequest) returns (CatalogResponse);
+  rpc Invoke(stream InvocationControl) returns (stream InvocationObservation);
+}
+message CallerScope {
+  chapchoo.conversations.CaptureSource source = 1;
+  string agent_id = 2;
+  string conversation_id = 3;
+}
+message CatalogRequest { CallerScope scope = 1; }
+message CatalogResponse { bytes catalog_json = 1; }
+message Submit {
+  CallerScope scope = 1;
+  string name = 2;
+  bytes arguments_json = 3;
+}
+message InvocationControl {
+  // Exactly one Submit first; the only later frame is one request-local cancel.
+  oneof control {
+    Submit submit = 1;
+    google.protobuf.Empty cancel = 2;
+  }
+}
+enum Rejection {
+  REJECTION_UNSPECIFIED = 0;
+  REJECTION_INVALID_ENVELOPE = 1;
+  REJECTION_UNKNOWN_TOOL = 2;
+  REJECTION_CAPACITY = 3;
+  REJECTION_CLOSING = 4;
+  REJECTION_CANCELLED = 5;
+  REJECTION_QUEUE_EXPIRED = 6;
+  REJECTION_RESPONSE_EXPIRED = 7;
+  REJECTION_AUTHORITY = 8;
+}
+message Final {
+  oneof outcome {
+    Rejection not_executed = 1;
+    bytes result_json = 2;
+    google.protobuf.Empty uncertain = 3;
+    google.protobuf.Empty uncertain_representation = 4;
+  }
+}
+message InvocationObservation {
+  oneof observation {
+    google.protobuf.Empty waiting = 1;
+    google.protobuf.Empty started = 2;
+    Final final = 3;
+  }
+}

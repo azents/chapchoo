@@ -9,6 +9,17 @@ use chapchoo_persistence::{
 };
 
 impl ConversationService {
+    pub async fn check_tool_scope(
+        &self,
+        source: &ConnectorSource<'_>,
+        scope: &ConversationMessageScope<'_>,
+    ) -> Result<(), ServiceError> {
+        Ok(self
+            .store
+            .check_conversation_tool_scope(source, scope)
+            .await?)
+    }
+
     pub async fn messages(
         &self,
         actor: &SecretDigest,

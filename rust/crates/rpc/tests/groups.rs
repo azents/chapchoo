@@ -52,6 +52,9 @@ fn selectable_group_unions_deduplicate_shared_services_and_exclude_peers() -> Re
         let core=Arc::new(chapchoo_service::ConversationService::new(store.clone()));
         let app = Arc::new(ComputersService::new(store.clone()));
         let admission=Arc::new(AtomicBool::new(true));
+        let tools=chapchoo_rpc::ServerToolServices::new(
+            chapchoo_service::ServerTools::new(Arc::new(chapchoo_service::ConversationToolBackend::new(core.clone()))),
+            admission.clone());
         let processor=Arc::new(chapchoo_rpc::ConversationControlProcessor::new(app.clone(),core.clone(),chapchoo_rpc::PeerDelivery::new(app.clone()),admission.clone()));
         let conversations=chapchoo_rpc::ConversationServices::new(core.clone(),
             Arc::new(chapchoo_service::ConversationInputService::new(store.clone(),processor.clone(),4)?),
@@ -86,7 +89,7 @@ fn selectable_group_unions_deduplicate_shared_services_and_exclude_peers() -> Re
                         Some(&computers),
                         Some(&authentication),
                         Some(&conversations),
-                        Some((&auth, &connections,&capture)),
+                        Some((&auth, &connections,&capture,&tools)),
                     )?)
                     .serve_with_incoming_shutdown(incoming, async {
                         let _ = stopped.await;
@@ -140,6 +143,9 @@ fn selectable_group_unions_deduplicate_shared_services_and_exclude_peers() -> Re
             let captured=chapchoo_protocol::conversations::connector_capture_client::ConnectorCaptureClient::new(channel.clone())
                 .inspect(chapchoo_protocol::conversations::CaptureRequest::default()).await.err().ok_or("Anonymous captured source accepted")?;
             assert_eq!(captured.code(),if groups.contains(ServiceGroup::Control) {Code::Unauthenticated} else {Code::Unimplemented});
+            let server_tools=chapchoo_protocol::server_tools::server_tools_client::ServerToolsClient::new(channel.clone())
+                .catalog(chapchoo_protocol::server_tools::CatalogRequest::default()).await.err().ok_or("Anonymous tool catalog accepted")?;
+            assert_eq!(server_tools.code(),if groups.contains(ServiceGroup::Control) {Code::Unauthenticated} else {Code::Unimplemented});
             let credentials=chapchoo_protocol::conversations::connector_capture_client::ConnectorCaptureClient::new(channel.clone())
                 .acquire_authentication(chapchoo_protocol::conversations::ExecutionAuthenticationReference::default()).await
                 .err().ok_or("Anonymous execution credentials accepted")?;
@@ -173,6 +179,7 @@ fn selectable_group_unions_deduplicate_shared_services_and_exclude_peers() -> Re
         );
         authentication_service.finish().await?;
         conversations.finish().await?;
+        tools.finish().await?;
         Ok(())
     }))
 }

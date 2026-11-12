@@ -1,9 +1,10 @@
 //! Application-owned diagnostics exclude dependency protocol payloads.
 use tracing_subscriber::{filter::filter_fn, prelude::*};
 fn allowed(target: &str) -> bool {
-    // SDK TRACE serializes login metadata. EnvFilter specificity alone cannot
-    // be a security boundary because operators can enable narrower targets.
-    !target.starts_with("agent_client_protocol")
+    // SDK diagnostics serialize login metadata and tool requests/results.
+    // EnvFilter specificity alone cannot be a security boundary because
+    // operators can enable narrower targets.
+    !target.starts_with("agent_client_protocol") && !target.starts_with("rmcp")
 }
 pub(super) fn initialize() {
     tracing_subscriber::registry()
@@ -37,7 +38,8 @@ mod tests {
         }
     }
     #[test]
-    fn enabled_trace_cannot_publish_sdk_login_metadata() -> Result<(), Box<dyn std::error::Error>> {
+    fn enabled_trace_cannot_publish_sdk_protocol_payloads() -> Result<(), Box<dyn std::error::Error>>
+    {
         let bytes = Arc::new(Mutex::new(Vec::new()));
         let writer = Capture(bytes.clone());
         let subscriber = tracing_subscriber::registry()
@@ -51,10 +53,16 @@ mod tests {
             );
         tracing::subscriber::with_default(subscriber, || {
             tracing::trace!(target:"agent_client_protocol::jsonrpc::transport_actor",message="synthetic-api-key-must-not-appear");
+            tracing::debug!(target:"rmcp::service",request="private-tool-request-must-not-appear");
+            tracing::debug!(target:"rmcp::service",result="private-tool-result-must-not-appear");
+            tracing::trace!(target:"rmcp::transport::streamable_http_server::tower",message="private-mcp-message-must-not-appear");
             tracing::info!(target:"chapchoo::connector",stage="authentication","Native operation rejected");
         });
         let output = String::from_utf8(bytes.lock().map_err(|_| "Capture unavailable")?.clone())?;
         assert!(!output.contains("synthetic-api-key"));
+        assert!(!output.contains("private-tool-request"));
+        assert!(!output.contains("private-tool-result"));
+        assert!(!output.contains("private-mcp-message"));
         assert!(output.contains("Native operation rejected"));
         Ok(())
     }

@@ -69,6 +69,11 @@ These calls do not dispatch native commands, create a capture or turn metadata
 reads into renewal. Credential traffic is separate from session JSONL and does
 not establish native login or model success.
 
+Control separately registers the component-only [server-tools service](server-tools.md).
+Its bounded Catalog/Invoke protocol uses current Connector authority and its own
+effect owner. It is neither a Control command payload nor an owner/peer RPC.
+Client/Admin groups do not register it; native readiness is not authorization.
+
 Peer requests carry either the authenticated session digest for fresh owner
 permission checks, or the exact current reconciliation context and live owner.
 An asserted Computer ID alone is insufficient. A live Connector owner takes

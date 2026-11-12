@@ -253,6 +253,24 @@ async fn start_backends(
         None
     };
     let conversation_core = Arc::new(chapchoo_service::ConversationService::new(store.clone()));
+    let tools = if groups.contains(ServiceGroup::Control) {
+        let tools = chapchoo_rpc::ServerToolServices::new(
+            chapchoo_service::ServerTools::new(Arc::new(
+                chapchoo_service::ConversationToolBackend::new(conversation_core.clone()),
+            )),
+            admission.clone(),
+        );
+        let owned = tools.clone();
+        let shutdown = stop.clone();
+        tasks.spawn(async move {
+            shutdown.cancelled().await;
+            owned.finish().await?;
+            Ok(())
+        });
+        Some(tools)
+    } else {
+        None
+    };
     let capture = authentication.execution.as_ref().map(|owner| {
         chapchoo_rpc::ConversationCaptureServices::new(
             conversation_core.clone(),
@@ -413,7 +431,10 @@ async fn start_backends(
     let components = control
         .as_ref()
         .zip(capture.as_ref())
-        .map(|(plane, capture)| (&plane.authentication, &plane.connections, capture));
+        .zip(tools.as_ref())
+        .map(|((plane, capture), tools)| {
+            (&plane.authentication, &plane.connections, capture, tools)
+        });
     let authentication_rpc = authentication.device.as_ref().map(|service| {
         AuthenticationServices::new(service.clone()).with_admission(admission.clone())
     });

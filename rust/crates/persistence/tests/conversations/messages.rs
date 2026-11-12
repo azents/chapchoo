@@ -132,6 +132,28 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<String, TestError> {
             .source,
         ConversationSource::NotStarted
     ));
+    store
+        .check_conversation_tool_scope(&f.source(&key), &scope)
+        .await?;
+    assert!(matches!(
+        store
+            .check_conversation_tool_scope(
+                &f.source(&key),
+                &ConversationMessageScope {
+                    agent_id: &f.other_agent,
+                    conversation_id: &conversation,
+                }
+            )
+            .await,
+        Err(StoreError::NotFound)
+    ));
+    let invalid_scope_key = BearerSecret::generate()?.digest();
+    assert!(
+        store
+            .check_conversation_tool_scope(&f.source(&invalid_scope_key), &scope)
+            .await
+            .is_err()
+    );
     let text = ConversationText::parse("Agent domain receipt".into())?;
     let published = store
         .publish_conversation_message(

@@ -3,6 +3,7 @@ mod authentication;
 mod authentication_sync;
 mod capture_sync;
 mod operations;
+mod server_tools;
 use crate::AppError;
 use chapchoo_crypto::BearerSecret;
 use chapchoo_protocol::control::{
@@ -116,6 +117,11 @@ async fn reconnect(
     operations: &mut operations::Operations,
 ) -> Result<(), AppError> {
     let channel = endpoint(endpoint_url)?.connect_lazy();
+    // Long tool streams must not occupy the Control/auth channel's eight slots.
+    let tools_channel = endpoint(endpoint_url)?
+        .buffer_size(128)
+        .concurrency_limit(128)
+        .connect_lazy();
     let mut authentication = ConnectorAuthenticationClient::new(channel.clone())
         .max_decoding_message_size(64 * 1024)
         .max_encoding_message_size(64 * 1024);
@@ -130,7 +136,7 @@ async fn reconnect(
         tokio::time::Instant::now() + refresh_delay(exchanged.proactive_after.as_ref())?;
     loop {
         let outcome = connected(
-            channel.clone(),
+            (channel.clone(), tools_channel.clone()),
             &mut authentication,
             &session_id,
             &mut key,
@@ -168,7 +174,7 @@ fn refresh_delay(value: Option<&prost_types::Timestamp>) -> Result<Duration, App
     )?))
 }
 async fn connected(
-    channel: Channel,
+    channels: (Channel, Channel),
     authentication: &mut ConnectorAuthenticationClient<Channel>,
     session: &str,
     key: &mut BearerSecret,
@@ -176,6 +182,7 @@ async fn connected(
     stop: &CancellationToken,
     workers: (&mut capture_sync::CaptureSync, &mut operations::Operations),
 ) -> Result<(), AppError> {
+    let (channel, tools_channel) = channels;
     let (capture_sync, operations) = workers;
     let (sender, receiver) = mpsc::channel(8);
     sender
@@ -209,6 +216,15 @@ async fn connected(
     {
         return Err("Connector heartbeat policy is invalid".into());
     }
+    let _tool_route = operations.tool_route(
+        tools_channel,
+        chapchoo_protocol::conversations::CaptureSource {
+            session_id: session.into(),
+            control_id: connected.instance_id.clone(),
+            connection_id: connected.connection_id.clone(),
+        },
+        key,
+    )?;
     let mut heartbeat = tokio::time::interval(Duration::from_millis(u64::from(
         connected.heartbeat_interval_ms,
     )));

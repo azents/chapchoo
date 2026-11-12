@@ -6,7 +6,10 @@ import {
 } from "@chapchoo/rpc-client/accounts";
 import { AuthenticationsClient } from "@chapchoo/rpc-client/authentication";
 import { ConversationsClient } from "@chapchoo/rpc-client/conversations";
-import type { OwnerConversation } from "@chapchoo/rpc-client/conversations";
+import type {
+  HarnessSupply,
+  OwnerConversation,
+} from "@chapchoo/rpc-client/conversations";
 import {
   AgentsClient,
   ComputersClient,
@@ -42,11 +45,17 @@ async function poll<T>(
   }
 }
 /** Disposable prerequisite state uses the same public RPC admission as the UI. */
-export async function nativeConversation(assembly: Assembly): Promise<{
+export async function nativeConversation(
+  assembly: Assembly,
+  supply: HarnessSupply = {
+    existingCodexPath: "/opt/chapchoo/codex-fixture",
+  },
+): Promise<{
+  agentId: string;
   chatPath: string;
   current: () => Promise<OwnerConversation>;
   pendingInputs: () => Promise<number>;
-  close: () => Promise<void>;
+  close: (expectedRequestId?: string) => Promise<void>;
 }> {
   const docker = assembly.docker;
   if (!docker)
@@ -121,13 +130,15 @@ export async function nativeConversation(assembly: Assembly): Promise<{
         },
       );
     });
-  const close = async (): Promise<void> => {
+  const close = async (
+    expectedRequestId = "conversation-create",
+  ): Promise<void> => {
     try {
       if (agentId) {
         await call(computers.requestLifecycle.bind(computers), {
           agentId,
           requestId: "conversation-delete",
-          expectedRequestId: "conversation-create",
+          expectedRequestId,
           action: Action.ACTION_DELETE,
         });
         try {
@@ -186,8 +197,8 @@ export async function nativeConversation(assembly: Assembly): Promise<{
     if (!authenticationId)
       throw new Error("Conversation fixture key registration was not observed");
     stage = "create";
-    // Freeze only this owned Provider before creating work. The explicit
-    // deterministic executable must be selected before any Connector can start.
+    // Freeze only this owned Provider before creating work. Select the explicit
+    // supply before any Connector can start.
     const agent = await provider.whileSuspended(async () => {
       const agent = (
         await call(agents.create.bind(agents), {
@@ -204,11 +215,11 @@ export async function nativeConversation(assembly: Assembly): Promise<{
       if (!agent)
         throw new Error("Conversation fixture Agent was not returned");
       agentId = agent.id;
-      stage = "select-deterministic-executable";
+      stage = "select-native-supply";
       await call(conversations.saveSupply.bind(conversations), {
         agentId,
         requestId: "conversation-fixture-supply",
-        supply: { existingCodexPath: "/opt/chapchoo/codex-fixture" },
+        supply,
       });
       return agent;
     });
@@ -230,6 +241,7 @@ export async function nativeConversation(assembly: Assembly): Promise<{
       },
     );
     return {
+      agentId: agent.id,
       chatPath: `/teams/my/agents/${agent.handle}/chat`,
       current: () =>
         call(conversations.current.bind(conversations), { agentId: agent.id }),

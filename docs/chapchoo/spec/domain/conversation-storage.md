@@ -131,11 +131,14 @@ newer-page traversal against concurrent appends. Exact message body reads return
 at most 32 KiB per chunk, including arbitrary byte boundaries; consumers assemble
 bytes before UTF-8 decoding. Metadata never loads full bodies.
 
-The Store/service also prepares explicit Agent message publication. It checks
+The Store/service performs explicit Agent message publication. It checks
 the current authenticated Connector execution/route and actual Agent/conversation
 ownership independently of native readiness, native IDs or the UI's selected
-conversation. There is no public publication RPC or MCP entrypoint yet; these
-prepared operations do not make ordinary native output user-visible chat.
+conversation. The component-only [server-tools boundary](server-tools.md)
+exposes this operation as intentional `publish_text` to the fixed native owner.
+There is no owner-selected recipient or publication retry key. Ordinary native
+output does not append independent chat receipts. The current browser still
+renders native records and temporary inputs through its separate source reader.
 
 Explicit schema preparation transfers retained original non-deleted inputs into
 a deterministic prefix ordered by original acceptance time and stored input

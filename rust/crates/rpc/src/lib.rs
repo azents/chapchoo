@@ -18,6 +18,7 @@ mod native_resources;
 mod peer;
 mod provider_authentication;
 mod reports;
+mod server_tools;
 mod status;
 #[cfg(test)]
 #[path = "../tests/support/mod.rs"]
@@ -39,4 +40,5 @@ pub use peer::PeerServices;
 pub use provider_authentication::{
     ProviderAuthenticator, ProviderBootstrapConfig, ReviewedServiceAccount, ServiceAccountReviewer,
 };
+pub use server_tools::ServerToolServices;
 pub use status::DOMAIN_REASON_METADATA;

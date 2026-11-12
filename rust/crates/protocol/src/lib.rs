@@ -7,6 +7,35 @@
 //! use chapchoo_persistence::Store;
 //! ```
 
+/// Component tool messages contain private arguments/results and sealed scope.
+pub mod server_tools {
+    tonic::include_proto!("chapchoo.server_tools");
+    /// Canonical Rejection names on received pre-submission RPC errors.
+    /// This marker is never attached after the effect owner accepts Submit.
+    pub const NOT_EXECUTED_METADATA: &str = "chapchoo-tool-not-executed";
+    macro_rules! redacted_debug {
+        ($($message:ty),+ $(,)?) => {$(
+            impl std::fmt::Debug for $message {
+                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    f.debug_struct(stringify!($message)).finish_non_exhaustive()
+                }
+            }
+        )+};
+    }
+    redacted_debug!(
+        CallerScope,
+        CatalogRequest,
+        CatalogResponse,
+        Submit,
+        InvocationControl,
+        invocation_control::Control,
+        Final,
+        r#final::Outcome,
+        InvocationObservation,
+        invocation_observation::Observation,
+    );
+}
+
 /// Captured observations contain private conversation content, not Debug fields.
 pub mod conversations {
     tonic::include_proto!("chapchoo.conversations");

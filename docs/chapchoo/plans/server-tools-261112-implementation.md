@@ -51,5 +51,15 @@ component restored. Six design/research documents accompany the first phase.
 Phase 1 storage, atomic acceptance, preserving migration and protected reads are
 implemented with focused both-engine tests, the final Rust workspace gate,
 129 live RPC checks per engine and client/document validation passing. The single
-independent review found no actionable material findings. Commit/PR delivery is
-next; phases 2 and 3 have not begun. No merge or deployment has completed.
+independent review found no actionable material findings. Required commit hooks
+passed; commit `49f2150` is open as [PR #123](https://github.com/azents/chapchoo/pull/123)
+against `main`. Phase 2 now uses `feat/server-tools-relay`, based on that branch,
+and its [execution plan](server-tools-261112-phase-2.md) precedes implementation.
+The bounded common owner/RPC, official-SDK local relay and actual native
+setup/lifetime wiring are implemented. Canonical Rust and both-engine live RPC
+gates pass. Native compatibility validation distinguishes effective real New
+from correctly rejected unmaterialized empty restoration and controlled-fixture
+successful exact Resume. Both explicit Docker cases and owned cleanup pass;
+full integrated review and corrective re-review have no unresolved warning.
+The Phase-2 commit/hooks and stacked PR delivery are next. Phase 3 has not begun. PR CI is not yet settled; no merge or deployment
+occurred.

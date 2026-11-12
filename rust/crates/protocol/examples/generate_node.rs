@@ -27,6 +27,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .arg(root.join("proto/chapchoo/computers.proto"))
         .arg(root.join("proto/chapchoo/authentication.proto"))
         .arg(root.join("proto/chapchoo/conversations.proto"))
+        .arg(root.join("proto/chapchoo/server_tools.proto"))
         .status()?;
     if !status.success() {
         return Err(io::Error::other("Node protocol generation failed").into());

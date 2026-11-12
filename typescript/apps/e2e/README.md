@@ -48,10 +48,12 @@ Build an architecture-matched binary directory containing `chapchoo`, then build
 an isolated image from the repository root:
 
 ```sh
+pnpm --filter @chapchoo/testenv build:fixtures
 docker build --target runtime-base -f images/chapchoo/Dockerfile \
   -t chapchoo-runtime-base:acceptance .
 docker buildx build --load \
   --build-context "binary-artifacts=/absolute/path/to/binary-directory" \
+  --build-context "fixture-artifacts=$PWD/testenv/chapchoo/dist/fixtures" \
   -f testenv/chapchoo/fixtures/Dockerfile -t chapchoo-conversation:acceptance .
 ```
 

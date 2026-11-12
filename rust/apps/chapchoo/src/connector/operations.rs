@@ -41,6 +41,7 @@ pub(super) struct Operations {
     payload: Arc<Semaphore>,
     stop: CancellationToken,
     authentication: super::authentication_sync::AuthenticationSync,
+    tools_route: super::server_tools::CurrentRoute,
 }
 impl Operations {
     pub(super) fn stop(&mut self, command: c::StopCommand) -> Result<bool, AppError> {
@@ -86,6 +87,7 @@ impl Operations {
     pub(super) fn new(native: NativeHandle) -> Self {
         Self {
             authentication: super::authentication_sync::AuthenticationSync::new(native.clone()),
+            tools_route: super::server_tools::CurrentRoute::default(),
             native,
             slots: Arc::new(Semaphore::new(32)),
             tasks: JoinSet::new(),
@@ -97,6 +99,15 @@ impl Operations {
             payload: Arc::new(Semaphore::new(32 * 1024 * 1024)),
             stop: CancellationToken::new(),
         }
+    }
+    pub(super) fn tool_route(
+        &self,
+        channel: Channel,
+        source: c::CaptureSource,
+        key: &BearerSecret,
+    ) -> Result<super::server_tools::RouteLease, AppError> {
+        self.tools_route.update(channel, source, key)?;
+        Ok(self.tools_route.lease())
     }
     pub(super) fn setup(
         &mut self,
@@ -136,13 +147,23 @@ impl Operations {
         let authentication = Arc::new(super::authentication::Authentication::new(
             channel, origin, key, &command,
         )?);
+        let scope = chapchoo_harness::NativeToolScope {
+            agent_id: command.agent_id.clone(),
+            conversation_id: command.conversation_id.clone(),
+        };
+        let tools = Arc::new(super::server_tools::Provider::new(
+            self.tools_route.clone(),
+            scope.clone(),
+        ));
         let rx = match self.native.admit_setup_with_authentication(
             NativeSetupOperation {
                 operation_id: command.operation_id.clone(),
+                scope,
                 supply,
                 intent,
             },
             authentication,
+            tools,
         ) {
             Ok(rx) => rx,
             Err(chapchoo_harness::Error::NotAdmitted) => return Ok(false),
@@ -422,6 +443,7 @@ impl Operations {
         Ok(())
     }
     pub(super) async fn finish(mut self) -> Result<(), AppError> {
+        self.tools_route.withdraw();
         self.stop.cancel();
         let mut result = self.authentication.finish().await;
         while let Some(completed) = self.tasks.join_next().await {

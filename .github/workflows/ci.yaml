@@ -296,10 +296,12 @@ jobs:
       - name: Build the model-free conversation fixture from the same package
         run: |
           test -S /var/run/docker.sock
+          pnpm --filter @chapchoo/testenv build:fixtures
           docker buildx build --builder default --load --target runtime-base \
             -f images/chapchoo/Dockerfile -t chapchoo-runtime-base:acceptance .
           docker buildx build --builder default --load \
             --build-context "binary-artifacts=$CHAPCHOO_E2E_PACKAGE_ROOT" \
+            --build-context "fixture-artifacts=$PWD/testenv/chapchoo/dist/fixtures" \
             -f testenv/chapchoo/fixtures/Dockerfile -t chapchoo-conversation-acceptance:ci .
       - name: Prepare the real session before Send and reuse it for the first input
         env:

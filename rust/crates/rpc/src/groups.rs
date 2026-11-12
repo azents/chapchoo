@@ -2,7 +2,7 @@
 use crate::{
     AccountServices, AuthenticationServices, ComponentAuthenticationServices,
     ComponentConnectionServices, ComputerServices, ConversationCaptureServices,
-    ConversationServices,
+    ConversationServices, ServerToolServices,
 };
 use tonic::{Status, service::Routes};
 
@@ -76,6 +76,7 @@ impl ServiceGroups {
                 "chapchoo.control.ProviderConnection",
                 "chapchoo.control.ConnectorConnection",
                 "chapchoo.conversations.ConnectorCapture",
+                "chapchoo.server_tools.ServerTools",
             ]);
         }
         names
@@ -92,6 +93,7 @@ impl ServiceGroups {
             &ComponentAuthenticationServices,
             &ComponentConnectionServices,
             &ConversationCaptureServices,
+            &ServerToolServices,
         )>,
     ) -> Result<Routes, Status> {
         if self.is_empty() {
@@ -139,14 +141,15 @@ impl ServiceGroups {
             }
         }
         if self.control {
-            let (authentication, connections, capture) = components
+            let (authentication, connections, capture, tools) = components
                 .ok_or_else(|| Status::failed_precondition("Control services are required"))?;
             routes
                 .add_service(authentication.provider_server())
                 .add_service(authentication.connector_server())
                 .add_service(connections.provider_server())
                 .add_service(connections.connector_server())
-                .add_service(capture.server());
+                .add_service(capture.server())
+                .add_service(tools.server());
         }
         Ok(routes.routes())
     }
