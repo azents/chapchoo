@@ -40,7 +40,7 @@ existing Codex installation before releasing its owned Provider to create the
 Computer. It waits for a real selected native session before the first Send and
 checks that the first input retains that exact conversation/native target. The
 fixture refuses a duplicate primary New or a synthetic first prompt. Synthetic
-login, accepted user input and one intentional official-SDK `publish_text` cross
+login, accepted user input and one intentional official-SDK `send_message` cross
 the production MCP/RPC and receipt-read boundaries. Ordinary/final native output
 stays out of Chat while actual full records retain its two utterances, update,
 publication input/result and typed inline answer. Reentry checks accepted messages

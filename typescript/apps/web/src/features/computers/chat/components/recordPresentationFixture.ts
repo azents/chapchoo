@@ -112,12 +112,12 @@ export const conversationReviewRecords: ConversationRecord[] = [
   {
     ...record("tool", "draft-publication", "", 10n),
     toolKind: "execute",
-    title: "mcp.chapchoo.publish_text",
+    title: "mcp.chapchoo.send_message",
     status: "completed",
     toolInput: {
       json: JSON.stringify({
         server: "chapchoo",
-        tool: "publish_text",
+        tool: "send_message",
         arguments: {
           text: "테마의 **색상 변수**를 정리했습니다.\n\n루트에서 `pnpm test`를 실행하실 수 있습니다.",
         },

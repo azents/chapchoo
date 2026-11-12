@@ -110,7 +110,7 @@ of the actual body, not a generic sent-action title. Their rail follows the
 current scoped Mantine primary filled color.
 
 Publication classification decodes the captured MCP input's exact
-`server: "chapchoo"` and `tool: "publish_text"` identity. A matching display title,
+`server: "chapchoo"` and `tool: "send_message"` identity. A matching display title,
 generic kind or body text is insufficient. The pinned adapter supplies this
 structured identity rather than a separate ACP tool name. One captured tool
 item displays readable publication text and its actual result/error; nested

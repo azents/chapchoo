@@ -24,7 +24,7 @@ void test("publication uses actual structured MCP identity and the normalized me
   const body = "  **확인한 방법**입니다.\n\n`pnpm test`를 실행하세요. ";
   const original = JSON.stringify({
     server: "chapchoo",
-    tool: "publish_text",
+    tool: "send_message",
     arguments: { text: body },
   });
   const publication: ConversationRecord = {
@@ -75,13 +75,13 @@ void test("publication uses actual structured MCP identity and the normalized me
     },
     {
       ...publication,
-      title: "mcp.chapchoo.publish_text",
+      title: "mcp.chapchoo.send_message",
       toolInput: { json: "{}" },
     },
     {
       ...publication,
       toolInput: {
-        json: '{"server":"another","tool":"publish_text","arguments":{"text":"same"}}',
+        json: '{"server":"another","tool":"send_message","arguments":{"text":"same"}}',
       },
     },
     {

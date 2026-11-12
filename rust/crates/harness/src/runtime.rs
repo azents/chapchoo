@@ -789,6 +789,9 @@ impl State {
         command
             .arg(&applied.adapter)
             .env("CODEX_PATH", entrypoint)
+            // ACP forwards this policy on both New and exact Resume. Keep the
+            // scoped MCP endpoint in the ACP declaration, not in static config.
+            .env("CODEX_CONFIG", native_tool_config())
             .env("PATH", explicit_path(&applied.node)?)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -1000,6 +1003,10 @@ impl State {
         })
     }
 }
+fn native_tool_config() -> &'static str {
+    r#"{"code_mode":{"direct_only_tool_namespaces":["mcp__chapchoo"]},"features":{"code_mode_only_strict_3p_tools":false}}"#
+}
+
 fn check_source(
     context: &NativeContext,
     source: &crate::CaptureLog,
@@ -1127,6 +1134,20 @@ async fn retire_scope() -> Result<(), Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn actual_start_policy_directly_exposes_only_the_conversation_namespace()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let config: serde_json::Value = serde_json::from_str(native_tool_config())?;
+        assert_eq!(
+            config,
+            serde_json::json!({
+                "code_mode": {"direct_only_tool_namespaces": ["mcp__chapchoo"]},
+                "features": {"code_mode_only_strict_3p_tools": false}
+            })
+        );
+        Ok(())
+    }
+
     #[test]
     fn context_intent_requires_the_owned_copy_and_does_not_replay_existing_capture()
     -> Result<(), Box<dyn std::error::Error>> {

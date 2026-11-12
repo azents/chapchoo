@@ -96,7 +96,7 @@ export function recordInput(
 }
 const publicationInput = z.looseObject({
   server: z.literal("chapchoo"),
-  tool: z.literal("publish_text"),
+  tool: z.literal("send_message"),
   arguments: z.unknown().optional(),
 });
 const publicationText = z.looseObject({ text: z.string() });

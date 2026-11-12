@@ -57,7 +57,7 @@ pub(super) fn validate_catalog(catalog: &ListToolsResult) -> Result<(), AppError
     // One production declaration, no artificial test tool in the native catalog.
     if catalog.next_cursor.is_some()
         || catalog.tools.len() != 1
-        || catalog.tools[0].name != "publish_text"
+        || catalog.tools[0].name != "send_message"
     {
         return Err("The expected server tool catalog is unavailable".into());
     }

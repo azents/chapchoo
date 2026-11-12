@@ -80,7 +80,7 @@ for (const width of [390, 960]) {
       await expect(
         publication
           .locator("pre")
-          .filter({ hasText: /"tool"\s*:\s*"publish_text"/ }),
+          .filter({ hasText: /"tool"\s*:\s*"send_message"/ }),
       ).toBeVisible();
       await expect(
         publication.locator("pre").filter({ hasText: "fixture-message" }),

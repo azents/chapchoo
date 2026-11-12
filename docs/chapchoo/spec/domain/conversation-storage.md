@@ -135,7 +135,7 @@ The Store/service performs explicit Agent message publication. It checks
 the current authenticated Connector execution/route and actual Agent/conversation
 ownership independently of native readiness, native IDs or the UI's selected
 conversation. The component-only [server-tools boundary](server-tools.md)
-exposes this operation as intentional `publish_text` to the fixed native owner.
+exposes this operation as intentional `send_message` to the fixed native owner.
 There is no owner-selected recipient or publication retry key. Ordinary native
 output does not append independent chat receipts. The
 [Chat browser](conversation-web.md) reads these messages separately from actual

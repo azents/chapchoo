@@ -49,10 +49,10 @@ impl ServerToolBackend for Backend {
         })
     }
     fn catalog(&self) -> Result<Vec<u8>, ServiceError> {
-        Ok(br#"{"tools":[{"name":"publish_text","inputSchema":{"type":"object"}}]}"#.to_vec())
+        Ok(br#"{"tools":[{"name":"send_message","inputSchema":{"type":"object"}}]}"#.to_vec())
     }
     fn validate(&self, name: &str, _: &[u8]) -> Result<(), ServerToolValidation> {
-        if name == "publish_text" {
+        if name == "send_message" {
             Ok(())
         } else {
             Err(ServerToolValidation::UnknownTool)
@@ -107,7 +107,7 @@ fn submit(arguments: &[u8]) -> wire::InvocationControl {
     wire::InvocationControl {
         control: Some(wire::invocation_control::Control::Submit(wire::Submit {
             scope: Some(scope()),
-            name: "publish_text".into(),
+            name: "send_message".into(),
             arguments_json: arguments.to_vec(),
         })),
     }
@@ -178,7 +178,7 @@ async fn generated_component_stream_preserves_scope_result_and_request_local_con
             )?)
             .await?
             .into_inner();
-        assert!(String::from_utf8(catalog.catalog_json)?.contains("publish_text"));
+        assert!(String::from_utf8(catalog.catalog_json)?.contains("send_message"));
 
         let (sender, receiver) = mpsc::channel(2);
         sender.send(submit(b"publish")).await?;
@@ -327,7 +327,7 @@ async fn opening_rejections_preserve_invalid_envelope_capacity_and_closing() -> 
                     agent_id: "agent".into(),
                     conversation_id: "conversation".into(),
                 },
-                name: "publish_text".into(),
+                name: "send_message".into(),
                 arguments: b"publish".to_vec(),
             })?);
         }

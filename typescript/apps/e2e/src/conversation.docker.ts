@@ -140,7 +140,7 @@ test("owner receives intentional server messages and inspects native typed-answe
     await expect(
       publication
         .locator("pre")
-        .filter({ hasText: /"tool"\s*:\s*"publish_text"/ }),
+        .filter({ hasText: /"tool"\s*:\s*"send_message"/ }),
     ).toBeVisible();
     const outputs = history.locator('[data-record-origin="assistant"]');
     await expect(outputs).toHaveCount(2);
