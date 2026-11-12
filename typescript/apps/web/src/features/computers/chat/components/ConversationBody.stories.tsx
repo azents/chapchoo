@@ -372,6 +372,36 @@ function Fixture({
     <Box maw="49rem" p="md" mx="auto">
       <ConversationBody
         controls={controls}
+        messages={{
+          region: {
+            agentId: "agent",
+            conversationId: "conversation",
+            messages: records
+              .filter(
+                (record) =>
+                  record.kind === "user" || record.kind === "assistant",
+              )
+              .map((record) => ({
+                id: `receipt-${record.key}`,
+                role: record.kind === "user" ? "user" : "agent",
+                order: record.anchor.ordinal,
+                receivedAt: 1n,
+                text: record.content
+                  .flatMap((part) => (part.type === "text" ? [part.text] : []))
+                  .join("\n"),
+              })),
+            through: 100n,
+            window: { type: "latest" },
+            renderedAt: 1,
+          },
+          read: "ready",
+          olderRead: "ready",
+          readingOlder: false,
+          paginationReset: records,
+          onRead: () => {},
+          onOlder: () => {},
+          onLatest: () => {},
+        }}
         copy={copy}
         writable={mode !== "unavailable" && surface !== "history"}
         agentName="Corgi"

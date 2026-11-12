@@ -19,6 +19,7 @@ import type { AgentsProps, InitialAgents } from "../../types";
 import type { ChatCopy } from "../copy";
 import type { ConversationControls } from "../types";
 import type { AgentView } from "@chapchoo/web-core/computer";
+import type { ConversationMessage } from "@chapchoo/web-core/conversation-message-types";
 import type {
   ConversationRecord,
   ConversationRegion,
@@ -284,7 +285,54 @@ function Fixture({
   const [failedDeleted, setFailedDeleted] = useState(false);
   const [retrySubmitted, setRetrySubmitted] = useState(false);
   const [nativeRecorded, setNativeRecorded] = useState(false);
-  const floating = useFloatingChat(input, agent.id, true, records);
+  // Static accepted receipts for this UI fixture, distinct from captured records.
+  const messages: ConversationMessage[] = (
+    [
+      "nativeFailed",
+      "pendingOrder",
+      "authenticationRequired",
+      "nativeStarting",
+      "notStarted",
+    ].includes(mode)
+      ? []
+      : records
+  )
+    .filter((record) => record.kind === "user" || record.kind === "assistant")
+    .map((record) => ({
+      id: `receipt-${record.key}`,
+      role: record.kind === "user" ? "user" : "agent",
+      order: record.anchor.ordinal,
+      receivedAt: 1n,
+      text: record.content
+        .flatMap((part) => (part.type === "text" ? [part.text] : []))
+        .join("\n"),
+    }));
+  if (mode === "pendingInput" && !nativeRecorded) {
+    messages.push({
+      id: "receipt-user:visual-recorded",
+      role: "user",
+      order: 3n,
+      receivedAt: 1n,
+      text: "두 저장소의 작업 현황을 정리해줘.",
+      sourceInputId: "visual-pending-input",
+    });
+  }
+  if (mode === "nativeFailed" || mode === "pendingOrder") {
+    messages.push({
+      id: "receipt-failed-input",
+      role: "user",
+      order: 1n,
+      receivedAt: 1n,
+      text: "안녕하세요",
+      sourceInputId: "failed-input",
+    });
+  }
+  const floating = useFloatingChat(input, agent.id, true, messages, {
+    source: "conversation/snapshot",
+    tail:
+      records.filter((record) => record.kind === "request").at(-1)?.anchor ??
+      null,
+  });
   const copy = chatCopy(locale);
   const c = computerCopy(locale);
   const writable =
@@ -414,9 +462,46 @@ function Fixture({
     computerCopy: c,
     activityLabel: (value) => activityStatus(copy, value),
   });
+  function readOlderMessages(): void {
+    floating.preserveHistory();
+    const start = Math.max(1, pageStart - 10);
+    setRecords((current) => [
+      ...Array.from({ length: pageStart - start }, (_, index) =>
+        fixtureMessage(
+          "assistant",
+          `page-${index + start}`,
+          `Message ${index + start}`,
+          BigInt(index + start),
+        ),
+      ),
+      ...current,
+    ]);
+    setPageStart(start);
+    setOlder(start > 1);
+  }
   return (
     <>
       <Chat
+        messages={{
+          region: {
+            agentId: agent.id,
+            conversationId: "conversation",
+            messages,
+            through: messages.at(-1)?.order ?? 0n,
+            older: older ? BigInt(pageStart) : void 0,
+            window: { type: "latest" },
+            renderedAt: initial.renderedAt,
+          },
+          read: mode === "readerError" ? "error" : "ready",
+          olderRead: "ready",
+          readingOlder: false,
+          paginationReset: agent,
+          onRead: () => {},
+          onOlder: readOlderMessages,
+          onLatest: floating.followLatest,
+        }}
+        recentRecords={{ ...startupRegion, records }}
+        recentRead="ready"
         product={controlled.product}
         focus={controlled.focus}
         agent={agent}
@@ -495,6 +580,7 @@ function Fixture({
               ? [
                   {
                     requestId: "visual-pending",
+                    id: "visual-pending-input",
                     text: "두 저장소의 작업 현황을 정리해줘.",
                     observation: "accepted",
                   },

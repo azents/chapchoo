@@ -1,8 +1,12 @@
 import "server-only";
 import {
   conversationApi,
-  readConversationRegion,
+  readConversationActivity,
 } from "@chapchoo/web-core/conversation";
+import {
+  conversationMessageApi,
+  readConversationMessages,
+} from "@chapchoo/web-core/conversation-messages";
 import { getConfig } from "@/config";
 import { getBackend } from "@/shared/server/backend";
 import { readPageScope } from "@/shared/server/identity";
@@ -20,10 +24,16 @@ export async function loadChat(
   const scope = await readPageScope();
   const backend = getBackend(getConfig());
   const agentId = initial.agent.id;
+  const messages = await scope.read((token) =>
+    readConversationMessages(
+      conversationMessageApi(backend.conversations, token),
+      { agentId, window: { type: "latest" } },
+    ),
+  );
   const region = await scope.read((token) =>
-    readConversationRegion(conversationApi(backend.conversations, token), {
+    readConversationActivity(conversationApi(backend.conversations, token), {
       agentId,
     }),
   );
-  return { initial, initialConversation: region };
+  return { initial, initialConversation: region, initialMessages: messages };
 }

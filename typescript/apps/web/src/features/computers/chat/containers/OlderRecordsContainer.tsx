@@ -1,6 +1,6 @@
 "use client";
 import { useOlderRecords } from "./useOlderRecords";
-import type { ConversationControls } from "../types";
+import type { ConversationControls, MessageControls } from "../types";
 import type { RefObject } from "react";
 export function OlderRecordsContainer({
   controls,
@@ -8,7 +8,7 @@ export function OlderRecordsContainer({
   contentRef,
   followingLatest,
 }: {
-  controls: ConversationControls;
+  controls: ConversationControls | MessageControls;
   viewportRef: RefObject<HTMLDivElement | null>;
   contentRef: RefObject<HTMLDivElement | null>;
   followingLatest: boolean;

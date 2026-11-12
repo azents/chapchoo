@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { readConversationRegion } from "../dist/conversation.js";
+import { readConversationActivity } from "../dist/conversation.js";
 import {
   markConversationInputDeleted,
   mergeConversationRegion,
@@ -53,7 +53,7 @@ function fixture({ started = true, known = false } = {}) {
         return {
           acceptance,
           ownership: 2,
-          delivery: { possibleForwarding: {} },
+          delivery: { failed: {} },
         };
       },
       records: async () => ({ records: [] }),
@@ -63,12 +63,12 @@ function fixture({ started = true, known = false } = {}) {
     },
   };
 }
-test("a not-started accepted input remains completely readable with truthful delivery on reentry", async () => {
+test("a not-started failed input remains completely readable for explicit recovery on reentry", async () => {
   const f = fixture({ started: false });
-  const result = await readConversationRegion(f.api, { agentId: "agent" });
+  const result = await readConversationActivity(f.api, { agentId: "agent" });
   assert.equal(result.header.state, "notStarted");
   assert.equal(result.inputs[0].text, f.text);
-  assert.equal(result.inputs[0].observation, "uncertain");
+  assert.equal(result.inputs[0].observation, "failed");
   assert.deepEqual(f.reads[0].input.scope.target, { notStarted: {} });
   assert.ok(
     f.reads
@@ -82,12 +82,12 @@ test("a not-started accepted input remains completely readable with truthful del
 });
 test("exact closure removes a consumed cached input without mistaking pagination for deletion", async () => {
   const f = fixture();
-  const previous = await readConversationRegion(f.api, { agentId: "agent" });
+  const previous = await readConversationActivity(f.api, { agentId: "agent" });
   f.api.inputs = async (query) => {
     assert.deepEqual(query.knownIds, [f.acceptance.id]);
     return { inputs: [], closedIds: [f.acceptance.id] };
   };
-  const incoming = await readConversationRegion(f.api, {
+  const incoming = await readConversationActivity(f.api, {
     agentId: "agent",
     expectedSnapshotId: "snapshot",
     expectedConversationId: "conversation",
@@ -121,7 +121,7 @@ test("pickup between listing and status read closes the input rather than fabric
   f.api.readInput = async () => {
     throw new Error("Consumed text must not be read");
   };
-  const result = await readConversationRegion(f.api, { agentId: "agent" });
+  const result = await readConversationActivity(f.api, { agentId: "agent" });
   assert.deepEqual(result.inputs, []);
   assert.deepEqual(result.closedInputs, [f.acceptance.id]);
   assert.equal(result.latestInput, undefined);
@@ -136,14 +136,18 @@ test("pickup during byte transfer is confirmed by an exact read; other failures 
       throw new Error("Transfer interrupted");
     };
     f.api.inputResult = async () =>
-      transferred && consumed ? {} : { acceptance: f.acceptance, ownership: 2 };
+      transferred && consumed
+        ? {}
+        : { acceptance: f.acceptance, ownership: 2, delivery: { failed: {} } };
     if (consumed) {
-      const result = await readConversationRegion(f.api, { agentId: "agent" });
+      const result = await readConversationActivity(f.api, {
+        agentId: "agent",
+      });
       assert.deepEqual(result.inputs, []);
       assert.deepEqual(result.closedInputs, [f.acceptance.id]);
     } else {
       await assert.rejects(
-        readConversationRegion(f.api, { agentId: "agent" }),
+        readConversationActivity(f.api, { agentId: "agent" }),
         /Transfer interrupted/,
       );
     }
@@ -152,14 +156,14 @@ test("pickup during byte transfer is confirmed by an exact read; other failures 
 
 test("first native binding retains the original acceptance target without retargeting a mutation", async () => {
   const f = fixture();
-  const result = await readConversationRegion(f.api, { agentId: "agent" });
+  const result = await readConversationActivity(f.api, { agentId: "agent" });
   assert.equal(result.inputs[0].text, f.text);
   assert.deepEqual(f.acceptance.target, { notStarted: {} });
   assert.deepEqual(f.reads[0].input.scope.target, { snapshotId: "snapshot" });
 });
 test("active updates reuse immutable cached input text while refreshing only actual retained result facts", async () => {
   const f = fixture({ known: true });
-  const result = await readConversationRegion(f.api, {
+  const result = await readConversationActivity(f.api, {
     agentId: "agent",
     expectedSnapshotId: "snapshot",
     expectedConversationId: "conversation",
@@ -178,14 +182,14 @@ test("active updates reuse immutable cached input text while refreshing only act
     result,
   );
   assert.equal(merged.inputs[0].text, "unchanged original");
-  assert.equal(merged.inputs[0].observation, "uncertain");
+  assert.equal(merged.inputs[0].observation, "failed");
 });
 test("deleted input bodies are not reread and a tombstone removes cached text after reentry", async () => {
   const f = fixture({ started: false, known: true });
   f.api.inputs = async () => ({
     inputs: [{ acceptance: f.acceptance, totalBytes: 0n, deleted: true }],
   });
-  const result = await readConversationRegion(f.api, { agentId: "agent" });
+  const result = await readConversationActivity(f.api, { agentId: "agent" });
   assert.equal(result.inputs[0].deleted, true);
   assert.equal(result.inputs[0].text, undefined);
   assert.equal(result.latestInput, undefined);
@@ -223,7 +227,7 @@ test("deleted input bodies are not reread and a tombstone removes cached text af
     mergeConversationRegion(ack, { ...restored, inputs: [] }).inputs[0].text,
     undefined,
   );
-  const paged = await readConversationRegion(f.api, {
+  const paged = await readConversationActivity(f.api, {
     agentId: "agent",
     expectedConversationId: "conversation",
     inputBefore: { acceptedAt: 1n, requestId: "old" },
@@ -265,7 +269,7 @@ test("Stop result observation is read-only and limited to its exact source and c
     assert.equal(input.requestId, "stop-request");
     return { receipt: { state: 2 } };
   };
-  const result = await readConversationRegion(f.api, {
+  const result = await readConversationActivity(f.api, {
     agentId: "agent",
     stop: {
       conversationId: "conversation",
@@ -277,7 +281,7 @@ test("Stop result observation is read-only and limited to its exact source and c
     requestId: "stop-request",
     observation: "published",
   });
-  const stale = await readConversationRegion(f.api, {
+  const stale = await readConversationActivity(f.api, {
     agentId: "agent",
     stop: {
       conversationId: "conversation",
@@ -301,7 +305,7 @@ test("latest startup diagnosis stays current while browsing older failed inputs 
     preparation:
       requestId === "latest" ? { possibleForwarding: {} } : { failed: 3 },
   });
-  const first = await readConversationRegion(f.api, {
+  const first = await readConversationActivity(f.api, {
     agentId: "agent",
     expectedConversationId: "conversation",
     knownInputs: [f.acceptance.id],
@@ -321,7 +325,7 @@ test("latest startup diagnosis stays current while browsing older failed inputs 
       acceptedAt: 40n,
     },
   });
-  const older = await readConversationRegion(f.api, {
+  const older = await readConversationActivity(f.api, {
     agentId: "agent",
     expectedConversationId: "conversation",
     knownInputs: [f.acceptance.id],
@@ -346,8 +350,9 @@ for (const when of ["before-status", "during-body"]) {
         ? { ...f.acceptance, id: "new-operation", acceptedAt: 30n }
         : f.acceptance,
       ownership: 1,
+      delivery: { failed: {} },
     });
-    const region = await readConversationRegion(f.api, { agentId: "agent" });
+    const region = await readConversationActivity(f.api, { agentId: "agent" });
     assert.deepEqual(region.inputs, []);
     assert.deepEqual(region.closedInputs, [f.acceptance.id]);
     assert.equal(region.latestInput, undefined);
@@ -382,7 +387,7 @@ test("a newer deleted failure does not hide an earlier preparing input", async (
     ],
     latest: live,
   });
-  const current = await readConversationRegion(f.api, {
+  const current = await readConversationActivity(f.api, {
     agentId: "agent",
     expectedConversationId: "conversation",
     knownInputs: [live.id],
@@ -402,7 +407,7 @@ test("a newer deleted failure does not hide an earlier preparing input", async (
     inputs: [{ acceptance: tombstone, totalBytes: 0n, deleted: true }],
     latest: live,
   });
-  const older = await readConversationRegion(f.api, {
+  const older = await readConversationActivity(f.api, {
     agentId: "agent",
     expectedConversationId: "conversation",
     knownInputs: [tombstone.id],

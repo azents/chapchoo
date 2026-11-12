@@ -10,7 +10,7 @@ test("underfilled Chat loads successive pages without losing bottom follow", asy
   );
   const log = page.getByRole("log", { name: "Message", exact: true });
   await expect(
-    page.locator('[id="conversation-assistant%3Apage-20"]'),
+    page.locator('[id="message-receipt-assistant%3Apage-20"]'),
   ).toBeAttached();
   await expect
     .poll(() =>
@@ -64,7 +64,7 @@ for (const width of [390, 1280]) {
 }
 
 for (const width of [390, 1280]) {
-  test(`pending input matches native message geometry without lifecycle captions at ${width}`, async ({
+  test(`accepted receipt keeps one stable message across native insertion at ${width}`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 844 });
@@ -83,14 +83,14 @@ for (const width of [390, 1280]) {
       await document.fonts.ready;
     });
     const measurements: { width: number; height: number }[] = [];
-    for (const opacity of ["0.6", "1"]) {
-      if (opacity === "1") {
+    for (const inserted of [false, true]) {
+      if (inserted) {
         await page
           .getByRole("button", { name: "Record pending input", exact: true })
           .click();
       }
       await expect(message).toHaveCount(1);
-      await expect(message).toHaveCSS("opacity", opacity);
+      await expect(message).toHaveCSS("opacity", "1");
       measurements.push(
         await message.locator('[class*="userBubble"]').evaluate((bubble) => {
           const bounds = bubble.getBoundingClientRect();
@@ -456,16 +456,16 @@ test("main Chat automatically prepends older messages and retains its reading an
   const top = await log.evaluate((element) => {
     element.scrollTop = 0;
     return element
-      .querySelector('[id="conversation-assistant%3Apage-11"]')
+      .querySelector('[id="message-receipt-assistant%3Apage-11"]')
       ?.getBoundingClientRect().top;
   });
   await expect(
-    page.locator('[id="conversation-assistant%3Apage-1"]'),
+    page.locator('[id="message-receipt-assistant%3Apage-1"]'),
   ).toBeAttached();
   await expect
     .poll(() =>
       page
-        .locator('[id="conversation-assistant%3Apage-11"]')
+        .locator('[id="message-receipt-assistant%3Apage-11"]')
         .evaluate((element) => element.getBoundingClientRect().top),
     )
     .toBeCloseTo(top ?? 0, 0);
@@ -645,7 +645,7 @@ test("not-started and preparing conversations never masquerade as execution fail
     ).toHaveCount(0);
   }
 });
-test("sending and failed inputs share dimmed user bubbles without captions and new input below retained history", async ({
+test("accepted receipt stays distinct from a dimmed local send and failed-delivery controls", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -656,8 +656,12 @@ test("sending and failed inputs share dimmed user bubbles without captions and n
   await expect(bubbles).toHaveCount(2);
   await expect(bubbles.nth(0)).toContainText("안녕하세요");
   await expect(bubbles.nth(1)).toContainText("새 메시지");
+  await expect(bubbles.nth(0)).toHaveCSS("opacity", "1");
+  await expect(bubbles.nth(1)).toHaveCSS("opacity", "0.6");
+  await expect(page.locator("[data-input-operation]")).toContainText(
+    "Codex 실행 실패",
+  );
   for (const bubble of await bubbles.all()) {
-    await expect(bubble).toHaveCSS("opacity", "0.6");
     await expect(bubble.getByRole("status")).toHaveCount(0);
     expect(
       await bubble.evaluate((element) => {
@@ -704,13 +708,13 @@ test("confirmed failed messages expose explicit retry and delete without retryin
   await expect(
     log.getByRole("button", { name: "재시도", exact: true }),
   ).toHaveCount(0);
-  await expect(log.locator('[data-kind="user"]')).toHaveCount(1);
+  await expect(log.locator('[data-kind="user"]')).toHaveCount(2);
   await expect(log.locator('[data-kind="user"]').first()).toContainText(
     "안녕하세요",
   );
   await expect(log.locator('[data-kind="user"]').first()).toHaveCSS(
     "opacity",
-    "0.6",
+    "1",
   );
 });
 test("auth withdrawal replaces the protected conversation surface", async ({

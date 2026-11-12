@@ -160,7 +160,7 @@ test("user and distinct assistant utterances render safe Markdown with activity 
     "noopener noreferrer",
   );
   await expect(user).toHaveAttribute("aria-label", "You");
-  await expect(page.locator('[data-kind="assistant"]')).toHaveCount(2);
+  await expect(page.locator('[data-kind="agent"]')).toHaveCount(2);
   await expect(
     page.getByRole("heading", { name: "First utterance" }),
   ).toBeVisible();
@@ -244,16 +244,14 @@ test("history shows a captured user message without a second delivery row", asyn
   await page.goto(
     "/iframe.html?id=chat-conversation-body--captured-history&viewMode=story",
   );
-  await expect(page.getByRole("button", { name: "나 ㅎㅇ" })).toBeVisible();
+  const captured = page.getByRole("button").filter({ hasText: "ㅎㅇ" });
+  await expect(captured).toBeVisible();
+  await expect(captured.getByText("나", { exact: true })).toHaveCount(0);
   await expect(page.getByText("메시지 · 에이전트에 전달됨")).toHaveCount(0);
-  const unmatched = page
-    .getByRole("region", { name: "나" })
-    .filter({ hasText: "전달되지 않은 메시지" });
-  await expect(unmatched).toBeVisible();
-  await expect(unmatched).toHaveCSS("opacity", "0.6");
-  await expect(unmatched.getByText("전달 실패", { exact: true })).toHaveCount(
-    0,
-  );
+  await expect(
+    page.getByText("전달되지 않은 메시지", { exact: true }),
+  ).toHaveCount(0);
+  await expect(page.locator("[data-input-operation]")).toHaveCount(0);
 });
 
 for (const story of [

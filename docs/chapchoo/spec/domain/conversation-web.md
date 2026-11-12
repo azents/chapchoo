@@ -4,55 +4,74 @@ title: "Private conversation reader and controls"
 
 # Private conversation reader and controls
 
-The General Chat surface presents source-bound native observations and retained
-product operations. It is not a local transcript simulator, a durable browser
-feed or evidence that credentials or a model work.
-
-The independent [chat receipt store](conversation-storage.md#independent-chat-receipts)
-has protected owner reads, but this browser still reads native records and
-temporary inputs. Receipt persistence alone does not switch the main Chat or
-full-history presentation to a message-only source.
+The General Chat surface renders accepted user messages and intentional Agent
+publications from the independent
+[chat receipt store](conversation-storage.md#independent-chat-receipts).
+Ordinary and final native/model text remains captured full-record history, not
+an automatic Chat message or a fallback when no publication exists. Actual live
+permission/form requests and delivery-recovery controls remain independently
+available. This is not evidence that real model credentials work.
 
 ## Initial rendering and active reads
 
-Exact-Team/private-owner route admission loads both the Agent and initial
-conversation region through the request-owned server session. The HTML renders
-that region and hydrates the same values. Reads do not create a conversation,
+Exact-Team/private-owner route admission loads the Agent, initial receipt-message
+region and actual activity controls through the request-owned server session.
+The HTML renders those values and hydrates exactly that state. Reads do not create a conversation,
 power on a Computer, prepare an installation or start native work.
 
-The current transcript read owner continues on a one-second cadence while the
-document is visible and the account remains authorized. Full history mounts its
-own source-bound read owner, seeded from the current admitted region, so paging
-older history does not replace current-head polling. Each owner coalesces refreshes,
-allows at most one read in flight, and rereads on focus/online activation.
-Hydration does not issue an immediate duplicate read. Hidden documents stop scheduling
-new reads. Unmounted owners discard late responses. Request authentication,
+Message and activity read owners continue independently on a one-second cadence
+while the document is visible and the account remains authorized. Activity reads
+actual live request occurrences, latest plan and input operations, without scanning
+general native transcript metadata or tool fields to discover Chat messages.
+Original input text is read there only for confirmed failed-input retry.
+Opening Activity starts a separate full-record read for its recent preview.
+Full history mounts its own source-bound reader from an actually loaded recent
+region or an explicit initial full-record fetch; an activity-only region is not
+treated as complete history. Closing either consumer withdraws its read owner.
+Each owner coalesces refreshes, allows at most one read in flight, and rereads on
+focus/online activation. Primary hydration does not issue an immediate duplicate
+read. Hidden documents stop scheduling new reads, and withdrawn/unmounted
+lifetimes discard late responses. Request authentication,
 Origin/POST and cookie disposition remain owned by the existing web boundary.
 
 Both the main Chat viewport and full history automatically request older pages
 near the top, including filling an underfull viewport. Page insertion retains the
-visible reading anchor. Latest polling continues after paging and preserves each
-stream's oldest cursor independently; an exhausted native or retained-input stream
-does not restart when its sibling still has pages. A page admitted during an
-in-flight poll is queued, not consumed without execution. An unchanged cursor
-does not trigger repeated automatic page requests. Failed reads recover on the
-normal cadence with truthful error feedback; there are no manual read-reload or
-older-page buttons. These reads never replay Send, an answer, deletion or Stop.
+visible reading anchor. Chat pages use product-conversation receipt order, not a
+native snapshot/ordinal or retained-input cursor. Newer catch-up freezes a finite
+`through` head and continues each bounded page before observing a later head.
+Older reads cannot advance that frontier or discard unfinished catch-up. A
+latest-window selection supersedes an in-flight older response and replaces the
+window rather than merging a disconnected prefix across a gap.
+Full history separately preserves its native-record oldest cursor. It reads
+only actual captured records, not temporary input bodies or local drafts as
+synthetic user records. Current delivery/error recovery remains in Chat's
+explicit operation controls.
+A page admitted during an in-flight poll is queued. An unchanged cursor does not
+trigger repeated automatic page requests. Failed older reads yield to current-head
+freshness and then retry their exact cursor on the read cadence. Truthful read
+errors do not authorize effect replay; Chat also exposes read-only recovery.
+These reads never replay Send, an answer, deletion or Stop.
 Paging progress/errors are separate from current-head freshness: a failing older
 page remains visible as a read error without withdrawing Send authority established
 by successful current-head observation and the existing admission checks.
 
-The client sends bounded known-record/update hints, not a durable cursor.
-Ordinal, paging index and accepted-time request values use canonical int64 decimal
+Native-history clients send bounded known-record/update hints, not a durable
+cursor. Receipt order, native ordinal, paging index and accepted-time request values use canonical int64 decimal
 strings so browser query keys stay JSON-safe; server ingress validates syntax and
 range before restoring exact bigint values. This is not floating-point coercion. It
-assembles complete field bytes before UTF-8 decoding and validates the empty final
+assembles complete message/field bytes before UTF-8 decoding and validates the empty final
 suffix under the same source authority. One initial coherent field metadata view
 selects each finite extent, so appends can continue without starving the observed
 complete body. The returned known ordinal includes the initial field ordinals,
 not later updates. New fields wait for the next poll. Replacing an unread extent
 still rejects the read; a final field read rechecks owner/source authority.
-Recent/older records and retained input pages use source-bound anchors. The
+Message pages contain at most 25 metadata entries; complete bodies use 32-KiB
+byte chunks, including an empty final suffix check under current private
+conversation authority. Missing or changed authorized bodies are explicit read
+failures, not empty messages or native-output substitution. Immutable receipt
+identity/order governs merging; equal text or reused request nonces never merge
+distinct messages. A native-source replacement does not reset Chat receipts.
+Recent/older native records and retained input pages use source-bound anchors. The
 current plan has its own read even outside the recent region. Both the Chat header
 portrait and status control open the same activity sheet. The activity sheet
 provides a character/name identity row linking to the current Agent's canonical
@@ -74,7 +93,7 @@ row design. Selection enters a separate full-height history view at that record 
 keyboard focus on the selected entry after the activity sheet finishes closing.
 Opening history without a selection also leaves focus inside that view. Closing
 the sheet back to the transcript restores the status control.
-User and assistant conversation is included. Each chronological record has an
+User and ordinary native/model text is included in full records. Each chronological record has an
 independent single-line summary with a left chevron, ACP-kind icon, title, plain
 opening preview and separate status. Opening a record adds its full content
 below without changing the summary geometry. There is no event aggregation.
@@ -83,7 +102,21 @@ kinds. Recognized structured arguments and native locations provide meaningful
 subjects; unspecified or malformed input remains available as exact raw JSON.
 Read/search/command output, retained before/after edits, locations and other
 typed content remain inspectable without inferred counts or fabricated results.
-User and Agent identity have distinct icons. Preview text strips Markdown through
+User rows have a user icon; intentional publication has a paper plane; ordinary
+native/model text has a text icon and localized Output label without the Agent
+name. User/publication rows omit visible sender-name labels while retaining
+accessible role semantics. Both collapsed rows preview the normalized beginning
+of the actual body, not a generic sent-action title. Their rail follows the
+current scoped Mantine primary filled color.
+
+Publication classification decodes the captured MCP input's exact
+`server: "chapchoo"` and `tool: "publish_text"` identity. A matching display title,
+generic kind or body text is insufficient. The pinned adapter supplies this
+structured identity rather than a separate ACP tool name. One captured tool
+item displays readable publication text and its actual result/error; nested
+original tool input/output remains inspectable. Invocation intent or a missing
+result does not prove physical publication. No synthetic assistant row is added.
+Preview text strips Markdown through
 its syntax tree; expanded text retains Markdown. Adjacent streaming text chunks
 concatenate verbatim rather than inserting whitespace.
 The entire expanded left gutter, including panel/viewport-edge padding, is a
@@ -93,14 +126,17 @@ scrolling remain usable. Closing restores focus to the opener.
 The history reader unmounts on close and the activity sheet remains the return
 destination. Sheet headings and close actions sit outside their scrolling content.
 
-Conversation identity and source snapshot are compared independently. A replaced
-source clears old live content and paging before the new source refills. Ordinary
+Product conversation identity and native source snapshot are compared independently.
+A replaced native source clears source-bound activity/history and paging before
+refill, without removing accepted receipt messages. A changed product conversation
+replaces the receipt window too. Ordinary
 loading/error feedback does not fabricate a new conversation or native context.
 Same-source updates retain original record order and update the matching native
 message. Viewport anchoring preserves an existing record's screen offset while
 the reader is detached. Both viewports follow new events at the bottom. While
-reading above it, only a genuinely newer source-bound native record exposes the
-new-events-below action. Prepending old pages, updating existing streaming content,
+reading above it, a genuinely newer message receipt or actual live question
+exposes Chat's new-events-below action. Full history independently follows newer
+source-bound native records. Prepending old pages, updating existing streaming content,
 or merely leaving the bottom does not. Selecting that action resumes following;
 there is no always-visible latest action.
 
@@ -112,15 +148,21 @@ boundary. A conversation shorter than that boundary still has internal travel
 above its resting latest position, and the viewport allows edge overscroll
 instead of containing it. The document itself does not scroll.
 The header and composer stay available while conversation content
-scrolls internally. The main transcript contains user/assistant conversation and
+scrolls internally. The main transcript contains accepted user/Agent messages and
 necessary questions or permission input. Tool, reasoning, plan, terminal, notice
 and state records belong to the recent preview and full history, not duplicate
-transcript disclosures. A confirmed native user message is the visible message
-in both the transcript and full history; Chat does not repeat a separate
-delivery receipt beside it. Pending input disappears at actual native
-Inserted/Steered acceptance independently of when native history appears.
-There is no ID association, text matching or message morphing between them;
-a short natural display gap is allowed.
+transcript disclosures. A user receipt remains the main message regardless of
+native insertion, steering, input cleanup or source replacement. Its original
+input ID can correlate a current local acknowledgement without duplicating the
+accepted body. When a response is lost and pickup precedes the first input poll,
+an unambiguous same-Agent/product-conversation USER receipt can correlate the
+currently outstanding nonce while its input ID is unknown. A known ID must
+match exactly; ambiguous reused nonces remain uncorrelated. This establishes
+Chat acceptance, never native delivery, permanent deduplication or recovery of
+an absent operation. Only an unchanged matching draft is cleared.
+A locally acknowledged operation awaiting its receipt read has a
+status, not a second accepted text row. Uncertain/sending drafts and confirmed
+failed-input recovery remain operational controls, not native-history imports.
 The down arrow signals new content that arrived while the owner was reading
 above latest, rather than a detached position alone. Reaching latest or selecting
 the arrow acknowledges it.
@@ -156,17 +198,17 @@ first be selected. Input-level reported startup failures remain readable on
 reentry rather than being reduced to generic delivery failure. Possible setup
 forwarding does not replace known delivery uncertainty in an input label.
 
-Pending and failed text uses the same right-aligned user-bubble presentation as
-native user messages: a localized author label above a padded Markdown body.
-Pending input alone has opacity 0.6 and no delivery/lifecycle caption. Explicit
-failure recovery actions remain separate. Paragraph default margins do not add
-empty space inside the user bubble.
-Retained inputs precede newer local
-submissions, so a pending message does not jump above earlier failures.
+Unacknowledged local text uses the same right-aligned user-bubble presentation as
+accepted user receipts: a localized author label above padded Markdown.
+Local pending text alone has opacity 0.6 and no delivery/lifecycle caption;
+accepted receipts are not dimmed merely because native delivery is pending or
+failed. Confirmed failure/preparation/uncertainty and explicit recovery actions
+remain separate, without rendering the retained input as a second accepted body.
+Paragraph default margins do not add empty space inside the user bubble.
 
 ## Text, requests and retained operation facts
 
-User content and assistant utterances use Markdown without raw HTML or automatic
+Receipt content and retained native text use Markdown without raw HTML or automatic
 external-image loading. The body uses the small text token; the composer retains
 the normal input size. Assistant authors include the selected Agent profile.
 Links use the common theme color. Disclosure transitions respect reduced motion.
@@ -182,10 +224,11 @@ Text plans render their own typed text rather than assuming generic content.
 
 Send uploads exact UTF-8 pieces through the generated owner client. Acceptance,
 preparation, possible forwarding, known failure and missing evidence remain
-different pending observations. Original submitted text survives navigation
-until actual Inserted/Steered pickup ends that input. Native history is not
-fabricated or correlated to its deleted input. Steering does not manufacture a
-native message ID.
+different pending observations. Completed acceptance also persists the independent
+user receipt. Original input text survives until actual Inserted/Steered pickup
+or explicit body deletion ends that temporary input; accepted Chat remains.
+Native history is not fabricated from receipts or deleted inputs. Steering does
+not manufacture a native message ID.
 Recovery of a retained Request ID removes its matching local uncertain entry.
 An owner may then intentionally send identical text as a new operation; recovery
 itself never submits another effect or treats text equality as request identity.
@@ -280,11 +323,14 @@ not revoke an acknowledged save. No mutation is automatically replayed.
 - [Primary rendering](web-rendering.md) — resolved server data and client continuation ownership.
 - [Web sessions](web-session.md) — request credentials, account withdrawal and cookie authority.
 - [Native lifetime](native-harness.md) — actual preparation/session ownership and whole-scope retirement.
+- [Native-owner server tools](server-tools.md) — intentional publication and actual captured invocation identity.
 - [Verification boundaries](acceptance.md) — component, deterministic protocol fixture and real-model evidence are distinct.
 
 ## References
 
 - [`Chat server loader`](../../../../typescript/apps/web/src/features/computers/chat/server/loadChat.ts)
-- [`Conversation read owner`](../../../../typescript/apps/web/src/features/computers/chat/containers/useConversationReader.ts)
+- [`Message read owner`](../../../../typescript/apps/web/src/features/computers/chat/containers/useMessageReader.ts)
+- [`Activity and history read owner`](../../../../typescript/apps/web/src/features/computers/chat/containers/useConversationReader.ts)
 - [`Conversation renderer`](../../../../typescript/apps/web/src/features/computers/chat/components/ConversationBody.tsx)
 - [`Generated-client boundary`](../../../../typescript/packages/web-core/src/conversation.ts)
+- [`Message client boundary`](../../../../typescript/packages/web-core/src/conversation-messages.ts)

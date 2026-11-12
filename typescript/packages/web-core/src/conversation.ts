@@ -325,19 +325,34 @@ export async function readConversationRecord(
   await api.fields(record);
   return value;
 }
-export async function readConversationRegion(
+export interface ConversationReadInput {
+  agentId: string;
+  before?: ConversationAnchor;
+  expectedSnapshotId?: string;
+  expectedConversationId?: string;
+  known?: { key: string; updatedOrdinal: bigint }[];
+  inputBefore?: Wire.InputAnchor;
+  knownInputs?: string[];
+  checkInputs?: string[];
+  stop?: { requestId: string; conversationId: string; snapshotId: string };
+}
+export function readConversationRegion(
   api: ConversationApi,
-  input: {
-    agentId: string;
-    before?: ConversationAnchor;
-    expectedSnapshotId?: string;
-    expectedConversationId?: string;
-    known?: { key: string; updatedOrdinal: bigint }[];
-    inputBefore?: Wire.InputAnchor;
-    knownInputs?: string[];
-    checkInputs?: string[];
-    stop?: { requestId: string; conversationId: string; snapshotId: string };
-  },
+  input: ConversationReadInput,
+): Promise<ConversationRegion> {
+  return readNativeRegion(api, input, "history");
+}
+/** Live controls require actual requests and plan, not a transcript body scan. */
+export function readConversationActivity(
+  api: ConversationApi,
+  input: Omit<ConversationReadInput, "before" | "known">,
+): Promise<ConversationRegion> {
+  return readNativeRegion(api, input, "activity");
+}
+async function readNativeRegion(
+  api: ConversationApi,
+  input: ConversationReadInput,
+  surface: "activity" | "history",
 ): Promise<ConversationRegion> {
   const header = conversationHeader(
     input.agentId,
@@ -360,14 +375,15 @@ export async function readConversationRegion(
           : { notStarted: {} },
       }
     : undefined;
-  const retainedPage = inputScope
-    ? await api.inputs({
-        scope: inputScope,
-        before: sameSource ? input.inputBefore : undefined,
-        limit: 24,
-        knownIds: sameSource ? (input.checkInputs ?? []) : [],
-      })
-    : { inputs: [], latest: undefined, closedIds: [] };
+  const retainedPage =
+    inputScope && surface === "activity"
+      ? await api.inputs({
+          scope: inputScope,
+          before: sameSource ? input.inputBefore : undefined,
+          limit: 24,
+          knownIds: sameSource ? (input.checkInputs ?? []) : [],
+        })
+      : { inputs: [], latest: undefined, closedIds: [] };
   const closedInputs = new Set(retainedPage.closedIds);
   const retained = retainedPage.inputs;
   const inputs: NonNullable<ConversationRegion["inputs"]> = [];
@@ -387,6 +403,7 @@ export async function readConversationRegion(
     let text: string | undefined;
     if (
       !item.deleted &&
+      inputObservation(status) === "failed" &&
       !(sameSource && input.knownInputs?.includes(receipt.id))
     ) {
       try {
@@ -508,11 +525,6 @@ export async function readConversationRegion(
       renderedAt: Date.now(),
     };
   }
-  const region = await api.records({
-    source: header.source,
-    before,
-    limit: 24,
-  });
   const live =
     header.native && header.conversationId
       ? (
@@ -523,6 +535,31 @@ export async function readConversationRegion(
           })
         ).requests
       : [];
+  const region: Wire.RecordRegion =
+    surface === "history"
+      ? await api.records({ source: header.source, before, limit: 24 })
+      : {
+          records: live
+            .map((request) => {
+              if (!request.occurrence)
+                throw new Error("Live question occurrence is unavailable");
+              // The normalizer emits exactly one REQUEST record at slot zero
+              // for this captured occurrence. Its body is read from that record.
+              return {
+                kind: RecordKind.RECORD_KIND_REQUEST,
+                nativeId: request.occurrence.occurrenceId,
+                anchor: { ordinal: request.occurrence.ordinal, index: 0n },
+                updatedOrdinal: request.occurrence.ordinal,
+              };
+            })
+            .sort((left, right) =>
+              left.anchor.ordinal > right.anchor.ordinal
+                ? -1
+                : left.anchor.ordinal < right.anchor.ordinal
+                  ? 1
+                  : 0,
+            ),
+        };
   const records: ConversationRecord[] = [];
   for (const metadata of region.records) {
     const key = `${kinds[metadata.kind]}:${metadata.nativeId}`;
@@ -572,7 +609,9 @@ export async function readConversationRegion(
     stop,
     before,
     older:
-      region.records.length === 24 ? region.records.at(-1)?.anchor : undefined,
+      surface === "history" && region.records.length === 24
+        ? region.records.at(-1)?.anchor
+        : undefined,
     renderedAt: Date.now(),
   };
 }

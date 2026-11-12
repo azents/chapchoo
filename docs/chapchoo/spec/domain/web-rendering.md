@@ -33,11 +33,13 @@ replace; no current feature needs an invented minor selection.
 Admin issuance/expiry values use the account's independent regional format and
 time zone instead of fixed UTC formatting and its suffix.
 
-Chat hydrates the server's exact initial conversation region, then its
-[active read owner](conversation-web.md#initial-rendering-and-active-reads)
-continues source-bound reads on a coalesced visible-document cadence. Source
-replacement clears the old region before refill; this is ordinary loading, not
-a second staged primary snapshot or a durable browser feed.
+Chat renders and hydrates the server's exact accepted-message region plus real
+activity controls. Its independent
+[active readers](conversation-web.md#initial-rendering-and-active-reads) continue
+on a coalesced visible-document cadence. Receipt paging uses the product
+conversation and finite receipt-order frontier; source-bound activity/history
+has separate ownership. Replacing a native source does not erase accepted Chat.
+These are read windows, not a second staged primary snapshot or durable browser feed.
 
 Existing selected-team and inventory-kind routes remain pathname-owned. Form
 inputs, authentication challenge bindings, newly issued proof links and destructive

@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import { hasRecordArrival } from "../recordArrival";
-import type { ConversationAnchor } from "@chapchoo/web-core/conversation-types";
+import { hasMessageArrival, hasRecordArrival } from "../recordArrival";
+import type { RecordArrival } from "../recordArrival";
 import type { RefObject } from "react";
 
 export interface FloatingChat {
@@ -21,7 +21,8 @@ export function useFloatingChat(
   input: string,
   conversationKey: string,
   active = true,
-  updates: readonly { anchor: ConversationAnchor }[] = [],
+  updates: readonly { order: bigint }[] = [],
+  requestHead?: RecordArrival,
 ): FloatingChat {
   const shellRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -39,19 +40,25 @@ export function useFloatingChat(
   const [unseen, setUnseen] = useState(false);
   const previousHead = useRef({
     source: conversationKey,
-    tail: updates.at(-1)?.anchor ?? null,
+    tail: updates.at(-1)?.order ?? null,
   });
+  const previousRequest = useRef(requestHead);
   useLayoutEffect(() => {
     const head = {
       source: conversationKey,
-      tail: updates.at(-1)?.anchor ?? null,
+      tail: updates.at(-1)?.order ?? null,
     };
-    const unseenUpdate = hasRecordArrival(previousHead.current, head);
+    const unseenUpdate = hasMessageArrival(previousHead.current, head);
+    const unseenRequest =
+      previousRequest.current && requestHead
+        ? hasRecordArrival(previousRequest.current, requestHead)
+        : false;
     previousHead.current = head;
-    if (unseenUpdate && !following.current) {
+    previousRequest.current = requestHead;
+    if ((unseenUpdate || unseenRequest) && !following.current) {
       setUnseen(true);
     }
-  }, [updates, conversationKey]);
+  }, [updates, conversationKey, requestHead]);
   const schedulePin = useCallback((): void => {
     cancelAnimationFrame(frame.current);
     frame.current = requestAnimationFrame(() => {

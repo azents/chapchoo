@@ -109,4 +109,22 @@ export const conversationReviewRecords: ConversationRecord[] = [
       9n,
     ),
   },
+  {
+    ...record("tool", "draft-publication", "", 10n),
+    toolKind: "execute",
+    title: "mcp.chapchoo.publish_text",
+    status: "completed",
+    toolInput: {
+      json: JSON.stringify({
+        server: "chapchoo",
+        tool: "publish_text",
+        arguments: {
+          text: "테마의 **색상 변수**를 정리했습니다.\n\n루트에서 `pnpm test`를 실행하실 수 있습니다.",
+        },
+      }),
+    },
+    toolOutput: {
+      json: '{"result":{"content":[{"type":"text","text":"Message accepted."}],"structuredContent":{"message_id":"fixture-message"}},"error":null}',
+    },
+  },
 ];

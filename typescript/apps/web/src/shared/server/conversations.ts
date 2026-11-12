@@ -4,11 +4,17 @@ import {
   answerDelivery,
   conversationApi,
   inputObservation,
+  readConversationActivity,
   readConversationRegion,
   stopObservation,
   submitConversationAnswer,
   submitConversationInput,
 } from "@chapchoo/web-core/conversation";
+import { conversationMessageWindow } from "@chapchoo/web-core/conversation-message-types";
+import {
+  conversationMessageApi,
+  readConversationMessages,
+} from "@chapchoo/web-core/conversation-messages";
 import {
   readHarnessSupply,
   saveHarnessSupply,
@@ -30,6 +36,57 @@ const operation = z
   .object({ agentId: id, conversationId: id, requestId: id })
   .strict();
 export const conversationsRouter = router({
+  messages: procedure
+    .input(
+      z
+        .object({
+          agentId: id,
+          expectedConversationId: id.nullable().optional(),
+          window: conversationMessageWindow,
+        })
+        .strict(),
+    )
+    .query(({ ctx, input }) =>
+      attempt(() =>
+        ctx.session.authenticated((token) =>
+          readConversationMessages(
+            conversationMessageApi(ctx.backend.conversations, token),
+            input,
+          ),
+        ),
+      ),
+    ),
+  activity: procedure
+    .input(
+      z
+        .object({
+          agentId: id,
+          expectedSnapshotId: z.string().max(512).optional(),
+          expectedConversationId: id.optional(),
+          inputBefore: conversationReadInputAnchor.optional(),
+          knownInputs: z.array(id).max(24).optional(),
+          checkInputs: z.array(id).max(25).optional(),
+          stop: z
+            .object({
+              requestId: id,
+              conversationId: id,
+              snapshotId: z.string().min(1).max(512),
+            })
+            .strict()
+            .optional(),
+        })
+        .strict(),
+    )
+    .query(({ ctx, input }) =>
+      attempt(() =>
+        ctx.session.authenticated((token) =>
+          readConversationActivity(
+            conversationApi(ctx.backend.conversations, token),
+            input,
+          ),
+        ),
+      ),
+    ),
   supply: procedure
     .input(z.object({ agentId: id }).strict())
     .query(({ ctx, input }) =>

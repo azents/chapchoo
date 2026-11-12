@@ -127,6 +127,7 @@ their own evidence.
 ## Connections
 
 - [Conversation storage](conversation-storage.md) — Stable completed chat receipts and independent captured history.
+- [Private conversation web](conversation-web.md) — Message-only Chat and separate actual invocation/output records.
 - [Native preparation and lifetime](native-harness.md) — Exact context, actual-start provision and owned retirement.
 - [Connector process](connector-process.md) — Current operational routes across reconnect and key refresh.
 - [Control services](computer-control-rpc.md) — Component authorization and separate command/peer boundaries.

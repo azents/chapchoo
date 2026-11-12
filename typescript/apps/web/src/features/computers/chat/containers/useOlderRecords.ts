@@ -1,10 +1,10 @@
 "use client";
 import { useEffect, useRef } from "react";
-import type { ConversationControls } from "../types";
+import type { ConversationControls, MessageControls } from "../types";
 import type { RefObject } from "react";
 /** One request per source-bound cursor; prepend anchoring remains with the caller. */
 export function useOlderRecords(
-  controls: ConversationControls,
+  controls: ConversationControls | MessageControls,
   viewportRef: RefObject<HTMLDivElement | null>,
   contentRef: RefObject<HTMLDivElement | null>,
   followingLatest: boolean,
@@ -15,14 +15,19 @@ export function useOlderRecords(
   useEffect(() => {
     requested.current = null;
   }, [controls.paginationReset]);
-  const cursor = JSON.stringify([
-    controls.region.header.conversationId,
-    controls.region.header.source?.snapshotId,
-    controls.region.older?.ordinal.toString(),
-    controls.region.older?.index.toString(),
-    controls.region.inputOlder?.acceptedAt.toString(),
-    controls.region.inputOlder?.requestId,
-  ]);
+  const region = controls.region;
+  const cursor = JSON.stringify(
+    "header" in region
+      ? [
+          region.header.conversationId,
+          region.header.source?.snapshotId,
+          region.older?.ordinal.toString(),
+          region.older?.index.toString(),
+          region.inputOlder?.acceptedAt.toString(),
+          region.inputOlder?.requestId,
+        ]
+      : [region.conversationId, region.older?.toString()],
+  );
   useEffect(() => {
     const viewport = viewportRef.current;
     const content = contentRef.current;
@@ -34,7 +39,8 @@ export function useOlderRecords(
       const c = current.current;
       if (
         c.read !== "ready" ||
-        (!c.region.older && !c.region.inputOlder) ||
+        (c.region.older === void 0 &&
+          !("inputOlder" in c.region && c.region.inputOlder)) ||
         requested.current === cursor
       ) {
         return;

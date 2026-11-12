@@ -1,22 +1,18 @@
 "use client";
-import { reconcileLocalConversationInputs } from "@chapchoo/web-core/conversation-state";
 import { useEffect, useRef } from "react";
 import { useConversationReader } from "./useConversationReader";
 import { useHistoryScroll } from "./useHistoryScroll";
 import type { ConversationHistoryProps } from "../components/ConversationHistory";
 import type { ChatCopy } from "../copy";
-import type { ConversationControls } from "../types";
 import type { ConversationRegion } from "@chapchoo/web-core/conversation-types";
 
 export interface ConversationHistoryInput {
   initial: ConversationRegion;
   initialFocus: string | null;
   olderOnOpen: boolean;
+  initialFetch?: boolean;
   agentName: string;
   copy: ChatCopy;
-  inputs: ConversationControls["inputs"];
-  drafts: ConversationControls["drafts"];
-  deletions: { id: string; conversationId: string; snapshotId?: string }[];
 }
 export function useConversationHistory(
   props: ConversationHistoryInput,
@@ -24,25 +20,12 @@ export function useConversationHistory(
   const reader = useConversationReader(
     props.initial,
     true,
+    "history",
     void 0,
-    props.inputs,
+    [],
+    props.initialFetch,
   );
   const scroll = useHistoryScroll(props.initialFocus, reader.region);
-  const { markInputDeleted } = reader;
-  const appliedDeletions = useRef(new Set<string>());
-  useEffect(() => {
-    for (const deletion of props.deletions) {
-      const key = JSON.stringify(deletion);
-      if (!appliedDeletions.current.has(key)) {
-        appliedDeletions.current.add(key);
-        markInputDeleted(
-          deletion.id,
-          deletion.conversationId,
-          deletion.snapshotId,
-        );
-      }
-    }
-  }, [props.deletions, markInputDeleted]);
   const older = useRef((): void => {});
   older.current = () => {
     scroll.preserveHistory();
@@ -63,19 +46,8 @@ export function useConversationHistory(
       readingOlder: reader.readingOlder,
       olderRead: reader.olderRead,
       paginationReset: reader.paginationReset,
-      inputs: reconcileLocalConversationInputs(
-        props.inputs.filter(
-          (input) =>
-            (input.conversationId === void 0
-              ? reader.region.header.conversationId ===
-                props.initial.header.conversationId
-              : input.conversationId === reader.region.header.conversationId) &&
-            input.snapshotId === reader.region.header.source?.snapshotId,
-        ),
-        reader.region.inputs,
-        reader.region.closedInputs,
-      ),
-      drafts: props.drafts,
+      inputs: [],
+      drafts: {},
       stop: "idle",
       onRead: reader.refresh,
       onOlder: () => {

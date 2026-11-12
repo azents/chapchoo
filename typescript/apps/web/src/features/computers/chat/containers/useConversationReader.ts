@@ -16,12 +16,14 @@ import type {
 export function useConversationReader(
   initial: ConversationRegion,
   enabled: boolean,
+  surface: "activity" | "history",
   stopLookup?: {
     conversationId: string;
     requestId: string;
     snapshotId: string;
   },
   pendingInputs: LocalConversationInput[] = [],
+  initialFetch = false,
 ): {
   region: ConversationRegion;
   read: "ready" | "loading" | "error";
@@ -50,7 +52,7 @@ export function useConversationReader(
   const visibility = useDocumentVisibility();
   const [region, setRegion] = useState(initial);
   const [read, setRead] = useState<"ready" | "loading" | "error">(
-    initial.header.state === "loading" ? "loading" : "ready",
+    initialFetch || initial.header.state === "loading" ? "loading" : "ready",
   );
   const current = useRef(initial);
   const before = useRef<ConversationAnchor | null>(null);
@@ -68,6 +70,7 @@ export function useConversationReader(
   const refresh = useRef<() => void>(() => {});
   const active = useRef(false);
   const owner = useRef(true);
+  const generation = useRef(0);
   useEffect(() => {
     owner.current = true;
     return () => {
@@ -75,12 +78,13 @@ export function useConversationReader(
     };
   }, []);
   useEffect(() => {
+    const lifetime = ++generation.current;
     active.current = enabled && visibility === "visible";
     function hasOwner(): boolean {
-      return owner.current;
+      return owner.current && lifetime === generation.current;
     }
     function canRead(): boolean {
-      return owner.current && active.current;
+      return hasOwner() && active.current;
     }
     async function run(): Promise<void> {
       if (!canRead()) {
@@ -115,49 +119,61 @@ export function useConversationReader(
             ...rotating,
           ]),
         ].slice(0, 25);
-        const incoming = await utils.conversations.region.fetch(
-          {
-            agentId: initial.header.agentId,
-            before: anchor
-              ? { ordinal: String(anchor.ordinal), index: String(anchor.index) }
-              : void 0,
-            inputBefore: inputAnchor
-              ? {
-                  acceptedAt: String(inputAnchor.acceptedAt),
-                  requestId: inputAnchor.requestId,
-                }
-              : void 0,
-            knownInputs: (current.current.inputs ?? [])
-              .filter(
-                (input) =>
-                  !inputAnchor ||
-                  input.acceptedAt < inputAnchor.acceptedAt ||
-                  (input.acceptedAt === inputAnchor.acceptedAt &&
-                    input.requestId < inputAnchor.requestId),
-              )
-              .slice(-24)
-              .filter((input) => input.text !== void 0)
-              .map((input) => input.id),
-            expectedSnapshotId: snapshot,
-            expectedConversationId: current.current.header.conversationId,
-            checkInputs,
-            stop: stopRef.current,
-            known: current.current.records
-              .filter(
-                (record) =>
-                  !anchor ||
-                  record.anchor.ordinal < anchor.ordinal ||
-                  (record.anchor.ordinal === anchor.ordinal &&
-                    record.anchor.index < anchor.index),
-              )
-              .slice(-24)
-              .map((record) => ({
-                key: record.key,
-                updatedOrdinal: String(record.updatedOrdinal),
-              })),
-          },
-          { staleTime: 0, retry: false },
-        );
+        const input = {
+          agentId: initial.header.agentId,
+          inputBefore: inputAnchor
+            ? {
+                acceptedAt: String(inputAnchor.acceptedAt),
+                requestId: inputAnchor.requestId,
+              }
+            : void 0,
+          knownInputs: (current.current.inputs ?? [])
+            .filter(
+              (input) =>
+                !inputAnchor ||
+                input.acceptedAt < inputAnchor.acceptedAt ||
+                (input.acceptedAt === inputAnchor.acceptedAt &&
+                  input.requestId < inputAnchor.requestId),
+            )
+            .slice(-24)
+            .filter((input) => input.text !== void 0)
+            .map((input) => input.id),
+          expectedSnapshotId: snapshot,
+          expectedConversationId: current.current.header.conversationId,
+          checkInputs,
+          stop: stopRef.current,
+        };
+        const incoming =
+          surface === "activity"
+            ? await utils.conversations.activity.fetch(input, {
+                staleTime: 0,
+                retry: false,
+              })
+            : await utils.conversations.region.fetch(
+                {
+                  ...input,
+                  before: anchor
+                    ? {
+                        ordinal: String(anchor.ordinal),
+                        index: String(anchor.index),
+                      }
+                    : void 0,
+                  known: current.current.records
+                    .filter(
+                      (record) =>
+                        !anchor ||
+                        record.anchor.ordinal < anchor.ordinal ||
+                        (record.anchor.ordinal === anchor.ordinal &&
+                          record.anchor.index < anchor.index),
+                    )
+                    .slice(-24)
+                    .map((record) => ({
+                      key: record.key,
+                      updatedOrdinal: String(record.updatedOrdinal),
+                    })),
+                },
+                { staleTime: 0, retry: false },
+              );
         if (!hasOwner()) {
           return;
         }
@@ -185,6 +201,7 @@ export function useConversationReader(
           // stream is exhausted, that window must not revive its older cursor.
           current.current = {
             ...merged,
+            records: surface === "activity" ? incoming.records : merged.records,
             older: anchor
               ? incoming.older
               : paged.current || inputBefore.current || before.current
@@ -244,6 +261,9 @@ export function useConversationReader(
             () => refresh.current(),
             immediate ? 0 : 1000,
           );
+        } else if (owner.current && active.current) {
+          // Continue with the current owner after a withdrawn read settles.
+          refresh.current();
         }
       }
     }
@@ -252,13 +272,24 @@ export function useConversationReader(
     };
     // Hydrate the exact SSR region; first active continuation starts on cadence, not mount.
     if (active.current) {
-      timer.current = setTimeout(() => refresh.current(), 1000);
+      timer.current = setTimeout(
+        () => refresh.current(),
+        initialFetch ? 0 : 1000,
+      );
     }
     return () => {
+      generation.current += 1;
       active.current = false;
       clearTimeout(timer.current ?? void 0);
     };
-  }, [enabled, visibility, initial.header.agentId, utils]);
+  }, [
+    enabled,
+    visibility,
+    initial.header.agentId,
+    utils,
+    surface,
+    initialFetch,
+  ]);
   useWindowEvent("online", () => refresh.current());
   useWindowEvent("focus", () => refresh.current());
   const request = useCallback((): void => refresh.current(), []);

@@ -35,7 +35,7 @@ async function reply(route: Route, value: ConversationRegion): Promise<void> {
   });
 }
 
-test("a page admitted during a tail poll executes and exhausted streams never revive", async ({
+test("a native page admitted during a tail poll executes and its exhausted cursor never revives", async ({
   page,
 }) => {
   let receivePoll: (route: Route) => void = () => {};
@@ -51,10 +51,7 @@ test("a page admitted during a tail poll executes and exhausted streams never re
       return;
     }
     if (body.includes('"ordinal":"11"')) {
-      await reply(route, {
-        ...region(1, 10),
-        inputOlder: { acceptedAt: 50n, requestId: "input50" },
-      });
+      await reply(route, region(1, 10));
     } else {
       // No before means latest for that stream, not the start of another page chain.
       await reply(route, {
@@ -75,12 +72,11 @@ test("a page admitted during a tail poll executes and exhausted streams never re
   await log.evaluate((element) => {
     element.scrollTop = 0;
   });
-  await expect(page.getByTestId("reader-cursors")).toHaveText("11/100/ready");
+  await expect(page.getByTestId("reader-cursors")).toHaveText("11/end/ready");
   await expect(page.getByTestId("reader-page")).toHaveText("loading");
   await reply(held, {
     ...region(17, 40),
     older: { ordinal: 17n, index: 0n },
-    inputOlder: { acceptedAt: 100n, requestId: "input100" },
   });
   await expect(page.locator('[id="history-assistant%3A1"]')).toBeAttached();
   await log.evaluate((element) => {
@@ -93,9 +89,6 @@ test("a page admitted during a tail poll executes and exhausted streams never re
   expect(
     requests.filter((body) => body.includes('"ordinal":"11"')),
   ).toHaveLength(1);
-  expect(requests.some((body) => body.includes('"acceptedAt":"50"'))).toBe(
-    true,
-  );
 });
 
 test("failed older reads recover automatically on the same page cursor", async ({
@@ -116,7 +109,6 @@ test("failed older reads recover automatically on the same page cursor", async (
       await reply(route, {
         ...region(11, 40),
         older: { ordinal: 11n, index: 0n },
-        inputOlder: { acceptedAt: 100n, requestId: "input100" },
       });
     }
   });
@@ -149,7 +141,6 @@ test("a persistently failing older page cannot starve new head events", async ({
       await reply(route, {
         ...region(11, pageAttempts ? 41 : 40),
         older: { ordinal: 11n, index: 0n },
-        inputOlder: { acceptedAt: 100n, requestId: "input100" },
       });
     }
   });
@@ -165,7 +156,7 @@ test("a persistently failing older page cannot starve new head events", async ({
   });
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page.locator('[id="history-assistant%3A41"]')).toBeAttached();
-  await expect(page.getByTestId("reader-cursors")).toHaveText("11/100/ready");
+  await expect(page.getByTestId("reader-cursors")).toHaveText("11/end/ready");
   await expect(page.getByTestId("reader-page")).toHaveText("error");
   await expect(
     page.getByRole("button", { name: "New events below", exact: true }),

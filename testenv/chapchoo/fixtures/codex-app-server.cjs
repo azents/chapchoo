@@ -393,6 +393,33 @@ async function request(id, method, params) {
         itemId: "assistant-one",
         delta: "First assistant output",
       });
+      // This explicit SDK call, not an assistant/final event, publishes Chat.
+      if (!mcp) throw new Error("Fixture MCP owner is unavailable");
+      const publication = {
+        type: "mcpToolCall",
+        id: "publication-one",
+        server: "chapchoo",
+        tool: "publish_text",
+        arguments: { text: "Intentional fixture publication." },
+        status: "inProgress",
+        result: null,
+        error: null,
+        durationMs: null,
+      };
+      item("item/started", publication);
+      const publicationStart = performance.now();
+      const result = await mcp.callTool({
+        name: publication.tool,
+        arguments: publication.arguments,
+      });
+      if (result.isError)
+        throw new Error("Fixture publication was not accepted");
+      item("item/completed", {
+        ...publication,
+        status: "completed",
+        result,
+        durationMs: Math.round(performance.now() - publicationStart),
+      });
       write({
         id: "fixture-form",
         method: "mcpServer/elicitation/request",

@@ -9,6 +9,7 @@ import type {
   DraftValue,
   QuestionDraft,
 } from "@chapchoo/web-core/conversation-form";
+import type { ConversationMessageRegion } from "@chapchoo/web-core/conversation-message-types";
 import type {
   ConversationAnswer,
   ConversationRecord,
@@ -20,7 +21,18 @@ import type { ReactNode } from "react";
 
 export type ChatInput = AgentsInput & {
   initialConversation: ConversationRegion;
+  initialMessages: ConversationMessageRegion;
 };
+export interface MessageControls {
+  region: ConversationMessageRegion;
+  read: "ready" | "loading" | "error";
+  olderRead: "ready" | "loading" | "error";
+  readingOlder: boolean;
+  paginationReset: object;
+  onRead: () => void;
+  onOlder: () => void;
+  onLatest: () => void;
+}
 export interface ConversationControls {
   region: ConversationRegion;
   read: "ready" | "loading" | "error";
@@ -56,6 +68,9 @@ export interface ChatProps {
   secondaryOverlay: boolean;
   agentNavigation: ReactNode;
   conversation: ConversationControls;
+  messages: MessageControls;
+  recentRecords: ConversationRegion;
+  recentRead: "ready" | "loading" | "error";
   input: string;
   activity: ConversationActivity;
   writable: boolean;
