@@ -24,7 +24,6 @@ pub struct ConversationInputReference {
     pub request_id: String,
     pub target: ConversationTarget,
     pub accepted_at: i64,
-    pub deleted: bool,
 }
 impl fmt::Debug for ConversationInputReference {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -43,8 +42,6 @@ pub(super) struct InputReferenceRow {
     pub(super) target_snapshot: Option<String>,
     #[diesel(sql_type=BigInt)]
     pub(super) accepted_at: i64,
-    #[diesel(sql_type=diesel::sql_types::Bool)]
-    pub(super) deleted: bool,
 }
 impl InputReferenceRow {
     pub(super) fn reference(self) -> Result<ConversationInputReference, StoreError> {
@@ -59,7 +56,6 @@ impl InputReferenceRow {
                 None => ConversationTarget::NotStarted,
             },
             accepted_at: self.accepted_at,
-            deleted: self.deleted,
         })
     }
 }
@@ -144,7 +140,7 @@ impl Store {
                 return Err(StoreError::NotFound);
             }
             diesel::sql_query(dialect.query(
-                "SELECT id,conversation_id,request_id,target_snapshot,accepted_at,(deleted_at IS NOT NULL) AS deleted FROM conversation_inputs WHERE conversation_id=? AND request_id=?",
+                "SELECT id,conversation_id,request_id,target_snapshot,accepted_at FROM conversation_inputs WHERE conversation_id=? AND request_id=?",
             ))
             .bind::<IdentitySql, _>(id)
             .bind::<Text, _>(request)

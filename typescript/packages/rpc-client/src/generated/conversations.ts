@@ -292,7 +292,6 @@ export interface OwnerInputsRequest {
 export interface RetainedInput {
   acceptance: InputAcceptance | undefined;
   totalBytes: bigint;
-  deleted: boolean;
 }
 
 export interface OwnerDeleteInput {
@@ -307,7 +306,7 @@ export interface OwnerRetryInput {
   requestId: string;
 }
 
-/** `latest` is the newest non-deleted acceptance for this exact source, independent of `before`. */
+/** `latest` is the newest retained acceptance for this exact source, independent of `before`. */
 export interface RetainedInputs {
   inputs: RetainedInput[];
   latest:
@@ -337,7 +336,6 @@ export interface OwnerInputStatus {
   ownership: InputOwnership;
   delivery: InputDelivery | undefined;
   preparation: InputPreparation | undefined;
-  deleted: boolean;
   failed: boolean;
 }
 
@@ -2672,7 +2670,7 @@ export const OwnerInputsRequest: MessageFns<OwnerInputsRequest> = {
 };
 
 function createBaseRetainedInput(): RetainedInput {
-  return { acceptance: undefined, totalBytes: 0n, deleted: false };
+  return { acceptance: undefined, totalBytes: 0n };
 }
 
 export const RetainedInput: MessageFns<RetainedInput> = {
@@ -2685,9 +2683,6 @@ export const RetainedInput: MessageFns<RetainedInput> = {
         throw new globalThis.Error("value provided for field message.totalBytes of type int64 too large");
       }
       writer.uint32(16).int64(message.totalBytes);
-    }
-    if (message.deleted !== false) {
-      writer.uint32(24).bool(message.deleted);
     }
     return writer;
   },
@@ -2721,14 +2716,6 @@ export const RetainedInput: MessageFns<RetainedInput> = {
             message.totalBytes = reader.int64() as bigint;
             continue;
           }
-          case 3: {
-            if (tag !== 24) {
-              break;
-            }
-
-            message.deleted = reader.bool();
-            continue;
-          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2752,7 +2739,6 @@ export const RetainedInput: MessageFns<RetainedInput> = {
     message.totalBytes = (object.totalBytes !== undefined && object.totalBytes !== null)
       ? BigInt(object.totalBytes)
       : 0n;
-    message.deleted = object.deleted ?? false;
     return message;
   },
 };
@@ -3191,14 +3177,7 @@ export const InputDelivery: MessageFns<InputDelivery> = {
 };
 
 function createBaseOwnerInputStatus(): OwnerInputStatus {
-  return {
-    acceptance: undefined,
-    ownership: 0,
-    delivery: undefined,
-    preparation: undefined,
-    deleted: false,
-    failed: false,
-  };
+  return { acceptance: undefined, ownership: 0, delivery: undefined, preparation: undefined, failed: false };
 }
 
 export const OwnerInputStatus: MessageFns<OwnerInputStatus> = {
@@ -3214,9 +3193,6 @@ export const OwnerInputStatus: MessageFns<OwnerInputStatus> = {
     }
     if (message.preparation !== undefined) {
       InputPreparation.encode(message.preparation, writer.uint32(34).fork()).join();
-    }
-    if (message.deleted !== false) {
-      writer.uint32(40).bool(message.deleted);
     }
     if (message.failed !== false) {
       writer.uint32(48).bool(message.failed);
@@ -3269,14 +3245,6 @@ export const OwnerInputStatus: MessageFns<OwnerInputStatus> = {
             message.preparation = InputPreparation.decode(reader, reader.uint32());
             continue;
           }
-          case 5: {
-            if (tag !== 40) {
-              break;
-            }
-
-            message.deleted = reader.bool();
-            continue;
-          }
           case 6: {
             if (tag !== 48) {
               break;
@@ -3312,7 +3280,6 @@ export const OwnerInputStatus: MessageFns<OwnerInputStatus> = {
     message.preparation = (object.preparation !== undefined && object.preparation !== null)
       ? InputPreparation.fromPartial(object.preparation)
       : undefined;
-    message.deleted = object.deleted ?? false;
     message.failed = object.failed ?? false;
     return message;
   },

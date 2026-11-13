@@ -135,7 +135,7 @@ impl DeliveryRow {
 macro_rules! input {
     ($connection:expr,$dialect:expr,$conversation:expr,$operation:expr) => {{
         diesel::sql_query(
-            $dialect.query("SELECT id,conversation_id,request_id,target_snapshot,accepted_at,(deleted_at IS NOT NULL) AS deleted FROM conversation_inputs WHERE id=? AND conversation_id=?"),
+            $dialect.query("SELECT id,conversation_id,request_id,target_snapshot,accepted_at FROM conversation_inputs WHERE id=? AND conversation_id=?"),
         )
         .bind::<IdentitySql, _>($operation)
         .bind::<IdentitySql, _>($conversation)
@@ -309,7 +309,7 @@ impl Store {
             let route = connector!(connection, dialect, source);
             current(&row, agent, draft.target)?;
             let pending = diesel::sql_query(dialect.query(
-                "SELECT id,conversation_id,request_id,target_snapshot,accepted_at,(deleted_at IS NOT NULL) AS deleted FROM conversation_inputs WHERE id=? AND conversation_id=?",
+                "SELECT id,conversation_id,request_id,target_snapshot,accepted_at FROM conversation_inputs WHERE id=? AND conversation_id=?",
             ))
             .bind::<IdentitySql, _>(operation_id)
             .bind::<IdentitySql, _>(id)
@@ -429,7 +429,7 @@ impl Store {
             let previous = delivery!(connection, dialect, operation);
             let Some(previous) = previous else {
                 return if diesel::sql_query(dialect.query(
-                    "SELECT id,conversation_id,request_id,target_snapshot,accepted_at,(deleted_at IS NOT NULL) AS deleted FROM conversation_inputs WHERE id=? AND conversation_id=?",
+                    "SELECT id,conversation_id,request_id,target_snapshot,accepted_at FROM conversation_inputs WHERE id=? AND conversation_id=?",
                 ))
                 .bind::<IdentitySql, _>(operation).bind::<IdentitySql, _>(id)
                 .get_result::<super::inputs::InputReferenceRow>(connection).await.optional()?.is_none() {

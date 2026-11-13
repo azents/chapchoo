@@ -247,10 +247,11 @@ Retry calls the atomic server delete-then-requeue contract with a new Request ID
 It does not create a browser-local substitute row or automatically retry a failed
 request. Delete physically removes the failed outgoing item and its dependent
 records, without requiring a running Computer. Query invalidation and the next
-server queue read reconcile both actions. Successful deletion acknowledgement
-also closes the source-qualified cached row, including outside the current page;
-late cached data cannot restore that acknowledged row. No indefinite local
-delete-result verification mode or persistent deleted-item log remains.
+server queue read reconcile both actions. Successful acknowledgement removes the
+source-qualified cached item, including outside the current page. The reader
+discards responses from its pre-mutation snapshot and immediately queries again,
+so an earlier in-flight read cannot restore that item. It retains no bodyless
+deleted IDs, deletion-result verification mode or deleted-item log.
 
 Permission/form requests render inline. Original choices, their descriptions,
 schema/field titles and supported adjacent constraints remain inspectable.

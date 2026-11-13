@@ -74,7 +74,6 @@ pub struct ConversationInputStatus {
     pub acceptance: ConversationInputAcceptance,
     pub ownership: ConversationInputOwnership,
     pub delivery: Option<chapchoo_persistence::ConversationInputDelivery>,
-    pub deleted: bool,
     pub failed: bool,
 }
 #[derive(Clone)]
@@ -284,7 +283,6 @@ impl ConversationInputService {
                 .conversation_input_queue_state(conversation_id, &receipt.id)
                 .await?
                 == ConversationInputQueueState::Error,
-            deleted: receipt.deleted,
             acceptance: receipt.into(),
             ownership,
             delivery,

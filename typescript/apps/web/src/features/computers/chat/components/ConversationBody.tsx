@@ -684,15 +684,13 @@ export function ConversationBody({
               data-message-id={message.id}
               data-input-operation={
                 controls.region.inputs?.find(
-                  (input) =>
-                    !input.deleted && input.id === message.sourceInputId,
+                  (input) => input.id === message.sourceInputId,
                 )?.id
               }
               aria-label={message.role === "user" ? copy.you : agentName}
               className={`${classes.record} ${
                 controls.region.inputs?.some(
-                  (input) =>
-                    !input.deleted && input.id === message.sourceInputId,
+                  (input) => input.id === message.sourceInputId,
                 )
                   ? classes.pendingInput
                   : ""
@@ -719,10 +717,7 @@ export function ConversationBody({
                 </>
               )}
               {(controls.region.inputs ?? [])
-                .filter(
-                  (input) =>
-                    !input.deleted && input.id === message.sourceInputId,
-                )
+                .filter((input) => input.id === message.sourceInputId)
                 .map((input) => (
                   <InputResult
                     key={input.id}
@@ -894,7 +889,6 @@ export function ConversationBody({
         .filter(
           (input) =>
             surface !== "history" &&
-            !input.deleted &&
             !messages?.region.messages.some(
               (message) => message.sourceInputId === input.id,
             ),

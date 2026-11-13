@@ -394,7 +394,6 @@ pub(super) async fn initial(
         .await?
         .ok_or("Missing earlier live input")?;
     assert_eq!(live.reference.request_id, "unresolved-start");
-    assert!(!live.deleted);
     assert!(matches!(
         store
             .latest_conversation_input(&owner, &stale_scope, f.now)

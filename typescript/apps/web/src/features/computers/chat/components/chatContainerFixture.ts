@@ -68,3 +68,20 @@ export const containerInput: ChatInput = {
     renderedAt: 1,
   },
 };
+export const containerFailure: ChatInput = {
+  ...containerInput,
+  initialConversation: {
+    ...containerInput.initialConversation,
+    inputs: [
+      {
+        id: "failed-input",
+        requestId: "failed-request",
+        conversationId: "conversation",
+        acceptedAt: 1n,
+        text: "Retained failed queue item",
+        observation: "failed",
+      },
+    ],
+    latestInput: { requestId: "failed-request", observation: "failed" },
+  },
+};

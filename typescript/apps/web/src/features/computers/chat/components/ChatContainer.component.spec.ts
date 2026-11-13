@@ -1,6 +1,11 @@
 import { expect, test } from "@playwright/test";
 import superjson from "superjson";
-import { containerInput, containerUser } from "./chatContainerFixture";
+import {
+  containerFailure,
+  containerInput,
+  containerUser,
+} from "./chatContainerFixture";
+import type { Route } from "@playwright/test";
 
 test("actual Chat container retains a failed enqueue draft without optimistic Chat or queue rows", async ({
   page,
@@ -55,5 +60,72 @@ test("actual Chat container retains a failed enqueue draft without optimistic Ch
   await expect(page.locator("[data-input-operation]")).toHaveCount(0);
   await expect(page.locator("[data-user-bubble]")).toHaveCount(0);
   expect(sends).toHaveLength(1);
+  expect(unexpected).toEqual([]);
+});
+
+test("Delete removes the queue item and invalidates only the earlier in-flight read", async ({
+  page,
+}) => {
+  let deleted = false;
+  let reads = 0;
+  const captured = Promise.withResolvers<Route>();
+  const released = Promise.withResolvers<void>();
+  const unexpected: string[] = [];
+  async function reply(route: Route, value: unknown): Promise<void> {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ result: { data: superjson.serialize(value) } }),
+    });
+  }
+  await page.route("**/api/trpc/**", async (route) => {
+    const method = new URL(route.request().url()).pathname.split("/").at(-1);
+    switch (method) {
+      case "auth.identity":
+        return reply(route, containerUser);
+      case "computers.get":
+        if (containerInput.initial.type !== "detail") {
+          throw new Error("Missing Agent");
+        }
+        return reply(route, containerInput.initial.agent);
+      case "conversations.messages":
+        return reply(route, containerInput.initialMessages);
+      case "conversations.region":
+        return reply(route, containerInput.initialConversation);
+      case "conversations.deleteInput":
+        deleted = true;
+        return reply(route, void 0);
+      case "conversations.activity":
+        reads++;
+        if (reads === 1) {
+          captured.resolve(route);
+          await released.promise;
+          return reply(route, containerFailure.initialConversation);
+        }
+        return reply(
+          route,
+          deleted
+            ? containerInput.initialConversation
+            : containerFailure.initialConversation,
+        );
+      default:
+        unexpected.push(method ?? route.request().url());
+        return route.abort();
+    }
+  });
+  await page.goto(
+    "/iframe.html?id=chat-container-transport--removal-race&viewMode=story",
+  );
+  await expect(
+    page.getByText("Retained failed queue item", { exact: true }),
+  ).toBeVisible();
+  await captured.promise;
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(page.locator("[data-input-operation]")).toHaveCount(0);
+  released.resolve();
+  await expect.poll(() => reads).toBeGreaterThanOrEqual(2);
+  await expect(page.locator("[data-input-operation]")).toHaveCount(0);
+  await expect(
+    page.getByRole("textbox", { name: "Message", exact: true }),
+  ).toBeEnabled();
   expect(unexpected).toEqual([]);
 });

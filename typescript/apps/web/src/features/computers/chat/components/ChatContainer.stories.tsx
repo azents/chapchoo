@@ -2,16 +2,20 @@ import { DisplayProvider } from "@/shared/preferences/DisplayProvider";
 import { RpcProvider } from "@/shared/rpc/provider";
 import { useChatContainer } from "../containers/useChatContainer";
 import { Chat } from "./Chat";
-import { containerInput, containerUser } from "./chatContainerFixture";
+import {
+  containerFailure,
+  containerInput,
+  containerUser,
+} from "./chatContainerFixture";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import type { ReactElement } from "react";
 
-function Container(): ReactElement {
-  const props = useChatContainer(containerInput);
+function Container({ queued }: { queued: boolean }): ReactElement {
+  const props = useChatContainer(queued ? containerFailure : containerInput);
   return <Chat {...props} />;
 }
 /** Transport fixture: executable component tests intercept every API request. */
-function Fixture(): ReactElement {
+function Fixture({ queued = false }: { queued?: boolean }): ReactElement {
   const value = { language: "en", region: "en-US", timeZone: "UTC" };
   const identity = { type: "LOADED" as const, data: containerUser };
   return (
@@ -27,7 +31,7 @@ function Fixture(): ReactElement {
           zones: ["UTC"],
         }}
       >
-        <Container />
+        <Container queued={queued} />
       </DisplayProvider>
     </RpcProvider>
   );
@@ -40,3 +44,4 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const EnqueueFailure: Story = {};
+export const RemovalRace: Story = { args: { queued: true } };

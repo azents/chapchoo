@@ -207,7 +207,6 @@ pub(super) async fn result(
     });
     Ok(Response::new(wire::OwnerInputStatus {
         failed: value.failed,
-        deleted: value.deleted,
         acceptance: Some(acceptance(value.acceptance)),
         ownership: match value.ownership {
             ConversationInputOwnership::ProcessingHere => wire::InputOwnership::ProcessingHere,
@@ -299,7 +298,6 @@ pub(super) async fn list(
                     accepted_at: value.reference.accepted_at,
                 })),
                 total_bytes: value.bytes,
-                deleted: value.deleted,
             })
             .collect(),
     }))

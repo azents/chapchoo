@@ -410,7 +410,6 @@ function Fixture({
               conversationId: "conversation",
               acceptedAt: 1n,
               text: "안녕하세요",
-              deleted: failedDeleted,
               observation: retrySubmitted ? "accepted" : "failed",
               preparation: retrySubmitted
                 ? void 0

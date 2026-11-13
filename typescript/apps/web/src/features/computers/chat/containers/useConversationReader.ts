@@ -1,7 +1,7 @@
 "use client";
 import {
-  markConversationInputDeleted,
   mergeConversationRegion,
+  removeConversationInput,
 } from "@chapchoo/web-core/conversation-state";
 import { useDocumentVisibility, useWindowEvent } from "@mantine/hooks";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -31,7 +31,7 @@ export function useConversationReader(
   refresh: () => void;
   older: () => void;
   latest: () => void;
-  markInputDeleted: (
+  removeInput: (
     id: string,
     conversationId: string,
     snapshotId?: string,
@@ -98,10 +98,9 @@ export function useConversationReader(
       const anchor = retryHead.current ? null : before.current;
       const inputAnchor = retryHead.current ? null : inputBefore.current;
       const snapshot = current.current.header.source?.snapshotId;
+      const observed = current.current;
       try {
-        const known = (current.current.inputs ?? [])
-          .filter((item) => !item.deleted)
-          .map((item) => item.id);
+        const known = (current.current.inputs ?? []).map((item) => item.id);
         const offset = checkIndex.current % Math.max(known.length, 1);
         const rotating = [...known.slice(offset), ...known.slice(0, offset)];
         checkIndex.current = offset + 25;
@@ -162,6 +161,12 @@ export function useConversationReader(
                 { staleTime: 0, retry: false },
               );
         if (!hasOwner()) {
+          return;
+        }
+        // A successful queue mutation replaced this read's snapshot. Discard
+        // that older response and query again without retaining deleted IDs.
+        if (observed !== current.current) {
+          queued.current = true;
           return;
         }
         const changedSource =
@@ -226,6 +231,10 @@ export function useConversationReader(
           queued.current = true;
         }
       } catch {
+        if (observed !== current.current) {
+          queued.current = true;
+          return;
+        }
         if (
           (anchor || inputAnchor) &&
           (anchor !== before.current || inputAnchor !== inputBefore.current)
@@ -288,8 +297,8 @@ export function useConversationReader(
     paginationReset,
     readingOlder,
     refresh: request,
-    markInputDeleted: (id, conversationId, snapshotId) => {
-      current.current = markConversationInputDeleted(
+    removeInput: (id, conversationId, snapshotId) => {
+      current.current = removeConversationInput(
         current.current,
         id,
         conversationId,

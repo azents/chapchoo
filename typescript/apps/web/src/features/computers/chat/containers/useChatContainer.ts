@@ -214,8 +214,7 @@ export function useChatContainer(props: ChatInput): ChatProps {
           item.id === value.id &&
           item.requestId === value.requestId &&
           item.conversationId === region.header.conversationId &&
-          item.observation === "failed" &&
-          !item.deleted,
+          item.observation === "failed",
       ) ?? null
     );
   }
@@ -238,7 +237,7 @@ export function useChatContainer(props: ChatInput): ChatProps {
         originalRequestId: current.requestId,
         requestId: crypto.randomUUID(),
       });
-      reader.markInputDeleted(current.id, current.conversationId, snapshotId);
+      reader.removeInput(current.id, current.conversationId, snapshotId);
       floating.followLatest();
     } catch {
       // Atomic replacement keeps the original failed item if admission fails.
@@ -272,7 +271,7 @@ export function useChatContainer(props: ChatInput): ChatProps {
         },
         requestId: current.requestId,
       });
-      reader.markInputDeleted(current.id, current.conversationId, snapshotId);
+      reader.removeInput(current.id, current.conversationId, snapshotId);
     } catch {
       // Leave queried queue state authoritative. Repeating an explicit Delete
       // is idempotent; polling never repeats the mutation.

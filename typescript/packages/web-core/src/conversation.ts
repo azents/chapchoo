@@ -401,10 +401,7 @@ async function readNativeRegion(
       continue;
     }
     let text: string | undefined;
-    if (
-      !item.deleted &&
-      !(sameSource && input.knownInputs?.includes(receipt.id))
-    ) {
+    if (!(sameSource && input.knownInputs?.includes(receipt.id))) {
       try {
         text = new TextDecoder("utf-8", { fatal: true }).decode(
           await readConversationBytes(
@@ -448,7 +445,6 @@ async function readNativeRegion(
       requestId: receipt.requestId,
       acceptedAt: receipt.acceptedAt,
       text,
-      deleted: item.deleted,
       observation: inputObservation(status),
       preparation: inputPreparation(status),
       insertedNativeMessageId: status.delivery?.insertedNativeMessageId,
@@ -456,7 +452,7 @@ async function readNativeRegion(
   }
   const newest = retainedPage.latest;
   const firstInput = newest
-    ? inputs.find((item) => !item.deleted && item.id === newest.id)
+    ? inputs.find((item) => item.id === newest.id)
     : undefined;
   let latestInput: ConversationRegion["latestInput"] = firstInput
     ? {
@@ -474,7 +470,7 @@ async function readNativeRegion(
     });
     if (status.acceptance?.id !== newest.id) closedInputs.add(newest.id);
     latestInput =
-      status.deleted || status.acceptance?.id !== newest.id
+      status.acceptance?.id !== newest.id
         ? undefined
         : {
             requestId: newest.requestId,

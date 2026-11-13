@@ -22,7 +22,6 @@ pub struct RetryConversationInput {
 pub struct RetainedConversationInput {
     pub reference: ConversationInputReference,
     pub bytes: i64,
-    pub deleted: bool,
 }
 macro_rules! safe_debug { ($($name:ty),+) => { $(impl fmt::Debug for $name {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str(concat!(stringify!($name), "([REDACTED])")) }
@@ -233,17 +232,6 @@ impl Store {
             Ok(closed)
         })
     }
-    pub async fn conversation_inputs(
-        &self,
-        actor: &SecretDigest,
-        scope: &ConversationInputScope<'_>,
-        before: Option<&ConversationInputAnchor>,
-        limit: i64,
-        now: i64,
-    ) -> Result<Vec<RetainedConversationInput>, StoreError> {
-        self.conversation_inputs_filtered(actor, scope, before, limit, now, false)
-            .await
-    }
     pub async fn latest_conversation_input(
         &self,
         actor: &SecretDigest,
@@ -251,19 +239,18 @@ impl Store {
         now: i64,
     ) -> Result<Option<RetainedConversationInput>, StoreError> {
         Ok(self
-            .conversation_inputs_filtered(actor, scope, None, 1, now, true)
+            .conversation_inputs(actor, scope, None, 1, now)
             .await?
             .into_iter()
             .next())
     }
-    async fn conversation_inputs_filtered(
+    pub async fn conversation_inputs(
         &self,
         actor: &SecretDigest,
         scope: &ConversationInputScope<'_>,
         before: Option<&ConversationInputAnchor>,
         limit: i64,
         now: i64,
-        present_only: bool,
     ) -> Result<Vec<RetainedConversationInput>, StoreError> {
         if !(1..=25).contains(&limit) {
             return Err(StoreError::InvalidInput);
@@ -287,8 +274,6 @@ impl Store {
             accepted_at: i64,
             #[diesel(sql_type=BigInt)]
             bytes: i64,
-            #[diesel(sql_type=diesel::sql_types::Bool)]
-            deleted: bool,
         }
         operation!(self, |connection, dialect| {
             let _ = owned_agent!(connection, dialect, actor, agent, now);
@@ -296,10 +281,10 @@ impl Store {
             matches(&row, scope, agent)?;
             let query = match dialect {
                 Dialect::Postgres => {
-                    "SELECT i.id,i.request_id,i.target_snapshot,i.accepted_at,CAST(COALESCE(octet_length(i.submitted_text),0) AS BIGINT) AS bytes,(i.deleted_at IS NOT NULL) AS deleted FROM conversation_inputs i JOIN conversations c ON c.id=i.conversation_id WHERE i.conversation_id=? AND (c.source_snapshot=? OR (c.source_snapshot IS NULL AND ? IS NULL)) AND (i.accepted_at<? OR (i.accepted_at=? AND i.request_id<?)) AND (?=FALSE OR i.deleted_at IS NULL) ORDER BY i.accepted_at DESC,i.request_id DESC LIMIT ?"
+                    "SELECT i.id,i.request_id,i.target_snapshot,i.accepted_at,CAST(COALESCE(octet_length(i.submitted_text),0) AS BIGINT) AS bytes FROM conversation_inputs i JOIN conversations c ON c.id=i.conversation_id WHERE i.conversation_id=? AND (c.source_snapshot=? OR (c.source_snapshot IS NULL AND ? IS NULL)) AND (i.accepted_at<? OR (i.accepted_at=? AND i.request_id<?)) ORDER BY i.accepted_at DESC,i.request_id DESC LIMIT ?"
                 }
                 Dialect::Sqlite => {
-                    "SELECT i.id,i.request_id,i.target_snapshot,i.accepted_at,CAST(COALESCE(length(CAST(i.submitted_text AS BLOB)),0) AS BIGINT) AS bytes,(i.deleted_at IS NOT NULL) AS deleted FROM conversation_inputs i JOIN conversations c ON c.id=i.conversation_id WHERE i.conversation_id=? AND (c.source_snapshot=? OR (c.source_snapshot IS NULL AND ? IS NULL)) AND (i.accepted_at<? OR (i.accepted_at=? AND i.request_id<?)) AND (?=FALSE OR i.deleted_at IS NULL) ORDER BY i.accepted_at DESC,i.request_id DESC LIMIT ?"
+                    "SELECT i.id,i.request_id,i.target_snapshot,i.accepted_at,CAST(COALESCE(length(CAST(i.submitted_text AS BLOB)),0) AS BIGINT) AS bytes FROM conversation_inputs i JOIN conversations c ON c.id=i.conversation_id WHERE i.conversation_id=? AND (c.source_snapshot=? OR (c.source_snapshot IS NULL AND ? IS NULL)) AND (i.accepted_at<? OR (i.accepted_at=? AND i.request_id<?)) ORDER BY i.accepted_at DESC,i.request_id DESC LIMIT ?"
                 }
             };
             let snapshot = scope.target.snapshot().map(SnapshotId::as_str);
@@ -310,7 +295,6 @@ impl Store {
                 .bind::<BigInt, _>(time)
                 .bind::<BigInt, _>(time)
                 .bind::<Text, _>(request)
-                .bind::<diesel::sql_types::Bool, _>(present_only)
                 .bind::<BigInt, _>(limit)
                 .load::<Row>(connection)
                 .await?;
@@ -323,11 +307,9 @@ impl Store {
                             request_id: value.request_id,
                             target_snapshot: value.target_snapshot,
                             accepted_at: value.accepted_at,
-                            deleted: value.deleted,
                         }
                         .reference()?,
                         bytes: value.bytes,
-                        deleted: value.deleted,
                     })
                 })
                 .collect()
@@ -400,10 +382,10 @@ impl Store {
             matches(&row, scope, agent)?;
             let query = match dialect {
                 Dialect::Postgres => {
-                    "SELECT substring(convert_to(i.submitted_text,'UTF8') FROM CAST(? AS INTEGER) FOR CAST(? AS INTEGER)) AS bytes,CAST(octet_length(i.submitted_text) AS BIGINT) AS total_bytes FROM conversation_inputs i JOIN conversations c ON c.id=i.conversation_id WHERE i.deleted_at IS NULL AND i.conversation_id=? AND i.request_id=? AND (c.source_snapshot=? OR (c.source_snapshot IS NULL AND ? IS NULL))"
+                    "SELECT substring(convert_to(i.submitted_text,'UTF8') FROM CAST(? AS INTEGER) FOR CAST(? AS INTEGER)) AS bytes,CAST(octet_length(i.submitted_text) AS BIGINT) AS total_bytes FROM conversation_inputs i JOIN conversations c ON c.id=i.conversation_id WHERE i.conversation_id=? AND i.request_id=? AND (c.source_snapshot=? OR (c.source_snapshot IS NULL AND ? IS NULL))"
                 }
                 Dialect::Sqlite => {
-                    "SELECT substr(CAST(i.submitted_text AS BLOB),?,?) AS bytes,CAST(length(CAST(i.submitted_text AS BLOB)) AS BIGINT) AS total_bytes FROM conversation_inputs i JOIN conversations c ON c.id=i.conversation_id WHERE i.deleted_at IS NULL AND i.conversation_id=? AND i.request_id=? AND (c.source_snapshot=? OR (c.source_snapshot IS NULL AND ? IS NULL))"
+                    "SELECT substr(CAST(i.submitted_text AS BLOB),?,?) AS bytes,CAST(length(CAST(i.submitted_text AS BLOB)) AS BIGINT) AS total_bytes FROM conversation_inputs i JOIN conversations c ON c.id=i.conversation_id WHERE i.conversation_id=? AND i.request_id=? AND (c.source_snapshot=? OR (c.source_snapshot IS NULL AND ? IS NULL))"
                 }
             };
             let snapshot = scope.target.snapshot().map(SnapshotId::as_str);

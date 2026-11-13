@@ -3,7 +3,6 @@ import { attempt } from "@chapchoo/web-core/boundary";
 import {
   answerDelivery,
   conversationApi,
-  inputObservation,
   readConversationActivity,
   readConversationRegion,
   stopObservation,
@@ -249,27 +248,6 @@ export const conversationsRouter = router({
         ),
       ),
     ),
-  inputResult: procedure.input(operation).query(({ ctx, input }) =>
-    attempt(() =>
-      ctx.session.authenticated(async (token) => {
-        const result = await conversationApi(
-          ctx.backend.conversations,
-          token,
-        ).inputResult(input);
-        return {
-          observation: inputObservation(result),
-          deleted: result.deleted,
-          receipt: result.acceptance
-            ? {
-                id: result.acceptance.id,
-                requestId: result.acceptance.requestId,
-                conversationId: result.acceptance.conversationId,
-              }
-            : void 0,
-        };
-      }),
-    ),
-  ),
   answer: procedure
     .input(
       z

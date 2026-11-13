@@ -103,7 +103,11 @@ message OwnerInputsRequest {
   // Exact bounded existence checks; omission from a history page is not closure.
   repeated string known_ids = 4;
 }
-message RetainedInput { InputAcceptance acceptance = 1; int64 total_bytes = 2; bool deleted = 3; }
+message RetainedInput {
+  InputAcceptance acceptance = 1; int64 total_bytes = 2;
+  reserved 3;
+  reserved "deleted";
+}
 message OwnerDeleteInput { OwnerInputScope scope = 1; string request_id = 2; }
 message OwnerRetryInput {
   OwnerInputScope scope = 1;
@@ -111,7 +115,7 @@ message OwnerRetryInput {
   string original_request_id = 3;
   string request_id = 4;
 }
-// `latest` is the newest non-deleted acceptance for this exact source, independent of `before`.
+// `latest` is the newest retained acceptance for this exact source, independent of `before`.
 message RetainedInputs {
   repeated RetainedInput inputs = 1; InputAcceptance latest = 2;
   // No pending row remains for these requested IDs. This is not delivery evidence.
@@ -132,7 +136,8 @@ message InputDelivery {
 message OwnerInputStatus {
   InputAcceptance acceptance = 1; InputOwnership ownership = 2; InputDelivery delivery = 3;
   InputPreparation preparation = 4;
-  bool deleted = 5;
+  reserved 5;
+  reserved "deleted";
   bool failed = 6;
 }
 // Setup result is not current native liveness, source catch-up or text consumption.

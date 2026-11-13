@@ -149,7 +149,6 @@ test("activity reads queried outgoing text independently of its delivery status"
     inputs: ["accepted", "failed"].map((id) => ({
       acceptance: acceptance(id),
       totalBytes: 4n,
-      deleted: false,
     })),
   });
   api.inputResult = async ({ requestId }) => ({
