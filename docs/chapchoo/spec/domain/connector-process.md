@@ -86,8 +86,12 @@ identity/size/offset and complete UTF-8 assembly, then rechecks the exact source
 at the final empty-suffix read before native queue admission. Per-input 16-MiB and
 aggregate 32-MiB worker budgets are independent of the 32-operation/report limit.
 An existing actor result is recovered without redispatch. Missing or uncertain
-facts do not become known non-delivery; only actual insertion/steering/failure
-results are reported. Shutdown drains workers alongside native retirement.
+facts do not become known non-delivery. Actual insertion/steering/failure results
+remain native observations; a worker error instead reports AttemptError to close
+the server queue attempt without asserting physical nonexecution. Shutdown drains
+workers alongside native retirement. The actual launch's
+[publication fence](server-tools.md#user-receipt-publication-order) orders dependent
+tool Submit behind the successful normal user-receipt acknowledgement.
 
 Answer commands likewise carry small operation/source references. Complete
 original typed values are pulled with consistent responder token, captured
@@ -106,7 +110,10 @@ response. The lease remains held through native release acknowledgement; later
 commands are fenced by the server's settled operation checks or, for a consumed
 input, the absence of any body/forwarding grant. A repeated successful input
 report after a lost ACK closes an already absent pending operation under current
-source authority; it does not recreate a receipt or assert another effect. An uncertain or
+source authority; it does not recreate a receipt or assert another effect.
+Its Recorded/Closed acknowledgement separately reports whether the existing
+normal user receipt is present. AttemptError closes only queue-attempt ownership;
+it does not manufacture or release a known native result. An uncertain or
 different native result is never released. A refused report does not authorize
 native-fact release: a transport status alone is not proof of irreversible source
 fencing. This recycles acknowledged capacity without

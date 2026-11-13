@@ -136,7 +136,7 @@ test("live activity controls do not scan native transcript or tool bodies", asyn
   assert.equal(result.older, undefined);
 });
 
-test("activity reads original text only for confirmed failed-input recovery, not accepted chat", async () => {
+test("activity reads queried outgoing text independently of its delivery status", async () => {
   const api = apiFor([]);
   const acceptance = (id) => ({
     id,
@@ -149,7 +149,6 @@ test("activity reads original text only for confirmed failed-input recovery, not
     inputs: ["accepted", "failed"].map((id) => ({
       acceptance: acceptance(id),
       totalBytes: 4n,
-      deleted: false,
     })),
   });
   api.inputResult = async ({ requestId }) => ({
@@ -170,10 +169,10 @@ test("activity reads original text only for confirmed failed-input recovery, not
     };
   };
   const result = await readConversationActivity(api, { agentId: "agent" });
-  assert.deepEqual(bodyReads, ["failed", "failed"]);
+  assert.deepEqual(bodyReads, ["accepted", "accepted", "failed", "failed"]);
   assert.equal(
     result.inputs.find((item) => item.id === "accepted").text,
-    undefined,
+    "body",
   );
   assert.equal(result.inputs.find((item) => item.id === "failed").text, "body");
 });

@@ -1,20 +1,4 @@
-import type {
-  ConversationRegion,
-  LocalConversationInput,
-} from "./conversation-types.js";
-/** Persisted request identity supersedes local uncertainty without dispatching another operation. */
-export function reconcileLocalConversationInputs(
-  local: LocalConversationInput[],
-  retained: ConversationRegion["inputs"],
-  closed: string[] = [],
-): LocalConversationInput[] {
-  const remaining = local.filter(
-    (item) =>
-      !(item.id && closed.includes(item.id)) &&
-      !retained?.some((input) => input.requestId === item.requestId),
-  );
-  return remaining.length === local.length ? local : remaining;
-}
+import type { ConversationRegion } from "./conversation-types.js";
 /** Newer updates win; a late older-page result only contributes missing or newer records. */
 export function mergeConversationRegion(
   previous: ConversationRegion,
@@ -23,12 +7,13 @@ export function mergeConversationRegion(
   if (
     previous.header.agentId !== incoming.header.agentId ||
     previous.header.conversationId !== incoming.header.conversationId ||
-    previous.header.source?.snapshotId !== incoming.header.source?.snapshotId ||
-    incoming.header.state === "loading"
+    previous.header.source?.snapshotId !== incoming.header.source?.snapshotId
   )
     return incoming;
   const records = new Map(
-    previous.records.map((record) => [record.key, record]),
+    (incoming.header.state === "loading" ? [] : previous.records).map(
+      (record) => [record.key, record],
+    ),
   );
   for (const record of incoming.records) {
     const old = records.get(record.key);
@@ -43,21 +28,13 @@ export function mergeConversationRegion(
   for (const input of incoming.inputs ?? []) {
     if (incoming.closedInputs?.includes(input.id)) continue;
     const old = inputs.get(input.id);
-    const deleted = input.deleted || old?.deleted;
     inputs.set(input.id, {
       ...input,
-      deleted,
-      text: deleted ? undefined : (input.text ?? old?.text),
+      text: input.text ?? old?.text,
     });
   }
   return {
     ...incoming,
-    latestInput: [...inputs.values()].some(
-      (item) =>
-        item.deleted && item.requestId === incoming.latestInput?.requestId,
-    )
-      ? undefined
-      : incoming.latestInput,
     inputs: [...inputs.values()].sort((a, b) =>
       a.acceptedAt < b.acceptedAt
         ? -1
@@ -78,8 +55,8 @@ export function mergeConversationRegion(
     ),
   };
 }
-/** Only acknowledged deletion or an exact tombstone read may call this. */
-export function markConversationInputDeleted(
+/** Remove an acknowledged queue item under its exact queried source. */
+export function removeConversationInput(
   region: ConversationRegion,
   id: string,
   conversationId: string,
@@ -90,14 +67,12 @@ export function markConversationInputDeleted(
     region.header.source?.snapshotId !== snapshotId
   )
     return region;
-  const deleted = region.inputs?.find((item) => item.id === id);
+  const removed = region.inputs?.find((item) => item.id === id);
   return {
     ...region,
-    inputs: region.inputs?.map((input) =>
-      input.id === id ? { ...input, deleted: true, text: undefined } : input,
-    ),
+    inputs: region.inputs?.filter((input) => input.id !== id),
     latestInput:
-      region.latestInput?.requestId === deleted?.requestId
+      region.latestInput?.requestId === removed?.requestId
         ? undefined
         : region.latestInput,
   };

@@ -7,20 +7,14 @@ test("pending Markdown user bubbles are dimmed and have no lifecycle caption", a
   await page.goto(
     "/iframe.html?id=chat-conversation-body--input-states&viewMode=story",
   );
-  const messages = page
-    .locator('[data-kind="user"]')
-    .filter({ has: page.getByText("확인", { exact: true }) });
-  await expect(messages).toHaveCount(2);
-  const widths = await messages.evaluateAll((elements) =>
-    elements.map(
-      (element) => element.querySelector("div")?.getBoundingClientRect().width,
-    ),
-  );
-  expect(widths[0]).toBe(widths[1]);
-  await expect(messages.nth(0).locator("strong")).toHaveText("확인");
-  await expect(messages.nth(1).locator("strong")).toHaveText("확인");
+  const messages = page.locator("[data-input-operation]");
+  await expect(messages).toHaveCount(3);
+  await expect(messages.last().locator("strong")).toHaveText("확인");
   for (const message of await messages.all()) {
-    await expect(message).toHaveCSS("opacity", "0.6");
+    await expect(message.locator("[data-user-bubble]")).toHaveCSS(
+      "opacity",
+      "0.6",
+    );
   }
   await expect(page.getByText("Delivery failed", { exact: true })).toHaveCount(
     0,

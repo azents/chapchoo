@@ -20,7 +20,6 @@ const controls: ConversationControls = {
   },
   read: "ready",
   readingOlder: false,
-  inputs: [],
   drafts: {},
   stop: "idle",
   onRead: () => {},

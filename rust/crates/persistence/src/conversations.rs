@@ -3,6 +3,7 @@
 mod answers;
 pub(crate) mod authority;
 mod delivery;
+mod input_queue;
 mod input_reads;
 mod inputs;
 mod messages;
@@ -42,9 +43,13 @@ use authority::{connector, owned_agent};
 pub use delivery::{
     ConversationDeliveryTarget, ConversationForwardingAdmission, ConversationForwardingGrant,
     ConversationInputChunk, ConversationInputDelivery, ConversationInputOutcome,
-    ConversationOperationForwarding,
+    ConversationInputReportAcknowledgement, ConversationOperationForwarding,
 };
-pub use input_reads::{ConversationInputAnchor, ConversationInputScope, RetainedConversationInput};
+pub use input_queue::ConversationInputQueueState;
+pub use input_reads::{
+    ConversationInputAnchor, ConversationInputScope, RetainedConversationInput,
+    RetryConversationInput,
+};
 pub use inputs::{
     AcceptConversationInput, ConversationInputAdmission, ConversationInputReceipt,
     ConversationInputReference,

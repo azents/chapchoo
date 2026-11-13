@@ -292,7 +292,6 @@ export interface OwnerInputsRequest {
 export interface RetainedInput {
   acceptance: InputAcceptance | undefined;
   totalBytes: bigint;
-  deleted: boolean;
 }
 
 export interface OwnerDeleteInput {
@@ -300,7 +299,14 @@ export interface OwnerDeleteInput {
   requestId: string;
 }
 
-/** `latest` is the newest non-deleted acceptance for this exact source, independent of `before`. */
+export interface OwnerRetryInput {
+  scope: OwnerInputScope | undefined;
+  originalInputId: string;
+  originalRequestId: string;
+  requestId: string;
+}
+
+/** `latest` is the newest retained acceptance for this exact source, independent of `before`. */
 export interface RetainedInputs {
   inputs: RetainedInput[];
   latest:
@@ -330,7 +336,7 @@ export interface OwnerInputStatus {
   ownership: InputOwnership;
   delivery: InputDelivery | undefined;
   preparation: InputPreparation | undefined;
-  deleted: boolean;
+  failed: boolean;
 }
 
 /** Setup result is not current native liveness, source catch-up or text consumption. */
@@ -679,6 +685,12 @@ export interface InputReport {
   insertedNativeMessageId?: string | undefined;
   steered?: Empty | undefined;
   failed?: Empty | undefined;
+  attemptError?: Empty | undefined;
+}
+
+export interface InputReportAcknowledgement {
+  /** Closure after explicit deletion does not establish a normal user receipt. */
+  userReceiptRecorded: boolean;
 }
 
 export interface NativeStateReport {
@@ -2658,7 +2670,7 @@ export const OwnerInputsRequest: MessageFns<OwnerInputsRequest> = {
 };
 
 function createBaseRetainedInput(): RetainedInput {
-  return { acceptance: undefined, totalBytes: 0n, deleted: false };
+  return { acceptance: undefined, totalBytes: 0n };
 }
 
 export const RetainedInput: MessageFns<RetainedInput> = {
@@ -2671,9 +2683,6 @@ export const RetainedInput: MessageFns<RetainedInput> = {
         throw new globalThis.Error("value provided for field message.totalBytes of type int64 too large");
       }
       writer.uint32(16).int64(message.totalBytes);
-    }
-    if (message.deleted !== false) {
-      writer.uint32(24).bool(message.deleted);
     }
     return writer;
   },
@@ -2707,14 +2716,6 @@ export const RetainedInput: MessageFns<RetainedInput> = {
             message.totalBytes = reader.int64() as bigint;
             continue;
           }
-          case 3: {
-            if (tag !== 24) {
-              break;
-            }
-
-            message.deleted = reader.bool();
-            continue;
-          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2738,7 +2739,6 @@ export const RetainedInput: MessageFns<RetainedInput> = {
     message.totalBytes = (object.totalBytes !== undefined && object.totalBytes !== null)
       ? BigInt(object.totalBytes)
       : 0n;
-    message.deleted = object.deleted ?? false;
     return message;
   },
 };
@@ -2807,6 +2807,99 @@ export const OwnerDeleteInput: MessageFns<OwnerDeleteInput> = {
     message.scope = (object.scope !== undefined && object.scope !== null)
       ? OwnerInputScope.fromPartial(object.scope)
       : undefined;
+    message.requestId = object.requestId ?? "";
+    return message;
+  },
+};
+
+function createBaseOwnerRetryInput(): OwnerRetryInput {
+  return { scope: undefined, originalInputId: "", originalRequestId: "", requestId: "" };
+}
+
+export const OwnerRetryInput: MessageFns<OwnerRetryInput> = {
+  encode(message: OwnerRetryInput, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.scope !== undefined) {
+      OwnerInputScope.encode(message.scope, writer.uint32(10).fork()).join();
+    }
+    if (message.originalInputId !== "") {
+      writer.uint32(18).string(message.originalInputId);
+    }
+    if (message.originalRequestId !== "") {
+      writer.uint32(26).string(message.originalRequestId);
+    }
+    if (message.requestId !== "") {
+      writer.uint32(34).string(message.requestId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): OwnerRetryInput {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseOwnerRetryInput();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.scope = OwnerInputScope.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.originalInputId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.originalRequestId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.requestId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<OwnerRetryInput>, I>>(base?: I): OwnerRetryInput {
+    return OwnerRetryInput.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<OwnerRetryInput>, I>>(object: I): OwnerRetryInput {
+    const message = createBaseOwnerRetryInput();
+    message.scope = (object.scope !== undefined && object.scope !== null)
+      ? OwnerInputScope.fromPartial(object.scope)
+      : undefined;
+    message.originalInputId = object.originalInputId ?? "";
+    message.originalRequestId = object.originalRequestId ?? "";
     message.requestId = object.requestId ?? "";
     return message;
   },
@@ -3084,7 +3177,7 @@ export const InputDelivery: MessageFns<InputDelivery> = {
 };
 
 function createBaseOwnerInputStatus(): OwnerInputStatus {
-  return { acceptance: undefined, ownership: 0, delivery: undefined, preparation: undefined, deleted: false };
+  return { acceptance: undefined, ownership: 0, delivery: undefined, preparation: undefined, failed: false };
 }
 
 export const OwnerInputStatus: MessageFns<OwnerInputStatus> = {
@@ -3101,8 +3194,8 @@ export const OwnerInputStatus: MessageFns<OwnerInputStatus> = {
     if (message.preparation !== undefined) {
       InputPreparation.encode(message.preparation, writer.uint32(34).fork()).join();
     }
-    if (message.deleted !== false) {
-      writer.uint32(40).bool(message.deleted);
+    if (message.failed !== false) {
+      writer.uint32(48).bool(message.failed);
     }
     return writer;
   },
@@ -3152,12 +3245,12 @@ export const OwnerInputStatus: MessageFns<OwnerInputStatus> = {
             message.preparation = InputPreparation.decode(reader, reader.uint32());
             continue;
           }
-          case 5: {
-            if (tag !== 40) {
+          case 6: {
+            if (tag !== 48) {
               break;
             }
 
-            message.deleted = reader.bool();
+            message.failed = reader.bool();
             continue;
           }
         }
@@ -3187,7 +3280,7 @@ export const OwnerInputStatus: MessageFns<OwnerInputStatus> = {
     message.preparation = (object.preparation !== undefined && object.preparation !== null)
       ? InputPreparation.fromPartial(object.preparation)
       : undefined;
-    message.deleted = object.deleted ?? false;
+    message.failed = object.failed ?? false;
     return message;
   },
 };
@@ -7542,6 +7635,7 @@ function createBaseInputReport(): InputReport {
     insertedNativeMessageId: undefined,
     steered: undefined,
     failed: undefined,
+    attemptError: undefined,
   };
 }
 
@@ -7561,6 +7655,9 @@ export const InputReport: MessageFns<InputReport> = {
     }
     if (message.failed !== undefined) {
       Empty.encode(message.failed, writer.uint32(42).fork()).join();
+    }
+    if (message.attemptError !== undefined) {
+      Empty.encode(message.attemptError, writer.uint32(50).fork()).join();
     }
     return writer;
   },
@@ -7618,6 +7715,14 @@ export const InputReport: MessageFns<InputReport> = {
             message.failed = Empty.decode(reader, reader.uint32());
             continue;
           }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.attemptError = Empty.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -7648,6 +7753,64 @@ export const InputReport: MessageFns<InputReport> = {
     message.failed = (object.failed !== undefined && object.failed !== null)
       ? Empty.fromPartial(object.failed)
       : undefined;
+    message.attemptError = (object.attemptError !== undefined && object.attemptError !== null)
+      ? Empty.fromPartial(object.attemptError)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseInputReportAcknowledgement(): InputReportAcknowledgement {
+  return { userReceiptRecorded: false };
+}
+
+export const InputReportAcknowledgement: MessageFns<InputReportAcknowledgement> = {
+  encode(message: InputReportAcknowledgement, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.userReceiptRecorded !== false) {
+      writer.uint32(8).bool(message.userReceiptRecorded);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): InputReportAcknowledgement {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseInputReportAcknowledgement();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.userReceiptRecorded = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<InputReportAcknowledgement>, I>>(base?: I): InputReportAcknowledgement {
+    return InputReportAcknowledgement.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<InputReportAcknowledgement>, I>>(object: I): InputReportAcknowledgement {
+    const message = createBaseInputReportAcknowledgement();
+    message.userReceiptRecorded = object.userReceiptRecorded ?? false;
     return message;
   },
 };
@@ -9597,6 +9760,15 @@ export const ConversationsService = {
     responseSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
     responseDeserialize: (value: Buffer): Empty => Empty.decode(value),
   },
+  retryInput: {
+    path: "/chapchoo.conversations.Conversations/RetryInput" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: OwnerRetryInput): Buffer => Buffer.from(OwnerRetryInput.encode(value).finish()),
+    requestDeserialize: (value: Buffer): OwnerRetryInput => OwnerRetryInput.decode(value),
+    responseSerialize: (value: InputAcceptance): Buffer => Buffer.from(InputAcceptance.encode(value).finish()),
+    responseDeserialize: (value: Buffer): InputAcceptance => InputAcceptance.decode(value),
+  },
   messages: {
     path: "/chapchoo.conversations.Conversations/Messages" as const,
     requestStream: false as const,
@@ -9727,6 +9899,7 @@ export interface ConversationsServer extends UntypedServiceImplementation {
   inputs: handleUnaryCall<OwnerInputsRequest, RetainedInputs>;
   readInput: handleUnaryCall<OwnerInputRead, FieldChunk>;
   deleteInput: handleUnaryCall<OwnerDeleteInput, Empty>;
+  retryInput: handleUnaryCall<OwnerRetryInput, InputAcceptance>;
   messages: handleUnaryCall<OwnerMessagesRequest, MessageRegion>;
   readMessage: handleUnaryCall<OwnerMessageRead, FieldChunk>;
   submitAnswer: handleUnaryCall<OwnerAnswerPiece, OwnerAnswerProgress>;
@@ -9862,6 +10035,21 @@ export interface ConversationsClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  retryInput(
+    request: OwnerRetryInput,
+    callback: (error: ServiceError | null, response: InputAcceptance) => void,
+  ): ClientUnaryCall;
+  retryInput(
+    request: OwnerRetryInput,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: InputAcceptance) => void,
+  ): ClientUnaryCall;
+  retryInput(
+    request: OwnerRetryInput,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: InputAcceptance) => void,
   ): ClientUnaryCall;
   messages(
     request: OwnerMessagesRequest,
@@ -10155,8 +10343,9 @@ export const ConnectorCaptureService = {
     responseStream: false as const,
     requestSerialize: (value: InputReport): Buffer => Buffer.from(InputReport.encode(value).finish()),
     requestDeserialize: (value: Buffer): InputReport => InputReport.decode(value),
-    responseSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
-    responseDeserialize: (value: Buffer): Empty => Empty.decode(value),
+    responseSerialize: (value: InputReportAcknowledgement): Buffer =>
+      Buffer.from(InputReportAcknowledgement.encode(value).finish()),
+    responseDeserialize: (value: Buffer): InputReportAcknowledgement => InputReportAcknowledgement.decode(value),
   },
   reportNative: {
     path: "/chapchoo.conversations.ConnectorCapture/ReportNative" as const,
@@ -10283,7 +10472,7 @@ export interface ConnectorCaptureServer extends UntypedServiceImplementation {
   checkSetup: handleUnaryCall<SetupCheck, Empty>;
   reportSetup: handleUnaryCall<SetupReport, Empty>;
   pullInput: handleUnaryCall<InputChunkRequest, InputChunk>;
-  reportInput: handleUnaryCall<InputReport, Empty>;
+  reportInput: handleUnaryCall<InputReport, InputReportAcknowledgement>;
   reportNative: handleUnaryCall<NativeStateReport, Empty>;
   reportRequest: handleUnaryCall<LiveRequestReport, Empty>;
   checkStop: handleUnaryCall<StopCheck, Empty>;
@@ -10416,17 +10605,20 @@ export interface ConnectorCaptureClient extends Client {
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: InputChunk) => void,
   ): ClientUnaryCall;
-  reportInput(request: InputReport, callback: (error: ServiceError | null, response: Empty) => void): ClientUnaryCall;
+  reportInput(
+    request: InputReport,
+    callback: (error: ServiceError | null, response: InputReportAcknowledgement) => void,
+  ): ClientUnaryCall;
   reportInput(
     request: InputReport,
     metadata: Metadata,
-    callback: (error: ServiceError | null, response: Empty) => void,
+    callback: (error: ServiceError | null, response: InputReportAcknowledgement) => void,
   ): ClientUnaryCall;
   reportInput(
     request: InputReport,
     metadata: Metadata,
     options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: Empty) => void,
+    callback: (error: ServiceError | null, response: InputReportAcknowledgement) => void,
   ): ClientUnaryCall;
   reportNative(
     request: NativeStateReport,

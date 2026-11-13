@@ -3,7 +3,6 @@ import { attempt } from "@chapchoo/web-core/boundary";
 import {
   answerDelivery,
   conversationApi,
-  inputObservation,
   readConversationActivity,
   readConversationRegion,
   stopObservation,
@@ -214,27 +213,41 @@ export const conversationsRouter = router({
         ),
       ),
     ),
-  inputResult: procedure.input(operation).query(({ ctx, input }) =>
-    attempt(() =>
-      ctx.session.authenticated(async (token) => {
-        const result = await conversationApi(
-          ctx.backend.conversations,
-          token,
-        ).inputResult(input);
-        return {
-          observation: inputObservation(result),
-          deleted: result.deleted,
-          receipt: result.acceptance
-            ? {
-                id: result.acceptance.id,
-                requestId: result.acceptance.requestId,
-                conversationId: result.acceptance.conversationId,
-              }
-            : void 0,
-        };
-      }),
+  retryInput: procedure
+    .input(
+      z
+        .object({
+          source: z
+            .object({
+              agentId: id,
+              conversationId: id,
+              snapshotId: z.string().min(1).max(512).optional(),
+            })
+            .strict(),
+          originalInputId: id,
+          originalRequestId: id,
+          requestId: id,
+        })
+        .strict(),
+    )
+    .mutation(({ ctx, input }) =>
+      attempt(() =>
+        ctx.session.authenticated((token) =>
+          conversationApi(ctx.backend.conversations, token).retryInput({
+            scope: {
+              agentId: input.source.agentId,
+              conversationId: input.source.conversationId,
+              target: input.source.snapshotId
+                ? { snapshotId: input.source.snapshotId }
+                : { notStarted: {} },
+            },
+            originalInputId: input.originalInputId,
+            originalRequestId: input.originalRequestId,
+            requestId: input.requestId,
+          }),
+        ),
+      ),
     ),
-  ),
   answer: procedure
     .input(
       z

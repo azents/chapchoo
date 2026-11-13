@@ -45,6 +45,7 @@ export interface ConversationApi {
   inputs(value: Wire.OwnerInputsRequest): Promise<Wire.RetainedInputs>;
   readInput(value: Wire.OwnerInputRead): Promise<Wire.FieldChunk>;
   deleteInput(value: Wire.OwnerDeleteInput): Promise<unknown>;
+  retryInput(value: Wire.OwnerRetryInput): Promise<Wire.InputAcceptance>;
   fields(value: Wire.OwnerFieldsRequest): Promise<Wire.RecordFields>;
   readField(value: Wire.OwnerFieldRead): Promise<Wire.FieldChunk>;
   liveRequests(value: Wire.OwnerLiveRequests): Promise<Wire.LiveRequestList>;
@@ -85,6 +86,7 @@ export function conversationApi(
     submitInput: (value) => call(client.submitInput.bind(client), value, token),
     inputResult: (value) => call(client.inputResult.bind(client), value, token),
     deleteInput: (value) => call(client.deleteInput.bind(client), value, token),
+    retryInput: (value) => call(client.retryInput.bind(client), value, token),
     submitAnswer: (value) =>
       call(client.submitAnswer.bind(client), value, token),
     answerResult: (value) =>
@@ -362,8 +364,6 @@ async function readNativeRegion(
     input.expectedSnapshotId === header.source?.snapshotId &&
     input.expectedConversationId === header.conversationId;
   const before = sameSource ? input.before : undefined;
-  if (header.state === "loading")
-    return { header, records: [], renderedAt: Date.now() };
   if (input.expectedSnapshotId !== undefined && !sameSource)
     return { header, records: [], renderedAt: Date.now(), refill: true };
   const inputScope: Wire.OwnerInputScope | undefined = header.conversationId
@@ -401,11 +401,7 @@ async function readNativeRegion(
       continue;
     }
     let text: string | undefined;
-    if (
-      !item.deleted &&
-      inputObservation(status) === "failed" &&
-      !(sameSource && input.knownInputs?.includes(receipt.id))
-    ) {
+    if (!(sameSource && input.knownInputs?.includes(receipt.id))) {
       try {
         text = new TextDecoder("utf-8", { fatal: true }).decode(
           await readConversationBytes(
@@ -449,7 +445,6 @@ async function readNativeRegion(
       requestId: receipt.requestId,
       acceptedAt: receipt.acceptedAt,
       text,
-      deleted: item.deleted,
       observation: inputObservation(status),
       preparation: inputPreparation(status),
       insertedNativeMessageId: status.delivery?.insertedNativeMessageId,
@@ -457,7 +452,7 @@ async function readNativeRegion(
   }
   const newest = retainedPage.latest;
   const firstInput = newest
-    ? inputs.find((item) => !item.deleted && item.id === newest.id)
+    ? inputs.find((item) => item.id === newest.id)
     : undefined;
   let latestInput: ConversationRegion["latestInput"] = firstInput
     ? {
@@ -475,7 +470,7 @@ async function readNativeRegion(
     });
     if (status.acceptance?.id !== newest.id) closedInputs.add(newest.id);
     latestInput =
-      status.deleted || status.acceptance?.id !== newest.id
+      status.acceptance?.id !== newest.id
         ? undefined
         : {
             requestId: newest.requestId,
@@ -505,14 +500,15 @@ async function readNativeRegion(
           ),
         }
       : undefined;
-  if (!header.source) {
+  if (!header.source || header.state === "loading") {
     const final = conversationHeader(
       input.agentId,
       await api.current({ agentId: input.agentId }),
     );
     if (
       final.state !== header.state ||
-      final.conversationId !== header.conversationId
+      final.conversationId !== header.conversationId ||
+      final.source?.snapshotId !== header.source?.snapshotId
     )
       throw new Error("Conversation source changed during read");
     return {
@@ -776,6 +772,7 @@ export async function submitConversationAnswer(
 export function inputObservation(
   value: Wire.OwnerInputStatus,
 ): InputObservation {
+  if (value.failed) return "failed";
   if (!value.acceptance) return "uncertain";
   if (
     value.delivery?.failed !== undefined ||

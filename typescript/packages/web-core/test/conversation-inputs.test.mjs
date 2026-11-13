@@ -2,9 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readConversationActivity } from "../dist/conversation.js";
 import {
-  markConversationInputDeleted,
+  removeConversationInput,
   mergeConversationRegion,
-  reconcileLocalConversationInputs,
 } from "../dist/conversation-state.js";
 function fixture({ started = true, known = false } = {}) {
   const text = `  Original 🙂 ${"가".repeat(22000)}\n `;
@@ -100,19 +99,6 @@ test("exact closure removes a consumed cached input without mistaking pagination
       .length,
     1,
   );
-  const local = [
-    {
-      id: f.acceptance.id,
-      requestId: f.acceptance.requestId,
-      text: "accepted before the first poll",
-      observation: "accepted",
-    },
-  ];
-  assert.deepEqual(
-    reconcileLocalConversationInputs(local, [], incoming.closedInputs),
-    [],
-  );
-  assert.equal(reconcileLocalConversationInputs(local, [], []), local);
 });
 
 test("pickup between listing and status read closes the input rather than fabricating uncertainty", async () => {
@@ -161,6 +147,38 @@ test("first native binding retains the original acceptance target without retarg
   assert.deepEqual(f.acceptance.target, { notStarted: {} });
   assert.deepEqual(f.reads[0].input.scope.target, { snapshotId: "snapshot" });
 });
+test("waiting queue bodies come from the server just like failed bodies", async () => {
+  const f = fixture();
+  f.api.inputResult = async () => ({
+    acceptance: f.acceptance,
+    ownership: 1,
+  });
+  const result = await readConversationActivity(f.api, { agentId: "agent" });
+  assert.equal(result.inputs[0].text, f.text);
+  assert.equal(result.inputs[0].observation, "accepted");
+  assert.ok(f.reads.some((read) => read.type === "text"));
+});
+test("queue text stays visible while the native source is loading", async () => {
+  const f = fixture();
+  f.api.current = async () => ({
+    conversation: {
+      conversationId: "conversation",
+      status: 2,
+      snapshotId: "snapshot",
+    },
+  });
+  f.api.inputResult = async () => ({
+    acceptance: f.acceptance,
+    ownership: 1,
+  });
+  f.api.liveRequests = async () => {
+    throw new Error("Loading native history is not queue authority");
+  };
+  const result = await readConversationActivity(f.api, { agentId: "agent" });
+  assert.equal(result.header.state, "loading");
+  assert.equal(result.inputs[0].text, f.text);
+  assert.deepEqual(result.records, []);
+});
 test("active updates reuse immutable cached input text while refreshing only actual retained result facts", async () => {
   const f = fixture({ known: true });
   const result = await readConversationActivity(f.api, {
@@ -183,56 +201,6 @@ test("active updates reuse immutable cached input text while refreshing only act
   );
   assert.equal(merged.inputs[0].text, "unchanged original");
   assert.equal(merged.inputs[0].observation, "failed");
-});
-test("deleted input bodies are not reread and a tombstone removes cached text after reentry", async () => {
-  const f = fixture({ started: false, known: true });
-  f.api.inputs = async () => ({
-    inputs: [{ acceptance: f.acceptance, totalBytes: 0n, deleted: true }],
-  });
-  const result = await readConversationActivity(f.api, { agentId: "agent" });
-  assert.equal(result.inputs[0].deleted, true);
-  assert.equal(result.inputs[0].text, undefined);
-  assert.equal(result.latestInput, undefined);
-  const merged = mergeConversationRegion(
-    {
-      ...result,
-      inputs: [
-        { ...result.inputs[0], deleted: false, text: "must not return" },
-      ],
-    },
-    result,
-  );
-  assert.equal(merged.inputs[0].deleted, true);
-  assert.equal(merged.inputs[0].text, undefined);
-  assert.equal(
-    markConversationInputDeleted(merged, merged.inputs[0].id, "another"),
-    merged,
-  );
-  const restored = {
-    ...result,
-    inputs: [{ ...result.inputs[0], text: "cached body", deleted: false }],
-  };
-  const ack = markConversationInputDeleted(
-    restored,
-    result.inputs[0].id,
-    "conversation",
-  );
-  assert.equal(ack.inputs[0].deleted, true);
-  assert.equal(ack.inputs[0].text, undefined);
-  assert.equal(
-    mergeConversationRegion(ack, restored).inputs[0].text,
-    undefined,
-  );
-  assert.equal(
-    mergeConversationRegion(ack, { ...restored, inputs: [] }).inputs[0].text,
-    undefined,
-  );
-  const paged = await readConversationActivity(f.api, {
-    agentId: "agent",
-    expectedConversationId: "conversation",
-    inputBefore: { acceptedAt: 1n, requestId: "old" },
-  });
-  assert.equal(paged.latestInput, undefined);
 });
 test("source replacement discards cached retained inputs instead of reviving initial-target receipts", () => {
   const f = fixture();
@@ -359,67 +327,40 @@ for (const when of ["before-status", "during-body"]) {
   });
 }
 
-test("a newer deleted failure does not hide an earlier preparing input", async () => {
-  const f = fixture({ started: false, known: true });
-  const live = {
-    ...f.acceptance,
-    id: "live-operation",
-    requestId: "live",
-    acceptedAt: 20n,
-  };
-  const tombstone = {
-    ...f.acceptance,
-    id: "deleted-operation",
-    requestId: "zz-deleted",
-    acceptedAt: 20n,
-  };
-  f.api.inputResult = async ({ requestId }) => ({
-    acceptance: requestId === "live" ? live : tombstone,
-    ownership: 1,
-    deleted: requestId !== "live",
-    preparation:
-      requestId === "live" ? { possibleForwarding: {} } : { failed: 3 },
-  });
-  f.api.inputs = async () => ({
+test("acknowledged queue removal preserves other items and checks the exact source", () => {
+  const region = {
+    header: {
+      agentId: "agent",
+      conversationId: "conversation",
+      state: "notStarted",
+    },
+    records: [],
     inputs: [
-      { acceptance: tombstone, totalBytes: 0n, deleted: true },
-      { acceptance: live, totalBytes: 4n, deleted: false },
+      {
+        id: "one",
+        requestId: "one",
+        conversationId: "conversation",
+        acceptedAt: 1n,
+        observation: "failed",
+        text: "first",
+      },
+      {
+        id: "two",
+        requestId: "two",
+        conversationId: "conversation",
+        acceptedAt: 2n,
+        observation: "accepted",
+        text: "second",
+      },
     ],
-    latest: live,
-  });
-  const current = await readConversationActivity(f.api, {
-    agentId: "agent",
-    expectedConversationId: "conversation",
-    knownInputs: [live.id],
-  });
-  assert.equal(current.latestInput.requestId, "live");
-  assert.deepEqual(current.latestInput.preparation, { type: "preparing" });
-  assert.equal(
-    current.inputs.find((item) => item.requestId === "zz-deleted").deleted,
-    true,
-  );
-  assert.equal(
-    markConversationInputDeleted(current, tombstone.id, "conversation")
-      .latestInput.requestId,
-    "live",
-  );
-  f.api.inputs = async () => ({
-    inputs: [{ acceptance: tombstone, totalBytes: 0n, deleted: true }],
-    latest: live,
-  });
-  const older = await readConversationActivity(f.api, {
-    agentId: "agent",
-    expectedConversationId: "conversation",
-    knownInputs: [tombstone.id],
-    inputBefore: { acceptedAt: 20n, requestId: "zz-deleted" },
-  });
-  assert.equal(older.latestInput.requestId, "live");
-  assert.equal(
-    older.inputs.some((item) => item.requestId === "live"),
-    false,
-  );
-  assert.equal(
-    mergeConversationRegion(current, older).latestInput.requestId,
-    "live",
-  );
+    latestInput: { requestId: "two", observation: "accepted" },
+    renderedAt: 1,
+  };
+  assert.equal(removeConversationInput(region, "one", "foreign"), region);
+  const removed = removeConversationInput(region, "one", "conversation");
+  assert.deepEqual(removed.inputs, [region.inputs[1]]);
+  assert.equal(removed.latestInput, region.latestInput);
+  const empty = removeConversationInput(removed, "two", "conversation");
+  assert.deepEqual(empty.inputs, []);
+  assert.equal(empty.latestInput, undefined);
 });

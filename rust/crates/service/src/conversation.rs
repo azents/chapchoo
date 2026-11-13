@@ -5,6 +5,7 @@ pub use answer_owner::{
     AcceptedConversationAnswer, ConversationAnswerAcceptance, ConversationAnswerDraft,
     ConversationAnswerFuture, ConversationAnswerProcessor, ConversationAnswerService,
 };
+mod input_consumer;
 mod input_owner;
 mod input_work;
 mod messages;
@@ -296,11 +297,36 @@ impl ConversationService {
         source: &ConnectorSource<'_>,
         draft: &chapchoo_persistence::ConversationOperationForwarding<'_>,
         outcome: &chapchoo_persistence::ConversationInputOutcome,
-    ) -> Result<(), ServiceError> {
+    ) -> Result<chapchoo_persistence::ConversationInputReportAcknowledgement, ServiceError> {
         Ok(self
             .store
             .complete_conversation_input_forwarding(source, draft, outcome)
             .await?)
+    }
+    pub async fn report_input_attempt_error(
+        &self,
+        source: &ConnectorSource<'_>,
+        draft: &chapchoo_persistence::ConversationOperationForwarding<'_>,
+    ) -> Result<(), ServiceError> {
+        Ok(self
+            .store
+            .fail_conversation_input_attempt(source, draft)
+            .await?)
+    }
+    pub async fn input_pending(
+        &self,
+        actor: &chapchoo_crypto::SecretDigest,
+        agent_id: &str,
+        conversation_id: &str,
+        input_id: &str,
+    ) -> Result<bool, ServiceError> {
+        self.owner_conversation(actor, agent_id, crate::AcceptanceTime::System.now()?)
+            .await?;
+        Ok(self
+            .store
+            .conversation_input_queue_state(conversation_id, input_id)
+            .await?
+            == chapchoo_persistence::ConversationInputQueueState::Pending)
     }
     pub async fn check_setup(
         &self,

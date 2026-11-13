@@ -24,6 +24,7 @@ impl Drop for Lease {
 pub(super) struct OperationPermit {
     _slot: OwnedSemaphorePermit,
     _lease: Lease,
+    pub(super) ordering: Option<super::super::server_tools::Ticket>,
 }
 impl Operations {
     pub(super) fn admit(&self, kind: Kind, id: &str) -> Result<Option<OperationPermit>, AppError> {
@@ -45,6 +46,7 @@ impl Operations {
         active.insert(key.clone());
         Ok(Some(OperationPermit {
             _slot: slot,
+            ordering: None,
             _lease: Lease {
                 key,
                 active: self.active.clone(),

@@ -129,58 +129,6 @@ test("fresh native observations win over historical failures and missing saved s
     assert.equal(conversationActivity(value), foreground);
   }
 });
-test("new local acceptance replaces older failed diagnosis, but uncertain input never authorizes replay", () => {
-  const value = region({ latestInput: failure() });
-  for (const observation of ["sending", "accepted", "preparing"]) {
-    assert.equal(
-      conversationActivity(value, [
-        { requestId: "new", text: "new", observation },
-      ]),
-      "starting",
-    );
-  }
-  assert.equal(
-    conversationActivity(value, [
-      { requestId: "new", text: "new", observation: "uncertain" },
-    ]),
-    "deliveryUnconfirmed",
-  );
-  assert.equal(
-    conversationActivity(value, [
-      {
-        requestId: "new",
-        snapshotId: "other",
-        text: "new",
-        observation: "sending",
-      },
-    ]),
-    "startFailed",
-  );
-  assert.equal(
-    conversationActivity(value, [
-      {
-        requestId: "new",
-        conversationId: "another",
-        text: "new",
-        observation: "accepted",
-      },
-    ]),
-    "startFailed",
-  );
-  assert.equal(
-    conversationActivity(value, [
-      { requestId: "failed", text: "new", observation: "accepted" },
-    ]),
-    "startFailed",
-  );
-  value.inputs = [{ requestId: "new" }];
-  assert.equal(
-    conversationActivity(value, [
-      { requestId: "new", text: "new", observation: "sending" },
-    ]),
-    "startFailed",
-  );
-});
 test("typed setup decoding retains reported facts without guessing token or network causes", () => {
   for (const [failed, reason] of [
     [1, "notAdmitted"],

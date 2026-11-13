@@ -303,7 +303,7 @@ impl ConversationControlProcessor {
                 native_session_id: target.native_session.as_str().into(),
             }),
         };
-        let _ = self
+        let dispatched = self
             .invoke(
                 &input.actor,
                 &agent.computer.id,
@@ -312,6 +312,35 @@ impl ConversationControlProcessor {
                 control::connector_command::Operation::Input(command),
             )
             .await?;
+        if !dispatched {
+            return Ok(());
+        }
+        // This is a queue-consumer/report lifetime, not model completion.
+        // Connector terminal errors are explicitly reported even when no
+        // physical outcome can be asserted.
+        while self.admission.load(Ordering::Acquire)
+            && self
+                .conversation
+                .input_pending(
+                    actor,
+                    &input.agent_id,
+                    &input.receipt.conversation_id,
+                    &input.receipt.id,
+                )
+                .await?
+        {
+            let current = self
+                .computers
+                .resolve_connector_route(&agent.computer.id)
+                .await?;
+            if current.is_none_or(|current| {
+                current.component.control_id != route.component.control_id
+                    || current.component.connection_id != route.component.connection_id
+            }) {
+                return Ok(());
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
         Ok(())
     }
     async fn invoke(

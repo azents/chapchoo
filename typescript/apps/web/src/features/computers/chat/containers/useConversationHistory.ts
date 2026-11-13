@@ -22,7 +22,6 @@ export function useConversationHistory(
     true,
     "history",
     void 0,
-    [],
     props.initialFetch,
   );
   const scroll = useHistoryScroll(props.initialFocus, reader.region);
@@ -46,7 +45,6 @@ export function useConversationHistory(
       readingOlder: reader.readingOlder,
       olderRead: reader.olderRead,
       paginationReset: reader.paginationReset,
-      inputs: [],
       drafts: {},
       stop: "idle",
       onRead: reader.refresh,

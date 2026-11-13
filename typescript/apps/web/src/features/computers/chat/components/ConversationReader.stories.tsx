@@ -42,7 +42,6 @@ function Reader(): ReactElement {
   const scroll = useHistoryScroll(null, reader.region);
   const controls: ConversationControls = {
     ...reader,
-    inputs: [],
     drafts: {},
     stop: "idle",
     onRead: reader.refresh,

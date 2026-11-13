@@ -470,6 +470,7 @@ impl Store {
                 HarnessSupply::Managed => ("MANAGED", None),
                 HarnessSupply::Existing(path) => ("EXISTING", Some(path.as_str())),
             };
+            super::input_queue::require_consumer!(connection, dialect, operation);
             diesel::sql_query(dialect.query("INSERT INTO conversation_input_preparation(operation_id,execution_id,supply_kind,executable_path,selection_request_id,fresh_native_allowed,require_retained_source,preparation_state) VALUES(?,?,?,?,?,?,?,'POSSIBLE')"))
                 .bind::<IdentitySql,_>(operation).bind::<IdentitySql,_>(route._execution_id).bind::<Text,_>(kind).bind::<Nullable<Text>,_>(path)
                 .bind::<Nullable<Text>,_>(selection_request_id.as_deref()).bind::<diesel::sql_types::Bool,_>(fresh_native_allowed).bind::<diesel::sql_types::Bool,_>(require_retained_source).execute(connection).await?;
@@ -578,6 +579,15 @@ impl Store {
             if input_exists {
                 diesel::sql_query(dialect.query("UPDATE conversation_input_preparation SET preparation_state=?,ready_snapshot=?,ready_native_session=?,failure_kind=? WHERE operation_id=?"))
                     .bind::<Text,_>(state).bind::<Nullable<Text>,_>(snapshot).bind::<Nullable<Text>,_>(native).bind::<Nullable<Text>,_>(failure).bind::<IdentitySql,_>(operation).execute(connection).await?;
+                if state == "FAILED" {
+                    diesel::sql_query(
+                        dialect
+                            .query("UPDATE conversation_inputs SET queue_state='ERROR' WHERE id=?"),
+                    )
+                    .bind::<IdentitySql, _>(operation)
+                    .execute(connection)
+                    .await?;
+                }
             } else {
                 let ready_connection = if state == "READY" {
                     Some(EntityId::from_dto(

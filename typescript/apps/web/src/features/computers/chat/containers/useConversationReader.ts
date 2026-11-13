@@ -1,7 +1,7 @@
 "use client";
 import {
-  markConversationInputDeleted,
   mergeConversationRegion,
+  removeConversationInput,
 } from "@chapchoo/web-core/conversation-state";
 import { useDocumentVisibility, useWindowEvent } from "@mantine/hooks";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -10,7 +10,6 @@ import type {
   ConversationAnchor,
   ConversationRegion,
   InputHistoryAnchor,
-  LocalConversationInput,
 } from "@chapchoo/web-core/conversation-types";
 
 export function useConversationReader(
@@ -22,7 +21,6 @@ export function useConversationReader(
     requestId: string;
     snapshotId: string;
   },
-  pendingInputs: LocalConversationInput[] = [],
   initialFetch = false,
 ): {
   region: ConversationRegion;
@@ -33,7 +31,7 @@ export function useConversationReader(
   refresh: () => void;
   older: () => void;
   latest: () => void;
-  markInputDeleted: (
+  removeInput: (
     id: string,
     conversationId: string,
     snapshotId?: string,
@@ -41,18 +39,17 @@ export function useConversationReader(
 } {
   const utils = trpc.useUtils();
   const stopRef = useRef(stopLookup);
-  const pendingRef = useRef(pendingInputs);
   const checkIndex = useRef(0);
-  useEffect(() => {
-    pendingRef.current = pendingInputs;
-  }, [pendingInputs]);
   useEffect(() => {
     stopRef.current = stopLookup;
   }, [stopLookup]);
   const visibility = useDocumentVisibility();
   const [region, setRegion] = useState(initial);
   const [read, setRead] = useState<"ready" | "loading" | "error">(
-    initialFetch || initial.header.state === "loading" ? "loading" : "ready",
+    initialFetch ||
+      (surface === "history" && initial.header.state === "loading")
+      ? "loading"
+      : "ready",
   );
   const current = useRef(initial);
   const before = useRef<ConversationAnchor | null>(null);
@@ -101,24 +98,13 @@ export function useConversationReader(
       const anchor = retryHead.current ? null : before.current;
       const inputAnchor = retryHead.current ? null : inputBefore.current;
       const snapshot = current.current.header.source?.snapshotId;
+      const observed = current.current;
       try {
-        const known = (current.current.inputs ?? [])
-          .filter((item) => !item.deleted)
-          .map((item) => item.id);
+        const known = (current.current.inputs ?? []).map((item) => item.id);
         const offset = checkIndex.current % Math.max(known.length, 1);
         const rotating = [...known.slice(offset), ...known.slice(0, offset)];
         checkIndex.current = offset + 25;
-        const checkInputs = [
-          ...new Set([
-            ...pendingRef.current
-              .filter(
-                (item) =>
-                  item.conversationId === current.current.header.conversationId,
-              )
-              .flatMap((item) => (item.id ? [item.id] : [])),
-            ...rotating,
-          ]),
-        ].slice(0, 25);
+        const checkInputs = rotating.slice(0, 25);
         const input = {
           agentId: initial.header.agentId,
           inputBefore: inputAnchor
@@ -177,12 +163,18 @@ export function useConversationReader(
         if (!hasOwner()) {
           return;
         }
+        // A successful queue mutation replaced this read's snapshot. Discard
+        // that older response and query again without retaining deleted IDs.
+        if (observed !== current.current) {
+          queued.current = true;
+          return;
+        }
         const changedSource =
           incoming.header.conversationId !==
             current.current.header.conversationId ||
           incoming.header.source?.snapshotId !==
             current.current.header.source?.snapshotId;
-        if (changedSource || incoming.header.state === "loading") {
+        if (changedSource) {
           paged.current = false;
           retryHead.current = false;
           setOlderRead("ready");
@@ -190,7 +182,7 @@ export function useConversationReader(
           inputBefore.current = null;
           setReadingOlder(false);
           current.current = incoming;
-          setRegion(incoming);
+          setRegion(current.current);
         } else if (
           (!anchor && !inputAnchor) ||
           (anchor === before.current && inputAnchor === inputBefore.current)
@@ -229,7 +221,8 @@ export function useConversationReader(
           incoming.header.state === "loading"
         ) {
           setRead(
-            incoming.refill || incoming.header.state === "loading"
+            incoming.refill ||
+              (surface === "history" && incoming.header.state === "loading")
               ? "loading"
               : "ready",
           );
@@ -238,6 +231,10 @@ export function useConversationReader(
           queued.current = true;
         }
       } catch {
+        if (observed !== current.current) {
+          queued.current = true;
+          return;
+        }
         if (
           (anchor || inputAnchor) &&
           (anchor !== before.current || inputAnchor !== inputBefore.current)
@@ -300,8 +297,8 @@ export function useConversationReader(
     paginationReset,
     readingOlder,
     refresh: request,
-    markInputDeleted: (id, conversationId, snapshotId) => {
-      current.current = markConversationInputDeleted(
+    removeInput: (id, conversationId, snapshotId) => {
+      current.current = removeConversationInput(
         current.current,
         id,
         conversationId,
@@ -310,12 +307,14 @@ export function useConversationReader(
       setRegion(current.current);
     },
     older: () => {
-      if (!current.current.older && !current.current.inputOlder) {
+      const recordAnchor =
+        surface === "history" ? (current.current.older ?? null) : null;
+      if (!recordAnchor && !current.current.inputOlder) {
         return;
       }
       // Admit the page even during an in-flight latest poll. run() queues it;
       // the stale latest result cannot consume or replace the page request.
-      before.current = current.current.older ?? null;
+      before.current = recordAnchor;
       inputBefore.current = current.current.inputOlder ?? null;
       setReadingOlder(true);
       setOlderRead("loading");

@@ -133,6 +133,11 @@ Agent/conversation in its immutable setup fingerprint. An already-live exact
 lookup validates that original product scope before returning the existing
 session; it acquires neither authentication nor another tools provision.
 
+Connector's [user-receipt publication fence](server-tools.md#user-receipt-publication-order)
+belongs to that actual provision, not a saved setup intention. Owner-bound input
+dispatch rechecks the stable application binding in the serialized actor before
+native submission; a successor cannot borrow a predecessor's publication ticket.
+
 An actual launch checks scope against its admitted authentication binding and
 retains a tool provision before starting the native process. Strict-v2
 initialization requires advertised HTTP MCP capability. Both New and exact

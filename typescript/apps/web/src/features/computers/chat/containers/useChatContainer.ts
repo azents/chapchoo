@@ -6,12 +6,10 @@ import {
   initialQuestionDraft,
   reviewQuestionAnswer,
 } from "@chapchoo/web-core/conversation-form";
-import { acknowledgeConversationInputs } from "@chapchoo/web-core/conversation-message-state";
-import { reconcileLocalConversationInputs } from "@chapchoo/web-core/conversation-state";
 import { useDisplay } from "@chapchoo/web-core/display-context";
 import { TRPCClientError } from "@trpc/client";
 import { useLocale } from "next-intl";
-import { createElement, useContext, useEffect, useRef, useState } from "react";
+import { createElement, useContext, useRef, useState } from "react";
 import { trpc } from "@/shared/rpc/client";
 import { useAgentsContainer } from "../../containers/useAgentsContainer";
 import { chatStatus } from "../chatStatus";
@@ -49,7 +47,7 @@ export function useChatContainer(props: ChatInput): ChatProps {
     initialFetch: boolean;
   } | null>(null);
   const [navOpened, setNavOpened] = useState(false);
-  const [inputs, setInputs] = useState<ConversationControls["inputs"]>([]);
+  const [inputError, setInputError] = useState(false);
   const [drafts, setDrafts] = useState<Partial<Record<string, QuestionDraft>>>(
     {},
   );
@@ -68,6 +66,9 @@ export function useChatContainer(props: ChatInput): ChatProps {
   const stopBusy = useRef(false);
   const utils = trpc.useUtils();
   const sendMutation = trpc.conversations.send.useMutation({ retry: false });
+  const retryMutation = trpc.conversations.retryInput.useMutation({
+    retry: false,
+  });
   const deleteMutation = trpc.conversations.deleteInput.useMutation({
     retry: false,
   });
@@ -80,7 +81,6 @@ export function useChatContainer(props: ChatInput): ChatProps {
     product.access === "authorized",
     "activity",
     stop ?? void 0,
-    inputs,
   );
   const region = reader.region;
   const messageReader = useMessageReader(
@@ -99,66 +99,8 @@ export function useChatContainer(props: ChatInput): ChatProps {
     product.access === "authorized" && opened,
     "history",
     void 0,
-    inputs,
     true,
   );
-  const previousSnapshot = useRef(
-    props.initialConversation.header.source?.snapshotId ?? null,
-  );
-  useEffect(() => {
-    if (product.access !== "authorized") {
-      return;
-    }
-    const messages = messageReader.region;
-    const agentId = props.initialConversation.header.agentId;
-    const recovered = acknowledgeConversationInputs(inputs, agentId, messages);
-    if (recovered.acknowledged.length) {
-      setInput((value) =>
-        recovered.acknowledged.some((item) => item.text === value) ? "" : value,
-      );
-      setInputs(
-        (all) => acknowledgeConversationInputs(all, agentId, messages).inputs,
-      );
-    }
-  }, [
-    inputs,
-    messageReader.region,
-    product.access,
-    props.initialConversation.header.agentId,
-  ]);
-  useEffect(() => {
-    const snapshot = region.header.source?.snapshotId ?? null;
-    const previous = previousSnapshot.current;
-    previousSnapshot.current = snapshot;
-    if (previous !== snapshot) {
-      setInputs((all) =>
-        all
-          .filter((item) => previous === null || item.snapshotId === snapshot)
-          .map((item) => ({
-            ...item,
-            snapshotId: item.snapshotId ?? snapshot ?? void 0,
-          })),
-      );
-    }
-    const recovered = inputs.find(
-      (item) =>
-        item.observation === "uncertain" &&
-        region.inputs?.some(
-          (retained) => retained.requestId === item.requestId,
-        ),
-    );
-    if (recovered) {
-      setInput((value) => (value === recovered.text ? "" : value));
-    }
-    setInputs((all) =>
-      reconcileLocalConversationInputs(all, region.inputs, region.closedInputs),
-    );
-  }, [
-    region.header.source?.snapshotId,
-    region.inputs,
-    region.closedInputs,
-    inputs,
-  ]);
   const floating = useFloatingChat(
     input,
     messageReader.region.conversationId ?? "",
@@ -181,7 +123,7 @@ export function useChatContainer(props: ChatInput): ChatProps {
     computer.power === "running" &&
     computer.connector === "connected" &&
     computer.phase === "completed";
-  const activity = conversationActivity(region, inputs);
+  const activity = conversationActivity(region);
   const writable =
     effectAvailable &&
     reader.read === "ready" &&
@@ -235,19 +177,13 @@ export function useChatContainer(props: ChatInput): ChatProps {
         : all;
     });
   }
-  async function send(retryText?: string): Promise<void> {
-    const text = retryText ?? input;
-    if (
-      !writable ||
-      inputBusy.current ||
-      !text.trim() ||
-      inputs.some(
-        (item) => item.text === text && item.observation === "uncertain",
-      )
-    ) {
+  async function send(): Promise<void> {
+    const text = input;
+    if (!writable || inputBusy.current || !text.trim()) {
       return;
     }
     inputBusy.current = true;
+    setInputError(false);
     const requestId = crypto.randomUUID();
     const target = {
       agentId: agent.id,
@@ -256,44 +192,14 @@ export function useChatContainer(props: ChatInput): ChatProps {
       requestId,
       text,
     };
-    setInputs((all) => [
-      ...all,
-      {
-        text,
-        requestId,
-        observation: "sending",
-        snapshotId: target.snapshotId,
-        conversationId: target.conversationId,
-      },
-    ]);
     try {
-      const receipt = await sendMutation.mutateAsync(target);
-      setInputs((all) =>
-        all.map((item) =>
-          item.requestId === requestId
-            ? {
-                ...item,
-                id: receipt.id,
-                observation: "accepted",
-                conversationId: receipt.conversationId,
-              }
-            : item,
-        ),
-      );
-      if (retryText === void 0) {
-        setInput((current) => (current === text ? "" : current));
-      }
+      await sendMutation.mutateAsync(target);
+      setInput((current) => (current === text ? "" : current));
       floating.followLatest();
     } catch {
-      setInputs((all) =>
-        all.map((item) =>
-          item.requestId === requestId
-            ? item.observation === "accepted" && item.id
-              ? item
-              : { ...item, observation: "uncertain" }
-            : item,
-        ),
-      );
+      // Keep the draft. Only the server queue can introduce a pending bubble,
+      // including when acceptance succeeded but its response was lost.
+      setInputError(true);
     } finally {
       inputBusy.current = false;
     }
@@ -308,10 +214,39 @@ export function useChatContainer(props: ChatInput): ChatProps {
           item.id === value.id &&
           item.requestId === value.requestId &&
           item.conversationId === region.header.conversationId &&
-          item.observation === "failed" &&
-          !item.deleted,
+          item.observation === "failed",
       ) ?? null
     );
+  }
+  async function retryInput(value: RetainedInputView): Promise<void> {
+    const current = currentFailedInput(value);
+    if (!current || deletionBusy.current || !writable) {
+      return;
+    }
+    deletionBusy.current = true;
+    const snapshotId = region.header.source?.snapshotId;
+    setInputAction({ requestId: current.requestId, state: "retrying" });
+    try {
+      await retryMutation.mutateAsync({
+        source: {
+          agentId: agent.id,
+          conversationId: current.conversationId,
+          snapshotId,
+        },
+        originalInputId: current.id,
+        originalRequestId: current.requestId,
+        requestId: crypto.randomUUID(),
+      });
+      reader.removeInput(current.id, current.conversationId, snapshotId);
+      floating.followLatest();
+    } catch {
+      // Atomic replacement keeps the original failed item if admission fails.
+      // A lost response is resolved only by queried queue rows, never replay.
+    } finally {
+      deletionBusy.current = false;
+      setInputAction(void 0);
+    }
+    await refreshAfterEffect();
   }
   async function deleteInput(value: RetainedInputView): Promise<void> {
     const current = currentFailedInput(value);
@@ -336,46 +271,15 @@ export function useChatContainer(props: ChatInput): ChatProps {
         },
         requestId: current.requestId,
       });
-      reader.markInputDeleted(current.id, current.conversationId, snapshotId);
-      setInputAction(void 0);
+      reader.removeInput(current.id, current.conversationId, snapshotId);
     } catch {
-      // Lost delete responses recover through read-only tombstone observations.
-      setInputAction({ requestId: current.requestId, state: "uncertain" });
+      // Leave queried queue state authoritative. Repeating an explicit Delete
+      // is idempotent; polling never repeats the mutation.
     } finally {
       deletionBusy.current = false;
+      setInputAction(void 0);
     }
     await refreshAfterEffect();
-  }
-  async function recoverDeletion(): Promise<void> {
-    if (inputAction?.state === "uncertain") {
-      const current = region.inputs?.find(
-        (item) => item.requestId === inputAction.requestId,
-      );
-      if (current && current.conversationId === region.header.conversationId) {
-        const snapshot = region.header.source?.snapshotId;
-        try {
-          const result = await utils.conversations.inputResult.fetch(
-            {
-              agentId: agent.id,
-              conversationId: current.conversationId,
-              requestId: current.requestId,
-            },
-            { staleTime: 0, retry: false },
-          );
-          if (result.deleted) {
-            reader.markInputDeleted(
-              current.id,
-              current.conversationId,
-              snapshot,
-            );
-          }
-          setInputAction(void 0);
-        } catch {
-          // Keep uncertainty until the exact operation can be read.
-        }
-      }
-    }
-    reader.refresh();
   }
   async function answer(
     record: ConversationRecord,
@@ -506,18 +410,6 @@ export function useChatContainer(props: ChatInput): ChatProps {
     readingOlder: reader.readingOlder,
     olderRead: reader.olderRead,
     paginationReset: reader.paginationReset,
-    inputs: acknowledgeConversationInputs(
-      inputs,
-      region.header.agentId,
-      messageReader.region,
-    ).inputs.filter(
-      (item) =>
-        !region.inputs?.some(
-          (retained) => retained.requestId === item.requestId,
-        ) &&
-        (item.snapshotId === void 0 ||
-          item.snapshotId === region.header.source?.snapshotId),
-    ),
     stop:
       stop?.workId === region.header.workId &&
       stop?.snapshotId === region.header.source?.snapshotId
@@ -533,9 +425,7 @@ export function useChatContainer(props: ChatInput): ChatProps {
             typeof entry[0] === "string" && entry[1] !== null,
         ),
     ),
-    onRead: () => {
-      void recoverDeletion();
-    },
+    onRead: reader.refresh,
     inputAction,
     inputDeletable:
       product.access === "authorized" &&
@@ -543,8 +433,8 @@ export function useChatContainer(props: ChatInput): ChatProps {
       reader.read === "ready",
     onRetryInput: (value) => {
       const current = currentFailedInput(value);
-      if (current?.text && inputAction?.state !== "deleting") {
-        void send(current.text);
+      if (current && !deletionBusy.current && writable) {
+        void retryInput(current);
       }
     },
     onDeleteInput: (value) => {
@@ -622,17 +512,12 @@ export function useChatContainer(props: ChatInput): ChatProps {
     recentRecords: recentReader.region,
     recentRead: recentReader.read,
     input,
+    inputError: inputError ? copy.enqueueFailed : void 0,
     activity: reader.read === "error" ? "unavailable" : activity,
     writable: writable && !sendMutation.isPending,
     stoppable:
       effectAvailable && Boolean(region.header.native && region.header.workId),
-    sendable:
-      writable &&
-      !sendMutation.isPending &&
-      Boolean(input.trim()) &&
-      !inputs.some(
-        (item) => item.text === input && item.observation === "uncertain",
-      ),
+    sendable: writable && !sendMutation.isPending && Boolean(input.trim()),
     status,
     statusLoading: presentation.refreshing,
     opened,
@@ -658,7 +543,10 @@ export function useChatContainer(props: ChatInput): ChatProps {
     onClose: () => setOpened(false),
     onOpenNav: () => setNavOpened(true),
     onCloseNav: () => setNavOpened(false),
-    onInput: setInput,
+    onInput: (value) => {
+      setInput(value);
+      setInputError(false);
+    },
     onSend: () => {
       void send();
     },

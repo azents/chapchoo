@@ -22,6 +22,7 @@ import { nativeStatus } from "../copy";
 import classes from "./Chat.module.css";
 import { ConversationBody, ConversationContent } from "./ConversationBody";
 import { RecentConversationRecord } from "./ConversationRecord";
+import { OutgoingIcon } from "./OutgoingIcon";
 import type { ChatProps } from "../types";
 import type { ReactElement } from "react";
 
@@ -203,11 +204,22 @@ export function Chat(props: ChatProps): ReactElement {
                   contentRef={f.contentRef}
                   followingLatest={!f.detached}
                 />
+                <OlderRecordsContainer
+                  controls={{
+                    ...props.conversation,
+                    region: {
+                      ...props.conversation.region,
+                      older: void 0,
+                    },
+                  }}
+                  viewportRef={f.viewportRef}
+                  contentRef={f.contentRef}
+                  followingLatest={!f.detached}
+                />
                 {props.messages.read === "ready" &&
                 props.conversation.region.header.state !== "loading" &&
                 props.messages.region.messages.length === 0 &&
                 props.conversation.region.records.length === 0 &&
-                props.conversation.inputs.length === 0 &&
                 !props.conversation.region.inputs?.length ? (
                   <div className={classes.empty}>
                     <CharacterArtwork
@@ -247,9 +259,20 @@ export function Chat(props: ChatProps): ReactElement {
                   </Box>
                 </ActionIcon>
               ) : null}
+              {props.inputError ? (
+                <div
+                  id="chat-input-error"
+                  role="alert"
+                  className={classes.composerError}
+                >
+                  <OutgoingIcon kind="error" />
+                  <span>{props.inputError}</span>
+                </div>
+              ) : null}
               <div
                 className={classes.composer}
                 data-readonly={!props.writable || void 0}
+                data-error={Boolean(props.inputError) || void 0}
               >
                 <textarea
                   ref={f.textareaRef}
@@ -257,6 +280,10 @@ export function Chat(props: ChatProps): ReactElement {
                   value={props.input}
                   disabled={!props.writable}
                   aria-label={c.message}
+                  aria-invalid={Boolean(props.inputError)}
+                  aria-describedby={
+                    props.inputError ? "chat-input-error" : void 0
+                  }
                   placeholder={
                     props.writable
                       ? `${agent.name} · ${c.input}`

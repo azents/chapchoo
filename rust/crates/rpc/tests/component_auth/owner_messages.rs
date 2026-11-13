@@ -29,12 +29,16 @@ pub(super) async fn exercise(
         .iter()
         .filter(|m| m.source_input_id.as_deref() == Some(input_id))
         .collect::<Vec<_>>();
-    assert_eq!(matches.len(), 1, "Chunked receipt recovery duplicated chat");
+    assert_eq!(
+        matches.len(),
+        1,
+        "Successful report recovery duplicated chat"
+    );
     let message = *matches.first().ok_or("Missing accepted message")?;
     assert_eq!(message.role, c::MessageRole::User as i32);
     assert_eq!(
         message.source_input_request_id.as_deref(),
-        Some("owner-large-input")
+        Some("large-input-wire")
     );
     assert_eq!(message.total_bytes, i64::try_from(expected_text.len())?);
     assert!(message.receipt_order > 0 && message.receipt_order <= region.through);
@@ -188,12 +192,6 @@ pub(super) async fn native_output_is_not_chat(
         )?)
         .await?
         .into_inner();
-    assert!(!region.messages.is_empty());
-    assert!(
-        region
-            .messages
-            .iter()
-            .all(|m| m.role == c::MessageRole::User as i32)
-    );
+    assert!(region.messages.is_empty());
     Ok(())
 }

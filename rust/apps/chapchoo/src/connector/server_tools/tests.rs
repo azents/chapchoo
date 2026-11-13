@@ -85,6 +85,16 @@ impl ServerToolBackend for Backend {
     }
 }
 struct Profile;
+fn binding() -> chapchoo_harness::NativeAuthenticationBinding {
+    chapchoo_harness::NativeAuthenticationBinding {
+        agent_id: "agent".into(),
+        conversation_id: "conversation".into(),
+        operation_id: "setup".into(),
+        execution_id: "execution".into(),
+        authentication_id: "authentication".into(),
+        source: [1; 24],
+    }
+}
 fn http_client() -> Result<reqwest::Client, AppError> {
     let tls = rustls::ClientConfig::builder_with_provider(Arc::new(
         rustls::crypto::ring::default_provider(),
@@ -156,6 +166,8 @@ async fn official_sdk_http_round_trip_keeps_native_scope_across_server_key_refre
             connection_id: "connection-1".into(),
         };
         current.update(channel.clone(), source.clone(), &key)?;
+        let ordering = super::Ordering::default();
+        let publication_owner = ordering.open(binding());
         let relay = Arc::new(tokio::sync::Mutex::new(
             Relay::start(
                 current.clone(),
@@ -163,6 +175,7 @@ async fn official_sdk_http_round_trip_keeps_native_scope_across_server_key_refre
                     agent_id: "agent".into(),
                     conversation_id: "conversation".into(),
                 },
+                publication_owner.clone(),
             )
             .await?,
         ));
@@ -222,9 +235,21 @@ async fn official_sdk_http_round_trip_keeps_native_scope_across_server_key_refre
         assert!(!invalid.to_string().contains("may have occurred"));
         let body = "  의도적 메시지 🙂\n원문  ";
         let arguments = serde_json::from_value(serde_json::json!({"text":body}))?;
-        let result = client
-            .call_tool(CallToolRequestParams::new("send_message").with_arguments(arguments))
-            .await?;
+        let mut input_receipt = ordering.begin(&binding(), "input-before-fast-agent")?;
+        let pending = client.send_request_with_option(
+            ClientRequest::CallToolRequest(CallToolRequest::new(
+                CallToolRequestParams::new("send_message").with_arguments(arguments),
+            )), PeerRequestOptions::default(),
+        ).await?;
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            while !publication_owner.waiting() {
+                tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+            }
+        }).await?;
+        assert!(lock(&backend.calls).is_empty(), "No RPC submit before user receipt ACK");
+        input_receipt.recorded();
+        let response = pending.await_response().await?;
+        let result: rmcp::model::CallToolResult = serde_json::from_value(serde_json::to_value(response)?)?;
         assert_eq!(result.is_error, Some(false));
         assert_eq!(
             result
@@ -272,7 +297,8 @@ async fn official_sdk_http_round_trip_keeps_native_scope_across_server_key_refre
         tokio::time::timeout(std::time::Duration::from_secs(10), backend.cancelled.acquire()).await??.forget();
 
         let isolated = Arc::new(tokio::sync::Mutex::new(Relay::start(current.clone(),
-            Recipient { agent_id:"agent".into(), conversation_id:"conversation".into() }).await?));
+            Recipient { agent_id:"agent".into(), conversation_id:"conversation".into() },
+            super::Ordering::default().open(binding())).await?));
         let cleanup = isolated.clone();
         fixture.cleanup(async move { cleanup.lock().await.finish().await });
         let (isolated_url, isolated_key) = {

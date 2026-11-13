@@ -395,10 +395,11 @@ async fn start_backends(
             delivery,
             admission.clone(),
         ));
-        let input = Arc::new(chapchoo_service::ConversationInputService::new(
+        let input = Arc::new(chapchoo_service::ConversationInputService::new_with_policy(
             store.clone(),
             processor.clone(),
             32,
+            application.computers,
         )?);
         let stops = Arc::new(chapchoo_service::ConversationStopService::new(
             store,

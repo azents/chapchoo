@@ -42,6 +42,7 @@ pub(super) struct Operations {
     stop: CancellationToken,
     authentication: super::authentication_sync::AuthenticationSync,
     tools_route: super::server_tools::CurrentRoute,
+    ordering: super::server_tools::Ordering,
 }
 impl Operations {
     pub(super) fn stop(&mut self, command: c::StopCommand) -> Result<bool, AppError> {
@@ -88,6 +89,7 @@ impl Operations {
         Self {
             authentication: super::authentication_sync::AuthenticationSync::new(native.clone()),
             tools_route: super::server_tools::CurrentRoute::default(),
+            ordering: super::server_tools::Ordering::default(),
             native,
             slots: Arc::new(Semaphore::new(32)),
             tasks: JoinSet::new(),
@@ -154,6 +156,7 @@ impl Operations {
         let tools = Arc::new(super::server_tools::Provider::new(
             self.tools_route.clone(),
             scope.clone(),
+            self.ordering.clone(),
         ));
         let rx = match self.native.admit_setup_with_authentication(
             NativeSetupOperation {
@@ -211,7 +214,7 @@ impl Operations {
         origin: c::CaptureSource,
         key: &BearerSecret,
     ) -> Result<bool, AppError> {
-        let permit = match self.admit(leases::Kind::Input, &command.operation_id)? {
+        let mut permit = match self.admit(leases::Kind::Input, &command.operation_id)? {
             Some(permit) => permit,
             None => return Ok(false),
         };
@@ -227,6 +230,7 @@ impl Operations {
         let native = self.native.clone();
         let payload = self.payload.clone();
         let stop = self.stop.clone();
+        let ordering = self.ordering.clone();
         self.tasks.spawn(async move {
             let outcome = async {
                 use chapchoo_harness::{NativeInputObservation, NativePromptAcceptance};
@@ -305,12 +309,25 @@ impl Operations {
                     return Err("Input transfer completion is inconsistent".into());
                 }
                 let text = chapchoo_domain::ConversationText::parse(String::from_utf8(bytes)?)?;
+                let binding = native
+                    .authentication_binding()
+                    .await?
+                    .ok_or("Native input owner is absent")?;
+                if binding.agent_id != command.agent_id
+                    || binding.conversation_id != command.conversation_id
+                {
+                    return Err("Native input owner conflicts".into());
+                }
+                permit.ordering = Some(ordering.begin(&binding, &command.operation_id)?);
                 let result = native
-                    .prompt(chapchoo_harness::NativeInputOperation {
-                        operation_id: command.operation_id.clone(),
-                        target,
-                        text,
-                    })
+                    .prompt_for_owner(
+                        chapchoo_harness::NativeInputOperation {
+                            operation_id: command.operation_id.clone(),
+                            target,
+                            text,
+                        },
+                        binding,
+                    )
                     .await?;
                 drop(budget);
                 match result {
@@ -330,8 +347,8 @@ impl Operations {
                 Ok(chapchoo_harness::NativePromptAcceptance::Failed) => {
                     c::input_report::Result::Failed(())
                 }
-                // No generic error is evidence of native non-delivery.
-                Err(_) => return None,
+                // End the queue attempt without asserting native nonexecution.
+                Err(_) => c::input_report::Result::AttemptError(()),
             };
             Some((
                 Report::Input(c::InputReport {
@@ -371,6 +388,13 @@ impl Operations {
         // report task. A check already awaiting its response still sees the held
         // invocation lease before any native release can be enqueued.
         for pending in std::mem::take(&mut self.settled) {
+            if matches!(&pending.0, Report::Input(report)
+                if matches!(report.result, Some(c::input_report::Result::AttemptError(()))))
+            {
+                // The server closed the queue attempt, but no known native
+                // observation exists to release or replace in the registry.
+                continue;
+            }
             match self.native.admit_reported(pending.0.native_report()?) {
                 Ok(receiver) => {
                     self.releasing.spawn(async move {
@@ -399,7 +423,7 @@ impl Operations {
                         let mut report = report.clone();
                         report.source = Some(origin.clone());
                         match request(report, &key) {
-                            Ok(request) => client.report_answer(request).await,
+                            Ok(request) => client.report_answer(request).await.map(|_| false),
                             Err(_) => Err(tonic::Status::unavailable(
                                 "Answer report request could not be prepared",
                             )),
@@ -409,7 +433,7 @@ impl Operations {
                         let mut report = report.clone();
                         report.source = Some(origin.clone());
                         match request(report, &key) {
-                            Ok(request) => client.report_stop(request).await,
+                            Ok(request) => client.report_stop(request).await.map(|_| false),
                             Err(_) => Err(tonic::Status::unavailable(
                                 "Stop report request could not be prepared",
                             )),
@@ -419,7 +443,7 @@ impl Operations {
                         let mut report = report.clone();
                         report.source = Some(origin.clone());
                         match request(report, &key) {
-                            Ok(request) => client.report_setup(request).await,
+                            Ok(request) => client.report_setup(request).await.map(|_| false),
                             Err(_) => Err(tonic::Status::unavailable(
                                 "Operation report request could not be prepared",
                             )),
@@ -429,14 +453,17 @@ impl Operations {
                         let mut report = report.clone();
                         report.source = Some(origin.clone());
                         match request(report, &key) {
-                            Ok(request) => client.report_input(request).await,
+                            Ok(request) => client
+                                .report_input(request)
+                                .await
+                                .map(|reply| reply.into_inner().user_receipt_recorded),
                             Err(_) => Err(tonic::Status::unavailable(
                                 "Operation report request could not be prepared",
                             )),
                         }
                     }
                 };
-                publication.record((report, permit), result.map(|_| ()));
+                publication.record((report, permit), result);
             }
             publication
         });

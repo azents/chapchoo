@@ -38,52 +38,6 @@ async function reply(
 const story =
   "/iframe.html?id=chat-message-reader--continuation&viewMode=story";
 
-for (const edited of [false, true]) {
-  test(`lost send response and consumed input acknowledge one receipt without clearing newer edits: ${edited}`, async ({
-    page,
-  }) => {
-    let received: (route: Route) => void = () => {};
-    const held = new Promise<Route>((resolve) => {
-      received = resolve;
-    });
-    await page.route("**/api/trpc/conversations.messages*", (route) => {
-      received(route);
-    });
-    await page.goto(
-      "/iframe.html?id=chat-message-reader--lost-response&viewMode=story",
-    );
-    const draft = page.getByRole("textbox", { name: "Draft", exact: true });
-    if (edited) {
-      await draft.fill("A newer unsent edit");
-    }
-    await page.getByRole("button", { name: "Poll now", exact: true }).click();
-    const pending = await held;
-    const accepted = region(50, 50);
-    await reply(pending, {
-      ...accepted,
-      messages: [
-        {
-          id: "receipt",
-          role: "user",
-          order: 50n,
-          receivedAt: 50n,
-          text: "Accepted SSR receipt",
-          sourceInputId: "consumed-input",
-          sourceInputRequestId: "nonce",
-        },
-      ],
-    });
-    await expect(
-      page.getByText("Accepted SSR receipt", { exact: true }),
-    ).toHaveCount(1);
-    await expect(page.locator("[data-message-id]")).toHaveCount(1);
-    await expect(draft).toHaveValue(edited ? "A newer unsent edit" : "");
-    await expect(
-      page.getByText("Response not confirmed", { exact: true }),
-    ).toHaveCount(0);
-  });
-}
-
 test("exact hydration and finite receipt catch-up never read native history", async ({
   page,
 }) => {

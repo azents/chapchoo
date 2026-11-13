@@ -2,6 +2,7 @@
 //! never grants server authority independently of the current component route.
 mod handler;
 mod http;
+mod ordering;
 mod provider;
 mod rpc;
 mod sessions;
@@ -31,6 +32,7 @@ macro_rules! redacted {
         }
     )+};
 }
+pub(super) use ordering::{Ordering, Ticket};
 pub(super) use provider::Provider;
 use redacted;
 fn lock<T>(value: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -93,6 +95,7 @@ redacted!(Recipient);
 struct State {
     route: CurrentRoute,
     recipient: Recipient,
+    ordering: Arc<ordering::Owner>,
     key: BearerSecret,
     stop: CancellationToken,
     requests: Arc<Semaphore>,
@@ -122,7 +125,11 @@ pub(super) struct Relay {
 }
 redacted!(Relay);
 impl Relay {
-    pub(super) async fn start(route: CurrentRoute, recipient: Recipient) -> Result<Self, AppError> {
+    pub(super) async fn start(
+        route: CurrentRoute,
+        recipient: Recipient,
+        ordering: Arc<ordering::Owner>,
+    ) -> Result<Self, AppError> {
         let catalog = rpc::catalog(&route, &recipient).await?;
         handler::validate_catalog(&catalog)?;
         let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await?;
@@ -130,6 +137,7 @@ impl Relay {
         let state = Arc::new(State {
             route,
             recipient,
+            ordering,
             key: BearerSecret::generate()?,
             stop: CancellationToken::new(),
             requests: Arc::new(Semaphore::new(128)),
@@ -163,6 +171,7 @@ impl Relay {
         self.state.key.expose()
     }
     pub(super) fn close(&self) {
+        self.state.ordering.close();
         self.state.stop.cancel();
     }
     pub(super) async fn verify(&self) -> Result<(), AppError> {

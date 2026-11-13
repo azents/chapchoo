@@ -52,9 +52,9 @@ returns absence and does not create one.
 
 If connection startup has not already selected an empty conversation, first
 input admission creates the conversation and association in the same transaction
-as its retained input and immutable user chat receipt. Failure of either write
-rolls back the whole admission, including any conversation creation and receipt
-order allocation. Exact retained-input recovery adds no second message.
+as its outgoing input. Enqueue commits no ordinary Chat message. Admission
+failure rolls back the queue item and any conversation creation. Exact
+retained-input recovery adds no second queued item or consumer dispatch.
 A connected desired-running Computer can instead prepare
 the selected empty conversation before the first input through the sealed
 [startup boundary](#connection-time-preparation). The exact submitted text is preserved. Request
@@ -82,15 +82,36 @@ evidence rather than another grant. A lost waiter or server restart cannot turn
 that committed fact into known non-delivery. Native results retain an actual
 inserted message ID, steering without an invented ID, or failure. Current
 authenticated source admission fences result publication. Inserted or Steered
-ends the pending input: the transaction deletes its original content, acceptance
-and dependent delivery/preparation rows. Actual native session/captured history
-remains independent. Failed and unresolved operations remain pending facts.
+ends the pending input: one transaction appends its ordinary user Chat message
+and deletes its content, acceptance and dependent delivery/preparation rows.
+An already committed user receipt from a pre-queue installation is preserved
+without a second message. Actual native session/captured history remains
+independent. A reported failure retains the outgoing item and its error; no
+automatic retry follows. Unresolved physical delivery is not proof of rollback.
+
+Queue PENDING/ERROR is a consumer-attempt observation, separate from native
+delivery evidence. Only newly admitted processing renews the existing row's
+database-time lease, using the configured component validity and heartbeat.
+Existing recovery never renews or dispatches. Processor return/error closes
+the attempt, while panic or process loss stops its co-owned renewal and an
+independent reaper expires orphaned PENDING rows. A renewed lease cannot
+resurrect an expired/error row. Exact input identity isolates old finalization
+from a manual replacement. Connector AttemptError requires authenticated current
+source/target and the operation's existing forwarding fact; it records queue
+error without manufacturing native nonexecution. Valid late success can still
+consume a retained errored row. No model-task deadline or automatic retry is
+derived from consumer liveness.
 
 An authenticated same-source successful report for an already absent operation
 acknowledges closure, not reconstructed delivery success. This permits the
 Connector to release a known native result after a lost report ACK; subsequent
 body pulls and forwarding cannot use a removed input. Independent chat receipts
-preserve accepted text but are not completed-input recovery records.
+preserve successfully delivered text but are not completed-input recovery records.
+ReportInput separately acknowledges whether that normal user receipt exists,
+using its existing conversation/source-input provenance. A closure after explicit
+deletion returns false rather than inventing a receipt. The
+[native publication fence](server-tools.md#user-receipt-publication-order) uses
+this distinction without adding another history table.
 Consequently an arbitrary explicit old owner
 submission is no longer recoverable forever and may be a new operation if current
 admission allows it. Missing results never automatically resubmit.
@@ -115,12 +136,13 @@ the head too. Receipt order, not timestamps, native event order or DTO sorting,
 defines the shared stable order.
 
 User receipts retain the original input ID, request nonce and acceptance time
-as provenance without an owning input foreign key. The nonce supports
-acknowledgement correlation after input pickup; it is neither a permanent
+as provenance without an owning input foreign key. The nonce identifies the
+original accepted request; it is neither a permanent
 deduplication key nor authority to recover or replay an absent input. Another
 explicit admission with a consumed nonce can produce a new input and message.
-Consumption, failed-input body deletion and native-source replacement leave
-accepted chat unchanged. Captured assistant/model output never appends chat.
+Successful pickup creates the ordinary user receipt. Failed-item deletion and
+native-source replacement leave existing Chat receipts unchanged. Captured
+assistant/model output never appends chat.
 
 Owner `Messages` and `ReadMessage` calls revalidate the current private Agent
 owner, Team membership and exact product conversation on every read. No native
@@ -146,11 +168,16 @@ a deterministic prefix ordered by original acceptance time and stored input
 identity. Migration 23 preserves original bytes, input identity, request nonce
 and acceptance time, using the original UUID under the new `CM` projection for
 the transferred message. It neither reconstructs native history nor resends
-input. Already consumed or deleted text is not recreated. A database insert guard
-requires each subsequent input's matching user receipt. Preparation is atomic
+input. Already consumed or deleted text is not recreated. Forward migration 24
+removes the input-time receipt guard so new enqueue and delivery are separate.
+Existing messages remain immutable. Preparation is atomic
 under the existing installation binding; downgrade refuses to discard nonempty
 chat. Native event capture and full-record browser presentation remain separate
 from message-only Chat.
+
+Migration 24 also removes obsolete bodyless input rows left by previously
+completed explicit deletions, including their dependent input facts. Existing
+ordinary Chat receipts and retained outgoing bodies are preserved.
 
 ## Internal input owner and setup facts
 
@@ -194,20 +221,27 @@ possible/session-ready/failure evidence. A known setup failure is not collapsed
 into absent text-delivery evidence; session-ready still does not prove current
 native liveness, completed source catch-up or text consumption.
 
-An owner can logically delete an input only after confirmed setup or delivery
-failure, with no possible or successful native delivery. The transaction checks
-private owner, Team, exact conversation and original source before clearing the
-body. It preserves the accepted operation identity and outcome; the same Request
-ID remains consumed and is rejected before deleted-body decoding. Deletion is
-idempotent and does not cancel work or erase native transcript records. Bounded
-lists expose bodyless deletion tombstones and, independently of the page anchor,
-the newest non-deleted acceptance for that exact private source. A newer
-tombstone does not replace an earlier live operation as that selection. Body
-reads exclude removed content, and exact input-result recovery includes
-deletion state. This removes only temporary delivery content; the independently
-accepted user chat message remains. Downgrade is rejected
-while removed bodies cannot be restored. Logical deletion does not erase storage
-pages or backups.
+An owner can delete a reported failed outgoing input. The completed transaction
+checks private owner, Team, exact conversation and current source, then physically
+deletes the row and its dependent preparation/delivery records. No bodyless
+deleted-item result or separate safety-history store is created. Repeated Delete
+of an absent item is idempotent. It is not native cancellation and does not erase
+already recorded Chat or native transcript records.
+
+Explicit Retry names the original item and a fresh request ID. In one transaction
+it verifies the original failure, reads its exact text, deletes the old item and
+registers a fresh operation. A failed insertion rolls back the deletion too.
+The replacement is handed to the same bounded consumer only for fresh admission;
+recovery of the still-present replacement returns its acceptance without another
+dispatch. Competing replacements for one original yield at most one new item.
+The optional replacement-origin ID belongs only to the new pending row and
+disappears with it; it is not a retained result for the removed item.
+
+Bounded lists query the outgoing table and expose the newest current item
+independently of the page anchor. Exact absence hints close removed rows even
+outside the current page. Queue text remains readable while its exact native
+source is loading, independently of native history readiness. Downgrade to
+admission-time Chat refuses outgoing bodies without their matching old receipts.
 
 The concrete internal Control processor uses current owner/Computer authority and
 PeerDelivery, obtains setup admission once, then sends only the sealed small setup

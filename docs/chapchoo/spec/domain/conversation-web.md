@@ -23,7 +23,8 @@ Message and activity read owners continue independently on a one-second cadence
 while the document is visible and the account remains authorized. Activity reads
 actual live request occurrences, latest plan and input operations, without scanning
 general native transcript metadata or tool fields to discover Chat messages.
-Original input text is read there only for confirmed failed-input retry.
+Every retained outgoing item's original text is read there for its pending
+bubble, with unchanged cached bodies reused on subsequent reads.
 Opening Activity starts a separate full-record read for its recent preview.
 Full history mounts its own source-bound reader from an actually loaded recent
 region or an explicit initial full-record fetch; an activity-only region is not
@@ -154,18 +155,12 @@ The header and composer stay available while conversation content
 scrolls internally. The main transcript contains accepted user/Agent messages and
 necessary questions or permission input. Tool, reasoning, plan, terminal, notice
 and state records belong to the recent preview and full history, not duplicate
-transcript disclosures. A user receipt remains the main message regardless of
-native insertion, steering, input cleanup or source replacement. Its original
-input ID can correlate a current local acknowledgement without duplicating the
-accepted body. When a response is lost and pickup precedes the first input poll,
-an unambiguous same-Agent/product-conversation USER receipt can correlate the
-currently outstanding nonce while its input ID is unknown. A known ID must
-match exactly; ambiguous reused nonces remain uncorrelated. This establishes
-Chat acceptance, never native delivery, permanent deduplication or recovery of
-an absent operation. Only an unchanged matching draft is cleared.
-A locally acknowledged operation awaiting its receipt read has a
-status, not a second accepted text row. Uncertain/sending drafts and confirmed
-failed-input recovery remain operational controls, not native-history imports.
+transcript disclosures. A successfully delivered user receipt remains the main
+message after input cleanup or source replacement. Pending messages come
+exclusively from queried server queue rows. The browser does not manufacture
+sending/uncertain bubbles or clear drafts through receipt-nonce correlation.
+A historical receipt that still has a matching queued operation is rendered
+once, with pending styling and recovery attached to that exact input ID.
 The down arrow signals new content that arrived while the owner was reading
 above latest, rather than a detached position alone. Reaching latest or selecting
 the arrow acknowledges it.
@@ -194,19 +189,22 @@ A separate latest-input observation stays current even when the user pages older
 inputs. It follows the newest non-deleted operation for the exact source, so
 deleting a newer failure does not hide an earlier accepted or preparing
 operation. The current native foreground observation takes precedence over past
-startup failures. New local submissions supersede older failure feedback without
+startup failures. New queried queue items supersede older failure feedback without
 replaying it. Authentication setup links to the Agent detail page; automatic read
 recovery only refreshes observations. The composer is disabled when authentication must
 first be selected. Input-level reported startup failures remain readable on
 reentry rather than being reduced to generic delivery failure. Possible setup
 forwarding does not replace known delivery uncertainty in an input label.
 
-Unacknowledged local text uses the same right-aligned user-bubble presentation as
-accepted user receipts: a localized author label above padded Markdown.
-Local pending text alone has opacity 0.6 and no delivery/lifecycle caption;
-accepted receipts are not dimmed merely because native delivery is pending or
-failed. Confirmed failure/preparation/uncertainty and explicit recovery actions
-remain separate, without rendering the retained input as a second accepted body.
+Queried outgoing text uses the same right-aligned user-bubble presentation as
+ordinary user messages: a localized author label above padded Markdown.
+Both waiting and failed outgoing bubbles have opacity 0.6; completed messages
+retain normal contrast. Waiting has no lifecycle caption. Failure feedback is
+below and outside the bubble, with its own ordinary contrast. Retry and Delete
+are icon-only 28-by-28 CSS-pixel controls, including on mobile, with 18-pixel
+icons, zero inter-button gap, localized accessible names and hover/focus
+tooltips. This is scoped to these controls, not a global touch-target change.
+The refresh icon retains its standard arrowhead geometry.
 Paragraph default margins do not add empty space inside the user bubble.
 
 ## Text, requests and retained operation facts
@@ -227,31 +225,33 @@ Text plans render their own typed text rather than assuming generic content.
 
 Send uploads exact UTF-8 pieces through the generated owner client. Acceptance,
 preparation, possible forwarding, known failure and missing evidence remain
-different pending observations. Completed acceptance also persists the independent
-user receipt. Original input text survives until actual Inserted/Steered pickup
-or explicit body deletion ends that temporary input; accepted Chat remains.
-Native history is not fabricated from receipts or deleted inputs. Steering does
-not manufacture a native message ID.
-Recovery of a retained Request ID removes its matching local uncertain entry.
-An owner may then intentionally send identical text as a new operation; recovery
-itself never submits another effect or treats text equality as request identity.
-Readers send at most 25 exact known-input IDs per continuation, prioritizing
-locally accepted IDs and rotating cached IDs. A source-qualified absence removes
-that exact local/cached bubble even if pickup preceded its first list poll;
+different pending observations. Queue acceptance clears only an unchanged
+submitted draft. A failed enqueue request leaves the draft and an adjacent
+composer error notice, without an optimistic bubble. If its response was lost,
+later server queries may still discover the accepted item; the browser does
+not infer nonexecution. Original input text survives until actual Inserted/Steered
+pickup commits the ordinary user message and removes the queue item, or explicit
+deletion removes a failed item. Native history is not fabricated from queue rows.
+Steering does not manufacture a native message ID.
+An operational consumer error, including owner loss, is also an actionable
+failed queue item; it is not proof of physical non-delivery. A valid late native
+success may still replace that retained item with its normal receipt.
+Readers send at most 25 exact known-input IDs per continuation, rotating cached
+IDs. A source-qualified absence removes that exact cached bubble;
 page omission alone does not. Each read owner serializes reads, and applies
 closures only to its admitted conversation/source without a permanent closure
 ledger.
 
 Confirmed failed outgoing inputs expose intentional retry and deletion actions.
-Retry copies retained text into ordinary Send with a new Request ID; it does not
-replay an uncertain operation or change the old outcome. Delete clears the
-original submitted body and hides the entry after an authoritative response,
-while retaining the operation evidence described in
-[conversation storage](conversation-storage.md). It does not require a running
-Computer. Pending or lost delete responses stay read-only recoverable through
-the exact input result. A successful acknowledgement clears the source-qualified
-cached operation even outside the current page. Tombstones merge monotonically,
-so late bounded reads cannot restore deleted text or its latest-failure status.
+Retry calls the atomic server delete-then-requeue contract with a new Request ID.
+It does not create a browser-local substitute row or automatically retry a failed
+request. Delete physically removes the failed outgoing item and its dependent
+records, without requiring a running Computer. Query invalidation and the next
+server queue read reconcile both actions. Successful acknowledgement removes the
+source-qualified cached item, including outside the current page. The reader
+discards responses from its pre-mutation snapshot and immediately queries again,
+so an earlier in-flight read cannot restore that item. It retains no bodyless
+deleted IDs, deletion-result verification mode or deleted-item log.
 
 Permission/form requests render inline. Original choices, their descriptions,
 schema/field titles and supported adjacent constraints remain inspectable.

@@ -1,9 +1,34 @@
+// Recreate only this test fixture's historical acceptance-time receipts before
+// crossing the outgoing-queue boundary. No input body or evidence is discarded.
+macro_rules! isolate_pre_queue_migration {
+    ($connection:expr,$migrations:expr) => {{
+        let connection = &mut *$connection;
+        if connection.applied_migrations()?.iter()
+            .any(|version| version.to_string() == "00000000000024") {
+            #[derive(diesel::QueryableByName)]
+            struct PendingCount {
+                #[diesel(sql_type=diesel::sql_types::BigInt)]
+                n: i64,
+            }
+            let pending = diesel::sql_query("SELECT CAST(count(*) AS BIGINT) AS n FROM conversation_inputs i WHERE i.deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM conversation_messages m WHERE m.source_input_id=i.id)")
+                .get_result::<PendingCount>(connection)?.n;
+            if pending > 0 {
+                assert!(connection.revert_last_migration($migrations).is_err(),
+                    "Unmatched outgoing items must prevent downgrade");
+                connection.batch_execute("INSERT INTO conversation_messages(id,conversation_id,role,body,receipt_order,received_at,source_input_id,source_input_request_id,original_accepted_at) SELECT i.id,i.conversation_id,'USER',i.submitted_text,COALESCE((SELECT max(m.receipt_order) FROM conversation_messages m WHERE m.conversation_id=i.conversation_id),0)+row_number() OVER (PARTITION BY i.conversation_id ORDER BY i.accepted_at,i.id),i.accepted_at,i.id,i.request_id,i.accepted_at FROM conversation_inputs i WHERE i.deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM conversation_messages m WHERE m.source_input_id=i.id); INSERT INTO conversation_message_heads(conversation_id,last_order) SELECT conversation_id,max(receipt_order) FROM conversation_messages WHERE TRUE GROUP BY conversation_id ON CONFLICT(conversation_id) DO UPDATE SET last_order=excluded.last_order")?;
+            }
+            assert_eq!(connection.revert_last_migration($migrations)?.to_string(), "00000000000024");
+        }
+    }};
+}
+
 // Older migration tests must exercise their own historical schema, not stop at
 // the newer chat guard. Prove that guard first, then retire only synthetic chat
 // facts from this fixture. Production downgrade never performs this cleanup.
 macro_rules! isolate_pre_chat_migration {
     ($connection:expr,$migrations:expr) => {{
         let connection = &mut *$connection;
+        isolate_pre_queue_migration!(connection, $migrations);
         if connection
             .applied_migrations()?
             .iter()
@@ -52,6 +77,8 @@ mod messages;
 mod messages_migration;
 #[path = "conversations/native_state.rs"]
 mod native_state;
+#[path = "conversations/outgoing_queue.rs"]
+mod outgoing_queue;
 #[path = "conversations/preparation.rs"]
 mod preparation;
 #[path = "conversations/projections.rs"]
