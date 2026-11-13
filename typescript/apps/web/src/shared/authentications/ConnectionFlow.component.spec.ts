@@ -190,12 +190,11 @@ test("lost cancellation with no receipt observes its known attempt without repla
   expect(calls.filter((value) => value === "pollDevice")).toHaveLength(0);
 });
 
-test("accepted key followed by an unavailable read retains its original receipt rather than registering twice", async ({
+test("lost key registration response recovers its exact receipt without registering again", async ({
   page,
 }) => {
   await mockFlow(page, false);
   let registrations = 0;
-  let reads = 0;
   let acceptedRequest: string | null = null;
   await page.route("**/api/trpc/authentications.registerKey", async (route) => {
     registrations += 1;
@@ -212,40 +211,7 @@ test("accepted key followed by an unavailable read retains its original receipt 
       throw new Error("A fixture Request ID is required");
     }
     acceptedRequest = body.json.requestId;
-    await route.fulfill({
-      json: {
-        result: {
-          data: superjson.serialize({
-            type: "record",
-            authenticationId: "connected",
-          }),
-        },
-      },
-    });
-  });
-  await page.route("**/api/trpc/authentications.get", async (route) => {
-    reads += 1;
-    if (reads === 1) {
-      await route.fulfill({
-        status: 503,
-        json: {
-          error: {
-            json: {
-              message: "Unavailable",
-              code: -32603,
-              data: {
-                code: "INTERNAL_SERVER_ERROR",
-                path: "authentications.get",
-                reason: null,
-                httpStatus: 503,
-              },
-            },
-          },
-        },
-      });
-    } else {
-      await route.fallback();
-    }
+    await route.abort("failed");
   });
   await page.route(
     "**/api/trpc/authentications.requestResult",
@@ -261,6 +227,7 @@ test("accepted key followed by an unavailable read retains its original receipt 
       ) {
         throw new Error("A fixture recovery Request ID is required");
       }
+      expect(acceptedRequest).not.toBeNull();
       expect(body.json.requestId).toBe(acceptedRequest);
       await route.fulfill({
         json: {
@@ -286,60 +253,135 @@ test("accepted key followed by an unavailable read retains its original receipt 
   await page
     .getByRole("button", { name: "OpenAI API key", exact: true })
     .click();
-  await expect(
-    page.getByRole("textbox", { name: "Alias", exact: true }),
-  ).toBeEmpty();
   await page.getByLabel(/^API key\s*\*?$/).fill("disposable-component-key");
   await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByLabel(/^API key\s*\*?$/)).toHaveCount(0);
   await page
     .getByRole("button", { name: "Check request result", exact: true })
     .click();
   await expect(page.getByRole("status")).toHaveText(
     "Selected: Connected fixture",
   );
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   expect(registrations).toBe(1);
-  expect(reads).toBe(2);
 });
 
-test("accepted record that is now unavailable returns to its task without claiming rejection or re-registering", async ({
+test("accepted key with an unavailable detail read stays saved without receipt recovery or another registration", async ({
   page,
 }) => {
   const calls = await mockFlow(page, false);
-  await page.route("**/api/trpc/authentications.get", async (route) => {
+  let registrations = 0;
+  let reads = 0;
+  await page.route("**/api/trpc/authentications.registerKey", async (route) => {
+    registrations += 1;
     await route.fulfill({
-      status: 404,
+      json: {
+        result: {
+          data: superjson.serialize({
+            type: "record",
+            authenticationId: "connected",
+          }),
+        },
+      },
+    });
+  });
+  await page.route("**/api/trpc/authentications.get", async (route) => {
+    reads += 1;
+    await route.fulfill({
+      status: 503,
       json: {
         error: {
           json: {
-            message: "Not found",
-            code: -32004,
+            message: "Unavailable",
+            code: -32603,
             data: {
-              code: "NOT_FOUND",
+              code: "INTERNAL_SERVER_ERROR",
               path: "authentications.get",
-              reason: "DOMAIN_REASON_NOT_FOUND",
-              httpStatus: 404,
+              reason: null,
+              httpStatus: 503,
             },
           },
         },
       },
     });
   });
-  await start(page);
-  await page.clock.runFor(5000);
+  await page.goto(
+    "/iframe.html?id=authentication-flow--in-place&viewMode=story",
+  );
+  await page
+    .getByRole("button", { name: "Connect account", exact: true })
+    .first()
+    .click();
+  await page
+    .getByRole("button", { name: "OpenAI API key", exact: true })
+    .click();
+  await expect(
+    page.getByRole("textbox", { name: "Alias", exact: true }),
+  ).toBeEmpty();
+  await page.getByLabel(/^API key\s*\*?$/).fill("disposable-component-key");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(
     page.getByText(
-      "The connection was saved, but is no longer available to select. No replacement was selected.",
+      "The connection was saved, but could not be loaded for selection. No replacement was selected.",
       { exact: true },
     ),
   ).toBeVisible();
+  await expect(page.getByLabel(/^API key\s*\*?$/)).toHaveCount(0);
   await page
     .getByRole("dialog")
     .getByRole("button", { name: "Close", exact: true })
     .filter({ hasText: "Close" })
     .click();
-  await page.clock.resume();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByRole("status")).toHaveText("Selected: ");
-  expect(calls.filter((value) => value === "startDevice")).toHaveLength(1);
-  expect(calls.filter((value) => value === "pollDevice")).toHaveLength(1);
+  expect(registrations).toBe(1);
+  expect(reads).toBe(1);
+  expect(calls.filter((value) => value === "requestResult")).toHaveLength(0);
 });
+
+for (const status of [404, 503]) {
+  test(`registered Device followed by detail ${status} remains saved and returns without another exchange`, async ({
+    page,
+  }) => {
+    const calls = await mockFlow(page, false);
+    await page.route("**/api/trpc/authentications.get", async (route) => {
+      await route.fulfill({
+        status,
+        json: {
+          error: {
+            json: {
+              message: "Unavailable",
+              code: status === 404 ? -32004 : -32603,
+              data: {
+                code: status === 404 ? "NOT_FOUND" : "INTERNAL_SERVER_ERROR",
+                path: "authentications.get",
+                reason: status === 404 ? "DOMAIN_REASON_NOT_FOUND" : null,
+                httpStatus: status,
+              },
+            },
+          },
+        },
+      });
+    });
+    await start(page);
+    await page.clock.runFor(5000);
+    await expect(
+      page.getByText(
+        "The connection was saved, but could not be loaded for selection. No replacement was selected.",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Close", exact: true })
+      .filter({ hasText: "Close" })
+      .click();
+    await page.clock.resume();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.getByRole("status")).toHaveText("Selected: ");
+    expect(calls.filter((value) => value === "startDevice")).toHaveLength(1);
+    expect(calls.filter((value) => value === "pollDevice")).toHaveLength(1);
+    expect(calls.filter((value) => value === "requestResult")).toHaveLength(0);
+    expect(calls.filter((value) => value === "deviceStatus")).toHaveLength(0);
+  });
+}

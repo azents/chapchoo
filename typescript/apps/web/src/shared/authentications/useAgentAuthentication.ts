@@ -51,10 +51,17 @@ export function useAgentAuthentication(
     [input.agent.id, user],
   );
   async function refresh(revision: number): Promise<void> {
-    await utils.computers.invalidate();
-    if (revision === fence.current) {
-      setTask({ type: "ready" });
-      setOpened(false);
+    if (revision !== fence.current) {
+      return;
+    }
+    setTask({ type: "ready" });
+    setOpened(false);
+    try {
+      await utils.computers.invalidate();
+    } catch (failure) {
+      if (revision === fence.current) {
+        withdrawAuthenticationSession(failure, auth.clearIdentity);
+      }
     }
   }
   async function select(value: AuthenticationView): Promise<void> {

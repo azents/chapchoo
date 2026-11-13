@@ -79,10 +79,14 @@ record and requires the captured expected Request ID.
 Uncertain catalogue writes retain the original Request ID and offer request-result
 observation, not a fresh operation. No observed result is not cancellation proof.
 Observed accepted device identities resume status; observed record/deletion
-identities finish their original task. A known accepted write is not reclassified
-as rejected when its subsequent catalogue read fails. An accepted record that is
-no longer available can return to the owning picker without selecting a replacement
-or claiming that the original write failed. An uncertain cancellation
+identities finish their original task. A known accepted write remains accepted
+when subsequent catalogue or Agent refresh fails. Registered Device results use
+the same boundary: failure to read the saved record does not make the exchange
+uncertain again. If an accepted record cannot be loaded for selection, its
+accepted identity remains in a closable result dialog. The User can return to
+the owning picker without selecting a replacement or repeating the original
+write; a transient read failure does not claim the record was deleted.
+An uncertain cancellation
 with no accepted receipt can still observe its retained attempt ID through
 DeviceStatus, including registration or a terminal result, without replaying the
 cancellation or advancing provider work. Modal dismissal cannot discard ownership
@@ -113,8 +117,10 @@ Existing detail keeps profile and Computer controls and adds a compact Codex row
 showing saved alias or no selection. Its picker uses the same scoped catalogue;
 unchanged selection is disabled. Selection compares the captured credential ID
 and last accepted selection Request ID; it changes no other Agent or shared
-record. An uncertain save is recovered by its exact request result, never a
-blind repeated write. In-place registration selects the accepted record for that
+record. A validated accepted selection settles its picker before supplementary
+Agent refresh; later read failure cannot revoke that acceptance. An uncertain
+save is recovered by its exact request result, never a blind repeated write.
+In-place registration selects the accepted record for that
 Agent. Cancel leaves its prior reference unchanged. The saved reference is SSR
 primary data; the unused picker catalogue is supplementary and is queried only
 when opened, so its availability does not block Computer detail or chat.
