@@ -85,7 +85,9 @@
     "emailMismatch": "Enter the email address that received this link or invitation.",
     "registered": "This email already has an account. Log in instead.",
     "registrationRequired": "Create your account before accepting this invitation.",
-    "mailUncertain": "We could not confirm whether the email was sent. Check your inbox and the current status before requesting another email.",
+    "mailUnavailable": "Email delivery is not configured on this server.",
+    "capacityExhausted": "Password processing is busy. Try again shortly.",
+    "readError": "Could not load the current information. Reload to try again.",
     "invalidInput": "Check the entered values and try again.",
     "usePassword": "Use password instead"
   }

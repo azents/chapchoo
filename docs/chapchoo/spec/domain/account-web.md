@@ -15,6 +15,13 @@ Admin provides initial setup, administrator login and signup/reset-link
 inventories with issuance/revocation. Team ownership does not grant server-wide
 administration. Backend operations remain the authority for current permissions.
 
+General workspace and Admin grant-inventory reads distinguish loading failure
+from mutation-result uncertainty. Their generic read errors offer a reload;
+known domain reasons keep their specific localized meaning. Mail-not-configured
+denial reports unavailable server mail delivery in both apps, not an unknown
+send result. Capacity exhaustion reports busy password processing. These
+projections do not infer rollback or authorize automatic mutation or mail replay.
+
 Personal Agent/Computer routes and read-only Admin Provider/resource inventory
 reuse these same presentation/session boundaries. Their server-derived power,
 connectivity, confirmation and bounded observation behavior is specified in

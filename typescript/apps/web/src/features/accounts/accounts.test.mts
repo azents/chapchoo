@@ -50,7 +50,7 @@ void test("domain failures are localized without exposing machine reasons", () =
     );
     assert.equal(
       accountError("DOMAIN_REASON_MAIL_UNAVAILABLE", c),
-      c.mailUncertain,
+      c.mailUnavailable,
     );
     assert.equal(
       accountError("DOMAIN_REASON_OWNER_TRANSFER_REQUIRED", c),
@@ -66,5 +66,15 @@ void test("domain failures are localized without exposing machine reasons", () =
     );
     assert.equal(accountError("UNKNOWN_REASON", c), c.genericError);
     assert.equal(accountError(null, c), c.genericError);
+    assert.equal(accountError(null, c, "read"), c.readError);
+    assert.equal(accountError("UNKNOWN_REASON", c, "read"), c.readError);
+    assert.equal(
+      accountError("DOMAIN_REASON_CAPACITY_EXHAUSTED", c),
+      c.capacityExhausted,
+    );
+    assert.equal(
+      accountError("DOMAIN_REASON_PERMISSION_DENIED", c, "read"),
+      c.permissionDenied,
+    );
   }
 });

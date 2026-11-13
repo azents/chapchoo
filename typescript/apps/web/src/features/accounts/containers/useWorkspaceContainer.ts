@@ -123,11 +123,14 @@ export function useWorkspaceContainer({
   const queryError = teamId ? (team.error ?? members.error) : received.error;
   let state: WorkspaceProps["state"];
   if (auth.state.type === "ERROR") {
-    state = { type: "ERROR", message: accountError(auth.state.reason, copy) };
+    state = {
+      type: "ERROR",
+      message: accountError(auth.state.reason, copy, "read"),
+    };
   } else if (queryError) {
     state = {
       type: "ERROR",
-      message: accountError(queryError.data?.reason ?? null, copy),
+      message: accountError(queryError.data?.reason ?? null, copy, "read"),
     };
   } else if (
     auth.state.type !== "AUTHENTICATED" ||
@@ -235,7 +238,11 @@ export function useWorkspaceContainer({
       received: received.isError
         ? {
             type: "ERROR",
-            message: accountError(received.error.data?.reason ?? null, copy),
+            message: accountError(
+              received.error.data?.reason ?? null,
+              copy,
+              "read",
+            ),
           }
         : received.isPending
           ? { type: "LOADING" }
@@ -243,7 +250,11 @@ export function useWorkspaceContainer({
       invitations: invitations.isError
         ? {
             type: "ERROR",
-            message: accountError(invitations.error.data?.reason ?? null, copy),
+            message: accountError(
+              invitations.error.data?.reason ?? null,
+              copy,
+              "read",
+            ),
           }
         : canManage && invitations.isPending
           ? { type: "LOADING" }

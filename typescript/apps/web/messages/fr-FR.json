@@ -85,7 +85,9 @@
     "emailMismatch": "Saisissez l’adresse e-mail qui a reçu ce lien ou cette invitation.",
     "registered": "Un compte existe déjà avec cette adresse e-mail. Connectez-vous.",
     "registrationRequired": "Créez votre compte avant d’accepter cette invitation.",
-    "mailUncertain": "L’envoi de l’e-mail n’a pas pu être confirmé. Vérifiez vos e-mails et l’état actuel avant une nouvelle demande.",
+    "mailUnavailable": "L’envoi d’e-mails n’est pas configuré sur ce serveur.",
+    "capacityExhausted": "Le traitement des mots de passe est saturé. Réessayez dans quelques instants.",
+    "readError": "Les informations actuelles n’ont pas pu être chargées. Actualisez la page pour réessayer.",
     "invalidInput": "Vérifiez les valeurs saisies, puis réessayez.",
     "usePassword": "Utiliser un mot de passe"
   }

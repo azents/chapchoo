@@ -7,6 +7,7 @@ import {
 import { useAuth } from "@chapchoo/web-core/auth-context";
 import { computerCopy } from "@chapchoo/web-core/computer-messages";
 import { useDisplay } from "@chapchoo/web-core/display-context";
+import { displayText } from "@chapchoo/web-core/display-messages";
 import { initialQuery } from "@chapchoo/web-core/page-state";
 import { agentsPath } from "@chapchoo/web-core/workspace";
 import { useDocumentVisibility, useMediaQuery } from "@mantine/hooks";
@@ -299,6 +300,6 @@ export function useAgentsContainer({
     onLogout: auth.logout,
     formatTime: (value) =>
       formatDisplayDate(value, display.region, display.timeZone, "medium") ??
-      copy.unknown,
+      displayText(display.language).unavailable,
   };
 }

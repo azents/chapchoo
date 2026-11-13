@@ -3,6 +3,7 @@ import { formatDisplayDate } from "@chapchoo/ui/displayFormatting";
 import { useAuth } from "@chapchoo/web-core/auth-context";
 import { computerCopy } from "@chapchoo/web-core/computer-messages";
 import { useDisplay } from "@chapchoo/web-core/display-context";
+import { displayText } from "@chapchoo/web-core/display-messages";
 import { initialQuery } from "@chapchoo/web-core/page-state";
 import { useDocumentVisibility } from "@mantine/hooks";
 import { useLocale } from "next-intl";
@@ -73,7 +74,7 @@ export function useComputersContainer({
     stale: initial.type === "providers" ? providers.isError : computers.isError,
     formatTime: (value) =>
       formatDisplayDate(value, display.region, display.timeZone, "medium") ??
-      copy.unknown,
+      displayText(display.language).unavailable,
     onRefresh: () => {
       if (auth.state.type === "SIGNED_OUT") {
         window.location.assign(`${basePath}/login`);
