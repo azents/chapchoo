@@ -18,9 +18,16 @@ test("owner receives intentional server messages and inspects native typed-answe
   const page = await context.newPage();
   let messageReads = 0;
   let historyReads = 0;
+  let sendRequests = 0;
+  let sendStatus = 0;
+  page.on("request", (request) => {
+    if (request.url().includes("conversations.send")) sendRequests++;
+  });
   page.on("response", (response) => {
     if (response.url().includes("conversations.messages")) messageReads++;
     if (response.url().includes("conversations.region")) historyReads++;
+    if (response.url().includes("conversations.send"))
+      sendStatus = response.status();
   });
   try {
     fixture = await nativeConversation(assembly);
@@ -259,12 +266,19 @@ test("owner receives intentional server messages and inspects native typed-answe
       description: `inputToPublicationMs=${inputToPublicationMs};messageReads=${messageReads};historyReads=${historyReads};ssrReceipts=${rendered.length}`,
     });
   } catch (error) {
+    // Only selected numeric facts cross the private fixture boundary.
+    let diagnostic = "unavailable";
+    try {
+      diagnostic = (await fixture?.diagnostics()) ?? "unavailable";
+    } catch {
+      // Diagnostic failure never replaces the original product failure.
+    }
     const locator =
       error instanceof Error
         ? error.message.split("\n").find((line) => line.startsWith("Locator:"))
         : undefined;
     failure = new Error(
-      `Native conversation browser failed at ${stage}${locator ? ` (${locator})` : ""}`,
+      `Native conversation browser failed at ${stage};sendRequests=${sendRequests};sendStatus=${sendStatus};messageReads=${messageReads};historyReads=${historyReads};${diagnostic}${locator ? ` (${locator})` : ""}`,
       { cause: error },
     );
   } finally {
