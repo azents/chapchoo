@@ -91,6 +91,10 @@ export function decodeString(values: unknown[]): string | undefined {
   if (!values.length) return undefined;
   return z.string().parse(values.at(-1));
 }
+/** Optional native descriptions preserve explicit absence as well as text. */
+export function decodeDescription(values: unknown[]): string | undefined {
+  return z.string().nullish().parse(values.at(-1)) ?? undefined;
+}
 /** Tool I/O is opaque display data; preserve exact integers without interpreting its schema. */
 export function decodeToolPayload(
   values: unknown[],

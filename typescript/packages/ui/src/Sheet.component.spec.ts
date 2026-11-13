@@ -43,7 +43,6 @@ for (const width of [390, 1280]) {
     expect(await header.boundingBox()).toEqual(before.header);
     expect(await close.boundingBox()).toEqual(before.close);
     expect(await sheet.evaluate((e) => e.scrollTop)).toBe(0);
-    await expect(viewport).toHaveCSS("mask-image", "none");
     await expect(page.locator("body")).toHaveCSS("overflow", "hidden");
     for (const edge of ["top", "bottom"] as const) {
       const canceled = await viewport.evaluate((e, edge) => {
@@ -68,13 +67,9 @@ for (const width of [390, 1280]) {
   });
 }
 
-test("fade is opt-in and nested modal returns focus to the same sheet", async ({
-  page,
-}) => {
-  await page.goto("/iframe.html?id=shared-sheet--activity-fade&viewMode=story");
+test("nested modal returns focus to the same sheet", async ({ page }) => {
+  await page.goto("/iframe.html?id=shared-sheet--activity&viewMode=story");
   const sheet = page.getByRole("dialog", { name: "History", exact: true });
-  const viewport = sheet.getByRole("log", { name: "Records" });
-  await expect(viewport).not.toHaveCSS("mask-image", "none");
   const opener = sheet.getByRole("button", { name: "Open confirmation" });
   await opener.click();
   const modal = page.getByRole("dialog", { name: "Confirmation", exact: true });

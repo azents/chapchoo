@@ -35,6 +35,3 @@
   overscroll-behavior-y: auto;
   touch-action: pan-y pinch-zoom;
 }
-.fadeTop {
-  mask-image: linear-gradient(to bottom, transparent 0.5rem, black 3.5rem);
-}

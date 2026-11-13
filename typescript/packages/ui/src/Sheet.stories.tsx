@@ -4,7 +4,7 @@ import { Sheet, SheetViewport } from "./Sheet";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import type { ReactElement } from "react";
 
-function Fixture({ fadeTop = false }: { fadeTop?: boolean }): ReactElement {
+function Fixture({ activity = false }: { activity?: boolean }): ReactElement {
   const [opened, setOpened] = useState(true);
   const [confirming, setConfirming] = useState(false);
   const confirmRef = useRef<HTMLButtonElement>(null);
@@ -15,13 +15,13 @@ function Fixture({ fadeTop = false }: { fadeTop?: boolean }): ReactElement {
         opened={opened}
         onClose={() => setOpened(false)}
         title="History"
-        size={fadeTop ? "78dvh" : "100dvh"}
+        size={activity ? "78dvh" : "100dvh"}
         closeButtonProps={{ "aria-label": "Close sheet" }}
         trapFocus={!confirming}
         closeOnEscape={!confirming}
         closeOnClickOutside={!confirming}
       >
-        <SheetViewport role="log" aria-label="Records" fadeTop={fadeTop}>
+        <SheetViewport role="log" aria-label="Records">
           <Stack p="lg">
             <Button ref={confirmRef} onClick={() => setConfirming(true)}>
               Open confirmation
@@ -55,4 +55,4 @@ const meta = { title: "Shared/Sheet", component: Fixture } satisfies Meta<
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const FullHistory: Story = { parameters: { layout: "padded" } };
-export const ActivityFade: Story = { args: { fadeTop: true } };
+export const Activity: Story = { args: { activity: true } };

@@ -79,6 +79,7 @@ type FixtureProps = {
   locale: string;
   name: string;
   initialActivityOpened?: boolean;
+  initialRecentError?: boolean;
   underfilled?: boolean;
 };
 function StaticHistory({
@@ -130,8 +131,10 @@ function Fixture({
   locale,
   name,
   initialActivityOpened = false,
+  initialRecentError = false,
   underfilled = false,
 }: FixtureProps): ReactElement {
+  const [recentError, setRecentError] = useState(initialRecentError);
   const stopped =
     mode === "stopped" || mode === "startError" || mode === "staleStopped";
   const stale = mode === "stale" || mode === "staleStopped";
@@ -487,7 +490,8 @@ function Fixture({
           onLatest: floating.followLatest,
         }}
         recentRecords={{ ...startupRegion, records }}
-        recentRead="ready"
+        recentRead={recentError ? "error" : "ready"}
+        onReadRecent={() => setRecentError(false)}
         product={controlled.product}
         focus={controlled.focus}
         agent={agent}
@@ -793,6 +797,13 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Connected: Story = {};
+export const RecentRecordError: Story = {
+  args: {
+    mode: "review",
+    initialActivityOpened: true,
+    initialRecentError: true,
+  },
+};
 export const ComposerRequestError: Story = { args: { mode: "inputError" } };
 export const QueueDeliveryError: Story = { args: { mode: "queueError" } };
 export const QueueWaiting: Story = { args: { mode: "queueWaiting" } };

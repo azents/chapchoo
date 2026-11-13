@@ -7,6 +7,93 @@ import {
 } from "./chatContainerFixture";
 import type { Route } from "@playwright/test";
 
+for (const width of [390, 1280]) {
+  test(`recent-record error offers adjacent read-only recovery at ${width}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 844 });
+    let recovered = false;
+    let reads = 0;
+    const unexpected: string[] = [];
+    await page.route("**/api/trpc/**", async (route) => {
+      const method = new URL(route.request().url()).pathname.split("/").at(-1);
+      let value: unknown;
+      switch (method) {
+        case "auth.identity":
+          value = containerUser;
+          break;
+        case "computers.get":
+          if (containerInput.initial.type !== "detail") {
+            throw new Error("Missing Agent");
+          }
+          value = containerInput.initial.agent;
+          break;
+        case "conversations.activity":
+          value = containerInput.initialConversation;
+          break;
+        case "conversations.messages":
+          value = containerInput.initialMessages;
+          break;
+        case "conversations.region":
+          reads += 1;
+          if (!recovered) {
+            await route.fulfill({
+              status: 500,
+              json: {
+                error: {
+                  json: {
+                    message: "Unavailable",
+                    code: -32603,
+                    data: {
+                      code: "INTERNAL_SERVER_ERROR",
+                      path: method,
+                      reason: null,
+                      httpStatus: 500,
+                    },
+                  },
+                },
+              },
+            });
+            return;
+          }
+          value = containerInput.initialConversation;
+          break;
+        default:
+          unexpected.push(method ?? route.request().url());
+          await route.abort();
+          return;
+      }
+      await route.fulfill({
+        json: { result: { data: superjson.serialize(value) } },
+      });
+    });
+    await page.goto(
+      "/iframe.html?id=chat-container-transport--enqueue-failure&viewMode=story",
+    );
+    await page.getByRole("button", { name: /^Activity:/ }).click();
+    const dialog = page.getByRole("dialog");
+    const alert = dialog.getByRole("alert");
+    await expect(alert).toHaveText(/Could not load conversation records/);
+    const retry = alert.getByRole("button", {
+      name: "Read again",
+      exact: true,
+    });
+    await expect(retry).toBeEnabled();
+    await retry.scrollIntoViewIfNeeded();
+    await expect(alert).toBeVisible();
+    await page.screenshot({
+      path: testInfo.outputPath("record-error.png"),
+      animations: "disabled",
+    });
+    recovered = true;
+    await retry.focus();
+    await retry.press("Enter");
+    await expect(alert).toHaveCount(0);
+    expect(reads).toBeGreaterThanOrEqual(2);
+    expect(unexpected).toEqual([]);
+  });
+}
+
 test("actual Chat container retains a failed enqueue draft without optimistic Chat or queue rows", async ({
   page,
 }) => {

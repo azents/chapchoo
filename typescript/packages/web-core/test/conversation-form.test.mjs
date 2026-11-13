@@ -9,7 +9,11 @@ import {
   encodeAnswer,
   readConversationRecord,
 } from "../dist/conversation.js";
-import { TypedAnswer } from "@chapchoo/rpc-client/conversations";
+import {
+  TypedAnswer,
+  RecordKind,
+  RecordField,
+} from "@chapchoo/rpc-client/conversations";
 
 test("native pattern evaluation stays at the bounded server while ordinary browser constraints remain active", () => {
   const question = {
@@ -175,6 +179,70 @@ test("invalid defaults are not fabricated into valid answers and full i64 defaul
     choice: "required",
   });
 });
+test("Notice without an optional description remains readable and invalid descriptions still fail", async () => {
+  let description = null;
+  const api = {
+    fields: async () => ({
+      fields: [
+        {
+          field: RecordField.RECORD_FIELD_TITLE,
+          updatedOrdinal: 1n,
+          totalBytes: 9n,
+        },
+        {
+          field: RecordField.RECORD_FIELD_DESCRIPTION,
+          updatedOrdinal: 1n,
+          totalBytes: BigInt(
+            Buffer.byteLength(JSON.stringify(description) + "\n"),
+          ),
+        },
+      ],
+    }),
+    readField: async (request) => {
+      const content = Buffer.from(
+        JSON.stringify(
+          request.field === RecordField.RECORD_FIELD_TITLE
+            ? "Notice"
+            : description,
+        ) + "\n",
+      );
+      return {
+        content: content.subarray(
+          request.offset,
+          request.offset + request.length,
+        ),
+        offset: request.offset,
+        totalBytes: BigInt(content.length),
+      };
+    },
+  };
+  const header = {
+    agentId: "agent",
+    state: "ready",
+    source: {
+      agentId: "agent",
+      conversationId: "conversation",
+      snapshotId: "snapshot",
+    },
+  };
+  const metadata = {
+    kind: RecordKind.RECORD_KIND_NOTICE,
+    nativeId: "notice",
+    anchor: { ordinal: 1n, index: 0n },
+    updatedOrdinal: 1n,
+  };
+  const absent = await readConversationRecord(api, header, metadata);
+  assert.equal(absent.description, undefined);
+  assert.equal(absent.title, "Notice");
+  description = "More information";
+  assert.equal(
+    (await readConversationRecord(api, header, metadata)).description,
+    description,
+  );
+  description = 42;
+  await assert.rejects(readConversationRecord(api, header, metadata));
+});
+
 test("terminal output is decoded after byte assembly and retains its exact inspectable bytes", async () => {
   const bytes = Buffer.from("첫 줄\n🙂\n");
   const outputs =
