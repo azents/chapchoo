@@ -34,15 +34,38 @@ const controls: ConversationControls = {
 function Fixture({
   teal,
   locale,
+  historical,
 }: {
   teal: boolean;
   locale: string;
+  historical: boolean;
 }): ReactElement {
   return (
     <AgentTheme palette={teal ? "teal" : null}>
       <Box maw="49rem" p="lg" mx="auto">
         <ConversationBody
-          controls={controls}
+          controls={{
+            ...controls,
+            region: {
+              ...controls.region,
+              records: historical
+                ? conversationReviewRecords.map((record) =>
+                    record.nativeId === "draft-publication"
+                      ? {
+                          ...record,
+                          title: "mcp.chapchoo.publish_text",
+                          toolInput: {
+                            json: (record.toolInput?.json ?? "").replace(
+                              '"tool":"send_message"',
+                              '"tool":"publish_text"',
+                            ),
+                          },
+                        }
+                      : record,
+                  )
+                : conversationReviewRecords,
+            },
+          }}
           copy={chatCopy(locale)}
           writable={false}
           agentName="Fixture Agent"
@@ -55,7 +78,7 @@ function Fixture({
 const meta = {
   title: "Chat/Record presentation",
   component: Fixture,
-  args: { teal: false, locale: "ko-KR" },
+  args: { teal: false, locale: "ko-KR", historical: false },
   parameters: { layout: "fullscreen" },
 } satisfies Meta<typeof Fixture>;
 export default meta;
@@ -65,3 +88,4 @@ export const ScopedTeal: Story = { args: { teal: true } };
 export const English: Story = { args: { locale: "en-US" } };
 export const Japanese: Story = { args: { locale: "ja-JP" } };
 export const French: Story = { args: { locale: "fr-FR" } };
+export const HistoricalPublication: Story = { args: { historical: true } };

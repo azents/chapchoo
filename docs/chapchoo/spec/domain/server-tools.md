@@ -149,3 +149,4 @@ readiness verifies transport provisioning, not successful model inference.
 - [`rust/crates/rpc/src/server_tools.rs`](../../../../rust/crates/rpc/src/server_tools.rs)
 - [`rust/apps/chapchoo/src/connector/server_tools.rs`](../../../../rust/apps/chapchoo/src/connector/server_tools.rs)
 - [Server-tools decisions](../../adr/tools-261112-server-provided-tools.md)
+- [Direct sender correction](../../adr/sender-261113-direct-conversation-tool.md)

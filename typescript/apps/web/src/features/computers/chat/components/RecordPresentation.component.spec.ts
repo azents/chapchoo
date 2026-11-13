@@ -1,5 +1,34 @@
 import { expect, test } from "@playwright/test";
 
+test("retained publication keeps its message preview, role and original identity", async ({
+  page,
+}) => {
+  await page.goto(
+    "/iframe.html?id=chat-record-presentation--historical-publication&viewMode=story",
+  );
+  const publication = page.locator('[data-record-origin="publication"]');
+  await expect(publication).toHaveCount(1);
+  await expect(
+    publication.getByRole("img", { name: "Agent", exact: true }),
+  ).toBeVisible();
+  await expect(publication.getByRole("button").first()).toContainText(
+    "테마의 색상 변수를 정리했습니다.",
+  );
+  await publication.getByRole("button", { expanded: false }).first().click();
+  await expect(
+    publication.getByText("Message accepted.", { exact: true }),
+  ).toBeVisible();
+  await publication
+    .getByRole("button", { name: "메시지 입력과 결과", exact: true })
+    .click();
+  await publication.locator("summary").filter({ hasText: "도구 입력" }).click();
+  await expect(
+    publication
+      .locator("pre")
+      .filter({ hasText: /"tool"\s*:\s*"publish_text"/ }),
+  ).toBeVisible();
+});
+
 for (const width of [390, 960]) {
   test(`approved full records preserve message meaning, originals and scoped primary at ${width}`, async ({
     page,
