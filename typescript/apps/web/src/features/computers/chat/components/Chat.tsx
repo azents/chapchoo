@@ -358,7 +358,7 @@ export function Chat(props: ChatProps): ReactElement {
           closeButtonProps={{ "aria-label": c.close }}
           overlayProps={{ backgroundOpacity: 0.12, blur: 0 }}
         >
-          <SheetViewport className={classes.panelBody} fadeTop>
+          <SheetViewport className={classes.panelBody}>
             <div
               className={classes.activityScroll}
               role="region"

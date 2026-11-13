@@ -74,9 +74,7 @@ Document overflow is locked by the mounted Sheet's CSS scope. Internal native
 wheel/touch gestures are not canceled; Mantine still owns focus and dismissal.
 Nested modal callers retain their explicit focus/Escape ownership.
 
-`fadeTop` is an explicit viewport opt-in, never a default. Chat Activity uses it
-as an upper-content continuation cue; Full history remains unmasked. Keep layout
-and scrollbar ownership identical with or without the mask. Verify both body
+The viewport keeps content fully readable up to the header. Verify both body
 edges, header/close geometry, lock removal and nested dialogs in component tests;
 physical Safari elasticity still needs device verification.
 

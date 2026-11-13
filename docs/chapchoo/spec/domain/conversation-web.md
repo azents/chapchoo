@@ -91,8 +91,8 @@ viewport. Chrome stays outside scrolling content; body padding is inside that
 viewport rather than creating a second clipping inset below the header. The
 mounted Sheet's CSS scope locks document overflow without a JavaScript wheel/touch
 boundary canceler. Closing it removes that scope; focus trapping and nested
-control dialogs retain their existing ownership. The Activity viewport has a
-transparent top continuation fade; full history is unmasked.
+control dialogs retain their existing ownership. Activity and full history keep
+the complete viewport readable up to the header.
 The sheet previews five recent records in chronological order, with a transparent
 top fade when older records exist. Preview and full history reuse the same compact
 row design. Selection enters a separate full-height history view at that record and keeps

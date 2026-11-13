@@ -38,23 +38,18 @@ export function Sheet(props: SheetProps): ReactElement {
   );
 }
 
-export type SheetViewportProps = ComponentPropsWithRef<"div"> & {
-  fadeTop?: boolean;
-};
+export type SheetViewportProps = ComponentPropsWithRef<"div">;
 
 /** The only vertical scroll owner below Sheet's header. Edge gestures stay native. */
 export function SheetViewport({
   className,
-  fadeTop = false,
   ...props
 }: SheetViewportProps): ReactElement {
   return (
     <div
       {...props}
       data-sheet-viewport
-      className={[classes.viewport, fadeTop ? classes.fadeTop : "", className]
-        .filter(Boolean)
-        .join(" ")}
+      className={[classes.viewport, className].filter(Boolean).join(" ")}
     />
   );
 }
