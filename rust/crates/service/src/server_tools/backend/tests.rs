@@ -6,7 +6,7 @@ fn publication_arguments_preserve_text_and_reject_unbound_target_or_retry_fields
     let body = "  원문 **공백** 🙂\n다음 줄  ";
     let encoded = serde_json::to_vec(&json!({"text":body}))?;
     assert_eq!(
-        text("publish_text", &encoded)
+        text("send_message", &encoded)
             .map_err(|_| "Invalid fixture")?
             .as_str(),
         body
@@ -20,7 +20,7 @@ fn publication_arguments_preserve_text_and_reject_unbound_target_or_retry_fields
         json!({"text":null}),
     ] {
         assert!(matches!(
-            text("publish_text", &serde_json::to_vec(&input)?),
+            text("send_message", &serde_json::to_vec(&input)?),
             Err(ServerToolValidation::InvalidArguments)
         ));
     }

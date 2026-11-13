@@ -45,10 +45,10 @@ impl ServerToolBackend for Backend {
         })
     }
     fn catalog(&self) -> Result<Vec<u8>, ServiceError> {
-        Ok(br#"{"tools":[{"name":"publish_text","description":"Fixture publication","inputSchema":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false}}]}"#.to_vec())
+        Ok(br#"{"tools":[{"name":"send_message","description":"Fixture publication","inputSchema":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false}}]}"#.to_vec())
     }
     fn validate(&self, name: &str, _: &[u8]) -> Result<(), ServerToolValidation> {
-        if name == "publish_text" {
+        if name == "send_message" {
             Ok(())
         } else {
             Err(ServerToolValidation::UnknownTool)
@@ -223,7 +223,7 @@ async fn official_sdk_http_round_trip_keeps_native_scope_across_server_key_refre
         let body = "  의도적 메시지 🙂\n원문  ";
         let arguments = serde_json::from_value(serde_json::json!({"text":body}))?;
         let result = client
-            .call_tool(CallToolRequestParams::new("publish_text").with_arguments(arguments))
+            .call_tool(CallToolRequestParams::new("send_message").with_arguments(arguments))
             .await?;
         assert_eq!(result.is_error, Some(false));
         assert_eq!(
@@ -240,7 +240,7 @@ async fn official_sdk_http_round_trip_keeps_native_scope_across_server_key_refre
         source.connection_id = "connection-2".into();
         current.update(channel, source, &next)?;
         client
-            .call_tool(CallToolRequestParams::new("publish_text").with_arguments(
+            .call_tool(CallToolRequestParams::new("send_message").with_arguments(
                 serde_json::from_value(serde_json::json!({"text":"second"}))?,
             ))
             .await?;
@@ -264,7 +264,7 @@ async fn official_sdk_http_round_trip_keeps_native_scope_across_server_key_refre
         // This is the SDK's real typed cancellation notification, not dropping
         // an HTTP connection or using the handler context's generic drop token.
         let pending = client.send_request_with_option(ClientRequest::CallToolRequest(CallToolRequest::new(
-            CallToolRequestParams::new("publish_text").with_arguments(
+            CallToolRequestParams::new("send_message").with_arguments(
                 serde_json::from_value(serde_json::json!({"text":"/wait-for-cancel"}))?),
         )), PeerRequestOptions::default()).await?;
         tokio::time::timeout(std::time::Duration::from_secs(10), backend.waiting.acquire()).await??.forget();
@@ -301,14 +301,14 @@ async fn official_sdk_http_round_trip_keeps_native_scope_across_server_key_refre
         assert!(response.status().is_success());
         let _ = response.bytes().await?;
 
-        let unsupported = client.call_tool(CallToolRequestParams::new("publish_text")
+        let unsupported = client.call_tool(CallToolRequestParams::new("send_message")
             .with_arguments(serde_json::from_value(serde_json::json!({"text":"/oversize-result"}))?))
             .await.err().ok_or("Oversized effect result was represented as success")?;
         assert!(unsupported.to_string().contains("cannot be represented"));
         current.withdraw();
         assert!(
             client
-                .call_tool(CallToolRequestParams::new("publish_text"))
+                .call_tool(CallToolRequestParams::new("send_message"))
                 .await
                 .is_err()
         );

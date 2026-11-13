@@ -66,7 +66,7 @@ async function connectMcp(servers) {
   mcp = client;
   await client.connect(transport);
   const catalog = await client.listTools();
-  if (catalog.tools.length !== 1 || catalog.tools[0]?.name !== "publish_text")
+  if (catalog.tools.length !== 1 || catalog.tools[0]?.name !== "send_message")
     throw new Error("Fixture requires its exact server-tools catalog");
   mcpTools = catalog.tools;
 }
@@ -243,6 +243,15 @@ async function request(id, method, params) {
       if (!authenticated || typeof params?.cwd !== "string")
         throw new Error("Fixture thread was not admitted");
       if (params.ephemeral !== true) {
+        if (
+          params.config?.code_mode?.direct_only_tool_namespaces?.length !== 1 ||
+          params.config.code_mode.direct_only_tool_namespaces[0] !==
+            "mcp__chapchoo" ||
+          params.config?.features?.code_mode_only_strict_3p_tools !== false
+        )
+          throw new Error(
+            "Fixture requires directly exposed conversation tools",
+          );
         if (primaryStarted)
           throw new Error("Fixture primary thread was started twice");
         if (
@@ -399,7 +408,7 @@ async function request(id, method, params) {
         type: "mcpToolCall",
         id: "publication-one",
         server: "chapchoo",
-        tool: "publish_text",
+        tool: "send_message",
         arguments: { text: "Intentional fixture publication." },
         status: "inProgress",
         result: null,

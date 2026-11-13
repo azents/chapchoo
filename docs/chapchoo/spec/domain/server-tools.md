@@ -6,7 +6,7 @@ title: "Native-owner server tools and explicit publication"
 
 Server tools connect one actual native owner's local HTTP capability to current
 server authority. They are independent of Control commands, native readiness and
-captured model output. The sole production tool, `publish_text`, appends an
+captured model output. The sole production tool, `send_message`, appends an
 intentional message to its fixed product conversation.
 
 ## Authority and publication
@@ -19,7 +19,7 @@ check current authority. Private Agent ownership and current Team membership
 remain server facts. Native IDs, startup readiness and the UI's selected
 conversation are not publication permission.
 
-`publish_text` accepts only a nonempty, bounded UTF-8 `text` field. Unknown
+`send_message` accepts only a nonempty, bounded UTF-8 `text` field. Unknown
 fields, recipient changes, retry keys and work-state arguments are rejected.
 Accepted bytes are preserved. The completed transaction allocates the immutable
 [chat receipt](conversation-storage.md#independent-chat-receipts); the tool returns
@@ -124,6 +124,15 @@ New and this real rejection from successful controlled-fixture New/Resume.
 Successful real persisted-session restoration and model-side tool use require
 their own evidence.
 
+Actual adapter launch supplies the Codex policy
+`code_mode.direct_only_tool_namespaces = ["mcp__chapchoo"]` and disables strict
+third-party deferral for this profile. The essential `send_message` capability
+is in the initial model tool list, not dependent on a name or description search
+or JavaScript catalog discovery. Other MCP namespaces keep their normal exposure.
+The policy contains no endpoint or credential; ACP still supplies the current
+owner's scoped HTTP declaration on both New and exact Resume. Endpoint/catalog
+readiness verifies transport provisioning, not successful model inference.
+
 ## Connections
 
 - [Conversation storage](conversation-storage.md) — Stable completed chat receipts and independent captured history.
@@ -140,3 +149,4 @@ their own evidence.
 - [`rust/crates/rpc/src/server_tools.rs`](../../../../rust/crates/rpc/src/server_tools.rs)
 - [`rust/apps/chapchoo/src/connector/server_tools.rs`](../../../../rust/apps/chapchoo/src/connector/server_tools.rs)
 - [Server-tools decisions](../../adr/tools-261112-server-provided-tools.md)
+- [Direct sender correction](../../adr/sender-261113-direct-conversation-tool.md)

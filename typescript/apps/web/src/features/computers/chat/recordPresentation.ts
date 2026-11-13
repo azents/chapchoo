@@ -96,7 +96,8 @@ export function recordInput(
 }
 const publicationInput = z.looseObject({
   server: z.literal("chapchoo"),
-  tool: z.literal("publish_text"),
+  // Interpret immutable older evidence; this grants no execution alias.
+  tool: z.enum(["send_message", "publish_text"]),
   arguments: z.unknown().optional(),
 });
 const publicationText = z.looseObject({ text: z.string() });

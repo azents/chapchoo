@@ -54,6 +54,7 @@ export async function nativeConversation(
   agentId: string;
   chatPath: string;
   current: () => Promise<OwnerConversation>;
+  diagnostics: () => Promise<string>;
   pendingInputs: () => Promise<number>;
   close: (expectedRequestId?: string) => Promise<void>;
 }> {
@@ -111,14 +112,18 @@ export async function nativeConversation(
   let provider: Awaited<ReturnType<Assembly["startDockerProvider"]>> | null =
     null;
   let stage = "initialize";
-  const call = <I, O>(method: Unary<I, O>, input: I): Promise<O> =>
+  const call = <I, O>(
+    method: Unary<I, O>,
+    input: I,
+    budgetMs = 15_000,
+  ): Promise<O> =>
     new Promise((resolve, reject) => {
       const metadata = new Metadata();
       if (token) metadata.set("authorization", `Bearer ${token}`);
       method(
         input,
         metadata,
-        { deadline: Date.now() + 15_000 },
+        { deadline: Date.now() + budgetMs },
         (error, result) => {
           if (error || result === undefined)
             reject(
@@ -245,6 +250,58 @@ export async function nativeConversation(
       chatPath: `/teams/my/agents/${agent.handle}/chat`,
       current: () =>
         call(conversations.current.bind(conversations), { agentId: agent.id }),
+      diagnostics: async () => {
+        const current = await call(
+          conversations.current.bind(conversations),
+          {
+            agentId: agent.id,
+          },
+          2_000,
+        );
+        const capture = current.conversation;
+        const startup = current.startup;
+        const result = [
+          `capture=${capture?.status ?? -1}`,
+          `foreground=${current.observedNative?.foreground ?? -1}`,
+          `startup=${startup?.failed ?? (startup?.sessionReady ? 20 : startup?.possibleForwarding ? 10 : 0)}`,
+        ];
+        if (capture?.snapshotId) {
+          const scope = {
+            agentId: agent.id,
+            conversationId: capture.conversationId,
+            target: { snapshotId: capture.snapshotId },
+          };
+          const pending = await call(
+            conversations.inputs.bind(conversations),
+            {
+              scope,
+              before: undefined,
+              limit: 25,
+              knownIds: [],
+            },
+            2_000,
+          );
+          result.push(`inputs=${pending.inputs.length}`);
+          if (pending.latest) {
+            const input = await call(
+              conversations.inputResult.bind(conversations),
+              {
+                agentId: agent.id,
+                conversationId: capture.conversationId,
+                requestId: pending.latest.requestId,
+              },
+              2_000,
+            );
+            result.push(
+              `admitted=${input.acceptance ? 1 : 0}`,
+              `owner=${input.ownership}`,
+              `setup=${input.preparation?.failed ?? (input.preparation?.sessionReady ? 20 : input.preparation?.possibleForwarding ? 10 : 0)}`,
+              `delivery=${input.delivery?.failed ? 1 : input.delivery?.insertedNativeMessageId ? 20 : input.delivery?.steered ? 30 : input.delivery?.possibleForwarding ? 10 : 0}`,
+            );
+          }
+        }
+        return result.join(";");
+      },
       pendingInputs: async () => {
         const current = await call(conversations.current.bind(conversations), {
           agentId: agent.id,

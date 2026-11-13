@@ -20,80 +20,82 @@ function record(): ConversationRecord {
     locations: [],
   };
 }
-void test("publication uses actual structured MCP identity and the normalized message body", () => {
-  const body = "  **확인한 방법**입니다.\n\n`pnpm test`를 실행하세요. ";
-  const original = JSON.stringify({
-    server: "chapchoo",
-    tool: "publish_text",
-    arguments: { text: body },
-  });
-  const publication: ConversationRecord = {
-    ...record(),
-    kind: "tool",
-    toolKind: "execute",
-    title: "Not the body",
-    content: [{ type: "text", text: "Unrelated native progress" }],
-    toolInput: { json: original },
-    toolOutput: {
-      json: JSON.stringify({
-        result: {
-          content: [{ type: "text", text: "Message accepted." }],
-          structuredContent: { message_id: "message" },
-        },
-        error: null,
-      }),
-    },
-  };
-  assert.equal(recordPreview(publication), plainPreview(body));
-  assert.equal(
-    recordPreview({
+for (const tool of ["send_message", "publish_text"]) {
+  void test(`publication preserves ${tool} structured identity and normalized body`, () => {
+    const body = "  **확인한 방법**입니다.\n\n`pnpm test`를 실행하세요. ";
+    const original = JSON.stringify({
+      server: "chapchoo",
+      tool,
+      arguments: { text: body },
+    });
+    const publication: ConversationRecord = {
       ...record(),
-      kind: "user",
-      content: [{ type: "text", text: body }],
-    }),
-    recordPreview(publication),
-  );
-  assert.deepEqual(recordPublication(publication), {
-    text: body,
-    resultText: "Message accepted.",
+      kind: "tool",
+      toolKind: "execute",
+      title: "Not the body",
+      content: [{ type: "text", text: "Unrelated native progress" }],
+      toolInput: { json: original },
+      toolOutput: {
+        json: JSON.stringify({
+          result: {
+            content: [{ type: "text", text: "Message accepted." }],
+            structuredContent: { message_id: "message" },
+          },
+          error: null,
+        }),
+      },
+    };
+    assert.equal(recordPreview(publication), plainPreview(body));
+    assert.equal(
+      recordPreview({
+        ...record(),
+        kind: "user",
+        content: [{ type: "text", text: body }],
+      }),
+      recordPreview(publication),
+    );
+    assert.deepEqual(recordPublication(publication), {
+      text: body,
+      resultText: "Message accepted.",
+    });
+    assert.equal(publication.toolInput?.json, original);
+    assert.equal(
+      recordPublication({ ...publication, toolOutput: void 0 })?.text,
+      body,
+    );
+    assert.equal(
+      recordPublication({ ...publication, toolOutput: { json: "{" } })?.text,
+      body,
+    );
+    for (const candidate of [
+      { ...publication, kind: "assistant" as const },
+      {
+        ...publication,
+        toolKind: "other",
+        toolInput: { json: '{"text":"looks like a message"}' },
+      },
+      {
+        ...publication,
+        title: "mcp.chapchoo.send_message",
+        toolInput: { json: "{}" },
+      },
+      {
+        ...publication,
+        toolInput: {
+          json: '{"server":"another","tool":"send_message","arguments":{"text":"same"}}',
+        },
+      },
+      {
+        ...publication,
+        toolInput: {
+          json: '{"server":"chapchoo","tool":"other","arguments":{"text":"same"}}',
+        },
+      },
+    ]) {
+      assert.equal(recordPublication(candidate), null);
+    }
   });
-  assert.equal(publication.toolInput?.json, original);
-  assert.equal(
-    recordPublication({ ...publication, toolOutput: void 0 })?.text,
-    body,
-  );
-  assert.equal(
-    recordPublication({ ...publication, toolOutput: { json: "{" } })?.text,
-    body,
-  );
-  for (const candidate of [
-    { ...publication, kind: "assistant" as const },
-    {
-      ...publication,
-      toolKind: "other",
-      toolInput: { json: '{"text":"looks like a message"}' },
-    },
-    {
-      ...publication,
-      title: "mcp.chapchoo.publish_text",
-      toolInput: { json: "{}" },
-    },
-    {
-      ...publication,
-      toolInput: {
-        json: '{"server":"another","tool":"publish_text","arguments":{"text":"same"}}',
-      },
-    },
-    {
-      ...publication,
-      toolInput: {
-        json: '{"server":"chapchoo","tool":"other","arguments":{"text":"same"}}',
-      },
-    },
-  ]) {
-    assert.equal(recordPublication(candidate), null);
-  }
-});
+}
 
 void test("message preview preserves native chunk whitespace and strips actual Markdown syntax", () => {
   const r = record();

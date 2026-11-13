@@ -22,7 +22,7 @@ Docker inputs and composes production web listeners with actual backend,
 Provider, Connector and the official ACP adapter. An execution-owned deterministic
 app-server executable is selected through the existing-CLI capability. Its fixed
 synthetic login/output/request never calls a model. The representative journey
-checks an accepted user receipt, one intentional official-SDK `publish_text`
+checks an accepted user receipt, one intentional official-SDK `send_message`
 receipt through the real MCP/RPC boundaries, and the absence of automatic
 native/final-output Chat publication. Actual full records retain the two native
 utterances, update, original publication input/result and explicit typed answer.
