@@ -3,6 +3,7 @@ import { formatDisplayDate } from "@chapchoo/ui/displayFormatting";
 import { useAuth } from "@chapchoo/web-core/auth-context";
 import { computerCopy } from "@chapchoo/web-core/computer-messages";
 import { useDisplay } from "@chapchoo/web-core/display-context";
+import { displayText } from "@chapchoo/web-core/display-messages";
 import { initialQuery } from "@chapchoo/web-core/page-state";
 import { useDocumentVisibility } from "@mantine/hooks";
 import { useLocale } from "next-intl";
@@ -52,6 +53,6 @@ export function useResourcesContainer({
     onLogout: auth.logout,
     formatTime: (value) =>
       formatDisplayDate(value, display.region, display.timeZone, "medium") ??
-      copy.unknown,
+      displayText(display.language).unavailable,
   };
 }
