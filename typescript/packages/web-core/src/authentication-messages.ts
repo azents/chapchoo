@@ -69,7 +69,7 @@ const english: AuthenticationCopy = {
   copied: "Copied",
   first: "First page",
   recordUnavailable:
-    "The connection was saved, but is no longer available to select. No replacement was selected.",
+    "The connection was saved, but could not be loaded for selection. No replacement was selected.",
   execution: "Execution",
   keyVisibility: "Show or hide API key",
   cloud: "Cloud",
@@ -143,7 +143,7 @@ const korean: AuthenticationCopy = {
   copied: "복사됨",
   first: "처음",
   recordUnavailable:
-    "연결은 저장되었지만 지금은 선택할 수 없습니다. 다른 인증으로 바꾸지는 않았습니다.",
+    "연결은 저장했지만 선택할 연결 정보를 불러오지 못했습니다. 다른 인증으로 바꾸지는 않았습니다.",
   execution: "실행",
   keyVisibility: "API 키 표시 또는 숨기기",
   cloud: "클라우드",
@@ -215,7 +215,7 @@ const japanese: AuthenticationCopy = {
   copied: "コピーしました",
   first: "最初のページ",
   recordUnavailable:
-    "接続は保存されましたが、現在は選択できません。別の認証には変更していません。",
+    "接続は保存されましたが、選択に必要な情報を読み込めませんでした。別の認証には変更していません。",
   execution: "実行",
   keyVisibility: "APIキーの表示を切り替え",
   cloud: "クラウド",
@@ -288,7 +288,7 @@ const french: AuthenticationCopy = {
   copied: "Copié",
   first: "Première page",
   recordUnavailable:
-    "La connexion a été enregistrée, mais n’est plus disponible. Aucune autre authentification n’a été sélectionnée.",
+    "La connexion a été enregistrée, mais ses informations n’ont pas pu être chargées pour la sélectionner. Aucune autre authentification n’a été sélectionnée.",
   execution: "Exécution",
   keyVisibility: "Afficher ou masquer la clé API",
   cloud: "Cloud",
