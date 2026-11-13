@@ -4,7 +4,6 @@ import { readConversationActivity } from "../dist/conversation.js";
 import {
   markConversationInputDeleted,
   mergeConversationRegion,
-  reconcileLocalConversationInputs,
 } from "../dist/conversation-state.js";
 function fixture({ started = true, known = false } = {}) {
   const text = `  Original 🙂 ${"가".repeat(22000)}\n `;
@@ -100,19 +99,6 @@ test("exact closure removes a consumed cached input without mistaking pagination
       .length,
     1,
   );
-  const local = [
-    {
-      id: f.acceptance.id,
-      requestId: f.acceptance.requestId,
-      text: "accepted before the first poll",
-      observation: "accepted",
-    },
-  ];
-  assert.deepEqual(
-    reconcileLocalConversationInputs(local, [], incoming.closedInputs),
-    [],
-  );
-  assert.equal(reconcileLocalConversationInputs(local, [], []), local);
 });
 
 test("pickup between listing and status read closes the input rather than fabricating uncertainty", async () => {
@@ -160,6 +146,38 @@ test("first native binding retains the original acceptance target without retarg
   assert.equal(result.inputs[0].text, f.text);
   assert.deepEqual(f.acceptance.target, { notStarted: {} });
   assert.deepEqual(f.reads[0].input.scope.target, { snapshotId: "snapshot" });
+});
+test("waiting queue bodies come from the server just like failed bodies", async () => {
+  const f = fixture();
+  f.api.inputResult = async () => ({
+    acceptance: f.acceptance,
+    ownership: 1,
+  });
+  const result = await readConversationActivity(f.api, { agentId: "agent" });
+  assert.equal(result.inputs[0].text, f.text);
+  assert.equal(result.inputs[0].observation, "accepted");
+  assert.ok(f.reads.some((read) => read.type === "text"));
+});
+test("queue text stays visible while the native source is loading", async () => {
+  const f = fixture();
+  f.api.current = async () => ({
+    conversation: {
+      conversationId: "conversation",
+      status: 2,
+      snapshotId: "snapshot",
+    },
+  });
+  f.api.inputResult = async () => ({
+    acceptance: f.acceptance,
+    ownership: 1,
+  });
+  f.api.liveRequests = async () => {
+    throw new Error("Loading native history is not queue authority");
+  };
+  const result = await readConversationActivity(f.api, { agentId: "agent" });
+  assert.equal(result.header.state, "loading");
+  assert.equal(result.inputs[0].text, f.text);
+  assert.deepEqual(result.records, []);
 });
 test("active updates reuse immutable cached input text while refreshing only actual retained result facts", async () => {
   const f = fixture({ known: true });

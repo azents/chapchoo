@@ -206,14 +206,6 @@ export interface ConversationRegion {
     observation: "pending" | "published" | "rejected" | "uncertain";
   };
 }
-export interface LocalConversationInput {
-  id?: string;
-  text: string;
-  observation: InputObservation | "sending";
-  requestId: string;
-  snapshotId?: string;
-  conversationId?: string;
-}
 export const inputHistoryAnchor = z
   .object({ acceptedAt: z.bigint(), requestId: z.string().min(1).max(128) })
   .strict();

@@ -2,10 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { MessageRole } from "@chapchoo/rpc-client/conversations";
 import { readConversationMessages } from "../dist/conversation-messages.js";
-import {
-  acknowledgeConversationInputs,
-  mergeConversationMessages,
-} from "../dist/conversation-message-state.js";
+import { mergeConversationMessages } from "../dist/conversation-message-state.js";
 import { conversationMessageWindow } from "../dist/conversation-message-types.js";
 
 function metadata(id, order, text = id) {
@@ -237,82 +234,6 @@ test("older paging cannot advance an unread head or discard a finite catch-up", 
     through: 31n,
   });
   assert.equal(mergeConversationMessages(merged, delta).older, undefined);
-});
-
-test("a lost acceptance response recovers only the current outstanding receipt after input pickup", () => {
-  const local = [
-    {
-      requestId: "outstanding",
-      text: "same text",
-      observation: "uncertain",
-      conversationId: "conversation",
-    },
-  ];
-  const receipt = {
-    ...message("receipt", 1n),
-    sourceInputId: "consumed-input",
-    sourceInputRequestId: "outstanding",
-  };
-  const recovered = acknowledgeConversationInputs(
-    local,
-    "agent",
-    region([receipt]),
-  );
-  assert.deepEqual(recovered.acknowledged, local);
-  assert.deepEqual(recovered.inputs, [
-    { ...local[0], id: "consumed-input", observation: "accepted" },
-  ]);
-  // A receipt confirms acceptance, not native insertion or durable nonce recovery.
-  assert.equal(recovered.inputs[0].snapshotId, undefined);
-  assert.deepEqual(
-    acknowledgeConversationInputs(recovered.inputs, "agent", region([receipt]))
-      .acknowledged,
-    [],
-  );
-  assert.equal(
-    acknowledgeConversationInputs([], "agent", region([receipt])).inputs.length,
-    0,
-  );
-  for (const unrelated of [
-    region([receipt], { agentId: "another-agent" }),
-    region([receipt], { conversationId: "another-conversation" }),
-    region([{ ...receipt, sourceInputRequestId: "another-current-operation" }]),
-    region([{ ...receipt, role: "agent" }]),
-    region([
-      receipt,
-      {
-        ...receipt,
-        id: "other-receipt",
-        sourceInputId: "reused-input",
-        order: 2n,
-      },
-    ]),
-  ])
-    assert.equal(
-      acknowledgeConversationInputs(local, "agent", unrelated).inputs,
-      local,
-    );
-  const known = [{ ...local[0], id: "consumed-input" }];
-  const reused = region([
-    receipt,
-    {
-      ...receipt,
-      id: "other-receipt",
-      sourceInputId: "reused-input",
-      order: 2n,
-    },
-  ]);
-  assert.equal(
-    acknowledgeConversationInputs(known, "agent", reused).inputs[0].id,
-    "consumed-input",
-  );
-  assert.equal(
-    mergeConversationMessages(region([receipt]), {
-      ...reused,
-      window: { type: "after", order: 1n },
-    }).messages.length,
-    2,
-  );
 });
 
 test("latest reset retains a reachable older cursor rather than merging across a gap", () => {

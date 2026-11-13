@@ -206,6 +206,7 @@ pub(super) async fn result(
         }),
     });
     Ok(Response::new(wire::OwnerInputStatus {
+        failed: value.failed,
         deleted: value.deleted,
         acceptance: Some(acceptance(value.acceptance)),
         ownership: match value.ownership {
@@ -329,6 +330,34 @@ pub(super) async fn delete(
         .await
         .map_err(status)?;
     Ok(Response::new(()))
+}
+pub(super) async fn retry(
+    service: &ConversationServices,
+    request: Request<wire::OwnerRetryInput>,
+) -> Result<Response<wire::InputAcceptance>, Status> {
+    service.admit()?;
+    let actor = actor(&request)?;
+    let value = request.into_inner();
+    let scope = value
+        .scope
+        .ok_or_else(|| Status::invalid_argument("Input scope is required"))?;
+    let receipt = service
+        .inputs
+        .retry(
+            actor,
+            chapchoo_service::RetryConversationInput {
+                agent_id: scope.agent_id,
+                conversation_id: scope.conversation_id,
+                target: target(scope.target)?,
+                original_input_id: value.original_input_id,
+                original_request_id: value.original_request_id,
+                request_id: value.request_id,
+            },
+            AcceptanceTime::System,
+        )
+        .await
+        .map_err(status)?;
+    Ok(Response::new(acceptance(receipt)))
 }
 pub(super) async fn read(
     service: &ConversationServices,

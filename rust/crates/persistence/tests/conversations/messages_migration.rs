@@ -122,16 +122,9 @@ async fn verify_transfer(
     }
     let deleted = store
         .conversation_input_reference(&owner, &f.agent.id, conversation, "legacy-deleted", f.now)
-        .await?
-        .ok_or("Deleted provenance disappeared")?;
-    assert!(deleted.deleted);
-    assert!(
-        !transferred
-            .messages
-            .iter()
-            .any(|m| m.receipt.source_input_id.as_deref() == Some(deleted.id.as_str()))
-    );
-    store
+        .await?;
+    assert!(deleted.is_none());
+    let queued = store
         .accept_conversation_input(
             &owner,
             &AcceptConversationInput {
@@ -147,14 +140,26 @@ async fn verify_transfer(
     let all = store
         .conversation_messages(&owner, &scope, ConversationMessageWindow::Latest, 25, f.now)
         .await?;
-    assert_eq!(all.through, 3);
-    assert_eq!(all.messages.len(), 3);
+    assert_eq!(all.through, 2);
+    assert_eq!(all.messages.len(), 2);
+    assert!(
+        store
+            .conversation_input_reference(
+                &owner,
+                &f.agent.id,
+                conversation,
+                &queued.request_id,
+                f.now,
+            )
+            .await?
+            .is_some()
+    );
     assert_eq!(
         all.messages
             .iter()
             .map(|m| m.receipt.receipt_order)
             .collect::<Vec<_>>(),
-        vec![1, 2, 3]
+        vec![1, 2]
     );
     Ok(())
 }

@@ -1,7 +1,4 @@
-import type {
-  ConversationRegion,
-  LocalConversationInput,
-} from "./conversation-types.js";
+import type { ConversationRegion } from "./conversation-types.js";
 
 export type ConversationActivity =
   | "idle"
@@ -20,30 +17,9 @@ export type ConversationActivity =
 /** Project retained facts, never absence alone, into a failed-start diagnosis. */
 export function conversationActivity(
   region: ConversationRegion,
-  local: LocalConversationInput[] = [],
 ): ConversationActivity {
   const header = region.header;
   if (header.foreground !== "unavailable") return header.foreground;
-  const latestLocal = local
-    .filter(
-      (item) =>
-        item.requestId !== region.latestInput?.requestId &&
-        (item.conversationId === undefined ||
-          item.conversationId === header.conversationId) &&
-        !region.inputs?.some(
-          (retained) => retained.requestId === item.requestId,
-        ) &&
-        (item.snapshotId === undefined ||
-          item.snapshotId === header.source?.snapshotId),
-    )
-    .at(-1);
-  if (
-    latestLocal?.observation === "sending" ||
-    latestLocal?.observation === "accepted" ||
-    latestLocal?.observation === "preparing"
-  )
-    return "starting";
-  if (latestLocal?.observation === "uncertain") return "deliveryUnconfirmed";
   if (header.state === "notStarted" && !header.savedAuthenticationId)
     return "authenticationRequired";
   const latest = region.latestInput;
@@ -63,7 +39,7 @@ export function conversationActivity(
   }
   if (header.state === "loading" || preparation?.type === "preparing")
     return "starting";
-  const observation = latestLocal?.observation ?? latest?.observation;
+  const observation = latest?.observation;
   if (observation === "preparing" || observation === "accepted")
     return "starting";
   if (observation === "uncertain") return "deliveryUnconfirmed";

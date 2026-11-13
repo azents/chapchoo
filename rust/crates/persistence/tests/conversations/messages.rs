@@ -5,6 +5,42 @@ use chapchoo_persistence::{
     ConversationMessageWindow, ConversationOperationForwarding, PublishConversationMessage,
 };
 
+async fn pickup(
+    store: &Store,
+    f: &Fixture,
+    input: &chapchoo_persistence::ConversationInputReceipt,
+    snapshot: &SnapshotId,
+    native: &NativeConversationId,
+) -> Result<(), StoreError> {
+    let actor = f.owner.digest();
+    let key = f.connector.digest();
+    let route = store
+        .resolve_connector_route(&f.agent.computer.id)
+        .await?
+        .ok_or(StoreError::Conflict)?;
+    let target = ConversationDeliveryTarget {
+        snapshot: snapshot.clone(),
+        native_session: native.clone(),
+    };
+    let operation = ConversationOperationForwarding {
+        agent_id: &f.agent.id,
+        conversation_id: &input.conversation_id,
+        operation_id: &input.id,
+        target: &target,
+    };
+    store
+        .begin_conversation_input_forwarding(&actor, &route, &operation, f.now)
+        .await?;
+    store
+        .complete_conversation_input_forwarding(
+            &f.source(&key),
+            &operation,
+            &ConversationInputOutcome::Steered,
+        )
+        .await
+        .map(|_| ())
+}
+
 async fn exercise(store: &Store, f: &Fixture) -> Result<String, TestError> {
     let actor = f.owner.digest();
     let original = "  사용자 원문 **보존** 🙂\n두 번째 줄  ";
@@ -18,11 +54,9 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<String, TestError> {
     // Deliberately skew the application policy clock while the test database
     // retains the host clock, so receipt time cannot pass by copying acceptance.
     let acceptance_now = f.now + 60_000;
-    let receipt_before = now()? / 1000 * 1000;
     let input = store
         .accept_conversation_input(&actor, &draft, acceptance_now)
         .await?;
-    let receipt_after = now()?;
     let recovered = store
         .accept_conversation_input(&actor, &draft, acceptance_now)
         .await?;
@@ -32,6 +66,44 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<String, TestError> {
         agent_id: &f.agent.id,
         conversation_id: &conversation,
     };
+    assert!(
+        store
+            .conversation_messages(&actor, &scope, ConversationMessageWindow::Latest, 25, f.now,)
+            .await?
+            .messages
+            .is_empty()
+    );
+    assert!(matches!(
+        store
+            .current_conversation(&actor, &f.agent.id, f.now)
+            .await?
+            .ok_or("Missing conversation")?
+            .source,
+        ConversationSource::NotStarted
+    ));
+    let snapshot_a = snapshot("message-source-a")?;
+    let native = NativeConversationId::parse("message-native".into())?;
+    let key = f.connector.digest();
+    store
+        .check_conversation_tool_scope(&f.source(&key), &scope)
+        .await?;
+    store
+        .bind_conversation_source(
+            &f.source(&key),
+            &SourceBinding {
+                conversation_id: conversation.clone(),
+                expected_previous: None,
+                snapshot: snapshot_a.clone(),
+                native_session: native.clone(),
+            },
+        )
+        .await?;
+    store
+        .complete_conversation_source(&f.source(&key), &conversation, &snapshot_a, None)
+        .await?;
+    let receipt_before = now()? / 1000 * 1000;
+    pickup(store, f, &input, &snapshot_a, &native).await?;
+    let receipt_after = now()?;
     let first = store
         .conversation_messages(&actor, &scope, ConversationMessageWindow::Latest, 25, f.now)
         .await?;
@@ -119,19 +191,6 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<String, TestError> {
             .await
             .is_err()
     );
-    let snapshot_a = snapshot("message-source-a")?;
-    let native = NativeConversationId::parse("message-native".into())?;
-    let key = f.connector.digest();
-    // An actual tool request uses current component/domain authority before
-    // setup knows a native ID. This does not add automatic startup execution.
-    assert!(matches!(
-        store
-            .current_conversation(&actor, &f.agent.id, f.now)
-            .await?
-            .ok_or("Missing product conversation")?
-            .source,
-        ConversationSource::NotStarted
-    ));
     store
         .check_conversation_tool_scope(&f.source(&key), &scope)
         .await?;
@@ -197,20 +256,6 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<String, TestError> {
         Err(StoreError::Unauthenticated)
     ));
 
-    store
-        .bind_conversation_source(
-            &f.source(&key),
-            &SourceBinding {
-                conversation_id: conversation.clone(),
-                expected_previous: None,
-                snapshot: snapshot_a.clone(),
-                native_session: native.clone(),
-            },
-        )
-        .await?;
-    store
-        .complete_conversation_source(&f.source(&key), &conversation, &snapshot_a, None)
-        .await?;
     exercise_delivery_retention(store, f, &input, &snapshot_a, &native).await?;
 
     // Concurrent writers share one conversation allocation, not timestamp or UUID order.
@@ -224,6 +269,8 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<String, TestError> {
         let agent = f.agent.id.clone();
         let conversation = conversation.clone();
         let snapshot = snapshot_a.clone();
+        let native = native.clone();
+        let computer_id = f.agent.computer.id.clone();
         let session = f.session.clone();
         let control = f.control.clone();
         let connection = f.connection.clone();
@@ -232,17 +279,46 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<String, TestError> {
             let text = ConversationText::parse("Intentionally repeated body".into())
                 .map_err(|_| StoreError::InvalidInput)?;
             if index % 2 == 0 {
-                store
+                let input = store
                     .accept_conversation_input(
                         &actor,
                         &AcceptConversationInput {
-                            agent_id: agent,
-                            conversation_id: Some(conversation),
+                            agent_id: agent.clone(),
+                            conversation_id: Some(conversation.clone()),
                             request_id: format!("concurrent-chat-{index}"),
-                            target: ConversationTarget::Snapshot(snapshot),
+                            target: ConversationTarget::Snapshot(snapshot.clone()),
                             text,
                         },
                         now,
+                    )
+                    .await?;
+                let route = store
+                    .resolve_connector_route(&computer_id)
+                    .await?
+                    .ok_or(StoreError::Conflict)?;
+                let target = ConversationDeliveryTarget {
+                    snapshot,
+                    native_session: native,
+                };
+                let operation = ConversationOperationForwarding {
+                    agent_id: &agent,
+                    conversation_id: &conversation,
+                    operation_id: &input.id,
+                    target: &target,
+                };
+                store
+                    .begin_conversation_input_forwarding(&actor, &route, &operation, now)
+                    .await?;
+                store
+                    .complete_conversation_input_forwarding(
+                        &ConnectorSource {
+                            session_id: &session,
+                            control_id: &control,
+                            connection_id: &connection,
+                            credential: &key,
+                        },
+                        &operation,
+                        &ConversationInputOutcome::Steered,
                     )
                     .await?;
             } else {
@@ -271,13 +347,13 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<String, TestError> {
     let all = store
         .conversation_messages(&actor, &scope, ConversationMessageWindow::Latest, 25, f.now)
         .await?;
-    assert_eq!(all.messages.len(), 11);
+    assert_eq!(all.messages.len(), 10);
     assert_eq!(
         all.messages
             .iter()
             .map(|m| m.receipt.receipt_order)
             .collect::<Vec<_>>(),
-        (1..=11).collect::<Vec<_>>()
+        (1..=10).collect::<Vec<_>>()
     );
     let older = store
         .conversation_messages(
@@ -354,7 +430,7 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<String, TestError> {
                 conversation_id: conversation.clone(),
                 expected_previous: Some(snapshot_a),
                 snapshot: snapshot_b.clone(),
-                native_session: native,
+                native_session: native.clone(),
             },
         )
         .await?;
@@ -387,17 +463,26 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<String, TestError> {
                 agent_id: f.agent.id.clone(),
                 conversation_id: Some(conversation.clone()),
                 request_id: "chat-first".into(),
-                target: ConversationTarget::Snapshot(snapshot_b),
+                target: ConversationTarget::Snapshot(snapshot_b.clone()),
                 text: ConversationText::parse("An explicit new submission".into())?,
             },
             f.now,
         )
         .await?;
     assert_ne!(fresh.id, input.id);
+    assert_eq!(
+        store
+            .conversation_messages(&actor, &scope, ConversationMessageWindow::Latest, 25, f.now,)
+            .await?
+            .messages
+            .len(),
+        10
+    );
+    pickup(store, f, &fresh, &snapshot_b, &native).await?;
     let after = store
         .conversation_messages(&actor, &scope, ConversationMessageWindow::Latest, 25, f.now)
         .await?;
-    assert_eq!(after.messages.len(), 12);
+    assert_eq!(after.messages.len(), 11);
     assert_eq!(
         after
             .messages
@@ -432,16 +517,6 @@ async fn exercise_delivery_retention(
         operation_id: &first.id,
         target: &target,
     };
-    store
-        .begin_conversation_input_forwarding(&owner, &route, &forwarding, f.now)
-        .await?;
-    store
-        .complete_conversation_input_forwarding(
-            &f.source(&key),
-            &forwarding,
-            &ConversationInputOutcome::Steered,
-        )
-        .await?;
     assert!(
         store
             .conversation_input_reference(
@@ -463,7 +538,7 @@ async fn exercise_delivery_retention(
                 request_id: "failed-chat-input".into(),
                 target: ConversationTarget::Snapshot(snapshot.clone()),
                 text: ConversationText::parse(
-                    "Accepted chat survives failed delivery deletion".into(),
+                    "A failed outgoing item is not a normal Chat message".into(),
                 )?,
             },
             f.now,
@@ -502,8 +577,15 @@ async fn exercise_delivery_retention(
     let messages = store
         .conversation_messages(&owner, &scope, ConversationMessageWindow::Latest, 25, f.now)
         .await?;
-    assert_eq!(messages.messages.len(), 3);
-    for input in [first, &failed] {
+    assert_eq!(messages.messages.len(), 2);
+    assert!(
+        !messages
+            .messages
+            .iter()
+            .any(|message| message.receipt.source_input_id.as_deref() == Some(failed.id.as_str()))
+    );
+    {
+        let input = first;
         let message = messages
             .messages
             .iter()
@@ -597,7 +679,7 @@ async fn verify_rollback(
     let before = store
         .conversation_messages(&actor, &scope, ConversationMessageWindow::Latest, 25, f.now)
         .await?;
-    let result = store
+    let admitted = store
         .accept_conversation_input(
             &actor,
             &AcceptConversationInput {
@@ -610,6 +692,19 @@ async fn verify_rollback(
             f.now,
         )
         .await;
+    let result = match admitted {
+        Ok(input) => {
+            pickup(
+                store,
+                f,
+                &input,
+                &snapshot("message-source-b")?,
+                &NativeConversationId::parse("message-native".into())?,
+            )
+            .await
+        }
+        Err(error) => Err(error),
+    };
     match result {
         Err(StoreError::Database(diesel::result::Error::DatabaseError(_, information))) => {
             assert_eq!(information.message(), expected);
@@ -621,15 +716,14 @@ async fn verify_rollback(
         .await?;
     assert_eq!(before.through, after.through);
     assert_eq!(before.messages.len(), after.messages.len());
-    assert!(
-        store
-            .conversation_input_reference(&actor, &f.agent.id, conversation, "rollback-chat", f.now)
-            .await?
-            .is_none()
+    assert_eq!(
+        store.conversation_input_reference(
+            &actor, &f.agent.id, conversation, "rollback-chat", f.now,
+        ).await?.is_some(),
+        expected == "Injected chat failure",
     );
     Ok(())
 }
-const OLD_WRITER: &str = "INSERT INTO conversation_inputs(id,conversation_id,request_id,target_snapshot,submitted_text,accepted_at) SELECT c.id,c.id,'old-unreceipted-writer',c.source_snapshot,'Must not be accepted',0 FROM conversations c JOIN agents a ON a.id=c.agent_id WHERE a.handle='chat-fixture'";
 const SQLITE_ROLLBACK: &str = "CREATE TRIGGER reject_chat_fixture BEFORE INSERT ON conversation_inputs WHEN NEW.request_id='rollback-chat' BEGIN SELECT RAISE(ABORT,'Injected input failure'); END";
 const POSTGRES_ROLLBACK: &str = "CREATE FUNCTION reject_chat_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.request_id='rollback-chat' THEN RAISE EXCEPTION 'Injected input failure'; END IF; RETURN NEW; END; $$; CREATE TRIGGER reject_chat_fixture BEFORE INSERT ON conversation_inputs FOR EACH ROW EXECUTE FUNCTION reject_chat_fixture()";
 const SQLITE_CHAT_ROLLBACK: &str = "CREATE TRIGGER reject_chat_write_fixture BEFORE INSERT ON conversation_messages WHEN NEW.body='Must roll back both receipts' BEGIN SELECT RAISE(ABORT,'Injected chat failure'); END";
@@ -656,11 +750,6 @@ fn sqlite_chat_receipts_and_lifetime() -> Result<(), TestError> {
     let conversation = runtime.block_on(exercise(&store, &f))?;
     let mut connection = diesel::SqliteConnection::establish(path.to_str().ok_or("Invalid path")?)?;
     connection.batch_execute("PRAGMA foreign_keys=ON")?;
-    let old = connection
-        .batch_execute(OLD_WRITER)
-        .err()
-        .ok_or("Old writer was accepted")?;
-    assert!(old.to_string().contains("requires its chat receipt"));
     connection.batch_execute(SQLITE_ROLLBACK)?;
     runtime.block_on(verify_rollback(
         &store,
@@ -707,11 +796,6 @@ fn postgres_chat_receipts_and_lifetime() -> Result<(), TestError> {
         let f = runtime.block_on(fixture(&store))?;
         let conversation = runtime.block_on(exercise(&store, &f))?;
         let mut connection = AsyncConnectionWrapper::<AsyncPgConnection>::establish(&url)?;
-        let old = connection
-            .batch_execute(OLD_WRITER)
-            .err()
-            .ok_or("Old writer was accepted")?;
-        assert!(old.to_string().contains("requires its chat receipt"));
         connection.batch_execute(POSTGRES_ROLLBACK)?;
         runtime.block_on(verify_rollback(
             &store,

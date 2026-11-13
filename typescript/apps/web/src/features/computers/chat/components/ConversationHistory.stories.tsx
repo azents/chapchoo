@@ -58,13 +58,6 @@ function Fixture({
     region,
     read: "ready",
     readingOlder: false,
-    inputs: [
-      {
-        requestId: "pending",
-        text: "Pending local input",
-        observation: "uncertain",
-      },
-    ],
     drafts: {},
     stop: "idle",
     onRead: () => {},

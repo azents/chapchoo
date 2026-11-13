@@ -7,11 +7,20 @@ use chapchoo_harness::{
 pub(in crate::connector) struct Provider {
     route: CurrentRoute,
     scope: NativeToolScope,
+    ordering: Ordering,
 }
 redacted!(Provider);
 impl Provider {
-    pub(in crate::connector) fn new(route: CurrentRoute, scope: NativeToolScope) -> Self {
-        Self { route, scope }
+    pub(in crate::connector) fn new(
+        route: CurrentRoute,
+        scope: NativeToolScope,
+        ordering: Ordering,
+    ) -> Self {
+        Self {
+            route,
+            scope,
+            ordering,
+        }
     }
 }
 struct Lifetime(Relay);
@@ -45,6 +54,7 @@ impl NativeToolsProvider for Provider {
                     agent_id: self.scope.agent_id.clone(),
                     conversation_id: self.scope.conversation_id.clone(),
                 },
+                self.ordering.open(binding.clone()),
             )
             .await
             .map_err(NativeToolsError::new)?;

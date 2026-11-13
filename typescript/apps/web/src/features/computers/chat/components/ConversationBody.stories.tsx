@@ -295,41 +295,38 @@ function Fixture({
                 observation: "failed",
               },
             ]
-          : [],
+          : mode === "inputs"
+            ? [
+                {
+                  id: "preparing",
+                  requestId: "preparing",
+                  conversationId: "conversation",
+                  acceptedAt: 1n,
+                  text: "대화 준비 중인 메시지",
+                  observation: "preparing",
+                },
+                {
+                  id: "accepted",
+                  requestId: "accepted",
+                  conversationId: "conversation",
+                  acceptedAt: 2n,
+                  text: "접수된 메시지",
+                  observation: "accepted",
+                },
+                {
+                  id: "failed",
+                  requestId: "failed",
+                  conversationId: "conversation",
+                  acceptedAt: 3n,
+                  text: "**확인**",
+                  observation: "failed",
+                },
+              ]
+            : [],
       renderedAt: 1,
     },
     read: mode === "loading" ? "loading" : mode === "error" ? "error" : "ready",
     readingOlder: false,
-    inputs:
-      mode === "inputs"
-        ? [
-            {
-              requestId: "sending",
-              text: "전송 중인 메시지",
-              observation: "sending",
-            },
-            {
-              requestId: "preparing",
-              text: "대화 준비 중인 메시지",
-              observation: "preparing",
-            },
-            {
-              requestId: "accepted",
-              text: "접수된 메시지",
-              observation: "accepted",
-            },
-            {
-              requestId: "failed",
-              text: "**확인**",
-              observation: "failed",
-            },
-            {
-              requestId: "uncertain",
-              text: "**확인**",
-              observation: "uncertain",
-            },
-          ]
-        : [],
     stop: "idle",
     drafts: { [request.key]: draft },
     onRead: () => {},

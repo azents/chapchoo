@@ -184,11 +184,27 @@ impl ServerHandler for Handler {
         let controls = self.controls.clone();
         let id = context.id;
         let state = self.state.clone();
+        // Snapshot only already-dispatched inputs. Future inputs must not
+        // indefinitely extend a call's receipt dependency set.
+        let ordering = state.ordering.snapshot();
         let (sender, receiver) = oneshot::channel();
         tasks.spawn(async move {
             let _permit = permit;
             let _bytes = bytes;
-            let invocation = rpc::invoke(&state, request.name.into_owned(), arguments, cancel);
+            let invocation = async {
+                let waiting = async {
+                    ordering
+                        .map_err(|_| unavailable())?
+                        .ready()
+                        .await
+                        .map_err(|_| unavailable())
+                };
+                tokio::select! {
+                    result = waiting => result?,
+                    _ = cancel.cancelled() => return Err(unavailable()),
+                }
+                rpc::invoke(&state, request.name.into_owned(), arguments, cancel).await
+            };
             let result = tokio::select! {
                 result = tokio::time::timeout(Duration::from_secs(50), invocation) =>
                     result.unwrap_or_else(|_| Err(unavailable())),

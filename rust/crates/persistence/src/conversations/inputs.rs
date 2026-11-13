@@ -175,6 +175,21 @@ impl Store {
         draft: &AcceptConversationInput,
         now: i64,
     ) -> Result<ConversationInputAdmission, StoreError> {
+        self.admit_conversation_input_for_consumer(
+            actor,
+            draft,
+            now,
+            crate::DirectoryPolicy::default(),
+        )
+        .await
+    }
+    pub async fn admit_conversation_input_for_consumer(
+        &self,
+        actor: &SecretDigest,
+        draft: &AcceptConversationInput,
+        now: i64,
+        policy: crate::DirectoryPolicy,
+    ) -> Result<ConversationInputAdmission, StoreError> {
         request_id(&draft.request_id)?;
         let agent = EntityId::from_dto(EntityKind::Agent, &draft.agent_id)?;
         let expected = draft
@@ -281,23 +296,13 @@ impl Store {
                 return Err(StoreError::InvalidInput);
             }
             let id = EntityId::generate(now)?;
-            let receipt_now = crate::directory::database_now!(connection, dialect);
-            let _ = super::messages::append_message!(
-                connection,
-                dialect,
-                row.id,
-                super::messages::MessageOrigin::User {
-                    input: id,
-                    request_id: &draft.request_id,
-                    accepted_at: now
-                },
-                draft.text,
-                receipt_now
-            );
-            diesel::sql_query(dialect.query("INSERT INTO conversation_inputs(id,conversation_id,request_id,target_snapshot,submitted_text,accepted_at) VALUES(?,?,?,?,?,?)"))
+            let consumer_now = crate::directory::database_now!(connection, dialect);
+            let consumer_expires = policy.expiry(consumer_now, true)?;
+            diesel::sql_query(dialect.query("INSERT INTO conversation_inputs(id,conversation_id,request_id,target_snapshot,submitted_text,accepted_at,queue_state,consumer_expires_at) VALUES(?,?,?,?,?,?,'PENDING',?)"))
                 .bind::<IdentitySql,_>(id).bind::<IdentitySql,_>(row.id).bind::<Text,_>(&draft.request_id)
                 .bind::<Nullable<Text>,_>(draft.target.snapshot().map(SnapshotId::as_str))
-                .bind::<Text,_>(draft.text.as_str()).bind::<BigInt,_>(now).execute(connection).await?;
+                .bind::<Text,_>(draft.text.as_str()).bind::<BigInt,_>(now)
+                .bind::<BigInt,_>(consumer_expires).execute(connection).await?;
             Ok(ConversationInputAdmission::Accepted(
                 ConversationInputReceipt {
                     id: id.to_dto(EntityKind::ConversationOperation),

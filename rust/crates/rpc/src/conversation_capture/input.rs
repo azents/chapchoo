@@ -50,7 +50,7 @@ pub(super) async fn pull(
 pub(super) async fn report(
     service: &ConversationCaptureServices,
     request: Request<wire::InputReport>,
-) -> Result<Response<()>, Status> {
+) -> Result<Response<wire::InputReportAcknowledgement>, Status> {
     service.admit()?;
     let credential = actor(&request)?;
     let value = request.into_inner();
@@ -67,13 +67,31 @@ pub(super) async fn report(
         }
         Some(wire::input_report::Result::Steered(())) => ConversationInputOutcome::Steered,
         Some(wire::input_report::Result::Failed(())) => ConversationInputOutcome::Failed,
+        Some(wire::input_report::Result::AttemptError(())) => {
+            service
+                .service
+                .report_input_attempt_error(
+                    &source(&origin, &credential),
+                    &ConversationOperationForwarding {
+                        agent_id: &command.agent_id,
+                        conversation_id: &command.conversation_id,
+                        operation_id: &command.operation_id,
+                        target: &target,
+                    },
+                )
+                .await
+                .map_err(status)?;
+            return Ok(Response::new(wire::InputReportAcknowledgement {
+                user_receipt_recorded: false,
+            }));
+        }
         None => {
             return Err(Status::invalid_argument(
                 "Known native input outcome is required",
             ));
         }
     };
-    service
+    let acknowledgement = service
         .service
         .report_input(
             &source(&origin, &credential),
@@ -87,5 +105,8 @@ pub(super) async fn report(
         )
         .await
         .map_err(status)?;
-    Ok(Response::new(()))
+    Ok(Response::new(wire::InputReportAcknowledgement {
+        user_receipt_recorded: acknowledgement
+            == chapchoo_service::ConversationInputReportAcknowledgement::Recorded,
+    }))
 }

@@ -33,6 +33,11 @@ assembled journey. Missing
 native prerequisites fail. This is deterministic assembled-plumbing coverage,
 not authenticated Codex/model or general compatibility acceptance. Default
 browser scenarios and browser-free native integration remain separate owners.
+Both-engine queue tests own orphan-consumer expiry, no resurrection, manual
+replacement identity and successful-receipt versus deleted-row closure. Integrated
+RPC tests cover processor return/error/panic, while Connector MCP tests own
+pre-Submit receipt ordering, report-ACK loss and actual-owner isolation. Those
+contracts do not establish successful real model-side use.
 The [conversation acceptance boundaries](../../notes/chat-261108-implementation-acceptance.md)
 separate implemented owned contracts, deterministic/native evidence and the
 remaining authenticated CLI, architecture/ABI, CI and review gates. Fixture

@@ -214,6 +214,41 @@ export const conversationsRouter = router({
         ),
       ),
     ),
+  retryInput: procedure
+    .input(
+      z
+        .object({
+          source: z
+            .object({
+              agentId: id,
+              conversationId: id,
+              snapshotId: z.string().min(1).max(512).optional(),
+            })
+            .strict(),
+          originalInputId: id,
+          originalRequestId: id,
+          requestId: id,
+        })
+        .strict(),
+    )
+    .mutation(({ ctx, input }) =>
+      attempt(() =>
+        ctx.session.authenticated((token) =>
+          conversationApi(ctx.backend.conversations, token).retryInput({
+            scope: {
+              agentId: input.source.agentId,
+              conversationId: input.source.conversationId,
+              target: input.source.snapshotId
+                ? { snapshotId: input.source.snapshotId }
+                : { notStarted: {} },
+            },
+            originalInputId: input.originalInputId,
+            originalRequestId: input.originalRequestId,
+            requestId: input.requestId,
+          }),
+        ),
+      ),
+    ),
   inputResult: procedure.input(operation).query(({ ctx, input }) =>
     attempt(() =>
       ctx.session.authenticated(async (token) => {

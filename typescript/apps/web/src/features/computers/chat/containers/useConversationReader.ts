@@ -10,7 +10,6 @@ import type {
   ConversationAnchor,
   ConversationRegion,
   InputHistoryAnchor,
-  LocalConversationInput,
 } from "@chapchoo/web-core/conversation-types";
 
 export function useConversationReader(
@@ -22,7 +21,6 @@ export function useConversationReader(
     requestId: string;
     snapshotId: string;
   },
-  pendingInputs: LocalConversationInput[] = [],
   initialFetch = false,
 ): {
   region: ConversationRegion;
@@ -41,18 +39,17 @@ export function useConversationReader(
 } {
   const utils = trpc.useUtils();
   const stopRef = useRef(stopLookup);
-  const pendingRef = useRef(pendingInputs);
   const checkIndex = useRef(0);
-  useEffect(() => {
-    pendingRef.current = pendingInputs;
-  }, [pendingInputs]);
   useEffect(() => {
     stopRef.current = stopLookup;
   }, [stopLookup]);
   const visibility = useDocumentVisibility();
   const [region, setRegion] = useState(initial);
   const [read, setRead] = useState<"ready" | "loading" | "error">(
-    initialFetch || initial.header.state === "loading" ? "loading" : "ready",
+    initialFetch ||
+      (surface === "history" && initial.header.state === "loading")
+      ? "loading"
+      : "ready",
   );
   const current = useRef(initial);
   const before = useRef<ConversationAnchor | null>(null);
@@ -108,17 +105,7 @@ export function useConversationReader(
         const offset = checkIndex.current % Math.max(known.length, 1);
         const rotating = [...known.slice(offset), ...known.slice(0, offset)];
         checkIndex.current = offset + 25;
-        const checkInputs = [
-          ...new Set([
-            ...pendingRef.current
-              .filter(
-                (item) =>
-                  item.conversationId === current.current.header.conversationId,
-              )
-              .flatMap((item) => (item.id ? [item.id] : [])),
-            ...rotating,
-          ]),
-        ].slice(0, 25);
+        const checkInputs = rotating.slice(0, 25);
         const input = {
           agentId: initial.header.agentId,
           inputBefore: inputAnchor
@@ -182,7 +169,7 @@ export function useConversationReader(
             current.current.header.conversationId ||
           incoming.header.source?.snapshotId !==
             current.current.header.source?.snapshotId;
-        if (changedSource || incoming.header.state === "loading") {
+        if (changedSource) {
           paged.current = false;
           retryHead.current = false;
           setOlderRead("ready");
@@ -190,7 +177,7 @@ export function useConversationReader(
           inputBefore.current = null;
           setReadingOlder(false);
           current.current = incoming;
-          setRegion(incoming);
+          setRegion(current.current);
         } else if (
           (!anchor && !inputAnchor) ||
           (anchor === before.current && inputAnchor === inputBefore.current)
@@ -229,7 +216,8 @@ export function useConversationReader(
           incoming.header.state === "loading"
         ) {
           setRead(
-            incoming.refill || incoming.header.state === "loading"
+            incoming.refill ||
+              (surface === "history" && incoming.header.state === "loading")
               ? "loading"
               : "ready",
           );
@@ -310,12 +298,14 @@ export function useConversationReader(
       setRegion(current.current);
     },
     older: () => {
-      if (!current.current.older && !current.current.inputOlder) {
+      const recordAnchor =
+        surface === "history" ? (current.current.older ?? null) : null;
+      if (!recordAnchor && !current.current.inputOlder) {
         return;
       }
       // Admit the page even during an in-flight latest poll. run() queues it;
       // the stale latest result cannot consume or replace the page request.
-      before.current = current.current.older ?? null;
+      before.current = recordAnchor;
       inputBefore.current = current.current.inputOlder ?? null;
       setReadingOlder(true);
       setOlderRead("loading");

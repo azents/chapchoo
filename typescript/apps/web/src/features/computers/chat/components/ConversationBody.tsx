@@ -4,16 +4,26 @@ import {
   draftField,
   initialQuestionDraft,
 } from "@chapchoo/web-core/conversation-form";
-import { Button, Group, Image, Stack, Text } from "@mantine/core";
+import {
+  ActionIcon,
+  Button,
+  Group,
+  Image,
+  rem,
+  Stack,
+  Text,
+  Tooltip,
+} from "@mantine/core";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { inputStatus, nativeStatus, permissionScope } from "../copy";
+import { nativeStatus, permissionScope } from "../copy";
 import { recordPublication } from "../recordPresentation";
 import classes from "./ConversationBody.module.css";
 import {
   ContentDisclosure,
   ConversationRecordDisclosure,
 } from "./ConversationRecord";
+import { OutgoingIcon } from "./OutgoingIcon";
 import { RecordDiff } from "./RecordDiff";
 import { ToolRecordDetails } from "./ToolRecordDetails";
 import type { ChatCopy } from "../copy";
@@ -28,6 +38,7 @@ import type {
   ConversationRecord,
   FormValue,
   QuestionField,
+  RetainedInputView,
 } from "@chapchoo/web-core/conversation-types";
 import type { ReactElement, ReactNode } from "react";
 
@@ -61,7 +72,9 @@ function UserMessageBody({
       <Text size="xs" c="dimmed" ta="right" className={classes.userAuthor}>
         {copy.you}
       </Text>
-      <div className={classes.userBubble}>{children}</div>
+      <div className={classes.userBubble} data-user-bubble>
+        {children}
+      </div>
     </>
   );
 }
@@ -555,6 +568,84 @@ function PublicationRecordDetails({
     </>
   );
 }
+function InputResult({
+  input,
+  controls,
+  copy,
+  writable,
+}: {
+  input: RetainedInputView;
+  controls: ConversationControls;
+  copy: ChatCopy;
+  writable: boolean;
+}): ReactElement | null {
+  const failed = input.observation === "failed";
+  const action =
+    controls.inputAction?.requestId === input.requestId
+      ? controls.inputAction
+      : void 0;
+  const actionBusy =
+    action?.state === "deleting" || action?.state === "retrying";
+  if (!failed && !action) {
+    return null;
+  }
+  return (
+    <Stack gap="xs">
+      {failed && controls.onRetryInput && controls.onDeleteInput ? (
+        <Group justify="flex-end" gap="sm" mt={rem(4)} wrap="nowrap">
+          <Group gap={rem(6)} c="red" role="alert" wrap="nowrap">
+            <OutgoingIcon kind="error" />
+            <Text size="sm" fw={600}>
+              {copy.failed}
+            </Text>
+          </Group>
+          <Group gap={0} wrap="nowrap">
+            <Tooltip
+              label={copy.retryMessage}
+              withArrow
+              events={{ hover: true, focus: true, touch: false }}
+            >
+              <ActionIcon
+                size={rem(28)}
+                style={{ minWidth: rem(28), minHeight: rem(28) }}
+                variant="subtle"
+                color="gray"
+                aria-label={copy.retryMessage}
+                disabled={!writable || actionBusy || !input.text}
+                onClick={() => controls.onRetryInput?.(input)}
+              >
+                <OutgoingIcon kind="retry" />
+              </ActionIcon>
+            </Tooltip>
+            <Tooltip
+              label={copy.deleteMessage}
+              withArrow
+              events={{ hover: true, focus: true, touch: false }}
+            >
+              <ActionIcon
+                size={rem(28)}
+                style={{ minWidth: rem(28), minHeight: rem(28) }}
+                variant="subtle"
+                color="gray"
+                aria-label={copy.deleteMessage}
+                disabled={!controls.inputDeletable || actionBusy}
+                onClick={() => controls.onDeleteInput?.(input)}
+              >
+                <OutgoingIcon kind="delete" />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
+        </Group>
+      ) : null}
+      {action && action.state !== "retrying" ? (
+        <Text size="xs" role="status">
+          {copy.deletingMessage}
+        </Text>
+      ) : null}
+    </Stack>
+  );
+}
+
 export function ConversationBody({
   controls,
   messages,
@@ -591,8 +682,21 @@ export function ConversationBody({
               id={`message-${encodeURIComponent(message.id)}`}
               data-kind={message.role}
               data-message-id={message.id}
+              data-input-operation={
+                controls.region.inputs?.find(
+                  (input) =>
+                    !input.deleted && input.id === message.sourceInputId,
+                )?.id
+              }
               aria-label={message.role === "user" ? copy.you : agentName}
-              className={classes.record}
+              className={`${classes.record} ${
+                controls.region.inputs?.some(
+                  (input) =>
+                    !input.deleted && input.id === message.sourceInputId,
+                )
+                  ? classes.pendingInput
+                  : ""
+              }`}
               tabIndex={-1}
             >
               {message.role === "user" ? (
@@ -614,6 +718,20 @@ export function ConversationBody({
                   <Markdown text={message.text} />
                 </>
               )}
+              {(controls.region.inputs ?? [])
+                .filter(
+                  (input) =>
+                    !input.deleted && input.id === message.sourceInputId,
+                )
+                .map((input) => (
+                  <InputResult
+                    key={input.id}
+                    input={input}
+                    controls={controls}
+                    copy={copy}
+                    writable={writable}
+                  />
+                ))}
             </article>
           ))
         : null}
@@ -777,12 +895,9 @@ export function ConversationBody({
           (input) =>
             surface !== "history" &&
             !input.deleted &&
-            (input.observation === "failed" ||
-              input.observation === "uncertain" ||
-              input.observation === "preparing" ||
-              !messages?.region.messages.some(
-                (message) => message.sourceInputId === input.id,
-              )),
+            !messages?.region.messages.some(
+              (message) => message.sourceInputId === input.id,
+            ),
         )
         .map((input) => (
           <section
@@ -790,74 +905,20 @@ export function ConversationBody({
             aria-label={copy.you}
             key={input.id}
             data-input-operation={input.id}
+            data-input-state={input.observation}
+            data-kind="user"
           >
-            <Text size="xs" role="status">
-              {inputStatus(copy, input)}
-            </Text>
-            {input.observation === "failed" &&
-            controls.onRetryInput &&
-            controls.onDeleteInput ? (
-              <Group justify="flex-end" gap="xs">
-                <Button
-                  size="compact-xs"
-                  variant="subtle"
-                  disabled={
-                    !writable ||
-                    controls.inputAction?.requestId === input.requestId ||
-                    !input.text
-                  }
-                  onClick={() => controls.onRetryInput?.(input)}
-                >
-                  {copy.retryMessage}
-                </Button>
-                <Button
-                  size="compact-xs"
-                  variant="subtle"
-                  color="red"
-                  disabled={
-                    !controls.inputDeletable ||
-                    controls.inputAction?.requestId === input.requestId
-                  }
-                  onClick={() => controls.onDeleteInput?.(input)}
-                >
-                  {copy.deleteMessage}
-                </Button>
-              </Group>
-            ) : null}
-            {controls.inputAction?.requestId === input.requestId ? (
-              <Text size="xs" role="status">
-                {controls.inputAction.state === "deleting"
-                  ? copy.deletingMessage
-                  : copy.deleteUnconfirmed}
-              </Text>
-            ) : null}
-          </section>
-        ))}
-      {controls.inputs
-        .filter(
-          (input) =>
-            surface !== "history" &&
-            !messages?.region.messages.some(
-              (message) =>
-                input.id !== void 0 && message.sourceInputId === input.id,
-            ),
-        )
-        .map((input) => (
-          <section
-            key={input.requestId}
-            className={`${classes.record} ${classes.pendingInput}`}
-            data-kind={input.observation === "accepted" ? void 0 : "user"}
-            aria-label={copy.you}
-          >
-            {input.observation === "accepted" ? (
-              <Text size="xs" role="status">
-                {copy.accepted}
-              </Text>
-            ) : (
+            {input.text ? (
               <UserMessageBody copy={copy}>
                 <Markdown text={input.text} />
               </UserMessageBody>
-            )}
+            ) : null}
+            <InputResult
+              input={input}
+              controls={controls}
+              copy={copy}
+              writable={writable}
+            />
           </section>
         ))}
     </Stack>

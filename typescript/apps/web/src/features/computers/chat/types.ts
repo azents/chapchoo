@@ -14,7 +14,6 @@ import type {
   ConversationAnswer,
   ConversationRecord,
   ConversationRegion,
-  LocalConversationInput,
   RetainedInputView,
 } from "@chapchoo/web-core/conversation-types";
 import type { ReactNode } from "react";
@@ -39,11 +38,13 @@ export interface ConversationControls {
   readingOlder: boolean;
   olderRead?: "ready" | "loading" | "error";
   paginationReset?: object;
-  inputs: LocalConversationInput[];
   stop: "idle" | "pending" | "published" | "rejected" | "uncertain";
   drafts: Partial<Record<string, QuestionDraft>>;
   onRead: () => void;
-  inputAction?: { requestId: string; state: "deleting" | "uncertain" };
+  inputAction?: {
+    requestId: string;
+    state: "deleting" | "retrying";
+  };
   inputDeletable?: boolean;
   onRetryInput?: (input: RetainedInputView) => void;
   onDeleteInput?: (input: RetainedInputView) => void;
@@ -72,6 +73,7 @@ export interface ChatProps {
   recentRecords: ConversationRegion;
   recentRead: "ready" | "loading" | "error";
   input: string;
+  inputError?: string;
   activity: ConversationActivity;
   writable: boolean;
   stoppable: boolean;

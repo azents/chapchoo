@@ -77,6 +77,12 @@ test("owner receives intentional server messages and inspects native typed-answe
     ).toBeVisible({ timeout: 180_000 });
     await expect(log.locator("[data-message-id]")).toHaveCount(2);
     await expect(log.getByText(inputText, { exact: true })).toHaveCount(1);
+    await expect(log.locator("[data-message-id]").first()).toContainText(
+      inputText,
+    );
+    await expect(log.locator("[data-message-id]").last()).toContainText(
+      "Intentional fixture publication.",
+    );
     await expect(
       log.getByText("First assistant output", { exact: true }),
     ).toHaveCount(0);

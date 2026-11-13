@@ -346,6 +346,12 @@ pub(super) async fn initial(
             .request_id,
         "zz-setup-failed"
     );
+    let deleted = store
+        .conversation_inputs(&owner, &scope, None, 25, f.now)
+        .await?
+        .into_iter()
+        .find(|item| item.reference.request_id == "zz-setup-failed")
+        .ok_or("Missing failed queue item")?;
     store
         .delete_failed_conversation_input(&owner, &scope, "zz-setup-failed", f.now)
         .await?;
@@ -355,13 +361,34 @@ pub(super) async fn initial(
     let listed = store
         .conversation_inputs(&owner, &scope, None, 25, f.now)
         .await?;
-    let deleted = listed
-        .iter()
-        .find(|item| item.reference.request_id == "zz-setup-failed")
-        .ok_or("Missing deletion tombstone")?;
-    assert_eq!(listed[0].reference.request_id, "zz-setup-failed");
-    assert!(deleted.deleted);
-    assert_eq!(deleted.bytes, 0);
+    assert!(
+        !listed
+            .iter()
+            .any(|item| item.reference.request_id == "zz-setup-failed")
+    );
+    assert_eq!(
+        store
+            .closed_conversation_inputs(
+                &owner,
+                &scope,
+                std::slice::from_ref(&deleted.reference.id),
+                f.now
+            )
+            .await?,
+        vec![deleted.reference.id.clone()],
+    );
+    assert!(
+        store
+            .conversation_input_reference(
+                &owner,
+                &f.agent.id,
+                &first.conversation_id,
+                "zz-setup-failed",
+                f.now,
+            )
+            .await?
+            .is_none()
+    );
     let live = store
         .latest_conversation_input(&owner, &scope, f.now)
         .await?
@@ -406,27 +433,6 @@ pub(super) async fn initial(
             .await,
         Err(StoreError::NotFound)
     ));
-    assert!(matches!(
-        store
-            .accept_conversation_input(
-                &owner,
-                &AcceptConversationInput {
-                    agent_id: f.agent.id.clone(),
-                    conversation_id: Some(first.conversation_id.clone()),
-                    request_id: "zz-setup-failed".into(),
-                    target: ConversationTarget::NotStarted,
-                    text: ConversationText::parse("another explicit input".into())?,
-                },
-                f.now
-            )
-            .await,
-        Err(StoreError::InvalidTransition)
-    ));
-    // Deleting content must not delete the effect/admission result.
-    assert!(
-        matches!(store.begin_conversation_input_preparation(&owner, &route, &failed, f.now).await?,
-        Admission::Existing(facts) if facts.state == State::Known(Outcome::Failed(Failure::SourceUnavailable)))
-    );
     Ok(())
 }
 async fn rejected_initial_recovery(

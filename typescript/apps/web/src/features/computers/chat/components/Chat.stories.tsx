@@ -57,7 +57,6 @@ type FixtureProps = {
     | "signedOut"
     | "startError"
     | "nativeFailed"
-    | "pendingOrder"
     | "authenticationRequired"
     | "nativeStarting"
     | "notStarted"
@@ -67,6 +66,10 @@ type FixtureProps = {
     | "unread"
     | "idle"
     | "pendingInput"
+    | "inputError"
+    | "queueError"
+    | "queueWaiting"
+    | "queuePages"
     | "inputRecorded"
     | "computerStarting"
     | "computerStopping"
@@ -103,7 +106,6 @@ function StaticHistory({
     },
     read: "ready",
     readingOlder: false,
-    inputs: [],
     drafts: {},
     stop: "idle",
     onRead: () => {},
@@ -198,10 +200,15 @@ function Fixture({
     teamId: "team",
     teamHandle: "my",
   };
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(
+    mode === "inputError" ? "두 저장소의 작업 현황을 정리해줘." : "",
+  );
   const [records, setRecords] = useState<ConversationRecord[]>(
     [
       "pendingInput",
+      "inputError",
+      "queueError",
+      "queueWaiting",
       "inputRecorded",
       "computerStarting",
       "computerStopping",
@@ -245,7 +252,7 @@ function Fixture({
                 ),
               )
             : conversationReviewRecords
-        : mode === "empty" || mode === "idle"
+        : mode === "empty" || mode === "idle" || mode === "queuePages"
           ? []
           : [
               fixtureMessage(
@@ -279,17 +286,22 @@ function Fixture({
   const [navOpened, setNavOpened] = useState(false);
   const [detailsOpened, setDetailsOpened] = useState(false);
   const [activity, setActivity] = useState<"working" | "idle">(
-    mode === "idle" ? "idle" : "working",
+    mode === "idle" ||
+      mode === "inputError" ||
+      mode === "queueError" ||
+      mode === "queueWaiting"
+      ? "idle"
+      : "working",
   );
   const [workStop, setWorkStop] = useState<"idle" | "published">("idle");
   const [failedDeleted, setFailedDeleted] = useState(false);
   const [retrySubmitted, setRetrySubmitted] = useState(false);
   const [nativeRecorded, setNativeRecorded] = useState(false);
+  const [queueStart, setQueueStart] = useState(6);
   // Static accepted receipts for this UI fixture, distinct from captured records.
   const messages: ConversationMessage[] = (
     [
       "nativeFailed",
-      "pendingOrder",
       "authenticationRequired",
       "nativeStarting",
       "notStarted",
@@ -307,26 +319,6 @@ function Fixture({
         .flatMap((part) => (part.type === "text" ? [part.text] : []))
         .join("\n"),
     }));
-  if (mode === "pendingInput" && !nativeRecorded) {
-    messages.push({
-      id: "receipt-user:visual-recorded",
-      role: "user",
-      order: 3n,
-      receivedAt: 1n,
-      text: "두 저장소의 작업 현황을 정리해줘.",
-      sourceInputId: "visual-pending-input",
-    });
-  }
-  if (mode === "nativeFailed" || mode === "pendingOrder") {
-    messages.push({
-      id: "receipt-failed-input",
-      role: "user",
-      order: 1n,
-      receivedAt: 1n,
-      text: "안녕하세요",
-      sourceInputId: "failed-input",
-    });
-  }
   const floating = useFloatingChat(input, agent.id, true, messages, {
     source: "conversation/snapshot",
     tail:
@@ -336,6 +328,10 @@ function Fixture({
   const copy = chatCopy(locale);
   const c = computerCopy(locale);
   const writable =
+    mode === "inputError" ||
+    mode === "queueError" ||
+    mode === "queueWaiting" ||
+    mode === "queuePages" ||
     mode === "pendingInput" ||
     mode === "inputRecorded" ||
     mode === "unread" ||
@@ -345,7 +341,6 @@ function Fixture({
     mode === "empty" ||
     mode === "textPlan" ||
     mode === "nativeFailed" ||
-    mode === "pendingOrder" ||
     mode === "notStarted" ||
     mode === "nativeStarting";
   const actions = useComputerActions({
@@ -392,7 +387,6 @@ function Fixture({
   const controlled = useChatFocus(product);
   const startup = [
     "nativeFailed",
-    "pendingOrder",
     "authenticationRequired",
     "nativeStarting",
     "notStarted",
@@ -408,26 +402,30 @@ function Fixture({
     },
     records: [],
     inputs:
-      mode === "nativeFailed" || mode === "pendingOrder"
+      mode === "nativeFailed" && !failedDeleted
         ? [
             {
-              id: "failed-input",
-              requestId: "request",
+              id: retrySubmitted ? "retry-input" : "failed-input",
+              requestId: retrySubmitted ? "retry-request" : "request",
               conversationId: "conversation",
               acceptedAt: 1n,
               text: "안녕하세요",
               deleted: failedDeleted,
-              observation: "failed",
-              preparation: { type: "failed", reason: "nativeRejected" },
+              observation: retrySubmitted ? "accepted" : "failed",
+              preparation: retrySubmitted
+                ? void 0
+                : { type: "failed", reason: "nativeRejected" },
             },
           ]
         : [],
     latestInput:
-      mode === "nativeFailed" || mode === "pendingOrder"
+      mode === "nativeFailed" && !failedDeleted
         ? {
-            requestId: "request",
-            observation: "failed",
-            preparation: { type: "failed", reason: "nativeRejected" },
+            requestId: retrySubmitted ? "retry-request" : "request",
+            observation: retrySubmitted ? "accepted" : "failed",
+            preparation: retrySubmitted
+              ? void 0
+              : { type: "failed", reason: "nativeRejected" },
           }
         : mode === "nativeStarting"
           ? {
@@ -439,18 +437,7 @@ function Fixture({
     renderedAt: initial.renderedAt,
   };
   const displayedActivity = startup
-    ? conversationActivity(
-        startupRegion,
-        mode === "pendingOrder"
-          ? [
-              {
-                requestId: "new-local",
-                text: "새 메시지",
-                observation: "sending",
-              },
-            ]
-          : [],
-      )
+    ? conversationActivity(startupRegion)
     : activity;
   const presentation = chatStatus({
     computer: agent.computer,
@@ -552,9 +539,59 @@ function Fixture({
                   workId: activity === "working" ? "work" : void 0,
                 },
                 records,
+                inputs:
+                  mode === "queuePages"
+                    ? Array.from({ length: 30 - queueStart }, (_, offset) => ({
+                        id: `queue-page-${queueStart + offset}`,
+                        requestId: `queue-page-${queueStart + offset}`,
+                        conversationId: "conversation",
+                        acceptedAt: BigInt(queueStart + offset),
+                        text: `Queued item ${queueStart + offset}`,
+                        observation: "failed" as const,
+                      }))
+                    : (mode === "queueError" || mode === "queueWaiting") &&
+                        !failedDeleted
+                      ? [
+                          {
+                            id:
+                              retrySubmitted || mode === "queueWaiting"
+                                ? "queue-requeued"
+                                : "queue-failed",
+                            requestId:
+                              retrySubmitted || mode === "queueWaiting"
+                                ? "requeued"
+                                : "failed",
+                            conversationId: "conversation",
+                            acceptedAt: 1n,
+                            text: "두 저장소의 작업 현황을 정리해줘.",
+                            observation:
+                              retrySubmitted || mode === "queueWaiting"
+                                ? "accepted"
+                                : "failed",
+                          },
+                        ]
+                      : mode === "pendingInput" && !nativeRecorded
+                        ? [
+                            {
+                              id: "visual-pending-input",
+                              requestId: "visual-pending",
+                              conversationId: "conversation",
+                              acceptedAt: 1n,
+                              text: "두 저장소의 작업 현황을 정리해줘.",
+                              observation: "accepted",
+                            },
+                          ]
+                        : [],
                 older: older
                   ? { ordinal: BigInt(pageStart), index: 0n }
                   : void 0,
+                inputOlder:
+                  mode === "queuePages" && queueStart > 0
+                    ? {
+                        acceptedAt: BigInt(queueStart),
+                        requestId: `queue-page-${queueStart}`,
+                      }
+                    : void 0,
                 latestPlan:
                   mode === "textPlan"
                     ? {
@@ -575,33 +612,6 @@ function Fixture({
               },
           read: mode === "readerError" ? "error" : "ready",
           readingOlder: false,
-          inputs:
-            mode === "pendingInput" && !nativeRecorded
-              ? [
-                  {
-                    requestId: "visual-pending",
-                    id: "visual-pending-input",
-                    text: "두 저장소의 작업 현황을 정리해줘.",
-                    observation: "accepted",
-                  },
-                ]
-              : retrySubmitted
-                ? [
-                    {
-                      requestId: "explicit-new-retry",
-                      text: "안녕하세요",
-                      observation: "sending",
-                    },
-                  ]
-                : mode === "pendingOrder"
-                  ? [
-                      {
-                        requestId: "new-local",
-                        text: "새 메시지",
-                        observation: "sending",
-                      },
-                    ]
-                  : [],
           stop: workStop,
           inputDeletable: true,
           onRetryInput: () => setRetrySubmitted(true),
@@ -610,6 +620,10 @@ function Fixture({
           onRead: () => {},
           onOlder: () => {
             floating.preserveHistory();
+            if (mode === "queuePages") {
+              setQueueStart(0);
+              return;
+            }
             const start = Math.max(1, pageStart - 10);
             setRecords((current) => [
               ...Array.from({ length: pageStart - start }, (_, index) =>
@@ -636,6 +650,7 @@ function Fixture({
           onAnswer: () => {},
         }}
         input={input}
+        inputError={mode === "inputError" ? copy.enqueueFailed : void 0}
         activity={mode === "readerError" ? "unavailable" : displayedActivity}
         writable={writable}
         stoppable={writable || mode === "sending" || mode === "readerError"}
@@ -665,6 +680,9 @@ function Fixture({
         onCloseNav={() => setNavOpened(false)}
         onInput={setInput}
         onSend={() => {
+          if (mode === "inputError") {
+            return;
+          }
           if (!writable || !input.trim()) {
             return;
           }
@@ -776,6 +794,10 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Connected: Story = {};
+export const ComposerRequestError: Story = { args: { mode: "inputError" } };
+export const QueueDeliveryError: Story = { args: { mode: "queueError" } };
+export const QueueWaiting: Story = { args: { mode: "queueWaiting" } };
+export const QueuePages: Story = { args: { mode: "queuePages" } };
 export const UnreadMessages: Story = {
   args: { mode: "unread", locale: "en-US", name: "Corgi" },
 };
@@ -817,7 +839,6 @@ export const ComputerRestarting: Story = {
 };
 export const StatusRefreshing: Story = { args: { mode: "statusRefreshing" } };
 export const NativeFailed: Story = { args: { mode: "nativeFailed" } };
-export const PendingOrder: Story = { args: { mode: "pendingOrder" } };
 export const AuthenticationRequired: Story = {
   args: { mode: "authenticationRequired" },
 };

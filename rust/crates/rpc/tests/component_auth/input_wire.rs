@@ -107,12 +107,15 @@ pub(super) async fn exercise(
         command: Some(command.clone()),
         result: Some(c::input_report::Result::Steered(())),
     };
-    client
-        .report_input(authenticated(report.clone(), context.key)?)
-        .await?;
-    client
-        .report_input(authenticated(report, context.key)?)
-        .await?;
+    for _ in 0..2 {
+        assert!(
+            client
+                .report_input(authenticated(report.clone(), context.key)?)
+                .await?
+                .into_inner()
+                .user_receipt_recorded
+        );
+    }
     assert!(
         context
             .store
@@ -156,6 +159,7 @@ pub(super) async fn exercise(
             .code(),
         Code::FailedPrecondition
     );
+    super::owner_messages::exercise(context, conversation, &receipt.id, &text).await?;
     let setup_input = context
         .store
         .accept_conversation_input(

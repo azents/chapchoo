@@ -176,7 +176,7 @@ impl ConnectorCapture for ConversationCaptureServices {
     async fn report_input(
         &self,
         request: Request<wire::InputReport>,
-    ) -> Result<Response<()>, Status> {
+    ) -> Result<Response<wire::InputReportAcknowledgement>, Status> {
         input::report(self, request).await
     }
     async fn check_setup(

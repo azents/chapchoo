@@ -115,5 +115,173 @@ pub(super) async fn exercise(
     service.finish().await?;
     recovered.finish().await?;
     assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert!(
+        store
+            .conversation_input_queue_state(&accepted.conversation_id, &accepted.id)
+            .await?
+            == chapchoo_persistence::ConversationInputQueueState::Error,
+        "A processor that returns without delivery must close its attempt"
+    );
+    exercise_terminal(store, owner, agent).await?;
+    exercise_retry(store, owner, agent).await?;
     Ok(accepted)
+}
+
+async fn exercise_retry(
+    store: &Store,
+    owner: &chapchoo_crypto::SecretDigest,
+    agent: &chapchoo_persistence::AgentSummary,
+) -> Result<(), TestError> {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let entered = Arc::new(tokio::sync::Semaphore::new(0));
+    let release = Arc::new(tokio::sync::Semaphore::new(0));
+    let service = ConversationInputService::new(
+        store.clone(),
+        Arc::new(Processor {
+            calls: calls.clone(),
+            entered: entered.clone(),
+            release: release.clone(),
+        }),
+        4,
+    )?;
+    let first = service
+        .accept(
+            owner.clone(),
+            AcceptConversationInput {
+                agent_id: agent.id.clone(),
+                conversation_id: None,
+                request_id: "retry-original".into(),
+                target: ConversationTarget::NotStarted,
+                text: ConversationText::parse(
+                    "Synthetic fixture input; never forwarded to a model".into(),
+                )?,
+            },
+            AcceptanceTime::System,
+        )
+        .await?;
+    entered.acquire().await?.forget();
+    release.add_permits(1);
+    wait_failed(store, &first).await?;
+    let draft = chapchoo_persistence::RetryConversationInput {
+        agent_id: agent.id.clone(),
+        conversation_id: first.conversation_id.clone(),
+        original_input_id: first.id.clone(),
+        original_request_id: first.request_id.clone(),
+        target: ConversationTarget::NotStarted,
+        request_id: "retry-fresh".into(),
+    };
+    let next = service
+        .retry(owner.clone(), draft.clone(), AcceptanceTime::System)
+        .await?;
+    entered.acquire().await?.forget();
+    assert_ne!(next.id, first.id);
+    assert_eq!(
+        service
+            .retry(owner.clone(), draft, AcceptanceTime::System)
+            .await?
+            .id,
+        next.id
+    );
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        2,
+        "Existing replacement must not dispatch"
+    );
+    store
+        .fail_conversation_input(&first.conversation_id, &first.id)
+        .await?;
+    assert_eq!(
+        store
+            .conversation_input_queue_state(&next.conversation_id, &next.id)
+            .await?,
+        chapchoo_persistence::ConversationInputQueueState::Pending
+    );
+    release.add_permits(1);
+    service.finish().await?;
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    Ok(())
+}
+async fn wait_failed(store: &Store, input: &ConversationInputAcceptance) -> Result<(), TestError> {
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            if store
+                .conversation_input_queue_state(&input.conversation_id, &input.id)
+                .await?
+                == chapchoo_persistence::ConversationInputQueueState::Error
+            {
+                return Ok::<_, TestError>(());
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+    })
+    .await??;
+    Ok(())
+}
+
+struct TerminalProcessor(bool);
+impl ConversationInputProcessor for TerminalProcessor {
+    fn process(&self, _: AcceptedConversationInput) -> ConversationInputFuture {
+        let panic = self.0;
+        Box::pin(async move {
+            assert!(!panic, "Injected consumer panic");
+            Err(chapchoo_service::ServiceError::domain(
+                chapchoo_service::DomainReason::InvalidTransition,
+            ))
+        })
+    }
+}
+async fn exercise_terminal(
+    store: &Store,
+    owner: &chapchoo_crypto::SecretDigest,
+    agent: &chapchoo_persistence::AgentSummary,
+) -> Result<(), TestError> {
+    for panic in [false, true] {
+        let policy = chapchoo_service::ComputerPolicy {
+            heartbeat_ms: 5,
+            directory: chapchoo_persistence::DirectoryPolicy {
+                component_validity_ms: 40,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let service = ConversationInputService::new_with_policy(
+            store.clone(),
+            Arc::new(TerminalProcessor(panic)),
+            4,
+            policy,
+        )?;
+        let accepted = service
+            .accept(
+                owner.clone(),
+                AcceptConversationInput {
+                    agent_id: agent.id.clone(),
+                    conversation_id: None,
+                    request_id: format!("terminal-{panic}"),
+                    target: ConversationTarget::NotStarted,
+                    text: ConversationText::parse("Synthetic terminal consumer".into())?,
+                },
+                AcceptanceTime::System,
+            )
+            .await?;
+        // Poll the authoritative state. Timeout bounds a hang; it does not
+        // establish the terminal transition or hide the retained processor error.
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                if store
+                    .conversation_input_queue_state(&accepted.conversation_id, &accepted.id)
+                    .await?
+                    == chapchoo_persistence::ConversationInputQueueState::Error
+                {
+                    return Ok::<_, TestError>(());
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+            }
+        })
+        .await??;
+        assert!(
+            service.finish().await.is_err(),
+            "Retain the original failure"
+        );
+    }
+    Ok(())
 }

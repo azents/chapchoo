@@ -86,7 +86,10 @@ impl State {
         Ok(())
     }
 }
-fn same_application(one: &NativeAuthenticationBinding, two: &NativeAuthenticationBinding) -> bool {
+pub(super) fn same_application(
+    one: &NativeAuthenticationBinding,
+    two: &NativeAuthenticationBinding,
+) -> bool {
     one.agent_id == two.agent_id
         && one.conversation_id == two.conversation_id
         && one.operation_id == two.operation_id

@@ -227,6 +227,7 @@ enum Command {
     ),
     Prompt(
         NativeInputOperation,
+        Option<NativeAuthenticationBinding>,
         OwnedSemaphorePermit,
         oneshot::Sender<Result<NativePromptAcceptance, Error>>,
     ),
@@ -366,7 +367,21 @@ impl NativeOwner {
                     Command::SetupObservation(id, result) => {
                         let _ = result.send(state.setups.observe(&id));
                     }
-                    Command::Prompt(operation, _permit, result) => {
+                    Command::Prompt(operation, expected, _permit, result) => {
+                        if let Some(expected) = expected.as_ref() {
+                            match state.current_authentication() {
+                                Ok(Some(current))
+                                    if authentication::same_application(&current, expected) => {}
+                                Ok(_) => {
+                                    let _ = result.send(Err(Error::NotAdmitted));
+                                    continue;
+                                }
+                                Err(error) => {
+                                    let _ = result.send(Err(error));
+                                    continue;
+                                }
+                            }
+                        }
                         let outcome = tokio::select! {
                             _=stopping.cancelled()=>Err(Error::DeliveryUncertain),
                             outcome=state.input(operation)=>outcome,
@@ -490,6 +505,21 @@ impl NativeHandle {
         &self,
         operation: NativeInputOperation,
     ) -> Result<NativePromptAcceptance, Error> {
+        self.submit_input(operation, None).await
+    }
+    /// Bind dispatch to the launch whose tool publication fence was installed.
+    pub async fn prompt_for_owner(
+        &self,
+        operation: NativeInputOperation,
+        owner: NativeAuthenticationBinding,
+    ) -> Result<NativePromptAcceptance, Error> {
+        self.submit_input(operation, Some(owner)).await
+    }
+    async fn submit_input(
+        &self,
+        operation: NativeInputOperation,
+        owner: Option<NativeAuthenticationBinding>,
+    ) -> Result<NativePromptAcceptance, Error> {
         operation.validate()?;
         let bytes = u32::try_from(operation.text.as_str().len()).map_err(|_| Error::NotAdmitted)?;
         let permit = self
@@ -499,7 +529,7 @@ impl NativeHandle {
             .map_err(|_| Error::NotAdmitted)?;
         let (result, rx) = oneshot::channel();
         self.sender
-            .try_send(Command::Prompt(operation, permit, result))
+            .try_send(Command::Prompt(operation, owner, permit, result))
             .map_err(|_| Error::NotAdmitted)?;
         rx.await.map_err(|_| Error::Process)?
     }

@@ -11,6 +11,7 @@ export interface ChatCopy {
   activity: string;
   close: string;
   message: string;
+  enqueueFailed: string;
   you: string;
   send: string;
   latest: string;
@@ -89,6 +90,7 @@ const en: ChatCopy = {
   activity: "Activity",
   close: "Close",
   message: "Message",
+  enqueueFailed: "Could not send the request",
   send: "Send",
   you: "You",
   latest: "Jump to latest",
@@ -178,6 +180,7 @@ const ko: ChatCopy = {
   activity: "작업 상태",
   close: "닫기",
   message: "메시지",
+  enqueueFailed: "전송 요청 실패",
   you: "나",
   send: "보내기",
   latest: "최신 대화로 이동",
@@ -267,6 +270,7 @@ const ja: ChatCopy = {
   activity: "作業状況",
   close: "閉じる",
   message: "メッセージ",
+  enqueueFailed: "送信リクエストに失敗しました",
   you: "あなた",
   send: "送信",
   latest: "最新の会話へ",
@@ -356,6 +360,7 @@ const fr: ChatCopy = {
   activity: "Activité",
   close: "Fermer",
   message: "Message",
+  enqueueFailed: "Échec de la demande d’envoi",
   send: "Envoyer",
   you: "Vous",
   latest: "Aller aux derniers messages",

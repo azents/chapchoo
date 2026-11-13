@@ -11,6 +11,7 @@ service Conversations {
   rpc Inputs(OwnerInputsRequest) returns (RetainedInputs);
   rpc ReadInput(OwnerInputRead) returns (FieldChunk);
   rpc DeleteInput(OwnerDeleteInput) returns (google.protobuf.Empty);
+  rpc RetryInput(OwnerRetryInput) returns (InputAcceptance);
   rpc Messages(OwnerMessagesRequest) returns (MessageRegion);
   rpc ReadMessage(OwnerMessageRead) returns (FieldChunk);
   rpc SubmitAnswer(OwnerAnswerPiece) returns (OwnerAnswerProgress);
@@ -104,6 +105,12 @@ message OwnerInputsRequest {
 }
 message RetainedInput { InputAcceptance acceptance = 1; int64 total_bytes = 2; bool deleted = 3; }
 message OwnerDeleteInput { OwnerInputScope scope = 1; string request_id = 2; }
+message OwnerRetryInput {
+  OwnerInputScope scope = 1;
+  string original_input_id = 2;
+  string original_request_id = 3;
+  string request_id = 4;
+}
 // `latest` is the newest non-deleted acceptance for this exact source, independent of `before`.
 message RetainedInputs {
   repeated RetainedInput inputs = 1; InputAcceptance latest = 2;
@@ -126,6 +133,7 @@ message OwnerInputStatus {
   InputAcceptance acceptance = 1; InputOwnership ownership = 2; InputDelivery delivery = 3;
   InputPreparation preparation = 4;
   bool deleted = 5;
+  bool failed = 6;
 }
 // Setup result is not current native liveness, source catch-up or text consumption.
 message InputPreparation {
@@ -221,7 +229,7 @@ service ConnectorCapture {
   rpc CheckSetup(SetupCheck) returns (google.protobuf.Empty);
   rpc ReportSetup(SetupReport) returns (google.protobuf.Empty);
   rpc PullInput(InputChunkRequest) returns (InputChunk);
-  rpc ReportInput(InputReport) returns (google.protobuf.Empty);
+  rpc ReportInput(InputReport) returns (InputReportAcknowledgement);
   rpc ReportNative(NativeStateReport) returns (google.protobuf.Empty);
   rpc ReportRequest(LiveRequestReport) returns (google.protobuf.Empty);
   rpc CheckStop(StopCheck) returns (google.protobuf.Empty);
@@ -322,7 +330,12 @@ message InputChunkRequest { CaptureSource source = 1; InputCommand command = 2; 
 message InputChunk { bytes content = 1; uint32 total_bytes = 2; uint32 offset = 3; }
 message InputReport {
   CaptureSource source = 1; InputCommand command = 2;
-  oneof result { string inserted_native_message_id = 3; google.protobuf.Empty steered = 4; google.protobuf.Empty failed = 5; }
+  // Attempt error is queue failure, not evidence of physical nonexecution.
+  oneof result { string inserted_native_message_id = 3; google.protobuf.Empty steered = 4; google.protobuf.Empty failed = 5; google.protobuf.Empty attempt_error = 6; }
+}
+message InputReportAcknowledgement {
+  // Closure after explicit deletion does not establish a normal user receipt.
+  bool user_receipt_recorded = 1;
 }
 enum Foreground {
   FOREGROUND_UNSPECIFIED = 0; FOREGROUND_IDLE = 1; FOREGROUND_RUNNING = 2;

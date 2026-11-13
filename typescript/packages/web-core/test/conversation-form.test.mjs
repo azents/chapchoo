@@ -10,7 +10,6 @@ import {
   readConversationRecord,
 } from "../dist/conversation.js";
 import { TypedAnswer } from "@chapchoo/rpc-client/conversations";
-import { reconcileLocalConversationInputs } from "../dist/conversation-state.js";
 
 test("native pattern evaluation stays at the bounded server while ordinary browser constraints remain active", () => {
   const question = {
@@ -37,21 +36,6 @@ test("native pattern evaluation stays at the bounded server while ordinary brows
   assert.deepEqual(reviewQuestionAnswer(question, draft).errors, {
     value: "invalid",
   });
-});
-
-test("retained request recovery removes its local uncertainty without conflating a new same-text operation", () => {
-  const recovered = {
-    requestId: "recovered",
-    text: "same text",
-    observation: "uncertain",
-  };
-  const unresolved = { ...recovered, requestId: "different-operation" };
-  const retained = [{ requestId: "recovered" }];
-  assert.deepEqual(reconcileLocalConversationInputs([recovered], retained), []);
-  assert.deepEqual(
-    reconcileLocalConversationInputs([recovered, unresolved], retained),
-    [unresolved],
-  );
 });
 
 test("tool-only original input and output remain independent with exact integers and clear semantics", async () => {

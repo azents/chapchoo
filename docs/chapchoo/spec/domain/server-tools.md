@@ -27,6 +27,27 @@ an acceptance text result and structured `message_id`, not the message body.
 There is no recall promise after dispatch. Ordinary commentary/final model output
 stays in captured records and does not invoke this operation.
 
+## User receipt publication order
+
+Before native input dispatch, Connector installs a bounded memory-only ticket
+under that actual native launch. The serialized actor rechecks the launch's
+Agent, conversation, setup operation, execution and applied authentication
+identity; credential-source refresh alone does not replace the launch.
+A tool call snapshots already-pending input tickets and waits before server
+Submit within its existing fifty-second local observation bound. Future inputs
+cannot extend that dependency snapshot. Catalog/initialization, native input
+acceptance and report publication are not gated.
+
+Only Inserted/Steered ReportInput acknowledgement confirming an existing
+[ordinary user receipt](conversation-storage.md#independent-chat-receipts)
+opens its ticket. A lost ACK keeps waiting through report recovery. An absent
+queue row after explicit deletion can be closed without a receipt and does not
+open dependent calls. Input failure rejects those existing dependent calls,
+not later Send/manual Retry or the lifetime's fixed-recipient authority.
+Actual native retirement closes old calls; an old launch's ACK cannot release
+its successor. This is dispatch/publication ordering, not model completion,
+input replay or persistent causal/deleted-item history.
+
 ## Bounded invocation owner
 
 The server process owns started effects independently of stream/HTTP waiters.

@@ -64,7 +64,7 @@ for (const width of [390, 1280]) {
 }
 
 for (const width of [390, 1280]) {
-  test(`accepted receipt keeps one stable message across native insertion at ${width}`, async ({
+  test(`queued message becomes a normal receipt without changing bubble geometry at ${width}`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 844 });
@@ -90,7 +90,10 @@ for (const width of [390, 1280]) {
           .click();
       }
       await expect(message).toHaveCount(1);
-      await expect(message).toHaveCSS("opacity", "1");
+      await expect(message.locator("[data-user-bubble]")).toHaveCSS(
+        "opacity",
+        inserted ? "1" : "0.6",
+      );
       measurements.push(
         await message.locator('[class*="userBubble"]').evaluate((bubble) => {
           const bounds = bubble.getBoundingClientRect();
@@ -645,77 +648,27 @@ test("not-started and preparing conversations never masquerade as execution fail
     ).toHaveCount(0);
   }
 });
-test("accepted receipt stays distinct from a dimmed local send and failed-delivery controls", async ({
+test("explicit retry replaces a failed queue row and Delete removes it without changing history", async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto(
-    "/iframe.html?id=chat-conversation--pending-order&viewMode=story",
-  );
-  const bubbles = page.getByRole("log").locator('[data-kind="user"]');
-  await expect(bubbles).toHaveCount(2);
-  await expect(bubbles.nth(0)).toContainText("안녕하세요");
-  await expect(bubbles.nth(1)).toContainText("새 메시지");
-  await expect(bubbles.nth(0)).toHaveCSS("opacity", "1");
-  await expect(bubbles.nth(1)).toHaveCSS("opacity", "0.6");
-  await expect(page.locator("[data-input-operation]")).toContainText(
-    "Codex 실행 실패",
-  );
-  for (const bubble of await bubbles.all()) {
-    await expect(bubble.getByRole("status")).toHaveCount(0);
-    expect(
-      await bubble.evaluate((element) => {
-        const style = getComputedStyle(element);
-        const surface = element.children.item(1);
-        const body = surface?.querySelector("p");
-        const author = element.firstElementChild;
-        if (!body || !surface || !author) {
-          return false;
-        }
-        return (
-          style.alignSelf === "flex-end" &&
-          author.textContent === "나" &&
-          Number.parseFloat(getComputedStyle(surface).borderRadius) > 0 &&
-          getComputedStyle(body).marginTop === "0px" &&
-          getComputedStyle(body).marginBottom === "0px" &&
-          author.getBoundingClientRect().bottom <=
-            surface.getBoundingClientRect().top
-        );
-      }),
-    ).toBeTruthy();
-  }
-});
-test("confirmed failed messages expose explicit retry and delete without retrying uncertainty", async ({
-  page,
-}) => {
-  await page.goto(
-    "/iframe.html?id=chat-conversation--native-failed&viewMode=story",
-  );
+  const story =
+    "/iframe.html?id=chat-conversation--queue-delivery-error&viewMode=story";
+  await page.goto(story);
   const log = page.getByRole("log");
-  await expect(
-    log.getByRole("button", { name: "재시도", exact: true }),
-  ).toBeEnabled();
-  await expect(
-    log.getByRole("button", { name: "삭제", exact: true }),
-  ).toBeEnabled();
+  const recorded = log.locator("[data-message-id]");
+  await expect(recorded).toHaveCount(2);
   await log.getByRole("button", { name: "재시도", exact: true }).click();
-  await expect(log.locator('[data-kind="user"]')).toHaveCount(2);
-  await expect(log.locator('[data-kind="user"]').last()).toHaveCSS(
-    "opacity",
-    "0.6",
-  );
-  await log.getByRole("button", { name: "삭제", exact: true }).click();
   await expect(
-    log.getByRole("button", { name: "재시도", exact: true }),
+    log.locator('[data-input-operation="queue-failed"]'),
   ).toHaveCount(0);
-  await expect(log.locator('[data-kind="user"]')).toHaveCount(2);
-  await expect(log.locator('[data-kind="user"]').first()).toContainText(
-    "안녕하세요",
-  );
-  await expect(log.locator('[data-kind="user"]').first()).toHaveCSS(
-    "opacity",
-    "1",
-  );
+  await expect(
+    log.locator('[data-input-operation="queue-requeued"]'),
+  ).toHaveCount(1);
+  await expect(recorded).toHaveCount(2);
+  await page.goto(story);
+  await log.getByRole("button", { name: "삭제", exact: true }).click();
+  await expect(log.locator("[data-input-operation]")).toHaveCount(0);
+  await expect(recorded).toHaveCount(2);
 });
 test("auth withdrawal replaces the protected conversation surface", async ({
   page,

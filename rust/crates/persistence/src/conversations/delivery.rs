@@ -13,6 +13,11 @@ pub enum ConversationInputOutcome {
     Steered,
     Failed,
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConversationInputReportAcknowledgement {
+    Recorded,
+    Closed,
+}
 #[derive(Clone, PartialEq, Eq)]
 pub enum ConversationInputDelivery {
     PossibleForwarding,
@@ -267,6 +272,7 @@ impl Store {
             {
                 return Err(StoreError::Conflict);
             }
+            super::input_queue::require_consumer!(connection, dialect, operation_id);
             diesel::sql_query(dialect.query("INSERT INTO conversation_input_delivery(operation_id,execution_id,source_snapshot,native_session_id,delivery_state) VALUES(?,?,?,?,'POSSIBLE')"))
                 .bind::<IdentitySql,_>(operation_id).bind::<IdentitySql,_>(route._execution_id)
                 .bind::<Text,_>(draft.target.snapshot.as_str()).bind::<Text,_>(draft.target.native_session.as_str())
@@ -286,7 +292,7 @@ impl Store {
         source: &crate::ConnectorSource<'_>,
         draft: &ConversationOperationForwarding<'_>,
         outcome: &ConversationInputOutcome,
-    ) -> Result<(), StoreError> {
+    ) -> Result<ConversationInputReportAcknowledgement, StoreError> {
         let (agent, id, operation_id) = ids(draft)?;
         let (state, message) = match outcome {
             ConversationInputOutcome::Inserted { native_message_id } => {
@@ -315,7 +321,22 @@ impl Store {
                 // A lost ACK may repeat a successful report after removal.
                 // No pending operation remains to deliver, recover or replay.
                 return if consumed {
-                    Ok(())
+                    #[derive(diesel::QueryableByName)]
+                    struct ReceiptCount {
+                        #[diesel(sql_type=BigInt)]
+                        n: i64,
+                    }
+                    let receipts = diesel::sql_query(dialect.query(
+                        "SELECT CAST(count(*) AS BIGINT) AS n FROM conversation_messages WHERE conversation_id=? AND source_input_id=?",
+                    ))
+                    .bind::<IdentitySql, _>(id)
+                    .bind::<IdentitySql, _>(operation_id)
+                    .get_result::<ReceiptCount>(connection).await?;
+                    Ok(if receipts.n > 0 {
+                        ConversationInputReportAcknowledgement::Recorded
+                    } else {
+                        ConversationInputReportAcknowledgement::Closed
+                    })
                 } else {
                     Err(StoreError::NotFound)
                 };
@@ -328,13 +349,50 @@ impl Store {
             match previous.delivery()? {
                 ConversationInputDelivery::Known(previous) if &previous == outcome => {
                     if !consumed {
-                        return Ok(());
+                        return Ok(ConversationInputReportAcknowledgement::Closed);
                     }
                 }
                 ConversationInputDelivery::Known(_) => return Err(StoreError::Conflict),
                 ConversationInputDelivery::PossibleForwarding => {}
             }
             if consumed {
+                let receipt =
+                    diesel::sql_query(dialect.query(
+                        "SELECT * FROM conversation_inputs WHERE id=? AND conversation_id=?",
+                    ))
+                    .bind::<IdentitySql, _>(operation_id)
+                    .bind::<IdentitySql, _>(id)
+                    .get_result::<super::inputs::InputRow>(connection)
+                    .await?
+                    .receipt()?;
+                #[derive(diesel::QueryableByName)]
+                struct ExistingMessage {
+                    #[diesel(sql_type=BigInt)]
+                    n: i64,
+                }
+                let existing = diesel::sql_query(dialect.query(
+                    "SELECT CAST(count(*) AS BIGINT) AS n FROM conversation_messages WHERE source_input_id=?",
+                ))
+                .bind::<IdentitySql, _>(operation_id)
+                .get_result::<ExistingMessage>(connection)
+                .await?;
+                // Pre-queue installations already committed their accepted
+                // receipts. Preserve those immutable identities and ordering.
+                if existing.n == 0 {
+                    let receipt_now = crate::directory::database_now!(connection, dialect);
+                    let _ = super::messages::append_message!(
+                        connection,
+                        dialect,
+                        id,
+                        super::messages::MessageOrigin::User {
+                            input: operation_id,
+                            request_id: &receipt.request_id,
+                            accepted_at: receipt.accepted_at
+                        },
+                        receipt.text,
+                        receipt_now
+                    );
+                }
                 diesel::sql_query(
                     dialect
                         .query("DELETE FROM conversation_inputs WHERE id=? AND conversation_id=?"),
@@ -343,11 +401,46 @@ impl Store {
                 .bind::<IdentitySql, _>(id)
                 .execute(connection)
                 .await?;
-                return Ok(());
+                return Ok(ConversationInputReportAcknowledgement::Recorded);
             }
             diesel::sql_query(dialect.query("UPDATE conversation_input_delivery SET delivery_state=?,native_message_id=? WHERE operation_id=?"))
                 .bind::<Text,_>(state).bind::<Nullable<Text>,_>(message).bind::<IdentitySql,_>(operation_id)
                 .execute(connection).await?;
+            diesel::sql_query(
+                dialect.query("UPDATE conversation_inputs SET queue_state='ERROR' WHERE id=?"),
+            )
+            .bind::<IdentitySql, _>(operation_id)
+            .execute(connection)
+            .await?;
+            Ok(ConversationInputReportAcknowledgement::Closed)
+        })
+    }
+    /// Queue-attempt failure is separate from native outcome evidence.
+    pub async fn fail_conversation_input_attempt(
+        &self,
+        source: &crate::ConnectorSource<'_>,
+        draft: &ConversationOperationForwarding<'_>,
+    ) -> Result<(), StoreError> {
+        let (agent, id, operation) = ids(draft)?;
+        operation!(self, |connection, dialect| {
+            let row = super::records::source_conversation!(connection, dialect, source, id);
+            let route = connector!(connection, dialect, source);
+            current(&row, agent, draft.target)?;
+            let previous = delivery!(connection, dialect, operation);
+            let Some(previous) = previous else {
+                return if diesel::sql_query(dialect.query(
+                    "SELECT id,conversation_id,request_id,target_snapshot,accepted_at,(deleted_at IS NOT NULL) AS deleted FROM conversation_inputs WHERE id=? AND conversation_id=?",
+                ))
+                .bind::<IdentitySql, _>(operation).bind::<IdentitySql, _>(id)
+                .get_result::<super::inputs::InputReferenceRow>(connection).await.optional()?.is_none() {
+                    Ok(())
+                } else { Err(StoreError::InvalidTransition) };
+            };
+            if !previous.matches(route._execution_id, draft.target) {
+                return Err(StoreError::Conflict);
+            }
+            diesel::sql_query(dialect.query("UPDATE conversation_inputs SET queue_state='ERROR' WHERE id=? AND conversation_id=?"))
+                .bind::<IdentitySql, _>(operation).bind::<IdentitySql, _>(id).execute(connection).await?;
             Ok(())
         })
     }

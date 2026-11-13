@@ -221,6 +221,12 @@ impl Conversations for ConversationServices {
     ) -> Result<Response<()>, Status> {
         input::delete(self, request).await
     }
+    async fn retry_input(
+        &self,
+        request: Request<wire::OwnerRetryInput>,
+    ) -> Result<Response<wire::InputAcceptance>, Status> {
+        input::retry(self, request).await
+    }
     async fn latest_plan(
         &self,
         request: Request<wire::RecordSource>,

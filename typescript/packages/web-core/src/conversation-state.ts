@@ -1,20 +1,4 @@
-import type {
-  ConversationRegion,
-  LocalConversationInput,
-} from "./conversation-types.js";
-/** Persisted request identity supersedes local uncertainty without dispatching another operation. */
-export function reconcileLocalConversationInputs(
-  local: LocalConversationInput[],
-  retained: ConversationRegion["inputs"],
-  closed: string[] = [],
-): LocalConversationInput[] {
-  const remaining = local.filter(
-    (item) =>
-      !(item.id && closed.includes(item.id)) &&
-      !retained?.some((input) => input.requestId === item.requestId),
-  );
-  return remaining.length === local.length ? local : remaining;
-}
+import type { ConversationRegion } from "./conversation-types.js";
 /** Newer updates win; a late older-page result only contributes missing or newer records. */
 export function mergeConversationRegion(
   previous: ConversationRegion,
@@ -23,12 +7,13 @@ export function mergeConversationRegion(
   if (
     previous.header.agentId !== incoming.header.agentId ||
     previous.header.conversationId !== incoming.header.conversationId ||
-    previous.header.source?.snapshotId !== incoming.header.source?.snapshotId ||
-    incoming.header.state === "loading"
+    previous.header.source?.snapshotId !== incoming.header.source?.snapshotId
   )
     return incoming;
   const records = new Map(
-    previous.records.map((record) => [record.key, record]),
+    (incoming.header.state === "loading" ? [] : previous.records).map(
+      (record) => [record.key, record],
+    ),
   );
   for (const record of incoming.records) {
     const old = records.get(record.key);
