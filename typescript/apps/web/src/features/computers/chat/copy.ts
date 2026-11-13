@@ -37,6 +37,7 @@ export interface ChatCopy {
   codex: string;
   loading: string;
   error: string;
+  recordsError: string;
   retry: string;
   retryMessage: string;
   deleteMessage: string;
@@ -116,6 +117,7 @@ const en: ChatCopy = {
   codex: "Codex",
   loading: "Loading conversation…",
   error: "Conversation could not be updated",
+  recordsError: "Could not load conversation records.",
   retry: "Read again",
   retryMessage: "Retry",
   deleteMessage: "Delete",
@@ -206,6 +208,7 @@ const ko: ChatCopy = {
   codex: "Codex",
   loading: "대화 불러오는 중…",
   error: "대화를 갱신하지 못했습니다",
+  recordsError: "대화 기록을 불러오지 못했습니다.",
   retry: "다시 불러오기",
   retryMessage: "재시도",
   deleteMessage: "삭제",
@@ -296,6 +299,7 @@ const ja: ChatCopy = {
   codex: "Codex",
   loading: "会話を読み込み中…",
   error: "会話を更新できませんでした",
+  recordsError: "会話の記録を読み込めませんでした。",
   retry: "再読み込み",
   retryMessage: "再送信",
   deleteMessage: "削除",
@@ -387,6 +391,7 @@ const fr: ChatCopy = {
   codex: "Codex",
   loading: "Chargement de la conversation…",
   error: "Impossible d’actualiser la conversation",
+  recordsError: "Impossible de charger l’historique de la conversation.",
   retry: "Relire",
   retryMessage: "Réessayer",
   deleteMessage: "Supprimer",

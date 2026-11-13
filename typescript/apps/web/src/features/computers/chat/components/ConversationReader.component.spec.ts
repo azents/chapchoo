@@ -123,7 +123,7 @@ test("failed older reads recover automatically on the same page cursor", async (
     element.scrollTop = 0;
   });
   await expect(page.getByRole("alert")).toContainText(
-    "Conversation could not be updated",
+    "Could not load conversation records.",
   );
   await expect(page.getByTestId("reader-cursors")).toHaveText("end/end/ready");
   expect(attempts).toBe(2);

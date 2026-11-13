@@ -13,6 +13,7 @@ import {
 import { z } from "zod";
 import {
   decodeContent,
+  decodeDescription,
   decodeLines,
   decodeLocations,
   decodePlan,
@@ -253,7 +254,7 @@ export async function readConversationRecord(
       values.get(RecordField.RECORD_FIELD_TOOL_OUTPUT) ?? [],
     ),
     title: decodeString(values.get(RecordField.RECORD_FIELD_TITLE) ?? []),
-    description: decodeString(
+    description: decodeDescription(
       values.get(RecordField.RECORD_FIELD_DESCRIPTION) ?? [],
     ),
     status:

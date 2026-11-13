@@ -12,8 +12,10 @@ import {
   Box,
   Button,
   Drawer,
+  Group,
   Loader,
   ScrollArea,
+  Text,
 } from "@mantine/core";
 import { ComputerControls } from "../../components/ComputerControls";
 import { profileStyle } from "../../profilePalette";
@@ -457,10 +459,23 @@ export function Chat(props: ChatProps): ReactElement {
                       : void 0
                   }
                 >
-                  {props.recentRead !== "ready" ? (
-                    <p role={props.recentRead === "error" ? "alert" : "status"}>
-                      {props.recentRead === "error" ? c.error : c.loading}
-                    </p>
+                  {props.recentRead === "error" ? (
+                    <Group role="alert" gap="xs" justify="space-between">
+                      <Text size="sm" c="dimmed">
+                        {c.recordsError}
+                      </Text>
+                      <Button
+                        variant="subtle"
+                        size="xs"
+                        onClick={props.onReadRecent}
+                      >
+                        {c.retry}
+                      </Button>
+                    </Group>
+                  ) : props.recentRead === "loading" ? (
+                    <Text role="status" size="sm" c="dimmed">
+                      {c.loading}
+                    </Text>
                   ) : null}
                   {records.slice(-5).map((record) => (
                     <RecentConversationRecord

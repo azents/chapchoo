@@ -52,6 +52,11 @@ trigger repeated automatic page requests. Failed older reads yield to current-he
 freshness and then retry their exact cursor on the read cadence. Truthful read
 errors do not authorize effect replay; Chat also exposes read-only recovery.
 These reads never replay Send, an answer, deletion or Stop.
+Recent-record errors in Activity and full-history errors expose a compact
+record-specific status with an adjacent read-only retry. Retained records stay
+visible; retry refreshes that reader rather than reloading the app or issuing
+an effect. An absent optional native Notice description is a valid record, not
+a history-read error. Its title and other retained fields remain available.
 Paging progress/errors are separate from current-head freshness: a failing older
 page remains visible as a read error without withdrawing Send authority established
 by successful current-head observation and the existing admission checks.

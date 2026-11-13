@@ -72,6 +72,7 @@ export interface ChatProps {
   messages: MessageControls;
   recentRecords: ConversationRegion;
   recentRead: "ready" | "loading" | "error";
+  onReadRecent: () => void;
   input: string;
   inputError?: string;
   activity: ConversationActivity;

@@ -731,8 +731,13 @@ export function ConversationBody({
           ))
         : null}
       {controls.read === "error" || controls.olderRead === "error" ? (
-        <Group role="alert">
-          <Text>{copy.error}</Text>
+        <Group role="alert" gap="xs" justify="space-between">
+          <Text size="sm" c="dimmed">
+            {copy.recordsError}
+          </Text>
+          <Button variant="subtle" size="xs" onClick={controls.onRead}>
+            {copy.retry}
+          </Button>
         </Group>
       ) : controls.read === "loading" || controls.olderRead === "loading" ? (
         <Text role="status">{copy.loading}</Text>

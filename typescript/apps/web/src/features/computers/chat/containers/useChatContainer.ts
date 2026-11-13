@@ -511,6 +511,7 @@ export function useChatContainer(props: ChatInput): ChatProps {
     },
     recentRecords: recentReader.region,
     recentRead: recentReader.read,
+    onReadRecent: recentReader.refresh,
     input,
     inputError: inputError ? copy.enqueueFailed : void 0,
     activity: reader.read === "error" ? "unavailable" : activity,

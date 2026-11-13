@@ -488,6 +488,7 @@ function Fixture({
         }}
         recentRecords={{ ...startupRegion, records }}
         recentRead="ready"
+        onReadRecent={() => {}}
         product={controlled.product}
         focus={controlled.focus}
         agent={agent}
