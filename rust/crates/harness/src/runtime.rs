@@ -33,6 +33,7 @@ pub use reported::NativeReportedOperation;
 mod inputs;
 use answers::AnswerRegistry;
 pub use answers::{NativeAnswerObservation, NativeAnswerOperation};
+mod activity;
 mod observations;
 mod protocol;
 mod requests;
@@ -304,9 +305,13 @@ impl NativeOwner {
                 stops: StopRegistry::default(),
                 answers: AnswerRegistry::default(),
                 credential_write: None,
+                project_write: None,
                 pending_tools: None,
                 cleanup_errors: Vec::new(),
             };
+            let mut deferred = Vec::<DeferredSetup>::new();
+            let mut cadence = tokio::time::interval(Duration::from_millis(100));
+            cadence.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             loop {
                 let native_ended = state.live.as_ref().map(|live| live.ended.clone());
                 let command = tokio::select! {
@@ -325,6 +330,26 @@ impl NativeOwner {
                         continue;
                     },
                     command = receiver.recv() => match command { Some(c)=>c, None=>break },
+                    _ = cadence.tick(), if !deferred.is_empty() => {
+                        let expired = deferred[0].deadline <= tokio::time::Instant::now();
+                        if expired || state.refresh_safe() {
+                            let pending = deferred.remove(0);
+                            let outcome = if expired {
+                                match state.setups.begin(&pending.operation)? {
+                                    Some(previous) => Ok(previous),
+                                    None => {
+                                        let failure = NativeSetupObservation::Failed(NativeSetupFailure::NotAdmitted);
+                                        state.setups.completed(&pending.operation.operation_id, failure.clone())?;
+                                        Ok(failure)
+                                    }
+                                }
+                            } else {
+                                state.setup(pending.operation, pending.authentication, pending.tools).await
+                            };
+                            let _ = pending.result.send(outcome);
+                        }
+                        continue;
+                    },
                 };
                 match command {
                     Command::Preparation(result) => {
@@ -358,6 +383,32 @@ impl NativeOwner {
                         let _ = result.send(state.stop_operation(&id, &target));
                     }
                     Command::Setup(operation, authentication, tools, result) => {
+                        if let Some(pending) = deferred.iter().find(|pending| {
+                            pending.operation.operation_id == operation.operation_id
+                        }) {
+                            let observed = if pending.operation == operation {
+                                Ok(NativeSetupObservation::PossibleForwarding)
+                            } else {
+                                Err(Error::OperationConflict)
+                            };
+                            let _ = result.send(observed);
+                            continue;
+                        }
+                        if state.needs_refresh(&operation) && !state.refresh_safe() {
+                            if deferred.len() >= 32 {
+                                let _ = result.send(Err(Error::NotAdmitted));
+                            } else {
+                                deferred.push(DeferredSetup {
+                                    operation,
+                                    authentication,
+                                    tools,
+                                    result,
+                                    deadline: tokio::time::Instant::now()
+                                        + Duration::from_secs(300),
+                                });
+                            }
+                            continue;
+                        }
                         let outcome = tokio::select! {
                             _=stopping.cancelled()=>Err(Error::DeliveryUncertain),
                             outcome=state.setup(operation,authentication,tools)=>outcome,
@@ -365,7 +416,15 @@ impl NativeOwner {
                         let _ = result.send(outcome);
                     }
                     Command::SetupObservation(id, result) => {
-                        let _ = result.send(state.setups.observe(&id));
+                        let observed = if deferred
+                            .iter()
+                            .any(|pending| pending.operation.operation_id == id)
+                        {
+                            Ok(NativeSetupObservation::PossibleForwarding)
+                        } else {
+                            state.setups.observe(&id)
+                        };
+                        let _ = result.send(observed);
                     }
                     Command::Prompt(operation, expected, _permit, result) => {
                         if let Some(expected) = expected.as_ref() {
@@ -593,8 +652,16 @@ struct State {
     stops: StopRegistry,
     answers: AnswerRegistry,
     credential_write: Option<JoinHandle<Result<NativeCredentials, Error>>>,
+    project_write: Option<JoinHandle<Result<(), Error>>>,
     pending_tools: Option<crate::NativeToolProvision>,
     cleanup_errors: Vec<Error>,
+}
+struct DeferredSetup {
+    operation: NativeSetupOperation,
+    authentication: Arc<dyn NativeAuthenticationProvider>,
+    tools: Arc<dyn crate::NativeToolsProvider>,
+    result: oneshot::Sender<Result<NativeSetupObservation, Error>>,
+    deadline: tokio::time::Instant,
 }
 struct Live {
     child: Child,
@@ -611,6 +678,14 @@ struct Live {
     observations: Arc<Observations>,
     _authentication: NativeAuthenticationBinding,
     tools: Option<crate::NativeToolProvision>,
+    instructions: chapchoo_domain::ProjectInstructions,
+    tool_catalog: Vec<u8>,
+}
+struct StartConfiguration<'a> {
+    scope: &'a crate::NativeToolScope,
+    instructions: &'a chapchoo_domain::ProjectInstructions,
+    tool_catalog: &'a [u8],
+    empty_scope: bool,
 }
 impl State {
     async fn captured_source(&mut self) -> Result<Option<crate::CaptureLog>, Error> {
@@ -697,7 +772,7 @@ impl State {
         source: crate::CaptureLog,
         authentication: Arc<dyn NativeAuthenticationProvider>,
         tools: Arc<dyn crate::NativeToolsProvider>,
-        tool_scope: &crate::NativeToolScope,
+        config: StartConfiguration<'_>,
     ) -> Result<NativeConversationId, Error> {
         if self.blocked {
             return Err(Error::RetirementUnknown);
@@ -710,7 +785,7 @@ impl State {
         }
         self.retained_capture = Some(source.clone());
         if let Some(live) = &mut self.live {
-            if !tool_scope.matches(&live._authentication) {
+            if !config.scope.matches(&live._authentication) {
                 return Err(Error::OperationConflict);
             }
             if live.capture.snapshot()? != source.snapshot()? {
@@ -745,7 +820,7 @@ impl State {
         // retire the namespace scope before another start can be attempted.
         self.blocked = true;
         let result = self
-            .launch(supply, context, source, authentication, tools, tool_scope)
+            .launch(supply, context, source, authentication, tools, config)
             .await;
         match result {
             Ok(id) => {
@@ -770,13 +845,13 @@ impl State {
         source: crate::CaptureLog,
         authentication: Arc<dyn NativeAuthenticationProvider>,
         tools: Arc<dyn crate::NativeToolsProvider>,
-        tool_scope: &crate::NativeToolScope,
+        config: StartConfiguration<'_>,
     ) -> Result<NativeConversationId, Error> {
         let applied = self.preparer.prepare(&supply).await?;
         let admitted = authentication.acquire().await?;
         authentication.check(&admitted.binding).await?;
         let binding = admitted.binding;
-        if !tool_scope.matches(&binding) {
+        if !config.scope.matches(&binding) {
             return Err(Error::Authentication);
         }
         self.pending_tools = Some(
@@ -839,11 +914,11 @@ impl State {
         });
         let log = source.clone();
         let observations = Arc::new(Observations::default());
+        if let NativeContext::Resume { session, .. } = &context {
+            observations.bind(source.snapshot()?, session.clone(), config.empty_scope)?;
+        }
         let observed = observations.clone();
-        let record: Recorder = Arc::new(move |line| {
-            let position = log.append(line, None)?;
-            observed.captured(line, position)
-        });
+        let record: Recorder = Arc::new(move |line| observed.record_live(&log, line));
         let incoming =
             FramedRead::new(stdout, LinesCodec::new_with_max_length(MAX_LINE)).map(move |line| {
                 let line = line.map_err(std::io::Error::other)?;
@@ -895,6 +970,8 @@ impl State {
             observations,
             _authentication: binding,
             tools: self.pending_tools.take(),
+            instructions: config.instructions.clone(),
+            tool_catalog: config.tool_catalog.to_vec(),
         });
         let session = tokio::time::timeout_at(deadline, ready_rx)
             .await
@@ -909,7 +986,7 @@ impl State {
             .bind_native(&id)?;
         let live = self.live.as_ref().ok_or(Error::Process)?;
         live.observations
-            .bind(live.capture.snapshot()?, id.clone())?;
+            .bind(live.capture.snapshot()?, id.clone(), config.empty_scope)?;
         self.live.as_mut().ok_or(Error::Process)?.session = Some(session);
         let provision = self
             .live
@@ -937,6 +1014,17 @@ impl State {
         requests::respond(&live.requests, session.session_id(), response).await
     }
     async fn retire(&mut self) -> Result<Retirement, Error> {
+        let project_publication = match self.project_write.as_mut() {
+            Some(work) => work
+                .await
+                .map_err(|_| Error::Storage)
+                .and_then(|result| result),
+            None => Ok(()),
+        };
+        self.project_write = None;
+        if let Err(error) = project_publication {
+            self.cleanup_errors.push(error);
+        }
         if let Some(tools) = &self.pending_tools {
             tools.close();
         }

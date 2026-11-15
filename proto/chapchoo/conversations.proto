@@ -4,6 +4,8 @@ import "google/protobuf/empty.proto";
 // Every owner request rechecks private Agent ownership and current Team admission.
 service Conversations {
   rpc Current(OwnerConversationRequest) returns (OwnerConversation);
+  rpc InstructionEvidence(OwnerInstructionEvidenceRequest) returns (ProjectInstructionEvidence);
+  rpc InstructionHistory(OwnerInstructionHistoryRequest) returns (ProjectInstructionHistory);
   rpc GetSupply(OwnerConversationRequest) returns (SavedSupply);
   rpc SaveSupply(SaveSupplyRequest) returns (SavedSupply);
   rpc SubmitInput(OwnerInputPiece) returns (OwnerInputProgress);
@@ -27,6 +29,24 @@ service Conversations {
   rpc StopResult(OwnerStopResultRequest) returns (OptionalStopReceipt);
 }
 message OwnerConversationRequest { string agent_id = 1; }
+message OwnerInstructionEvidenceRequest { string agent_id = 1; string conversation_id = 2; string operation_id = 3; }
+message OwnerInstructionHistoryRequest { string agent_id = 1; string conversation_id = 2; optional string before_operation_id = 3; }
+message ProjectInstructionMetadata { string operation_id = 1; string execution_id = 2; int64 created_at = 3; optional int64 applied_at = 4; }
+message ProjectInstructionHistory { repeated ProjectInstructionMetadata items = 1; optional string next_before = 2; }
+enum InstructionSourceKind {
+ INSTRUCTION_SOURCE_KIND_UNSPECIFIED = 0;
+ INSTRUCTION_SOURCE_KIND_PRODUCT = 1;
+ INSTRUCTION_SOURCE_KIND_FUNCTION = 2;
+ INSTRUCTION_SOURCE_KIND_OWNER = 3;
+ INSTRUCTION_SOURCE_KIND_EXECUTION = 4;
+}
+message InstructionSource { InstructionSourceKind kind = 1; string text = 2; }
+message ProjectInstructionEvidence {
+ string agent_id = 1; string conversation_id = 2; string operation_id = 3; string execution_id = 4;
+ repeated InstructionSource sources = 5; string rendered_document = 6; int64 created_at = 7;
+ bytes tool_catalog = 8; NativeTarget applied_target = 9; optional int64 applied_at = 10;
+}
+message ProjectInstructionsRequest { CaptureSource source = 1; string agent_id = 2; string conversation_id = 3; string operation_id = 4; }
 // Chat scope follows product conversation ownership, not a native snapshot.
 message MessageScope { string agent_id = 1; string conversation_id = 2; }
 message MessageAfter { int64 order = 1; optional int64 through = 2; }
@@ -226,6 +246,7 @@ message OptionalStopReceipt { StopReceipt receipt = 1; }
 // Authenticated execution-local captured observations, not native command replay.
 // This service is registered only in the component-facing Control group.
 service ConnectorCapture {
+  rpc ReadProjectInstructions(ProjectInstructionsRequest) returns (ProjectInstructionEvidence);
   rpc Current(CurrentCaptureRequest) returns (CurrentCaptureState);
   rpc Inspect(CaptureRequest) returns (CaptureState);
   rpc Bind(BindCaptureRequest) returns (CaptureState);

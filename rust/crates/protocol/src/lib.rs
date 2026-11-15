@@ -50,6 +50,13 @@ pub mod conversations {
     }
     redacted_debug!(
         NativeTarget,
+        OwnerInstructionEvidenceRequest,
+        OwnerInstructionHistoryRequest,
+        ProjectInstructionMetadata,
+        ProjectInstructionHistory,
+        ProjectInstructionsRequest,
+        ProjectInstructionEvidence,
+        InstructionSource,
         NativeStateReport,
         NativePreparation,
         WorkTarget,
@@ -230,6 +237,8 @@ pub mod computers {
         AgentRequest,
         TeamAgentRequest,
         UpdateAgentProfileRequest,
+        SystemPrompt,
+        SaveSystemPromptRequest,
         CreationResultRequest,
         HistoricalCreationResult,
         PresentCreation,

@@ -293,6 +293,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @chapchoo/e2e exec playwright install chromium
       - run: pnpm --filter @chapchoo/e2e test:e2e
+      - name: Verify released native project instruction replacement and clear
+        run: python3 typescript/apps/integration/native_project_instructions.py --program-root typescript/apps/integration
       - name: Build the model-free conversation fixture from the same package
         run: |
           test -S /var/run/docker.sock

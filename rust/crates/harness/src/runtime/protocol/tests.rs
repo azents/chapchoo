@@ -47,6 +47,18 @@ async fn reply(
 fn initialization(version: u32) -> Value {
     json!({"protocolVersion":version,"info":{"name":"fixture","version":"1"},"capabilities":{"session":{}}})
 }
+async fn acknowledge_title(
+    reader: &mut BufReader<tokio::io::ReadHalf<tokio::io::DuplexStream>>,
+    writer: &mut tokio::io::WriteHalf<tokio::io::DuplexStream>,
+) -> Result<(), TestError> {
+    let title = request(reader).await?;
+    assert_eq!(title.method, "session/set_title");
+    assert_eq!(
+        title.params.get("title").and_then(Value::as_str),
+        Some("Agent project")
+    );
+    reply(writer, &title, json!({"title":"Agent project"})).await
+}
 #[tokio::test]
 async fn existing_capture_resumes_without_requesting_native_history_again() -> Result<(), TestError>
 {
@@ -126,6 +138,7 @@ async fn prompt_ack_retains_owner_and_does_not_require_completion_or_link() -> R
     let new = request(&mut read).await?;
     assert_eq!(new.method, "session/new");
     reply(&mut write, &new, json!({"sessionId":"native-1"})).await?;
+    acknowledge_title(&mut read, &mut write).await?;
     let session = rx.await??;
     let prompt = session.send_prompt("verbatim \ntext").block_task();
     tokio::pin!(prompt);

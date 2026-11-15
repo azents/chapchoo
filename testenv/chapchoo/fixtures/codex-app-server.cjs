@@ -2,7 +2,7 @@
 // Deterministic native-protocol fixture. This executable never contacts a model.
 // Select it explicitly as an existing CLI in an isolated test Computer only.
 const { createInterface } = require("node:readline");
-const { existsSync, writeFileSync } = require("node:fs");
+const { existsSync, readFileSync, writeFileSync } = require("node:fs");
 const { join } = require("node:path");
 if (process.argv.includes("--version")) {
   process.stdout.write("codex-cli 0.165.0\n");
@@ -71,7 +71,7 @@ async function connectMcp(servers) {
   mcpTools = catalog.tools;
 }
 const threadId = "fixture-thread";
-const turnId = "fixture-turn";
+let turnId = "fixture-turn";
 const model = "fixture-model";
 let authenticated = false;
 let active = false;
@@ -356,6 +356,71 @@ async function request(id, method, params) {
           threadId: params.threadId,
           turn: helperTurn,
         });
+        break;
+      }
+      if (
+        params?.input?.[0]?.text ===
+        "Continue after refreshing project instructions"
+      ) {
+        if (
+          !authenticated ||
+          active ||
+          primaryUsed ||
+          params.threadId !== threadId ||
+          !readFileSync(join(cwd, "AGENTS.md"), "utf8").includes("PROJECT_BETA")
+        )
+          throw new Error("Fixture refresh input was not admitted");
+        // The exclusive durable marker catches duplicate forwarding across
+        // physical fixture restarts without silently replaying the input.
+        writeFileSync(
+          join(process.env.CODEX_HOME, "refresh-input-once"),
+          "accepted\n",
+          { flag: "wx", mode: 0o600 },
+        );
+        primaryUsed = true;
+        active = true;
+        turnId = "fixture-refresh-turn";
+        reply(id, { turn: turn("inProgress") });
+        notify("turn/started", { threadId, turn: turn("inProgress") });
+        item("item/started", {
+          type: "userMessage",
+          id: "native-refresh-user",
+          clientId: params.clientUserMessageId ?? null,
+          content: params.input,
+        });
+        item("item/completed", {
+          type: "userMessage",
+          id: "native-refresh-user",
+          clientId: params.clientUserMessageId ?? null,
+          content: params.input,
+        });
+        const refreshedPublication = {
+          type: "mcpToolCall",
+          id: "publication-refresh",
+          server: "chapchoo",
+          tool: "send_message",
+          arguments: { text: "Refreshed project fixture publication." },
+          status: "inProgress",
+          result: null,
+          error: null,
+          durationMs: null,
+        };
+        item("item/started", refreshedPublication);
+        const refreshedResult = await mcp.callTool({
+          name: "send_message",
+          arguments: refreshedPublication.arguments,
+        });
+        if (refreshedResult.isError)
+          throw new Error("Fixture refreshed publication failed");
+        item("item/completed", {
+          ...refreshedPublication,
+          status: "completed",
+          result: refreshedResult,
+          durationMs: 0,
+        });
+        active = false;
+        notify("turn/completed", { threadId, turn: turn("completed") });
+        notify("thread/status/changed", { threadId, status: { type: "idle" } });
         break;
       }
       if (

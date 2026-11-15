@@ -94,6 +94,29 @@ impl fmt::Debug for ComputersService {
     }
 }
 impl ComputersService {
+    pub async fn system_prompt(
+        &self,
+        actor: &SecretDigest,
+        agent_id: &str,
+        clock: AcceptanceTime,
+    ) -> Result<String, ServiceError> {
+        Ok(self
+            .store
+            .system_prompt(actor, agent_id, clock.now()?)
+            .await?)
+    }
+    pub async fn save_system_prompt(
+        &self,
+        actor: &SecretDigest,
+        agent_id: &str,
+        content: &str,
+        clock: AcceptanceTime,
+    ) -> Result<String, ServiceError> {
+        Ok(self
+            .store
+            .save_system_prompt(actor, agent_id, content, clock.now()?)
+            .await?)
+    }
     pub fn new(store: Store) -> Self {
         Self {
             store,

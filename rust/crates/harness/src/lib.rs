@@ -2,6 +2,7 @@
 mod authentication;
 mod capture;
 mod preparation;
+mod project;
 mod runtime;
 mod server_tools;
 mod storage;
@@ -14,6 +15,7 @@ pub use capture::{CaptureBoundary, CaptureLog, CapturePass, CapturedEvent};
 pub use preparation::{
     AppliedSupply, Freshness, NativeComponentVersions, NativePreparationObservation, Preparer,
 };
+pub use project::MAX_PROJECT_INSTRUCTION_BYTES;
 pub use runtime::{
     CaptureReplay, InteractiveRequest, InteractiveResponse, NativeAnswerObservation,
     NativeAnswerOperation, NativeCaptureReader, NativeContext, NativeForeground, NativeHandle,

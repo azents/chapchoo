@@ -8,6 +8,7 @@ pub(in crate::connector) struct Provider {
     route: CurrentRoute,
     scope: NativeToolScope,
     ordering: Ordering,
+    expected_catalog: Option<rmcp::model::ListToolsResult>,
 }
 redacted!(Provider);
 impl Provider {
@@ -20,11 +21,22 @@ impl Provider {
             route,
             scope,
             ordering,
+            expected_catalog: None,
         }
+    }
+    pub(in crate::connector) fn with_expected_catalog(
+        mut self,
+        bytes: &[u8],
+    ) -> Result<Self, AppError> {
+        self.expected_catalog = Some(serde_json::from_slice(bytes)?);
+        Ok(self)
     }
 }
 struct Lifetime(Relay);
 impl NativeToolLifetime for Lifetime {
+    fn quiescent(&self) -> bool {
+        self.0.quiescent()
+    }
     fn close(&self) {
         self.0.close();
     }
@@ -58,6 +70,16 @@ impl NativeToolsProvider for Provider {
             )
             .await
             .map_err(NativeToolsError::new)?;
+            if self
+                .expected_catalog
+                .as_ref()
+                .is_some_and(|expected| expected != &relay.state.catalog)
+            {
+                relay.finish().await.map_err(NativeToolsError::new)?;
+                return Err(NativeToolsError::new(
+                    std::io::Error::other("Tool contract changed before preparation").into(),
+                ));
+            }
             let declaration = BearerSecret::parse(relay.bearer().to_owned())
                 .map_err(|error| NativeToolsError::new(error.into()))
                 .and_then(|key| NativeMcpDeclaration::http(relay.url(), key));

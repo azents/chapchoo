@@ -212,6 +212,15 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
             .await,
         Err(StoreError::NotFound)
     ));
+    store
+        .complete_conversation_input_preparation(
+            &source,
+            &start,
+            &chapchoo_persistence::ConversationPreparationOutcome::Failed(
+                chapchoo_persistence::ConversationPreparationFailure::BeforeNativeLaunch,
+            ),
+        )
+        .await?;
     let next = preparation(store, f, "authentication-start-two").await?;
     let next_draft = draft(f, &next);
     assert!(matches!(
@@ -229,7 +238,7 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
         store
             .begin_execution_authentication(&source, &start, Some(&next.id))
             .await,
-        Err(StoreError::Conflict)
+        Err(StoreError::InvalidTransition)
     ));
     assert!(matches!(
         store

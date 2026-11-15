@@ -23,6 +23,7 @@ mod email;
 mod form_text;
 mod handle;
 mod password;
+mod project_instructions;
 mod provider_request;
 mod role;
 
@@ -47,5 +48,9 @@ pub use email::{EmailAddress, InvalidEmail};
 pub use form_text::{FormTextRule, InvalidFormTextRule};
 pub use handle::{Handle, InvalidHandle};
 pub use password::{Password, PasswordPolicyError};
+pub use project_instructions::{
+    InstructionSource, InstructionSourceKind, InvalidProjectInstructions,
+    MAX_OWNER_INSTRUCTION_BYTES, MAX_PROJECT_INSTRUCTION_BYTES, ProjectInstructions,
+};
 pub use provider_request::{InvalidProviderKeyRequest, ProviderKeyRequestId};
 pub use role::{MembershipRole, TeamKind, TeamRole};

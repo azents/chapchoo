@@ -11,6 +11,7 @@ mod input_work;
 mod messages;
 mod records;
 mod stop_owner;
+mod system_prompts;
 pub use stop_owner::{
     AcceptedConversationStop, ConversationStopFuture, ConversationStopProcessor,
     ConversationStopService,

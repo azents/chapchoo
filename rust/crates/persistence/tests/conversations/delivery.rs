@@ -47,6 +47,7 @@ pub(super) async fn exercise(
             .await,
         Err(StoreError::NotFound)
     ));
+    instructions_fixture::apply(store, &owner, &route, &source, &draft, f.now).await?;
     let (one, two) = tokio::join!(
         store.begin_conversation_input_forwarding(&owner, &route, &draft, f.now),
         store.begin_conversation_input_forwarding(&owner, &route, &draft, f.now),
@@ -166,24 +167,17 @@ pub(super) async fn exercise(
             f.now,
         )
         .await?;
-    assert!(matches!(
-        store
-            .begin_conversation_input_forwarding(
-                &owner,
-                &route,
-                &Forwarding {
-                    operation_id: &pending.id,
-                    ..draft
-                },
-                f.now
-            )
-            .await?,
-        Admission::Granted(_)
-    ));
     let pending_draft = Forwarding {
         operation_id: &pending.id,
         ..draft
     };
+    instructions_fixture::apply(store, &owner, &route, &source, &pending_draft, f.now).await?;
+    assert!(matches!(
+        store
+            .begin_conversation_input_forwarding(&owner, &route, &pending_draft, f.now)
+            .await?,
+        Admission::Granted(_)
+    ));
     let mut bytes = Vec::new();
     while bytes.len() < pending.text.as_str().len() {
         let chunk = store

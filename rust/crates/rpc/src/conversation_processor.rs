@@ -47,6 +47,7 @@ impl ConversationControlProcessor {
         if !self.admission.load(Ordering::Acquire) {
             return Ok(());
         }
+        let deadline = Instant::now() + Duration::from_secs(300);
         let actor = &input.actor;
         let mut agent = self
             .computers
@@ -59,6 +60,7 @@ impl ConversationControlProcessor {
         else {
             return Ok(());
         };
+        let _ = self.refresh_project(&input).await?;
         let draft = ConversationInputPreparation {
             agent_id: &input.agent_id,
             conversation_id: &input.receipt.conversation_id,
@@ -111,8 +113,9 @@ impl ConversationControlProcessor {
         };
         let supply = wire_supply(supply);
         let mut startup_operation = startup_operation;
-        let mut execution = execution;
         if startup_operation.is_none() {
+            self.preserve_input(&input, &route, &draft, deadline)
+                .await?;
             let setup = wire::SetupCommand {
                 agent_id: input.agent_id.clone(),
                 conversation_id: input.receipt.conversation_id.clone(),
@@ -135,8 +138,7 @@ impl ConversationControlProcessor {
         }
         // Product acceptance has already returned. This finite setup observation
         // budget is not a native task queue or model-completion waiter.
-        let deadline = Instant::now() + Duration::from_secs(300);
-        let target = loop {
+        let (target, grant, route) = loop {
             if !self.admission.load(Ordering::Acquire) || Instant::now() >= deadline {
                 return Ok(());
             }
@@ -149,7 +151,7 @@ impl ConversationControlProcessor {
                     return Ok(());
                 };
                 if &observed.operation_id != operation_id {
-                    return Ok(());
+                    startup_operation = Some(observed.operation_id.clone());
                 }
                 observed.facts.state
             } else {
@@ -195,8 +197,9 @@ impl ConversationControlProcessor {
                             require_retained_source,
                             ..
                         } => {
-                            execution = grant.execution_id;
                             startup_operation = None;
+                            self.preserve_input(&input, &route, &draft, deadline)
+                                .await?;
                             let current = self
                                 .conversation
                                 .owner_conversation(
@@ -226,7 +229,7 @@ impl ConversationControlProcessor {
                                     &input.actor,
                                     &agent.computer.id,
                                     &agent.computer.current_request_id,
-                                    &execution,
+                                    &grant.execution_id,
                                     control::connector_command::Operation::Setup(setup),
                                 )
                                 .await?
@@ -259,40 +262,91 @@ impl ConversationControlProcessor {
                         && current.source.snapshot() == Some(&target.snapshot)
                         && current.native_session_id.as_ref() == Some(&target.native_session)
                     {
-                        break target;
+                        if let Some((operation, _)) = self.refresh_project(&input).await? {
+                            startup_operation = Some(operation);
+                            continue;
+                        }
+                        let selected = self
+                            .conversation
+                            .project_instructions_for_owner(
+                                actor,
+                                &input.agent_id,
+                                AcceptanceTime::System.now()?,
+                            )
+                            .await?;
+                        let effective_operation =
+                            startup_operation.as_deref().unwrap_or(&input.receipt.id);
+                        let evidence = self
+                            .conversation
+                            .instruction_evidence(
+                                actor,
+                                &input.agent_id,
+                                &input.receipt.conversation_id,
+                                effective_operation,
+                                AcceptanceTime::System.now()?,
+                            )
+                            .await?;
+                        if evidence.instructions != selected
+                            || evidence.tool_catalog
+                                != chapchoo_service::ConversationToolBackend::catalog_definition()?
+                        {
+                            if let Some(latest) = self
+                                .conversation
+                                .connection_startup(
+                                    actor,
+                                    &input.agent_id,
+                                    AcceptanceTime::System.now()?,
+                                )
+                                .await?
+                            {
+                                startup_operation = Some(latest.operation_id);
+                            }
+                            tokio::time::sleep(Duration::from_millis(200)).await;
+                            continue;
+                        }
+                        agent = self
+                            .computers
+                            .agent(actor, &input.agent_id, AcceptanceTime::System)
+                            .await?;
+                        let Some(route) = self
+                            .computers
+                            .resolve_connector_route(&agent.computer.id)
+                            .await?
+                        else {
+                            return Ok(());
+                        };
+                        let grant = match self
+                            .conversation
+                            .begin_input(
+                                actor,
+                                &route,
+                                &ConversationOperationForwarding {
+                                    agent_id: &input.agent_id,
+                                    conversation_id: &input.receipt.conversation_id,
+                                    operation_id: &input.receipt.id,
+                                    target: &target,
+                                },
+                                AcceptanceTime::System.now()?,
+                            )
+                            .await
+                        {
+                            Ok(ConversationForwardingAdmission::Granted(grant)) => grant,
+                            Ok(ConversationForwardingAdmission::Existing(_)) => return Ok(()),
+                            // This transaction committed no forwarding grant. Reobserve
+                            // configuration within the original setup budget, never a
+                            // delivery that may already have crossed the boundary.
+                            Err(error) if error.reason() == DomainReason::InvalidTransition => {
+                                tokio::time::sleep(Duration::from_millis(200)).await;
+                                continue;
+                            }
+                            Err(error) => return Err(error),
+                        };
+                        break (target, grant, route);
                     }
                 }
                 ConversationPreparationState::PossibleForwarding => {}
             }
             tokio::time::sleep(Duration::from_millis(200)).await;
-        };
-        let Some(route) = self
-            .computers
-            .resolve_connector_route(&agent.computer.id)
-            .await?
-        else {
-            return Ok(());
-        };
-        agent = self
-            .computers
-            .agent(actor, &input.agent_id, AcceptanceTime::System)
-            .await?;
-        let grant = self
-            .conversation
-            .begin_input(
-                actor,
-                &route,
-                &ConversationOperationForwarding {
-                    agent_id: &input.agent_id,
-                    conversation_id: &input.receipt.conversation_id,
-                    operation_id: &input.receipt.id,
-                    target: &target,
-                },
-                AcceptanceTime::System.now()?,
-            )
-            .await?;
-        let ConversationForwardingAdmission::Granted(grant) = grant else {
-            return Ok(());
         };
         let command = wire::InputCommand {
             agent_id: input.agent_id.clone(),
@@ -342,6 +396,150 @@ impl ConversationControlProcessor {
             tokio::time::sleep(Duration::from_millis(200)).await;
         }
         Ok(())
+    }
+    async fn preserve_input(
+        &self,
+        input: &AcceptedConversationInput,
+        route: &chapchoo_service::ResolvedRoute,
+        draft: &ConversationInputPreparation<'_>,
+        deadline: Instant,
+    ) -> Result<(), ServiceError> {
+        let result = async {
+            let catalog = chapchoo_service::ConversationToolBackend::catalog_definition()?;
+            loop {
+                if Instant::now() >= deadline || !self.admission.load(Ordering::Acquire) {
+                    return Err(ServiceError::domain(DomainReason::InvalidTransition));
+                }
+                let selected = self
+                    .conversation
+                    .project_instructions_for_owner(
+                        &input.actor,
+                        &input.agent_id,
+                        AcceptanceTime::System.now()?,
+                    )
+                    .await?;
+                match self
+                    .conversation
+                    .seal_project_instructions(
+                        &input.actor,
+                        route,
+                        draft,
+                        &selected,
+                        &catalog,
+                        AcceptanceTime::System.now()?,
+                    )
+                    .await
+                {
+                    Ok(_) => return Ok(()),
+                    Err(error) if error.reason() == DomainReason::InvalidTransition => {
+                        let pending = self
+                            .conversation
+                            .setup_facts(&input.actor, draft, AcceptanceTime::System.now()?)
+                            .await?;
+                        if !pending.is_some_and(|facts| {
+                            matches!(
+                                facts.state,
+                                ConversationPreparationState::PossibleForwarding
+                            )
+                        }) {
+                            return Err(error);
+                        }
+                        tokio::time::sleep(Duration::from_millis(200)).await;
+                    }
+                    Err(error) => return Err(error),
+                }
+            }
+        }
+        .await;
+        if result.is_err()
+            && let Err(error) = self
+                .conversation
+                .reject_unsealed_preparation(route, draft)
+                .await
+        {
+            tracing::warn!(error=?error, "Unsealed input preparation could not be settled");
+        }
+        result
+    }
+    async fn refresh_project(
+        &self,
+        input: &AcceptedConversationInput,
+    ) -> Result<Option<(String, String)>, ServiceError> {
+        let agent = self
+            .computers
+            .agent(&input.actor, &input.agent_id, AcceptanceTime::System)
+            .await?;
+        let Some(route) = self
+            .computers
+            .resolve_connector_route(&agent.computer.id)
+            .await?
+        else {
+            return Ok(None);
+        };
+        let selected = self
+            .conversation
+            .project_instructions_for_owner(
+                &input.actor,
+                &input.agent_id,
+                AcceptanceTime::System.now()?,
+            )
+            .await?;
+        let catalog = chapchoo_service::ConversationToolBackend::catalog_definition()?;
+        let refresh = self
+            .conversation
+            .admit_project_refresh(
+                &route,
+                &input.agent_id,
+                &input.receipt.conversation_id,
+                &selected,
+                &catalog,
+                AcceptanceTime::System.now()?,
+            )
+            .await?;
+        let Some(chapchoo_service::ConnectionStartupAdmission::Dispatch {
+            operation_id,
+            execution_id,
+            requested_supply,
+            context,
+            fresh_native_allowed,
+            require_retained_source,
+            ..
+        }) = refresh
+        else {
+            return Ok(None);
+        };
+        let context = match context {
+            chapchoo_service::ConnectionStartupContext::Existing {
+                snapshot,
+                native_session,
+            } => wire::setup_command::Context::Existing(wire::NativeTarget {
+                snapshot_id: snapshot.as_str().into(),
+                native_session_id: native_session.as_str().into(),
+            }),
+            chapchoo_service::ConnectionStartupContext::Initial => {
+                wire::setup_command::Context::Initial(wire::InitialNativeContext {
+                    allow_fresh: fresh_native_allowed,
+                    require_retained_source,
+                })
+            }
+        };
+        let setup = wire::SetupCommand {
+            agent_id: input.agent_id.clone(),
+            conversation_id: input.receipt.conversation_id.clone(),
+            operation_id: operation_id.clone(),
+            supply: Some(wire_supply(requested_supply)),
+            context: Some(context),
+        };
+        let _ = self
+            .invoke(
+                &input.actor,
+                &agent.computer.id,
+                &agent.computer.current_request_id,
+                &execution_id,
+                control::connector_command::Operation::Setup(setup),
+            )
+            .await?;
+        Ok(Some((operation_id, execution_id)))
     }
     async fn invoke(
         &self,

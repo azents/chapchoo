@@ -9,6 +9,8 @@ import { ConversationsClient } from "@chapchoo/rpc-client/conversations";
 import type {
   HarnessSupply,
   OwnerConversation,
+  ProjectInstructionEvidence,
+  ProjectInstructionHistory,
 } from "@chapchoo/rpc-client/conversations";
 import {
   AgentsClient,
@@ -54,6 +56,10 @@ export async function nativeConversation(
   agentId: string;
   chatPath: string;
   current: () => Promise<OwnerConversation>;
+  instructionHistory: () => Promise<ProjectInstructionHistory>;
+  instructionEvidence: (
+    operationId: string,
+  ) => Promise<ProjectInstructionEvidence>;
   diagnostics: () => Promise<string>;
   pendingInputs: () => Promise<number>;
   close: (expectedRequestId?: string) => Promise<void>;
@@ -250,6 +256,30 @@ export async function nativeConversation(
       chatPath: `/teams/my/agents/${agent.handle}/chat`,
       current: () =>
         call(conversations.current.bind(conversations), { agentId: agent.id }),
+      instructionHistory: async () => {
+        const current = await call(conversations.current.bind(conversations), {
+          agentId: agent.id,
+        });
+        if (!current.conversation)
+          throw new Error("Instruction fixture conversation is unavailable");
+        return call(conversations.instructionHistory.bind(conversations), {
+          agentId: agent.id,
+          conversationId: current.conversation.conversationId,
+          beforeOperationId: void 0,
+        });
+      },
+      instructionEvidence: async (operationId) => {
+        const current = await call(conversations.current.bind(conversations), {
+          agentId: agent.id,
+        });
+        if (!current.conversation)
+          throw new Error("Instruction fixture conversation is unavailable");
+        return call(conversations.instructionEvidence.bind(conversations), {
+          agentId: agent.id,
+          conversationId: current.conversation.conversationId,
+          operationId,
+        });
+      },
       diagnostics: async () => {
         const current = await call(
           conversations.current.bind(conversations),

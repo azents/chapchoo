@@ -66,6 +66,7 @@ export interface ChatProps {
   navigation: AppNavigation | null;
   accountControls: ReactNode;
   supplyControl: ReactNode;
+  instructionEvidenceControl?: ReactNode;
   secondaryOverlay: boolean;
   agentNavigation: ReactNode;
   conversation: ConversationControls;

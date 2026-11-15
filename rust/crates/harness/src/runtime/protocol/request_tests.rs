@@ -30,6 +30,7 @@ async fn captured_requests_bind_typed_ids_to_fresh_single_use_targets() -> Resul
     observations.bind(
         source.snapshot()?,
         NativeConversationId::parse("native".into())?,
+        true,
     )?;
     let retained = source.clone();
     let observed = observations.clone();
@@ -65,6 +66,7 @@ async fn captured_requests_bind_typed_ids_to_fresh_single_use_targets() -> Resul
     reply(&mut write, &initialize, initialization(2)).await?;
     let new = request(&mut read).await?;
     reply(&mut write, &new, json!({"sessionId":"native"})).await?;
+    acknowledge_title(&mut read, &mut write).await?;
     let session = rx.await??;
     permission(&mut write, schema::RequestId::Number(1)).await?;
     observations.wait_change().await;

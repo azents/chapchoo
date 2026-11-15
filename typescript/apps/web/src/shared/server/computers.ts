@@ -86,6 +86,51 @@ export const computersRouter = router({
         ),
       ),
     ),
+  systemPrompt: procedure
+    .input(z.object({ agentId: id }).strict())
+    .query(({ ctx, input }) =>
+      attempt(() =>
+        ctx.session.authenticated(async (token) =>
+          z
+            .object({ content: z.string() })
+            .parse(
+              await call(
+                ctx.backend.agents.getSystemPrompt.bind(ctx.backend.agents),
+                input,
+                token,
+              ),
+            ),
+        ),
+      ),
+    ),
+  saveSystemPrompt: procedure
+    .input(
+      z
+        .object({
+          agentId: id,
+          content: z
+            .string()
+            .refine(
+              (value) => new TextEncoder().encode(value).length <= 16 * 1024,
+            ),
+        })
+        .strict(),
+    )
+    .mutation(({ ctx, input }) =>
+      attempt(() =>
+        ctx.session.authenticated(async (token) =>
+          z
+            .object({ content: z.string() })
+            .parse(
+              await call(
+                ctx.backend.agents.saveSystemPrompt.bind(ctx.backend.agents),
+                input,
+                token,
+              ),
+            ),
+        ),
+      ),
+    ),
   providers: procedure
     .input(page)
     .query(({ ctx, input }) =>

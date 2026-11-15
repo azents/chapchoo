@@ -44,6 +44,7 @@ async fn steering_only_prompts_after_explicit_non_consumption() -> Result<(), Te
         reply(&mut write, &initialize, initialization(2)).await?;
         let new = request(&mut read).await?;
         reply(&mut write, &new, json!({"sessionId":"native"})).await?;
+        acknowledge_title(&mut read, &mut write).await?;
         let session = rx.await??;
         let text = ConversationText::parse("exact \n한글".into())?;
         let submitted = steering::submit(&session, &text);
@@ -141,6 +142,7 @@ async fn cancelling_a_steering_waiter_after_publication_never_grants_prompt_fall
     reply(&mut write, &initialize, initialization(2)).await?;
     let new = request(&mut read).await?;
     reply(&mut write, &new, json!({"sessionId":"native"})).await?;
+    acknowledge_title(&mut read, &mut write).await?;
     let session = rx.await??;
     let text = ConversationText::parse("once".into())?;
     {

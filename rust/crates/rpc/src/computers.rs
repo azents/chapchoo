@@ -227,6 +227,41 @@ impl wire::agents_server::Agents for AgentsAdapter {
             .map_err(status)?;
         Ok(Response::new(self.0.agent(agent).await?))
     }
+    async fn get_system_prompt(
+        &self,
+        request: Request<wire::AgentRequest>,
+    ) -> Result<Response<wire::SystemPrompt>, Status> {
+        self.0.admit()?;
+        let actor = input::actor(&request)?;
+        let value = request.into_inner();
+        let content = self
+            .0
+            .service
+            .system_prompt(&actor, &value.agent_id, AcceptanceTime::System)
+            .await
+            .map_err(status)?;
+        Ok(Response::new(wire::SystemPrompt { content }))
+    }
+    async fn save_system_prompt(
+        &self,
+        request: Request<wire::SaveSystemPromptRequest>,
+    ) -> Result<Response<wire::SystemPrompt>, Status> {
+        self.0.admit()?;
+        let actor = input::actor(&request)?;
+        let value = request.into_inner();
+        let content = self
+            .0
+            .service
+            .save_system_prompt(
+                &actor,
+                &value.agent_id,
+                &value.content,
+                AcceptanceTime::System,
+            )
+            .await
+            .map_err(status)?;
+        Ok(Response::new(wire::SystemPrompt { content }))
+    }
     async fn creation_result(
         &self,
         request: Request<wire::CreationResultRequest>,

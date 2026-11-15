@@ -10,7 +10,7 @@ use std::{error::Error, fs::OpenOptions, path::Path};
 
 pub const SQLITE_MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/sqlite");
 pub const POSTGRES_MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/postgres");
-pub(crate) const VERSIONS: [&str; 24] = [
+pub(crate) const VERSIONS: [&str; 25] = [
     "00000000000001",
     "00000000000002",
     "00000000000003",
@@ -35,6 +35,7 @@ pub(crate) const VERSIONS: [&str; 24] = [
     "00000000000022",
     "00000000000023",
     "00000000000024",
+    "00000000000025",
 ];
 const PG_LOCK: i64 = 1_960_261_029;
 #[cfg(test)]
@@ -71,6 +72,8 @@ fn prepared_product_query() -> String {
         "external_auth_requests",
         "agent_authentication_selections",
         "agent_harness_supplies",
+        "agent_system_prompts",
+        "project_instruction_evidence",
         "agent_harness_supply_requests",
         "conversations",
         "agent_conversations",

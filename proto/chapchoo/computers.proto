@@ -12,6 +12,8 @@ service Agents {
   rpc Get(AgentRequest) returns (Agent);
   rpc GetInTeam(TeamAgentRequest) returns (Agent);
   rpc UpdateProfile(UpdateAgentProfileRequest) returns (Agent);
+  rpc GetSystemPrompt(AgentRequest) returns (SystemPrompt);
+  rpc SaveSystemPrompt(SaveSystemPromptRequest) returns (SystemPrompt);
   rpc CreationResult(CreationResultRequest) returns (HistoricalCreationResult);
   rpc ForceRemove(ForceRemoveRequest) returns (google.protobuf.Empty);
 }
@@ -34,6 +36,8 @@ message AgentHandleRequest { string team_id = 1; string candidate = 2; }
 message HandleAvailability { bool available = 1; }
 message AgentListRequest { string team_id = 1; Page page = 2; }
 message AgentRequest { string agent_id = 1; }
+message SystemPrompt { string content = 1; }
+message SaveSystemPromptRequest { string agent_id = 1; string content = 2; }
 message TeamAgentRequest { string team_id = 1; string handle = 2; }
 message UpdateAgentProfileRequest {
   string agent_id = 1; string name = 2; string profile_image_id = 3; string palette_key = 4;

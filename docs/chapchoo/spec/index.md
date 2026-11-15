@@ -76,6 +76,7 @@ real Docker, browser journeys and live cluster rollout.
 
 - [Repository-owned entity identity](domain/repository-identity.md) — UUIDv7 issuance, compact storage, opaque DTOs and explicit preserving cutover.
 - [Agent handles and saved profiles](domain/agent-profile.md) — immutable handles, editable saved presentation, catalogue/palette choices and exact uncertain-creation recovery.
+- [Agent instructions and default project](domain/agent-instructions.md) — Save-only owner settings, retained source originals and same-context prompt/tool refresh.
 - [Credential primitives](domain/credential-primitives.md) — email/password values, bearers, encryption and hashing.
 - [Backend authentication](domain/backend-authentication.md) — scoped catalogue, explicit device acquisition and saved Agent references without Computer delivery.
 - [Account operations and mail](domain/account-operations.md) — password capacity, acceptance time and single-attempt delivery.

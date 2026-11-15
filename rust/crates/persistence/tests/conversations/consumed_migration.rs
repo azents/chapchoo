@@ -75,6 +75,20 @@ async fn exercise(
                 f.now,
             )
             .await?;
+        instructions_fixture::apply(
+            store,
+            &owner,
+            &route,
+            &source,
+            &ConversationOperationForwarding {
+                agent_id: &f.agent.id,
+                conversation_id: &first.conversation_id,
+                operation_id: &receipt.id,
+                target: &target,
+            },
+            f.now,
+        )
+        .await?;
         store
             .begin_conversation_input_forwarding(
                 &owner,
@@ -172,6 +186,20 @@ async fn exercise(
             )
             .await?;
         if name != "late-insert" {
+            instructions_fixture::apply(
+                store,
+                &owner,
+                &route,
+                &source,
+                &ConversationOperationForwarding {
+                    agent_id: &f.agent.id,
+                    conversation_id: &first.conversation_id,
+                    operation_id: &receipt.id,
+                    target: &target,
+                },
+                f.now,
+            )
+            .await?;
             store
                 .begin_conversation_input_forwarding(
                     &owner,

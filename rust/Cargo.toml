@@ -56,7 +56,7 @@ parking_lot = "0.12.5"
 chapchoo-kubernetes = { path = "crates/kubernetes" }
 chapchoo-docker = { path = "crates/docker" }
 chapchoo-harness = { path = "crates/harness" }
-agent-client-protocol = { version = "=5.0.0", features = ["unstable_protocol_v2"] }
+agent-client-protocol = { version = "=5.0.0", features = ["unstable_protocol_v2", "unstable_session_set_title", "unstable_subagents"] }
 flate2 = "1.1.5"
 tar = "0.4.44"
 semver = "1.0.27"
