@@ -335,14 +335,7 @@ impl NativeOwner {
                         if expired || state.refresh_safe() {
                             let pending = deferred.remove(0);
                             let outcome = if expired {
-                                match state.setups.begin(&pending.operation)? {
-                                    Some(previous) => Ok(previous),
-                                    None => {
-                                        let failure = NativeSetupObservation::Failed(NativeSetupFailure::NotAdmitted);
-                                        state.setups.completed(&pending.operation.operation_id, failure.clone())?;
-                                        Ok(failure)
-                                    }
-                                }
+                                state.setups.expire_unstarted(&pending.operation)
                             } else {
                                 state.setup(pending.operation, pending.authentication, pending.tools).await
                             };

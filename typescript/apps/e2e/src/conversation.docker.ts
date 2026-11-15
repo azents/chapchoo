@@ -144,10 +144,24 @@ test("owner receives intentional server messages and inspects native typed-answe
     await page
       .getByRole("textbox", { name: "Confirmation note", exact: true })
       .fill("typed native answer");
+    stage = "complete-original-question";
     await page
       .getByRole("button", { name: "Send answers", exact: true })
       .click();
-    await expect.poll(() => activeFixture.pendingInputs()).toBe(0);
+    stage = "await-refreshed-input-pickup";
+    await expect
+      .poll(
+        async () => {
+          const current = await activeFixture.current();
+          if (current.startup?.failed !== void 0) {
+            throw new Error("Native fixture configuration preparation failed");
+          }
+          return activeFixture.pendingInputs();
+        },
+        { timeout: 180_000 },
+      )
+      .toBe(0);
+    stage = "await-refreshed-publication";
     await expect(
       log.getByText("Refreshed project fixture publication.", { exact: true }),
     ).toBeVisible({ timeout: 180_000 });

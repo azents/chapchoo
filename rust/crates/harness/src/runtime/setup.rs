@@ -43,6 +43,17 @@ pub(super) struct SetupRegistry {
     entries: BTreeMap<String, (NativeSetupOperation, NativeSetupObservation)>,
 }
 impl SetupRegistry {
+    pub(super) fn expire_unstarted(
+        &mut self,
+        operation: &NativeSetupOperation,
+    ) -> Result<NativeSetupObservation, Error> {
+        if let Some(previous) = self.begin(operation)? {
+            return Ok(previous);
+        }
+        let failure = NativeSetupObservation::Failed(NativeSetupFailure::NotAdmitted);
+        self.completed(&operation.operation_id, failure.clone())?;
+        Ok(failure)
+    }
     pub(super) fn release_reported(
         &mut self,
         id: &str,
@@ -385,6 +396,38 @@ mod tests {
             },
         }
     }
+    #[test]
+    fn expired_setup_overflow_rejects_only_that_request_and_preserves_uncertainty()
+    -> Result<(), TestError> {
+        let mut registry = SetupRegistry::default();
+        for index in 0..256 {
+            registry.begin(&operation(&format!("pending-{index}")))?;
+        }
+        assert!(matches!(
+            registry.expire_unstarted(&operation("expired")),
+            Err(Error::NotAdmitted)
+        ));
+        assert_eq!(registry.entries.len(), 256);
+        for index in 0..256 {
+            assert!(matches!(
+                registry.observe(&format!("pending-{index}"))?,
+                NativeSetupObservation::PossibleForwarding
+            ));
+        }
+        assert!(matches!(
+            registry.expire_unstarted(&operation("pending-0"))?,
+            NativeSetupObservation::PossibleForwarding
+        ));
+        let settled = NativeSetupObservation::Failed(NativeSetupFailure::BeforeNativeLaunch);
+        registry.completed("pending-0", settled.clone())?;
+        registry.release_reported("pending-0", &settled)?;
+        assert!(matches!(
+            registry.expire_unstarted(&operation("expired"))?,
+            NativeSetupObservation::Failed(NativeSetupFailure::NotAdmitted)
+        ));
+        Ok(())
+    }
+
     #[test]
     fn duplicate_setup_recovers_original_evidence_and_changed_intent_conflicts()
     -> Result<(), TestError> {
