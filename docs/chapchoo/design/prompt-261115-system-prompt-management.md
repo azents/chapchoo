@@ -1,6 +1,7 @@
 ---
 title: "Default Agent Project and Session Configuration Refresh Design"
 created: 2026-11-16
+implemented: 2026-11-16
 document_role: primary
 document_type: design
 snapshot_id: prompt-261115
@@ -175,3 +176,5 @@ Core instruction change/clear is feasible through verified native behavior. Work
 - Approved authority IDs: `M1, M2, M3, M4, M5, M6, M7, M8`
 - Approved scope: existing default workspace, standard managed instruction publication, same-context work-preserving refresh, continuous input acceptance, retained source evidence and Save-only owner UI.
 - Approval evidence: exact-document bidirectional authority and feasibility review by the delegated technical interviewee, including the revision-2 standard-lifecycle correction for M4, revision-3 causal preparation identity for M3/M6 and revision-4 live-child/root-journal boundary. Work-state and queue coordination tests remain mandatory implementation completion gates.
+
+Implementation validation: [Agent project instructions validation](project-instructions-validation-2026-11-16.md).
