@@ -235,7 +235,7 @@ async fn exercise(
         ..draft
     };
     assert!(
-        matches!(store.begin_conversation_input_preparation(&owner, &route, &input, f.now).await?, Admission::ObservedStartup { operation_id: same, .. } if same == operation_id)
+        matches!(store.begin_conversation_input_preparation(&owner, &route, &input, f.now, &f.claim(store, input.conversation_id, input.operation_id).await?).await?, Admission::ObservedStartup { operation_id: same, .. } if same == operation_id)
     );
     store
         .complete_conversation_source(&source, &conversation_id, &snapshot, None)
@@ -266,7 +266,7 @@ async fn exercise(
         Some(Startup::Settled { .. })
     ));
     assert!(
-        matches!(store.begin_conversation_input_preparation(&owner, &route, &input, f.now).await?, Admission::ObservedStartup { facts, .. } if facts.state == State::Known(Outcome::SessionReady(target.clone())))
+        matches!(store.begin_conversation_input_preparation(&owner, &route, &input, f.now, &f.claim(store, input.conversation_id, input.operation_id).await?).await?, Admission::ObservedStartup { facts, .. } if facts.state == State::Known(Outcome::SessionReady(target.clone())))
     );
     assert!(matches!(
         store
@@ -279,7 +279,25 @@ async fn exercise(
                     operation_id: &first.id,
                     target: &target,
                 },
-                f.now
+                f.now,
+                &f.claim(
+                    store,
+                    (chapchoo_persistence::ConversationOperationForwarding {
+                        agent_id: &f.agent.id,
+                        conversation_id: &conversation_id,
+                        operation_id: &first.id,
+                        target: &target,
+                    })
+                    .conversation_id,
+                    (chapchoo_persistence::ConversationOperationForwarding {
+                        agent_id: &f.agent.id,
+                        conversation_id: &conversation_id,
+                        operation_id: &first.id,
+                        target: &target,
+                    })
+                    .operation_id
+                )
+                .await?
             )
             .await?,
         chapchoo_persistence::ConversationForwardingAdmission::Granted(_)
@@ -341,7 +359,7 @@ async fn exercise(
         )
         .await?;
     assert!(
-        matches!(store.begin_conversation_input_preparation(&owner, &next_route, &input, f.now).await?, Admission::ObservedStartup { operation_id: same, facts } if same == resume_id && facts.state == State::PossibleForwarding)
+        matches!(store.begin_conversation_input_preparation(&owner, &next_route, &input, f.now, &f.claim(store, input.conversation_id, input.operation_id).await?).await?, Admission::ObservedStartup { operation_id: same, facts } if same == resume_id && facts.state == State::PossibleForwarding)
     );
     store
         .complete_conversation_input_preparation(
@@ -399,7 +417,15 @@ async fn exercise(
             agent_id: &f.agent.id,
             conversation_id: &conversation_id,
             operation_id: &subsequent.id,
-        }, f.now).await?, Admission::ObservedStartup { facts, .. } if !facts.fresh_native_allowed && facts.state == State::Known(Outcome::SessionReady(target)))
+        }, f.now, &f.claim(store, (Draft {
+            agent_id: &f.agent.id,
+            conversation_id: &conversation_id,
+            operation_id: &subsequent.id,
+        }).conversation_id, (Draft {
+            agent_id: &f.agent.id,
+            conversation_id: &conversation_id,
+            operation_id: &subsequent.id,
+        }).operation_id).await?).await?, Admission::ObservedStartup { facts, .. } if !facts.fresh_native_allowed && facts.state == State::Known(Outcome::SessionReady(target)))
     );
     Ok(())
 }

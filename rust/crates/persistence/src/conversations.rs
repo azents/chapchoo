@@ -16,7 +16,9 @@ mod startup;
 mod stops;
 mod supply;
 mod system_prompts;
+mod waiting;
 pub use system_prompts::{MAX_SYSTEM_PROMPT_BYTES, ProjectInstructionEvidence};
+pub use waiting::{ClaimedConversationInput, ConversationInputCandidate, ConversationInputWake};
 
 use crate::{
     Store, StoreError,

@@ -68,7 +68,13 @@ impl ConversationControlProcessor {
         };
         let admission = self
             .conversation
-            .begin_setup(actor, &route, &draft, AcceptanceTime::System.now()?)
+            .begin_setup(
+                actor,
+                &route,
+                &draft,
+                AcceptanceTime::System.now()?,
+                &input.claim_id,
+            )
             .await?;
         let (execution, supply, fresh, require_retained_source, startup_operation) = match admission
         {
@@ -187,7 +193,13 @@ impl ConversationControlProcessor {
                     };
                     match self
                         .conversation
-                        .begin_setup(actor, &route, &draft, AcceptanceTime::System.now()?)
+                        .begin_setup(
+                            actor,
+                            &route,
+                            &draft,
+                            AcceptanceTime::System.now()?,
+                            &input.claim_id,
+                        )
                         .await?
                     {
                         ConversationPreparationAdmission::Granted {
@@ -329,6 +341,7 @@ impl ConversationControlProcessor {
                                     target: &target,
                                 },
                                 AcceptanceTime::System.now()?,
+                                &input.claim_id,
                             )
                             .await
                         {
@@ -659,6 +672,13 @@ impl ConversationInputProcessor for ConversationControlProcessor {
     fn process(&self, input: AcceptedConversationInput) -> ConversationInputFuture {
         let processor = self.clone();
         Box::pin(async move { processor.process_owned(input).await })
+    }
+    fn wake(&self, wake: chapchoo_service::ConversationInputWake) -> ConversationInputFuture {
+        let computers = self.computers.clone();
+        Box::pin(async move {
+            computers.start_waiting_conversation_input(&wake).await?;
+            Ok(())
+        })
     }
 }
 impl chapchoo_service::ConversationAnswerProcessor for ConversationControlProcessor {

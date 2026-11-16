@@ -43,14 +43,24 @@ pub(super) async fn exercise(
     );
     assert!(matches!(
         store
-            .begin_conversation_input_forwarding(&f.other.digest(), &route, &draft, f.now)
+            .begin_conversation_input_forwarding(
+                &f.other.digest(),
+                &route,
+                &draft,
+                f.now,
+                &f.claim(store, draft.conversation_id, draft.operation_id)
+                    .await?
+            )
             .await,
         Err(StoreError::NotFound)
     ));
-    instructions_fixture::apply(store, &owner, &route, &source, &draft, f.now).await?;
+    instructions_fixture::apply(store, f, &owner, &route, &source, &draft, f.now).await?;
+    let claim = f
+        .claim(store, draft.conversation_id, draft.operation_id)
+        .await?;
     let (one, two) = tokio::join!(
-        store.begin_conversation_input_forwarding(&owner, &route, &draft, f.now),
-        store.begin_conversation_input_forwarding(&owner, &route, &draft, f.now),
+        store.begin_conversation_input_forwarding(&owner, &route, &draft, f.now, &claim),
+        store.begin_conversation_input_forwarding(&owner, &route, &draft, f.now, &claim),
     );
     assert!(matches!(
         (one?, two?),
@@ -86,7 +96,14 @@ pub(super) async fn exercise(
     };
     assert!(matches!(
         store
-            .begin_conversation_input_forwarding(&owner, &route, &stale, f.now)
+            .begin_conversation_input_forwarding(
+                &owner,
+                &route,
+                &stale,
+                f.now,
+                &f.claim(store, stale.conversation_id, stale.operation_id)
+                    .await?
+            )
             .await,
         Err(StoreError::Conflict)
     ));
@@ -112,7 +129,14 @@ pub(super) async fn exercise(
         .await?;
     assert!(matches!(
         store
-            .begin_conversation_input_forwarding(&owner, &route, &draft, f.now)
+            .begin_conversation_input_forwarding(
+                &owner,
+                &route,
+                &draft,
+                f.now,
+                &f.claim(store, draft.conversation_id, draft.operation_id)
+                    .await?
+            )
             .await,
         Err(StoreError::NotFound)
     ));
@@ -152,6 +176,39 @@ pub(super) async fn exercise(
             .await,
         Err(StoreError::NotFound)
     ));
+    let loading = store
+        .conversation_input(
+            &owner,
+            &f.agent.id,
+            &first.conversation_id,
+            "during-loading",
+            f.now,
+        )
+        .await?
+        .ok_or("Missing message accepted while loading")?;
+    let loading_draft = Forwarding {
+        operation_id: &loading.id,
+        ..draft
+    };
+    instructions_fixture::apply(store, f, &owner, &route, &source, &loading_draft, f.now).await?;
+    let loading_claim = f
+        .claim(store, &loading.conversation_id, &loading.id)
+        .await?;
+    assert!(matches!(
+        store
+            .begin_conversation_input_forwarding(
+                &owner,
+                &route,
+                &loading_draft,
+                f.now,
+                &loading_claim
+            )
+            .await?,
+        Admission::Granted(_)
+    ));
+    store
+        .complete_conversation_input_forwarding(&source, &loading_draft, &Outcome::Steered)
+        .await?;
     let pending = store
         .accept_conversation_input(
             &owner,
@@ -171,10 +228,21 @@ pub(super) async fn exercise(
         operation_id: &pending.id,
         ..draft
     };
-    instructions_fixture::apply(store, &owner, &route, &source, &pending_draft, f.now).await?;
+    instructions_fixture::apply(store, f, &owner, &route, &source, &pending_draft, f.now).await?;
     assert!(matches!(
         store
-            .begin_conversation_input_forwarding(&owner, &route, &pending_draft, f.now)
+            .begin_conversation_input_forwarding(
+                &owner,
+                &route,
+                &pending_draft,
+                f.now,
+                &f.claim(
+                    store,
+                    pending_draft.conversation_id,
+                    pending_draft.operation_id
+                )
+                .await?
+            )
             .await?,
         Admission::Granted(_)
     ));

@@ -87,7 +87,14 @@ async fn exercise_queue(store: &Store, f: &Fixture) -> Result<(), TestError> {
     assert!(
         matches!(
             store
-                .begin_conversation_input_forwarding(&actor, &route, &operation, f.now)
+                .begin_conversation_input_forwarding(
+                    &actor,
+                    &route,
+                    &operation,
+                    f.now,
+                    &f.claim(store, operation.conversation_id, operation.operation_id)
+                        .await?
+                )
                 .await,
             Err(StoreError::InvalidTransition)
         ),
@@ -99,16 +106,31 @@ async fn exercise_queue(store: &Store, f: &Fixture) -> Result<(), TestError> {
     assert!(
         matches!(
             store
-                .begin_conversation_input_forwarding(&actor, &route, &operation, f.now)
+                .begin_conversation_input_forwarding(
+                    &actor,
+                    &route,
+                    &operation,
+                    f.now,
+                    &f.claim(store, operation.conversation_id, operation.operation_id)
+                        .await?
+                )
                 .await,
             Err(StoreError::InvalidTransition)
         ),
         "An explicit empty setting still requires an applied selection"
     );
-    instructions_fixture::apply(store, &actor, &route, &f.source(&key), &operation, f.now).await?;
+    instructions_fixture::apply(store, f, &actor, &route, &f.source(&key), &operation, f.now)
+        .await?;
     assert!(matches!(
         store
-            .begin_conversation_input_forwarding(&actor, &route, &operation, f.now,)
+            .begin_conversation_input_forwarding(
+                &actor,
+                &route,
+                &operation,
+                f.now,
+                &f.claim(store, operation.conversation_id, operation.operation_id)
+                    .await?
+            )
             .await?,
         ConversationForwardingAdmission::Granted(_)
     ));
@@ -128,7 +150,14 @@ async fn exercise_queue(store: &Store, f: &Fixture) -> Result<(), TestError> {
     );
     assert!(matches!(
         store
-            .begin_conversation_input_forwarding(&actor, &route, &operation, f.now,)
+            .begin_conversation_input_forwarding(
+                &actor,
+                &route,
+                &operation,
+                f.now,
+                &f.claim(store, operation.conversation_id, operation.operation_id)
+                    .await?
+            )
             .await?,
         ConversationForwardingAdmission::Existing(_)
     ));
@@ -224,9 +253,17 @@ async fn exercise_queue(store: &Store, f: &Fixture) -> Result<(), TestError> {
         operation_id: &replacement.id,
         ..operation
     };
-    instructions_fixture::apply(store, &actor, &route, &f.source(&key), &operation, f.now).await?;
+    instructions_fixture::apply(store, f, &actor, &route, &f.source(&key), &operation, f.now)
+        .await?;
     store
-        .begin_conversation_input_forwarding(&actor, &route, &operation, f.now)
+        .begin_conversation_input_forwarding(
+            &actor,
+            &route,
+            &operation,
+            f.now,
+            &f.claim(store, operation.conversation_id, operation.operation_id)
+                .await?,
+        )
         .await?;
     let outcome = ConversationInputOutcome::Inserted {
         native_message_id: "queue-actual-message".into(),
@@ -280,9 +317,17 @@ async fn exercise_queue(store: &Store, f: &Fixture) -> Result<(), TestError> {
         operation_id: &last.id,
         ..operation
     };
-    instructions_fixture::apply(store, &actor, &route, &f.source(&key), &operation, f.now).await?;
+    instructions_fixture::apply(store, f, &actor, &route, &f.source(&key), &operation, f.now)
+        .await?;
     store
-        .begin_conversation_input_forwarding(&actor, &route, &operation, f.now)
+        .begin_conversation_input_forwarding(
+            &actor,
+            &route,
+            &operation,
+            f.now,
+            &f.claim(store, operation.conversation_id, operation.operation_id)
+                .await?,
+        )
         .await?;
     store
         .complete_conversation_input_forwarding(
@@ -357,11 +402,20 @@ async fn exercise_consumer(
         ..DirectoryPolicy::default()
     };
     let admitted = store
-        .admit_conversation_input_for_consumer(&actor, &draft, f.now, short)
+        .admit_conversation_input(&actor, &draft, f.now)
         .await?;
     let ConversationInputAdmission::Accepted(first) = admitted else {
         return Err("Expected fresh consumer".into());
     };
+    let candidate = chapchoo_persistence::ConversationInputCandidate {
+        id: first.id.clone(),
+        agent_id: f.agent.id.clone(),
+        conversation_id: conversation.into(),
+    };
+    let first_claim = store
+        .claim_conversation_input(&candidate, short)
+        .await?
+        .ok_or("Expected FIFO claim")?;
     // Real elapsed time is the database lease's contract at this boundary.
     tokio::time::sleep(std::time::Duration::from_millis(5)).await;
     assert!(matches!(
@@ -372,18 +426,48 @@ async fn exercise_consumer(
     ));
     assert_eq!(
         store
-            .renew_conversation_input_consumer(conversation, &first.id, DirectoryPolicy::default())
+            .renew_conversation_input_consumer(
+                conversation,
+                &first.id,
+                &first_claim.claim_id,
+                DirectoryPolicy::default(),
+            )
             .await?,
-        State::Error,
+        State::Absent,
         "Recovery reads must not renew an expired owner"
     );
+    store.expire_conversation_input_consumers().await?;
     assert_eq!(
         store
-            .renew_conversation_input_consumer(conversation, &first.id, DirectoryPolicy::default())
+            .conversation_input_queue_state(conversation, &first.id)
             .await?,
-        State::Error,
-        "Heartbeat cannot resurrect a failed attempt"
+        State::Pending,
+        "Pre-attempt expiry preserves the accepted message for rediscovery"
     );
+    let successor = store
+        .claim_conversation_input(&candidate, DirectoryPolicy::default())
+        .await?
+        .ok_or("Expected recovered claim")?;
+    assert_ne!(successor.claim_id, first_claim.claim_id);
+    assert_eq!(successor.receipt.text, first.text);
+    store
+        .release_conversation_input_claim(conversation, &first.id, &first_claim.claim_id, true)
+        .await?;
+    assert_eq!(
+        store
+            .renew_conversation_input_consumer(
+                conversation,
+                &first.id,
+                &successor.claim_id,
+                DirectoryPolicy::default(),
+            )
+            .await?,
+        State::Pending,
+        "A stale worker cannot fail or release its successor"
+    );
+    store
+        .release_conversation_input_claim(conversation, &first.id, &successor.claim_id, true)
+        .await?;
     let retry = RetryConversationInput {
         agent_id: f.agent.id.clone(),
         conversation_id: conversation.into(),
@@ -399,6 +483,7 @@ async fn exercise_consumer(
         return Err("Expected fresh retry consumer".into());
     };
     assert_eq!(replacement.text, first.text);
+    let replacement_claim = f.claim(store, conversation, &replacement.id).await?;
     store
         .fail_conversation_input(conversation, &first.id)
         .await?;
@@ -414,6 +499,7 @@ async fn exercise_consumer(
             .renew_conversation_input_consumer(
                 conversation,
                 &replacement.id,
+                &replacement_claim,
                 DirectoryPolicy::default()
             )
             .await?,
@@ -433,19 +519,50 @@ async fn exercise_consumer(
         ..draft
     };
     let ConversationInputAdmission::Accepted(orphan) = store
-        .admit_conversation_input_for_consumer(&actor, &orphan, f.now, short)
+        .admit_conversation_input(&actor, &orphan, f.now)
         .await?
     else {
         return Err("Expected fresh restart orphan".into());
     };
-    tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    let candidate = chapchoo_persistence::ConversationInputCandidate {
+        id: orphan.id.clone(),
+        ..candidate
+    };
+    let orphan_claim = store
+        .claim_conversation_input(
+            &candidate,
+            DirectoryPolicy {
+                component_validity_ms: 1_000,
+                ..DirectoryPolicy::default()
+            },
+        )
+        .await?
+        .ok_or("Expected orphan claim")?;
+    let route = store
+        .resolve_connector_route(&f.agent.computer.id)
+        .await?
+        .ok_or("Missing route")?;
+    store
+        .begin_conversation_input_preparation(
+            &actor,
+            &route,
+            &chapchoo_persistence::ConversationInputPreparation {
+                agent_id: &f.agent.id,
+                conversation_id: conversation,
+                operation_id: &orphan.id,
+            },
+            f.now,
+            &orphan_claim.claim_id,
+        )
+        .await?;
+    tokio::time::sleep(std::time::Duration::from_millis(1_005)).await;
     store.expire_conversation_input_consumers().await?;
     assert_eq!(
         store
             .conversation_input_queue_state(conversation, &orphan.id)
             .await?,
         State::Error,
-        "Independent reaping closes work whose process disappeared"
+        "Possible native work remains Error after process loss and is never replayed"
     );
     Ok(())
 }

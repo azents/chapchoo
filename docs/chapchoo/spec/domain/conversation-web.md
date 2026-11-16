@@ -256,8 +256,9 @@ precedence; replacement is restart to the user. During temporary read errors,
 stale reads, unknown current power or Connector disconnection, the same-source
 retained native foreground remains visible with only a spinner. Cold absence
 has an empty label plus spinner, not an invented internal state or generic
-checking caption. Retained presentation never restores Send, answer or Stop
-authority. Missing native
+checking caption. Retained presentation never restores account or native-control
+authority. Ordinary text submission is independently admitted before native
+readiness. Missing native
 observations alone do not prove a failed start. Reported native rejection or
 pre-launch failure names the harness (currently Codex) as failing to start; it
 does not invent token-expiry or network diagnoses. An unavailable saved source
@@ -317,14 +318,25 @@ not infer nonexecution. Original input text survives until actual Inserted/Steer
 pickup commits the ordinary user message and removes the queue item, or explicit
 deletion removes a failed item. Native history is not fabricated from queue rows.
 Steering does not manufacture a native message ID.
-An operational consumer error, including owner loss, is also an actionable
-failed queue item; it is not proof of physical non-delivery. A valid late native
+An operational consumer error or lost ownership after a possible-native grant
+is an actionable failed queue item; it is not proof of physical non-delivery.
+Safe pre-attempt readiness loss remains waiting rather than a failure.
+A valid late native
 success may still replace that retained item with its normal receipt.
 Readers send at most 25 exact known-input IDs per continuation, rotating cached
 IDs. A source-qualified absence removes that exact cached bubble;
 page omission alone does not. Each read owner serializes reads, and applies
 closures only to its admitted conversation/source without a permanent closure
 ledger.
+
+Stopped, starting, restoring and matching loading-source states do not disable
+ordinary composition or substitute a queue-specific placeholder. Send retains
+the normal Agent/message hint, editor behavior and acceptance-only draft clear.
+Current account/private owner/Team, fresh reader authority, matching conversation,
+deletion and missing selected AI authentication still fence submission. Native
+answers and current-work Stop retain their own running/connected exact-target
+admission; writable composition does not enable those effects. Cloud-only
+automatic Start remains server-owned, not a browser poll or extra Send.
 
 Confirmed failed outgoing inputs expose intentional retry and deletion actions.
 Retry calls the atomic server delete-then-requeue contract with a new Request ID.

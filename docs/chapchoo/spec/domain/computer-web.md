@@ -62,10 +62,14 @@ cancellation; Computer Stop/restart retain their own confirmation and power
 semantics. File attachment remains unconnected. No browser-persisted transcript,
 offline effect queue or mock settings are introduced.
 
-Computer status and controls remain real: completed running power, connected
-Connector, completed lifecycle and fresh owner reads permit text admission; these
-facts do not establish harness readiness or model success. Otherwise history stays
-readable and input is read-only.
+Computer status and controls remain real. Ordinary message submission depends
+on current owner/reader authority rather than completed power or Connector
+readiness: stopped, starting and restoring views keep the same composer and
+placeholder. [Durable input waiting](conversation-storage.md) owns deferred
+delivery and Cloud-only automatic Start. Native answers and current-work controls
+retain their separate running/connected exact-target restrictions; these facts
+still do not establish model success. Withdrawn/stale account or reader authority
+keeps history readable where allowed and disables new submission.
 Start uses backend eligibility; visible authenticated views automatically observe
 Computer state at the existing bounded interval (five seconds while pending,
 fifteen seconds when settled), with focus refresh and no full-page reload.

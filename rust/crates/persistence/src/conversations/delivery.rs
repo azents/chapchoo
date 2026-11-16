@@ -243,6 +243,7 @@ impl Store {
         expected: &crate::ResolvedRoute,
         draft: &ConversationOperationForwarding<'_>,
         now: i64,
+        claim_id: &str,
     ) -> Result<ConversationForwardingAdmission, StoreError> {
         let (agent, id, operation_id) = ids(draft)?;
         operation!(self, |connection, dialect| {
@@ -261,9 +262,10 @@ impl Store {
                     previous.delivery()?,
                 ));
             }
-            if row.source_state != "READY" || owner.desired_state == "DELETING" {
+            if row.source_state != "READY" || owner.desired_state != "RUNNING" {
                 return Err(StoreError::InvalidTransition);
             }
+            super::input_queue::require_consumer!(connection, dialect, operation_id, claim_id);
             #[derive(diesel::QueryableByName)]
             struct AppliedProject {
                 #[diesel(sql_type=Text)]
@@ -328,7 +330,7 @@ impl Store {
             {
                 return Err(StoreError::Conflict);
             }
-            super::input_queue::require_consumer!(connection, dialect, operation_id);
+            super::input_queue::require_consumer!(connection, dialect, operation_id, claim_id);
             diesel::sql_query(dialect.query("INSERT INTO conversation_input_delivery(operation_id,execution_id,source_snapshot,native_session_id,delivery_state) VALUES(?,?,?,?,'POSSIBLE')"))
                 .bind::<IdentitySql,_>(operation_id).bind::<IdentitySql,_>(route._execution_id)
                 .bind::<Text,_>(draft.target.snapshot.as_str()).bind::<Text,_>(draft.target.native_session.as_str())

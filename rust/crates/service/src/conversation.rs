@@ -6,6 +6,7 @@ pub use answer_owner::{
     ConversationAnswerFuture, ConversationAnswerProcessor, ConversationAnswerService,
 };
 mod input_consumer;
+mod input_dispatcher;
 mod input_owner;
 mod input_work;
 mod messages;
@@ -213,10 +214,11 @@ impl ConversationService {
         route: &chapchoo_persistence::ResolvedRoute,
         draft: &chapchoo_persistence::ConversationInputPreparation<'_>,
         now: i64,
+        claim_id: &str,
     ) -> Result<chapchoo_persistence::ConversationPreparationAdmission, ServiceError> {
         Ok(self
             .store
-            .begin_conversation_input_preparation(actor, route, draft, now)
+            .begin_conversation_input_preparation(actor, route, draft, now, claim_id)
             .await?)
     }
     pub async fn connection_startup(
@@ -276,10 +278,11 @@ impl ConversationService {
         route: &chapchoo_persistence::ResolvedRoute,
         draft: &chapchoo_persistence::ConversationOperationForwarding<'_>,
         now: i64,
+        claim_id: &str,
     ) -> Result<chapchoo_persistence::ConversationForwardingAdmission, ServiceError> {
         Ok(self
             .store
-            .begin_conversation_input_forwarding(actor, route, draft, now)
+            .begin_conversation_input_forwarding(actor, route, draft, now, claim_id)
             .await?)
     }
     pub async fn input_chunk(

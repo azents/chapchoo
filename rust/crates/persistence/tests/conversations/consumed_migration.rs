@@ -54,6 +54,10 @@ async fn exercise(
         snapshot: snapshot.clone(),
         native_session: native,
     };
+    // Historical unresolved work is retained as Error, not a live FIFO worker.
+    store
+        .fail_conversation_input(&first.conversation_id, &first.id)
+        .await?;
     let mut rows = Vec::new();
     for name in [
         "legacy-inserted",
@@ -77,6 +81,7 @@ async fn exercise(
             .await?;
         instructions_fixture::apply(
             store,
+            f,
             &owner,
             &route,
             &source,
@@ -100,7 +105,28 @@ async fn exercise(
                     target: &target,
                 },
                 f.now,
+                &f.claim(
+                    store,
+                    (ConversationOperationForwarding {
+                        agent_id: &f.agent.id,
+                        conversation_id: &first.conversation_id,
+                        operation_id: &receipt.id,
+                        target: &target,
+                    })
+                    .conversation_id,
+                    (ConversationOperationForwarding {
+                        agent_id: &f.agent.id,
+                        conversation_id: &first.conversation_id,
+                        operation_id: &receipt.id,
+                        target: &target,
+                    })
+                    .operation_id,
+                )
+                .await?,
             )
+            .await?;
+        store
+            .fail_conversation_input(&receipt.conversation_id, &receipt.id)
             .await?;
         rows.push(receipt);
     }
@@ -188,6 +214,7 @@ async fn exercise(
         if name != "late-insert" {
             instructions_fixture::apply(
                 store,
+                f,
                 &owner,
                 &route,
                 &source,
@@ -211,6 +238,24 @@ async fn exercise(
                         target: &target,
                     },
                     f.now,
+                    &f.claim(
+                        store,
+                        (ConversationOperationForwarding {
+                            agent_id: &f.agent.id,
+                            conversation_id: &first.conversation_id,
+                            operation_id: &receipt.id,
+                            target: &target,
+                        })
+                        .conversation_id,
+                        (ConversationOperationForwarding {
+                            agent_id: &f.agent.id,
+                            conversation_id: &first.conversation_id,
+                            operation_id: &receipt.id,
+                            target: &target,
+                        })
+                        .operation_id,
+                    )
+                    .await?,
                 )
                 .await?;
         }

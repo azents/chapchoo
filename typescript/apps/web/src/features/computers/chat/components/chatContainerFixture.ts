@@ -85,3 +85,38 @@ export const containerFailure: ChatInput = {
     latestInput: { requestId: "failed-request", observation: "failed" },
   },
 };
+
+export type DeferredComputerState = "stopped" | "starting" | "restoring";
+export function deferredContainerInput(
+  state: DeferredComputerState,
+): ChatInput {
+  if (containerInput.initial.type !== "detail") {
+    throw new Error("Deferred fixture requires Agent detail");
+  }
+  const stopped = state === "stopped";
+  return {
+    ...containerInput,
+    initial: {
+      ...containerInput.initial,
+      agent: {
+        ...containerInput.initial.agent,
+        computer: {
+          ...containerInput.initial.agent.computer,
+          operation: stopped ? "stop" : "start",
+          intent: stopped ? "stopped" : "running",
+          power: stopped ? "stopped" : "unknown",
+          lastKnownPower: "stopped",
+          phase: stopped ? "completed" : "starting",
+          connector: "disconnected",
+        },
+      },
+    },
+    initialConversation: {
+      ...containerInput.initialConversation,
+      header: {
+        ...containerInput.initialConversation.header,
+        state: state === "restoring" ? "loading" : "ready",
+      },
+    },
+  };
+}

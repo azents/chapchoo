@@ -64,7 +64,14 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
         .ok_or("Missing route")?;
     assert!(matches!(
         store
-            .begin_conversation_input_preparation(&actor, &route, &draft, f.now)
+            .begin_conversation_input_preparation(
+                &actor,
+                &route,
+                &draft,
+                f.now,
+                &f.claim(store, draft.conversation_id, draft.operation_id)
+                    .await?
+            )
             .await?,
         ConversationPreparationAdmission::Granted { .. }
     ));
@@ -179,7 +186,14 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
     assert!(
         matches!(
             store
-                .begin_conversation_input_forwarding(&actor, &route, &forwarding, f.now)
+                .begin_conversation_input_forwarding(
+                    &actor,
+                    &route,
+                    &forwarding,
+                    f.now,
+                    &f.claim(store, forwarding.conversation_id, forwarding.operation_id)
+                        .await?
+                )
                 .await,
             Err(StoreError::InvalidTransition)
         ),
@@ -198,7 +212,14 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
     assert!(
         matches!(
             store
-                .begin_conversation_input_forwarding(&actor, &route, &forwarding, f.now)
+                .begin_conversation_input_forwarding(
+                    &actor,
+                    &route,
+                    &forwarding,
+                    f.now,
+                    &f.claim(store, forwarding.conversation_id, forwarding.operation_id)
+                        .await?
+                )
                 .await,
             Err(StoreError::InvalidTransition)
         ),
@@ -208,7 +229,14 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
         .save_system_prompt(&actor, &f.agent.id, original, f.now)
         .await?;
     store
-        .begin_conversation_input_forwarding(&actor, &route, &forwarding, f.now)
+        .begin_conversation_input_forwarding(
+            &actor,
+            &route,
+            &forwarding,
+            f.now,
+            &f.claim(store, forwarding.conversation_id, forwarding.operation_id)
+                .await?,
+        )
         .await?;
     store
         .save_system_prompt(&actor, &f.agent.id, "saved after effect grant", f.now)
@@ -216,7 +244,14 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
     assert!(
         matches!(
             store
-                .begin_conversation_input_forwarding(&actor, &route, &forwarding, f.now)
+                .begin_conversation_input_forwarding(
+                    &actor,
+                    &route,
+                    &forwarding,
+                    f.now,
+                    &f.claim(store, forwarding.conversation_id, forwarding.operation_id)
+                        .await?
+                )
                 .await?,
             chapchoo_persistence::ConversationForwardingAdmission::Existing(
                 chapchoo_persistence::ConversationInputDelivery::PossibleForwarding
@@ -307,7 +342,14 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
             operation_id: &input.id,
         };
         store
-            .begin_conversation_input_preparation(&actor, &route, &next, f.now + 4)
+            .begin_conversation_input_preparation(
+                &actor,
+                &route,
+                &next,
+                f.now + 4,
+                &f.claim(store, next.conversation_id, next.operation_id)
+                    .await?,
+            )
             .await?;
         assert!(
             store
@@ -379,10 +421,22 @@ async fn exercise_forwarding_save_race(
         operation_id: &input.id,
         target,
     };
-    instructions_fixture::apply(store, &actor, &route, &f.source(&key), &forwarding, f.now).await?;
+    instructions_fixture::apply(
+        store,
+        f,
+        &actor,
+        &route,
+        &f.source(&key),
+        &forwarding,
+        f.now,
+    )
+    .await?;
+    let claim = f
+        .claim(store, forwarding.conversation_id, forwarding.operation_id)
+        .await?;
     let (saved, admission) = tokio::join!(
         store.save_system_prompt(&actor, &f.agent.id, "racing save", f.now),
-        store.begin_conversation_input_forwarding(&actor, &route, &forwarding, f.now),
+        store.begin_conversation_input_forwarding(&actor, &route, &forwarding, f.now, &claim),
     );
     saved?;
     assert_eq!(
@@ -393,7 +447,14 @@ async fn exercise_forwarding_save_race(
         Ok(chapchoo_persistence::ConversationForwardingAdmission::Granted(_)) => {
             assert!(matches!(
                 store
-                    .begin_conversation_input_forwarding(&actor, &route, &forwarding, f.now)
+                    .begin_conversation_input_forwarding(
+                        &actor,
+                        &route,
+                        &forwarding,
+                        f.now,
+                        &f.claim(store, forwarding.conversation_id, forwarding.operation_id)
+                            .await?
+                    )
                     .await?,
                 chapchoo_persistence::ConversationForwardingAdmission::Existing(
                     chapchoo_persistence::ConversationInputDelivery::PossibleForwarding
@@ -415,7 +476,14 @@ async fn exercise_forwarding_save_race(
             );
             assert!(matches!(
                 store
-                    .begin_conversation_input_forwarding(&actor, &route, &forwarding, f.now)
+                    .begin_conversation_input_forwarding(
+                        &actor,
+                        &route,
+                        &forwarding,
+                        f.now,
+                        &f.claim(store, forwarding.conversation_id, forwarding.operation_id)
+                            .await?
+                    )
                     .await,
                 Err(StoreError::InvalidTransition)
             ));
@@ -446,6 +514,7 @@ async fn exercise_forwarding_save_race(
 macro_rules! verify_latest_prompt_migration {
     ($connection:expr, $migrations:expr) => {{
         let connection = &mut *$connection;
+        isolate_pre_waiting_migration!(connection, $migrations);
         assert_eq!(connection.revert_last_migration($migrations)?.to_string(), "00000000000026");
         let duplicate = "INSERT INTO project_instruction_evidence(operation_id,agent_id,conversation_id,execution_id,sources_json,rendered_document,owner_content,tool_catalog,created_at,applied_snapshot,applied_native_session,applied_at) SELECT i.id,e.agent_id,e.conversation_id,e.execution_id,e.sources_json,e.rendered_document,e.owner_content,e.tool_catalog,e.created_at+10000,e.applied_snapshot,e.applied_native_session,e.applied_at FROM project_instruction_evidence e JOIN conversation_inputs i ON i.conversation_id=e.conversation_id AND i.id<>e.operation_id LIMIT 1";
         assert_eq!(diesel::sql_query(duplicate).execute(connection)?, 1);
@@ -464,6 +533,7 @@ macro_rules! verify_latest_prompt_migration {
         assert_eq!(current.content, "");
         assert!(diesel::sql_query(duplicate).execute(connection).is_err());
         // A pending or absent causal selection must not keep a timestamp fallback.
+        isolate_pre_waiting_migration!(connection, $migrations);
         connection.revert_last_migration($migrations)?;
         connection.batch_execute("UPDATE conversations SET current_preparation_operation_id=NULL")?;
         connection.run_pending_migrations($migrations)?;

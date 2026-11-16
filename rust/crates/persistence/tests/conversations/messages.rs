@@ -28,9 +28,17 @@ async fn pickup(
         operation_id: &input.id,
         target: &target,
     };
-    instructions_fixture::apply(store, &actor, &route, &f.source(&key), &operation, f.now).await?;
+    instructions_fixture::apply(store, f, &actor, &route, &f.source(&key), &operation, f.now)
+        .await?;
     store
-        .begin_conversation_input_forwarding(&actor, &route, &operation, f.now)
+        .begin_conversation_input_forwarding(
+            &actor,
+            &route,
+            &operation,
+            f.now,
+            &f.claim(store, operation.conversation_id, operation.operation_id)
+                .await?,
+        )
         .await?;
     store
         .complete_conversation_input_forwarding(
@@ -263,6 +271,7 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<String, TestError> {
     let mut tasks = tokio::task::JoinSet::new();
     let actor = Arc::new(actor);
     let key = Arc::new(key);
+    let input_lane = Arc::new(tokio::sync::Mutex::new(()));
     for index in 0..8 {
         let store = store.clone();
         let actor = actor.clone();
@@ -276,10 +285,14 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<String, TestError> {
         let control = f.control.clone();
         let connection = f.connection.clone();
         let now = f.now;
+        let input_lane = input_lane.clone();
         tasks.spawn(async move {
             let text = ConversationText::parse("Intentionally repeated body".into())
                 .map_err(|_| StoreError::InvalidInput)?;
             if index % 2 == 0 {
+                // Input delivery is FIFO; assistant publications still race
+                // with its successful writes to the shared receipt allocator.
+                let _input_turn = input_lane.lock().await;
                 let input = store
                     .accept_conversation_input(
                         &actor,
@@ -307,8 +320,25 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<String, TestError> {
                     operation_id: &input.id,
                     target: &target,
                 };
+                let claimed = store
+                    .claim_conversation_input(
+                        &chapchoo_persistence::ConversationInputCandidate {
+                            id: input.id.clone(),
+                            agent_id: agent.clone(),
+                            conversation_id: conversation.clone(),
+                        },
+                        DirectoryPolicy::default(),
+                    )
+                    .await?
+                    .ok_or(StoreError::InvalidTransition)?;
                 store
-                    .begin_conversation_input_forwarding(&actor, &route, &operation, now)
+                    .begin_conversation_input_forwarding(
+                        &actor,
+                        &route,
+                        &operation,
+                        now,
+                        &claimed.claim_id,
+                    )
                     .await?;
                 store
                     .complete_conversation_input_forwarding(
@@ -549,9 +579,25 @@ async fn exercise_delivery_retention(
         operation_id: &failed.id,
         ..forwarding
     };
-    instructions_fixture::apply(store, &owner, &route, &f.source(&key), &forwarding, f.now).await?;
+    instructions_fixture::apply(
+        store,
+        f,
+        &owner,
+        &route,
+        &f.source(&key),
+        &forwarding,
+        f.now,
+    )
+    .await?;
     store
-        .begin_conversation_input_forwarding(&owner, &route, &forwarding, f.now)
+        .begin_conversation_input_forwarding(
+            &owner,
+            &route,
+            &forwarding,
+            f.now,
+            &f.claim(store, forwarding.conversation_id, forwarding.operation_id)
+                .await?,
+        )
         .await?;
     store
         .complete_conversation_input_forwarding(

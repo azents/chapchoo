@@ -260,7 +260,15 @@ export async function nativeConversation(
       holdWork: async (): Promise<() => Promise<void>> => {
         const target = await docker.current();
         await docker.holdConversationWork(target);
-        return (): Promise<void> => docker.releaseConversationWork(target);
+        return async (): Promise<void> => {
+          const current = await docker.current();
+          if (current.volume !== target.volume) {
+            throw new Error(
+              "Conversation work barrier lost its original saved volume",
+            );
+          }
+          await docker.releaseConversationWork(current);
+        };
       },
       diagnostics: async () => {
         const current = await call(

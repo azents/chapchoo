@@ -70,16 +70,26 @@ exists; changed input under that request conflicts. Receipt recovery never
 dispatches native work or establishes native acceptance. Missing/replaced
 evidence does not prove non-delivery or authorize automatic resend.
 
-`NOT_STARTED`, `LOADING` and `READY` source states have distinct admission rules.
-A not-started input can bind to initial setup; a bound input retains its exact
-snapshot target. When no input is currently pending, a not-started input may join
-a startup-owned loading source or its matching ready source without changing
-its original target. Another concurrent pending not-started input cannot use
-that exception. Other loading sources reject new input, while an already
-accepted receipt may still be read. After consumed-input removal this is not
-a historical first-request counter: another explicit submission can be admitted,
-but setup still uses the exact independently retained source and cannot grant a
-fresh native context from input absence.
+`NOT_STARTED`, `LOADING` and `READY` source states retain their source authority.
+Matching loading-source submissions enter durable waiting. Several not-started
+inputs can join the same initial input/startup binding without changing their
+original submitted targets. First binding preserves those inputs; an unrelated
+source replacement keeps its existing terminal boundary. Input absence never
+grants a fresh native context or substitutes another snapshot.
+
+New inputs retain readiness-waiting state, conversation-local FIFO order, a
+nonsecret submitting-session reference and any qualified Cloud wake predecessor
+on the existing outgoing row. A bounded service dispatcher rediscovers them
+without a browser request, including after restart. Claim admission requires the
+current session/private owner/Team and desired-running Computer. Every earlier
+PENDING input blocks a later claim, including historical NULL-order inputs;
+Error rows do not block later eligible messages. Session expiry/revocation or
+observed owner/Team withdrawal ends waiting as Error. Restoration of authority
+does not implicitly retry that retained failure.
+
+Session rotation follows that bound session's current credential under the
+canonical User lock. The queue stores neither a bearer nor a credential digest;
+lookup-time token snapshots are not deferred effect authority.
 
 Native forwarding has a separate durable boundary. The Store revalidates private
 owner admission and the exact resolved Connector route without requiring its
@@ -96,14 +106,19 @@ without a second message. Actual native session/captured history remains
 independent. A reported failure retains the outgoing item and its error; no
 automatic retry follows. Unresolved physical delivery is not proof of rollback.
 
-Queue PENDING/ERROR is a consumer-attempt observation, separate from native
-delivery evidence. Only newly admitted processing renews the existing row's
-database-time lease, using the configured component validity and heartbeat.
-Existing recovery never renews or dispatches. Processor return/error closes
-the attempt, while panic or process loss stops its co-owned renewal and an
-independent reaper expires orphaned PENDING rows. A renewed lease cannot
-resurrect an expired/error row. Exact input identity isolates old finalization
-from a manual replacement. Connector AttemptError requires authenticated current
+Queue PENDING/ERROR and readiness waiting are separate from native delivery
+evidence. A claim owns a fresh opaque identity and database-time lease, using
+the configured component validity and heartbeat. Renew/release and new native
+setup/forwarding grants compare that exact identity; a stale worker cannot borrow
+a successor's lease. Existing receipt reads never renew or dispatch. A safe
+readiness return or expired claim before any input-owned possible-native fact
+returns to waiting. A committed setup/forwarding possibility, genuine processor
+failure or uncertain native result retains Error and cannot be automatically
+replayed. Startup-owned setup observations are not input-owned attempt facts.
+Panic/process loss stops co-owned renewal; a bounded independent reaper applies
+the same pre-attempt/possible-native distinction under input locks. Exact input
+identity isolates old finalization from manual replacement.
+Connector AttemptError requires authenticated current
 source/target and the operation's existing forwarding fact; it records queue
 error without manufacturing native nonexecution. Valid late success can still
 consume a retained errored row. No model-task deadline or automatic retry is
@@ -190,12 +205,29 @@ ordinary Chat receipts and retained outgoing bodies are preserved.
 
 The Store distinguishes newly accepted input from exact receipt recovery in its
 completed admission transaction. `ConversationInputService` reserves a bounded
-process task and byte budget before that admission. New input returns a small
-acceptance reference before its composition-supplied processor completes; the
-full submitted body is not part of that response. Browser waiter loss cannot
-cancel the task. Existing receipts, including those read by a fresh server owner,
-do not invoke the processor again. Lookup reports local ownership without
-dispatching or claiming non-delivery from its absence.
+process task and byte budget before short durable admission, then releases that
+reservation. Acceptance returns a small reference, not the full body or native
+success. The service-owned dispatcher scans at most 32 metadata candidates per
+one-second pass with a wrapping keyset cursor and a frozen metadata-only upper
+input-ID frontier per finite scan. Continuous arrivals cannot postpone revisiting
+earlier readiness waiting. It reserves existing task/body capacity before claiming
+and loading original text, then co-owns processing and renewal. Saturated delivery
+capacity skips further body claims for that pass while every remaining metadata
+candidate still receives its independent wake examination. Only an issued claim invokes the composition-supplied processor.
+Receipt lookup reports local ownership without dispatching or interpreting
+absence as non-delivery. Service shutdown stops rediscovery before draining owned
+processing and reaper failures.
+
+Sending to a stopped canonical Cloud Computer captures its exact lifecycle
+predecessor and a stable input-owned wake identity. Wake examination is independent
+of delivery FIFO, so a genuinely new message can wake older retained backlog.
+The shared [lifecycle transaction](computer-lifecycle.md) revalidates the bound
+input, current session and ownership after its locks, using fresh DB time before
+new Start intent. A lost wake settlement recovers the same admitted request or
+exact active-Stop target update. A newer explicit Stop withdraws older wake
+permission; workers never replace a captured predecessor with the latest Stop.
+Local never receives automatic Start authority. Physical startup/restoration
+still belongs to existing lifecycle reconciliation.
 
 The owner bounds each input to 16 MiB and aggregate retained input bytes to
 32 MiB, independently of task capacity. Capacity survives short acceptance and
@@ -238,9 +270,9 @@ already recorded Chat or native transcript records.
 Explicit Retry names the original item and a fresh request ID. In one transaction
 it verifies the original failure, reads its exact text, deletes the old item and
 registers a fresh operation. A failed insertion rolls back the deletion too.
-The replacement is handed to the same bounded consumer only for fresh admission;
-recovery of the still-present replacement returns its acceptance without another
-dispatch. Competing replacements for one original yield at most one new item.
+The replacement enters the same durable waiting/FIFO lifecycle at a fresh
+ordering position; receipt recovery adds no claim or wake authority. Competing
+replacements for one original yield at most one new item.
 The optional replacement-origin ID belongs only to the new pending row and
 disappears with it; it is not a retained result for the removed item.
 
@@ -249,6 +281,11 @@ independently of the page anchor. Exact absence hints close removed rows even
 outside the current page. Queue text remains readable while its exact native
 source is loading, independently of native history readiness. Downgrade to
 admission-time Chat refuses outgoing bodies without their matching old receipts.
+
+Migration 27 preserves existing original bytes, identities and native facts.
+Historical inputs receive no submitting-session/wake/claim authority and are not
+promoted to new waiting work. Both engines refuse downgrade while new live
+waiting/session/wake/claim metadata would be lost.
 
 The concrete internal Control processor uses current owner/Computer authority and
 PeerDelivery, obtains setup admission once, then sends only the sealed small setup

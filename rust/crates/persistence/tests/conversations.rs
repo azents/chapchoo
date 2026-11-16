@@ -1,8 +1,31 @@
 // Isolate historical migration tests after proving retained instruction evidence
 // prevents downgrade. Cleanup affects only this fixture's synthetic selections.
+macro_rules! isolate_pre_waiting_migration {
+    ($connection:expr,$migrations:expr) => {{
+        let connection = &mut *$connection;
+        if connection.applied_migrations()?.iter()
+            .any(|version| version.to_string() == "00000000000027") {
+            #[derive(diesel::QueryableByName)]
+            struct WaitingCount {
+                #[diesel(sql_type=diesel::sql_types::BigInt)]
+                n: i64,
+            }
+            let n = diesel::sql_query("SELECT CAST(count(*) AS BIGINT) AS n FROM conversation_inputs WHERE readiness_waiting=TRUE OR consumer_claim_id IS NOT NULL OR wake_predecessor IS NOT NULL OR submitting_session_id IS NOT NULL")
+                .get_result::<WaitingCount>(connection)?.n;
+            if n > 0 {
+                assert!(connection.revert_last_migration($migrations).is_err(),
+                    "Live deferred input authority must prevent downgrade");
+                connection.batch_execute("UPDATE conversation_inputs SET readiness_waiting=FALSE,consumer_claim_id=NULL,wake_predecessor=NULL,submitting_session_id=NULL")?;
+            }
+            assert_eq!(connection.revert_last_migration($migrations)?.to_string(), "00000000000027");
+        }
+    }};
+}
+
 macro_rules! isolate_pre_instructions_migration {
     ($connection:expr,$migrations:expr) => {{
         let connection = &mut *$connection;
+        isolate_pre_waiting_migration!(connection, $migrations);
         if connection.applied_migrations()?.iter()
             .any(|version| version.to_string() == "00000000000026") {
             assert_eq!(connection.revert_last_migration($migrations)?.to_string(), "00000000000026");
@@ -127,6 +150,8 @@ mod startup;
 mod support;
 #[path = "conversations/system_prompts.rs"]
 mod system_prompts;
+#[path = "conversations/waiting.rs"]
+mod waiting;
 
 use base64::{Engine, engine::general_purpose::URL_SAFE};
 use chapchoo_crypto::{
@@ -189,8 +214,33 @@ struct Fixture {
     connection: String,
     connector: BearerSecret,
     now: i64,
+    claims: tokio::sync::Mutex<std::collections::HashMap<String, String>>,
 }
 impl Fixture {
+    /// Retain only identities issued to this fixture through real FIFO admission.
+    async fn claim(
+        &self,
+        store: &Store,
+        conversation: &str,
+        input: &str,
+    ) -> Result<String, StoreError> {
+        let mut claims = self.claims.lock().await;
+        if let Some(claim) = claims.get(input) {
+            return Ok(claim.clone());
+        }
+        let candidate = chapchoo_persistence::ConversationInputCandidate {
+            id: input.to_owned(),
+            agent_id: self.agent.id.clone(),
+            conversation_id: conversation.to_owned(),
+        };
+        let claimed = store
+            .claim_conversation_input(&candidate, DirectoryPolicy::default())
+            .await?
+            .ok_or(StoreError::InvalidTransition)?;
+        claims.insert(input.to_owned(), claimed.claim_id.clone());
+        Ok(claimed.claim_id)
+    }
+
     fn source<'a>(&'a self, key: &'a chapchoo_crypto::SecretDigest) -> ConnectorSource<'a> {
         ConnectorSource {
             session_id: &self.session,
@@ -460,6 +510,7 @@ async fn fixture(store: &Store) -> Result<Fixture, TestError> {
         connection: prepared.owner.connection_id,
         connector: key.token,
         now,
+        claims: tokio::sync::Mutex::new(std::collections::HashMap::new()),
     })
 }
 
@@ -535,6 +586,7 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
         f.agent.computer.current_request_id
     );
 
+    preparation::rejected_initial_recovery(store, f).await?;
     let draft = AcceptConversationInput {
         agent_id: f.agent.id.clone(),
         conversation_id: None,
@@ -631,10 +683,10 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
         target: ConversationTarget::Snapshot(s1.clone()),
         text: ConversationText::parse("next".to_owned())?,
     };
-    assert!(matches!(
-        store.accept_conversation_input(&owner, &fresh, f.now).await,
-        Err(StoreError::InvalidTransition)
-    ));
+    let loading_input = store
+        .accept_conversation_input(&owner, &fresh, f.now)
+        .await?;
+    assert_eq!(loading_input.text, fresh.text);
     let pair = CapturedEventPair {
         snapshot: s1.clone(),
         position: position(1, "z-first")?,
@@ -707,9 +759,14 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
             .source,
         ConversationSource::Ready { .. }
     ));
-    store
-        .accept_conversation_input(&owner, &fresh, f.now)
-        .await?;
+    assert_eq!(
+        store
+            .accept_conversation_input(&owner, &fresh, f.now)
+            .await?
+            .id,
+        loading_input.id,
+        "Ready recovery must preserve the exact input accepted while loading"
+    );
     let second = CapturedEventPair {
         snapshot: s1.clone(),
         position: position(2, "a-second")?,

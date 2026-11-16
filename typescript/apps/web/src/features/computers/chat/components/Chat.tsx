@@ -272,6 +272,7 @@ export function Chat(props: ChatProps): ReactElement {
                   messages={props.messages}
                   copy={c}
                   writable={props.writable}
+                  nativeWritable={props.nativeWritable}
                   agentName={agent.name}
                   agentProfile={{
                     basePath: p.basePath,

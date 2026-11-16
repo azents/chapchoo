@@ -207,6 +207,10 @@ pub struct LifecycleRequest {
     pub expected_request_id: String,
     pub action: LifecycleAction,
 }
+pub(crate) enum LifecycleAuthority<'a> {
+    Owner { actor: &'a SecretDigest, now: i64 },
+    WaitingInput(&'a str),
+}
 impl fmt::Debug for LifecycleRequest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("LifecycleRequest([REDACTED])")
@@ -1138,6 +1142,23 @@ impl Store {
         request: &LifecycleRequest,
         now: i64,
     ) -> Result<AgentSummary, StoreError> {
+        self.admit_lifecycle(agent_id, request, LifecycleAuthority::Owner { actor, now })
+            .await
+    }
+
+    pub(crate) async fn admit_lifecycle(
+        &self,
+        agent_id: &str,
+        request: &LifecycleRequest,
+        authority: LifecycleAuthority<'_>,
+    ) -> Result<AgentSummary, StoreError> {
+        let queued_input = match authority {
+            LifecycleAuthority::Owner { .. } => None,
+            LifecycleAuthority::WaitingInput(value) => Some(EntityId::from_dto(
+                EntityKind::ConversationOperation,
+                value,
+            )?),
+        };
         if !valid_id(agent_id)
             || !valid_id(&request.request_id)
             || !valid_id(&request.expected_request_id)
@@ -1154,6 +1175,32 @@ impl Store {
             ],
         );
         operation!(self, |connection, dialect| {
+            let admitted: Result<AgentSummary, StoreError> = async {
+            let (queued_actor, now) = if let Some(input) = queued_input {
+                #[derive(diesel::QueryableByName)]
+                struct InitialActor { #[diesel(sql_type=Nullable<IdentitySql>)] user_id: Option<EntityId> }
+                let bound = diesel::sql_query(dialect.query("SELECT s.user_id FROM conversation_inputs i LEFT JOIN auth_sessions s ON s.id=i.submitting_session_id WHERE i.id=?"))
+                    .bind::<IdentitySql,_>(input)
+                    .get_result::<InitialActor>(connection).await.optional()?.ok_or(StoreError::InvalidTransition)?;
+                let user_id = bound.user_id.ok_or(StoreError::Unauthenticated)?;
+                diesel::sql_query(dialect.query(dialect.user_lock())).bind::<IdentitySql,_>(user_id)
+                    .get_result::<crate::models::UserRow>(connection).await.optional()?.ok_or(StoreError::Unauthenticated)?;
+                let now = crate::directory::database_now!(connection, dialect);
+                #[derive(diesel::QueryableByName)]
+                struct InitialProof { #[diesel(sql_type=Binary)] current_hash: Vec<u8> }
+                let proof = diesel::sql_query(dialect.query("SELECT s.current_hash FROM conversation_inputs i JOIN auth_sessions s ON s.id=i.submitting_session_id WHERE i.id=? AND s.user_id=? AND s.revoked_at IS NULL AND s.expires_at>?"))
+                    .bind::<IdentitySql,_>(input).bind::<IdentitySql,_>(user_id).bind::<BigInt,_>(now)
+                    .get_result::<InitialProof>(connection).await.optional()?.ok_or(StoreError::Unauthenticated)?;
+                (Some(SecretDigest::from_bytes(proof.current_hash.as_slice().try_into().map_err(|_|StoreError::Integrity)?)), now)
+            } else {
+                let LifecycleAuthority::Owner { now, .. } = authority else { return Err(StoreError::Integrity); };
+                (None, now)
+            };
+            let actor = match (&authority, queued_actor.as_ref()) {
+                (LifecycleAuthority::Owner { actor, .. }, None) => *actor,
+                (LifecycleAuthority::WaitingInput(_), Some(actor)) => actor,
+                _ => return Err(StoreError::Integrity),
+            };
             let user = authenticate!(connection, dialect, actor, now);
             lock_owned_agent_team!(connection, dialect, agent_id, &user.id);
             let query = format!("{} WHERE a.id=? AND a.owner_user_id=?", agent_query());
@@ -1194,6 +1241,33 @@ impl Store {
             if current.kind != "CLOUD" || current.desired_state == "DELETING" {
                 return Err(StoreError::InvalidTransition);
             }
+            let now = if let Some(input) = queued_input {
+                #[derive(diesel::QueryableByName)]
+                struct InputFence { #[diesel(sql_type=IdentitySql)] _id: EntityId }
+                let fence = match dialect {
+                    Dialect::Postgres => "SELECT i.id AS _id FROM conversation_inputs i JOIN conversations c ON c.id=i.conversation_id WHERE i.id=? AND c.agent_id=? AND i.queue_state='PENDING' AND i.wake_predecessor=? FOR UPDATE OF i",
+                    Dialect::Sqlite => "SELECT i.id AS _id FROM conversation_inputs i JOIN conversations c ON c.id=i.conversation_id WHERE i.id=? AND c.agent_id=? AND i.queue_state='PENDING' AND i.wake_predecessor=?",
+                };
+                diesel::sql_query(dialect.query(fence))
+                    .bind::<IdentitySql,_>(input)
+                    .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Agent, agent_id)?)
+                    .bind::<Text,_>(&request.expected_request_id)
+                    .get_result::<InputFence>(connection).await.optional()?.ok_or(StoreError::InvalidTransition)?;
+                // A lock wait can outlive lookup-time authority. Re-read the
+                // bound session and DB time before granting this input's Start.
+                let now = crate::directory::database_now!(connection, dialect);
+                #[derive(diesel::QueryableByName)]
+                struct WakeActor { #[diesel(sql_type=Binary)] current_hash: Vec<u8> }
+                let proof = diesel::sql_query(dialect.query("SELECT s.current_hash FROM conversation_inputs i JOIN auth_sessions s ON s.id=i.submitting_session_id WHERE i.id=? AND s.revoked_at IS NULL AND s.expires_at>?"))
+                    .bind::<IdentitySql,_>(input).bind::<BigInt,_>(now)
+                    .get_result::<WakeActor>(connection).await.optional()?.ok_or(StoreError::Unauthenticated)?;
+                let proof = SecretDigest::from_bytes(proof.current_hash.as_slice().try_into().map_err(|_|StoreError::Integrity)?);
+                let current_user = authenticate!(connection, dialect, &proof, now);
+                if current_user.id != user.id { return Err(StoreError::NotFound); }
+                now
+            } else {
+                now
+            };
             let action = LifecycleAction::from_str(&current.current_action)
                 .map_err(|_| StoreError::Integrity)?;
             let phase = LifecyclePhase::from_str(&current.current_phase)
@@ -1306,7 +1380,21 @@ impl Store {
                 .get_result::<AgentComputerRow>(connection)
                 .await?
                 .summary(now)
-        })
+            }.await;
+            match admitted {
+                Err(error @ (StoreError::Unauthenticated | StoreError::NotFound))
+                    if queued_input.is_some() =>
+                {
+                    diesel::sql_query(dialect.query("UPDATE conversation_inputs SET queue_state='ERROR',wake_predecessor=NULL WHERE id=? AND readiness_waiting=TRUE AND queue_state='PENDING' AND conversation_id IN (SELECT id FROM conversations WHERE agent_id=?)"))
+                        .bind::<Nullable<IdentitySql>,_>(queued_input)
+                        .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Agent, agent_id)?)
+                        .execute(connection).await?;
+                    Ok(Err(error))
+                }
+                Ok(value) => Ok(Ok(value)),
+                Err(error) => Err(error),
+            }
+        })?
     }
 
     pub async fn force_remove_agent(

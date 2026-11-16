@@ -1,0 +1,10 @@
+CREATE TEMP TABLE waiting_input_downgrade_guard(n BIGINT CHECK(n=0));
+INSERT INTO waiting_input_downgrade_guard SELECT count(*) FROM conversation_inputs WHERE submitting_session_id IS NOT NULL OR readiness_waiting OR consumer_claim_id IS NOT NULL OR wake_predecessor IS NOT NULL;
+DROP TABLE waiting_input_downgrade_guard;
+DROP INDEX conversation_input_order;
+DROP INDEX conversation_input_waiting;
+ALTER TABLE conversation_inputs DROP COLUMN consumer_claim_id;
+ALTER TABLE conversation_inputs DROP COLUMN wake_predecessor;
+ALTER TABLE conversation_inputs DROP COLUMN input_order;
+ALTER TABLE conversation_inputs DROP COLUMN submitting_session_id;
+ALTER TABLE conversation_inputs DROP COLUMN readiness_waiting;

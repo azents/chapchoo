@@ -83,8 +83,28 @@ test("owner receives intentional server messages and inspects native typed-answe
     const log = page.getByRole("log", { name: "Message", exact: true });
     await expect(message).toBeEnabled({ timeout: 90_000 });
     expect(historyReads).toBe(0);
-    stage = "intentional-publication";
     const releaseWork = await fixture.holdWork();
+    stage = "stop-before-ordinary-send";
+    await page
+      .getByRole("button", { name: /Activity/ })
+      .filter({ has: page.locator("strong") })
+      .click();
+    const activity = page.getByRole("dialog", {
+      name: "Activity",
+      exact: true,
+    });
+    await activity.getByRole("button", { name: "Stop", exact: true }).click();
+    await page
+      .getByRole("dialog", { name: "Stop", exact: true })
+      .getByRole("button", { name: "Confirm", exact: true })
+      .click();
+    await expect(
+      activity.getByText("Computer · Stopped", { exact: true }),
+    ).toBeVisible({ timeout: 180_000 });
+    await activity.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(message).toBeEnabled();
+    await expect(message).toHaveAttribute("aria-placeholder", /Send a message/);
+    stage = "stopped-send-auto-start-and-publication";
     const inputText = "Exercise the deterministic native conversation";
     await message.fill(inputText);
     const inputStart = performance.now();

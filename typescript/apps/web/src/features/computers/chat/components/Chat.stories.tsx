@@ -331,7 +331,7 @@ function Fixture({
   });
   const copy = chatCopy(locale);
   const c = computerCopy(locale);
-  const writable =
+  const nativeWritable =
     mode === "inputError" ||
     mode === "queueError" ||
     mode === "queueWaiting" ||
@@ -347,6 +347,17 @@ function Fixture({
     mode === "nativeFailed" ||
     mode === "notStarted" ||
     mode === "nativeStarting";
+  const writable =
+    nativeWritable ||
+    mode === "stopped" ||
+    mode === "disconnected" ||
+    mode === "unknown" ||
+    mode === "startError" ||
+    mode === "sending" ||
+    mode === "computerStarting" ||
+    mode === "computerStopping" ||
+    mode === "computerRestarting" ||
+    mode === "statusRefreshing";
   const actions = useComputerActions({
     pending: false,
     submit: () => {},
@@ -673,7 +684,10 @@ function Fixture({
         inputError={mode === "inputError" ? copy.enqueueFailed : void 0}
         activity={mode === "readerError" ? "unavailable" : displayedActivity}
         writable={writable}
-        stoppable={writable || mode === "sending" || mode === "readerError"}
+        nativeWritable={nativeWritable}
+        stoppable={
+          nativeWritable || mode === "sending" || mode === "readerError"
+        }
         sendable={writable && Boolean(input.trim())}
         status={presentation.label}
         statusLoading={presentation.refreshing}

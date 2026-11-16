@@ -123,7 +123,7 @@ for (const width of [390, 1280]) {
     );
     await expect(
       page.getByRole("textbox", { name: "메시지", exact: true }),
-    ).toBeDisabled();
+    ).toBeEnabled();
   });
 }
 
@@ -211,9 +211,12 @@ for (const story of [
     await page.goto(
       `/iframe.html?id=chat-conversation--${story}&viewMode=story`,
     );
-    await expect(
-      page.getByRole("textbox", { name: "Message", exact: true }),
-    ).toBeDisabled();
+    const input = page.getByRole("textbox", { name: "Message", exact: true });
+    if (story === "reader-error-with-active-work") {
+      await expect(input).toBeDisabled();
+    } else {
+      await expect(input).toBeEnabled();
+    }
     await page.getByRole("button", { name: /Corgi.*Activity/ }).click();
     const activity = page.getByRole("dialog", {
       name: "Activity",
@@ -554,16 +557,34 @@ for (const width of [320, 390, 1280]) {
   });
 }
 
-test("unavailable observations keep history readable and input read-only", async ({
+test("Computer readiness preserves ordinary composition and placeholder", async ({
   page,
 }) => {
   for (const state of [
     "stopped",
     "disconnected",
     "unknown",
-    "stale",
-    "stale-stopped",
+    "computer-starting",
+    "computer-restarting",
   ]) {
+    await page.goto(
+      `/iframe.html?id=chat-conversation--${state}&viewMode=story`,
+    );
+    const input = page.getByRole("textbox", { name: "메시지", exact: true });
+    await expect(input).toBeEnabled();
+    await expect(input).toHaveAttribute("aria-placeholder", /코기 ·/);
+    await input.fill("준비 전에도 평소처럼 입력");
+    await expect(
+      page.getByRole("button", { name: "보내기", exact: true }),
+    ).toBeEnabled();
+    await expect(page.getByRole("log")).toBeVisible();
+  }
+});
+
+test("stale authority keeps history readable and input read-only", async ({
+  page,
+}) => {
+  for (const state of ["stale", "stale-stopped"]) {
     await page.goto(
       `/iframe.html?id=chat-conversation--${state}&viewMode=story`,
     );

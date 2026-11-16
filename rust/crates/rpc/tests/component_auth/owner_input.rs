@@ -4,6 +4,32 @@ use chapchoo_domain::{ConversationTarget, ConversationText};
 use chapchoo_persistence::AcceptConversationInput;
 use chapchoo_protocol::conversations::{self as c, conversations_client::ConversationsClient};
 
+pub(super) async fn seed(
+    store: &Store,
+    owner: &chapchoo_crypto::SecretDigest,
+    agent: &chapchoo_persistence::AgentSummary,
+    conversation: &str,
+) -> Result<chapchoo_persistence::ConversationInputReceipt, TestError> {
+    let receipt = store
+        .accept_conversation_input(
+            owner,
+            &AcceptConversationInput {
+                agent_id: agent.id.clone(),
+                conversation_id: Some(conversation.into()),
+                request_id: "owner-large-input".into(),
+                target: ConversationTarget::NotStarted,
+                text: ConversationText::parse(" Keep whitespace 한글🦀\n".repeat(6000))?,
+            },
+            AcceptanceTime::System.now()?,
+        )
+        .await?;
+    // Establish retained failed recovery before any product dispatcher starts.
+    store
+        .fail_conversation_input(conversation, &receipt.id)
+        .await?;
+    Ok(receipt)
+}
+
 pub(super) async fn exercise(
     context: &super::capture::Context<'_>,
     conversation: &str,

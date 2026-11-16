@@ -328,6 +328,7 @@ impl Store {
         expected: &crate::ResolvedRoute,
         draft: &ConversationInputPreparation<'_>,
         now: i64,
+        claim_id: &str,
     ) -> Result<ConversationPreparationAdmission, StoreError> {
         let (agent, id, operation) = ids(draft)?;
         operation!(self, |connection, dialect| {
@@ -347,6 +348,10 @@ impl Store {
                     previous.facts()?,
                 ));
             }
+            if owner.desired_state != "RUNNING" {
+                return Err(StoreError::InvalidTransition);
+            }
+            super::input_queue::require_consumer!(connection, dialect, operation, claim_id);
             let mut retired = false;
             let covered = loop {
                 let head = diesel::sql_query(dialect.query(
@@ -495,7 +500,7 @@ impl Store {
                 HarnessSupply::Managed => ("MANAGED", None),
                 HarnessSupply::Existing(path) => ("EXISTING", Some(path.as_str())),
             };
-            super::input_queue::require_consumer!(connection, dialect, operation);
+            super::input_queue::require_consumer!(connection, dialect, operation, claim_id);
             diesel::sql_query(dialect.query("INSERT INTO conversation_input_preparation(operation_id,execution_id,supply_kind,executable_path,selection_request_id,fresh_native_allowed,require_retained_source,preparation_state) VALUES(?,?,?,?,?,?,?,'POSSIBLE')"))
                 .bind::<IdentitySql,_>(operation).bind::<IdentitySql,_>(route._execution_id).bind::<Text,_>(kind).bind::<Nullable<Text>,_>(path)
                 .bind::<Nullable<Text>,_>(selection_request_id.as_deref()).bind::<diesel::sql_types::Bool,_>(fresh_native_allowed).bind::<diesel::sql_types::Bool,_>(require_retained_source).execute(connection).await?;

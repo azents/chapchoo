@@ -4,8 +4,69 @@ import {
   containerFailure,
   containerInput,
   containerUser,
+  deferredContainerInput,
 } from "./chatContainerFixture";
 import type { Route } from "@playwright/test";
+
+for (const state of ["stopped", "starting", "restoring"] as const) {
+  test(`ordinary message submission remains available while Computer is ${state}`, async ({
+    page,
+  }) => {
+    const initial = deferredContainerInput(state);
+    const sends: unknown[] = [];
+    const unexpected: string[] = [];
+    await page.route("**/api/trpc/**", async (route) => {
+      const method = new URL(route.request().url()).pathname.split("/").at(-1);
+      let value: unknown;
+      switch (method) {
+        case "auth.identity":
+          value = containerUser;
+          break;
+        case "computers.get":
+          if (initial.initial.type !== "detail") {
+            throw new Error("Missing fixture Agent");
+          }
+          value = initial.initial.agent;
+          break;
+        case "conversations.activity":
+        case "conversations.region":
+          value = initial.initialConversation;
+          break;
+        case "conversations.messages":
+          value = initial.initialMessages;
+          break;
+        case "conversations.send":
+          sends.push(route.request().postDataJSON());
+          value = void 0;
+          break;
+        default:
+          unexpected.push(method ?? route.request().url());
+          await route.abort();
+          return;
+      }
+      await route.fulfill({
+        json: { result: { data: superjson.serialize(value) } },
+      });
+    });
+    await page.goto(
+      `/iframe.html?id=chat-container-transport--${state}&viewMode=story`,
+    );
+    const input = page.getByRole("textbox", { name: "Message", exact: true });
+    await expect(input).toBeEnabled();
+    await expect(input).toHaveAttribute("aria-placeholder", /Corgi ·/);
+    const text = `  ${state}: 준비되면 전달 🙂\\n `;
+    await input.fill(text);
+    await page.getByRole("button", { name: "Send", exact: true }).click();
+    await expect(input).toHaveText("");
+    await expect(input).toBeFocused();
+    await expect(
+      page.getByRole("button", { name: "Stop", exact: true }),
+    ).toHaveCount(0);
+    expect(sends).toHaveLength(1);
+    expect(sends[0]).toMatchObject({ json: { text } });
+    expect(unexpected).toEqual([]);
+  });
+}
 
 for (const width of [390, 1280]) {
   test(`recent-record error offers adjacent read-only recovery at ${width}`, async ({

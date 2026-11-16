@@ -1,5 +1,5 @@
 //! Queue ownership renewal is co-owned with processing, never detached from it.
-use crate::{ComputerPolicy, ServiceError};
+use crate::{ComputerPolicy, DomainReason, ServiceError};
 use chapchoo_persistence::{ConversationInputQueueState, Store};
 use std::{error::Error, fmt, future::Future, sync::Arc, time::Duration};
 use tokio::{
@@ -27,14 +27,10 @@ pub(super) fn combine(
     one: Result<(), ServiceError>,
     two: Result<(), ServiceError>,
 ) -> Result<(), ServiceError> {
-    let errors = [one, two]
-        .into_iter()
-        .filter_map(Result::err)
-        .collect::<Vec<_>>();
-    if errors.is_empty() {
-        Ok(())
-    } else {
-        Err(ServiceError::infrastructure(Failures(errors)))
+    match (one, two) {
+        (Ok(()), Ok(())) => Ok(()),
+        (Err(error), Ok(())) | (Ok(()), Err(error)) => Err(error),
+        (Err(one), Err(two)) => Err(ServiceError::infrastructure(Failures(vec![one, two]))),
     }
 }
 pub(super) struct Consumer {
@@ -83,11 +79,18 @@ impl Consumer {
     pub(super) fn check(&self) -> Result<(), ServiceError> {
         self.failure.lock().take().map_or(Ok(()), Err)
     }
+    pub(super) fn record_failure(&self, error: ServiceError) {
+        let mut failure = self.failure.lock();
+        if failure.is_none() {
+            *failure = Some(error);
+        }
+    }
     pub(super) async fn run(
         &self,
         store: Store,
         conversation: String,
         id: String,
+        claim: String,
         processing: impl Future<Output = Result<(), ServiceError>> + Send,
     ) -> Result<(), ServiceError> {
         let result = {
@@ -101,7 +104,7 @@ impl Consumer {
                     tokio::select! {
                         _ = stopped.changed() => return Ok(()),
                         _ = cadence.tick() => {
-                            match store.renew_conversation_input_consumer(&conversation, &id, self.policy.directory).await {
+                            match store.renew_conversation_input_consumer(&conversation, &id, &claim, self.policy.directory).await {
                                 Ok(ConversationInputQueueState::Pending) => {}
                                 Ok(ConversationInputQueueState::Absent | ConversationInputQueueState::Error) => return Ok(()),
                                 Err(error) => return Err(error.into()),
@@ -122,13 +125,21 @@ impl Consumer {
                 result = &mut renewing => result,
             }
         };
-        combine(
-            result,
-            store
-                .fail_conversation_input(&conversation, &id)
-                .await
-                .map_err(Into::into),
-        )
+        let failed = result
+            .as_ref()
+            .is_err_and(|error| error.reason() != DomainReason::InvalidTransition);
+        let released = store
+            .release_conversation_input_claim(&conversation, &id, &claim, failed)
+            .await
+            .map_err(Into::into);
+        match (result, released) {
+            (Err(error), Ok(ConversationInputQueueState::Pending))
+                if error.reason() == DomainReason::InvalidTransition =>
+            {
+                Ok(())
+            }
+            (result, released) => combine(result, released.map(|_| ())),
+        }
     }
     pub(super) async fn finish(&self) -> Result<(), ServiceError> {
         let _ = self.stop.send(true);

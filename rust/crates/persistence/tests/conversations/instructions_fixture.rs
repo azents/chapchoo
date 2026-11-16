@@ -9,6 +9,7 @@ use chapchoo_persistence::{
 /// Establish actual preparation and applied evidence before a new input effect.
 pub(super) async fn apply(
     store: &Store,
+    f: &Fixture,
     actor: &chapchoo_crypto::SecretDigest,
     route: &ResolvedRoute,
     source: &ConnectorSource<'_>,
@@ -21,7 +22,14 @@ pub(super) async fn apply(
         operation_id: operation.operation_id,
     };
     let admission = store
-        .begin_conversation_input_preparation(actor, route, &draft, now)
+        .begin_conversation_input_preparation(
+            actor,
+            route,
+            &draft,
+            now,
+            &f.claim(store, draft.conversation_id, draft.operation_id)
+                .await?,
+        )
         .await?;
     match admission {
         ConversationPreparationAdmission::ObservedStartup { .. } => return Ok(()),

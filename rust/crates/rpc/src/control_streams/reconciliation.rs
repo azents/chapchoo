@@ -70,6 +70,12 @@ impl ComponentConnectionServices {
     /// Bound each pass to current admitted streams and one bounded Provider page.
     /// Each subsequent invocation still revalidates exact live authority.
     pub async fn reconcile_once(&self, delivery: &PeerDelivery) -> Result<(), Status> {
+        // Keep the complete convergence state off callers' async stack frames.
+        // This remains one awaited pass, with identical cancellation/ownership.
+        Box::pin(self.reconcile_pass(delivery)).await
+    }
+
+    async fn reconcile_pass(&self, delivery: &PeerDelivery) -> Result<(), Status> {
         self.inner.admit()?;
         let (providers, connectors) = {
             let entries = self

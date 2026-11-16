@@ -64,21 +64,6 @@ impl Store {
         draft: &RetryConversationInput,
         now: i64,
     ) -> Result<ConversationInputAdmission, StoreError> {
-        self.retry_conversation_input_for_consumer(
-            actor,
-            draft,
-            now,
-            crate::DirectoryPolicy::default(),
-        )
-        .await
-    }
-    pub async fn retry_conversation_input_for_consumer(
-        &self,
-        actor: &SecretDigest,
-        draft: &RetryConversationInput,
-        now: i64,
-        policy: crate::DirectoryPolicy,
-    ) -> Result<ConversationInputAdmission, StoreError> {
         request_id(&draft.request_id)?;
         request_id(&draft.original_request_id)?;
         if draft.request_id == draft.original_request_id {
@@ -164,20 +149,19 @@ impl Store {
                 .execute(connection)
                 .await?;
             let id = EntityId::generate(now)?;
-            let consumer_now = crate::directory::database_now!(connection, dialect);
-            let consumer_expires = policy.expiry(consumer_now, true)?;
-            diesel::sql_query(dialect.query(
-                "INSERT INTO conversation_inputs(id,conversation_id,request_id,target_snapshot,submitted_text,accepted_at,replaces_input_id,queue_state,consumer_expires_at) VALUES(?,?,?,?,?,?,?,'PENDING',?)",
-            ))
-            .bind::<IdentitySql, _>(id)
-            .bind::<IdentitySql, _>(conversation)
-            .bind::<Text, _>(&draft.request_id)
-            .bind::<Nullable<Text>, _>(draft.target.snapshot().map(SnapshotId::as_str))
-            .bind::<Text, _>(old.text.as_str())
-            .bind::<BigInt, _>(now)
-            .bind::<IdentitySql, _>(original)
-            .bind::<BigInt, _>(consumer_expires)
-            .execute(connection).await?;
+            super::waiting::insert_waiting_input!(
+                connection,
+                dialect,
+                id,
+                conversation,
+                actor,
+                owner.computer_id,
+                &draft.request_id,
+                draft.target.snapshot().map(SnapshotId::as_str),
+                old.text.as_str(),
+                now,
+                Some(original)
+            );
             Ok(ConversationInputAdmission::Accepted(
                 ConversationInputReceipt {
                     id: id.to_dto(EntityKind::ConversationOperation),

@@ -640,6 +640,12 @@ impl ComputersService {
             .request_lifecycle(actor, agent_id, request, clock.now()?)
             .await?)
     }
+    pub async fn start_waiting_conversation_input(
+        &self,
+        wake: &crate::ConversationInputWake,
+    ) -> Result<AgentSummary, ServiceError> {
+        Ok(self.store.start_waiting_conversation_input(wake).await?)
+    }
     pub async fn force_remove_agent(
         &self,
         actor: &SecretDigest,
