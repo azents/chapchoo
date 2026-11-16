@@ -1,66 +1,38 @@
 import { expect, test } from "@playwright/test";
 import { instructionEvidenceCopy } from "../instructionEvidenceCopy";
 const copy = instructionEvidenceCopy("en");
-test("prompt sources are read-only originals with absent roles distinguished", async ({
+test("system prompt page renders exact current instructions and links back to the conversation", async ({
   page,
 }) => {
-  await page.goto(
-    "/iframe.html?id=chat-prompt-sources--supplied&viewMode=story",
-  );
+  await page.goto("/iframe.html?id=chat-system-prompt--applied&viewMode=story");
   await expect(
-    page.getByRole("combobox", { name: copy.execution, exact: true }),
+    page.getByRole("heading", { name: copy.title, exact: true }),
   ).toBeVisible();
   await expect(page.getByRole("status")).toHaveText(copy.supplied);
   await expect(
     page.getByText("한국어 원문도 그대로 유지합니다.", { exact: false }),
   ).toBeVisible();
-  await expect(page.getByText(copy.absent, { exact: true })).toHaveCount(2);
-  await expect(page.getByRole("textbox")).toHaveCount(0);
-  await expect(
-    page.getByRole("button", { name: "Save", exact: true }),
-  ).toHaveCount(0);
+  await expect(page.getByRole("link", { name: copy.back })).toHaveAttribute(
+    "href",
+    "/teams/my/agents/companion/chat",
+  );
 });
-test("prepared selection does not claim actual supply", async ({ page }) => {
+test("prepared content and absent content remain distinct", async ({
+  page,
+}) => {
   await page.goto(
-    "/iframe.html?id=chat-prompt-sources--prepared&viewMode=story",
+    "/iframe.html?id=chat-system-prompt--prepared&viewMode=story",
   );
   await expect(page.getByRole("status")).toHaveText(copy.prepared);
-});
-test("failed source reads and no retained evidence remain distinct", async ({
-  page,
-}) => {
-  await page.goto(
-    "/iframe.html?id=chat-prompt-sources--source-read-failure&viewMode=story",
-  );
-  await expect(page.getByRole("alert")).toContainText(copy.error);
-  await expect(
-    page.getByRole("button", { name: copy.retry, exact: true }),
-  ).toBeVisible();
-  await expect(page.getByText(copy.absent, { exact: true })).toHaveCount(0);
-  await page.goto("/iframe.html?id=chat-prompt-sources--empty&viewMode=story");
+  await page.goto("/iframe.html?id=chat-system-prompt--empty&viewMode=story");
   await expect(page.getByText(copy.empty, { exact: true })).toBeVisible();
-  await expect(page.getByRole("alert")).toHaveCount(0);
 });
-test("older loading and failures retain the original selected source", async ({
-  page,
-}) => {
-  await page.goto(
-    "/iframe.html?id=chat-prompt-sources--older-loading&viewMode=story",
-  );
+test("Korean system prompt terminology is localized", async ({ page }) => {
+  await page.goto("/iframe.html?id=chat-system-prompt--korean&viewMode=story");
   await expect(
-    page.getByRole("button", { name: copy.more, exact: true }),
-  ).toBeDisabled();
-  await expect(
-    page.getByText("한국어 원문도 그대로 유지합니다.", { exact: false }),
+    page.getByRole("heading", { name: "시스템 프롬프트", exact: true }),
   ).toBeVisible();
-  await page.goto(
-    "/iframe.html?id=chat-prompt-sources--older-read-failure&viewMode=story",
-  );
-  await expect(page.getByRole("alert")).toHaveText(copy.moreError);
   await expect(
-    page.getByRole("button", { name: copy.more, exact: true }),
-  ).toBeEnabled();
-  await expect(
-    page.getByText("한국어 원문도 그대로 유지합니다.", { exact: false }),
+    page.getByRole("link", { name: "대화로 돌아가기" }),
   ).toBeVisible();
 });

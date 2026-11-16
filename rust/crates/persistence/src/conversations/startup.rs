@@ -544,6 +544,8 @@ macro_rules! admit_agent {
             diesel::sql_query($dialect.query("UPDATE conversations SET current_preparation_operation_id=? WHERE id=?"))
                 .bind::<IdentitySql,_>(operation_id).bind::<IdentitySql,_>(row.id)
                 .execute($connection).await?;
+            diesel::sql_query($dialect.query("DELETE FROM project_instruction_evidence WHERE agent_id=?"))
+                .bind::<IdentitySql,_>(row.agent_id).execute($connection).await?;
             break 'agent Ok(Some(ConnectionStartupAdmission::Dispatch {
                 agent_id,
                 conversation_id,

@@ -17,8 +17,9 @@ by these storage or routing contracts. [Backend authentication](backend-authenti
 still owns saved credential records separately.
 
 [Agent instructions](agent-instructions.md) owns direct-overwrite prompt settings,
-durable preparation-source evidence and the causal current-preparation reference.
-Those originals survive temporary input consumption. Final forwarding requires
+the latest preparation payload and the causal current-preparation reference.
+The current payload survives temporary input consumption and is replaced at new
+preparation admission; historical prompt content does not accumulate. Final forwarding requires
 the exact current selection's applied evidence; absence, pending preparation or
 a later saved change never authorizes borrowing an older Ready bundle.
 

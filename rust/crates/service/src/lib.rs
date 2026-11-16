@@ -54,12 +54,12 @@ pub use chapchoo_persistence::{
     ExpectedAgentAuthentication, GrantKind, GrantSummary, InvitationStatus, InvitationSummary,
     LifecycleRequest, LiveConversationRequest, MAX_AUTHENTICATION_EXPIRY_MILLIS,
     MAX_SYSTEM_PROMPT_BYTES, ManagedComputer, ManagedResource, ManagedResourceKind, MemberSummary,
-    NativeRetirementAdmission, ProjectInstructionEvidence, ProjectInstructionHistory, ProofPreview,
-    ProviderCapabilities, ProviderChoice, ProviderCredentialResult, ProviderIdentity,
-    ProviderInventorySummary, ProviderSource, PublishConversationMessage, ReauthenticateTarget,
-    RegisterApiKey, RenameAuthentication, ReplaceApiKey, ResolvedRoute, ResourceCursor,
-    ResourceEvidence, ResourceReport, RetainedConversationInput, RetryConversationInput,
-    SaveHarnessSupply, SelectAgentAuthentication, SessionPolicy, SessionResult, SourceBinding,
+    NativeRetirementAdmission, ProjectInstructionEvidence, ProofPreview, ProviderCapabilities,
+    ProviderChoice, ProviderCredentialResult, ProviderIdentity, ProviderInventorySummary,
+    ProviderSource, PublishConversationMessage, ReauthenticateTarget, RegisterApiKey,
+    RenameAuthentication, ReplaceApiKey, ResolvedRoute, ResourceCursor, ResourceEvidence,
+    ResourceReport, RetainedConversationInput, RetryConversationInput, SaveHarnessSupply,
+    SelectAgentAuthentication, SessionPolicy, SessionResult, SourceBinding,
     StartDeviceAuthentication, TeamPatch, TeamSummary, UpdateAgentProfile, UserSummary,
 };
 pub use computers::{ComputerPolicy, ComputersService, PreparedComponentConnection};

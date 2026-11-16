@@ -50,10 +50,7 @@ pub mod conversations {
     }
     redacted_debug!(
         NativeTarget,
-        OwnerInstructionEvidenceRequest,
-        OwnerInstructionHistoryRequest,
-        ProjectInstructionMetadata,
-        ProjectInstructionHistory,
+        CurrentSystemPrompt,
         ProjectInstructionsRequest,
         ProjectInstructionEvidence,
         InstructionSource,

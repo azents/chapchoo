@@ -185,31 +185,28 @@ test("owner receives intentional server messages and inspects native typed-answe
     await page
       .getByRole("button", { name: /^Conversation fixture.*Activity$/ })
       .click();
-    stage = "retained-sources-after-later-save";
+    stage = "latest-system-prompt-page";
     await page
-      .getByRole("button", { name: "Prompt sources", exact: true })
+      .getByRole("link", { name: "System prompt", exact: true })
       .click();
-    const sources = page.getByRole("region", {
-      name: "Prompt sources",
-      exact: true,
-    });
-    const ownerSource = sources.getByRole("region", {
+    await expect(page).toHaveURL(
+      new RegExp(`${activeFixture.chatPath}/system-prompt$`),
+    );
+    await expect(
+      page.getByRole("heading", { name: "System prompt", exact: true }),
+    ).toBeVisible();
+    const ownerSource = page.getByRole("region", {
       name: "Owner system prompt",
       exact: true,
     });
     await expect(ownerSource.locator("pre")).toHaveText("PROJECT_BETA");
-    const suppliedSelection = await sources
-      .getByRole("combobox", { name: "Execution", exact: true })
-      .inputValue();
     await savePrompt(settingsPage, "PROJECT_GAMMA");
     await expect
       .poll(
         async () => {
-          const operation = (await activeFixture.instructionHistory()).items[0]
-            ?.operationId;
-          if (!operation) return false;
-          const evidence = await activeFixture.instructionEvidence(operation);
+          const evidence = (await activeFixture.systemPrompt()).prompt;
           return (
+            evidence !== undefined &&
             evidence.appliedAt !== void 0 &&
             evidence.sources.some((source) => source.text === "PROJECT_GAMMA")
           );
@@ -218,22 +215,16 @@ test("owner receives intentional server messages and inspects native typed-answe
       )
       .toBe(true);
     await page.reload();
-    await page
-      .getByRole("button", { name: /^Conversation fixture.*Activity$/ })
-      .click();
-    await page
-      .getByRole("button", { name: "Prompt sources", exact: true })
-      .click();
     await expect(ownerSource.locator("pre")).toHaveText("PROJECT_GAMMA", {
       timeout: 90_000,
     });
-    await sources
-      .getByRole("combobox", { name: "Execution", exact: true })
-      .click();
     await page
-      .getByRole("option", { name: suppliedSelection, exact: true })
+      .getByRole("link", { name: "Back to conversation", exact: true })
       .click();
-    await expect(ownerSource.locator("pre")).toHaveText("PROJECT_BETA");
+    await expect(page).toHaveURL(new RegExp(`${activeFixture.chatPath}$`));
+    await page
+      .getByRole("button", { name: /^Conversation fixture.*Activity$/ })
+      .click();
     stage = "actual-full-records";
     await page
       .getByRole("button", { name: "Full history", exact: true })

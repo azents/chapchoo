@@ -9,6 +9,7 @@ import type {
 export interface ChatCopy {
   records: RecordCopy;
   activity: string;
+  systemPrompt: string;
   close: string;
   message: string;
   enqueueFailed: string;
@@ -89,6 +90,7 @@ export interface ChatCopy {
 const en: ChatCopy = {
   records: recordCopy("en"),
   activity: "Activity",
+  systemPrompt: "System prompt",
   close: "Close",
   message: "Message",
   enqueueFailed: "Could not send the request",
@@ -180,6 +182,7 @@ const en: ChatCopy = {
 const ko: ChatCopy = {
   records: recordCopy("ko"),
   activity: "작업 상태",
+  systemPrompt: "시스템 프롬프트",
   close: "닫기",
   message: "메시지",
   enqueueFailed: "전송 요청 실패",
@@ -271,6 +274,7 @@ const ko: ChatCopy = {
 const ja: ChatCopy = {
   records: recordCopy("ja"),
   activity: "作業状況",
+  systemPrompt: "システムプロンプト",
   close: "閉じる",
   message: "メッセージ",
   enqueueFailed: "送信リクエストに失敗しました",
@@ -362,6 +366,7 @@ const ja: ChatCopy = {
 const fr: ChatCopy = {
   records: recordCopy("fr"),
   activity: "Activité",
+  systemPrompt: "Prompt système",
   close: "Fermer",
   message: "Message",
   enqueueFailed: "Échec de la demande d’envoi",

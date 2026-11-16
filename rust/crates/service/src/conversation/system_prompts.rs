@@ -2,8 +2,7 @@ use super::*;
 use chapchoo_crypto::SecretDigest;
 use chapchoo_domain::{InstructionSource, InstructionSourceKind, ProjectInstructions};
 use chapchoo_persistence::{
-    ConversationInputPreparation, ProjectInstructionEvidence, ProjectInstructionHistory,
-    ResolvedRoute,
+    ConversationInputPreparation, ProjectInstructionEvidence, ResolvedRoute,
 };
 
 impl ConversationService {
@@ -90,31 +89,13 @@ impl ConversationService {
             .project_instructions(source, agent, conversation, operation)
             .await?)
     }
-    pub async fn instruction_evidence(
+    pub async fn latest_system_prompt(
         &self,
         actor: &SecretDigest,
         agent: &str,
-        conversation: &str,
-        operation: &str,
         now: i64,
-    ) -> Result<ProjectInstructionEvidence, ServiceError> {
-        Ok(self
-            .store
-            .instruction_evidence(actor, agent, conversation, operation, now)
-            .await?)
-    }
-    pub async fn instruction_history(
-        &self,
-        actor: &SecretDigest,
-        agent: &str,
-        conversation: &str,
-        before_operation_id: Option<&str>,
-        now: i64,
-    ) -> Result<ProjectInstructionHistory, ServiceError> {
-        Ok(self
-            .store
-            .instruction_history(actor, agent, conversation, before_operation_id, now)
-            .await?)
+    ) -> Result<Option<ProjectInstructionEvidence>, ServiceError> {
+        Ok(self.store.latest_system_prompt(actor, agent, now).await?)
     }
 }
 

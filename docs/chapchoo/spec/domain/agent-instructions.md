@@ -25,7 +25,7 @@ local draft; a pending save owns its submission and disables dismissal. A real
 failure retains the draft. Confirmed save closes the editor and invalidates the
 saved-value query without claiming that preparation completed.
 
-## Selected configuration and durable evidence
+## Latest selected configuration
 
 A preparation retains exact ordered source-role/text values, the deterministic
 rendered document and the session-visible tool catalogue. Source collections are
@@ -36,7 +36,7 @@ substitution repairs a failed selection.
 Each new actual preparation admission reserves its operation as the conversation's
 current preparation in the same authority-revalidated transaction. Reserved but
 unsealed means pending, not permission to start. First seal checks that exact
-current operation before inserting immutable evidence. Existing recovery and late
+current operation before inserting its exact payload. Existing recovery and late
 completion never move the pointer backward. The identity is not a setting
 revision or a foreign key to a consumable input row.
 
@@ -56,12 +56,22 @@ SQLite and PostgreSQL preserve existing settings, conversations and source data.
 Old null causal references require a legitimate new admission; migration does not
 infer one from timestamps or operation sorting.
 
-Evidence survives successful input consumption independently of temporary
-preparation/delivery rows. The owner reads an operation's exact originals and can
-page earlier operations with a bounded 100-item operation cursor. The read-only
-Prompt sources view distinguishes prepared from supplied and absent source roles
-from read failure. Earlier-page failure keeps loaded records and the selected
-original; retry uses the failed cursor. Current settings never reconstruct history.
+The latest payload survives successful input consumption independently of temporary
+preparation/delivery rows. Each new preparation admission removes the Agent's
+previous payload in the same transaction that reserves the current operation.
+An Agent-unique index limits persistent prompt payloads to one per Agent.
+Pending unsealed preparation has no payload; late reports cannot recreate
+superseded content. The saved owner setting remains independently overwrite-only.
+
+The owner reads only the current Agent conversation's causally selected payload
+through `Conversations.SystemPrompt`. There is no historical-operation read,
+history cursor or prompt-content archive. The read-only System prompt page is
+server-rendered at the Agent chat's `/system-prompt` route and distinguishes
+not-yet-applied content from applied content. Navigation and browser Back preserve
+the Agent and Team context. Absent content differs from a route read failure.
+Migration 26 deletes all payloads except the current conversation's exact selected
+operation, without guessing from timestamps. Downgrade does not recreate deleted
+content.
 Operational credentials, endpoint bearers and authorization headers are not
 instruction sources.
 
@@ -132,3 +142,4 @@ A later input does not silently use superseded owner instructions.
 - [`activity.rs`](../../../../rust/crates/harness/src/runtime/activity.rs)
 - [`project.rs`](../../../../rust/crates/harness/src/project.rs)
 - [`conversations.proto`](../../../../proto/chapchoo/conversations.proto)
+- [Latest-only correction](../../requirements/prompt-261116-latest-system-prompt.md)

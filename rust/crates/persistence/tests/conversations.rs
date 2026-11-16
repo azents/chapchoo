@@ -3,6 +3,10 @@
 macro_rules! isolate_pre_instructions_migration {
     ($connection:expr,$migrations:expr) => {{
         let connection = &mut *$connection;
+        if connection.applied_migrations()?.iter()
+            .any(|version| version.to_string() == "00000000000026") {
+            assert_eq!(connection.revert_last_migration($migrations)?.to_string(), "00000000000026");
+        }
         if connection
             .applied_migrations()?
             .iter()
