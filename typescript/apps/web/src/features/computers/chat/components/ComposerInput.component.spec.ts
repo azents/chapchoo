@@ -157,6 +157,30 @@ test("native caret sentinels do not add draft text or hide the empty placeholder
   }
 });
 
+test("acceptance during composition cannot restore the already submitted draft", async ({
+  page,
+}) => {
+  await page.goto(
+    "/iframe.html?id=chat-conversation--connected&viewMode=story",
+  );
+  const input = page.getByRole("textbox", { name: "메시지", exact: true });
+  await input.dispatchEvent("compositionstart", { data: "" });
+  await input.fill("조합 중 전송");
+  const send = page.getByRole("button", { name: "보내기", exact: true });
+  await send.click();
+  await expect(send).toBeDisabled();
+  await input.dispatchEvent("compositionend", { data: "조합 중 전송" });
+  await expect(input).toHaveText("");
+  await expect(send).toBeDisabled();
+  await expect(
+    page
+      .locator("[data-user-bubble]")
+      .getByText("조합 중 전송", { exact: true }),
+  ).toHaveCount(1);
+  await input.pressSequentially("다음 초안");
+  await expect(input).toHaveText("다음 초안");
+});
+
 test("long placeholder does not increase empty editor height", async ({
   page,
 }) => {

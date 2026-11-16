@@ -30,6 +30,8 @@ export function useMessageEditor(
   const initialText = useRef(value);
   const composing = useRef(false);
   const terminalLine = useRef<Node | null>(null);
+  const published = useRef(value);
+  const deferredExternal = useRef<string | null>(null);
   function read(editor: HTMLDivElement): string {
     function text(node: Node): string {
       if (node === terminalLine.current) {
@@ -66,10 +68,17 @@ export function useMessageEditor(
   }
   useLayoutEffect(() => {
     const editor = editorRef.current;
-    if (editor && !composing.current && read(editor) !== value) {
+    if (composing.current) {
+      if (value !== published.current) {
+        deferredExternal.current = value;
+      }
+      return;
+    }
+    if (editor && read(editor) !== value) {
       editor.textContent = value;
       terminalLine.current = null;
     }
+    published.current = value;
   }, [value, editorRef]);
   function publish(editor: HTMLDivElement): void {
     const last = editor.lastChild;
@@ -85,13 +94,15 @@ export function useMessageEditor(
     } else if (last !== terminalLine.current || last?.textContent !== "\n") {
       terminalLine.current = null;
     }
-    onChange(read(editor));
+    const next = read(editor);
+    published.current = next;
+    onChange(next);
   }
   return {
     ...props,
     initialText: initialText.current,
     onInput: (event) => {
-      if (editable) {
+      if (editable && deferredExternal.current === null) {
         publish(event.currentTarget);
       }
     },
@@ -115,7 +126,12 @@ export function useMessageEditor(
     },
     onCompositionEnd: (event) => {
       composing.current = false;
-      if (editable) {
+      if (deferredExternal.current !== null) {
+        event.currentTarget.textContent = deferredExternal.current;
+        published.current = deferredExternal.current;
+        terminalLine.current = null;
+        deferredExternal.current = null;
+      } else if (editable) {
         publish(event.currentTarget);
       }
     },
