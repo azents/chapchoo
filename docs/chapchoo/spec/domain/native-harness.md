@@ -95,7 +95,8 @@ proves no cache reload, immediate adoption, model entitlement or external revoke
 
 ### Actual-start authentication
 
-An already-live exact resume returns the existing session before any new
+An already-live exact resume with unchanged selected instructions and tool
+contract returns the existing session before any new
 authentication provider call or file operation. A real launch requires a supplied
 `NativeAuthenticationProvider`. After compatible artifact preparation, the
 Connector provider recovers the previous application, admits the saved selection,
@@ -252,6 +253,13 @@ not delayed SDK callback completion. Protocol/capture termination reuses physica
 retirement rather than leaving unrecorded work alive.
 
 ## Retained captured source
+
+The [default-project refresh](agent-instructions.md) qualifies Setup by exact
+selected source originals and catalogue. Changed configuration waits for owned
+standard live work and external effects, then uses fallible whole-owner retirement,
+atomic project publication and exact same-context Resume. Root Idle and metadata
+snapshots alone are not complete work evidence. The bounded deferred setup owner
+continues to handle observation, answer and Stop commands while waiting.
 
 The current capture has an explicit snapshot/native-session manifest and ordered
 JSONL occurrences, with a single writer held through the source lifetime.

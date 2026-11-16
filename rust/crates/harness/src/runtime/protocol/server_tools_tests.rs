@@ -88,6 +88,9 @@ async fn provision(context: NativeContext, http: bool) -> Result<(), TestError> 
         },
     )
     .await?;
+    if !resumed {
+        acknowledge_title(&mut read, &mut write).await?;
+    }
     let session = rx.await??;
     assert_eq!(
         session.session_id().to_string(),

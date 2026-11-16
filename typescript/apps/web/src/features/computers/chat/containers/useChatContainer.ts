@@ -15,6 +15,7 @@ import { useAgentsContainer } from "../../containers/useAgentsContainer";
 import { chatStatus } from "../chatStatus";
 import { ConversationHistoryPage } from "../ConversationHistoryPage";
 import { activityStatus, chatCopy } from "../copy";
+import { InstructionEvidencePage } from "../InstructionEvidencePage";
 import { SupplyPage } from "../SupplyPage";
 import { useChatFocus } from "./useChatFocus";
 import { useConversationReader } from "./useConversationReader";
@@ -477,6 +478,13 @@ export function useChatContainer(props: ChatInput): ChatProps {
     product,
     agent,
     copy,
+    instructionEvidenceControl: region.header.conversationId
+      ? createElement(InstructionEvidencePage, {
+          key: `${agent.id}:${region.header.conversationId}`,
+          agentId: agent.id,
+          conversationId: region.header.conversationId,
+        })
+      : null,
     navigation,
     accountControls,
     supplyControl: createElement(SupplyPage, {

@@ -69,7 +69,8 @@ pub use conversations::{
     ConversationStopAdmission, ConversationStopReceipt, ConversationStopState, ConversationSummary,
     ConversationWorkTarget, EventChunkRead, EventMetadataRead, EventPairMetadata,
     EventPayloadChunk, EventPayloadKind, HarnessSupplyReceipt, HarnessSupplySelection,
-    LiveConversationRequest, PublishConversationMessage, RetainedConversationInput,
+    LiveConversationRequest, MAX_SYSTEM_PROMPT_BYTES, ProjectInstructionEvidence,
+    ProjectInstructionHistory, PublishConversationMessage, RetainedConversationInput,
     RetryConversationInput, SaveHarnessSupply, SourceBinding,
 };
 pub use creation_results::AgentCreationResult;

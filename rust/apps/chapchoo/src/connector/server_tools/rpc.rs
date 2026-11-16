@@ -81,6 +81,19 @@ fn opening_error(status: tonic::Status) -> ErrorData {
     tracing::warn!(code=?status.code(), "Server tool invocation stream could not be established");
     unavailable()
 }
+struct EffectBoundary<'a> {
+    state: &'a State,
+    finished: bool,
+}
+impl Drop for EffectBoundary<'_> {
+    fn drop(&mut self) {
+        if !self.finished {
+            self.state
+                .uncertain_effects
+                .store(true, std::sync::atomic::Ordering::Release);
+        }
+    }
+}
 pub(super) async fn invoke(
     state: &State,
     name: String,
@@ -101,6 +114,10 @@ pub(super) async fn invoke(
         })
         .map_err(|_| ErrorData::internal_error("Tool Submit was not sent", None))?;
     let open = request(ReceiverStream::new(receiver), &route).map_err(|_| unavailable())?;
+    let mut effect = EffectBoundary {
+        state,
+        finished: false,
+    };
     let mut client = client(&route);
     // This dedicated stream has no Control unary helper/ten-second deadline.
     let opening = client.invoke(open);
@@ -114,7 +131,22 @@ pub(super) async fn invoke(
             opening.await
         }
     };
-    let mut stream = response.map_err(opening_error)?.into_inner();
+    let mut stream = match response {
+        Ok(response) => response.into_inner(),
+        Err(status) => {
+            let mut markers = status
+                .metadata()
+                .get_all(wire::NOT_EXECUTED_METADATA)
+                .iter();
+            effect.finished = markers
+                .next()
+                .and_then(|value| value.to_str().ok())
+                .and_then(wire::Rejection::from_str_name)
+                .is_some_and(|reason| reason != wire::Rejection::Unspecified)
+                && markers.next().is_none();
+            return Err(opening_error(status));
+        }
+    };
     let mut waiting = false;
     let mut started = false;
     loop {
@@ -135,6 +167,10 @@ pub(super) async fn invoke(
                 outcome: Some(outcome),
             })) => {
                 use wire::r#final::Outcome;
+                effect.finished = matches!(
+                    &outcome,
+                    Outcome::ResultJson(_) | Outcome::UncertainRepresentation(())
+                ) || matches!(&outcome, Outcome::NotExecuted(_)) && !started;
                 return match outcome {
                     Outcome::ResultJson(bytes) => {
                         if bytes.len() > chapchoo_service::MAX_TOOL_PAYLOAD {

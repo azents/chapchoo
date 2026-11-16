@@ -39,6 +39,9 @@ pub trait NativeToolsProvider: Send + Sync {
     ) -> NativeToolsFuture<'a, NativeToolProvision>;
 }
 pub trait NativeToolLifetime: Send + Sync {
+    fn quiescent(&self) -> bool {
+        false
+    }
     fn close(&self);
     fn verify(&self) -> NativeToolsFuture<'_, ()>;
     fn finish(&mut self) -> NativeToolsFuture<'_, ()>;
@@ -80,6 +83,9 @@ pub struct NativeToolProvision {
     lifetime: Box<dyn NativeToolLifetime>,
 }
 impl NativeToolProvision {
+    pub(crate) fn quiescent(&self) -> bool {
+        self.lifetime.quiescent()
+    }
     pub fn new(declaration: NativeMcpDeclaration, lifetime: Box<dyn NativeToolLifetime>) -> Self {
         Self {
             declaration,

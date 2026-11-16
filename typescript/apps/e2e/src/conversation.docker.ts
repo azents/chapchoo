@@ -1,6 +1,22 @@
 import { test, expect } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { Assembly } from "@chapchoo/testenv/assembly";
 import { nativeConversation } from "@chapchoo/testenv/nativeConversation";
+
+async function savePrompt(page: Page, content: string): Promise<void> {
+  await page
+    .getByRole("button", { name: "Edit system prompt", exact: true })
+    .click();
+  const editor = page.getByRole("dialog", {
+    name: "System prompt",
+    exact: true,
+  });
+  await editor
+    .getByRole("textbox", { name: "Instructions", exact: true })
+    .fill(content);
+  await editor.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(editor).toHaveCount(0);
+}
 
 // Explicit disposable Docker prerequisites are required; no real model is used.
 test("owner receives intentional server messages and inspects native typed-answer records", async ({
@@ -100,22 +116,68 @@ test("owner receives intentional server messages and inspects native typed-answe
         exact: true,
       }),
     ).toBeVisible();
+    stage = "save-and-queue-during-existing-work";
+    const settingsPage = await context.newPage();
+    await settingsPage.goto(
+      `${assembly.generalUrl}${fixture.chatPath.replace(/\/chat$/, "")}`,
+    );
+    await savePrompt(settingsPage, "PROJECT_BETA");
+    const activeFixture = fixture;
+    await expect
+      .poll(async () =>
+        Boolean((await activeFixture.current()).startup?.possibleForwarding),
+      )
+      .toBe(true);
+    await expect(message).toBeEnabled();
+    const refreshInput = "Continue after refreshing project instructions";
+    await message.fill(refreshInput);
+    await page.getByRole("button", { name: "Send", exact: true }).click();
+    await expect.poll(() => activeFixture.pendingInputs()).toBe(1);
+    await expect(
+      page.getByRole("heading", {
+        name: "Review the native fixture choices",
+        exact: true,
+      }),
+    ).toBeVisible();
+    stage = "finish-existing-work-and-refresh";
     await page.getByRole("radio", { name: "Stable", exact: true }).check();
     await page
       .getByRole("textbox", { name: "Confirmation note", exact: true })
       .fill("typed native answer");
+    stage = "complete-original-question";
     await page
       .getByRole("button", { name: "Send answers", exact: true })
       .click();
-    const activeFixture = fixture;
-    await expect.poll(() => activeFixture.pendingInputs()).toBe(0);
+    stage = "await-refreshed-input-pickup";
+    await expect
+      .poll(
+        async () => {
+          const current = await activeFixture.current();
+          if (current.startup?.failed !== void 0) {
+            throw new Error("Native fixture configuration preparation failed");
+          }
+          return activeFixture.pendingInputs();
+        },
+        { timeout: 180_000 },
+      )
+      .toBe(0);
+    stage = "await-refreshed-publication";
+    await expect(
+      log.getByText("Refreshed project fixture publication.", { exact: true }),
+    ).toBeVisible({ timeout: 180_000 });
+    await expect(log.getByText(refreshInput, { exact: true })).toHaveCount(1);
+    const refreshed = await fixture.current();
+    expect(refreshed.conversation?.nativeSessionId).toBe(
+      prestartTarget?.nativeSessionId,
+    );
+    expect(refreshed.conversation?.snapshotId).toBe(prestartTarget?.snapshotId);
     await expect(
       page.getByRole("heading", {
         name: "Review the native fixture choices",
         exact: true,
       }),
     ).toHaveCount(0);
-    await expect(log.locator("[data-message-id]")).toHaveCount(2);
+    await expect(log.locator("[data-message-id]")).toHaveCount(4);
     await expect(
       log.getByText(/First assistant output|Second assistant utterance/),
     ).toHaveCount(0);
@@ -123,6 +185,56 @@ test("owner receives intentional server messages and inspects native typed-answe
     await page
       .getByRole("button", { name: /^Conversation fixture.*Activity$/ })
       .click();
+    stage = "retained-sources-after-later-save";
+    await page
+      .getByRole("button", { name: "Prompt sources", exact: true })
+      .click();
+    const sources = page.getByRole("region", {
+      name: "Prompt sources",
+      exact: true,
+    });
+    const ownerSource = sources.getByRole("region", {
+      name: "Owner system prompt",
+      exact: true,
+    });
+    await expect(ownerSource.locator("pre")).toHaveText("PROJECT_BETA");
+    const suppliedSelection = await sources
+      .getByRole("combobox", { name: "Execution", exact: true })
+      .inputValue();
+    await savePrompt(settingsPage, "PROJECT_GAMMA");
+    await expect
+      .poll(
+        async () => {
+          const operation = (await activeFixture.instructionHistory()).items[0]
+            ?.operationId;
+          if (!operation) return false;
+          const evidence = await activeFixture.instructionEvidence(operation);
+          return (
+            evidence.appliedAt !== void 0 &&
+            evidence.sources.some((source) => source.text === "PROJECT_GAMMA")
+          );
+        },
+        { timeout: 90_000 },
+      )
+      .toBe(true);
+    await page.reload();
+    await page
+      .getByRole("button", { name: /^Conversation fixture.*Activity$/ })
+      .click();
+    await page
+      .getByRole("button", { name: "Prompt sources", exact: true })
+      .click();
+    await expect(ownerSource.locator("pre")).toHaveText("PROJECT_GAMMA", {
+      timeout: 90_000,
+    });
+    await sources
+      .getByRole("combobox", { name: "Execution", exact: true })
+      .click();
+    await page
+      .getByRole("option", { name: suppliedSelection, exact: true })
+      .click();
+    await expect(ownerSource.locator("pre")).toHaveText("PROJECT_BETA");
+    stage = "actual-full-records";
     await page
       .getByRole("button", { name: "Full history", exact: true })
       .click();
@@ -132,8 +244,10 @@ test("owner receives intentional server messages and inspects native typed-answe
     });
     await expect(
       history.locator('[data-record-origin="publication"]'),
-    ).toHaveCount(1);
-    const publication = history.locator('[data-record-origin="publication"]');
+    ).toHaveCount(2);
+    const publication = history
+      .locator('[data-record-origin="publication"]')
+      .first();
     await publication.getByRole("button", { expanded: false }).first().click();
     await expect(
       publication
@@ -255,14 +369,14 @@ test("owner receives intentional server messages and inspects native typed-answe
         (element) => element.textContent,
       );
     }, html);
-    expect(rendered).toHaveLength(2);
+    expect(rendered).toHaveLength(4);
     expect(
       rendered.some((text) =>
         text?.includes("Intentional fixture publication."),
       ),
     ).toBe(true);
     expect(rendered.some((text) => text?.includes(inputText))).toBe(true);
-    await expect(log.locator("[data-message-id]")).toHaveCount(2);
+    await expect(log.locator("[data-message-id]")).toHaveCount(4);
     await expect(
       log.getByText(/First assistant output|Second assistant utterance/),
     ).toHaveCount(0);

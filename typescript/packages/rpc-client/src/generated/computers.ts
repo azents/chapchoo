@@ -141,6 +141,15 @@ export interface AgentRequest {
   agentId: string;
 }
 
+export interface SystemPrompt {
+  content: string;
+}
+
+export interface SaveSystemPromptRequest {
+  agentId: string;
+  content: string;
+}
+
 export interface TeamAgentRequest {
   teamId: string;
   handle: string;
@@ -794,6 +803,128 @@ export const AgentRequest: MessageFns<AgentRequest> = {
   fromPartial<I extends Exact<DeepPartial<AgentRequest>, I>>(object: I): AgentRequest {
     const message = createBaseAgentRequest();
     message.agentId = object.agentId ?? "";
+    return message;
+  },
+};
+
+function createBaseSystemPrompt(): SystemPrompt {
+  return { content: "" };
+}
+
+export const SystemPrompt: MessageFns<SystemPrompt> = {
+  encode(message: SystemPrompt, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.content !== "") {
+      writer.uint32(10).string(message.content);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SystemPrompt {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseSystemPrompt();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.content = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<SystemPrompt>, I>>(base?: I): SystemPrompt {
+    return SystemPrompt.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SystemPrompt>, I>>(object: I): SystemPrompt {
+    const message = createBaseSystemPrompt();
+    message.content = object.content ?? "";
+    return message;
+  },
+};
+
+function createBaseSaveSystemPromptRequest(): SaveSystemPromptRequest {
+  return { agentId: "", content: "" };
+}
+
+export const SaveSystemPromptRequest: MessageFns<SaveSystemPromptRequest> = {
+  encode(message: SaveSystemPromptRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.agentId !== "") {
+      writer.uint32(10).string(message.agentId);
+    }
+    if (message.content !== "") {
+      writer.uint32(18).string(message.content);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SaveSystemPromptRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseSaveSystemPromptRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.agentId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.content = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<SaveSystemPromptRequest>, I>>(base?: I): SaveSystemPromptRequest {
+    return SaveSystemPromptRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SaveSystemPromptRequest>, I>>(object: I): SaveSystemPromptRequest {
+    const message = createBaseSaveSystemPromptRequest();
+    message.agentId = object.agentId ?? "";
+    message.content = object.content ?? "";
     return message;
   },
 };
@@ -3467,6 +3598,25 @@ export const AgentsService = {
     responseSerialize: (value: Agent): Buffer => Buffer.from(Agent.encode(value).finish()),
     responseDeserialize: (value: Buffer): Agent => Agent.decode(value),
   },
+  getSystemPrompt: {
+    path: "/chapchoo.computers.Agents/GetSystemPrompt" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: AgentRequest): Buffer => Buffer.from(AgentRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): AgentRequest => AgentRequest.decode(value),
+    responseSerialize: (value: SystemPrompt): Buffer => Buffer.from(SystemPrompt.encode(value).finish()),
+    responseDeserialize: (value: Buffer): SystemPrompt => SystemPrompt.decode(value),
+  },
+  saveSystemPrompt: {
+    path: "/chapchoo.computers.Agents/SaveSystemPrompt" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: SaveSystemPromptRequest): Buffer =>
+      Buffer.from(SaveSystemPromptRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): SaveSystemPromptRequest => SaveSystemPromptRequest.decode(value),
+    responseSerialize: (value: SystemPrompt): Buffer => Buffer.from(SystemPrompt.encode(value).finish()),
+    responseDeserialize: (value: Buffer): SystemPrompt => SystemPrompt.decode(value),
+  },
   creationResult: {
     path: "/chapchoo.computers.Agents/CreationResult" as const,
     requestStream: false as const,
@@ -3497,6 +3647,8 @@ export interface AgentsServer extends UntypedServiceImplementation {
   get: handleUnaryCall<AgentRequest, Agent>;
   getInTeam: handleUnaryCall<TeamAgentRequest, Agent>;
   updateProfile: handleUnaryCall<UpdateAgentProfileRequest, Agent>;
+  getSystemPrompt: handleUnaryCall<AgentRequest, SystemPrompt>;
+  saveSystemPrompt: handleUnaryCall<SaveSystemPromptRequest, SystemPrompt>;
   creationResult: handleUnaryCall<CreationResultRequest, HistoricalCreationResult>;
   forceRemove: handleUnaryCall<ForceRemoveRequest, Empty>;
 }
@@ -3600,6 +3752,36 @@ export interface AgentsClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: Agent) => void,
+  ): ClientUnaryCall;
+  getSystemPrompt(
+    request: AgentRequest,
+    callback: (error: ServiceError | null, response: SystemPrompt) => void,
+  ): ClientUnaryCall;
+  getSystemPrompt(
+    request: AgentRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: SystemPrompt) => void,
+  ): ClientUnaryCall;
+  getSystemPrompt(
+    request: AgentRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: SystemPrompt) => void,
+  ): ClientUnaryCall;
+  saveSystemPrompt(
+    request: SaveSystemPromptRequest,
+    callback: (error: ServiceError | null, response: SystemPrompt) => void,
+  ): ClientUnaryCall;
+  saveSystemPrompt(
+    request: SaveSystemPromptRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: SystemPrompt) => void,
+  ): ClientUnaryCall;
+  saveSystemPrompt(
+    request: SaveSystemPromptRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: SystemPrompt) => void,
   ): ClientUnaryCall;
   creationResult(
     request: CreationResultRequest,

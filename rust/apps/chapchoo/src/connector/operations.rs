@@ -147,52 +147,121 @@ impl Operations {
             None => return Err("Setup context is required".into()),
         };
         let authentication = Arc::new(super::authentication::Authentication::new(
-            channel, origin, key, &command,
+            channel.clone(),
+            origin.clone(),
+            key,
+            &command,
         )?);
         let scope = chapchoo_harness::NativeToolScope {
             agent_id: command.agent_id.clone(),
             conversation_id: command.conversation_id.clone(),
         };
-        let tools = Arc::new(super::server_tools::Provider::new(
-            self.tools_route.clone(),
-            scope.clone(),
-            self.ordering.clone(),
-        ));
-        let rx = match self.native.admit_setup_with_authentication(
-            NativeSetupOperation {
-                operation_id: command.operation_id.clone(),
-                scope,
-                supply,
-                intent,
-            },
-            authentication,
-            tools,
-        ) {
-            Ok(rx) => rx,
-            Err(chapchoo_harness::Error::NotAdmitted) => return Ok(false),
-            Err(error) => return Err(error.into()),
-        };
+        let native = self.native.clone();
+        let route = self.tools_route.clone();
+        let ordering = self.ordering.clone();
+        let key = BearerSecret::parse(key.expose().to_owned())?;
         self.tasks.spawn(async move {
-            let result = match rx.await {
-                Ok(Ok(NativeSetupObservation::Ready(target))) => {
-                    c::setup_report::Result::Ready(c::NativeTarget {
-                        snapshot_id: target.snapshot.as_str().into(),
-                        native_session_id: target.native_session.as_str().into(),
+            let prepared = async {
+                let mut client = ConnectorCaptureClient::new(channel)
+                    .max_decoding_message_size(64 * 1024)
+                    .max_encoding_message_size(64 * 1024);
+                let evidence = client
+                    .read_project_instructions(request(
+                        c::ProjectInstructionsRequest {
+                            source: Some(origin),
+                            agent_id: command.agent_id.clone(),
+                            conversation_id: command.conversation_id.clone(),
+                            operation_id: command.operation_id.clone(),
+                        },
+                        &key,
+                    )?)
+                    .await?
+                    .into_inner();
+                if evidence.agent_id != command.agent_id
+                    || evidence.conversation_id != command.conversation_id
+                    || evidence.operation_id != command.operation_id
+                {
+                    return Err::<_, AppError>("Project instruction selection changed".into());
+                }
+                let sources = evidence
+                    .sources
+                    .into_iter()
+                    .map(|source| {
+                        let kind = match c::InstructionSourceKind::try_from(source.kind)? {
+                            c::InstructionSourceKind::Product => {
+                                chapchoo_domain::InstructionSourceKind::Product
+                            }
+                            c::InstructionSourceKind::Function => {
+                                chapchoo_domain::InstructionSourceKind::Function
+                            }
+                            c::InstructionSourceKind::Owner => {
+                                chapchoo_domain::InstructionSourceKind::Owner
+                            }
+                            c::InstructionSourceKind::Execution => {
+                                chapchoo_domain::InstructionSourceKind::Execution
+                            }
+                            c::InstructionSourceKind::Unspecified => {
+                                return Err::<_, AppError>("Instruction source is required".into());
+                            }
+                        };
+                        Ok(chapchoo_domain::InstructionSource {
+                            kind,
+                            text: source.text,
+                        })
                     })
+                    .collect::<Result<Vec<_>, AppError>>()?;
+                let instructions = chapchoo_domain::ProjectInstructions::new(sources)?;
+                if instructions.document() != evidence.rendered_document {
+                    return Err("Project instruction document does not match its originals".into());
                 }
-                Ok(Ok(NativeSetupObservation::Failed(failure))) => {
-                    c::setup_report::Result::Failed(match failure {
-                        NativeSetupFailure::NotAdmitted => c::SetupFailure::NotAdmitted,
-                        NativeSetupFailure::BeforeNativeLaunch => {
-                            c::SetupFailure::BeforeNativeLaunch
-                        }
-                        NativeSetupFailure::NativeRejected => c::SetupFailure::NativeRejected,
-                        NativeSetupFailure::SourceUnavailable => c::SetupFailure::SourceUnavailable,
-                        NativeSetupFailure::RetirementUnknown => c::SetupFailure::RetirementUnknown,
-                    } as i32)
+                let tools = Arc::new(
+                    super::server_tools::Provider::new(route, scope.clone(), ordering)
+                        .with_expected_catalog(&evidence.tool_catalog)?,
+                );
+                let rx = native.admit_setup_with_authentication(
+                    NativeSetupOperation {
+                        operation_id: command.operation_id.clone(),
+                        scope,
+                        supply,
+                        intent,
+                        instructions,
+                        tool_catalog: evidence.tool_catalog,
+                    },
+                    authentication,
+                    tools,
+                )?;
+                Ok(rx)
+            }
+            .await;
+            let result = match prepared {
+                Ok(rx) => match rx.await {
+                    Ok(Ok(NativeSetupObservation::Ready(target))) => {
+                        c::setup_report::Result::Ready(c::NativeTarget {
+                            snapshot_id: target.snapshot.as_str().into(),
+                            native_session_id: target.native_session.as_str().into(),
+                        })
+                    }
+                    Ok(Ok(NativeSetupObservation::Failed(failure))) => {
+                        c::setup_report::Result::Failed(match failure {
+                            NativeSetupFailure::NotAdmitted => c::SetupFailure::NotAdmitted,
+                            NativeSetupFailure::BeforeNativeLaunch => {
+                                c::SetupFailure::BeforeNativeLaunch
+                            }
+                            NativeSetupFailure::NativeRejected => c::SetupFailure::NativeRejected,
+                            NativeSetupFailure::SourceUnavailable => {
+                                c::SetupFailure::SourceUnavailable
+                            }
+                            NativeSetupFailure::RetirementUnknown => {
+                                c::SetupFailure::RetirementUnknown
+                            }
+                        } as i32)
+                    }
+                    // A lost local result is possible delivery, not a known failure.
+                    _ => return None,
+                },
+                Err(_) => {
+                    c::setup_report::Result::Failed(c::SetupFailure::BeforeNativeLaunch as i32)
                 }
-                // A lost local result is possible delivery, not a known failure.
-                _ => return None,
             };
             Some((
                 Report::Setup(c::SetupReport {

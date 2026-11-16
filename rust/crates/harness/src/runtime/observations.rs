@@ -42,12 +42,47 @@ struct Observed {
     foreground: Option<NativeForeground>,
     work: Option<String>,
     incoming: BTreeMap<schema::RequestId, SourcePosition>,
+    activity: super::activity::ActivityTracker,
 }
 #[derive(Deserialize)]
 struct IncomingRequest {
     id: schema::RequestId,
 }
 impl Observations {
+    pub(super) fn record_live(&self, source: &crate::CaptureLog, line: &str) -> Result<(), Error> {
+        let envelope: SessionEnvelope = serde_json::from_str(line).map_err(|_| Error::Protocol)?;
+        let session = envelope.params.session_id.ok_or(Error::Protocol)?;
+        if source
+            .native_session()?
+            .as_ref()
+            .is_some_and(|root| root.as_str() != session)
+        {
+            let method: IncomingEnvelope =
+                serde_json::from_str(line).map_err(|_| Error::Protocol)?;
+            let mut state = self.0.lock().map_err(|_| Error::Protocol)?;
+            if !state.activity.contains_child(&session) {
+                state.activity.mark_uncertain();
+            } else if method.method.as_deref() == Some("session/update") {
+                // Incomplete work evidence blocks refresh, not the lifetime of
+                // the already-started native owner.
+                let _ = state.activity.observe(line);
+            } else {
+                state.activity.child_request(&session);
+            }
+            // Child updates are live work evidence, not root journal records.
+            // Child requests get an explicit unsupported SDK response.
+            return Ok(());
+        }
+        self.captured(line, source.append(line, None)?)
+    }
+    pub(super) fn accepts_root_request(&self, session: &schema::SessionId) -> bool {
+        self.0.lock().is_ok_and(|state| {
+            state
+                .source
+                .as_ref()
+                .is_some_and(|(_, root)| root.as_str() == session.to_string())
+        })
+    }
     pub(super) fn changed(&self) {
         self.1.notify_one();
     }
@@ -62,6 +97,39 @@ impl Observations {
         }
         let method: Method = serde_json::from_str(line).map_err(|_| Error::Protocol)?;
         if method.method == "session/update" {
+            {
+                let mut state = self.0.lock().map_err(|_| Error::Protocol)?;
+                let _ = state.activity.observe(line);
+            }
+            #[derive(Deserialize)]
+            struct UpdateKind {
+                params: UpdateParams,
+            }
+            #[derive(Deserialize)]
+            #[serde(rename_all = "camelCase")]
+            struct UpdateParams {
+                session_id: String,
+                update: Kind,
+            }
+            #[derive(Deserialize)]
+            #[serde(rename_all = "camelCase")]
+            struct Kind {
+                session_update: String,
+            }
+            let kind: UpdateKind = serde_json::from_str(line).map_err(|_| Error::Protocol)?;
+            if kind.params.update.session_update != "state_update" {
+                return Ok(());
+            }
+            if self
+                .0
+                .lock()
+                .map_err(|_| Error::Protocol)?
+                .source
+                .as_ref()
+                .is_some_and(|(_, root)| root.as_str() != kind.params.session_id)
+            {
+                return Ok(());
+            }
             #[derive(Deserialize)]
             struct Notification {
                 params: schema::UpdateSessionNotification,
@@ -95,6 +163,7 @@ impl Observations {
         &self,
         snapshot: SnapshotId,
         native: NativeConversationId,
+        empty_scope: bool,
     ) -> Result<(), Error> {
         let mut state = self.0.lock().map_err(|_| Error::Protocol)?;
         if state
@@ -111,8 +180,17 @@ impl Observations {
         {
             return Err(Error::CaptureConflict);
         }
+        state.activity.bind(native.as_str(), empty_scope)?;
         state.source = Some((snapshot, native));
         Ok(())
+    }
+    pub(super) fn quiescent(&self) -> bool {
+        self.0.lock().is_ok_and(|state| {
+            state
+                .source
+                .as_ref()
+                .is_some_and(|(_, native)| state.activity.is_quiescent(native.as_str()))
+        })
     }
     #[cfg(test)]
     pub(super) fn update(&self, update: schema::UpdateSessionNotification) -> Result<(), Error> {
@@ -228,6 +306,7 @@ mod tests {
         observations.bind(
             SnapshotId::parse("snapshot".into())?,
             NativeConversationId::parse("native".into())?,
+            true,
         )?;
         assert!(observations.current()?.work.is_none());
         observations.update(update(schema::StateUpdate::Running(

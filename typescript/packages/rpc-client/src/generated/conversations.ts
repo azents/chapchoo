@@ -24,6 +24,15 @@ export const protobufPackage = "chapchoo.conversations";
 
 export const protobufFileName = "conversations.proto";
 
+export enum InstructionSourceKind {
+  INSTRUCTION_SOURCE_KIND_UNSPECIFIED = 0,
+  INSTRUCTION_SOURCE_KIND_PRODUCT = 1,
+  INSTRUCTION_SOURCE_KIND_FUNCTION = 2,
+  INSTRUCTION_SOURCE_KIND_OWNER = 3,
+  INSTRUCTION_SOURCE_KIND_EXECUTION = 4,
+  UNRECOGNIZED = -1,
+}
+
 export enum MessageRole {
   MESSAGE_ROLE_UNSPECIFIED = 0,
   MESSAGE_ROLE_USER = 1,
@@ -144,6 +153,55 @@ export enum AuthenticationRefreshObservation {
 
 export interface OwnerConversationRequest {
   agentId: string;
+}
+
+export interface OwnerInstructionEvidenceRequest {
+  agentId: string;
+  conversationId: string;
+  operationId: string;
+}
+
+export interface OwnerInstructionHistoryRequest {
+  agentId: string;
+  conversationId: string;
+  beforeOperationId?: string | undefined;
+}
+
+export interface ProjectInstructionMetadata {
+  operationId: string;
+  executionId: string;
+  createdAt: bigint;
+  appliedAt?: bigint | undefined;
+}
+
+export interface ProjectInstructionHistory {
+  items: ProjectInstructionMetadata[];
+  nextBefore?: string | undefined;
+}
+
+export interface InstructionSource {
+  kind: InstructionSourceKind;
+  text: string;
+}
+
+export interface ProjectInstructionEvidence {
+  agentId: string;
+  conversationId: string;
+  operationId: string;
+  executionId: string;
+  sources: InstructionSource[];
+  renderedDocument: string;
+  createdAt: bigint;
+  toolCatalog: Buffer;
+  appliedTarget: NativeTarget | undefined;
+  appliedAt?: bigint | undefined;
+}
+
+export interface ProjectInstructionsRequest {
+  source: CaptureSource | undefined;
+  agentId: string;
+  conversationId: string;
+  operationId: string;
 }
 
 /** Chat scope follows product conversation ownership, not a native snapshot. */
@@ -889,6 +947,678 @@ export const OwnerConversationRequest: MessageFns<OwnerConversationRequest> = {
   fromPartial<I extends Exact<DeepPartial<OwnerConversationRequest>, I>>(object: I): OwnerConversationRequest {
     const message = createBaseOwnerConversationRequest();
     message.agentId = object.agentId ?? "";
+    return message;
+  },
+};
+
+function createBaseOwnerInstructionEvidenceRequest(): OwnerInstructionEvidenceRequest {
+  return { agentId: "", conversationId: "", operationId: "" };
+}
+
+export const OwnerInstructionEvidenceRequest: MessageFns<OwnerInstructionEvidenceRequest> = {
+  encode(message: OwnerInstructionEvidenceRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.agentId !== "") {
+      writer.uint32(10).string(message.agentId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(18).string(message.conversationId);
+    }
+    if (message.operationId !== "") {
+      writer.uint32(26).string(message.operationId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): OwnerInstructionEvidenceRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseOwnerInstructionEvidenceRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.agentId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.operationId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<OwnerInstructionEvidenceRequest>, I>>(base?: I): OwnerInstructionEvidenceRequest {
+    return OwnerInstructionEvidenceRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<OwnerInstructionEvidenceRequest>, I>>(
+    object: I,
+  ): OwnerInstructionEvidenceRequest {
+    const message = createBaseOwnerInstructionEvidenceRequest();
+    message.agentId = object.agentId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    message.operationId = object.operationId ?? "";
+    return message;
+  },
+};
+
+function createBaseOwnerInstructionHistoryRequest(): OwnerInstructionHistoryRequest {
+  return { agentId: "", conversationId: "", beforeOperationId: undefined };
+}
+
+export const OwnerInstructionHistoryRequest: MessageFns<OwnerInstructionHistoryRequest> = {
+  encode(message: OwnerInstructionHistoryRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.agentId !== "") {
+      writer.uint32(10).string(message.agentId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(18).string(message.conversationId);
+    }
+    if (message.beforeOperationId !== undefined) {
+      writer.uint32(26).string(message.beforeOperationId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): OwnerInstructionHistoryRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseOwnerInstructionHistoryRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.agentId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.beforeOperationId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<OwnerInstructionHistoryRequest>, I>>(base?: I): OwnerInstructionHistoryRequest {
+    return OwnerInstructionHistoryRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<OwnerInstructionHistoryRequest>, I>>(
+    object: I,
+  ): OwnerInstructionHistoryRequest {
+    const message = createBaseOwnerInstructionHistoryRequest();
+    message.agentId = object.agentId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    message.beforeOperationId = object.beforeOperationId ?? undefined;
+    return message;
+  },
+};
+
+function createBaseProjectInstructionMetadata(): ProjectInstructionMetadata {
+  return { operationId: "", executionId: "", createdAt: 0n, appliedAt: undefined };
+}
+
+export const ProjectInstructionMetadata: MessageFns<ProjectInstructionMetadata> = {
+  encode(message: ProjectInstructionMetadata, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.operationId !== "") {
+      writer.uint32(10).string(message.operationId);
+    }
+    if (message.executionId !== "") {
+      writer.uint32(18).string(message.executionId);
+    }
+    if (message.createdAt !== 0n) {
+      if (BigInt.asIntN(64, message.createdAt) !== message.createdAt) {
+        throw new globalThis.Error("value provided for field message.createdAt of type int64 too large");
+      }
+      writer.uint32(24).int64(message.createdAt);
+    }
+    if (message.appliedAt !== undefined) {
+      if (BigInt.asIntN(64, message.appliedAt) !== message.appliedAt) {
+        throw new globalThis.Error("value provided for field message.appliedAt of type int64 too large");
+      }
+      writer.uint32(32).int64(message.appliedAt);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ProjectInstructionMetadata {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseProjectInstructionMetadata();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.operationId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.executionId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.createdAt = reader.int64() as bigint;
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.appliedAt = reader.int64() as bigint;
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ProjectInstructionMetadata>, I>>(base?: I): ProjectInstructionMetadata {
+    return ProjectInstructionMetadata.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ProjectInstructionMetadata>, I>>(object: I): ProjectInstructionMetadata {
+    const message = createBaseProjectInstructionMetadata();
+    message.operationId = object.operationId ?? "";
+    message.executionId = object.executionId ?? "";
+    message.createdAt = (object.createdAt !== undefined && object.createdAt !== null) ? BigInt(object.createdAt) : 0n;
+    message.appliedAt = (object.appliedAt !== undefined && object.appliedAt !== null)
+      ? BigInt(object.appliedAt)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseProjectInstructionHistory(): ProjectInstructionHistory {
+  return { items: [], nextBefore: undefined };
+}
+
+export const ProjectInstructionHistory: MessageFns<ProjectInstructionHistory> = {
+  encode(message: ProjectInstructionHistory, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.items) {
+      ProjectInstructionMetadata.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.nextBefore !== undefined) {
+      writer.uint32(18).string(message.nextBefore);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ProjectInstructionHistory {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseProjectInstructionHistory();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.items.push(ProjectInstructionMetadata.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.nextBefore = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ProjectInstructionHistory>, I>>(base?: I): ProjectInstructionHistory {
+    return ProjectInstructionHistory.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ProjectInstructionHistory>, I>>(object: I): ProjectInstructionHistory {
+    const message = createBaseProjectInstructionHistory();
+    message.items = object.items?.map((e) => ProjectInstructionMetadata.fromPartial(e)) || [];
+    message.nextBefore = object.nextBefore ?? undefined;
+    return message;
+  },
+};
+
+function createBaseInstructionSource(): InstructionSource {
+  return { kind: 0, text: "" };
+}
+
+export const InstructionSource: MessageFns<InstructionSource> = {
+  encode(message: InstructionSource, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.kind !== 0) {
+      writer.uint32(8).int32(message.kind);
+    }
+    if (message.text !== "") {
+      writer.uint32(18).string(message.text);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): InstructionSource {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseInstructionSource();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.kind = reader.int32() as any;
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.text = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<InstructionSource>, I>>(base?: I): InstructionSource {
+    return InstructionSource.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<InstructionSource>, I>>(object: I): InstructionSource {
+    const message = createBaseInstructionSource();
+    message.kind = object.kind ?? 0;
+    message.text = object.text ?? "";
+    return message;
+  },
+};
+
+function createBaseProjectInstructionEvidence(): ProjectInstructionEvidence {
+  return {
+    agentId: "",
+    conversationId: "",
+    operationId: "",
+    executionId: "",
+    sources: [],
+    renderedDocument: "",
+    createdAt: 0n,
+    toolCatalog: Buffer.alloc(0),
+    appliedTarget: undefined,
+    appliedAt: undefined,
+  };
+}
+
+export const ProjectInstructionEvidence: MessageFns<ProjectInstructionEvidence> = {
+  encode(message: ProjectInstructionEvidence, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.agentId !== "") {
+      writer.uint32(10).string(message.agentId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(18).string(message.conversationId);
+    }
+    if (message.operationId !== "") {
+      writer.uint32(26).string(message.operationId);
+    }
+    if (message.executionId !== "") {
+      writer.uint32(34).string(message.executionId);
+    }
+    for (const v of message.sources) {
+      InstructionSource.encode(v!, writer.uint32(42).fork()).join();
+    }
+    if (message.renderedDocument !== "") {
+      writer.uint32(50).string(message.renderedDocument);
+    }
+    if (message.createdAt !== 0n) {
+      if (BigInt.asIntN(64, message.createdAt) !== message.createdAt) {
+        throw new globalThis.Error("value provided for field message.createdAt of type int64 too large");
+      }
+      writer.uint32(56).int64(message.createdAt);
+    }
+    if (message.toolCatalog.length !== 0) {
+      writer.uint32(66).bytes(message.toolCatalog);
+    }
+    if (message.appliedTarget !== undefined) {
+      NativeTarget.encode(message.appliedTarget, writer.uint32(74).fork()).join();
+    }
+    if (message.appliedAt !== undefined) {
+      if (BigInt.asIntN(64, message.appliedAt) !== message.appliedAt) {
+        throw new globalThis.Error("value provided for field message.appliedAt of type int64 too large");
+      }
+      writer.uint32(80).int64(message.appliedAt);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ProjectInstructionEvidence {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseProjectInstructionEvidence();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.agentId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.operationId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.executionId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.sources.push(InstructionSource.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.renderedDocument = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 56) {
+              break;
+            }
+
+            message.createdAt = reader.int64() as bigint;
+            continue;
+          }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.toolCatalog = Buffer.from(reader.bytes());
+            continue;
+          }
+          case 9: {
+            if (tag !== 74) {
+              break;
+            }
+
+            message.appliedTarget = NativeTarget.decode(reader, reader.uint32());
+            continue;
+          }
+          case 10: {
+            if (tag !== 80) {
+              break;
+            }
+
+            message.appliedAt = reader.int64() as bigint;
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ProjectInstructionEvidence>, I>>(base?: I): ProjectInstructionEvidence {
+    return ProjectInstructionEvidence.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ProjectInstructionEvidence>, I>>(object: I): ProjectInstructionEvidence {
+    const message = createBaseProjectInstructionEvidence();
+    message.agentId = object.agentId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    message.operationId = object.operationId ?? "";
+    message.executionId = object.executionId ?? "";
+    message.sources = object.sources?.map((e) => InstructionSource.fromPartial(e)) || [];
+    message.renderedDocument = object.renderedDocument ?? "";
+    message.createdAt = (object.createdAt !== undefined && object.createdAt !== null) ? BigInt(object.createdAt) : 0n;
+    message.toolCatalog = object.toolCatalog ?? Buffer.alloc(0);
+    message.appliedTarget = (object.appliedTarget !== undefined && object.appliedTarget !== null)
+      ? NativeTarget.fromPartial(object.appliedTarget)
+      : undefined;
+    message.appliedAt = (object.appliedAt !== undefined && object.appliedAt !== null)
+      ? BigInt(object.appliedAt)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseProjectInstructionsRequest(): ProjectInstructionsRequest {
+  return { source: undefined, agentId: "", conversationId: "", operationId: "" };
+}
+
+export const ProjectInstructionsRequest: MessageFns<ProjectInstructionsRequest> = {
+  encode(message: ProjectInstructionsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.source !== undefined) {
+      CaptureSource.encode(message.source, writer.uint32(10).fork()).join();
+    }
+    if (message.agentId !== "") {
+      writer.uint32(18).string(message.agentId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(26).string(message.conversationId);
+    }
+    if (message.operationId !== "") {
+      writer.uint32(34).string(message.operationId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ProjectInstructionsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseProjectInstructionsRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.source = CaptureSource.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.agentId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.operationId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ProjectInstructionsRequest>, I>>(base?: I): ProjectInstructionsRequest {
+    return ProjectInstructionsRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ProjectInstructionsRequest>, I>>(object: I): ProjectInstructionsRequest {
+    const message = createBaseProjectInstructionsRequest();
+    message.source = (object.source !== undefined && object.source !== null)
+      ? CaptureSource.fromPartial(object.source)
+      : undefined;
+    message.agentId = object.agentId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    message.operationId = object.operationId ?? "";
     return message;
   },
 };
@@ -9695,6 +10425,29 @@ export const ConversationsService = {
     responseSerialize: (value: OwnerConversation): Buffer => Buffer.from(OwnerConversation.encode(value).finish()),
     responseDeserialize: (value: Buffer): OwnerConversation => OwnerConversation.decode(value),
   },
+  instructionEvidence: {
+    path: "/chapchoo.conversations.Conversations/InstructionEvidence" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: OwnerInstructionEvidenceRequest): Buffer =>
+      Buffer.from(OwnerInstructionEvidenceRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): OwnerInstructionEvidenceRequest =>
+      OwnerInstructionEvidenceRequest.decode(value),
+    responseSerialize: (value: ProjectInstructionEvidence): Buffer =>
+      Buffer.from(ProjectInstructionEvidence.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ProjectInstructionEvidence => ProjectInstructionEvidence.decode(value),
+  },
+  instructionHistory: {
+    path: "/chapchoo.conversations.Conversations/InstructionHistory" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: OwnerInstructionHistoryRequest): Buffer =>
+      Buffer.from(OwnerInstructionHistoryRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): OwnerInstructionHistoryRequest => OwnerInstructionHistoryRequest.decode(value),
+    responseSerialize: (value: ProjectInstructionHistory): Buffer =>
+      Buffer.from(ProjectInstructionHistory.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ProjectInstructionHistory => ProjectInstructionHistory.decode(value),
+  },
   getSupply: {
     path: "/chapchoo.conversations.Conversations/GetSupply" as const,
     requestStream: false as const,
@@ -9892,6 +10645,8 @@ export const ConversationsService = {
 
 export interface ConversationsServer extends UntypedServiceImplementation {
   current: handleUnaryCall<OwnerConversationRequest, OwnerConversation>;
+  instructionEvidence: handleUnaryCall<OwnerInstructionEvidenceRequest, ProjectInstructionEvidence>;
+  instructionHistory: handleUnaryCall<OwnerInstructionHistoryRequest, ProjectInstructionHistory>;
   getSupply: handleUnaryCall<OwnerConversationRequest, SavedSupply>;
   saveSupply: handleUnaryCall<SaveSupplyRequest, SavedSupply>;
   submitInput: handleUnaryCall<OwnerInputPiece, OwnerInputProgress>;
@@ -9930,6 +10685,36 @@ export interface ConversationsClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: OwnerConversation) => void,
+  ): ClientUnaryCall;
+  instructionEvidence(
+    request: OwnerInstructionEvidenceRequest,
+    callback: (error: ServiceError | null, response: ProjectInstructionEvidence) => void,
+  ): ClientUnaryCall;
+  instructionEvidence(
+    request: OwnerInstructionEvidenceRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ProjectInstructionEvidence) => void,
+  ): ClientUnaryCall;
+  instructionEvidence(
+    request: OwnerInstructionEvidenceRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ProjectInstructionEvidence) => void,
+  ): ClientUnaryCall;
+  instructionHistory(
+    request: OwnerInstructionHistoryRequest,
+    callback: (error: ServiceError | null, response: ProjectInstructionHistory) => void,
+  ): ClientUnaryCall;
+  instructionHistory(
+    request: OwnerInstructionHistoryRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ProjectInstructionHistory) => void,
+  ): ClientUnaryCall;
+  instructionHistory(
+    request: OwnerInstructionHistoryRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ProjectInstructionHistory) => void,
   ): ClientUnaryCall;
   getSupply(
     request: OwnerConversationRequest,
@@ -10263,6 +11048,17 @@ export const ConversationsClient = makeGenericClientConstructor(
  */
 export type ConnectorCaptureService = typeof ConnectorCaptureService;
 export const ConnectorCaptureService = {
+  readProjectInstructions: {
+    path: "/chapchoo.conversations.ConnectorCapture/ReadProjectInstructions" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ProjectInstructionsRequest): Buffer =>
+      Buffer.from(ProjectInstructionsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ProjectInstructionsRequest => ProjectInstructionsRequest.decode(value),
+    responseSerialize: (value: ProjectInstructionEvidence): Buffer =>
+      Buffer.from(ProjectInstructionEvidence.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ProjectInstructionEvidence => ProjectInstructionEvidence.decode(value),
+  },
   current: {
     path: "/chapchoo.conversations.ConnectorCapture/Current" as const,
     requestStream: false as const,
@@ -10464,6 +11260,7 @@ export const ConnectorCaptureService = {
 } as const;
 
 export interface ConnectorCaptureServer extends UntypedServiceImplementation {
+  readProjectInstructions: handleUnaryCall<ProjectInstructionsRequest, ProjectInstructionEvidence>;
   current: handleUnaryCall<CurrentCaptureRequest, CurrentCaptureState>;
   inspect: handleUnaryCall<CaptureRequest, CaptureState>;
   bind: handleUnaryCall<BindCaptureRequest, CaptureState>;
@@ -10491,6 +11288,21 @@ export interface ConnectorCaptureServer extends UntypedServiceImplementation {
 }
 
 export interface ConnectorCaptureClient extends Client {
+  readProjectInstructions(
+    request: ProjectInstructionsRequest,
+    callback: (error: ServiceError | null, response: ProjectInstructionEvidence) => void,
+  ): ClientUnaryCall;
+  readProjectInstructions(
+    request: ProjectInstructionsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ProjectInstructionEvidence) => void,
+  ): ClientUnaryCall;
+  readProjectInstructions(
+    request: ProjectInstructionsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ProjectInstructionEvidence) => void,
+  ): ClientUnaryCall;
   current(
     request: CurrentCaptureRequest,
     callback: (error: ServiceError | null, response: CurrentCaptureState) => void,

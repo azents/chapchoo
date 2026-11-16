@@ -16,6 +16,7 @@ mod mapping;
 mod memory;
 mod native_resources;
 mod peer;
+mod project_instructions;
 mod provider_authentication;
 mod reports;
 mod server_tools;

@@ -393,6 +393,7 @@ export function Chat(props: ChatProps): ReactElement {
                 onDetailsExit={props.focus.nestedClosed}
               />
               {props.supplyControl}
+              {props.instructionEvidenceControl}
               <div className={classes.summary}>
                 <span>
                   {agent.name} · {c.codex}

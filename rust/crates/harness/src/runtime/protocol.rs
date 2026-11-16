@@ -50,6 +50,10 @@ pub(super) async fn connect_authenticated(
             async move |request: schema::RequestPermissionRequest,
                         responder: Responder<schema::RequestPermissionResponse>,
                         _cx: ConnectionTo<Agent>| {
+                if !permission_observation.accepts_root_request(&request.session_id) {
+                    return responder
+                        .respond_with_error(agent_client_protocol::Error::invalid_params());
+                }
                 let mut pending = permission.lock().await;
                 pending.retain(|_, (_, r)| !r.cancelled());
                 let position = permission_observation
@@ -75,6 +79,19 @@ pub(super) async fn connect_authenticated(
             async move |request: schema::CreateElicitationRequest,
                         responder: Responder<schema::CreateElicitationResponse>,
                         _cx: ConnectionTo<Agent>| {
+                let root_scope = match &request.mode {
+                    schema::ElicitationMode::Form(form) => match &form.scope {
+                        schema::ElicitationScope::Session(scope) => {
+                            form_observation.accepts_root_request(&scope.session_id)
+                        }
+                        _ => false,
+                    },
+                    _ => false,
+                };
+                if !root_scope {
+                    return responder
+                        .respond_with_error(agent_client_protocol::Error::invalid_params());
+                }
                 let mut pending = forms.lock().await;
                 pending.retain(|_, (_, r)| !r.cancelled());
                 let position = form_observation
@@ -180,6 +197,7 @@ async fn initialize_session(
     // Credentials never enter capture. Do not install an external-token callback
     // or an interactive/native-login fallback.
     drop(credentials);
+    let fresh = matches!(&context, NativeContext::New);
     let session = match context {
         NativeContext::Resume {
             session: id,
@@ -208,5 +226,16 @@ async fn initialize_session(
                 .session
         }
     };
+    if fresh {
+        session
+            .connection()
+            .send_request(schema::SetSessionTitleRequest::new(
+                session.session_id().clone(),
+                "Agent project",
+            ))
+            .block_task()
+            .await
+            .map_err(|error| (ProtocolStage::Session, error))?;
+    }
     Ok(session)
 }

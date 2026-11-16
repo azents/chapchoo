@@ -126,6 +126,7 @@ queries. Background Computer observation does not overwrite in-progress edits.
 
 ## Connections
 
+- [Agent instructions](agent-instructions.md) — Separate owner system-prompt setting, default project and retained supplied sources.
 - [Repository identity](repository-identity.md) — IDs are opaque and separate from handles, request keys and native witnesses.
 - [Private Agent ownership](agent-ownership.md) — context selection does not share an owner's Agent with another member.
 - [Backend authentication](backend-authentication.md) — atomic new selection and preserved historical creation results.

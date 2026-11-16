@@ -253,7 +253,9 @@ pub(super) async fn exercise(
             .code(),
         Code::NotFound
     );
-    seal(context, &target).await?;
+    seal(context, &target)
+        .await
+        .map_err(|error| format!("wire-authentication-start preparation admission: {error}"))?;
     let original = context
         .store
         .agent(
@@ -453,6 +455,27 @@ pub(super) async fn exercise(
             .applied,
         Some(applied)
     );
+    // This fixture exercised credential handoff only; it never sealed project
+    // instructions or started native setup. Settle that exact unlaunched owner
+    // before admitting an independent OAuth preparation.
+    let route = context
+        .store
+        .resolve_connector_route(&context.agent.computer.id)
+        .await?
+        .ok_or("Missing authentication fixture route")?;
+    assert!(
+        context
+            .store
+            .reject_unsealed_preparation(
+                &route,
+                &ConversationInputPreparation {
+                    agent_id: &target.agent_id,
+                    conversation_id: &target.conversation_id,
+                    operation_id: &target.operation_id,
+                },
+            )
+            .await?
+    );
     let oauth = oauth(context).await?;
     let saved = context
         .store
@@ -481,7 +504,9 @@ pub(super) async fn exercise(
         )
         .await?;
     let oauth_target = prepare(context, "wire-oauth-start").await?;
-    seal(context, &oauth_target).await?;
+    seal(context, &oauth_target)
+        .await
+        .map_err(|error| format!("wire-oauth-start preparation admission: {error}"))?;
     client
         .begin_authentication(authenticated(
             c::BeginAuthenticationRequest {

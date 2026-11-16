@@ -16,6 +16,12 @@ No model execution is established
 by these storage or routing contracts. [Backend authentication](backend-authentication.md)
 still owns saved credential records separately.
 
+[Agent instructions](agent-instructions.md) owns direct-overwrite prompt settings,
+durable preparation-source evidence and the causal current-preparation reference.
+Those originals survive temporary input consumption. Final forwarding requires
+the exact current selection's applied evidence; absence, pending preparation or
+a later saved change never authorizes borrowing an older Ready bundle.
+
 ## Private admission and saved supply
 
 Owner reads/mutations authenticate the current account session, require the

@@ -18,6 +18,7 @@ import { AgentAuthenticationPage } from "@/shared/authentications/AgentAuthentic
 import { trpc } from "@/shared/rpc/client";
 import { creationCopy } from "../creationCopy";
 import { computerDetailCopy } from "../detailCopy";
+import { SystemPromptPage } from "../SystemPromptPage";
 import { useComputerActions } from "./useComputerActions";
 import type {
   AgentsInput,
@@ -195,6 +196,14 @@ export function useAgentsContainer({
   });
   return {
     initial,
+    systemPromptControl:
+      data.type === "detail"
+        ? createElement(SystemPromptPage, {
+            key: data.agent.id,
+            agentId: data.agent.id,
+            unavailable: detail.isError,
+          })
+        : null,
     authenticationControl:
       data.type === "detail"
         ? createElement(AgentAuthenticationPage, {

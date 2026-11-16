@@ -164,6 +164,40 @@ async fn dispatch_computer(
         if stopped(stop) {
             break;
         }
+        let (admission, already_sealed) = match admission {
+            ConnectionStartupAdmission::Settled {
+                agent_id,
+                conversation_id,
+                ..
+            } => {
+                let refresh = async {
+                    let selected = conversation
+                        .project_instructions_for_startup(&route, &agent_id, &conversation_id)
+                        .await?;
+                    let catalog = chapchoo_service::ConversationToolBackend::catalog_definition()?;
+                    conversation
+                        .admit_project_refresh(
+                            &route,
+                            &agent_id,
+                            &conversation_id,
+                            &selected,
+                            &catalog,
+                            chapchoo_service::AcceptanceTime::System.now()?,
+                        )
+                        .await
+                }
+                .await;
+                match refresh {
+                    Ok(Some(dispatch)) => (dispatch, true),
+                    Ok(None) => continue,
+                    Err(error) => {
+                        tracing::warn!(error=?error, "Project configuration refresh admission failed");
+                        continue;
+                    }
+                }
+            }
+            other => (other, false),
+        };
         let ConnectionStartupAdmission::Dispatch {
             agent_id,
             conversation_id,
@@ -189,6 +223,57 @@ async fn dispatch_computer(
             }
         };
         if !allowed || stopped(stop) {
+            continue;
+        }
+        let draft = chapchoo_service::ConversationInputPreparation {
+            agent_id: &agent_id,
+            conversation_id: &conversation_id,
+            operation_id: &operation_id,
+        };
+        let preserved = async {
+            if already_sealed {
+                return Ok::<(), chapchoo_service::ServiceError>(());
+            }
+            let catalog = chapchoo_service::ConversationToolBackend::catalog_definition()?;
+            let deadline = Instant::now() + Duration::from_secs(10);
+            loop {
+                if stopped(stop) || Instant::now() >= deadline {
+                    return Err(chapchoo_service::ServiceError::domain(
+                        chapchoo_service::DomainReason::InvalidTransition,
+                    ));
+                }
+                let selected = conversation
+                    .project_instructions_for_startup(&route, &agent_id, &conversation_id)
+                    .await?;
+                match conversation
+                    .seal_startup_project_instructions(
+                        &route,
+                        &draft,
+                        &selected,
+                        &catalog,
+                        chapchoo_service::AcceptanceTime::System.now()?,
+                    )
+                    .await
+                {
+                    Ok(_) => return Ok(()),
+                    Err(error)
+                        if error.reason() == chapchoo_service::DomainReason::InvalidTransition =>
+                    {
+                        tokio::time::sleep(Duration::from_millis(200)).await;
+                    }
+                    Err(error) => return Err(error),
+                }
+            }
+        }
+        .await;
+        if let Err(error) = preserved {
+            tracing::warn!(error=?error, "Project instruction preservation failed before startup");
+            if let Err(error) = conversation
+                .reject_unsealed_preparation(&route, &draft)
+                .await
+            {
+                tracing::warn!(error=?error, "Unsealed connection preparation could not be settled");
+            }
             continue;
         }
         let Some(call_id) = call_id() else {

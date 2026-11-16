@@ -1,8 +1,39 @@
+// Isolate historical migration tests after proving retained instruction evidence
+// prevents downgrade. Cleanup affects only this fixture's synthetic selections.
+macro_rules! isolate_pre_instructions_migration {
+    ($connection:expr,$migrations:expr) => {{
+        let connection = &mut *$connection;
+        if connection
+            .applied_migrations()?
+            .iter()
+            .any(|version| version.to_string() == "00000000000025")
+        {
+            #[derive(diesel::QueryableByName)]
+            struct EvidenceCount {
+                #[diesel(sql_type=diesel::sql_types::BigInt)]
+                n: i64,
+            }
+            let n = diesel::sql_query("SELECT CAST((SELECT count(*) FROM project_instruction_evidence)+(SELECT count(*) FROM agent_system_prompts)+(SELECT count(*) FROM conversations WHERE current_preparation_operation_id IS NOT NULL) AS BIGINT) AS n")
+                .get_result::<EvidenceCount>(connection)?.n;
+            if n > 0 {
+                assert!(connection.revert_last_migration($migrations).is_err(),
+                    "Retained instruction settings and originals must prevent downgrade");
+                connection.batch_execute("UPDATE conversations SET current_preparation_operation_id=NULL; DELETE FROM project_instruction_evidence; DELETE FROM agent_system_prompts")?;
+            }
+            assert_eq!(
+                connection.revert_last_migration($migrations)?.to_string(),
+                "00000000000025"
+            );
+        }
+    }};
+}
+
 // Recreate only this test fixture's historical acceptance-time receipts before
 // crossing the outgoing-queue boundary. No input body or evidence is discarded.
 macro_rules! isolate_pre_queue_migration {
     ($connection:expr,$migrations:expr) => {{
         let connection = &mut *$connection;
+        isolate_pre_instructions_migration!(connection,$migrations);
         if connection.applied_migrations()?.iter()
             .any(|version| version.to_string() == "00000000000024") {
             #[derive(diesel::QueryableByName)]
@@ -71,6 +102,8 @@ mod consumed_migration;
 mod delivery;
 #[path = "conversations/input_reads.rs"]
 mod input_reads;
+#[path = "conversations/instructions_fixture.rs"]
+mod instructions_fixture;
 #[path = "conversations/messages.rs"]
 mod messages;
 #[path = "conversations/messages_migration.rs"]
@@ -81,11 +114,15 @@ mod native_state;
 mod outgoing_queue;
 #[path = "conversations/preparation.rs"]
 mod preparation;
+#[path = "conversations/project_refresh.rs"]
+mod project_refresh;
 #[path = "conversations/projections.rs"]
 mod projections;
 #[path = "conversations/startup.rs"]
 mod startup;
 mod support;
+#[path = "conversations/system_prompts.rs"]
+mod system_prompts;
 
 use base64::{Engine, engine::general_purpose::URL_SAFE};
 use chapchoo_crypto::{
@@ -547,7 +584,9 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
     ));
     let s1 = snapshot("snapshot-one")?;
     let native = NativeConversationId::parse("native-context-one".to_owned())?;
-    preparation::initial(store, f, &first, &s1, &native).await?;
+    preparation::initial(store, f, &first, &s1, &native)
+        .await
+        .map_err(|error| format!("Initial preparation: {error}"))?;
     let binding = SourceBinding {
         conversation_id: first.conversation_id.clone(),
         expected_previous: None,
@@ -745,7 +784,9 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
             .await,
         Err(StoreError::Unauthenticated)
     ));
-    delivery::exercise(store, f, &first, &s1, &native).await?;
+    delivery::exercise(store, f, &first, &s1, &native)
+        .await
+        .map_err(|error| format!("Delivery: {error}"))?;
     answers::exercise(store, f, &first.conversation_id, &s1, &native).await?;
     native_state::exercise(store, f, &first.conversation_id, &s1, &native).await?;
     let s2 = snapshot("snapshot-two")?;
@@ -759,7 +800,9 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
         .bind_conversation_source(&source, &replacement)
         .await?;
     delivery::replaced(store, f, &first, &s1, &native).await?;
-    preparation::replaced(store, f, &first).await?;
+    preparation::replaced(store, f, &first)
+        .await
+        .map_err(|error| format!("Replaced preparation: {error}"))?;
     native_state::replaced(store, f, &first.conversation_id).await?;
     answers::replaced(store, f, &first.conversation_id).await?;
     assert!(

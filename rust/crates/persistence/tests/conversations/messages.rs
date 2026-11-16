@@ -28,6 +28,7 @@ async fn pickup(
         operation_id: &input.id,
         target: &target,
     };
+    instructions_fixture::apply(store, &actor, &route, &f.source(&key), &operation, f.now).await?;
     store
         .begin_conversation_input_forwarding(&actor, &route, &operation, f.now)
         .await?;
@@ -548,6 +549,7 @@ async fn exercise_delivery_retention(
         operation_id: &failed.id,
         ..forwarding
     };
+    instructions_fixture::apply(store, &owner, &route, &f.source(&key), &forwarding, f.now).await?;
     store
         .begin_conversation_input_forwarding(&owner, &route, &forwarding, f.now)
         .await?;
@@ -766,6 +768,7 @@ fn sqlite_chat_receipts_and_lifetime() -> Result<(), TestError> {
         "Injected chat failure",
     ))?;
     connection.batch_execute("DROP TRIGGER reject_chat_write_fixture")?;
+    isolate_pre_instructions_migration!(&mut connection, SQLITE_MIGRATIONS);
     assert!(connection.revert_last_migration(SQLITE_MIGRATIONS).is_err());
     connection.batch_execute("DELETE FROM agent_conversations")?;
     runtime.block_on(verify_bound_conversation(&store, &f, &conversation))?;
@@ -812,6 +815,7 @@ fn postgres_chat_receipts_and_lifetime() -> Result<(), TestError> {
             "Injected chat failure",
         ))?;
         connection.batch_execute("DROP TRIGGER reject_chat_write_fixture ON conversation_messages; DROP FUNCTION reject_chat_write_fixture()")?;
+        isolate_pre_instructions_migration!(&mut connection, POSTGRES_MIGRATIONS);
         assert!(
             connection
                 .revert_last_migration(POSTGRES_MIGRATIONS)

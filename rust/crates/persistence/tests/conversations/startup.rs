@@ -194,6 +194,14 @@ async fn exercise(
             .ok_or("Missing auth")?
             .authentication_id
     );
+    let instructions =
+        chapchoo_domain::ProjectInstructions::new(vec![chapchoo_domain::InstructionSource {
+            kind: chapchoo_domain::InstructionSourceKind::Product,
+            text: "Preserve existing user files.".into(),
+        }])?;
+    store
+        .seal_startup_project_instructions(&route, &draft, &instructions, br#"{"tools":[]}"#, f.now)
+        .await?;
     let snapshot = snapshot("startup-snapshot")?;
     let native = NativeConversationId::parse("startup-native".into())?;
     store

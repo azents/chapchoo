@@ -437,7 +437,7 @@ macro_rules! admit_agent {
             };
             if let Some((head, facts, action)) = recovered {
                 match action {
-                    StartupRecovery::Settle => {
+                    StartupRecovery::Settle if super::system_prompts::selected_preparation!($connection, $dialect, row.id).is_some() => {
                         break 'agent Ok(Some(ConnectionStartupAdmission::Settled {
                             agent_id,
                             conversation_id,
@@ -456,7 +456,7 @@ macro_rules! admit_agent {
                     }
                     StartupRecovery::Wait => break 'agent Ok(None),
                     StartupRecovery::RetirePrevious => break 'agent Err(StoreError::Conflict),
-                    StartupRecovery::ConsiderNew => {}
+                    StartupRecovery::ConsiderNew | StartupRecovery::Settle => {}
                 }
             }
             let input_preparation = diesel::sql_query($dialect.query(
@@ -541,6 +541,9 @@ macro_rules! admit_agent {
             .bind::<BigInt, _>(admitted_at)
             .execute($connection)
             .await?;
+            diesel::sql_query($dialect.query("UPDATE conversations SET current_preparation_operation_id=? WHERE id=?"))
+                .bind::<IdentitySql,_>(operation_id).bind::<IdentitySql,_>(row.id)
+                .execute($connection).await?;
             break 'agent Ok(Some(ConnectionStartupAdmission::Dispatch {
                 agent_id,
                 conversation_id,

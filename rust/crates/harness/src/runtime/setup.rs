@@ -14,6 +14,8 @@ pub struct NativeSetupOperation {
     pub scope: crate::NativeToolScope,
     pub supply: HarnessSupply,
     pub intent: NativeSetupIntent,
+    pub instructions: chapchoo_domain::ProjectInstructions,
+    pub tool_catalog: Vec<u8>,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeSetupFailure {
@@ -41,6 +43,17 @@ pub(super) struct SetupRegistry {
     entries: BTreeMap<String, (NativeSetupOperation, NativeSetupObservation)>,
 }
 impl SetupRegistry {
+    pub(super) fn expire_unstarted(
+        &mut self,
+        operation: &NativeSetupOperation,
+    ) -> Result<NativeSetupObservation, Error> {
+        if let Some(previous) = self.begin(operation)? {
+            return Ok(previous);
+        }
+        let failure = NativeSetupObservation::Failed(NativeSetupFailure::NotAdmitted);
+        self.completed(&operation.operation_id, failure.clone())?;
+        Ok(failure)
+    }
     pub(super) fn release_reported(
         &mut self,
         id: &str,
@@ -120,6 +133,13 @@ impl State {
     ) -> Result<NativeSetupObservation, Error> {
         valid_id(&operation.scope.agent_id)?;
         valid_id(&operation.scope.conversation_id)?;
+        operation
+            .instructions
+            .validate()
+            .map_err(|_| Error::NotAdmitted)?;
+        if operation.tool_catalog.len() > 48 * 1024 {
+            return Err(Error::NotAdmitted);
+        }
         if let Some(previous) = self.setups.begin(&operation)? {
             return Ok(previous);
         }
@@ -159,6 +179,18 @@ impl State {
         authentication: Arc<dyn NativeAuthenticationProvider>,
         tools: Arc<dyn crate::NativeToolsProvider>,
     ) -> Result<NativeTextTarget, Error> {
+        let safe_retirement = self.needs_refresh(operation);
+        if safe_retirement {
+            let live = self.live.as_ref().ok_or(Error::NotAdmitted)?;
+            if !operation.scope.matches(&live._authentication) {
+                return Err(Error::OperationConflict);
+            }
+            let _ = retained_context(&operation.intent, &live.capture)?;
+            if !self.refresh_safe() {
+                return Err(Error::NotAdmitted);
+            }
+            self.retire().await?;
+        }
         let retained = self.captured_source().await?;
         let source = match retained {
             Some(source) => source,
@@ -183,6 +215,17 @@ impl State {
         };
         let snapshot = source.snapshot()?;
         let context = retained_context(&operation.intent, &source)?;
+        let empty_scope = matches!(&context, NativeContext::New) || safe_retirement;
+        if self.live.is_none() {
+            let storage = self.storage.clone();
+            let document = operation.instructions.document();
+            self.project_write = Some(tokio::task::spawn_blocking(move || {
+                storage.publish_project_instructions(&document)
+            }));
+            let published = self.project_write.as_mut().ok_or(Error::Storage)?.await;
+            self.project_write = None;
+            published.map_err(|_| Error::Storage)??;
+        }
         let native_session = self
             .start(
                 operation.supply.clone(),
@@ -190,12 +233,41 @@ impl State {
                 source,
                 authentication,
                 tools,
-                &operation.scope,
+                StartConfiguration {
+                    scope: &operation.scope,
+                    instructions: &operation.instructions,
+                    tool_catalog: &operation.tool_catalog,
+                    empty_scope,
+                },
             )
             .await?;
         Ok(NativeTextTarget {
             snapshot,
             native_session,
+        })
+    }
+    pub(super) fn needs_refresh(&self, operation: &NativeSetupOperation) -> bool {
+        self.live.as_ref().is_some_and(|live| {
+            live.instructions != operation.instructions
+                || live.tool_catalog != operation.tool_catalog
+                || live.requested_supply != operation.supply
+        })
+    }
+    pub(super) fn refresh_safe(&self) -> bool {
+        self.live.as_ref().is_none_or(|live| {
+            live.observations
+                .current()
+                .is_ok_and(|observed| observed.foreground == NativeForeground::Idle)
+                && live.observations.quiescent()
+                && live
+                    .requests
+                    .try_lock()
+                    .is_ok_and(|requests| requests.is_empty())
+                && self.inputs.is_empty()
+                && live
+                    .tools
+                    .as_ref()
+                    .is_none_or(crate::NativeToolProvision::quiescent)
         })
     }
 }
@@ -283,6 +355,8 @@ mod tests {
             operation_id: "operation".into(),
             scope: tool_scope(),
             supply: HarnessSupply::Managed,
+            instructions: Default::default(),
+            tool_catalog: Vec::new(),
             intent: NativeSetupIntent::Initial {
                 allow_fresh: true,
                 require_retained_source: false,
@@ -314,12 +388,46 @@ mod tests {
             operation_id: id.into(),
             scope: tool_scope(),
             supply: HarnessSupply::Managed,
+            instructions: Default::default(),
+            tool_catalog: Vec::new(),
             intent: NativeSetupIntent::Initial {
                 allow_fresh: true,
                 require_retained_source: false,
             },
         }
     }
+    #[test]
+    fn expired_setup_overflow_rejects_only_that_request_and_preserves_uncertainty()
+    -> Result<(), TestError> {
+        let mut registry = SetupRegistry::default();
+        for index in 0..256 {
+            registry.begin(&operation(&format!("pending-{index}")))?;
+        }
+        assert!(matches!(
+            registry.expire_unstarted(&operation("expired")),
+            Err(Error::NotAdmitted)
+        ));
+        assert_eq!(registry.entries.len(), 256);
+        for index in 0..256 {
+            assert!(matches!(
+                registry.observe(&format!("pending-{index}"))?,
+                NativeSetupObservation::PossibleForwarding
+            ));
+        }
+        assert!(matches!(
+            registry.expire_unstarted(&operation("pending-0"))?,
+            NativeSetupObservation::PossibleForwarding
+        ));
+        let settled = NativeSetupObservation::Failed(NativeSetupFailure::BeforeNativeLaunch);
+        registry.completed("pending-0", settled.clone())?;
+        registry.release_reported("pending-0", &settled)?;
+        assert!(matches!(
+            registry.expire_unstarted(&operation("expired"))?,
+            NativeSetupObservation::Failed(NativeSetupFailure::NotAdmitted)
+        ));
+        Ok(())
+    }
+
     #[test]
     fn duplicate_setup_recovers_original_evidence_and_changed_intent_conflicts()
     -> Result<(), TestError> {
@@ -442,6 +550,8 @@ mod tests {
                     operation_id: "recovery-after-source-loss".into(),
                     scope: tool_scope(),
                     supply: HarnessSupply::Managed,
+                    instructions: Default::default(),
+                    tool_catalog: Vec::new(),
                     intent,
                 },
                 authentication,

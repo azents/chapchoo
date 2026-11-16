@@ -108,6 +108,7 @@ struct State {
     catalogued: std::sync::atomic::AtomicBool,
     observed: Notify,
     catalog: rmcp::model::ListToolsResult,
+    uncertain_effects: std::sync::atomic::AtomicBool,
 }
 impl State {
     fn collect(&self, result: Result<(), JoinError>) {
@@ -150,6 +151,7 @@ impl Relay {
             catalogued: std::sync::atomic::AtomicBool::new(false),
             observed: Notify::new(),
             catalog,
+            uncertain_effects: std::sync::atomic::AtomicBool::new(false),
         });
         let sessions = Arc::new(sessions::Sessions::new());
         let owner = state.clone();
@@ -173,6 +175,22 @@ impl Relay {
     pub(super) fn close(&self) {
         self.state.ordering.close();
         self.state.stop.cancel();
+    }
+    pub(super) fn quiescent(&self) -> bool {
+        if self
+            .state
+            .uncertain_effects
+            .load(std::sync::atomic::Ordering::Acquire)
+        {
+            return false;
+        }
+        let Ok(mut calls) = self.state.calls.try_lock() else {
+            return false;
+        };
+        while let Some(result) = calls.try_join_next() {
+            self.state.collect(result);
+        }
+        calls.is_empty() && lock(&self.state.failures).is_empty()
     }
     pub(super) async fn verify(&self) -> Result<(), AppError> {
         use std::sync::atomic::Ordering;

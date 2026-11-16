@@ -372,5 +372,14 @@ pub(super) async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError
             .await?,
         Some(applied)
     );
+    store
+        .complete_conversation_input_preparation(
+            &current_source,
+            &application,
+            &chapchoo_persistence::ConversationPreparationOutcome::Failed(
+                chapchoo_persistence::ConversationPreparationFailure::BeforeNativeLaunch,
+            ),
+        )
+        .await?;
     Ok(())
 }

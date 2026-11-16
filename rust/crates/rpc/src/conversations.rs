@@ -191,6 +191,60 @@ fn stop_receipt(value: ConversationStopReceipt) -> wire::StopReceipt {
 }
 #[tonic::async_trait]
 impl Conversations for ConversationServices {
+    async fn instruction_evidence(
+        &self,
+        request: Request<wire::OwnerInstructionEvidenceRequest>,
+    ) -> Result<Response<wire::ProjectInstructionEvidence>, Status> {
+        self.admit()?;
+        let actor = actor(&request)?;
+        let value = request.into_inner();
+        let evidence = self
+            .conversation
+            .instruction_evidence(
+                &actor,
+                &value.agent_id,
+                &value.conversation_id,
+                &value.operation_id,
+                now()?,
+            )
+            .await
+            .map_err(status)?;
+        Ok(Response::new(crate::project_instructions::evidence(
+            evidence,
+        )))
+    }
+    async fn instruction_history(
+        &self,
+        request: Request<wire::OwnerInstructionHistoryRequest>,
+    ) -> Result<Response<wire::ProjectInstructionHistory>, Status> {
+        self.admit()?;
+        let actor = actor(&request)?;
+        let value = request.into_inner();
+        let history = self
+            .conversation
+            .instruction_history(
+                &actor,
+                &value.agent_id,
+                &value.conversation_id,
+                value.before_operation_id.as_deref(),
+                now()?,
+            )
+            .await
+            .map_err(status)?;
+        Ok(Response::new(wire::ProjectInstructionHistory {
+            next_before: history.next_before,
+            items: history
+                .items
+                .into_iter()
+                .map(|item| wire::ProjectInstructionMetadata {
+                    operation_id: item.operation_id,
+                    execution_id: item.execution_id,
+                    created_at: item.created_at,
+                    applied_at: item.applied_at,
+                })
+                .collect(),
+        }))
+    }
     async fn messages(
         &self,
         request: Request<wire::OwnerMessagesRequest>,

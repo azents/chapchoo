@@ -154,11 +154,8 @@ pub(super) async fn initial(
     assert!(matches!(
         store
             .begin_conversation_input_preparation(&owner, &route, &pending, f.now)
-            .await?,
-        Admission::Granted {
-            fresh_native_allowed: false,
-            ..
-        }
+            .await,
+        Err(StoreError::InvalidTransition)
     ));
     store
         .save_harness_supply(
@@ -218,6 +215,26 @@ pub(super) async fn initial(
         snapshot: snapshot.clone(),
         native_session: native.clone(),
     });
+    let instructions = chapchoo_domain::ProjectInstructions::new(vec![
+        chapchoo_domain::InstructionSource {
+            kind: chapchoo_domain::InstructionSourceKind::Product,
+            text: "Preserve existing user files.".into(),
+        },
+        chapchoo_domain::InstructionSource {
+            kind: chapchoo_domain::InstructionSourceKind::Owner,
+            text: "".into(),
+        },
+    ])?;
+    store
+        .seal_project_instructions(
+            &owner,
+            &route,
+            &draft,
+            &instructions,
+            br#"{"tools":[]}"#,
+            f.now,
+        )
+        .await?;
     store
         .complete_conversation_input_preparation(&source, &draft, &result)
         .await?;
@@ -432,6 +449,31 @@ pub(super) async fn initial(
             .await,
         Err(StoreError::NotFound)
     ));
+    // The deleted failure remains the selected historical operation. Recover
+    // with a genuinely new pending setup, never by reselecting an old READY fact.
+    store
+        .begin_conversation_input_preparation(&owner, &route, &pending, f.now)
+        .await?;
+    store
+        .seal_project_instructions(
+            &owner,
+            &route,
+            &pending,
+            &instructions,
+            br#"{"tools":[]}"#,
+            f.now,
+        )
+        .await?;
+    store
+        .complete_conversation_input_preparation(
+            &source,
+            &pending,
+            &Outcome::SessionReady(ConversationDeliveryTarget {
+                snapshot: snapshot.clone(),
+                native_session: native.clone(),
+            }),
+        )
+        .await?;
     Ok(())
 }
 async fn rejected_initial_recovery(
@@ -484,26 +526,28 @@ async fn rejected_initial_recovery(
     assert!(matches!(
         store
             .begin_conversation_input_preparation(&owner, route, &denied, f.now)
-            .await?,
-        Admission::Granted {
-            fresh_native_allowed: false,
-            ..
-        }
+            .await,
+        Err(StoreError::InvalidTransition)
+    ));
+    assert!(matches!(
+        store
+            .begin_conversation_input_preparation(&owner, route, &retry, f.now)
+            .await,
+        Err(StoreError::InvalidTransition)
     ));
     store
         .complete_conversation_input_preparation(
             &source,
-            &denied,
-            &Outcome::Failed(Failure::SourceUnavailable),
+            &first,
+            &Outcome::Failed(Failure::NativeRejected),
         )
         .await?;
-    // A resume-only lookup failure cannot clear an unresolved creation attempt.
     assert!(matches!(
         store
             .begin_conversation_input_preparation(&owner, route, &retry, f.now)
             .await?,
         Admission::Granted {
-            fresh_native_allowed: false,
+            fresh_native_allowed: true,
             ..
         }
     ));
@@ -511,14 +555,7 @@ async fn rejected_initial_recovery(
         .complete_conversation_input_preparation(
             &source,
             &retry,
-            &Outcome::Failed(Failure::SourceUnavailable),
-        )
-        .await?;
-    store
-        .complete_conversation_input_preparation(
-            &source,
-            &first,
-            &Outcome::Failed(Failure::NativeRejected),
+            &Outcome::Failed(Failure::BeforeNativeLaunch),
         )
         .await?;
     // The old operation remains settled; only a new explicit input can start.

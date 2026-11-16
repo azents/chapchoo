@@ -14,6 +14,14 @@ impl ConversationToolBackend {
     pub fn new(conversation: Arc<ConversationService>) -> Self {
         Self { conversation }
     }
+    pub fn catalog_definition() -> Result<Vec<u8>, ServiceError> {
+        serde_json::to_vec(&json!({"tools":[{
+            "name":"send_message",
+            "description":"Send text to the user in this conversation. Ordinary model output is not sent.",
+            "inputSchema":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false},
+            "outputSchema":{"type":"object","properties":{"message_id":{"type":"string"}},"required":["message_id"],"additionalProperties":false}
+        }]})).map_err(ServiceError::infrastructure)
+    }
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -47,12 +55,7 @@ impl ServerToolBackend for ConversationToolBackend {
         })
     }
     fn catalog(&self) -> Result<Vec<u8>, ServiceError> {
-        serde_json::to_vec(&json!({"tools":[{
-            "name":"send_message",
-            "description":"Send text to the user in this conversation. Ordinary model output is not sent.",
-            "inputSchema":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false},
-            "outputSchema":{"type":"object","properties":{"message_id":{"type":"string"}},"required":["message_id"],"additionalProperties":false}
-        }]})).map_err(ServiceError::infrastructure)
+        Self::catalog_definition()
     }
     fn validate(&self, name: &str, arguments: &[u8]) -> Result<(), ServerToolValidation> {
         text(name, arguments).map(|_| ())

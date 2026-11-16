@@ -84,6 +84,28 @@ async fn exercise_queue(store: &Store, f: &Fixture) -> Result<(), TestError> {
         .resolve_connector_route(&f.agent.computer.id)
         .await?
         .ok_or("Missing queue route")?;
+    assert!(
+        matches!(
+            store
+                .begin_conversation_input_forwarding(&actor, &route, &operation, f.now)
+                .await,
+            Err(StoreError::InvalidTransition)
+        ),
+        "Missing settings cannot waive applied product/function evidence"
+    );
+    store
+        .save_system_prompt(&actor, &f.agent.id, "", f.now)
+        .await?;
+    assert!(
+        matches!(
+            store
+                .begin_conversation_input_forwarding(&actor, &route, &operation, f.now)
+                .await,
+            Err(StoreError::InvalidTransition)
+        ),
+        "An explicit empty setting still requires an applied selection"
+    );
+    instructions_fixture::apply(store, &actor, &route, &f.source(&key), &operation, f.now).await?;
     assert!(matches!(
         store
             .begin_conversation_input_forwarding(&actor, &route, &operation, f.now,)
@@ -202,6 +224,7 @@ async fn exercise_queue(store: &Store, f: &Fixture) -> Result<(), TestError> {
         operation_id: &replacement.id,
         ..operation
     };
+    instructions_fixture::apply(store, &actor, &route, &f.source(&key), &operation, f.now).await?;
     store
         .begin_conversation_input_forwarding(&actor, &route, &operation, f.now)
         .await?;
@@ -257,6 +280,7 @@ async fn exercise_queue(store: &Store, f: &Fixture) -> Result<(), TestError> {
         operation_id: &last.id,
         ..operation
     };
+    instructions_fixture::apply(store, &actor, &route, &f.source(&key), &operation, f.now).await?;
     store
         .begin_conversation_input_forwarding(&actor, &route, &operation, f.now)
         .await?;

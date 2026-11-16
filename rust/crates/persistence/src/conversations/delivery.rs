@@ -264,6 +264,62 @@ impl Store {
             if row.source_state != "READY" || owner.desired_state == "DELETING" {
                 return Err(StoreError::InvalidTransition);
             }
+            #[derive(diesel::QueryableByName)]
+            struct AppliedProject {
+                #[diesel(sql_type=Text)]
+                owner_content: String,
+                #[diesel(sql_type=Text)]
+                sources_json: String,
+                #[diesel(sql_type=Text)]
+                rendered_document: String,
+                #[diesel(sql_type=Nullable<Text>)]
+                applied_snapshot: Option<String>,
+                #[diesel(sql_type=Nullable<Text>)]
+                applied_native_session: Option<String>,
+                #[diesel(sql_type=Nullable<BigInt>)]
+                applied_at: Option<i64>,
+            }
+            #[derive(diesel::QueryableByName)]
+            struct SavedProject {
+                #[diesel(sql_type=Text)]
+                content: String,
+            }
+            let current = system_prompts::selected_preparation!(connection, dialect, id)
+                .ok_or(StoreError::InvalidTransition)?;
+            if current.execution_id != Some(route._execution_id)
+                || current.preparation_state != "READY"
+            {
+                return Err(StoreError::InvalidTransition);
+            }
+            let selected_operation = current.operation_id;
+            let selected = diesel::sql_query(dialect.query("SELECT owner_content,sources_json,rendered_document,applied_snapshot,applied_native_session,applied_at FROM project_instruction_evidence WHERE operation_id=? AND agent_id=? AND conversation_id=? AND execution_id=?"))
+                .bind::<IdentitySql,_>(selected_operation).bind::<IdentitySql,_>(agent)
+                .bind::<IdentitySql,_>(id).bind::<IdentitySql,_>(route._execution_id)
+                .get_result::<AppliedProject>(connection).await.optional()?.ok_or(StoreError::InvalidTransition)?;
+            let saved = diesel::sql_query(
+                dialect.query("SELECT content FROM agent_system_prompts WHERE agent_id=?"),
+            )
+            .bind::<IdentitySql, _>(agent)
+            .get_result::<SavedProject>(connection)
+            .await
+            .optional()?
+            .map_or_else(String::new, |saved| saved.content);
+            let originals: chapchoo_domain::ProjectInstructions =
+                serde_json::from_str(&selected.sources_json).map_err(|_| StoreError::Integrity)?;
+            originals.validate().map_err(|_| StoreError::Integrity)?;
+            if originals.document() != selected.rendered_document
+                || system_prompts::owner_content(&originals) != selected.owner_content
+            {
+                return Err(StoreError::Integrity);
+            }
+            if selected.owner_content != saved
+                || selected.applied_at.is_none()
+                || selected.applied_snapshot.as_deref() != Some(draft.target.snapshot.as_str())
+                || selected.applied_native_session.as_deref()
+                    != Some(draft.target.native_session.as_str())
+            {
+                return Err(StoreError::InvalidTransition);
+            }
             // NotStarted input survived only the first binding; replacement deletes it.
             if input
                 .target

@@ -27,6 +27,11 @@ import {
   harnessSupplyChoice,
   nativeTarget,
 } from "@chapchoo/web-core/conversation-types";
+import {
+  instructionEvidence,
+  instructionHistory,
+} from "@chapchoo/web-core/instruction-evidence";
+import { call } from "@chapchoo/web-core/rpc";
 import { z } from "zod";
 import { procedure, router } from "@/shared/server/trpc";
 
@@ -35,6 +40,51 @@ const operation = z
   .object({ agentId: id, conversationId: id, requestId: id })
   .strict();
 export const conversationsRouter = router({
+  instructionHistory: procedure
+    .input(
+      z
+        .object({
+          agentId: id,
+          conversationId: id,
+          beforeOperationId: id.optional(),
+        })
+        .strict(),
+    )
+    .query(({ ctx, input }) =>
+      attempt(() =>
+        ctx.session.authenticated(async (token) =>
+          instructionHistory(
+            await call(
+              ctx.backend.conversations.instructionHistory.bind(
+                ctx.backend.conversations,
+              ),
+              input,
+              token,
+            ),
+          ),
+        ),
+      ),
+    ),
+  instructionEvidence: procedure
+    .input(
+      z.object({ agentId: id, conversationId: id, operationId: id }).strict(),
+    )
+    .query(({ ctx, input }) =>
+      attempt(() =>
+        ctx.session.authenticated(async (token) =>
+          instructionEvidence(
+            await call(
+              ctx.backend.conversations.instructionEvidence.bind(
+                ctx.backend.conversations,
+              ),
+              input,
+              token,
+            ),
+            input,
+          ),
+        ),
+      ),
+    ),
   messages: procedure
     .input(
       z

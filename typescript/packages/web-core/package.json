@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./instruction-evidence": {
+      "types": "./dist/instruction-evidence.d.ts",
+      "default": "./dist/instruction-evidence.js"
+    },
     "./conversation-messages": {
       "types": "./dist/conversation-messages.d.ts",
       "default": "./dist/conversation-messages.js"

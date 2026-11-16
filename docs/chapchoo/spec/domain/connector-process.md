@@ -42,6 +42,12 @@ outcomes across stream changes; duplicate operations recover their original fact
 and changed intent conflicts. Missing local facts are not permission to recreate
 a context.
 
+Setup content is read through the exact current sealed preparation before native
+admission. The [instruction contract](agent-instructions.md) retains originals
+independently of consumed inputs and qualifies unchanged reuse by both selected
+source bytes and catalogue. Changed configuration stays actor-owned while
+existing work finishes, without tying its waiter to the Control connection.
+
 Setup source selection reopens the existing complete copy and resumes its exact
 native session without history replay. Missing expected source fails. Creating
 an initial copy/context requires the sealed positive permission and local

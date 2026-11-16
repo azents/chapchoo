@@ -104,6 +104,31 @@ fn state(value: ConversationSummary) -> wire::CaptureState {
 }
 #[tonic::async_trait]
 impl ConnectorCapture for ConversationCaptureServices {
+    async fn read_project_instructions(
+        &self,
+        request: Request<wire::ProjectInstructionsRequest>,
+    ) -> Result<Response<wire::ProjectInstructionEvidence>, Status> {
+        self.admit()?;
+        let credential = actor(&request)?;
+        let value = request.into_inner();
+        let origin = value
+            .source
+            .as_ref()
+            .ok_or_else(|| Status::invalid_argument("Execution source is required"))?;
+        let evidence = self
+            .service
+            .project_instructions(
+                &source(origin, &credential),
+                &value.agent_id,
+                &value.conversation_id,
+                &value.operation_id,
+            )
+            .await
+            .map_err(status)?;
+        Ok(Response::new(crate::project_instructions::evidence(
+            evidence,
+        )))
+    }
     async fn get_authentication_binding(
         &self,
         request: Request<wire::ExecutionAuthenticationReference>,

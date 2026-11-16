@@ -180,6 +180,7 @@ fn sqlite_preserves_retained_original_input_prefix() -> Result<(), TestError> {
     let original = runtime.block_on(original_inputs(&store, &f, &order))?;
     prepare_sqlite(&path, &cipher)?;
     runtime.block_on(verify_transfer(&store, &f, &original))?;
+    isolate_pre_instructions_migration!(&mut connection, SQLITE_MIGRATIONS);
     assert!(connection.revert_last_migration(SQLITE_MIGRATIONS).is_err());
     Ok(())
 }
@@ -212,6 +213,7 @@ fn postgres_preserves_retained_original_input_prefix() -> Result<(), TestError> 
         let original = runtime.block_on(original_inputs(&store, &f, &order))?;
         prepare_postgres(&url, &cipher)?;
         runtime.block_on(verify_transfer(&store, &f, &original))?;
+        isolate_pre_instructions_migration!(&mut connection, POSTGRES_MIGRATIONS);
         assert!(
             connection
                 .revert_last_migration(POSTGRES_MIGRATIONS)

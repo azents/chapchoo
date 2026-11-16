@@ -289,6 +289,11 @@ impl Store {
             {
                 return Err(StoreError::Conflict);
             }
+            let selected = system_prompts::selected_preparation!(connection, dialect, id)
+                .ok_or(StoreError::InvalidTransition)?;
+            if selected.operation_id != operation {
+                return Err(StoreError::InvalidTransition);
+            }
             let submitted = input
                 .as_ref()
                 .and_then(|input| input.target_snapshot.as_deref());
@@ -423,11 +428,31 @@ impl Store {
                 }
                 retired = true;
             };
+            let selected = system_prompts::selected_preparation!(connection, dialect, id);
             if let Some((operation_id, facts)) = covered {
-                return Ok(ConversationPreparationAdmission::ObservedStartup {
-                    operation_id,
-                    facts,
-                });
+                if selected.as_ref().is_some_and(|selected| {
+                    selected
+                        .operation_id
+                        .to_dto(EntityKind::ConversationOperation)
+                        == operation_id
+                }) {
+                    return Ok(ConversationPreparationAdmission::ObservedStartup {
+                        operation_id,
+                        facts,
+                    });
+                }
+                if matches!(
+                    facts.state,
+                    ConversationPreparationState::PossibleForwarding
+                ) {
+                    return Err(StoreError::InvalidTransition);
+                }
+            }
+            if selected.is_some_and(|selected| {
+                selected.execution_id == Some(route._execution_id)
+                    && selected.preparation_state == "POSSIBLE"
+            }) {
+                return Err(StoreError::InvalidTransition);
             }
             let target = input
                 .target_snapshot
@@ -474,6 +499,15 @@ impl Store {
             diesel::sql_query(dialect.query("INSERT INTO conversation_input_preparation(operation_id,execution_id,supply_kind,executable_path,selection_request_id,fresh_native_allowed,require_retained_source,preparation_state) VALUES(?,?,?,?,?,?,?,'POSSIBLE')"))
                 .bind::<IdentitySql,_>(operation).bind::<IdentitySql,_>(route._execution_id).bind::<Text,_>(kind).bind::<Nullable<Text>,_>(path)
                 .bind::<Nullable<Text>,_>(selection_request_id.as_deref()).bind::<diesel::sql_types::Bool,_>(fresh_native_allowed).bind::<diesel::sql_types::Bool,_>(require_retained_source).execute(connection).await?;
+            diesel::sql_query(
+                dialect.query(
+                    "UPDATE conversations SET current_preparation_operation_id=? WHERE id=?",
+                ),
+            )
+            .bind::<IdentitySql, _>(operation)
+            .bind::<IdentitySql, _>(id)
+            .execute(connection)
+            .await?;
             Ok(ConversationPreparationAdmission::Granted {
                 grant: ConversationForwardingGrant {
                     execution_id: route._execution_id.to_dto(EntityKind::Execution),
@@ -600,6 +634,19 @@ impl Store {
                 diesel::sql_query(dialect.query("UPDATE conversation_startups SET preparation_state=?,ready_snapshot=?,ready_native_session=?,failure_kind=?,ready_connection_id=? WHERE operation_id=?"))
                     .bind::<Text,_>(state).bind::<Nullable<Text>,_>(snapshot).bind::<Nullable<Text>,_>(native).bind::<Nullable<Text>,_>(failure)
                     .bind::<Nullable<IdentitySql>,_>(ready_connection).bind::<IdentitySql,_>(operation).execute(connection).await?;
+            }
+            if state == "READY" {
+                let applied_at = crate::directory::database_now!(connection, dialect);
+                diesel::sql_query(dialect.query(
+                    "UPDATE project_instruction_evidence SET applied_snapshot=?,applied_native_session=?,applied_at=? WHERE operation_id=? AND execution_id=?",
+                ))
+                .bind::<Nullable<Text>, _>(snapshot)
+                .bind::<Nullable<Text>, _>(native)
+                .bind::<BigInt, _>(applied_at)
+                .bind::<IdentitySql, _>(operation)
+                .bind::<IdentitySql, _>(route._execution_id)
+                .execute(connection)
+                .await?;
             }
             Ok(())
         })

@@ -1,6 +1,27 @@
 # Native integration tests
 
-This private Node test application owns the real Docker backend integration
+## Released-program project instructions
+
+`pnpm --filter @chapchoo/integration test:project-instructions` requires Python 3,
+Node and the lockfile-installed development-only ACP 2.6.0/Codex 0.165.0 programs.
+Missing prerequisites fail. This browser-free check uses fresh disposable
+HOME/native state, a local model catalogue and loopback fixed Responses SSE;
+it reads no operator credentials and makes no live inference request.
+
+It verifies title-persisted exact restoration before the first model request,
+then AGENTS.md A→B→empty across physical owner replacement and exact same-ID
+Resume. Assertions inspect the new instruction item's native role and ordering
+before the next fixture message, not mere marker presence in retained history.
+Exactly three fixed-response requests and no native action callbacks are allowed.
+Every owned process group and listener is explicitly finished.
+
+The existing browser CI gate runs this designated check. The one model-free
+conversation browser journey separately verifies owner Save, queued input while
+prior work is active, same-context refresh, once-only continuation and retained
+original inspection after a later Save. Fixed-response delivery proves neither
+model obedience nor successful live credentials.
+
+This private integration application also owns the real Docker backend integration
 journey. It has no browser or Playwright dependency and imports no product app
 source. Existing browser E2E remains responsible for the owner/operator UI.
 

@@ -12,6 +12,12 @@ an automatic Chat message or a fallback when no publication exists. Actual live
 permission/form requests and delivery-recovery controls remain independently
 available. This is not evidence that real model credentials work.
 
+The owner can continue composing and submitting while
+[configuration refresh](agent-instructions.md#common-refresh-and-continuing-input)
+waits for native work to finish. Native-action readiness does not disable server
+input admission. Activity's read-only Prompt sources view selects retained
+preparation originals separately from current saved settings and native history.
+
 ## Initial rendering and active reads
 
 Exact-Team/private-owner route admission loads the Agent, initial receipt-message

@@ -134,16 +134,25 @@ a model turn. Its failure neither erases restoration evidence nor proves that no
 earlier effect occurred. An already-live lookup validates the original product
 scope and reuses the existing provision without reapplication.
 
-A native identity does not guarantee that the native engine persisted an empty
-context. The supported Codex adapter documents that a never-prompted thread has
-no rollout until its first user input, and its empty-thread fallback requires
-the same still-live app-server. Physical owner loss may therefore make exact
-restoration fail even while the original product capture binding remains.
-That rejection preserves the exact source; it cannot authorize fabricated input
-or replacement with a fresh context. The model-free acceptance separates real
-New and this real rejection from successful controlled-fixture New/Resume.
-Successful real persisted-session restoration and model-side tool use require
-their own evidence.
+Legitimate catalogue changes use the common
+[configuration refresh](agent-instructions.md#common-refresh-and-continuing-input)
+instead of silently retaining a stale declaration. The new actual-start provision
+compares the selected catalogue with discovery before native launch. Refresh
+requires physical local invocation quiescence; an unmarked transport loss or
+uncertain remote effect keeps that owner unsafe even after its local waiter ends.
+Only known completion or explicit pre-execution rejection resolves the effect
+boundary. No local timeout manufactures permission to retire started remote work.
+
+A native identity alone does not guarantee that the engine persisted an empty
+context. Initial product preparation now sets a native title before Ready; the
+released-program fixed-response acceptance checks exact restoration before the
+first model request and after project instruction changes. This metadata step
+is not fabricated user input. Restore failure still preserves the original
+source and cannot authorize a fresh context. The
+[project refresh contract](agent-instructions.md) separates file publication,
+actual-start catalogue verification, exact native restoration and model compliance.
+A successful fixed-response request does not certify credentialed live inference
+or model-side tool use.
 
 Actual adapter launch supplies the Codex policy
 `code_mode.direct_only_tool_namespaces = ["mcp__chapchoo"]` and disables strict

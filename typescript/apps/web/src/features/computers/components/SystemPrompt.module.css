@@ -1,0 +1,46 @@
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mantine-spacing-md);
+  width: 100%;
+  min-height: 2.75rem;
+  text-align: start;
+}
+.content {
+  display: flex;
+  flex-direction: column;
+}
+.body {
+  flex: 1;
+  min-height: 0;
+}
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-lg);
+  min-height: 0;
+}
+.field {
+  flex: 1;
+  min-height: 0;
+}
+.input {
+  min-height: 24rem;
+  max-height: 65dvh;
+  resize: vertical;
+  overflow-wrap: anywhere;
+}
+.footer {
+  padding-top: var(--mantine-spacing-md);
+}
+@media (max-width: 48em) {
+  .form {
+    min-height: calc(100dvh - 9rem);
+  }
+  .input {
+    min-height: calc(100dvh - 15rem);
+    max-height: none;
+    resize: none;
+  }
+}

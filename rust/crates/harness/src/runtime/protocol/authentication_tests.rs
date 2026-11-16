@@ -1,4 +1,6 @@
 use super::*;
+#[path = "refresh_tests.rs"]
+mod refresh_tests;
 #[path = "tools_lifetime_tests.rs"]
 mod tools_lifetime_tests;
 use chapchoo_crypto::ExternalSecret;
@@ -52,6 +54,7 @@ fn state(storage: NativeStorage) -> Result<State, Error> {
         stops: StopRegistry::default(),
         answers: AnswerRegistry::default(),
         credential_write: None,
+        project_write: None,
         pending_tools: None,
         cleanup_errors: Vec::new(),
     })
@@ -90,6 +93,7 @@ async fn already_live_setup_preserves_applied_credentials_without_calling_new_pr
     reply(&mut write, &initialize, initialization(2)).await?;
     let session = request(&mut read).await?;
     reply(&mut write, &session, json!({"sessionId":"live-native"})).await?;
+    acknowledge_title(&mut read, &mut write).await?;
     let session = rx.await??;
     let child = tokio::process::Command::new("/bin/cat")
         .stdin(Stdio::piped())
@@ -137,6 +141,8 @@ async fn already_live_setup_preserves_applied_credentials_without_calling_new_pr
         observations: Arc::default(),
         _authentication: binding.clone(),
         tools: None,
+        instructions: Default::default(),
+        tool_catalog: Vec::new(),
     });
     let result = state
         .start(
@@ -148,9 +154,14 @@ async fn already_live_setup_preserves_applied_credentials_without_calling_new_pr
             source,
             provider.clone(),
             crate::server_tools::unused_tools(),
-            &crate::NativeToolScope {
-                agent_id: binding.agent_id.clone(),
-                conversation_id: binding.conversation_id.clone(),
+            StartConfiguration {
+                scope: &crate::NativeToolScope {
+                    agent_id: binding.agent_id.clone(),
+                    conversation_id: binding.conversation_id.clone(),
+                },
+                instructions: &Default::default(),
+                tool_catalog: &[],
+                empty_scope: false,
             },
         )
         .await;
@@ -356,6 +367,7 @@ async fn explicit_api_key_login_precedes_session_and_rejection_never_falls_back(
             let session = request(&mut read).await?;
             assert_eq!(session.method, "session/new");
             reply(&mut write, &session, json!({"sessionId":"synthetic"})).await?;
+            acknowledge_title(&mut read, &mut write).await?;
             assert_eq!(rx.await??.session_id().to_string(), "synthetic");
             done.cancel();
             connection.await??;

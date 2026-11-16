@@ -1,0 +1,11 @@
+.source {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  font-size: var(--mantine-font-size-sm);
+  margin-block: var(--mantine-spacing-sm) 0;
+  padding: var(--mantine-spacing-md);
+  border: 0.0625rem solid var(--chapchoo-color-border);
+  border-radius: var(--mantine-radius-md);
+  background: var(--chapchoo-color-surface);
+}
