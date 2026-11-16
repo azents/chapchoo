@@ -82,7 +82,7 @@ for (const width of [390, 1280]) {
     );
     await expect(
       page.getByRole("textbox", { name: "메시지", exact: true }),
-    ).toHaveValue("두 저장소의 작업 현황을 정리해줘.");
+    ).toHaveText("두 저장소의 작업 현황을 정리해줘.");
     await expect(page.getByRole("alert")).toContainText("전송 요청 실패");
     await expect(page.locator("[data-input-operation]")).toHaveCount(0);
   });

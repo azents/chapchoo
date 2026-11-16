@@ -585,7 +585,7 @@ test("unavailable observations keep history readable and input read-only", async
     ).toHaveCount(0);
     await expect(
       main.getByRole("textbox", { name: "메시지", exact: true }),
-    ).toHaveAttribute("placeholder", /읽기 전용/);
+    ).toHaveAttribute("aria-placeholder", /읽기 전용/);
     await page.getByRole("button", { name: /코기.*작업 상태/ }).click();
     await expect(
       page.getByRole("dialog", { name: "작업 상태", exact: true }),

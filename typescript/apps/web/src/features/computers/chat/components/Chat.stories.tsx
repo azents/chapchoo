@@ -323,7 +323,7 @@ function Fixture({
         .flatMap((part) => (part.type === "text" ? [part.text] : []))
         .join("\n"),
     }));
-  const floating = useFloatingChat(input, agent.id, true, messages, {
+  const floating = useFloatingChat(agent.id, true, messages, {
     source: "conversation/snapshot",
     tail:
       records.filter((record) => record.kind === "request").at(-1)?.anchor ??

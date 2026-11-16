@@ -103,7 +103,6 @@ export function useChatContainer(props: ChatInput): ChatProps {
     true,
   );
   const floating = useFloatingChat(
-    input,
     messageReader.region.conversationId ?? "",
     product.access === "authorized",
     messageReader.region.messages,
