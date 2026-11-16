@@ -21,6 +21,7 @@ export interface ChatCopy {
   readOnly: string;
   idle: string;
   working: string;
+  thinking: string;
   requiresAction: string;
   unavailable: string;
   notStarted: string;
@@ -102,6 +103,7 @@ const en: ChatCopy = {
   readOnly: "Read-only",
   idle: "Ready to chat",
   working: "Working",
+  thinking: "Thinking",
   requiresAction: "Waiting for your answer",
   unavailable: "Check {harness} connection",
   notStarted: "Send a message to start",
@@ -194,6 +196,7 @@ const ko: ChatCopy = {
   readOnly: "읽기 전용",
   idle: "대화 가능",
   working: "작업 중",
+  thinking: "생각 중",
   requiresAction: "답변을 기다리는 중",
   unavailable: "{harness} 연결 확인 필요",
   notStarted: "메시지를 보내 대화 시작",
@@ -286,6 +289,7 @@ const ja: ChatCopy = {
   readOnly: "閲覧のみ",
   idle: "会話できます",
   working: "作業中",
+  thinking: "考え中",
   requiresAction: "回答を待っています",
   unavailable: "{harness}の接続を確認してください",
   notStarted: "メッセージを送って会話を開始",
@@ -378,6 +382,7 @@ const fr: ChatCopy = {
   readOnly: "Lecture seule",
   idle: "Disponible",
   working: "Travail en cours",
+  thinking: "Réflexion en cours",
   requiresAction: "En attente de votre réponse",
   unavailable: "Vérifier la connexion à {harness}",
   notStarted: "Envoyez un message pour commencer",

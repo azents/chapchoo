@@ -19,6 +19,31 @@ input admission. Activity's System prompt link navigates to a separate
 server-rendered page for the latest selected prompt, independently of current
 saved settings and native history. It has no history selection or pagination.
 
+## Execution feedback
+
+The transcript ends with a short localized Thinking status (`생각 중` in Korean)
+while the current authorized observation reports native work. Its decorative
+spark pulses and its text shimmers on a 2.4-second cycle. This is ephemeral
+execution feedback, independent of published messages and token streaming; it
+contains no Agent name or progress estimate. The existing content-size observer
+keeps it above the composer while preserving a detached reader's scroll intent.
+
+Display requires a ready conversation with `working` foreground, a successful
+current activity read, current owner access, and a completed running Computer
+intent with running power and a connected Connector. Idle, attention requests,
+loading, failed/stale observation, disconnection and stopped/retiring lifecycle
+withdraw the indicator. A pending, published or uncertain Stop withdraws it;
+an unanswered live permission/form request also withdraws it even if the native
+engine still reports `working`. Historical requests without current responder
+authority and already answered requests do not suppress running feedback.
+A rejected Stop does not erase positively observed running work. Independent
+host-management connectivity does not erase native execution evidence.
+The header's retained-state/refreshing presentation remains separate.
+
+The non-interactive status uses polite screen-reader feedback. Reduced-motion
+users receive static readable text and a stationary spark; high-contrast text
+does not depend on a transparent gradient.
+
 ## Initial rendering and active reads
 
 Exact-Team/private-owner route admission loads the Agent, initial receipt-message

@@ -1,8 +1,48 @@
 import { computerOperation } from "@chapchoo/web-core/computer-messages";
+import type { ConversationControls } from "./types";
 import type { ComputerView } from "@chapchoo/web-core/computer";
 import type { ComputerCopy } from "@chapchoo/web-core/computer-messages";
 import type { ConversationActivity } from "@chapchoo/web-core/conversation-activity";
-import type { ConversationHeader } from "@chapchoo/web-core/conversation-types";
+import type {
+  ConversationHeader,
+  ConversationRecord,
+} from "@chapchoo/web-core/conversation-types";
+
+/** Animate only current, positively observed native work. */
+export function chatThinking({
+  computer,
+  header,
+  records,
+  read,
+  stale,
+  authorized,
+  stop,
+}: {
+  computer: ComputerView;
+  header: ConversationHeader;
+  records: readonly ConversationRecord[];
+  read: ConversationControls["read"];
+  stale: boolean;
+  authorized: boolean;
+  stop: ConversationControls["stop"];
+}): boolean {
+  return (
+    authorized &&
+    !stale &&
+    read === "ready" &&
+    computer.intent === "running" &&
+    computer.phase === "completed" &&
+    computer.power === "running" &&
+    computer.connector === "connected" &&
+    header.state === "ready" &&
+    header.foreground === "working" &&
+    !records.some(
+      (record) =>
+        record.kind === "request" && record.responder && !record.answer,
+    ) &&
+    (stop === "idle" || stop === "rejected")
+  );
+}
 
 export interface ChatStatusView {
   label: string;
