@@ -87,6 +87,8 @@ export interface ChatProps {
   historyContent: ReactNode;
   onCloseHistory: () => void;
   navOpened: boolean;
+  desktopNavCollapsed: boolean;
+  onToggleDesktopNav: () => void;
   onOpen: () => void;
   onClose: () => void;
   onOpenNav: () => void;

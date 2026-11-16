@@ -17,6 +17,7 @@ import { ConversationHistoryPage } from "../ConversationHistoryPage";
 import { activityStatus, chatCopy } from "../copy";
 import { SupplyPage } from "../SupplyPage";
 import { useChatFocus } from "./useChatFocus";
+import { useChatNavigation } from "./useChatNavigation";
 import { useConversationReader } from "./useConversationReader";
 import { useFloatingChat } from "./useFloatingChat";
 import { useMessageReader } from "./useMessageReader";
@@ -46,7 +47,7 @@ export function useChatContainer(props: ChatInput): ChatProps {
     olderOnOpen: boolean;
     initialFetch: boolean;
   } | null>(null);
-  const [navOpened, setNavOpened] = useState(false);
+  const chatNavigation = useChatNavigation();
   const [inputError, setInputError] = useState(false);
   const [drafts, setDrafts] = useState<Partial<Record<string, QuestionDraft>>>(
     {},
@@ -506,7 +507,7 @@ export function useChatContainer(props: ChatInput): ChatProps {
       },
       onLatest: () => {
         messageReader.latest();
-        floating.followLatest();
+        floating.followLatest(true);
       },
     },
     recentRecords: recentReader.region,
@@ -531,7 +532,7 @@ export function useChatContainer(props: ChatInput): ChatProps {
     status,
     statusLoading: presentation.refreshing,
     opened,
-    navOpened,
+    ...chatNavigation,
     floating,
     historyOpened: history !== null,
     historyContent: history
@@ -551,8 +552,6 @@ export function useChatContainer(props: ChatInput): ChatProps {
     focus: controlled.focus,
     onOpen: () => setOpened(true),
     onClose: () => setOpened(false),
-    onOpenNav: () => setNavOpened(true),
-    onCloseNav: () => setNavOpened(false),
     onInput: (value) => {
       setInput(value);
       setInputError(false);

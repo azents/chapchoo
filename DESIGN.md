@@ -237,10 +237,19 @@ layering. Reference surface shadow: `0 4px 18px rgb(53 58 54 / 4%)`. A calm pane
 separator is often enough. Avoid heavy floating dashboards, decorative gradients,
 colored card mosaics and deeply nested rounded boxes.
 
-Requester-supplied Pickle and Apple Liquid Glass were taste references, not a
-requirement to blur everything. If explored, materials belong selectively to
-navigation/control layers without reducing content clarity. The selected cream
-composition does not need glass.
+### Floating surfaces
+
+Floating controls use the upper chat status summary as their material baseline,
+confirmed on 2026-11-16. The design system owns this surface in
+`@chapchoo/ui/FloatingSurface`, with a component for containers and a class for
+native or Mantine controls whose semantics must remain unchanged.
+
+The shared material preserves the status summary: a 34% profile-surface tint
+over transparent, `blur(0.25rem)`, the profile border, a 65% surface inset highlight
+and a shallow 4% profile-ink shadow. Neutral theme roles supply the material when
+there is no profile scope. Foreground content stays opaque. Placement, radius,
+dimensions and state transitions belong to each control; state changes retain the
+same material. Ordinary content surfaces keep their existing treatment.
 
 ## Shapes
 

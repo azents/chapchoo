@@ -10,6 +10,7 @@ import { ContextSidebar } from "@chapchoo/ui/ContextSidebar";
 import { ProfileAccount } from "@chapchoo/ui/ProfileAccount";
 import { WorkspaceSelector } from "@chapchoo/ui/WorkspaceSelector";
 import { InteractiveSurface } from "@chapchoo/ui/InteractiveSurface";
+import { FloatingSurface } from "@chapchoo/ui/FloatingSurface";
 import { DropdownButton } from "@chapchoo/ui/DropdownButton";
 import {
   Button,
@@ -136,6 +137,12 @@ export default function CommonUiPreview(): ReactElement {
           </Group>
         </InteractiveSurface>
         <InteractiveSurface disabled>Unavailable action</InteractiveSurface>
+        <FloatingSurface style={{ padding: "1rem", borderRadius: "1.75rem" }}>
+          <Text>
+            Floating surface — shared status-summary translucency, border and
+            shallow depth.
+          </Text>
+        </FloatingSurface>
         <Mascot size={72} />
         <EmptyFeedback
           title="Shared presentation example"

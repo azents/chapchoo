@@ -16,6 +16,10 @@ export interface ChatCopy {
   you: string;
   send: string;
   latest: string;
+  scrollDown: string;
+  newMessages: string;
+  collapseSidebar: string;
+  expandSidebar: string;
   menu: string;
   detail: string;
   readOnly: string;
@@ -98,6 +102,10 @@ const en: ChatCopy = {
   send: "Send",
   you: "You",
   latest: "Jump to latest",
+  scrollDown: "Scroll down",
+  newMessages: "View new messages",
+  collapseSidebar: "Collapse sidebar",
+  expandSidebar: "Expand sidebar",
   menu: "Agents and conversations",
   detail: "Agent details",
   readOnly: "Read-only",
@@ -191,6 +199,10 @@ const ko: ChatCopy = {
   you: "나",
   send: "보내기",
   latest: "최신 대화로 이동",
+  scrollDown: "아래로 이동",
+  newMessages: "새 메시지 보기",
+  collapseSidebar: "사이드바 접기",
+  expandSidebar: "사이드바 펼치기",
   menu: "에이전트와 대화",
   detail: "에이전트 상세",
   readOnly: "읽기 전용",
@@ -284,6 +296,10 @@ const ja: ChatCopy = {
   you: "あなた",
   send: "送信",
   latest: "最新の会話へ",
+  scrollDown: "下へ移動",
+  newMessages: "新しいメッセージを見る",
+  collapseSidebar: "サイドバーを閉じる",
+  expandSidebar: "サイドバーを開く",
   menu: "エージェントと会話",
   detail: "エージェントの詳細",
   readOnly: "閲覧のみ",
@@ -377,6 +393,10 @@ const fr: ChatCopy = {
   send: "Envoyer",
   you: "Vous",
   latest: "Aller aux derniers messages",
+  scrollDown: "Aller en bas",
+  newMessages: "Voir les nouveaux messages",
+  collapseSidebar: "Réduire la barre latérale",
+  expandSidebar: "Développer la barre latérale",
   menu: "Agents et conversations",
   detail: "Détails de l’agent",
   readOnly: "Lecture seule",

@@ -192,11 +192,27 @@ loading/error feedback does not fabricate a new conversation or native context.
 Same-source updates retain original record order and update the matching native
 message. Viewport anchoring preserves an existing record's screen offset while
 the reader is detached. Both viewports follow new events at the bottom. While
-reading above it, a genuinely newer message receipt or actual live question
-exposes Chat's new-events-below action. Full history independently follows newer
-source-bound native records. Prepending old pages, updating existing streaming content,
-or merely leaving the bottom does not. Selecting that action resumes following;
-there is no always-visible latest action.
+reading above it, Chat shows a localized Scroll down action. A genuinely newer
+message receipt or actual live question changes it to View new messages; old pages
+and updates to existing content do not create unread state. Full history
+independently follows newer source-bound native records. The Chat action returns
+to the latest receipt window and resumes following at the destination. User scroll
+intent can interrupt that return. Reaching the bottom acknowledges unread state
+and withdraws the action; its last displayed label remains unchanged through exit.
+Reduced motion returns immediately, and preference changes preserve detached reading.
+
+The return control uses the unchanged upper status-summary surface: translucent
+profile tint, blur, border and shallow highlight/shadow. Its icon/text gap remains
+fixed while measured label width transitions; outgoing and incoming labels do
+not overlap. Initial server rendering adds no artificial return control.
+Mobile Chat hides its scrollbar while retaining native touch/wheel/keyboard
+scrolling. Desktop exposes the existing scrollbar only while hovering.
+
+Desktop navigation is an inline fixed-width sidebar when expanded. A left
+chevron collapses it and a menu button re-expands it, transitioning sidebar width
+and contents while the chat takes the released space. Hidden navigation is inert.
+Mobile retains its navigation drawer; resizing to desktop closes that drawer and
+restores focus to the desktop toggle. Reduced motion removes sidebar transitions.
 
 ## User-facing execution diagnosis
 
@@ -215,9 +231,9 @@ exclusively from queried server queue rows. The browser does not manufacture
 sending/uncertain bubbles or clear drafts through receipt-nonce correlation.
 A historical receipt that still has a matching queued operation is rendered
 once, with pending styling and recovery attached to that exact input ID.
-The down arrow signals new content that arrived while the owner was reading
-above latest, rather than a detached position alone. Reaching latest or selecting
-the arrow acknowledges it.
+The return action distinguishes reading above latest from unread arrivals through
+its label. Acknowledgement occurs at latest rather than implying that clicking
+has already completed a smooth return.
 
 The status distinguishes a conversation that has not started, missing saved AI
 authentication, startup in progress, reported startup failure, delivery failure,

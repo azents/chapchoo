@@ -1,4 +1,5 @@
 "use client";
+import { useReducedMotion } from "@mantine/hooks";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { hasMessageArrival, hasRecordArrival } from "../recordArrival";
 import type { RecordArrival } from "../recordArrival";
@@ -13,7 +14,7 @@ export interface FloatingChat {
   profileRef: RefObject<HTMLDivElement | null>;
   detached: boolean;
   unseen: boolean;
-  followLatest: () => void;
+  followLatest: (smooth?: boolean) => void;
   preserveHistory: () => void;
 }
 /** Measured overlay clearance and explicit latest-follow intent, independent of status size. */
@@ -31,6 +32,12 @@ export function useFloatingChat(
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
   const following = useRef(true);
+  const returning = useRef(false);
+  const reducedMotion = useReducedMotion();
+  const motionPreference = useRef(reducedMotion);
+  useLayoutEffect(() => {
+    motionPreference.current = reducedMotion;
+  }, [reducedMotion]);
   const pinnedTop = useRef(0);
   const historyAnchor = useRef<{ element: HTMLElement; top: number } | null>(
     null,
@@ -70,17 +77,39 @@ export function useFloatingChat(
       }
     });
   }, []);
-  const followLatest = useCallback((): void => {
-    historyAnchor.current = null;
-    following.current = true;
-    setDetached(false);
-    setUnseen(false);
-    if (viewportRef.current) {
-      viewportRef.current.scrollTop = viewportRef.current.scrollHeight;
-      pinnedTop.current = viewportRef.current.scrollTop;
+  const followLatest = useCallback(
+    (smooth = false): void => {
+      historyAnchor.current = null;
+      const viewport = viewportRef.current;
+      if (
+        smooth &&
+        !motionPreference.current &&
+        viewport &&
+        viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop > 1
+      ) {
+        following.current = false;
+        returning.current = true;
+        cancelAnimationFrame(frame.current);
+        viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
+        return;
+      }
+      returning.current = false;
+      following.current = true;
+      setDetached(false);
+      setUnseen(false);
+      if (viewportRef.current) {
+        viewportRef.current.scrollTop = viewportRef.current.scrollHeight;
+        pinnedTop.current = viewportRef.current.scrollTop;
+      }
+      schedulePin();
+    },
+    [schedulePin],
+  );
+  useLayoutEffect(() => {
+    if (reducedMotion && returning.current) {
+      followLatest();
     }
-    schedulePin();
-  }, [schedulePin]);
+  }, [reducedMotion, followLatest]);
   useLayoutEffect(() => {
     const textarea = textareaRef.current;
     if (!textarea) {
@@ -134,6 +163,8 @@ export function useFloatingChat(
         viewport.scrollTop = viewport.scrollHeight;
         pinnedTop.current = viewport.scrollTop;
         schedulePin();
+      } else if (returning.current) {
+        viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
       }
     };
     const observer = new ResizeObserver(measure);
@@ -147,14 +178,18 @@ export function useFloatingChat(
         return;
       }
       following.current =
-        viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <=
-        48;
+        viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <= 1;
       setDetached(!following.current);
       if (following.current) {
+        returning.current = false;
         setUnseen(false);
       }
     };
     const onIntent = (): void => {
+      if (returning.current) {
+        returning.current = false;
+        viewport.scrollTo({ top: viewport.scrollTop, behavior: "instant" });
+      }
       historyAnchor.current = null;
       cancelAnimationFrame(frame.current);
       following.current = false;
@@ -170,6 +205,7 @@ export function useFloatingChat(
     viewport.addEventListener("keydown", onIntent);
     return (): void => {
       observer.disconnect();
+      returning.current = false;
       cancelAnimationFrame(frame.current);
       cancelAnimationFrame(intentFrame.current);
       viewport.removeEventListener("scroll", onScroll);
@@ -179,7 +215,7 @@ export function useFloatingChat(
       viewport.removeEventListener("keydown", onIntent);
     };
   }, [schedulePin, active]);
-  useLayoutEffect(followLatest, [conversationKey, followLatest]);
+  useLayoutEffect(() => followLatest(), [conversationKey, followLatest]);
   return {
     shellRef,
     viewportRef,
