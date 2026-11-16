@@ -224,7 +224,8 @@ instead of containing it. The document itself does not scroll.
 The header and composer stay available while conversation content
 scrolls internally. Activating Send keeps focus in the composer, including pointer
 and touch activation, rather than transferring it to the button. An in-flight Send
-keeps the textarea enabled while disabling further Send activation; the container's
+keeps the textarea enabled and focusable but read-only until acceptance or failure,
+preserving the submitted draft while disabling further Send activation; the container's
 synchronous admission guard also rejects repeated Enter submission. A failed
 request retains the draft and focus. Enter submission keeps its existing
 composition guard. The textarea has an explicit chat-message

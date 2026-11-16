@@ -325,6 +325,7 @@ export function Chat(props: ChatProps): ReactElement {
                   rows={1}
                   value={props.input}
                   disabled={!props.writable}
+                  readOnly={props.enqueuePending}
                   aria-label={c.message}
                   aria-invalid={Boolean(props.inputError)}
                   aria-describedby={

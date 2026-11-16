@@ -74,6 +74,7 @@ export interface ChatProps {
   recentRead: "ready" | "loading" | "error";
   onReadRecent: () => void;
   input: string;
+  enqueuePending: boolean;
   inputError?: string;
   activity: ConversationActivity;
   thinking: boolean;

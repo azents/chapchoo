@@ -94,85 +94,106 @@ for (const width of [390, 1280]) {
   });
 }
 
-test("actual Chat container retains a failed enqueue draft without optimistic Chat or queue rows", async ({
-  page,
-}) => {
-  const sends: unknown[] = [];
-  const admitted = Promise.withResolvers<void>();
-  const release = Promise.withResolvers<void>();
-  const unexpected: string[] = [];
-  await page.route("**/api/trpc/**", async (route) => {
-    const method = new URL(route.request().url()).pathname.split("/").at(-1);
-    if (method === "conversations.send") {
-      sends.push(route.request().postDataJSON());
-      admitted.resolve();
-      await release.promise;
-      await route.abort("failed");
-      return;
-    }
-    let value: unknown;
-    switch (method) {
-      case "auth.identity":
-        value = containerUser;
-        break;
-      case "computers.get":
-        if (containerInput.initial.type !== "detail") {
-          throw new Error("Fixture requires an Agent detail");
+for (const outcome of ["failed", "accepted"] as const) {
+  test(`actual Chat container preserves an in-flight draft until enqueue is ${outcome}`, async ({
+    page,
+  }) => {
+    const sends: unknown[] = [];
+    const admitted = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const unexpected: string[] = [];
+    await page.route("**/api/trpc/**", async (route) => {
+      const method = new URL(route.request().url()).pathname.split("/").at(-1);
+      if (method === "conversations.send") {
+        sends.push(route.request().postDataJSON());
+        admitted.resolve();
+        await release.promise;
+        if (outcome === "failed") {
+          await route.abort("failed");
+        } else {
+          await route.fulfill({
+            contentType: "application/json",
+            body: JSON.stringify({
+              result: { data: superjson.serialize(void 0) },
+            }),
+          });
         }
-        value = containerInput.initial.agent;
-        break;
-      case "conversations.region":
-      case "conversations.activity":
-        value = containerInput.initialConversation;
-        break;
-      case "conversations.messages":
-        value = containerInput.initialMessages;
-        break;
-      default:
-        unexpected.push(method ?? route.request().url());
-        await route.abort();
         return;
-    }
-    await route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify({ result: { data: superjson.serialize(value) } }),
+      }
+      let value: unknown;
+      switch (method) {
+        case "auth.identity":
+          value = containerUser;
+          break;
+        case "computers.get":
+          if (containerInput.initial.type !== "detail") {
+            throw new Error("Fixture requires an Agent detail");
+          }
+          value = containerInput.initial.agent;
+          break;
+        case "conversations.region":
+        case "conversations.activity":
+          value = containerInput.initialConversation;
+          break;
+        case "conversations.messages":
+          value = containerInput.initialMessages;
+          break;
+        default:
+          unexpected.push(method ?? route.request().url());
+          await route.abort();
+          return;
+      }
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ result: { data: superjson.serialize(value) } }),
+      });
     });
-  });
-  await page.goto(
-    "/iframe.html?id=chat-container-transport--enqueue-failure&viewMode=story",
-  );
-  const input = page.getByRole("textbox", { name: "Message", exact: true });
-  await expect(input).toBeEnabled();
-  const draft = "Keep this exact failed draft 🙂";
-  await input.fill(draft);
-  await input.evaluate((node) => {
-    node.setAttribute("data-blurs", "0");
-    node.addEventListener("blur", () =>
-      node.setAttribute(
-        "data-blurs",
-        String(Number(node.getAttribute("data-blurs")) + 1),
-      ),
+    await page.goto(
+      "/iframe.html?id=chat-container-transport--enqueue-failure&viewMode=story",
     );
+    const input = page.getByRole("textbox", { name: "Message", exact: true });
+    await expect(input).toBeEnabled();
+    const draft = "Keep this exact failed draft 🙂";
+    await input.fill(draft);
+    await input.evaluate((node) => {
+      node.setAttribute("data-blurs", "0");
+      node.addEventListener("blur", () =>
+        node.setAttribute(
+          "data-blurs",
+          String(Number(node.getAttribute("data-blurs")) + 1),
+        ),
+      );
+    });
+    await page.getByRole("button", { name: "Send", exact: true }).click();
+    await admitted.promise;
+    await expect(input).toBeEnabled();
+    await expect(input).toBeFocused();
+    await expect(input).toHaveJSProperty("readOnly", true);
+    await expect(input).toHaveAttribute("data-blurs", "0");
+    await expect(
+      page.getByRole("button", { name: "Send", exact: true }),
+    ).toBeDisabled();
+    await input.press("End");
+    await input.pressSequentially(" must not alter the pending draft");
+    await expect(input).toHaveValue(draft);
+    await input.press("Enter");
+    release.resolve();
+    if (outcome === "failed") {
+      await expect(page.locator("#chat-input-error")).toBeVisible();
+      await expect(input).toHaveValue(draft);
+    } else {
+      await expect(page.locator("#chat-input-error")).toHaveCount(0);
+      await expect(input).toHaveValue("");
+    }
+    await expect(input).toBeFocused();
+    await expect(input).toHaveJSProperty("readOnly", false);
+    await expect(input).toHaveAttribute("data-blurs", "0");
+    await expect(page.locator("[data-input-operation]")).toHaveCount(0);
+    await expect(page.locator("[data-user-bubble]")).toHaveCount(0);
+    expect(sends).toHaveLength(1);
+    expect(unexpected).toEqual([]);
   });
-  await page.getByRole("button", { name: "Send", exact: true }).click();
-  await admitted.promise;
-  await expect(input).toBeEnabled();
-  await expect(input).toBeFocused();
-  await expect(input).toHaveAttribute("data-blurs", "0");
-  await expect(
-    page.getByRole("button", { name: "Send", exact: true }),
-  ).toBeDisabled();
-  await input.press("Enter");
-  release.resolve();
-  await expect(page.locator("#chat-input-error")).toBeVisible();
-  await expect(input).toHaveValue(draft);
-  await expect(input).toBeFocused();
-  await expect(input).toHaveAttribute("data-blurs", "0");
-  await expect(page.locator("[data-input-operation]")).toHaveCount(0);
-  await expect(page.locator("[data-user-bubble]")).toHaveCount(0);
-  expect(sends).toHaveLength(1);
-  expect(unexpected).toEqual([]);
-});
+}
 
 test("Delete removes the queue item and invalidates only the earlier in-flight read", async ({
   page,

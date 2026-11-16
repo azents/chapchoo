@@ -514,6 +514,7 @@ export function useChatContainer(props: ChatInput): ChatProps {
     recentRead: recentReader.read,
     onReadRecent: recentReader.refresh,
     input,
+    enqueuePending: sendMutation.isPending,
     inputError: inputError ? copy.enqueueFailed : void 0,
     activity: reader.read === "error" ? "unavailable" : activity,
     thinking: chatThinking({
