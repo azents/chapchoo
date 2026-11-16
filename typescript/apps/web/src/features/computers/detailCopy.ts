@@ -2,7 +2,6 @@ const english = {
   computer: "Computer",
   on: "The Computer is on",
   off: "The Computer is off",
-  unknown: "Power has not been confirmed",
   connection: "Computer connection",
   connectionHint:
     "Reported by the connection app inside the Computer, independently of its power.",
@@ -19,7 +18,6 @@ const korean: ComputerDetailCopy = {
   computer: "컴퓨터",
   on: "컴퓨터가 켜져 있습니다",
   off: "컴퓨터가 꺼져 있습니다",
-  unknown: "전원 상태를 확인하지 못했습니다",
   connection: "컴퓨터 연결",
   connectionHint:
     "컴퓨터 안의 연결 프로그램이 보내는 신호입니다. 전원 상태와는 다를 수 있습니다.",
@@ -36,7 +34,6 @@ const japanese: ComputerDetailCopy = {
   computer: "コンピューター",
   on: "コンピューターは起動しています",
   off: "コンピューターは停止しています",
-  unknown: "電源の状態を確認できません",
   connection: "コンピューターの接続",
   connectionHint:
     "コンピューター内の接続アプリが送る信号です。電源の状態とは異なる場合があります。",
@@ -53,7 +50,6 @@ const french: ComputerDetailCopy = {
   computer: "Ordinateur",
   on: "L’ordinateur est allumé",
   off: "L’ordinateur est arrêté",
-  unknown: "L’alimentation n’a pas pu être confirmée",
   connection: "Connexion de l’ordinateur",
   connectionHint:
     "Signal de l’application de connexion dans l’ordinateur, indépendant de son alimentation.",

@@ -24,6 +24,7 @@ const english = {
   bootstrapSecret: "Bootstrap Secret",
   agents: "Agents",
   computerStatus: "Computer status",
+  refreshing: "Refreshing Computer information",
   accounts: "Account and spaces",
   inventory: "Computer inventory",
   providers: "Computer Providers",
@@ -84,8 +85,7 @@ const english = {
     "Remove this Agent now? Its Computer and data may remain. The background cleanup request is retained, but completion is not confirmed.",
   delayed:
     "Starting is taking longer than expected. This does not mean the Computer has failed.",
-  stale:
-    "Could not load the latest state. Showing the last-known information; current power and cleanup completion are not confirmed.",
+  stale: "Could not load Computer information. Refresh to try again.",
   unavailable:
     "The request could not be completed. Review the current state before trying again.",
   lostSubmission:
@@ -108,7 +108,8 @@ const english = {
   powerUnknown: "Current power is not verified.",
   requiresStopped: "The Computer must be stopped.",
   requiresRunning: "The Computer must be running.",
-  savedUnverified: "The original saved environment is not verified.",
+  savedUnverified:
+    "The original saved environment must be available before starting.",
   readOnly: "Read-only inventory",
   replay: "Replay character animation",
   status: "Status",
@@ -139,6 +140,7 @@ const korean: ComputerCopy = {
   bootstrapSecret: "부트스트랩 Secret",
   agents: "에이전트",
   computerStatus: "컴퓨터 상태",
+  refreshing: "컴퓨터 정보 새로고침",
   accounts: "계정 및 공간",
   inventory: "컴퓨터 목록",
   providers: "Computer Provider",
@@ -199,8 +201,7 @@ const korean: ComputerCopy = {
     "지금 에이전트를 강제로 제거할까요? 컴퓨터와 데이터가 남을 수 있습니다. 백그라운드 정리 요청은 유지되지만, 정리가 끝났는지는 확인되지 않았습니다.",
   delayed:
     "시작에 시간이 걸리고 있습니다. 이것만으로 컴퓨터 실행에 실패했다고 단정할 수는 없습니다.",
-  stale:
-    "최신 상태를 불러오지 못해 마지막으로 확인한 정보를 표시합니다. 현재 전원이나 정리 완료 여부는 확인되지 않았습니다.",
+  stale: "컴퓨터 정보를 불러오지 못했습니다. 새로고침해 다시 시도해 주세요.",
   unavailable:
     "요청을 완료하지 못했습니다. 현재 상태를 확인한 뒤 다시 시도해 주세요.",
   lostSubmission:
@@ -223,7 +224,7 @@ const korean: ComputerCopy = {
   powerUnknown: "현재 전원 상태를 확인하지 못했습니다.",
   requiresStopped: "컴퓨터가 중지된 상태에서만 할 수 있습니다.",
   requiresRunning: "컴퓨터가 실행 중일 때만 할 수 있습니다.",
-  savedUnverified: "기존 저장 환경을 확인하지 못했습니다.",
+  savedUnverified: "기존 저장 환경이 준비돼야 시작할 수 있습니다.",
   readOnly: "조회만 가능",
   replay: "캐릭터 동작 다시 보기",
   status: "상태",
@@ -253,6 +254,7 @@ const japanese: ComputerCopy = {
   bootstrapSecret: "ブートストラップ Secret",
   agents: "エージェント",
   computerStatus: "コンピューターの状態",
+  refreshing: "コンピューター情報を更新中",
   accounts: "アカウントとスペース",
   inventory: "コンピューター一覧",
   providers: "Computer Provider",
@@ -315,7 +317,7 @@ const japanese: ComputerCopy = {
   delayed:
     "起動に時間がかかっています。これだけではコンピューターの起動に失敗したとは判断できません。",
   stale:
-    "最新の状態を取得できないため、最後に確認した情報を表示しています。現在の電源やクリーンアップの完了状況は未確認です。",
+    "コンピューター情報を取得できませんでした。再読み込みしてもう一度お試しください。",
   unavailable:
     "要求を完了できませんでした。現在の状態を確認してから再試行してください。",
   lostSubmission:
@@ -338,7 +340,7 @@ const japanese: ComputerCopy = {
   powerUnknown: "現在の電源は未確認です。",
   requiresStopped: "コンピューターが停止している場合のみ操作できます。",
   requiresRunning: "コンピューターが実行中の場合のみ操作できます。",
-  savedUnverified: "元の保存環境は未確認です。",
+  savedUnverified: "起動するには元の保存環境が利用可能である必要があります。",
   readOnly: "読み取り専用",
   replay: "キャラクターの動きを再生",
   status: "状態",
@@ -368,6 +370,7 @@ const french: ComputerCopy = {
   bootstrapSecret: "Secret de démarrage",
   agents: "Agents",
   computerStatus: "État de l’ordinateur",
+  refreshing: "Actualisation des informations de l’ordinateur",
   accounts: "Compte et espaces",
   inventory: "Ordinateurs",
   providers: "Computer Providers",
@@ -430,7 +433,7 @@ const french: ComputerCopy = {
   delayed:
     "Le démarrage prend plus de temps que prévu. Cela ne suffit pas à conclure que l’ordinateur n’a pas pu démarrer.",
   stale:
-    "Impossible de charger l’état actuel. Les dernières informations connues sont affichées ; l’alimentation actuelle et la fin du nettoyage ne sont pas confirmées.",
+    "Impossible de charger les informations de l’ordinateur. Actualisez pour réessayer.",
   unavailable:
     "La demande n’a pas pu aboutir. Vérifiez l’état actuel avant de réessayer.",
   lostSubmission:
@@ -454,7 +457,8 @@ const french: ComputerCopy = {
   requiresStopped: "L’ordinateur doit être arrêté pour effectuer cette action.",
   requiresRunning:
     "L’ordinateur doit être en cours d’exécution pour effectuer cette action.",
-  savedUnverified: "L’environnement persistant d’origine n’a pas été vérifié.",
+  savedUnverified:
+    "L’environnement persistant d’origine doit être disponible pour démarrer.",
   readOnly: "Inventaire en lecture seule",
   replay: "Rejouer l’animation du personnage",
   status: "État",

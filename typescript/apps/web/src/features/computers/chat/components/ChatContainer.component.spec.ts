@@ -98,11 +98,15 @@ test("actual Chat container retains a failed enqueue draft without optimistic Ch
   page,
 }) => {
   const sends: unknown[] = [];
+  const admitted = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
   const unexpected: string[] = [];
   await page.route("**/api/trpc/**", async (route) => {
     const method = new URL(route.request().url()).pathname.split("/").at(-1);
     if (method === "conversations.send") {
       sends.push(route.request().postDataJSON());
+      admitted.resolve();
+      await release.promise;
       await route.abort("failed");
       return;
     }
@@ -141,9 +145,29 @@ test("actual Chat container retains a failed enqueue draft without optimistic Ch
   await expect(input).toBeEnabled();
   const draft = "Keep this exact failed draft 🙂";
   await input.fill(draft);
+  await input.evaluate((node) => {
+    node.setAttribute("data-blurs", "0");
+    node.addEventListener("blur", () =>
+      node.setAttribute(
+        "data-blurs",
+        String(Number(node.getAttribute("data-blurs")) + 1),
+      ),
+    );
+  });
   await page.getByRole("button", { name: "Send", exact: true }).click();
+  await admitted.promise;
+  await expect(input).toBeEnabled();
+  await expect(input).toBeFocused();
+  await expect(input).toHaveAttribute("data-blurs", "0");
+  await expect(
+    page.getByRole("button", { name: "Send", exact: true }),
+  ).toBeDisabled();
+  await input.press("Enter");
+  release.resolve();
   await expect(page.locator("#chat-input-error")).toBeVisible();
   await expect(input).toHaveValue(draft);
+  await expect(input).toBeFocused();
+  await expect(input).toHaveAttribute("data-blurs", "0");
   await expect(page.locator("[data-input-operation]")).toHaveCount(0);
   await expect(page.locator("[data-user-bubble]")).toHaveCount(0);
   expect(sends).toHaveLength(1);

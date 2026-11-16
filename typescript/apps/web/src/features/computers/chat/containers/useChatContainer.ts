@@ -525,7 +525,7 @@ export function useChatContainer(props: ChatInput): ChatProps {
       authorized: product.access === "authorized",
       stop: conversation.stop,
     }),
-    writable: writable && !sendMutation.isPending,
+    writable,
     stoppable:
       effectAvailable && Boolean(region.header.native && region.header.workId),
     sendable: writable && !sendMutation.isPending && Boolean(input.trim()),

@@ -179,15 +179,21 @@ export function Agents(props: AgentsProps): ReactElement {
                           className={classes.statusDot}
                           aria-hidden="true"
                         />
-                        {c[item.computer.connector]}
+                        {item.computer.connector === "unknown"
+                          ? null
+                          : c[item.computer.connector]}
                       </Box>
                       <Text size="xs" className={classes.cardFacts}>
-                        <span
-                          aria-label={`${c.power}: ${c[item.computer.power]}`}
-                        >
-                          {c[item.computer.power]}
-                        </span>
-                        {" · "}
+                        {item.computer.power !== "unknown" ? (
+                          <>
+                            <span
+                              aria-label={`${c.power}: ${c[item.computer.power]}`}
+                            >
+                              {c[item.computer.power]}
+                            </span>
+                            {" · "}
+                          </>
+                        ) : null}
                         <span
                           aria-label={`${c.phase}: ${computerOperation(item.computer, c).label}`}
                         >

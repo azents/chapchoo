@@ -1,11 +1,12 @@
 "use client";
 import { useReducedMotion } from "@mantine/hooks";
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useId, useLayoutEffect, useRef, useState } from "react";
 import { hasMessageArrival, hasRecordArrival } from "../recordArrival";
 import type { RecordArrival } from "../recordArrival";
 import type { RefObject } from "react";
 
 export interface FloatingChat {
+  inputId: string;
   shellRef: RefObject<HTMLDivElement | null>;
   viewportRef: RefObject<HTMLDivElement | null>;
   contentRef: RefObject<HTMLDivElement | null>;
@@ -25,6 +26,7 @@ export function useFloatingChat(
   updates: readonly { order: bigint }[] = [],
   requestHead?: RecordArrival,
 ): FloatingChat {
+  const inputId = useId();
   const shellRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -217,6 +219,7 @@ export function useFloatingChat(
   }, [schedulePin, active]);
   useLayoutEffect(() => followLatest(), [conversationKey, followLatest]);
   return {
+    inputId,
     shellRef,
     viewportRef,
     contentRef,

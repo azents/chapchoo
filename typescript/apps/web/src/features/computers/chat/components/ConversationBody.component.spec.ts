@@ -129,7 +129,9 @@ test("uncertain response delivery does not offer another effect", async ({
   await page.goto(
     "/iframe.html?id=chat-conversation-body--uncertain&viewMode=story",
   );
-  await expect(page.getByRole("alert")).toHaveText("Delivery not confirmed");
+  await expect(page.getByRole("alert")).toHaveText(
+    "No delivery result received. Refresh to load the result.",
+  );
   await expect(
     page.getByRole("button", { name: "Send answers", exact: true }),
   ).toBeDisabled();
