@@ -6,6 +6,7 @@ import {
   Box,
   Button,
   Group,
+  Loader,
   Modal,
   Stack,
   Text,
@@ -43,8 +44,15 @@ export function ComputerControls(props: Props): ReactElement {
   const locked = props.pending || props.stale;
   const operation = computerOperation(computer, c);
   const status =
-    computer.phase === "completed" ? c[computer.power] : operation.label;
+    computer.phase === "completed"
+      ? computer.power === "unknown"
+        ? null
+        : c[computer.power]
+      : operation.label;
   const blockedReason = admission?.reason;
+  const observationOnly = (reason: typeof blockedReason): boolean =>
+    reason === "powerUnknown" ||
+    (reason === "savedUnverified" && computer.saved === "unknown");
   return (
     <>
       <Group
@@ -54,12 +62,23 @@ export function ComputerControls(props: Props): ReactElement {
         gap="sm"
       >
         <Stack gap="xs" style={{ minWidth: 0 }}>
-          <Text size="sm" fw={600}>
-            {d.computer} · {status}
-          </Text>
+          <Group gap="xs">
+            <Text size="sm" fw={600}>
+              {d.computer}
+              {status ? ` · ${status}` : ""}
+            </Text>
+            {!status ? <Loader size="xs" aria-label={c.refreshing} /> : null}
+          </Group>
           <Group gap="xs" c="dimmed">
             <span className={classes.statusDot} aria-hidden="true" />
-            <Text size="xs">{c[computer.connector]}</Text>
+            {computer.connector === "unknown" ? (
+              <Loader
+                size="xs"
+                aria-label={`${d.connection}: ${c.refreshing}`}
+              />
+            ) : (
+              <Text size="xs">{c[computer.connector]}</Text>
+            )}
           </Group>
         </Stack>
         <Group gap="sm" wrap="nowrap">
@@ -79,7 +98,9 @@ export function ComputerControls(props: Props): ReactElement {
           </Button>
           <Tooltip
             label={
-              !restart?.available && restart?.reason
+              !restart?.available &&
+              restart?.reason &&
+              !observationOnly(restart.reason)
                 ? `${c.restart}: ${c[restart.reason]}`
                 : c.restart
             }
@@ -88,7 +109,13 @@ export function ComputerControls(props: Props): ReactElement {
             <span
               role="group"
               aria-label={c.restart}
-              tabIndex={!restart?.available && restart?.reason ? 0 : void 0}
+              tabIndex={
+                !restart?.available &&
+                restart?.reason &&
+                !observationOnly(restart.reason)
+                  ? 0
+                  : void 0
+              }
               className={classes.controlHelp}
             >
               <ActionIcon
@@ -124,7 +151,8 @@ export function ComputerControls(props: Props): ReactElement {
       {blockedReason &&
       !(blockedReason === "conflicting" && (operation.hint || stopping)) &&
       blockedReason !== "requiresRunning" &&
-      blockedReason !== "requiresStopped" ? (
+      blockedReason !== "requiresStopped" &&
+      !observationOnly(blockedReason) ? (
         <Text size="sm" c="dimmed">
           {c[blockedReason]}
         </Text>
@@ -155,18 +183,18 @@ export function ComputerControls(props: Props): ReactElement {
             </Alert>
           ) : null}
           <Stack gap="xs">
-            <Title order={3} size="h4">
-              {computer.power === "running"
-                ? d.on
-                : computer.power === "stopped"
-                  ? d.off
-                  : d.unknown}
-            </Title>
-            <Text size="xs" c="dimmed">
-              {computer.observedAt === null
-                ? c.neverObserved
-                : `${c.observed}: ${props.formatTime(computer.observedAt)}`}
-            </Text>
+            {computer.power !== "unknown" ? (
+              <Title order={3} size="h4">
+                {computer.power === "running" ? d.on : d.off}
+              </Title>
+            ) : (
+              <Loader size="sm" aria-label={c.refreshing} />
+            )}
+            {computer.observedAt !== null ? (
+              <Text size="xs" c="dimmed">
+                {`${c.observed}: ${props.formatTime(computer.observedAt)}`}
+              </Text>
+            ) : null}
             {computer.power === "unknown" &&
             computer.lastKnownPower !== "unknown" ? (
               <Text size="sm">
@@ -178,17 +206,23 @@ export function ComputerControls(props: Props): ReactElement {
             {[
               {
                 label: d.connection,
-                value: c[computer.connector],
+                value:
+                  computer.connector === "unknown"
+                    ? null
+                    : c[computer.connector],
                 hint: d.connectionHint,
               },
               {
                 label: d.management,
-                value: c[computer.management],
+                value:
+                  computer.management === "unknown"
+                    ? null
+                    : c[computer.management],
                 hint: d.managementHint,
               },
               {
                 label: d.storage,
-                value: c[computer.saved],
+                value: computer.saved === "unknown" ? null : c[computer.saved],
                 hint: d.storageHint,
               },
             ].map((item) => (
@@ -197,7 +231,14 @@ export function ComputerControls(props: Props): ReactElement {
                   <Text size="sm" fw={500}>
                     {item.label}
                   </Text>
-                  <Text size="sm">{item.value}</Text>
+                  {item.value ? (
+                    <Text size="sm">{item.value}</Text>
+                  ) : (
+                    <Loader
+                      size="xs"
+                      aria-label={`${item.label}: ${c.refreshing}`}
+                    />
+                  )}
                 </Group>
                 <Text size="xs" c="dimmed">
                   {item.hint}

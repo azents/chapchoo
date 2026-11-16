@@ -311,11 +311,21 @@ export function Chat(props: ChatProps): ReactElement {
                 data-readonly={!props.writable || void 0}
                 data-error={Boolean(props.inputError) || void 0}
               >
+                <label htmlFor={f.inputId} className={classes.srOnly}>
+                  {c.message}
+                </label>
                 <textarea
+                  id={f.inputId}
+                  name="chat-message"
+                  inputMode="text"
+                  autoCorrect="on"
+                  autoCapitalize="sentences"
+                  spellCheck
                   ref={f.textareaRef}
                   rows={1}
                   value={props.input}
                   disabled={!props.writable}
+                  readOnly={props.enqueuePending}
                   aria-label={c.message}
                   aria-invalid={Boolean(props.inputError)}
                   aria-describedby={
@@ -347,7 +357,11 @@ export function Chat(props: ChatProps): ReactElement {
                       size="2.25rem"
                       aria-label={c.send}
                       disabled={!props.sendable}
-                      onClick={props.onSend}
+                      onPointerDown={(event) => event.preventDefault()}
+                      onClick={() => {
+                        f.textareaRef.current?.focus({ preventScroll: true });
+                        props.onSend();
+                      }}
                     >
                       <Icon name="arrow" />
                     </ActionIcon>

@@ -514,6 +514,7 @@ export function useChatContainer(props: ChatInput): ChatProps {
     recentRead: recentReader.read,
     onReadRecent: recentReader.refresh,
     input,
+    enqueuePending: sendMutation.isPending,
     inputError: inputError ? copy.enqueueFailed : void 0,
     activity: reader.read === "error" ? "unavailable" : activity,
     thinking: chatThinking({
@@ -525,7 +526,7 @@ export function useChatContainer(props: ChatInput): ChatProps {
       authorized: product.access === "authorized",
       stop: conversation.stop,
     }),
-    writable: writable && !sendMutation.isPending,
+    writable,
     stoppable:
       effectAvailable && Boolean(region.header.native && region.header.workId),
     sendable: writable && !sendMutation.isPending && Boolean(input.trim()),

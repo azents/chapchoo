@@ -669,6 +669,7 @@ function Fixture({
           onAnswer: () => {},
         }}
         input={input}
+        enqueuePending={false}
         inputError={mode === "inputError" ? copy.enqueueFailed : void 0}
         activity={mode === "readerError" ? "unavailable" : displayedActivity}
         writable={writable}

@@ -77,6 +77,14 @@ not restore effect admission. Automatic observation continues without a
 manual Refresh control in the chat status bubble. The activity sheet retains
 existing control/detail functions. Read-only guidance appears in the disabled
 composer placeholder, not a second line in the status bubble. Stop/restart retain captured-request consent.
+Normal owner list and Computer-control surfaces omit generic unknown captions.
+A completed lifecycle without a current power observation shows the Computer
+identity with a refresh indicator rather than a fabricated power state; unknown
+connection/storage values also use an indicator in details. Observation-only
+blocking reasons are not repeated as failure prose. Known missing storage,
+connection loss, lifecycle failures and server action eligibility remain visible
+and authoritative. Last-known power is explicitly historical in details. Actual
+read failure has a refresh recovery message rather than an unknown-state caption.
 Read failure/disconnection never becomes stopped power. Auth withdrawal replaces
 the entire protected conversation surface with the existing recovery view.
 Workspace selection, account settings, invitations and Team settings remain

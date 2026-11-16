@@ -60,6 +60,45 @@ export const Off: Story = {
   },
 };
 export const Pending: Story = { args: { pending: true } };
+export const ObservationGap: Story = {
+  args: {
+    agent: {
+      ...detail.agent,
+      computer: {
+        ...detail.agent.computer,
+        power: "unknown",
+        phase: "completed",
+        connector: "connected",
+        saved: "unknown",
+        actions: [
+          { action: "stop", available: false, reason: "powerUnknown" },
+          { action: "restart", available: false, reason: "powerUnknown" },
+        ],
+      },
+    },
+  },
+};
+export const InitialObservation: Story = {
+  args: {
+    agent: {
+      ...detail.agent,
+      computer: {
+        ...detail.agent.computer,
+        power: "unknown",
+        lastKnownPower: "unknown",
+        phase: "completed",
+        connector: "unknown",
+        management: "unknown",
+        saved: "unknown",
+        observedAt: null,
+        actions: [
+          { action: "stop", available: false, reason: "powerUnknown" },
+          { action: "restart", available: false, reason: "powerUnknown" },
+        ],
+      },
+    },
+  },
+};
 export const Stopping: Story = {
   args: {
     agent: {
