@@ -1,7 +1,10 @@
 import { expect, test } from "@playwright/test";
 import superjson from "superjson";
 import { containerInput, containerUser } from "./chatContainerFixture";
-import type { ConversationHeader } from "@chapchoo/web-core/conversation-types";
+import type {
+  ConversationHeader,
+  ConversationRecord,
+} from "@chapchoo/web-core/conversation-types";
 
 test("current execution controls thinking across idle, attention, read failure and recovery", async ({
   page,
@@ -9,6 +12,7 @@ test("current execution controls thinking across idle, attention, read failure a
   let foreground: ConversationHeader["foreground"] = "idle";
   let failed = false;
   let activityReads = 0;
+  let requests: ConversationRecord[] = [];
   const unexpected: string[] = [];
   await page.route("**/api/trpc/**", async (route) => {
     const method = new URL(route.request().url()).pathname.split("/").at(-1);
@@ -48,6 +52,7 @@ test("current execution controls thinking across idle, attention, read failure a
         value = {
           ...containerInput.initialConversation,
           header: { ...containerInput.initialConversation.header, foreground },
+          records: requests,
         };
         break;
       case "conversations.messages":
@@ -77,6 +82,31 @@ test("current execution controls thinking across idle, attention, read failure a
     foreground = "working";
     await expect(thinking).toBeVisible();
   }
+  requests = [
+    {
+      key: "request:approval",
+      nativeId: "approval",
+      kind: "request",
+      anchor: { ordinal: 1n, index: 0n },
+      updatedOrdinal: 1n,
+      content: [],
+      locations: [],
+      responder: { token: "fixture-only" },
+      question: {
+        type: "permission",
+        title: "Approve this work",
+        content: [],
+        locations: [],
+        options: [{ id: "allow", title: "Allow", scope: "once" }],
+      },
+    },
+  ];
+  await expect(
+    page.getByRole("region", { name: "Approve this work" }),
+  ).toBeVisible();
+  await expect(thinking).toHaveCount(0);
+  requests = [];
+  await expect(thinking).toBeVisible();
   failed = true;
   await expect(thinking).toHaveCount(0);
   failed = false;

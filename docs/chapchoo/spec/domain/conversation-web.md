@@ -33,7 +33,10 @@ current activity read, current owner access, and a completed running Computer
 intent with running power and a connected Connector. Idle, attention requests,
 loading, failed/stale observation, disconnection and stopped/retiring lifecycle
 withdraw the indicator. A pending, published or uncertain Stop withdraws it;
-a rejected Stop does not erase positively observed running work. Independent
+an unanswered live permission/form request also withdraws it even if the native
+engine still reports `working`. Historical requests without current responder
+authority and already answered requests do not suppress running feedback.
+A rejected Stop does not erase positively observed running work. Independent
 host-management connectivity does not erase native execution evidence.
 The header's retained-state/refreshing presentation remains separate.
 

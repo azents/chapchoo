@@ -518,6 +518,7 @@ export function useChatContainer(props: ChatInput): ChatProps {
     thinking: chatThinking({
       computer,
       header: region.header,
+      records: region.records,
       read: reader.read,
       stale: product.stale,
       authorized: product.access === "authorized",

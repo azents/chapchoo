@@ -473,6 +473,7 @@ function Fixture({
       <Chat
         thinking={chatThinking({
           computer: agent.computer,
+          records,
           header: startup
             ? startupRegion.header
             : {
