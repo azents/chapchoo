@@ -2,6 +2,30 @@ import { expect, test } from "@playwright/test";
 
 const story = "/iframe.html?id=chat-presence--lifecycle&viewMode=story";
 
+for (const width of [390, 1440]) {
+  test(`composer error retains the composer width at ${width}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto(
+      "/iframe.html?id=chat-conversation--composer-request-error&viewMode=story",
+    );
+    const error = page.locator("footer [role=alert]");
+    await expect(error).toBeVisible();
+    await expect
+      .poll(async () => {
+        const errorBox = await error.boundingBox();
+        const composer = await page
+          .locator("footer [data-error]")
+          .boundingBox();
+        return errorBox && composer
+          ? Math.abs(errorBox.width - composer.width)
+          : null;
+      })
+      .toBeLessThan(1);
+  });
+}
+
 test("initial content stays visible, new content starts collapsed and exits inert", async ({
   page,
 }) => {
