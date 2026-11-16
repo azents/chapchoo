@@ -1,6 +1,7 @@
 ---
 title: "Messages Before Computer Readiness Design"
 created: 2026-11-16
+implemented: 2026-11-17
 document_role: primary
 document_type: design
 snapshot_id: messaging-261116
