@@ -2,7 +2,10 @@ import type en from "../../../messages/en-US.json";
 
 export type ErrorKey = keyof typeof en.Errors;
 
-export function errorKey(reason: string | null): ErrorKey {
+export function errorKey(
+  reason: string | null,
+  operation: "read" | "mutation" = "mutation",
+): ErrorKey {
   switch (reason) {
     case "DOMAIN_REASON_INVALID_INPUT":
       return "invalidInput";
@@ -43,6 +46,6 @@ export function errorKey(reason: string | null): ErrorKey {
     case "DOMAIN_REASON_CAPACITY_EXHAUSTED":
       return "capacityExhausted";
     default:
-      return "generic";
+      return operation === "read" ? "read" : "generic";
   }
 }

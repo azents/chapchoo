@@ -133,7 +133,10 @@ saved-environment evidence, observation time and available actions with typed
 blocking reasons. The browser does not infer stopped power from disconnection or
 query failure. Connector connectivity is not harness readiness. Display formatting
 uses the user's region/timezone; English, Korean, Japanese and French copy share
-the same typed key set.
+the same typed key set. If the browser cannot format an instant, owner and Admin
+timestamps use the existing localized display-unavailable label. This is not an
+unknown Computer state, and it changes neither the stored zone nor the underlying
+power, saved-environment or resource-presence observation.
 
 Creation follows registered cloud environment, required Codex authentication,
 then final handle, catalogue image and six-key palette selection alongside

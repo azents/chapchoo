@@ -86,7 +86,8 @@
     "alreadyProcessed": "This invitation has already been processed.",
     "ownerTransferRequired": "Transfer ownership before leaving the team.",
     "handleConflict": "This team handle is already in use.",
-    "mailUnavailable": "Email sign-in is not configured on this server.",
+    "mailUnavailable": "Email delivery is not configured on this server.",
+    "read": "Could not load the current information. Reload to try again.",
     "capacityExhausted": "Password processing is busy. Try again shortly.",
     "generic": "We could not confirm the result. Refresh the page to check the current state before submitting the change again."
   }

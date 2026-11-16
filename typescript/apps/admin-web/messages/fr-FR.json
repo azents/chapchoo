@@ -86,7 +86,8 @@
     "alreadyProcessed": "Cette invitation a déjà été traitée.",
     "ownerTransferRequired": "Transférez la propriété avant de quitter l’équipe.",
     "handleConflict": "Cet identifiant d’équipe est déjà utilisé.",
-    "mailUnavailable": "La connexion par e-mail n’est pas configurée sur ce serveur.",
+    "mailUnavailable": "L’envoi d’e-mails n’est pas configuré sur ce serveur.",
+    "read": "Les informations actuelles n’ont pas pu être chargées. Actualisez la page pour réessayer.",
     "capacityExhausted": "Les demandes sont trop nombreuses pour le moment. Réessayez dans quelques instants.",
     "generic": "Le résultat de la demande n’a pas pu être confirmé. Actualisez la page avant de soumettre à nouveau la modification."
   }

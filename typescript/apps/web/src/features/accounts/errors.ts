@@ -1,6 +1,10 @@
 import type { Copy } from "./types";
 
-export function accountError(reason: string | null, c: Copy): string {
+export function accountError(
+  reason: string | null,
+  c: Copy,
+  operation: "read" | "mutation" = "mutation",
+): string {
   switch (reason) {
     case "DOMAIN_REASON_INVALID_INPUT":
       return c.invalidInput;
@@ -32,8 +36,10 @@ export function accountError(reason: string | null, c: Copy): string {
     case "DOMAIN_REASON_OWNER_TRANSFER_REQUIRED":
       return c.ownerLeaveDescription;
     case "DOMAIN_REASON_MAIL_UNAVAILABLE":
-      return c.mailUncertain;
+      return c.mailUnavailable;
+    case "DOMAIN_REASON_CAPACITY_EXHAUSTED":
+      return c.capacityExhausted;
     default:
-      return c.genericError;
+      return operation === "read" ? c.readError : c.genericError;
   }
 }

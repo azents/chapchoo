@@ -145,7 +145,7 @@ export function useAdminGrantsContainer({
   if (auth.state.type === "ERROR") {
     state = {
       type: "ERROR",
-      message: errors(errorKey(auth.state.reason)),
+      message: errors(errorKey(auth.state.reason, "read")),
     };
   } else if (auth.state.type === "SIGNED_OUT") {
     state = { type: "LOADING" };
@@ -157,7 +157,7 @@ export function useAdminGrantsContainer({
       case "error":
         state = {
           type: "ERROR",
-          message: errors(errorKey(query.error.data?.reason ?? null)),
+          message: errors(errorKey(query.error.data?.reason ?? null, "read")),
         };
         break;
       case "success":

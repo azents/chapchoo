@@ -110,11 +110,12 @@ await test("known domain reasons resolve to translated presentation keys", () =>
   assert.deepEqual(
     known.map(([, key]) => key).sort(),
     Object.keys(en.Errors)
-      .filter((key) => key !== "generic")
+      .filter((key) => key !== "generic" && key !== "read")
       .sort(),
   );
   for (const [reason, key] of known) {
     assert.equal(errorKey(reason), key);
+    assert.equal(errorKey(reason, "read"), key);
     for (const messages of Object.values(translations)) {
       assert.ok(messages.Errors[key].trim().length > 0);
     }
@@ -131,9 +132,11 @@ await test("missing, internal and unknown reasons use an honest generic message"
     "INVALID_SESSION",
   ]) {
     assert.equal(errorKey(reason), "generic");
+    assert.equal(errorKey(reason, "read"), "read");
   }
   for (const messages of Object.values(translations)) {
     assert.ok(messages.Errors.generic.trim().length > 0);
+    assert.ok(messages.Errors.read.trim().length > 0);
   }
 });
 
