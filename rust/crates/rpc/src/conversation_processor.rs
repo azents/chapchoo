@@ -48,11 +48,8 @@ impl ConversationControlProcessor {
             return Ok(());
         }
         let deadline = Instant::now() + Duration::from_secs(300);
-        let actor = &input.actor;
-        let mut agent = self
-            .computers
-            .agent(actor, &input.agent_id, AcceptanceTime::System)
-            .await?;
+        let authority = input.authority();
+        let mut agent = self.conversation.queued_agent(&authority).await?;
         let Some(route) = self
             .computers
             .resolve_connector_route(&agent.computer.id)
@@ -60,7 +57,6 @@ impl ConversationControlProcessor {
         else {
             return Ok(());
         };
-        let _ = self.refresh_project(&input).await?;
         let draft = ConversationInputPreparation {
             agent_id: &input.agent_id,
             conversation_id: &input.receipt.conversation_id,
@@ -68,13 +64,7 @@ impl ConversationControlProcessor {
         };
         let admission = self
             .conversation
-            .begin_setup(
-                actor,
-                &route,
-                &draft,
-                AcceptanceTime::System.now()?,
-                &input.claim_id,
-            )
+            .queued_begin_setup(&authority, &route, &draft)
             .await?;
         let (execution, supply, fresh, require_retained_source, startup_operation) = match admission
         {
@@ -106,7 +96,7 @@ impl ConversationControlProcessor {
         };
         let current = self
             .conversation
-            .owner_conversation(actor, &input.agent_id, AcceptanceTime::System.now()?)
+            .queued_owner_conversation(&authority)
             .await?;
         let Some(context) = setup_context(
             &input.receipt.target,
@@ -130,8 +120,8 @@ impl ConversationControlProcessor {
                 context: Some(context),
             };
             if !self
-                .invoke(
-                    &input.actor,
+                .invoke_queued(
+                    &input,
                     &agent.computer.id,
                     &agent.computer.current_request_id,
                     &execution,
@@ -151,7 +141,7 @@ impl ConversationControlProcessor {
             let state = if let Some(operation_id) = &startup_operation {
                 let Some(observed) = self
                     .conversation
-                    .connection_startup(actor, &input.agent_id, AcceptanceTime::System.now()?)
+                    .queued_connection_startup(&authority)
                     .await?
                 else {
                     return Ok(());
@@ -163,7 +153,7 @@ impl ConversationControlProcessor {
             } else {
                 let Some(facts) = self
                     .conversation
-                    .setup_facts(actor, &draft, AcceptanceTime::System.now()?)
+                    .queued_setup_facts(&authority, &draft)
                     .await?
                 else {
                     return Ok(());
@@ -180,10 +170,7 @@ impl ConversationControlProcessor {
                             | chapchoo_service::ConversationPreparationFailure::BeforeNativeLaunch
                     ) =>
                 {
-                    agent = self
-                        .computers
-                        .agent(actor, &input.agent_id, AcceptanceTime::System)
-                        .await?;
+                    agent = self.conversation.queued_agent(&authority).await?;
                     let Some(route) = self
                         .computers
                         .resolve_connector_route(&agent.computer.id)
@@ -193,13 +180,7 @@ impl ConversationControlProcessor {
                     };
                     match self
                         .conversation
-                        .begin_setup(
-                            actor,
-                            &route,
-                            &draft,
-                            AcceptanceTime::System.now()?,
-                            &input.claim_id,
-                        )
+                        .queued_begin_setup(&authority, &route, &draft)
                         .await?
                     {
                         ConversationPreparationAdmission::Granted {
@@ -214,11 +195,7 @@ impl ConversationControlProcessor {
                                 .await?;
                             let current = self
                                 .conversation
-                                .owner_conversation(
-                                    actor,
-                                    &input.agent_id,
-                                    AcceptanceTime::System.now()?,
-                                )
+                                .queued_owner_conversation(&authority)
                                 .await?;
                             let Some(context) = setup_context(
                                 &input.receipt.target,
@@ -237,8 +214,8 @@ impl ConversationControlProcessor {
                                 context: Some(context),
                             };
                             if !self
-                                .invoke(
-                                    &input.actor,
+                                .invoke_queued(
+                                    &input,
                                     &agent.computer.id,
                                     &agent.computer.current_request_id,
                                     &grant.execution_id,
@@ -265,7 +242,7 @@ impl ConversationControlProcessor {
                 ) => {
                     let Some(current) = self
                         .conversation
-                        .owner_conversation(actor, &input.agent_id, AcceptanceTime::System.now()?)
+                        .queued_owner_conversation(&authority)
                         .await?
                     else {
                         return Ok(());
@@ -274,27 +251,15 @@ impl ConversationControlProcessor {
                         && current.source.snapshot() == Some(&target.snapshot)
                         && current.native_session_id.as_ref() == Some(&target.native_session)
                     {
-                        if let Some((operation, _)) = self.refresh_project(&input).await? {
-                            startup_operation = Some(operation);
-                            continue;
-                        }
                         let selected = self
                             .conversation
-                            .project_instructions_for_owner(
-                                actor,
-                                &input.agent_id,
-                                AcceptanceTime::System.now()?,
-                            )
+                            .queued_project_instructions(&authority)
                             .await?;
                         let effective_operation =
                             startup_operation.as_deref().unwrap_or(&input.receipt.id);
                         let evidence = self
                             .conversation
-                            .latest_system_prompt(
-                                actor,
-                                &input.agent_id,
-                                AcceptanceTime::System.now()?,
-                            )
+                            .queued_latest_system_prompt(&authority)
                             .await?;
                         let catalog =
                             chapchoo_service::ConversationToolBackend::catalog_definition()?;
@@ -306,11 +271,7 @@ impl ConversationControlProcessor {
                         }) {
                             if let Some(latest) = self
                                 .conversation
-                                .connection_startup(
-                                    actor,
-                                    &input.agent_id,
-                                    AcceptanceTime::System.now()?,
-                                )
+                                .queued_connection_startup(&authority)
                                 .await?
                             {
                                 startup_operation = Some(latest.operation_id);
@@ -318,10 +279,7 @@ impl ConversationControlProcessor {
                             tokio::time::sleep(Duration::from_millis(200)).await;
                             continue;
                         }
-                        agent = self
-                            .computers
-                            .agent(actor, &input.agent_id, AcceptanceTime::System)
-                            .await?;
+                        agent = self.conversation.queued_agent(&authority).await?;
                         let Some(route) = self
                             .computers
                             .resolve_connector_route(&agent.computer.id)
@@ -331,8 +289,8 @@ impl ConversationControlProcessor {
                         };
                         let grant = match self
                             .conversation
-                            .begin_input(
-                                actor,
+                            .queued_begin_input(
+                                &authority,
                                 &route,
                                 &ConversationOperationForwarding {
                                     agent_id: &input.agent_id,
@@ -340,8 +298,6 @@ impl ConversationControlProcessor {
                                     operation_id: &input.receipt.id,
                                     target: &target,
                                 },
-                                AcceptanceTime::System.now()?,
-                                &input.claim_id,
                             )
                             .await
                         {
@@ -373,8 +329,8 @@ impl ConversationControlProcessor {
             }),
         };
         let dispatched = self
-            .invoke(
-                &input.actor,
+            .invoke_queued(
+                &input,
                 &agent.computer.id,
                 &agent.computer.current_request_id,
                 &grant.execution_id,
@@ -388,15 +344,7 @@ impl ConversationControlProcessor {
         // Connector terminal errors are explicitly reported even when no
         // physical outcome can be asserted.
         while self.admission.load(Ordering::Acquire)
-            && self
-                .conversation
-                .input_pending(
-                    actor,
-                    &input.agent_id,
-                    &input.receipt.conversation_id,
-                    &input.receipt.id,
-                )
-                .await?
+            && self.conversation.queued_input_pending(&authority).await?
         {
             let current = self
                 .computers
@@ -427,21 +375,16 @@ impl ConversationControlProcessor {
                 }
                 let selected = self
                     .conversation
-                    .project_instructions_for_owner(
-                        &input.actor,
-                        &input.agent_id,
-                        AcceptanceTime::System.now()?,
-                    )
+                    .queued_project_instructions(&input.authority())
                     .await?;
                 match self
                     .conversation
-                    .seal_project_instructions(
-                        &input.actor,
+                    .queued_seal_project_instructions(
+                        &input.authority(),
                         route,
                         draft,
                         &selected,
                         &catalog,
-                        AcceptanceTime::System.now()?,
                     )
                     .await
                 {
@@ -449,7 +392,7 @@ impl ConversationControlProcessor {
                     Err(error) if error.reason() == DomainReason::InvalidTransition => {
                         let pending = self
                             .conversation
-                            .setup_facts(&input.actor, draft, AcceptanceTime::System.now()?)
+                            .queued_setup_facts(&input.authority(), draft)
                             .await?;
                         if !pending.is_some_and(|facts| {
                             matches!(
@@ -476,89 +419,50 @@ impl ConversationControlProcessor {
         }
         result
     }
-    async fn refresh_project(
+    async fn invoke_queued(
         &self,
         input: &AcceptedConversationInput,
-    ) -> Result<Option<(String, String)>, ServiceError> {
-        let agent = self
-            .computers
-            .agent(&input.actor, &input.agent_id, AcceptanceTime::System)
-            .await?;
-        let Some(route) = self
-            .computers
-            .resolve_connector_route(&agent.computer.id)
-            .await?
-        else {
-            return Ok(None);
-        };
-        let selected = self
-            .conversation
-            .project_instructions_for_owner(
-                &input.actor,
-                &input.agent_id,
-                AcceptanceTime::System.now()?,
-            )
-            .await?;
-        let catalog = chapchoo_service::ConversationToolBackend::catalog_definition()?;
-        let refresh = self
-            .conversation
-            .admit_project_refresh(
-                &route,
-                &input.agent_id,
-                &input.receipt.conversation_id,
-                &selected,
-                &catalog,
-                AcceptanceTime::System.now()?,
-            )
-            .await?;
-        let Some(chapchoo_service::ConnectionStartupAdmission::Dispatch {
-            operation_id,
-            execution_id,
-            requested_supply,
-            context,
-            fresh_native_allowed,
-            require_retained_source,
-            ..
-        }) = refresh
-        else {
-            return Ok(None);
-        };
-        let context = match context {
-            chapchoo_service::ConnectionStartupContext::Existing {
-                snapshot,
-                native_session,
-            } => wire::setup_command::Context::Existing(wire::NativeTarget {
-                snapshot_id: snapshot.as_str().into(),
-                native_session_id: native_session.as_str().into(),
+        computer: &str,
+        request: &str,
+        execution: &str,
+        operation: control::connector_command::Operation,
+    ) -> Result<bool, ServiceError> {
+        self.invoke_authorized(
+            control::peer_authority::Context::QueuedInput(control::QueuedInputAuthority {
+                agent_id: input.agent_id.clone(),
+                conversation_id: input.receipt.conversation_id.clone(),
+                input_id: input.receipt.id.clone(),
+                claim_id: input.claim_id.clone(),
             }),
-            chapchoo_service::ConnectionStartupContext::Initial => {
-                wire::setup_command::Context::Initial(wire::InitialNativeContext {
-                    allow_fresh: fresh_native_allowed,
-                    require_retained_source,
-                })
-            }
-        };
-        let setup = wire::SetupCommand {
-            agent_id: input.agent_id.clone(),
-            conversation_id: input.receipt.conversation_id.clone(),
-            operation_id: operation_id.clone(),
-            supply: Some(wire_supply(requested_supply)),
-            context: Some(context),
-        };
-        let _ = self
-            .invoke(
-                &input.actor,
-                &agent.computer.id,
-                &agent.computer.current_request_id,
-                &execution_id,
-                control::connector_command::Operation::Setup(setup),
-            )
-            .await?;
-        Ok(Some((operation_id, execution_id)))
+            computer,
+            request,
+            execution,
+            operation,
+        )
+        .await
     }
     async fn invoke(
         &self,
         actor: &chapchoo_crypto::SecretDigest,
+        computer: &str,
+        request: &str,
+        execution: &str,
+        operation: control::connector_command::Operation,
+    ) -> Result<bool, ServiceError> {
+        self.invoke_authorized(
+            control::peer_authority::Context::User(control::UserAuthority {
+                session_credential_digest: actor.as_bytes().into(),
+            }),
+            computer,
+            request,
+            execution,
+            operation,
+        )
+        .await
+    }
+    async fn invoke_authorized(
+        &self,
+        authority: control::peer_authority::Context,
         computer: &str,
         request: &str,
         execution: &str,
@@ -579,11 +483,7 @@ impl ConversationControlProcessor {
                     computer_id: computer.into(),
                     owner: None,
                     authority: Some(control::PeerAuthority {
-                        context: Some(control::peer_authority::Context::User(
-                            control::UserAuthority {
-                                session_credential_digest: actor.as_bytes().into(),
-                            },
-                        )),
+                        context: Some(authority),
                     }),
                     command: Some(control::ConnectorCommand {
                         identity: Some(control::CallIdentity {

@@ -74,8 +74,12 @@ Its bounded Catalog/Invoke protocol uses current Connector authority and its own
 effect owner. It is neither a Control command payload nor an owner/peer RPC.
 Client/Admin groups do not register it; native readiness is not authorization.
 
-Peer requests carry either the authenticated session digest for fresh owner
-permission checks, or the exact current reconciliation context and live owner.
+Peer requests carry the authenticated session digest for fresh owner permission
+checks, the exact current reconciliation context and live owner, or the restricted
+[queued-input reference](peer-delivery.md#queued-input-authority) for that input's
+Connector Setup/Input. The queued context resolves current bound session and exact
+claim inside Store admission; it cannot authorize Provider/convergence,
+startup/refresh, Observe, Answer or Stop.
 An asserted Computer ID alone is insufficient. A live Connector owner takes
 precedence over Provider-owner management authority. The Provider owner is admitted
 only while no eligible Connector route exists. Current Request ID, applicable

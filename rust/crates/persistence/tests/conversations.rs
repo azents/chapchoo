@@ -145,6 +145,10 @@ mod preparation;
 mod project_refresh;
 #[path = "conversations/projections.rs"]
 mod projections;
+#[path = "conversations/rotation.rs"]
+mod rotation;
+#[path = "conversations/rotation_waits.rs"]
+mod rotation_waits;
 #[path = "conversations/startup.rs"]
 mod startup;
 mod support;

@@ -462,9 +462,21 @@ export interface ReconciliationAuthority {
   owner: ExpectedOwner | undefined;
 }
 
+/**
+ * References an existing issued input claim; it creates no native grant.
+ * Valid only for that input's Connector Setup/Input, never startup or refresh.
+ */
+export interface QueuedInputAuthority {
+  agentId: string;
+  conversationId: string;
+  inputId: string;
+  claimId: string;
+}
+
 export interface PeerAuthority {
   user?: UserAuthority | undefined;
   reconciliation?: ReconciliationAuthority | undefined;
+  queuedInput?: QueuedInputAuthority | undefined;
 }
 
 export interface ExpectedOwner {
@@ -5112,8 +5124,99 @@ export const ReconciliationAuthority: MessageFns<ReconciliationAuthority> = {
   },
 };
 
+function createBaseQueuedInputAuthority(): QueuedInputAuthority {
+  return { agentId: "", conversationId: "", inputId: "", claimId: "" };
+}
+
+export const QueuedInputAuthority: MessageFns<QueuedInputAuthority> = {
+  encode(message: QueuedInputAuthority, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.agentId !== "") {
+      writer.uint32(10).string(message.agentId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(18).string(message.conversationId);
+    }
+    if (message.inputId !== "") {
+      writer.uint32(26).string(message.inputId);
+    }
+    if (message.claimId !== "") {
+      writer.uint32(34).string(message.claimId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): QueuedInputAuthority {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseQueuedInputAuthority();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.agentId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.inputId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.claimId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<QueuedInputAuthority>, I>>(base?: I): QueuedInputAuthority {
+    return QueuedInputAuthority.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<QueuedInputAuthority>, I>>(object: I): QueuedInputAuthority {
+    const message = createBaseQueuedInputAuthority();
+    message.agentId = object.agentId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    message.inputId = object.inputId ?? "";
+    message.claimId = object.claimId ?? "";
+    return message;
+  },
+};
+
 function createBasePeerAuthority(): PeerAuthority {
-  return { user: undefined, reconciliation: undefined };
+  return { user: undefined, reconciliation: undefined, queuedInput: undefined };
 }
 
 export const PeerAuthority: MessageFns<PeerAuthority> = {
@@ -5123,6 +5226,9 @@ export const PeerAuthority: MessageFns<PeerAuthority> = {
     }
     if (message.reconciliation !== undefined) {
       ReconciliationAuthority.encode(message.reconciliation, writer.uint32(18).fork()).join();
+    }
+    if (message.queuedInput !== undefined) {
+      QueuedInputAuthority.encode(message.queuedInput, writer.uint32(26).fork()).join();
     }
     return writer;
   },
@@ -5156,6 +5262,14 @@ export const PeerAuthority: MessageFns<PeerAuthority> = {
             message.reconciliation = ReconciliationAuthority.decode(reader, reader.uint32());
             continue;
           }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.queuedInput = QueuedInputAuthority.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -5178,6 +5292,9 @@ export const PeerAuthority: MessageFns<PeerAuthority> = {
       : undefined;
     message.reconciliation = (object.reconciliation !== undefined && object.reconciliation !== null)
       ? ReconciliationAuthority.fromPartial(object.reconciliation)
+      : undefined;
+    message.queuedInput = (object.queuedInput !== undefined && object.queuedInput !== null)
+      ? QueuedInputAuthority.fromPartial(object.queuedInput)
       : undefined;
     return message;
   },

@@ -99,7 +99,9 @@ impl ConversationService {
     }
 }
 
-fn selected(owner_sources: Vec<InstructionSource>) -> Result<ProjectInstructions, ServiceError> {
+pub(super) fn selected(
+    owner_sources: Vec<InstructionSource>,
+) -> Result<ProjectInstructions, ServiceError> {
     let mut sources = vec![
         InstructionSource {
             kind: InstructionSourceKind::Product,

@@ -64,6 +64,45 @@ macro_rules! owned_agent {
 }
 pub(super) use owned_agent;
 
+/// Only private shared Store implementations accept this sum type. Public owner
+/// entrypoints keep credential admission; queued entrypoints use an issued claim.
+pub(super) enum OwnerAuthority<'a> {
+    Credential { actor: &'a SecretDigest, now: i64 },
+    Queued(&'a ConversationInputAuthority),
+}
+macro_rules! owned_authority {
+    ($connection:expr,$dialect:expr,$authority:expr,$agent:expr,$conversation:expr) => {{
+        match $authority {
+            $crate::conversations::authority::OwnerAuthority::Credential { actor, now } => Some((
+                $crate::conversations::authority::owned_agent!(
+                    $connection,
+                    $dialect,
+                    actor,
+                    $agent,
+                    *now
+                ),
+                *now,
+            )),
+            $crate::conversations::authority::OwnerAuthority::Queued(authority) => {
+                let expected: Option<EntityId> = $conversation;
+                let bound =
+                    EntityId::from_dto(EntityKind::Conversation, &authority.conversation_id)?;
+                if EntityId::from_dto(EntityKind::Agent, &authority.agent_id)? != $agent
+                    || expected.is_some_and(|id| id != bound)
+                {
+                    return Err(StoreError::NotFound);
+                }
+                $crate::conversations::waiting::queued_owned_agent!(
+                    $connection,
+                    $dialect,
+                    authority
+                )
+            }
+        }
+    }};
+}
+pub(super) use owned_authority;
+
 /// The single locked query binds current key, session, route, execution and Computer.
 #[derive(diesel::QueryableByName)]
 pub(crate) struct ConnectorContext {

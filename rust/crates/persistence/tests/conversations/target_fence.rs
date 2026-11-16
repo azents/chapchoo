@@ -302,6 +302,17 @@ async fn exercise(
         )
         .await?;
     assert!(
+        !store
+            .queued_conversation_input_pending(&chapchoo_persistence::ConversationInputAuthority {
+                agent_id: f.agent.id.clone(),
+                conversation_id: conversation_id.clone(),
+                input_id: input.id.clone(),
+                claim_id: next.claim_id.clone(),
+            })
+            .await?,
+        "Consumed input closes observation before missing session binding is considered"
+    );
+    assert!(
         store
             .conversation_input_reference(
                 &owner,

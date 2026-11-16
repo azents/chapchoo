@@ -115,6 +115,43 @@ async fn exercise(
         _ => return Err("Exactly one server must own the FIFO head".into()),
     };
     assert_eq!(claim.receipt.text, first.text);
+    let authority = chapchoo_persistence::ConversationInputAuthority {
+        agent_id: f.agent.id.clone(),
+        conversation_id: first.conversation_id.clone(),
+        input_id: first.id.clone(),
+        claim_id: claim.claim_id.clone(),
+    };
+    sql(
+        "CREATE TEMP TABLE pending_rotation AS SELECT id,current_hash,previous_hash,previous_valid_until FROM auth_sessions; UPDATE auth_sessions SET current_hash=(SELECT current_payload_hash FROM computers WHERE current_request_id='conversation-create'),previous_hash=NULL,previous_valid_until=NULL WHERE id=(SELECT submitting_session_id FROM conversation_inputs WHERE request_id='waiting-first')",
+    )?;
+    assert!(matches!(
+        store.current_identity(&f.owner.digest(), now()?).await,
+        Err(StoreError::Unauthenticated)
+    ));
+    assert!(
+        store.queued_conversation_input_pending(&authority).await?,
+        "A still-valid submitting session survives loss of the captured credential overlap"
+    );
+    assert_eq!(
+        store
+            .queued_current_conversation(&authority)
+            .await?
+            .ok_or("Missing bound current conversation")?
+            .id,
+        first.conversation_id,
+    );
+    let mut foreign = authority.clone();
+    foreign.agent_id = f.other_agent.clone();
+    assert!(
+        matches!(
+            store.queued_current_conversation(&foreign).await,
+            Err(StoreError::NotFound)
+        ),
+        "A valid claim cannot authorize another private Agent"
+    );
+    sql(
+        "UPDATE auth_sessions SET current_hash=(SELECT current_hash FROM pending_rotation b WHERE b.id=auth_sessions.id),previous_hash=(SELECT previous_hash FROM pending_rotation b WHERE b.id=auth_sessions.id),previous_valid_until=(SELECT previous_valid_until FROM pending_rotation b WHERE b.id=auth_sessions.id); DROP TABLE pending_rotation",
+    )?;
     let route = store
         .resolve_connector_route(&f.agent.computer.id)
         .await?
@@ -144,6 +181,13 @@ async fn exercise(
         .await?
         .ok_or("Missing recovered FIFO claim")?;
     assert_ne!(claim.claim_id, recovered.claim_id);
+    assert!(
+        matches!(
+            store.queued_conversation_input_pending(&authority).await,
+            Err(StoreError::InvalidTransition)
+        ),
+        "An old observer cannot borrow its successor claim"
+    );
     store
         .release_conversation_input_claim(&first.conversation_id, &first.id, &claim.claim_id, true)
         .await?;
@@ -442,6 +486,16 @@ async fn exercise(
         .await?
         .ok_or("Manual readiness can resume Local waiting")?;
     sql("UPDATE auth_sessions SET revoked_at=1")?;
+    let withdrawn = chapchoo_persistence::ConversationInputAuthority {
+        agent_id: f.agent.id.clone(),
+        conversation_id: second.conversation_id.clone(),
+        input_id: second.id.clone(),
+        claim_id: before_revoke.claim_id.clone(),
+    };
+    assert!(matches!(
+        store.queued_conversation_input_pending(&withdrawn).await,
+        Err(StoreError::Unauthenticated)
+    ));
     let second_draft = ConversationInputPreparation {
         operation_id: &second.id,
         ..draft

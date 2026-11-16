@@ -691,9 +691,34 @@ impl Store {
         agent_id: &str,
         now: i64,
     ) -> Result<Option<ConnectionStartupObservation>, StoreError> {
+        self.connection_startup_for(
+            super::authority::OwnerAuthority::Credential { actor, now },
+            agent_id,
+        )
+        .await
+    }
+    pub async fn queued_connection_startup(
+        &self,
+        authority: &super::ConversationInputAuthority,
+    ) -> Result<Option<ConnectionStartupObservation>, StoreError> {
+        self.connection_startup_for(
+            super::authority::OwnerAuthority::Queued(authority),
+            &authority.agent_id,
+        )
+        .await
+    }
+    async fn connection_startup_for(
+        &self,
+        authority: super::authority::OwnerAuthority<'_>,
+        agent_id: &str,
+    ) -> Result<Option<ConnectionStartupObservation>, StoreError> {
         let agent = EntityId::from_dto(EntityKind::Agent, agent_id)?;
         operation!(self, |connection, dialect| {
-            let _ = super::authority::owned_agent!(connection, dialect, actor, agent, now);
+            let Some((_owner, _now)) =
+                super::authority::owned_authority!(connection, dialect, &authority, agent, None)
+            else {
+                return Ok(None);
+            };
             let current = diesel::sql_query(dialect.query(
                 "SELECT c.id FROM conversations c JOIN agent_conversations a ON a.conversation_id=c.id AND a.agent_id=c.agent_id WHERE a.agent_id=?",
             ))
@@ -704,6 +729,12 @@ impl Store {
             let Some(current) = current else {
                 return Ok(None);
             };
+            if let super::authority::OwnerAuthority::Queued(bound) = &authority
+                && current.id
+                    != EntityId::from_dto(EntityKind::Conversation, &bound.conversation_id)?
+            {
+                return Err(StoreError::Conflict);
+            }
             let Some(head) = latest_startup_head!(connection, dialect, current.id) else {
                 return Ok(None);
             };

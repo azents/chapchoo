@@ -405,6 +405,7 @@ pub mod control {
         ControlFrame,
         control_frame::Payload,
         UserAuthority,
+        QueuedInputAuthority,
         ReconciliationAuthority,
         PeerAuthority,
         peer_authority::Context,
@@ -488,6 +489,14 @@ mod tests {
             Box::new(c::peer_authority::Context::User(c::UserAuthority {
                 session_credential_digest: secret.as_bytes().to_vec(),
             })),
+            Box::new(c::peer_authority::Context::QueuedInput(
+                c::QueuedInputAuthority {
+                    agent_id: secret.into(),
+                    conversation_id: secret.into(),
+                    input_id: secret.into(),
+                    claim_id: secret.into(),
+                },
+            )),
         ];
         for value in values {
             let rendered = format!("{value:?}");

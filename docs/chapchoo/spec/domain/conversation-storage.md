@@ -90,6 +90,22 @@ does not implicitly retry that retained failure.
 Session rotation follows that bound session's current credential under the
 canonical User lock. The queue stores neither a bearer nor a credential digest;
 lookup-time token snapshots are not deferred effect authority.
+The processor carries the issued input ID, actual Agent/conversation and exact
+claim ID. Its Agent/current-conversation reads, setup facts, selected/sealed
+instructions, startup observation, forwarding admission and pending observation
+qualify that binding inside each completed Store operation. User precedes current
+session lookup and Team/Computer/input locks; session and claim expiry use fresh
+database time after waits. Repeated token rotation or loss of previous-token
+overlap does not withdraw a still-valid bound session. Revocation, expiry and
+private-scope withdrawal remain terminal. Pending observation first recognizes
+consumed/absent input, so successful consumption does not become an
+authentication error when its temporary binding disappears.
+
+The same references qualify only existing input-owned Setup/Input at the
+[internal Peer boundary](peer-delivery.md#queued-input-authority). They grant no
+independent startup, project refresh or replay. The runtime's connection-startup
+reconciler owns refresh admission and dispatch; the queued processor observes
+its selected evidence while the final forwarding transaction remains the gate.
 
 Native forwarding has a separate durable boundary. The Store revalidates private
 owner admission and the exact resolved Connector route without requiring its

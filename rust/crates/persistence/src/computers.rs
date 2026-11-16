@@ -417,7 +417,7 @@ pub(crate) struct AgentComputerRow {
 
 const COMPUTER_PROJECTION: &str = "c.id,c.owner_user_id,c.kind,c.provider_id,c.desired_state,c.current_request_id,c.current_payload_hash,c.current_execution_id,c.expected_old_execution_id,c.current_action,c.current_phase,c.initial_start_dispatch_at,c.prepare_admitted_at,ce.initial_allocation AS current_initial_allocation,p.can_create,c.observed_power,c.power_observed_at,c.power_source_connection_id,c.power_source_execution_id,c.environment_source_connection_id,c.saved_environment,pc.connection_id AS provider_connection_id,pc.expires_at AS provider_connection_expires_at,ci.expires_at AS control_expires_at,ci.draining AS control_draining,CASE WHEN pk.revoked_at IS NOT NULL THEN NULL WHEN pc.credential_hash=pk.current_hash THEN pk.expires_at WHEN pc.credential_hash=pk.previous_hash THEN CASE WHEN pk.expires_at<pk.previous_valid_until THEN pk.expires_at ELSE pk.previous_valid_until END ELSE NULL END AS management_key_valid_until,p.can_start,p.can_stop,p.can_restart FROM computers c LEFT JOIN computer_executions ce ON ce.id=c.current_execution_id LEFT JOIN computer_providers p ON p.id=c.provider_id LEFT JOIN provider_connections pc ON pc.provider_id=c.provider_id LEFT JOIN control_instances ci ON ci.id=pc.control_id LEFT JOIN provider_keys pk ON pk.provider_id=c.provider_id";
 
-fn agent_query() -> String {
+pub(crate) fn agent_query() -> String {
     format!(
         "SELECT a.id AS agent_id,a.team_id,a.name,a.handle,a.profile_image_id,pi.asset_key AS profile_asset_key,a.palette_key,aa.id AS selected_authentication_id,aa.name AS selected_authentication_name,aa.kind AS selected_authentication_kind,aas.current_request_id AS selection_request_id,aas.selected_at,{COMPUTER_PROJECTION} JOIN agents a ON a.computer_id=c.id JOIN profile_images pi ON pi.id=a.profile_image_id JOIN memberships am ON am.team_id=a.team_id AND am.user_id=a.owner_user_id LEFT JOIN agent_authentication_selections aas ON aas.agent_id=a.id LEFT JOIN external_authentications aa ON aa.id=aas.authentication_id AND (aa.owner_user_id=a.owner_user_id OR aa.owner_team_id=a.team_id)"
     )
@@ -452,7 +452,7 @@ impl AgentComputerRow {
         }
     }
 
-    fn summary(self, now: i64) -> Result<AgentSummary, StoreError> {
+    pub(crate) fn summary(self, now: i64) -> Result<AgentSummary, StoreError> {
         let computer = self.computer_summary(now)?;
         let authentication = match (
             self.selected_authentication_id,

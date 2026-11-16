@@ -113,6 +113,58 @@ pub struct DeliverySnapshot {
     pub resources: Vec<ManagedResource>,
     pub substrate: chapchoo_domain::ProviderSubstrate,
 }
+macro_rules! locked_computer {
+    ($connection:expr,$dialect:expr,$scope:expr) => {{
+        let query = match $dialect {
+            crate::store::Dialect::Postgres => {
+                "SELECT * FROM computers WHERE id=? FOR NO KEY UPDATE"
+            }
+            crate::store::Dialect::Sqlite => "SELECT * FROM computers WHERE id=?",
+        };
+        diesel::sql_query($dialect.query(query))
+            .bind::<IdentitySql, _>(EntityId::from_dto(
+                EntityKind::Computer,
+                $scope.computer_id,
+            )?)
+            .get_result::<crate::delivery::DeliveryComputerRow>($connection)
+            .await
+            .map(crate::delivery::DeliveryComputer::from)
+            .optional()?
+            .ok_or(StoreError::NotFound)?
+    }};
+}
+pub(crate) use locked_computer;
+macro_rules! snapshot {
+    ($connection:expr,$dialect:expr,$computer:expr,$scope:expr,$execution:expr) => {{
+        let computer = $computer;
+        let scope = $scope;
+        let execution: Option<&str> = $execution;
+        if computer.current_request_id != scope.request_id || computer.cleanup_completed_at.is_some() {
+            return Err(StoreError::Conflict);
+        }
+        if execution.is_some_and(|id| computer.current_execution_id.as_deref() != Some(id)
+            && computer.expected_old_execution_id.as_deref() != Some(id)) {
+            return Err(StoreError::Conflict);
+        }
+        let execution = if let Some(id) = execution {
+            Some(diesel::sql_query($dialect.query("SELECT * FROM computer_executions WHERE id=? AND computer_id=?"))
+                .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Execution,id)?)
+                .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Computer,scope.computer_id)?)
+                .get_result::<crate::delivery::DeliveryExecutionRow>($connection).await
+                .map(crate::delivery::DeliveryExecution::from).optional()?.ok_or(StoreError::NotFound)?)
+        } else { None };
+        let provider = diesel::sql_query($dialect.query("SELECT * FROM computer_providers WHERE id=?"))
+            .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Provider,&computer.provider_id)?)
+            .get_result::<crate::computers::ProviderRow>($connection).await?;
+        let resources = diesel::sql_query($dialect.query("SELECT * FROM computer_resources WHERE computer_id=? ORDER BY resource_kind,native_scope,name"))
+            .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Computer,scope.computer_id)?)
+            .load::<crate::native_resources::ResourceRow>($connection).await?
+            .into_iter().map(crate::ManagedResource::try_from).collect::<Result<Vec<_>,StoreError>>()?;
+        crate::computer_executions::validate_native_inventory(&provider,&resources)?;
+        crate::delivery::DeliverySnapshot { computer, execution, resources, substrate:provider.substrate()? }
+    }};
+}
+pub(crate) use snapshot;
 impl Store {
     pub async fn verify_delivery_bootstrap(
         &self,
@@ -164,22 +216,7 @@ impl Store {
             } else {
                 None
             };
-            let query = match dialect {
-                crate::store::Dialect::Postgres => {
-                    "SELECT * FROM computers WHERE id=? FOR NO KEY UPDATE"
-                }
-                crate::store::Dialect::Sqlite => "SELECT * FROM computers WHERE id=?",
-            };
-            let computer = diesel::sql_query(dialect.query(query))
-                .bind::<IdentitySql, _>(EntityId::from_dto(
-                    EntityKind::Computer,
-                    scope.computer_id,
-                )?)
-                .get_result::<DeliveryComputerRow>(connection)
-                .await
-                .map(DeliveryComputer::from)
-                .optional()?
-                .ok_or(StoreError::NotFound)?;
+            let computer = locked_computer!(connection, dialect, scope);
             if let Some(user) = user {
                 if computer.owner_user_id != user.id || computer.agent_removed_at.is_some() {
                     return Err(StoreError::NotFound);
@@ -205,54 +242,7 @@ impl Store {
                     return Err(StoreError::NotFound);
                 }
             }
-            if computer.current_request_id != scope.request_id
-                || computer.cleanup_completed_at.is_some()
-            {
-                return Err(StoreError::Conflict);
-            }
-            if execution.is_some_and(|id| {
-                computer.current_execution_id.as_deref() != Some(id)
-                    && computer.expected_old_execution_id.as_deref() != Some(id)
-            }) {
-                return Err(StoreError::Conflict);
-            }
-            let execution =
-                if let Some(id) = execution {
-                    Some(
-                        diesel::sql_query(dialect.query(
-                            "SELECT * FROM computer_executions WHERE id=? AND computer_id=?",
-                        ))
-                        .bind::<IdentitySql, _>(EntityId::from_dto(EntityKind::Execution, id)?)
-                        .bind::<IdentitySql, _>(EntityId::from_dto(
-                            EntityKind::Computer,
-                            scope.computer_id,
-                        )?)
-                        .get_result::<DeliveryExecutionRow>(connection)
-                        .await
-                        .map(DeliveryExecution::from)
-                        .optional()?
-                        .ok_or(StoreError::NotFound)?,
-                    )
-                } else {
-                    None
-                };
-            let provider =
-                diesel::sql_query(dialect.query("SELECT * FROM computer_providers WHERE id=?"))
-                    .bind::<IdentitySql, _>(EntityId::from_dto(
-                        EntityKind::Provider,
-                        &computer.provider_id,
-                    )?)
-                    .get_result::<crate::computers::ProviderRow>(connection)
-                    .await?;
-            let resources=diesel::sql_query(dialect.query("SELECT * FROM computer_resources WHERE computer_id=? ORDER BY resource_kind,native_scope,name")).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Computer,scope.computer_id)?).load::<crate::native_resources::ResourceRow>(connection).await?
-                .into_iter().map(ManagedResource::try_from).collect::<Result<Vec<_>,StoreError>>()?;
-            crate::computer_executions::validate_native_inventory(&provider, &resources)?;
-            Ok(DeliverySnapshot {
-                computer,
-                execution,
-                resources,
-                substrate: provider.substrate()?,
-            })
+            Ok(snapshot!(connection, dialect, computer, scope, execution))
         })
     }
 }

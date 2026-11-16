@@ -8,8 +8,15 @@ pub struct ConversationInputCandidate {
     pub agent_id: String,
     pub conversation_id: String,
 }
+/// Internal references to an issued claim, never standalone account authority.
+#[derive(Clone)]
+pub struct ConversationInputAuthority {
+    pub agent_id: String,
+    pub conversation_id: String,
+    pub input_id: String,
+    pub claim_id: String,
+}
 pub struct ClaimedConversationInput {
-    pub actor: SecretDigest,
     pub agent_id: String,
     pub receipt: ConversationInputReceipt,
     pub claim_id: String,
@@ -24,6 +31,7 @@ macro_rules! redacted { ($($t:ty),+) => {$(impl fmt::Debug for $t {
 })+}; }
 redacted!(
     ConversationInputCandidate,
+    ConversationInputAuthority,
     ClaimedConversationInput,
     ConversationInputWake
 );
@@ -65,9 +73,18 @@ struct CandidateRow {
     conversation_id: EntityId,
 }
 #[derive(diesel::QueryableByName)]
-struct ActorRow {
+pub(super) struct ActorRow {
     #[diesel(sql_type=Binary)]
-    current_hash: Vec<u8>,
+    pub(super) current_hash: Vec<u8>,
+}
+#[derive(diesel::QueryableByName)]
+pub(super) struct PendingBinding {
+    #[diesel(sql_type=IdentitySql)]
+    pub(super) agent_id: EntityId,
+    #[diesel(sql_type=IdentitySql)]
+    pub(super) conversation_id: EntityId,
+    #[diesel(sql_type=Text)]
+    pub(super) queue_state: String,
 }
 #[derive(diesel::QueryableByName)]
 struct WaitingRow {
@@ -93,12 +110,63 @@ macro_rules! queued_actor {
                 let now = crate::directory::database_now!($connection, $dialect);
                 let row = diesel::sql_query($dialect.query("SELECT s.current_hash FROM conversation_inputs i JOIN auth_sessions s ON s.id=i.submitting_session_id WHERE i.id=? AND s.user_id=? AND s.revoked_at IS NULL AND s.expires_at>?"))
                     .bind::<IdentitySql,_>($input).bind::<IdentitySql,_>(bound.user_id).bind::<BigInt,_>(now)
-                    .get_result::<ActorRow>($connection).await.optional()?;
+                    .get_result::<$crate::conversations::waiting::ActorRow>($connection).await.optional()?;
                 row.map(|r| r.current_hash.as_slice().try_into().map(SecretDigest::from_bytes).map_err(|_|StoreError::Integrity)).transpose()?
             } else { None }
         } else { None }
     }};
 }
+pub(super) use queued_actor;
+
+/// Qualify only this issued claim inside the caller's completed operation.
+/// The resolved digest never leaves persistence or survives these authority locks.
+macro_rules! queued_owned_agent {
+    ($connection:expr,$dialect:expr,$authority:expr) => {{
+        'qualified: {
+            let authority = $authority;
+            let agent = EntityId::from_dto(EntityKind::Agent, &authority.agent_id)?;
+            let conversation = EntityId::from_dto(EntityKind::Conversation, &authority.conversation_id)?;
+            let input = EntityId::from_dto(EntityKind::ConversationOperation, &authority.input_id)?;
+            let read = "SELECT c.agent_id,i.conversation_id,i.queue_state FROM conversation_inputs i JOIN conversations c ON c.id=i.conversation_id WHERE i.id=?";
+            let binding = diesel::sql_query($dialect.query(read))
+                .bind::<IdentitySql,_>(input)
+                .get_result::<$crate::conversations::waiting::PendingBinding>($connection).await.optional()?;
+            let Some(binding) = binding else { break 'qualified None; };
+            if binding.agent_id != agent || binding.conversation_id != conversation {
+                return Err(StoreError::NotFound);
+            }
+            if binding.queue_state != "PENDING" { break 'qualified None; }
+            let actor = $crate::conversations::waiting::queued_actor!($connection, $dialect, input);
+            let Some(actor) = actor else {
+                let retained = diesel::sql_query($dialect.query(read)).bind::<IdentitySql,_>(input)
+                    .get_result::<$crate::conversations::waiting::PendingBinding>($connection).await.optional()?;
+                if retained.is_none_or(|row| row.queue_state != "PENDING") { break 'qualified None; }
+                return Err(StoreError::Unauthenticated);
+            };
+            let now = crate::directory::database_now!($connection, $dialect);
+            let owned: Result<_, StoreError> = async {
+                Ok($crate::conversations::authority::owned_agent!($connection, $dialect, &actor, agent, now))
+            }.await;
+            let retained = diesel::sql_query($dialect.query(read)).bind::<IdentitySql,_>(input)
+                .get_result::<$crate::conversations::waiting::PendingBinding>($connection).await.optional()?;
+            if retained.is_none_or(|row| row.queue_state != "PENDING") {
+                match owned {
+                    Ok(_) | Err(StoreError::Unauthenticated | StoreError::NotFound) => break 'qualified None,
+                    Err(error) => return Err(error),
+                }
+            }
+            let owner = owned?;
+            $crate::conversations::input_queue::require_consumer!($connection, $dialect, input, &authority.claim_id);
+            let now = crate::directory::database_now!($connection, $dialect);
+            if $crate::conversations::waiting::queued_actor!($connection, $dialect, input).is_none() {
+                return Err(StoreError::Unauthenticated);
+            }
+            break 'qualified Some((owner, now));
+        }
+    }};
+}
+pub(super) use queued_owned_agent;
+
 macro_rules! waiting_owner {
     ($connection:expr,$dialect:expr,$input:expr,$actor:expr,$agent:expr,$now:expr) => {{
         let owner: Result<_, StoreError> = async {
@@ -116,6 +184,26 @@ macro_rules! waiting_owner {
     }};
 }
 impl Store {
+    /// A projection qualified by the exact issued claim and current bound session.
+    pub async fn queued_conversation_agent(
+        &self,
+        authority: &ConversationInputAuthority,
+    ) -> Result<crate::AgentSummary, StoreError> {
+        let agent = EntityId::from_dto(EntityKind::Agent, &authority.agent_id)?;
+        operation!(self, |connection, dialect| {
+            let (_, now) = queued_owned_agent!(connection, dialect, authority)
+                .ok_or(StoreError::InvalidTransition)?;
+            let query = format!("{} WHERE a.id=?", crate::computers::agent_query());
+            diesel::sql_query(dialect.query(&query))
+                .bind::<IdentitySql, _>(agent)
+                .get_result::<crate::computers::AgentComputerRow>(connection)
+                .await
+                .optional()?
+                .ok_or(StoreError::NotFound)?
+                .summary(now)
+        })
+    }
+
     /// Admit queue-owned Start through the shared lifecycle transaction with
     /// final bound-input/session qualification under its ownership locks.
     pub async fn start_waiting_conversation_input(
@@ -309,11 +397,20 @@ impl Store {
                     .await?
                     .receipt()?;
             Ok(Some(ClaimedConversationInput {
-                actor,
                 agent_id: candidate.agent_id.clone(),
                 receipt,
                 claim_id: claim.to_dto(EntityKind::ConversationOperation),
             }))
+        })
+    }
+    /// Observe retained work under its actual submitting session. Consumption
+    /// ends this observation before a vanished binding could look like withdrawal.
+    pub async fn queued_conversation_input_pending(
+        &self,
+        authority: &ConversationInputAuthority,
+    ) -> Result<bool, StoreError> {
+        operation!(self, |connection, dialect| {
+            Ok(queued_owned_agent!(connection, dialect, authority).is_some())
         })
     }
     /// Stale workers cannot finalize or release a successor's ownership. Native uncertainty is never reclaimable.

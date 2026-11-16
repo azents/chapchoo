@@ -177,7 +177,6 @@ async fn deliver(
                 claim.receipt.id.clone(),
                 claim.claim_id.clone(),
                 processor.process(AcceptedConversationInput {
-                    actor: claim.actor,
                     agent_id: claim.agent_id,
                     receipt: claim.receipt,
                     claim_id: claim.claim_id,

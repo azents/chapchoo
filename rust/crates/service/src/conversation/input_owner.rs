@@ -40,10 +40,19 @@ impl From<chapchoo_persistence::ConversationInputReference> for ConversationInpu
     }
 }
 pub struct AcceptedConversationInput {
-    pub actor: SecretDigest,
     pub agent_id: String,
     pub receipt: ConversationInputReceipt,
     pub claim_id: String,
+}
+impl AcceptedConversationInput {
+    pub fn authority(&self) -> chapchoo_persistence::ConversationInputAuthority {
+        chapchoo_persistence::ConversationInputAuthority {
+            agent_id: self.agent_id.clone(),
+            conversation_id: self.receipt.conversation_id.clone(),
+            input_id: self.receipt.id.clone(),
+            claim_id: self.claim_id.clone(),
+        }
+    }
 }
 enum Submission {
     New(AcceptConversationInput),

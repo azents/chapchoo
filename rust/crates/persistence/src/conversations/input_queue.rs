@@ -42,9 +42,9 @@ macro_rules! require_consumer {
         };
         let row = diesel::sql_query($dialect.query(query))
             .bind::<IdentitySql, _>($input)
-            .get_result::<super::input_queue::QueueRow>($connection).await?;
+            .get_result::<$crate::conversations::input_queue::QueueRow>($connection).await?;
         let now = crate::directory::database_now!($connection, $dialect);
-        if row.state()? != super::input_queue::ConversationInputQueueState::Pending
+        if row.state()? != $crate::conversations::input_queue::ConversationInputQueueState::Pending
             || row.consumer_expires_at <= now
             || row.readiness_waiting
             || row.consumer_claim_id != Some(claim)

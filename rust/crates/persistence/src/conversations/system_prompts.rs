@@ -210,17 +210,45 @@ impl Store {
         agent_id: &str,
         now: i64,
     ) -> Result<String, StoreError> {
+        self.system_prompt_for(
+            super::authority::OwnerAuthority::Credential { actor, now },
+            agent_id,
+        )
+        .await?
+        .ok_or(StoreError::Integrity)
+    }
+    pub async fn queued_system_prompt(
+        &self,
+        authority: &ConversationInputAuthority,
+    ) -> Result<Option<String>, StoreError> {
+        self.system_prompt_for(
+            super::authority::OwnerAuthority::Queued(authority),
+            &authority.agent_id,
+        )
+        .await
+    }
+    async fn system_prompt_for(
+        &self,
+        authority: super::authority::OwnerAuthority<'_>,
+        agent_id: &str,
+    ) -> Result<Option<String>, StoreError> {
         let agent = EntityId::from_dto(EntityKind::Agent, agent_id)?;
         operation!(self, |connection, dialect| {
-            let _ = owned_agent!(connection, dialect, actor, agent, now);
-            Ok(diesel::sql_query(
-                dialect.query("SELECT content FROM agent_system_prompts WHERE agent_id=?"),
-            )
-            .bind::<IdentitySql, _>(agent)
-            .get_result::<PromptRow>(connection)
-            .await
-            .optional()?
-            .map_or_else(String::new, |row| row.content))
+            let Some((_owner, _now)) =
+                super::authority::owned_authority!(connection, dialect, &authority, agent, None)
+            else {
+                return Ok(None);
+            };
+            Ok(Some(
+                diesel::sql_query(
+                    dialect.query("SELECT content FROM agent_system_prompts WHERE agent_id=?"),
+                )
+                .bind::<IdentitySql, _>(agent)
+                .get_result::<PromptRow>(connection)
+                .await
+                .optional()?
+                .map_or_else(String::new, |row| row.content),
+            ))
         })
     }
     pub async fn save_system_prompt(
@@ -282,6 +310,43 @@ impl Store {
         tool_catalog: &[u8],
         now: i64,
     ) -> Result<ProjectInstructionEvidence, StoreError> {
+        self.seal_project_instructions_authorized(
+            &authority::OwnerAuthority::Credential { actor, now },
+            expected,
+            draft,
+            instructions,
+            tool_catalog,
+        )
+        .await
+    }
+    pub async fn seal_queued_project_instructions(
+        &self,
+        authority: &ConversationInputAuthority,
+        expected: &crate::ResolvedRoute,
+        draft: &ConversationInputPreparation<'_>,
+        instructions: &ProjectInstructions,
+        tool_catalog: &[u8],
+    ) -> Result<ProjectInstructionEvidence, StoreError> {
+        if draft.operation_id != authority.input_id {
+            return Err(StoreError::InvalidTransition);
+        }
+        self.seal_project_instructions_authorized(
+            &authority::OwnerAuthority::Queued(authority),
+            expected,
+            draft,
+            instructions,
+            tool_catalog,
+        )
+        .await
+    }
+    async fn seal_project_instructions_authorized(
+        &self,
+        authority: &authority::OwnerAuthority<'_>,
+        expected: &crate::ResolvedRoute,
+        draft: &ConversationInputPreparation<'_>,
+        instructions: &ProjectInstructions,
+        tool_catalog: &[u8],
+    ) -> Result<ProjectInstructionEvidence, StoreError> {
         instructions
             .validate()
             .map_err(|_| StoreError::InvalidInput)?;
@@ -294,13 +359,32 @@ impl Store {
             serde_json::to_string(instructions).map_err(|_| StoreError::InvalidInput)?;
         let owner_content = owner_content(instructions);
         operation!(self, |connection, dialect| {
-            let owner = owned_agent!(connection, dialect, actor, agent, now);
+            let (owner, now) = authority::owned_authority!(
+                connection,
+                dialect,
+                authority,
+                agent,
+                Some(conversation)
+            )
+            .ok_or(StoreError::InvalidTransition)?;
             let (route, _) =
                 delivery::dispatch_route!(connection, dialect, expected, owner.computer_id);
             let row = conversation!(connection, dialect, conversation);
             if row.agent_id != agent {
                 return Err(StoreError::NotFound);
             }
+            let now = match authority {
+                authority::OwnerAuthority::Credential { .. } => now,
+                authority::OwnerAuthority::Queued(bound) => {
+                    super::input_queue::require_consumer!(
+                        connection,
+                        dialect,
+                        operation,
+                        &bound.claim_id
+                    );
+                    crate::directory::database_now!(connection, dialect)
+                }
+            };
             let selected = preparation_execution!(connection, dialect, conversation, operation);
             if selected.execution_id != route._execution_id {
                 return Err(StoreError::Conflict);
@@ -443,9 +527,31 @@ impl Store {
         agent_id: &str,
         now: i64,
     ) -> Result<Option<ProjectInstructionEvidence>, StoreError> {
+        self.latest_system_prompt_authorized(
+            &authority::OwnerAuthority::Credential { actor, now },
+            agent_id,
+        )
+        .await
+    }
+    pub async fn queued_latest_system_prompt(
+        &self,
+        authority: &ConversationInputAuthority,
+    ) -> Result<Option<ProjectInstructionEvidence>, StoreError> {
+        self.latest_system_prompt_authorized(
+            &authority::OwnerAuthority::Queued(authority),
+            &authority.agent_id,
+        )
+        .await
+    }
+    async fn latest_system_prompt_authorized(
+        &self,
+        authority: &authority::OwnerAuthority<'_>,
+        agent_id: &str,
+    ) -> Result<Option<ProjectInstructionEvidence>, StoreError> {
         let agent = EntityId::from_dto(EntityKind::Agent, agent_id)?;
         operation!(self, |connection, dialect| {
-            let _ = owned_agent!(connection, dialect, actor, agent, now);
+            let _ = authority::owned_authority!(connection, dialect, authority, agent, None)
+                .ok_or(StoreError::InvalidTransition)?;
             diesel::sql_query(dialect.query("SELECT e.agent_id,e.conversation_id,e.operation_id,e.execution_id,e.sources_json,e.rendered_document,e.created_at,e.tool_catalog,e.applied_snapshot,e.applied_native_session,e.applied_at FROM agent_conversations a JOIN conversations c ON c.id=a.conversation_id AND c.agent_id=a.agent_id JOIN project_instruction_evidence e ON e.agent_id=a.agent_id AND e.conversation_id=c.id AND e.operation_id=c.current_preparation_operation_id WHERE a.agent_id=?"))
                 .bind::<IdentitySql,_>(agent).get_result::<EvidenceRow>(connection).await.optional()?
                 .map(EvidenceRow::evidence).transpose()

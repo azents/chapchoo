@@ -356,6 +356,19 @@ impl ComputersService {
             .await?)
     }
 
+    pub async fn queued_connector_delivery_snapshot(
+        &self,
+        authority: &chapchoo_persistence::ConversationInputAuthority,
+        scope: ComputerRequest<'_>,
+        execution: &str,
+        command: &chapchoo_persistence::QueuedConversationCommand<'_>,
+    ) -> Result<chapchoo_persistence::DeliverySnapshot, ServiceError> {
+        Ok(self
+            .store
+            .queued_connector_delivery_snapshot(authority, scope, execution, command)
+            .await?)
+    }
+
     pub async fn provider_delivery_snapshot(
         &self,
         source: &ProviderSource<'_>,

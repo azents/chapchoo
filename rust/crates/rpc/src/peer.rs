@@ -52,6 +52,11 @@ impl PeerServices {
                 }
                 None
             }
+            wire::peer_authority::Context::QueuedInput(_) => {
+                return Err(Status::permission_denied(
+                    "Queued input authority requires its exact Connector Setup or Input",
+                ));
+            }
         };
         let snapshot = self
             .service
@@ -135,9 +140,19 @@ impl PeerServices {
             .as_ref()
             .ok_or_else(|| Status::invalid_argument("Computer context is required"))?;
         validate_call(command.identity.as_ref(), context)?;
-        let snapshot = self
-            .authorize(invocation.authority.as_ref(), context)
-            .await?;
+        let snapshot = match invocation
+            .authority
+            .as_ref()
+            .and_then(|authority| authority.context.as_ref())
+        {
+            Some(wire::peer_authority::Context::QueuedInput(authority)) => {
+                self.authorize_queued(authority, context, &command).await?
+            }
+            _ => {
+                self.authorize(invocation.authority.as_ref(), context)
+                    .await?
+            }
+        };
         if invocation.computer_id != context.computer_id
             || context.execution_id.is_empty()
             || snapshot.computer.current_execution_id.as_deref()
@@ -160,6 +175,86 @@ impl PeerServices {
             .invoke_connector(&invocation.computer_id, owner, command, deadline)
             .await
     }
+    async fn authorize_queued(
+        &self,
+        reference: &wire::QueuedInputAuthority,
+        context: &wire::ComputerContext,
+        command: &wire::ConnectorCommand,
+    ) -> Result<DeliverySnapshot, Status> {
+        use chapchoo_protocol::conversations::setup_command::Context;
+        use chapchoo_service::{
+            ConversationInputAuthority, ConversationInputPreparation,
+            ConversationOperationForwarding, QueuedConversationCommand, QueuedSetupContext,
+        };
+        let authority = ConversationInputAuthority {
+            agent_id: reference.agent_id.clone(),
+            conversation_id: reference.conversation_id.clone(),
+            input_id: reference.input_id.clone(),
+            claim_id: reference.claim_id.clone(),
+        };
+        let (supply, target);
+        let queued = match command.operation.as_ref() {
+            Some(wire::connector_command::Operation::Setup(setup)) => {
+                supply = crate::conversations::supply(setup.supply.clone())?;
+                let context = match setup.context.as_ref() {
+                    Some(Context::Initial(initial)) => QueuedSetupContext::Initial {
+                        allow_fresh: initial.allow_fresh,
+                        require_retained_source: initial.require_retained_source,
+                    },
+                    Some(Context::Existing(native)) => {
+                        target = queued_target(Some(native))?;
+                        QueuedSetupContext::Existing(&target)
+                    }
+                    None => return Err(Status::invalid_argument("Setup context is required")),
+                };
+                QueuedConversationCommand::Setup {
+                    draft: ConversationInputPreparation {
+                        agent_id: &setup.agent_id,
+                        conversation_id: &setup.conversation_id,
+                        operation_id: &setup.operation_id,
+                    },
+                    supply: &supply,
+                    context,
+                }
+            }
+            Some(wire::connector_command::Operation::Input(input)) => {
+                target = queued_target(input.target.as_ref())?;
+                QueuedConversationCommand::Input(ConversationOperationForwarding {
+                    agent_id: &input.agent_id,
+                    conversation_id: &input.conversation_id,
+                    operation_id: &input.operation_id,
+                    target: &target,
+                })
+            }
+            _ => {
+                return Err(Status::permission_denied(
+                    "Queued input authority requires its exact Connector Setup or Input",
+                ));
+            }
+        };
+        self.service
+            .queued_connector_delivery_snapshot(
+                &authority,
+                scope(context),
+                &context.execution_id,
+                &queued,
+            )
+            .await
+            .map_err(status)
+    }
+}
+fn queued_target(
+    target: Option<&chapchoo_protocol::conversations::NativeTarget>,
+) -> Result<chapchoo_service::ConversationDeliveryTarget, Status> {
+    let target = target.ok_or_else(|| Status::invalid_argument("Native target is required"))?;
+    Ok(chapchoo_service::ConversationDeliveryTarget {
+        snapshot: chapchoo_domain::SnapshotId::parse(target.snapshot_id.clone())
+            .map_err(|_| Status::invalid_argument("Snapshot is invalid"))?,
+        native_session: chapchoo_domain::NativeConversationId::parse(
+            target.native_session_id.clone(),
+        )
+        .map_err(|_| Status::invalid_argument("Native conversation is invalid"))?,
+    })
 }
 pub(crate) async fn validate_bootstrap(
     service: &ComputersService,
