@@ -24,5 +24,6 @@ Read the relevant body before applying it.
 | Convention | File |
 | --- | --- |
 | When designing or changing UI, express constraints and recovery through state-aware controls and flows instead of explanatory labels. | [action-first-ui](../conventions/ui/action-first-ui.md) |
+| Match floating-component translucency and material to the upper chat status summary; keep the summary as the baseline. | [floating-status-surface](../conventions/ui/floating-status-surface.md) |
 
 <!-- END_TABLE -->

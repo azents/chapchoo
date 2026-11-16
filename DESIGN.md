@@ -237,10 +237,22 @@ layering. Reference surface shadow: `0 4px 18px rgb(53 58 54 / 4%)`. A calm pane
 separator is often enough. Avoid heavy floating dashboards, decorative gradients,
 colored card mosaics and deeply nested rounded boxes.
 
-Requester-supplied Pickle and Apple Liquid Glass were taste references, not a
-requirement to blur everything. If explored, materials belong selectively to
-navigation/control layers without reducing content clarity. The selected cream
-composition does not need glass.
+### Floating control surfaces
+
+The upper chat status-summary surface is the visual reference for floating
+components, confirmed on 2026-11-16. Match its translucency, backdrop blur, border
+and shallow highlight/shadow when adding floating controls, including return-to-
+latest buttons. Keep the status summary as the baseline rather than changing it
+to match another control. Ordinary content surfaces retain their existing material.
+
+The current web reference is `.glass` in
+`typescript/apps/web/src/features/computers/chat/components/Chat.module.css`:
+a 34% `--profile-surface` tint over transparent, `blur(0.25rem)`, the profile
+border, a 65% surface inset highlight and a 4% profile-ink shallow shadow.
+Reuse that surface treatment in the same context; shared implementations must
+remain within the existing app/shared dependency boundaries. Keep foreground
+text and icons opaque. State changes preserve the material; content, control
+dimensions and interaction semantics remain role-specific.
 
 ## Shapes
 
