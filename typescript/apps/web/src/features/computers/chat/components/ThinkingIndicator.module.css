@@ -1,0 +1,80 @@
+.root {
+  margin-top: 1.5rem;
+  padding-bottom: var(--mantine-spacing-sm);
+  min-height: 5rem;
+  color: var(--chapchoo-color-secondary);
+  font-size: var(--mantine-font-size-sm);
+}
+
+.content {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding-top: 1.3rem;
+}
+
+.spark {
+  color: var(--profile-ink, var(--chapchoo-color-accentText));
+  font-size: 1.2rem;
+  animation: thinking-pulse 2.4s ease-in-out infinite;
+}
+
+.label {
+  color: var(--chapchoo-color-secondary);
+}
+
+@supports (background-clip: text) {
+  .label {
+    background: linear-gradient(
+      100deg,
+      var(--chapchoo-color-muted) 25%,
+      var(--profile-ink, var(--chapchoo-color-accentText)) 45%,
+      var(--chapchoo-color-ink) 50%,
+      var(--chapchoo-color-muted) 65%
+    );
+    background-size: 250% 100%;
+    background-clip: text;
+    color: transparent;
+    animation: thinking-shimmer 2.4s linear infinite;
+  }
+}
+
+@keyframes thinking-pulse {
+  0%,
+  100% {
+    transform: scale(0.85);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+}
+
+@keyframes thinking-shimmer {
+  from {
+    background-position: 140% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spark,
+  .label {
+    animation: none;
+  }
+  .label {
+    color: var(--chapchoo-color-secondary);
+    background: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .label {
+    color: CanvasText;
+    background: none;
+    animation: none;
+  }
+}

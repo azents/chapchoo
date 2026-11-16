@@ -76,6 +76,7 @@ export interface ChatProps {
   input: string;
   inputError?: string;
   activity: ConversationActivity;
+  thinking: boolean;
   writable: boolean;
   stoppable: boolean;
   sendable: boolean;

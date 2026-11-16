@@ -25,6 +25,7 @@ import classes from "./Chat.module.css";
 import { ConversationBody, ConversationContent } from "./ConversationBody";
 import { RecentConversationRecord } from "./ConversationRecord";
 import { OutgoingIcon } from "./OutgoingIcon";
+import { ThinkingIndicator } from "./ThinkingIndicator";
 import type { ChatProps } from "../types";
 import type { ReactElement } from "react";
 
@@ -244,6 +245,9 @@ export function Chat(props: ChatProps): ReactElement {
                     assetKey: agent.profileImage.assetKey,
                   }}
                 />
+                {props.thinking ? (
+                  <ThinkingIndicator label={c.thinking} />
+                ) : null}
               </div>
             </ScrollArea>
             <footer className={classes.composerArea} ref={f.overlayRef}>

@@ -56,6 +56,7 @@ export async function nativeConversation(
   chatPath: string;
   current: () => Promise<OwnerConversation>;
   systemPrompt: () => Promise<CurrentSystemPrompt>;
+  holdWork: () => Promise<() => Promise<void>>;
   diagnostics: () => Promise<string>;
   pendingInputs: () => Promise<number>;
   close: (expectedRequestId?: string) => Promise<void>;
@@ -256,6 +257,11 @@ export async function nativeConversation(
         call(conversations.systemPrompt.bind(conversations), {
           agentId: agent.id,
         }),
+      holdWork: async (): Promise<() => Promise<void>> => {
+        const target = await docker.current();
+        await docker.holdConversationWork(target);
+        return (): Promise<void> => docker.releaseConversationWork(target);
+      },
       diagnostics: async () => {
         const current = await call(
           conversations.current.bind(conversations),

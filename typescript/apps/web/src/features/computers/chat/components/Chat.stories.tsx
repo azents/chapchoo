@@ -6,7 +6,7 @@ import { AgentNavigation } from "@/shared/navigation/AgentNavigation";
 import { useComputerActions } from "../../containers/useComputerActions";
 import { creationCopy } from "../../creationCopy";
 import { computerDetailCopy } from "../../detailCopy";
-import { chatStatus } from "../chatStatus";
+import { chatStatus, chatThinking } from "../chatStatus";
 import { useChatFocus } from "../containers/useChatFocus";
 import { useFloatingChat } from "../containers/useFloatingChat";
 import { useHistoryScroll } from "../containers/useHistoryScroll";
@@ -471,6 +471,20 @@ function Fixture({
   return (
     <>
       <Chat
+        thinking={chatThinking({
+          computer: agent.computer,
+          header: startup
+            ? startupRegion.header
+            : {
+                agentId: agent.id,
+                state: "ready",
+                foreground: activity,
+              },
+          read: mode === "readerError" ? "error" : "ready",
+          stale,
+          authorized: mode !== "signedOut",
+          stop: workStop,
+        })}
         messages={{
           region: {
             agentId: agent.id,

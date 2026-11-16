@@ -342,6 +342,13 @@ export class DockerFixture {
     }
     return output.trim();
   }
+  /** Hold only the deterministic conversation fixture, not a production effect. */
+  async holdConversationWork(target: NativeComputer): Promise<void> {
+    await this.exec(target, "printf 'hold' > /workspace/acceptance-work-hold");
+  }
+  async releaseConversationWork(target: NativeComputer): Promise<void> {
+    await this.exec(target, "rm /workspace/acceptance-work-hold");
+  }
   async writeMarker(target: NativeComputer): Promise<void> {
     await this.exec(
       target,

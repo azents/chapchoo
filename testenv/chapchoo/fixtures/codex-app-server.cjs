@@ -2,8 +2,33 @@
 // Deterministic native-protocol fixture. This executable never contacts a model.
 // Select it explicitly as an existing CLI in an isolated test Computer only.
 const { createInterface } = require("node:readline");
-const { existsSync, readFileSync, writeFileSync } = require("node:fs");
+const { existsSync, readFileSync, writeFileSync, watch } = require("node:fs");
 const { join } = require("node:path");
+
+/** Optional test-owned barrier: positive native work remains live until release. */
+async function awaitWorkRelease() {
+  const path = "/workspace/acceptance-work-hold";
+  if (!existsSync(path)) return;
+  await new Promise((resolve, reject) => {
+    const watcher = watch(
+      "/workspace",
+      {
+        signal: AbortSignal.timeout(180_000),
+      },
+      () => {
+        if (!existsSync(path)) watcher.close();
+      },
+    );
+    watcher.once("error", reject);
+    watcher.once("close", () => {
+      if (existsSync(path))
+        reject(new Error("Fixture working gate closed without release"));
+      else resolve();
+    });
+    // Recheck after synchronous watch registration so release cannot be missed.
+    if (!existsSync(path)) watcher.close();
+  });
+}
 if (process.argv.includes("--version")) {
   process.stdout.write("codex-cli 0.165.0\n");
   return;
@@ -494,6 +519,7 @@ async function request(id, method, params) {
         result,
         durationMs: Math.round(performance.now() - publicationStart),
       });
+      await awaitWorkRelease();
       write({
         id: "fixture-form",
         method: "mcpServer/elicitation/request",

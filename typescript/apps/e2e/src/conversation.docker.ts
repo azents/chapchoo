@@ -84,6 +84,7 @@ test("owner receives intentional server messages and inspects native typed-answe
     await expect(message).toBeEnabled({ timeout: 90_000 });
     expect(historyReads).toBe(0);
     stage = "intentional-publication";
+    const releaseWork = await fixture.holdWork();
     const inputText = "Exercise the deterministic native conversation";
     await message.fill(inputText);
     const inputStart = performance.now();
@@ -109,6 +110,11 @@ test("owner receives intentional server messages and inspects native typed-answe
     );
     expect(afterInput.observedNative?.target).toEqual(prestartTarget);
     expect(historyReads).toBe(0);
+    stage = "running-feedback";
+    await expect(
+      log.getByRole("status").filter({ hasText: "Thinking" }),
+    ).toBeVisible();
+    await releaseWork();
     stage = "inline-native-answer";
     await expect(
       page.getByRole("heading", {
@@ -116,6 +122,9 @@ test("owner receives intentional server messages and inspects native typed-answe
         exact: true,
       }),
     ).toBeVisible();
+    await expect(
+      log.getByRole("status").filter({ hasText: "Thinking" }),
+    ).toHaveCount(0);
     stage = "save-and-queue-during-existing-work";
     const settingsPage = await context.newPage();
     await settingsPage.goto(

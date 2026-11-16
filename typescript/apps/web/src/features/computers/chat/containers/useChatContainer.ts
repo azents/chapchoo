@@ -12,7 +12,7 @@ import { useLocale } from "next-intl";
 import { createElement, useContext, useRef, useState } from "react";
 import { trpc } from "@/shared/rpc/client";
 import { useAgentsContainer } from "../../containers/useAgentsContainer";
-import { chatStatus } from "../chatStatus";
+import { chatStatus, chatThinking } from "../chatStatus";
 import { ConversationHistoryPage } from "../ConversationHistoryPage";
 import { activityStatus, chatCopy } from "../copy";
 import { SupplyPage } from "../SupplyPage";
@@ -515,6 +515,14 @@ export function useChatContainer(props: ChatInput): ChatProps {
     input,
     inputError: inputError ? copy.enqueueFailed : void 0,
     activity: reader.read === "error" ? "unavailable" : activity,
+    thinking: chatThinking({
+      computer,
+      header: region.header,
+      read: reader.read,
+      stale: product.stale,
+      authorized: product.access === "authorized",
+      stop: conversation.stop,
+    }),
     writable: writable && !sendMutation.isPending,
     stoppable:
       effectAvailable && Boolean(region.header.native && region.header.workId),
