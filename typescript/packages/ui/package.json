@@ -9,6 +9,7 @@
     "./ResponsiveDialog": "./src/ResponsiveDialog.tsx",
     "./DropdownButton": "./src/DropdownButton.tsx",
     "./InteractiveSurface": "./src/InteractiveSurface.tsx",
+    "./FloatingSurface": "./src/FloatingSurface.tsx",
     "./NavigationIcon": "./src/NavigationIcon.tsx",
     "./WorkspaceChrome": "./src/WorkspaceChrome.tsx",
     "./AppNavigation": "./src/AppNavigation.tsx",

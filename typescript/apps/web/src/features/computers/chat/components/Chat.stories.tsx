@@ -8,6 +8,7 @@ import { creationCopy } from "../../creationCopy";
 import { computerDetailCopy } from "../../detailCopy";
 import { chatStatus, chatThinking } from "../chatStatus";
 import { useChatFocus } from "../containers/useChatFocus";
+import { useChatNavigation } from "../containers/useChatNavigation";
 import { useFloatingChat } from "../containers/useFloatingChat";
 import { useHistoryScroll } from "../containers/useHistoryScroll";
 import { activityStatus, chatCopy } from "../copy";
@@ -286,7 +287,7 @@ function Fixture({
   const [opened, setOpened] = useState(initialActivityOpened);
   const [historyOpened, setHistoryOpened] = useState(false);
   const [historyFocus, setHistoryFocus] = useState<string | null>(null);
-  const [navOpened, setNavOpened] = useState(false);
+  const chatNavigation = useChatNavigation();
   const [detailsOpened, setDetailsOpened] = useState(false);
   const [activity, setActivity] = useState<"working" | "idle">(
     mode === "idle" ||
@@ -502,7 +503,7 @@ function Fixture({
           paginationReset: agent,
           onRead: () => {},
           onOlder: readOlderMessages,
-          onLatest: floating.followLatest,
+          onLatest: () => floating.followLatest(true),
         }}
         recentRecords={{ ...startupRegion, records }}
         recentRead={recentError ? "error" : "ready"}
@@ -657,7 +658,7 @@ function Fixture({
             setPageStart(start);
             setOlder(start > 1);
           },
-          onLatest: floating.followLatest,
+          onLatest: () => floating.followLatest(true),
           onHistory: (record) => {
             setOpened(false);
             setHistoryFocus(record?.key ?? null);
@@ -691,11 +692,9 @@ function Fixture({
           setHistoryOpened(false);
           setOpened(true);
         }}
-        navOpened={navOpened}
+        {...chatNavigation}
         onOpen={() => setOpened(true)}
         onClose={() => setOpened(false)}
-        onOpenNav={() => setNavOpened(true)}
-        onCloseNav={() => setNavOpened(false)}
         onInput={setInput}
         onSend={() => {
           if (mode === "inputError") {

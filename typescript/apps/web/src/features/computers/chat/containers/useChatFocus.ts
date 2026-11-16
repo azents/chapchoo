@@ -6,6 +6,7 @@ import type { RefObject } from "react";
 export interface ChatFocus {
   statusRef: RefObject<HTMLButtonElement | null>;
   navigationRef: RefObject<HTMLButtonElement | null>;
+  desktopNavigationRef: RefObject<HTMLButtonElement | null>;
   activityClosed: () => void;
   navigationClosed: () => void;
   nestedClosed: () => void;
@@ -20,6 +21,7 @@ export function useChatFocus(
 } {
   const statusRef = useRef<HTMLButtonElement>(null);
   const navigationRef = useRef<HTMLButtonElement>(null);
+  const desktopNavigationRef = useRef<HTMLButtonElement>(null);
   const nestedOpener = useRef<HTMLElement | null>(null);
   const navigationOpener = useRef<HTMLElement | null>(null);
   const originalAutofocus = useRef<string | null>(null);
@@ -71,10 +73,14 @@ export function useChatFocus(
     focus: {
       statusRef,
       navigationRef,
+      desktopNavigationRef,
       activityClosed: () => statusRef.current?.focus({ preventScroll: true }),
       navigationClosed: () => {
         restoreAutofocus();
-        navigationRef.current?.focus({ preventScroll: true });
+        const opener = navigationRef.current?.getClientRects().length
+          ? navigationRef.current
+          : desktopNavigationRef.current;
+        opener?.focus({ preventScroll: true });
       },
       nestedClosed: () => nestedOpener.current?.focus({ preventScroll: true }),
     },

@@ -3,13 +3,13 @@ import { AgentTheme } from "@chapchoo/ui/AgentTheme";
 import { CharacterArtwork } from "@chapchoo/ui/CharacterArtwork";
 import { ConfirmationDialog } from "@chapchoo/ui/ConfirmationDialog";
 import { ContextSidebar } from "@chapchoo/ui/ContextSidebar";
+import { floatingSurfaceClassName } from "@chapchoo/ui/FloatingSurface";
 import { PageFailure } from "@chapchoo/ui/PageFailure";
 import { Sheet, SheetViewport } from "@chapchoo/ui/Sheet";
 import { agentChatPath, agentPath } from "@chapchoo/web-core/workspace";
 import {
   ActionIcon,
   Alert,
-  Box,
   Button,
   Drawer,
   Group,
@@ -22,6 +22,7 @@ import { profileStyle } from "../../profilePalette";
 import { ChatPresence } from "../ChatPresence";
 import { OlderRecordsContainer } from "../containers/OlderRecordsContainer";
 import { nativeStatus } from "../copy";
+import { ReturnToLatest } from "../ReturnToLatest";
 import classes from "./Chat.module.css";
 import { ConversationBody, ConversationContent } from "./ConversationBody";
 import { RecentConversationRecord } from "./ConversationRecord";
@@ -35,6 +36,7 @@ const paths = {
   arrow: "M12 19V5m-6 6 6-6 6 6",
   menu: "M4 6h16M4 12h16M4 18h16",
   chevron: "m9 5 7 7-7 7",
+  chevronLeft: "m15 5-7 7 7 7",
   chat: "M20 11a8 8 0 0 1-8 8H4l1-5a8 8 0 1 1 15-3Z",
   activity: "M3 12h4l3-7 4 14 3-7h4",
   check: "m5 12 4 4L19 6",
@@ -100,8 +102,16 @@ export function Chat(props: ChatProps): ReactElement {
     agent.computer.connector !== "connected";
   return (
     <div className={classes.frame}>
-      <aside className={classes.sidebar}>
-        {!props.navOpened ? <Navigation {...props} /> : null}
+      <aside
+        className={classes.sidebar}
+        data-collapsed={props.desktopNavCollapsed || void 0}
+        inert={props.desktopNavCollapsed}
+        aria-hidden={props.desktopNavCollapsed || void 0}
+        id="chat-sidebar"
+      >
+        <div className={classes.sidebarInner}>
+          {!props.navOpened ? <Navigation {...props} /> : null}
+        </div>
       </aside>
       <AgentTheme palette={agent.paletteKey}>
         <main
@@ -114,18 +124,36 @@ export function Chat(props: ChatProps): ReactElement {
               <ActionIcon
                 variant="subtle"
                 size="2.75rem"
-                className={classes.glass}
+                className={`${floatingSurfaceClassName} ${classes.mobileNavigation}`}
                 aria-label={c.menu}
                 ref={props.focus.navigationRef}
                 onClick={props.onOpenNav}
               >
                 <Icon name="menu" />
               </ActionIcon>
+              <ActionIcon
+                variant="subtle"
+                size="2.75rem"
+                className={`${floatingSurfaceClassName} ${classes.desktopNavigation}`}
+                ref={props.focus.desktopNavigationRef}
+                aria-controls="chat-sidebar"
+                aria-expanded={!props.desktopNavCollapsed}
+                aria-label={
+                  props.desktopNavCollapsed
+                    ? c.expandSidebar
+                    : c.collapseSidebar
+                }
+                onClick={props.onToggleDesktopNav}
+              >
+                <Icon
+                  name={props.desktopNavCollapsed ? "menu" : "chevronLeft"}
+                />
+              </ActionIcon>
             </div>
             <div className={classes.presence} ref={f.profileRef}>
               <button
                 type="button"
-                className={`${classes.portrait} ${classes.glass}`}
+                className={`${classes.portrait} ${floatingSurfaceClassName}`}
                 onClick={props.onOpen}
                 aria-haspopup="dialog"
                 aria-label={`${c.activity}: ${agent.name}`}
@@ -136,7 +164,7 @@ export function Chat(props: ChatProps): ReactElement {
                   className={classes.artwork}
                 />
               </button>
-              <div className={`${classes.bubble} ${classes.glass}`}>
+              <div className={`${classes.bubble} ${floatingSurfaceClassName}`}>
                 <button
                   className={classes.status}
                   ref={props.focus.statusRef}
@@ -257,20 +285,14 @@ export function Chat(props: ChatProps): ReactElement {
               </div>
             </ScrollArea>
             <footer className={classes.composerArea} ref={f.overlayRef}>
-              {f.unseen ? (
-                <ActionIcon
-                  className={classes.latest}
-                  size="2.25rem"
-                  variant="default"
-                  radius="xl"
-                  aria-label={c.records.newEvents}
-                  onClick={props.messages.onLatest}
-                >
-                  <Box style={{ transform: "rotate(180deg)", display: "flex" }}>
-                    <Icon name="arrow" />
-                  </Box>
-                </ActionIcon>
-              ) : null}
+              <ReturnToLatest
+                key={`return:${motionSource}`}
+                visible={f.detached}
+                unread={f.unseen}
+                label={c.scrollDown}
+                unreadLabel={c.newMessages}
+                onLatest={props.messages.onLatest}
+              />
               <ChatPresence key={`composer:${motionSource}`}>
                 {props.inputError ? (
                   <div

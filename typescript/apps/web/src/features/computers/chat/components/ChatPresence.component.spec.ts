@@ -270,7 +270,7 @@ test("custom-scrollbar reading remains detached throughout a new arrival", async
     .getByRole("button", { name: "Receive message", exact: true })
     .click();
   await expect(
-    page.getByRole("button", { name: "New events below", exact: true }),
+    page.getByRole("button", { name: "View new messages", exact: true }),
   ).toBeVisible();
   await expect
     .poll(() =>

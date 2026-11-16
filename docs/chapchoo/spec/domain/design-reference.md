@@ -45,6 +45,14 @@ General/Admin authentication panels use the same motion implementation.
 Production context sidebars have no generic companion; their Agent rows retain
 saved artwork. The reference continues to demonstrate the reusable primitive.
 
+`FloatingSurface` is the shared floating-control material promoted from the upper
+[Chat status summary](conversation-web.md). Its container and class export reuse
+the same translucent profile/neutral tint, blur, border and shallow depth while
+leaving geometry and interaction to callers. Chat status chrome and its return
+action use that shared material. Common-UI neutral/profile stories and the
+isolated common-UI reuse document render the formal implementation; the material
+values remain documented in root `DESIGN.md`.
+
 The onboarding/local-outline stories demonstrate ownership boundaries. The
 common-UI reuse story imports the promoted shared-web implementation. The reuse story's nested document loads the Mantine stylesheet
 and `AppMantineProvider`; its global resets and document-root color scheme stay

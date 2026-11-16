@@ -402,10 +402,10 @@ for (const trigger of ["Receive message", "Receive question"]) {
       .toBeGreaterThan(200);
     await page.getByRole("button", { name: trigger, exact: true }).click();
     await expect(
-      page.getByRole("button", { name: "New events below", exact: true }),
+      page.getByRole("button", { name: "View new messages", exact: true }),
     ).toBeVisible();
     await page
-      .getByRole("button", { name: "New events below", exact: true })
+      .getByRole("button", { name: "View new messages", exact: true })
       .click();
     await expect
       .poll(() =>
@@ -439,7 +439,7 @@ test("updating an existing reply preserves detached reading without a new-event 
     page.getByText("Updated earlier reply.", { exact: false }),
   ).toBeAttached();
   await expect(
-    page.getByRole("button", { name: "New events below", exact: true }),
+    page.getByRole("button", { name: "View new messages", exact: true }),
   ).toHaveCount(0);
   await expect
     .poll(() => log.evaluate((element) => element.scrollTop))
@@ -526,13 +526,25 @@ for (const width of [320, 390, 1280]) {
       .poll(() => log.evaluate((element) => element.scrollTop))
       .toBe(0);
     await input.fill("");
-    await main
-      .getByRole("button", { name: "에이전트와 대화", exact: true })
-      .click();
-    const navigation = page.getByRole("dialog", {
-      name: "에이전트와 대화",
-      exact: true,
-    });
+    if (width > 768) {
+      await main
+        .getByRole("button", { name: "사이드바 접기", exact: true })
+        .click();
+      await main
+        .getByRole("button", { name: "사이드바 펼치기", exact: true })
+        .click();
+    } else {
+      await main
+        .getByRole("button", { name: "에이전트와 대화", exact: true })
+        .click();
+    }
+    const navigation =
+      width > 768
+        ? page.locator("#chat-sidebar")
+        : page.getByRole("dialog", {
+            name: "에이전트와 대화",
+            exact: true,
+          });
     await expect(
       navigation.getByRole("link", { name: /비숑/ }),
     ).toHaveAttribute("href", "/teams/my/agents/bichon/chat");
