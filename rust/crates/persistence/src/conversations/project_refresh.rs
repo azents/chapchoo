@@ -70,7 +70,7 @@ impl Store {
                 .get_result::<RefreshOwner>(connection).await.optional()?.ok_or(StoreError::NotFound)?;
             let (route, _) =
                 delivery::dispatch_route!(connection, dialect, expected, owner.computer_id);
-            if route.desired_state != "RUNNING" {
+            if !authority::input_ready!(connection, dialect, route.computer_id) {
                 return Ok(None);
             }
             let owner = diesel::sql_query(dialect.query("SELECT a.computer_id,c.current_request_id,c.desired_state FROM agents a JOIN computers c ON c.id=a.computer_id WHERE a.id=?"))

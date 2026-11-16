@@ -226,8 +226,12 @@ input, current session and ownership after its locks, using fresh DB time before
 new Start intent. A lost wake settlement recovers the same admitted request or
 exact active-Stop target update. A newer explicit Stop withdraws older wake
 permission; workers never replace a captured predecessor with the latest Stop.
-Local never receives automatic Start authority. Physical startup/restoration
-still belongs to existing lifecycle reconciliation.
+Local never receives automatic Start authority. While a Running target still
+retains the Stop's expected old execution, that retiring route cannot receive
+new input claims, setup/forwarding grants or startup dispatch. The successor can
+become eligible even while stored Stop provenance remains. Existing facts and
+valid late results remain observable. Physical startup/restoration still belongs
+to existing lifecycle reconciliation.
 
 The owner bounds each input to 16 MiB and aggregate retained input bytes to
 32 MiB, independently of task capacity. Capacity survives short acceptance and

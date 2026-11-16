@@ -258,7 +258,7 @@ impl Store {
                 (false, None) => return Err(StoreError::NotFound),
             };
             if input.is_none() {
-                if route.desired_state != "RUNNING" {
+                if !super::authority::input_ready!(connection, dialect, route.computer_id) {
                     return Err(StoreError::InvalidTransition);
                 }
                 let intent = diesel::sql_query(dialect.query(
@@ -348,7 +348,7 @@ impl Store {
                     previous.facts()?,
                 ));
             }
-            if owner.desired_state != "RUNNING" {
+            if !super::authority::input_ready!(connection, dialect, owner.computer_id) {
                 return Err(StoreError::InvalidTransition);
             }
             super::input_queue::require_consumer!(connection, dialect, operation, claim_id);

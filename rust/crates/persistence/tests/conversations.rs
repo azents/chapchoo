@@ -150,6 +150,8 @@ mod startup;
 mod support;
 #[path = "conversations/system_prompts.rs"]
 mod system_prompts;
+#[path = "conversations/target_fence.rs"]
+mod target_fence;
 #[path = "conversations/waiting.rs"]
 mod waiting;
 

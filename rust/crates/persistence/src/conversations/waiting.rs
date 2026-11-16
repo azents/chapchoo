@@ -249,7 +249,7 @@ impl Store {
                 return Ok(None);
             };
             let owner = waiting_owner!(connection, dialect, id, &actor, agent, now);
-            if owner.desired_state != "RUNNING" {
+            if !super::authority::input_ready!(connection, dialect, owner.computer_id) {
                 return Ok(None);
             };
             let current = conversation!(connection, dialect, conversation);
@@ -295,7 +295,10 @@ impl Store {
                     .bind::<IdentitySql,_>(id).execute(connection).await?;
                 return Ok(None);
             };
-            let _ = waiting_owner!(connection, dialect, id, &actor, agent, now);
+            let owner = waiting_owner!(connection, dialect, id, &actor, agent, now);
+            if !super::authority::input_ready!(connection, dialect, owner.computer_id) {
+                return Ok(None);
+            }
             let claim = EntityId::generate(now)?;
             diesel::sql_query(dialect.query("UPDATE conversation_inputs SET readiness_waiting=FALSE,consumer_claim_id=?,consumer_expires_at=? WHERE id=?"))
                 .bind::<IdentitySql,_>(claim).bind::<BigInt,_>(policy.expiry(now,true)?).bind::<IdentitySql,_>(id).execute(connection).await?;

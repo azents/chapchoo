@@ -262,7 +262,9 @@ impl Store {
                     previous.delivery()?,
                 ));
             }
-            if row.source_state != "READY" || owner.desired_state != "RUNNING" {
+            if row.source_state != "READY"
+                || !super::authority::input_ready!(connection, dialect, owner.computer_id)
+            {
                 return Err(StoreError::InvalidTransition);
             }
             super::input_queue::require_consumer!(connection, dialect, operation_id, claim_id);

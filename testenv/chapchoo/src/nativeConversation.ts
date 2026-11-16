@@ -138,15 +138,23 @@ export async function nativeConversation(
         },
       );
     });
-  const close = async (
-    expectedRequestId = "conversation-create",
-  ): Promise<void> => {
+  const close = async (expectedRequestId?: string): Promise<void> => {
     try {
       if (agentId) {
+        // Browser Stop and queue-owned Start replace the creation predecessor.
+        // Observe the current owned intent once; never retry a deletion mutation.
+        const predecessor =
+          expectedRequestId ??
+          (await call(agents.get.bind(agents), { agentId })).computer
+            ?.requestId;
+        if (!predecessor)
+          throw new Error(
+            "Conversation cleanup requires its current lifecycle intent",
+          );
         await call(computers.requestLifecycle.bind(computers), {
           agentId,
           requestId: "conversation-delete",
-          expectedRequestId,
+          expectedRequestId: predecessor,
           action: Action.ACTION_DELETE,
         });
         try {

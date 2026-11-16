@@ -100,14 +100,10 @@ struct LockedId {
 #[derive(diesel::QueryableByName)]
 struct ComputerGate {
     #[diesel(sql_type = Text)]
-    desired_state: String,
-    #[diesel(sql_type = Text)]
     current_request_id: String,
 }
 #[derive(diesel::QueryableByName)]
 struct DispatchGate {
-    #[diesel(sql_type = Text)]
-    desired_state: String,
     #[diesel(sql_type = Nullable<IdentitySql>)]
     current_execution_id: Option<EntityId>,
 }
@@ -645,7 +641,7 @@ impl Store {
             }
             let (execution, _session) = dispatch_route!(connection, dialect, route, computer);
             let gate = diesel::sql_query(
-                dialect.query("SELECT desired_state,current_request_id FROM computers WHERE id=?"),
+                dialect.query("SELECT current_request_id FROM computers WHERE id=?"),
             )
             .bind::<IdentitySql, _>(computer)
             .get_result::<ComputerGate>(connection)
@@ -654,7 +650,7 @@ impl Store {
             let Some(gate) = gate else {
                 return Ok(Vec::new());
             };
-            if gate.desired_state != "RUNNING" {
+            if !super::authority::input_ready!(connection, dialect, computer) {
                 return Ok(Vec::new());
             }
             let agents = diesel::sql_query(dialect.query(
@@ -733,11 +729,9 @@ impl Store {
         operation!(self, |connection, dialect| {
             let gate_sql = match dialect {
                 Dialect::Postgres => {
-                    "SELECT desired_state,current_execution_id FROM computers WHERE id=? FOR NO KEY UPDATE"
+                    "SELECT current_execution_id FROM computers WHERE id=? FOR NO KEY UPDATE"
                 }
-                Dialect::Sqlite => {
-                    "SELECT desired_state,current_execution_id FROM computers WHERE id=?"
-                }
+                Dialect::Sqlite => "SELECT current_execution_id FROM computers WHERE id=?",
             };
             let gate = diesel::sql_query(dialect.query(gate_sql))
                 .bind::<IdentitySql, _>(computer)
@@ -758,7 +752,7 @@ impl Store {
             let Some(owned) = owned else {
                 return Ok(false);
             };
-            if gate.desired_state != "RUNNING" {
+            if !super::authority::input_ready!(connection, dialect, computer) {
                 return Ok(false);
             }
             let connected = diesel::sql_query(dialect.query(
