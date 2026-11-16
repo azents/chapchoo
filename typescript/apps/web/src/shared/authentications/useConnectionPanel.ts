@@ -7,7 +7,6 @@ import { useLocale, useNow } from "next-intl";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { trpc } from "@/shared/rpc/client";
 import {
-  authenticationRecordUnavailable,
   authenticationTargetChanged,
   definitiveAuthenticationRejection,
   withdrawAuthenticationSession,
@@ -108,10 +107,21 @@ export function useConnectionPanel(
       return;
     }
     setApiKey("");
-    await Promise.all([
-      utils.authentications.list.invalidate(),
-      utils.computers.invalidate(),
-    ]);
+    setError(null);
+    if (value.type !== "record" || !input.onSelect) {
+      setDialog({ type: "closed" });
+      input.onCloseManage?.();
+    }
+    try {
+      await Promise.all([
+        utils.authentications.list.invalidate(),
+        utils.computers.invalidate(),
+      ]);
+    } catch (failure) {
+      if (revision === fence.current) {
+        withdrawAuthenticationSession(failure, auth.clearIdentity);
+      }
+    }
     if (revision !== fence.current) {
       return;
     }
@@ -124,14 +134,13 @@ export function useConnectionPanel(
         if (revision !== fence.current) {
           return;
         }
+        setDialog({ type: "closed" });
         input.onSelect(saved);
       } catch (failure) {
         if (revision !== fence.current) {
           return;
         }
-        if (!authenticationRecordUnavailable(failure)) {
-          throw failure;
-        }
+        withdrawAuthenticationSession(failure, auth.clearIdentity);
         setDialog({
           type: "recordUnavailable",
           authenticationId: value.authenticationId,
@@ -139,8 +148,6 @@ export function useConnectionPanel(
         return;
       }
     }
-    setDialog({ type: "closed" });
-    input.onCloseManage?.();
   }
   async function acceptProgress(
     value: DeviceProgress,

@@ -5,6 +5,75 @@ import {
   fixtureCatalogue,
 } from "./connectionFixture";
 
+test("accepted selection closes before supplementary Agent read settles and survives its failure", async ({
+  page,
+}) => {
+  const reading = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const finished = Promise.withResolvers<void>();
+  const initial = fixtureAgentAuthentication("en").agent;
+  let selections = 0;
+  await page.route("**/api/trpc/authentications.list", async (route) => {
+    await route.fulfill({
+      json: { result: { data: superjson.serialize(fixtureCatalogue.page) } },
+    });
+  });
+  await page.route("**/api/trpc/computers.get", async (route) => {
+    reading.resolve();
+    await release.promise;
+    await route.fulfill({
+      status: 503,
+      json: {
+        error: {
+          json: {
+            message: "Unavailable",
+            code: -32603,
+            data: {
+              code: "INTERNAL_SERVER_ERROR",
+              path: "computers.get",
+              reason: null,
+              httpStatus: 503,
+            },
+          },
+        },
+      },
+    });
+    finished.resolve();
+  });
+  await page.route("**/api/trpc/authentications.selectAgent", async (route) => {
+    selections += 1;
+    await route.fulfill({
+      json: {
+        result: {
+          data: superjson.serialize({
+            type: "selection",
+            agentId: initial.id,
+            authenticationId: "key-fixture",
+          }),
+        },
+      },
+    });
+  });
+  await page.goto(
+    "/iframe.html?id=authentication-agent-selection-flow--current&viewMode=story",
+  );
+  await page.getByRole("button", { name: "Change", exact: true }).click();
+  await page
+    .getByRole("heading", { name: "개발용 API", exact: true })
+    .locator("..")
+    .getByRole("button", { name: "Choose AI authentication", exact: true })
+    .click();
+  await reading.promise;
+  try {
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  } finally {
+    release.resolve();
+  }
+  await finished.promise;
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(selections).toBe(1);
+});
+
 test("stale selection conflict refreshes the expected reference and permits an explicit new selection", async ({
   page,
 }) => {

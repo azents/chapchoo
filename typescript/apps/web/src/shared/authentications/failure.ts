@@ -9,9 +9,6 @@ function failureReason(error: unknown): unknown {
   }
   return Reflect.get(error.data, "reason");
 }
-export function authenticationRecordUnavailable(error: unknown): boolean {
-  return failureReason(error) === "DOMAIN_REASON_NOT_FOUND";
-}
 export function authenticationTargetChanged(error: unknown): boolean {
   const reason = failureReason(error);
   return (
