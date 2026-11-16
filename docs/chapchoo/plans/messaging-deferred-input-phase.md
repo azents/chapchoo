@@ -6,6 +6,43 @@ tags: [conversation, computer, implementation]
 
 # Phase Execution Plan
 
+## Revision 2 Correction Execution
+
+- Continue PR #140 on the same branch/base; no extra phase/cleanup PR.
+- Inputs: ADR-D3 and feasibility resolution; Design revision 2 approved on
+  2026-11-17 for exact M1–M8. Design delta: None.
+- Root owns all implementation/integration/validation. The single independent
+  reviewer remains `/root/motion-review` (read-only stable integrated review).
+- Persistence paths: conversations authority/read/setup/forwarding/pending and
+  Computers read projection. Qualify issued input/exact claim/current bound
+  session inside completed operations, canonical locks and fresh time. Preserve
+  ordinary owner APIs through private shared implementations; absent-first pending.
+- Service/RPC paths: remove queued claim-time digest dependence and duplicate
+  queued `refresh_project` admission/manual dispatch. Existing runtime-owned
+  startup reconciliation exclusively owns startup/refresh.
+- Peer/protocol paths: exact input/claim context, only exact input-owned Setup
+  backed by its actual preparation fact or Input backed by delivery facts. Reject
+  Provider/convergence, startup/refresh Setup, Answer, Stop and unrelated commands.
+  Regenerate protocol and Node/Rust contracts together.
+- Integration order: bound Store qualification → shared read/effect operations →
+  service/processor → Peer/generated contracts → deterministic tests → stable
+  review/corrections → normal hooks and exact-head CI → Spec/plan cleanup.
+- Required verification: both DBs; forced rotation before/during User/Computer
+  waits and post-forward observation; revocation, wrong/stale claims, consumed
+  input and late-result preservation; changed instructions before/during setup
+  through the existing reconciler and eventual exactly-once input; Peer misuse
+  and live interoperability. Keep the existing actual Docker/browser core gate.
+- Absence checks: queued processing has no captured `input.actor` and no refresh
+  admission/manual dispatch; queued Peer cannot dispatch startup/refresh.
+- Non-goals: new schema, principal, native grant, retry policy, runtime mode,
+  configuration, credential lookup endpoint, public API or uncertain replay.
+- Context: `8b36002` contains the approved revision-2 records and safe fixture
+  diagnostics, not revision-2 production implementation. Prior `3342956` passed
+  12 CI jobs but failed the first-publication Docker flow; its cause remains
+  independently unresolved. No merge/deployment authorization.
+
+## Original Integrated Feature Scope
+
 - Phase: one focused feature PR.
 - Branch/base: `feat/deferred-computer-input` → `fix/chat-message-editor` at `852ed8507495031905dfc3790f8964d62cafab94` (editor PR #139).
 - Inputs: [Requirements](../requirements/messaging-261116-deferred-computer-input.md), [accepted ADR](../adr/messaging-261116-deferred-computer-input.md), [approved Design revision 2](../design/messaging-261116-deferred-computer-input.md).
