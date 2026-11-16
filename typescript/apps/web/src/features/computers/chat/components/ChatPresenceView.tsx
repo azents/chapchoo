@@ -12,13 +12,14 @@ export function ChatPresenceView({
   historyHead,
   onExited,
 }: ListProps): ReactElement {
+  const firstPresent = entries.findIndex((entry) => entry.present);
   return (
     <div className={classes.list}>
       {entries.map((entry, index) => (
         <ChatPresenceItem
           key={entry.key}
           entry={entry}
-          gap={spaced && index > 0}
+          gap={spaced && (entry.present ? index !== firstPresent : index > 0)}
           historyHead={historyHead}
           onExited={onExited}
         />

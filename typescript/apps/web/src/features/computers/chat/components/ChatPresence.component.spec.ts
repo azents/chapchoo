@@ -2,6 +2,32 @@ import { expect, test } from "@playwright/test";
 
 const story = "/iframe.html?id=chat-presence--lifecycle&viewMode=story";
 
+test("first-item spacing collapses on the same exit timeline", async ({
+  page,
+}) => {
+  await page.goto(story);
+  await page.getByRole("button", { name: "Toggle item" }).click();
+  const item = page.getByTestId("dynamic");
+  await expect(item).toBeVisible();
+  await expect
+    .poll(() =>
+      item.evaluate(
+        (node) => node.parentElement?.parentElement?.getAnimations().length,
+      ),
+    )
+    .toBe(0);
+  await page.getByRole("button", { name: "Remove initial" }).click();
+  await expect(page.getByTestId("initial")).toHaveCount(0);
+  expect(
+    await item.evaluate(
+      (node) => node.parentElement?.parentElement?.getAnimations().length,
+    ),
+  ).toBe(0);
+  expect(
+    await item.evaluate((node) => node.parentElement?.hasAttribute("data-gap")),
+  ).toBe(false);
+});
+
 for (const width of [390, 1440]) {
   test(`composer error retains the composer width at ${width}`, async ({
     page,

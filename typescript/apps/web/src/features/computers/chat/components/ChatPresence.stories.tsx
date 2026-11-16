@@ -8,6 +8,7 @@ import type { ReactElement } from "react";
 function Fixture(): ReactElement {
   const [shown, setShown] = useState(false);
   const [older, setOlder] = useState(false);
+  const [initialShown, setInitialShown] = useState(true);
   const [expanded, setExpanded] = useState(false);
   const [source, setSource] = useState(0);
   return (
@@ -15,6 +16,7 @@ function Fixture(): ReactElement {
       <Group>
         <Button onClick={() => setShown((value) => !value)}>Toggle item</Button>
         <Button onClick={() => setOlder(true)}>Prepend history</Button>
+        <Button onClick={() => setInitialShown(false)}>Remove initial</Button>
         <Button onClick={() => setExpanded((value) => !value)}>
           Resize item
         </Button>
@@ -33,9 +35,11 @@ function Fixture(): ReactElement {
             Earlier message
           </Text>
         ) : null}
-        <Text key="initial" data-testid="initial" data-presence-order={1n}>
-          Initial server-rendered message
-        </Text>
+        {initialShown ? (
+          <Text key="initial" data-testid="initial" data-presence-order={1n}>
+            Initial server-rendered message
+          </Text>
+        ) : null}
         {shown ? (
           <Stack key="dynamic" data-testid="dynamic">
             <Text>New response request</Text>
