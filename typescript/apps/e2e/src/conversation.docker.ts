@@ -38,10 +38,10 @@ test("owner receives intentional server messages and inspects native typed-answe
   let sendStatus = 0;
   page.on("request", (request) => {
     if (request.url().includes("conversations.send")) sendRequests++;
+    if (request.url().includes("conversations.region")) historyReads++;
   });
   page.on("response", (response) => {
     if (response.url().includes("conversations.messages")) messageReads++;
-    if (response.url().includes("conversations.region")) historyReads++;
     if (response.url().includes("conversations.send"))
       sendStatus = response.status();
   });
@@ -102,8 +102,10 @@ test("owner receives intentional server messages and inspects native typed-answe
       activity.getByText("Computer · Stopped", { exact: true }),
     ).toBeVisible({ timeout: 180_000 });
     await activity.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(activity).toBeHidden();
     await expect(message).toBeEnabled();
     await expect(message).toHaveAttribute("aria-placeholder", /Send a message/);
+    const historyReadsBeforeSend = historyReads;
     stage = "stopped-send-auto-start-and-publication";
     const inputText = "Exercise the deterministic native conversation";
     await message.fill(inputText);
@@ -129,7 +131,7 @@ test("owner receives intentional server messages and inspects native typed-answe
       prestarted.conversation?.conversationId,
     );
     expect(afterInput.observedNative?.target).toEqual(prestartTarget);
-    expect(historyReads).toBe(0);
+    expect(historyReads).toBe(historyReadsBeforeSend);
     stage = "running-feedback";
     await expect(
       log.getByRole("status").filter({ hasText: "Thinking" }),

@@ -137,3 +137,98 @@ Message acceptance durably records the original input and applicable wake contex
 - [`conversation_processor.rs`](../../../rust/crates/rpc/src/conversation_processor.rs)
 - [`computers.rs`](../../../rust/crates/persistence/src/computers.rs)
 - [Completed persistence operations](../../../.claude/conventions/rust/completed-persistence-operations.md)
+
+## D3 Brief: Rotation-Safe Internal Processing Authority
+
+Related authority: `messaging-261116/REQ-1`, `REQ-3`, existing account-session
+revocation/private ownership, and Design mechanisms M3/M5.
+
+### Question
+
+How does a deferred processor keep qualifying the same submitting session after
+credential rotation, including during database lock waits and internal Peer
+dispatch, without treating a captured digest as durable authority?
+
+The claim-time digest can become invalid while its bound session remains valid.
+Refreshing that digest before a separate completed operation still races
+rotation during its User-lock wait. The post-forward report observation is not
+bounded by the session's previous-token overlap. Setup for a project refresh
+also uses a startup operation identity distinct from the originating input.
+
+### Options
+
+- **A: infer queued authority from existing command identities and facts.**
+  Input-owned commands identify their input, but a refresh Setup does not carry
+  the originating exact claim. Selecting an arbitrary active input would borrow
+  ambient or successor authority. This cannot qualify every required path.
+- **B: carry explicit input and exact-claim references in narrowly scoped
+  internal processing and Peer context.** Completed Store operations resolve the
+  bound session after the User lock and qualify current ownership themselves.
+  A restricted internal Peer context preserves the same binding across the
+  process boundary. It changes internal interfaces but adds no principal,
+  permission, persisted queue, configuration or public account capability.
+- **C: refresh and redispatch after a definite credential rejection.** This adds
+  a retry/classification policy around native-possible work and uncertain
+  transport. It is larger and more fragile than qualifying the correct binding
+  before the existing dispatch.
+
+### Decision
+
+Accepted by `/root/deferred-input-decisions` on 2026-11-17 under the existing
+technical delegation: **Option B**.
+
+Carry the original repository-issued input identity and exact claim identity
+through internal processing. Each affected completed Store operation resolves
+and qualifies the stored submitting session, current owner/Team/Agent/Computer
+and exact live claim under canonical locks and fresh database time. Public
+account operations keep their existing credential admission; there is no
+general session-to-credential lookup endpoint.
+
+The internal Peer context permits only qualified Connector Setup/Input for this
+queued processing path. Bind the exact Agent, conversation, Computer, lifecycle
+request, execution and existing sealed preparation/delivery facts. Refresh Setup
+must prove its startup relationship to the same conversation/execution and
+originating input claim. Provider, convergence, Answer, Stop and unrelated
+commands cannot use this context.
+
+This qualification creates no native grant and recovers no lost live invocation.
+It neither redispatches possible effects nor erases uncertainty. Existing
+authenticated late results remain independently valid. Internal pending
+observation first recognizes consumed/absent input, then qualifies retained work
+atomically; ordinary rotation is not withdrawal, while real revocation/expiry
+remains terminal.
+
+### Consequences and Verification
+
+Design revision 2 must renew M3/M5 and the internal interface boundary before
+implementation. No Requirements scope, schema, runtime mode, configuration,
+versioning or public upload/result contract changes. Deterministic tests must
+force rotation before and during lock acquisition, after forwarding and after
+consumption; retain genuine revocation, exact-claim isolation, command scope and
+no-duplicate-effect assertions on both database engines and the Peer boundary.
+
+### D3 Feasibility Resolution: Keep Refresh with Its Existing Owner
+
+Accepted by the same technical decision owner on 2026-11-17 before implementation.
+The initial D3 text above proposed proving an originating claim for refresh Setup.
+Existing startup evidence has no such correlation; inferring it from the current
+selection would be ambient authority, while adding origin columns is avoidable.
+
+Use the existing runtime-owned connection-startup reconciler as the sole owner of
+connection startup and project-refresh admission/dispatch. Its settled-selection
+check, sealed POSSIBLE recovery, dispatch gate, route authority and explicit drain
+already provide this path. Remove the queued processor's duplicate
+`refresh_project` admission/manual-dispatch path. The processor observes the
+current preparation and waits for matching selected evidence instead of creating
+or dispatching refresh work itself.
+
+Accordingly, queued Peer context categorically rejects startup/refresh Setup.
+It permits only input-owned Setup whose operation is the exact referenced input
+and whose actual preparation fact matches, plus exact input forwarding. This
+supersedes the proposed refresh-origin relationship in D3 without adding schema.
+The existing reconciler cadence/backoff remains; no new delay policy or immediate
+inline-refresh guarantee is selected.
+
+Preserve the atomic final selected-instruction/evidence gate. Tests must change
+instructions before input and during pending setup, observe the existing
+reconciler completing refresh, and prove eventual input forwarding exactly once.

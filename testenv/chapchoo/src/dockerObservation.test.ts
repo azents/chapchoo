@@ -3,9 +3,40 @@ import test from "node:test";
 import {
   cleanupContainerInspection,
   nativeReadinessStatus,
+  publicationStageEvidence,
   runningSuccessor,
 } from "./dockerObservation.ts";
 import type { NativeComputer, NativeObservation } from "./dockerObservation.ts";
+
+void test("publication diagnostics expose only independent fixture stages and reject private native output", () => {
+  assert.equal(
+    publicationStageEvidence("mcp-call-exception\nnot-recorded"),
+    "publicationFirst=mcp-call-exception;publicationRefresh=not-recorded",
+  );
+  assert.equal(
+    publicationStageEvidence("mcp-result-accepted\nmcp-result-error"),
+    "publicationFirst=mcp-result-accepted;publicationRefresh=mcp-result-error",
+  );
+  assert.equal(
+    publicationStageEvidence("mcp-call-started\r\nnot-recorded"),
+    "publicationFirst=mcp-call-started;publicationRefresh=not-recorded",
+  );
+  for (const output of [
+    "private-secret\nnot-recorded",
+    "mcp-call-started",
+    "mcp-result-error\nnot-recorded\nprivate-secret",
+    "mcp-call-started\rnot-recorded",
+    "mcp-call-started\r\r\nnot-recorded",
+  ]) {
+    assert.throws(
+      () => publicationStageEvidence(output),
+      (error: unknown) =>
+        error instanceof Error &&
+        error.message ===
+          "Conversation fixture publication diagnostics are invalid",
+    );
+  }
+});
 
 void test("cleanup inspection preserves a listed-container disappearance without hiding other failures", async () => {
   const observed = { state: "exited" };

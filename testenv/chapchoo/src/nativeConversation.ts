@@ -5,7 +5,10 @@ import {
   TeamManagementClient,
 } from "@chapchoo/rpc-client/accounts";
 import { AuthenticationsClient } from "@chapchoo/rpc-client/authentication";
-import { ConversationsClient } from "@chapchoo/rpc-client/conversations";
+import {
+  ConversationsClient,
+  MessageRole,
+} from "@chapchoo/rpc-client/conversations";
 import type {
   HarnessSupply,
   OwnerConversation,
@@ -293,6 +296,26 @@ export async function nativeConversation(
           `foreground=${current.observedNative?.foreground ?? -1}`,
           `startup=${startup?.failed ?? (startup?.sessionReady ? 20 : startup?.possibleForwarding ? 10 : 0)}`,
         ];
+        const native = await docker.current();
+        result.push(await docker.conversationPublicationStages(native));
+        if (capture?.conversationId) {
+          const receipts = await call(
+            conversations.messages.bind(conversations),
+            {
+              scope: {
+                agentId: agent.id,
+                conversationId: capture.conversationId,
+              },
+              limit: 25,
+            },
+            2_000,
+          );
+          result.push(
+            `userReceipts=${receipts.messages.filter((message) => message.role === MessageRole.MESSAGE_ROLE_USER).length}`,
+            `agentReceipts=${receipts.messages.filter((message) => message.role === MessageRole.MESSAGE_ROLE_AGENT).length}`,
+            `inputProvenance=${receipts.messages.filter((message) => message.sourceInputRequestId !== undefined).length}`,
+          );
+        }
         if (capture?.snapshotId) {
           const scope = {
             agentId: agent.id,

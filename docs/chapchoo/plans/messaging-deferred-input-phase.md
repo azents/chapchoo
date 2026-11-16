@@ -8,9 +8,10 @@ tags: [conversation, computer, implementation]
 
 - Phase: one focused feature PR.
 - Branch/base: `feat/deferred-computer-input` → `fix/chat-message-editor` at `852ed8507495031905dfc3790f8964d62cafab94` (editor PR #139).
-- Inputs: [Requirements](../requirements/messaging-261116-deferred-computer-input.md), [accepted ADR](../adr/messaging-261116-deferred-computer-input.md), [approved Design revision 1](../design/messaging-261116-deferred-computer-input.md).
+- Inputs: [Requirements](../requirements/messaging-261116-deferred-computer-input.md), [accepted ADR](../adr/messaging-261116-deferred-computer-input.md), [approved Design revision 2](../design/messaging-261116-deferred-computer-input.md).
 - Approved mechanisms: `M1, M2, M3, M4, M5, M6, M7, M8`.
-- Authority: messaging-261116/REQ-1 through REQ-5, ADR-D1/D2, preserved current source/lifecycle/native-grant and account authority.
+- Authority: messaging-261116/REQ-1 through REQ-5, ADR-D1/D2/D3 and its feasibility resolution, preserved current source/lifecycle/native-grant and account authority.
+- Revision 2 correction: atomic bound input/claim/session processing and restricted input-owned Peer Setup/Input; existing reconciler exclusively owns startup/refresh. No new schema, principal, grant or retry policy. Implement only the renewed M1–M8 scope, then targeted authority review and exact-head gates.
 - Design delta: None.
 - Deliverables: ordinary submission while stopped/starting/restoring, durable ordered waiting, Cloud-only automatic Start, explicit Stop precedence, safe pre-attempt restart recovery and no uncertain native replay.
 - Non-goals: second message store/broker, new versioning/runtime mode/configuration, browser-owned wake, production mutations, merge or deployment.
