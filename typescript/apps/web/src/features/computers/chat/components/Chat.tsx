@@ -19,6 +19,7 @@ import {
 } from "@mantine/core";
 import { ComputerControls } from "../../components/ComputerControls";
 import { profileStyle } from "../../profilePalette";
+import { ChatPresence } from "../ChatPresence";
 import { OlderRecordsContainer } from "../containers/OlderRecordsContainer";
 import { nativeStatus } from "../copy";
 import classes from "./Chat.module.css";
@@ -89,6 +90,7 @@ export function Chat(props: ChatProps): ReactElement {
   const working = props.stoppable && props.activity === "working";
   const records = props.recentRecords.records;
   const currentPlan = props.conversation.region.latestPlan;
+  const motionSource = `${agent.id}:${props.conversation.region.header.conversationId}:${props.conversation.region.header.source?.snapshotId ?? ""}`;
   const showStatus =
     props.statusLoading ||
     props.activity !== "idle" ||
@@ -219,21 +221,23 @@ export function Chat(props: ChatProps): ReactElement {
                   contentRef={f.contentRef}
                   followingLatest={!f.detached}
                 />
-                {props.messages.read === "ready" &&
-                props.conversation.region.header.state !== "loading" &&
-                props.messages.region.messages.length === 0 &&
-                props.conversation.region.records.length === 0 &&
-                !props.conversation.region.inputs?.length ? (
-                  <div className={classes.empty}>
-                    <CharacterArtwork
-                      basePath={p.basePath}
-                      assetKey={agent.profileImage.assetKey}
-                      className={classes.emptyPortrait}
-                    />
-                    <h1>{agent.name}</h1>
-                    <p>{c.empty}</p>
-                  </div>
-                ) : null}
+                <ChatPresence key={`empty:${motionSource}`}>
+                  {props.messages.read === "ready" &&
+                  props.conversation.region.header.state !== "loading" &&
+                  props.messages.region.messages.length === 0 &&
+                  props.conversation.region.records.length === 0 &&
+                  !props.conversation.region.inputs?.length ? (
+                    <div key="empty" className={classes.empty}>
+                      <CharacterArtwork
+                        basePath={p.basePath}
+                        assetKey={agent.profileImage.assetKey}
+                        className={classes.emptyPortrait}
+                      />
+                      <h1>{agent.name}</h1>
+                      <p>{c.empty}</p>
+                    </div>
+                  ) : null}
+                </ChatPresence>
                 <ConversationBody
                   controls={props.conversation}
                   messages={props.messages}
@@ -245,9 +249,11 @@ export function Chat(props: ChatProps): ReactElement {
                     assetKey: agent.profileImage.assetKey,
                   }}
                 />
-                {props.thinking ? (
-                  <ThinkingIndicator label={c.thinking} />
-                ) : null}
+                <ChatPresence key={`thinking:${motionSource}`}>
+                  {props.thinking ? (
+                    <ThinkingIndicator key="thinking" label={c.thinking} />
+                  ) : null}
+                </ChatPresence>
               </div>
             </ScrollArea>
             <footer className={classes.composerArea} ref={f.overlayRef}>
@@ -265,16 +271,19 @@ export function Chat(props: ChatProps): ReactElement {
                   </Box>
                 </ActionIcon>
               ) : null}
-              {props.inputError ? (
-                <div
-                  id="chat-input-error"
-                  role="alert"
-                  className={classes.composerError}
-                >
-                  <OutgoingIcon kind="error" />
-                  <span>{props.inputError}</span>
-                </div>
-              ) : null}
+              <ChatPresence key={`composer:${motionSource}`}>
+                {props.inputError ? (
+                  <div
+                    key="input-error"
+                    id="chat-input-error"
+                    role="alert"
+                    className={classes.composerError}
+                  >
+                    <OutgoingIcon kind="error" />
+                    <span>{props.inputError}</span>
+                  </div>
+                ) : null}
+              </ChatPresence>
               <div
                 className={classes.composer}
                 data-readonly={!props.writable || void 0}

@@ -44,6 +44,23 @@ The non-interactive status uses polite screen-reader feedback. Reduced-motion
 users receive static readable text and a stationary spark; high-contrast text
 does not depend on a transparent gradient.
 
+## Transcript transitions
+
+New transcript messages, response requests, pending input and transient feedback
+enter with a 320ms soft upward slide. Height, opacity and translation share
+`cubic-bezier(.4,0,.4,1)` and the same duration for arrival and departure; spacing
+is measured inside the animated item. Removed items remain only for visual exit,
+are immediately inert and hidden from assistive technology, then unmount. Rapid
+reappearance continues from the currently rendered geometry. Pending input and
+its published receipt share one identity rather than producing duplicate bubbles.
+
+Initial server-rendered content is immediately visible and hydrates unchanged.
+Older receipt pages and full history do not replay arrival motion. Conversation
+or native-source replacement clears retained visual exits; loss of page access
+unmounts the chat. Reduced-motion and hidden-document updates settle immediately.
+The existing scroll owner follows changing layout only while following latest;
+explicit reading intent withdraws that pinning and preserves history anchors.
+
 ## Initial rendering and active reads
 
 Exact-Team/private-owner route admission loads the Agent, initial receipt-message

@@ -16,6 +16,7 @@ import {
 } from "@mantine/core";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { ChatPresence } from "../ChatPresence";
 import { nativeStatus, permissionScope } from "../copy";
 import { recordPublication } from "../recordPresentation";
 import classes from "./ConversationBody.module.css";
@@ -646,6 +647,20 @@ function InputResult({
   );
 }
 
+function ConversationItems({
+  children,
+  surface,
+}: {
+  children: ReactNode;
+  surface: "transcript" | "history";
+}): ReactElement {
+  return surface === "history" ? (
+    <Stack gap={0}>{children}</Stack>
+  ) : (
+    <ChatPresence spaced>{children}</ChatPresence>
+  );
+}
+
 export function ConversationBody({
   controls,
   messages,
@@ -666,9 +681,12 @@ export function ConversationBody({
   surface?: "transcript" | "history";
 }): ReactElement {
   return (
-    <Stack gap={surface === "history" ? 0 : "lg"}>
+    <ConversationItems
+      key={`${controls.region.header.agentId}:${controls.region.header.conversationId}:${controls.region.header.source?.snapshotId ?? ""}`}
+      surface={surface}
+    >
       {messages?.read === "error" || messages?.olderRead === "error" ? (
-        <Group role="alert">
+        <Group key="message-error" role="alert">
           <Text>{copy.error}</Text>
           <Button variant="subtle" onClick={messages.onRead}>
             {copy.retry}
@@ -678,10 +696,15 @@ export function ConversationBody({
       {surface === "transcript"
         ? messages?.region.messages.map((message) => (
             <article
-              key={message.id}
+              key={
+                message.sourceInputId
+                  ? `input:${message.sourceInputId}`
+                  : `message:${message.id}`
+              }
               id={`message-${encodeURIComponent(message.id)}`}
               data-kind={message.role}
               data-message-id={message.id}
+              data-presence-order={message.order}
               data-input-operation={
                 controls.region.inputs?.find(
                   (input) => input.id === message.sourceInputId,
@@ -731,7 +754,12 @@ export function ConversationBody({
           ))
         : null}
       {controls.read === "error" || controls.olderRead === "error" ? (
-        <Group role="alert" gap="xs" justify="space-between">
+        <Group
+          key="activity-error"
+          role="alert"
+          gap="xs"
+          justify="space-between"
+        >
           <Text size="sm" c="dimmed">
             {copy.recordsError}
           </Text>
@@ -740,14 +768,16 @@ export function ConversationBody({
           </Button>
         </Group>
       ) : controls.read === "loading" || controls.olderRead === "loading" ? (
-        <Text role="status">{copy.loading}</Text>
+        <Text key="activity-loading" role="status">
+          {copy.loading}
+        </Text>
       ) : null}
       {controls.region.records
         .filter((record) => surface === "history" || record.kind === "request")
         .map((record) => (
           <article
             id={`${surface === "history" ? "history" : "conversation"}-${encodeURIComponent(record.key)}`}
-            key={record.key}
+            key={`record:${record.key}`}
             data-kind={record.kind}
             data-surface={surface}
             aria-label={record.kind === "user" ? copy.you : void 0}
@@ -902,7 +932,7 @@ export function ConversationBody({
           <section
             className={`${classes.record} ${classes.pendingInput}`}
             aria-label={copy.you}
-            key={input.id}
+            key={`input:${input.id}`}
             data-input-operation={input.id}
             data-input-state={input.observation}
             data-kind="user"
@@ -920,6 +950,6 @@ export function ConversationBody({
             />
           </section>
         ))}
-    </Stack>
+    </ConversationItems>
   );
 }

@@ -1,0 +1,21 @@
+.list {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.item {
+  min-width: 0;
+  overflow: clip;
+}
+
+.inner {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.inner[data-gap] {
+  padding-top: var(--mantine-spacing-lg);
+}
