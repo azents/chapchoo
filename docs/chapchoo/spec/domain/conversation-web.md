@@ -15,8 +15,9 @@ available. This is not evidence that real model credentials work.
 The owner can continue composing and submitting while
 [configuration refresh](agent-instructions.md#common-refresh-and-continuing-input)
 waits for native work to finish. Native-action readiness does not disable server
-input admission. Activity's read-only Prompt sources view selects retained
-preparation originals separately from current saved settings and native history.
+input admission. Activity's System prompt link navigates to a separate
+server-rendered page for the latest selected prompt, independently of current
+saved settings and native history. It has no history selection or pagination.
 
 ## Initial rendering and active reads
 

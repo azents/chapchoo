@@ -5,7 +5,7 @@ import { ConfirmationDialog } from "@chapchoo/ui/ConfirmationDialog";
 import { ContextSidebar } from "@chapchoo/ui/ContextSidebar";
 import { PageFailure } from "@chapchoo/ui/PageFailure";
 import { Sheet, SheetViewport } from "@chapchoo/ui/Sheet";
-import { agentPath } from "@chapchoo/web-core/workspace";
+import { agentChatPath, agentPath } from "@chapchoo/web-core/workspace";
 import {
   ActionIcon,
   Alert,
@@ -393,7 +393,15 @@ export function Chat(props: ChatProps): ReactElement {
                 onDetailsExit={props.focus.nestedClosed}
               />
               {props.supplyControl}
-              {props.instructionEvidenceControl}
+              <Button
+                component="a"
+                variant="default"
+                fullWidth
+                mt="md"
+                href={`${agentChatPath(p.basePath, p.data.teamHandle, props.agent.handle)}/system-prompt`}
+              >
+                {c.systemPrompt}
+              </Button>
               <div className={classes.summary}>
                 <span>
                   {agent.name} · {c.codex}

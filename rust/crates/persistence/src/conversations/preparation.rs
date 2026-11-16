@@ -508,6 +508,12 @@ impl Store {
             .bind::<IdentitySql, _>(id)
             .execute(connection)
             .await?;
+            diesel::sql_query(
+                dialect.query("DELETE FROM project_instruction_evidence WHERE agent_id=?"),
+            )
+            .bind::<IdentitySql, _>(agent)
+            .execute(connection)
+            .await?;
             Ok(ConversationPreparationAdmission::Granted {
                 grant: ConversationForwardingGrant {
                     execution_id: route._execution_id.to_dto(EntityKind::Execution),

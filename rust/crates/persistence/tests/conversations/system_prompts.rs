@@ -92,18 +92,10 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
         "First seal must revalidate the selected owner bytes under save serialization"
     );
     assert!(
-        matches!(
-            store
-                .instruction_evidence(
-                    &actor,
-                    &f.agent.id,
-                    &accepted.conversation_id,
-                    &accepted.id,
-                    f.now,
-                )
-                .await,
-            Err(StoreError::NotFound)
-        ),
+        store
+            .latest_system_prompt(&actor, &f.agent.id, f.now)
+            .await?
+            .is_none(),
         "Rejected first seal does not fabricate immutable or applied evidence"
     );
     store
@@ -275,45 +267,27 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
         ""
     );
     let retained = store
-        .instruction_evidence(
-            &actor,
-            &f.agent.id,
-            &accepted.conversation_id,
-            &accepted.id,
-            f.now + 2,
-        )
-        .await?;
+        .latest_system_prompt(&actor, &f.agent.id, f.now + 2)
+        .await?
+        .ok_or("Missing current prompt")?;
     assert_eq!(retained.instructions, evidence.instructions);
     assert_eq!(retained.rendered_document, evidence.rendered_document);
     assert_eq!(retained.tool_catalog, evidence.tool_catalog);
     assert_eq!(retained.execution_id, evidence.execution_id);
     assert!(matches!(
         store
-            .instruction_evidence(
-                &f.other.digest(),
-                &f.agent.id,
-                &accepted.conversation_id,
-                &accepted.id,
-                f.now
-            )
+            .latest_system_prompt(&f.other.digest(), &f.agent.id, f.now)
             .await,
         Err(StoreError::NotFound)
     ));
-    assert_eq!(
-        store
-            .instruction_history(&actor, &f.agent.id, &accepted.conversation_id, None, f.now)
-            .await?
-            .items,
-        vec![retained]
-    );
-    // Equal timestamps exercise the operation-identity tie breaker across pages.
+    // Repeated selections replace the sole current payload even at equal times.
     let mut page_selection = selected.clone();
     for source in &mut page_selection.sources {
         if source.kind == InstructionSourceKind::Owner {
             source.text.clear();
         }
     }
-    for index in 0..101 {
+    for index in 0..3 {
         let input = store
             .accept_conversation_input(
                 &actor,
@@ -335,9 +309,31 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
         store
             .begin_conversation_input_preparation(&actor, &route, &next, f.now + 4)
             .await?;
+        assert!(
+            store
+                .latest_system_prompt(&actor, &f.agent.id, f.now + 4)
+                .await?
+                .is_none()
+        );
         store
             .seal_project_instructions(&actor, &route, &next, &page_selection, catalog, f.now + 4)
             .await?;
+        let current = store
+            .latest_system_prompt(&actor, &f.agent.id, f.now + 4)
+            .await?
+            .ok_or("Missing latest selection")?;
+        assert_eq!(current.operation_id, input.id);
+        assert!(matches!(
+            store
+                .project_instructions(
+                    &source,
+                    &f.agent.id,
+                    &accepted.conversation_id,
+                    &accepted.id
+                )
+                .await,
+            Err(StoreError::InvalidTransition)
+        ));
         store
             .complete_conversation_input_preparation(
                 &source,
@@ -348,58 +344,6 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
             )
             .await?;
     }
-    let first_page = store
-        .instruction_history(
-            &actor,
-            &f.agent.id,
-            &accepted.conversation_id,
-            None,
-            f.now + 4,
-        )
-        .await?;
-    assert_eq!(first_page.items.len(), 100);
-    let before = first_page
-        .next_before
-        .as_deref()
-        .ok_or("Expected history continuation")?;
-    assert_eq!(
-        Some(before),
-        first_page
-            .items
-            .last()
-            .map(|item| item.operation_id.as_str())
-    );
-    let second_page = store
-        .instruction_history(
-            &actor,
-            &f.agent.id,
-            &accepted.conversation_id,
-            Some(before),
-            f.now + 4,
-        )
-        .await?;
-    assert_eq!(second_page.items.len(), 2);
-    assert!(second_page.next_before.is_none());
-    let identities = first_page
-        .items
-        .iter()
-        .chain(second_page.items.iter())
-        .map(|item| item.operation_id.as_str())
-        .collect::<std::collections::BTreeSet<_>>();
-    assert_eq!(identities.len(), 102);
-    assert!(identities.contains(accepted.id.as_str()));
-    assert!(matches!(
-        store
-            .instruction_history(
-                &f.other.digest(),
-                &f.agent.id,
-                &accepted.conversation_id,
-                Some(before),
-                f.now + 4
-            )
-            .await,
-        Err(StoreError::NotFound)
-    ));
     exercise_forwarding_save_race(store, f, &accepted.conversation_id, &target).await?;
     Ok(())
 }
@@ -499,19 +443,50 @@ async fn exercise_forwarding_save_race(
     Ok(())
 }
 
+macro_rules! verify_latest_prompt_migration {
+    ($connection:expr, $migrations:expr) => {{
+        let connection = &mut *$connection;
+        assert_eq!(connection.revert_last_migration($migrations)?.to_string(), "00000000000026");
+        let duplicate = "INSERT INTO project_instruction_evidence(operation_id,agent_id,conversation_id,execution_id,sources_json,rendered_document,owner_content,tool_catalog,created_at,applied_snapshot,applied_native_session,applied_at) SELECT i.id,e.agent_id,e.conversation_id,e.execution_id,e.sources_json,e.rendered_document,e.owner_content,e.tool_catalog,e.created_at+10000,e.applied_snapshot,e.applied_native_session,e.applied_at FROM project_instruction_evidence e JOIN conversation_inputs i ON i.conversation_id=e.conversation_id AND i.id<>e.operation_id LIMIT 1";
+        assert_eq!(diesel::sql_query(duplicate).execute(connection)?, 1);
+        #[derive(diesel::QueryableByName, Debug, PartialEq)]
+        struct Retained {
+            #[diesel(sql_type=diesel::sql_types::BigInt)]
+            n: i64,
+            #[diesel(sql_type=diesel::sql_types::Text)]
+            content: String,
+        }
+        let read = "SELECT CAST(count(*) AS BIGINT) AS n,(SELECT content FROM agent_system_prompts LIMIT 1) AS content FROM project_instruction_evidence";
+        assert_eq!(diesel::sql_query(read).get_result::<Retained>(connection)?.n, 2);
+        connection.run_pending_migrations($migrations)?;
+        let current = diesel::sql_query(read).get_result::<Retained>(connection)?;
+        assert_eq!(current.n, 1);
+        assert_eq!(current.content, "");
+        assert!(diesel::sql_query(duplicate).execute(connection).is_err());
+        // A pending or absent causal selection must not keep a timestamp fallback.
+        connection.revert_last_migration($migrations)?;
+        connection.batch_execute("UPDATE conversations SET current_preparation_operation_id=NULL")?;
+        connection.run_pending_migrations($migrations)?;
+        assert_eq!(diesel::sql_query(read).get_result::<Retained>(connection)?.n, 0);
+    }};
+}
+
 #[test]
-fn sqlite_saved_prompts_and_retained_sources() -> Result<(), TestError> {
+fn sqlite_saved_prompts_and_latest_payload() -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("instructions.sqlite");
     let cipher = cipher()?;
     prepare_sqlite(&path, &cipher)?;
     let runtime = tokio::runtime::Runtime::new()?;
-    let store = runtime.block_on(Store::connect_sqlite(path, cipher))?;
+    let store = runtime.block_on(Store::connect_sqlite(path.clone(), cipher))?;
     let f = runtime.block_on(fixture(&store))?;
-    runtime.block_on(exercise(&store, &f))
+    runtime.block_on(exercise(&store, &f))?;
+    let mut connection = diesel::SqliteConnection::establish(path.to_str().ok_or("Invalid path")?)?;
+    verify_latest_prompt_migration!(&mut connection, SQLITE_MIGRATIONS);
+    Ok(())
 }
 #[test]
-fn postgres_saved_prompts_and_retained_sources() -> Result<(), TestError> {
+fn postgres_saved_prompts_and_latest_payload() -> Result<(), TestError> {
     let _lock = POSTGRES_CONVERSATION_LOCK
         .lock()
         .map_err(|_| "Fixture lock poisoned")?;
@@ -530,9 +505,12 @@ fn postgres_saved_prompts_and_retained_sources() -> Result<(), TestError> {
         let cipher = cipher()?;
         prepare_postgres(&url, &cipher)?;
         let runtime = tokio::runtime::Runtime::new()?;
-        let store = runtime.block_on(Store::connect_postgres(url, cipher))?;
+        let store = runtime.block_on(Store::connect_postgres(url.clone(), cipher))?;
         let f = runtime.block_on(fixture(&store))?;
-        runtime.block_on(exercise(&store, &f))
+        runtime.block_on(exercise(&store, &f))?;
+        let mut connection = AsyncConnectionWrapper::<AsyncPgConnection>::establish(&url)?;
+        verify_latest_prompt_migration!(&mut connection, POSTGRES_MIGRATIONS);
+        Ok(())
     })();
     control.batch_execute(&format!("DROP SCHEMA {schema} CASCADE"))?;
     result

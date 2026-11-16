@@ -70,8 +70,8 @@ pub use conversations::{
     ConversationWorkTarget, EventChunkRead, EventMetadataRead, EventPairMetadata,
     EventPayloadChunk, EventPayloadKind, HarnessSupplyReceipt, HarnessSupplySelection,
     LiveConversationRequest, MAX_SYSTEM_PROMPT_BYTES, ProjectInstructionEvidence,
-    ProjectInstructionHistory, PublishConversationMessage, RetainedConversationInput,
-    RetryConversationInput, SaveHarnessSupply, SourceBinding,
+    PublishConversationMessage, RetainedConversationInput, RetryConversationInput,
+    SaveHarnessSupply, SourceBinding,
 };
 pub use creation_results::AgentCreationResult;
 pub use delivery::{DeliveryComputer, DeliveryExecution, DeliverySnapshot};

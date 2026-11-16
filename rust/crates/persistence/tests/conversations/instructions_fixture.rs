@@ -2,7 +2,8 @@ use super::*;
 use chapchoo_domain::{InstructionSource, InstructionSourceKind, ProjectInstructions};
 use chapchoo_persistence::{
     ConversationInputPreparation, ConversationOperationForwarding,
-    ConversationPreparationAdmission, ConversationPreparationOutcome, ResolvedRoute,
+    ConversationPreparationAdmission, ConversationPreparationOutcome, ConversationPreparationState,
+    ResolvedRoute,
 };
 
 /// Establish actual preparation and applied evidence before a new input effect.
@@ -22,11 +23,21 @@ pub(super) async fn apply(
     let admission = store
         .begin_conversation_input_preparation(actor, route, &draft, now)
         .await?;
-    if matches!(
-        admission,
-        ConversationPreparationAdmission::ObservedStartup { .. }
-    ) {
-        return Ok(());
+    match admission {
+        ConversationPreparationAdmission::ObservedStartup { .. } => return Ok(()),
+        ConversationPreparationAdmission::Existing(facts)
+            if matches!(
+                facts.state,
+                ConversationPreparationState::Known(ConversationPreparationOutcome::SessionReady(
+                    _
+                ))
+            ) =>
+        {
+            // Existing setup is not a new selection. Forwarding revalidates
+            // the current applied payload, never this input's old payload.
+            return Ok(());
+        }
+        _ => {}
     }
     let owner = store.system_prompt(actor, operation.agent_id, now).await?;
     let instructions = ProjectInstructions::new(vec![

@@ -3,7 +3,7 @@ import { InstructionEvidence } from "./InstructionEvidence";
 import type { InstructionEvidenceView } from "@chapchoo/web-core/instruction-evidence";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 
-const evidence: InstructionEvidenceView = {
+const prompt: InstructionEvidenceView = {
   agentId: "agent",
   conversationId: "conversation",
   operationId: "operation",
@@ -17,71 +17,36 @@ const evidence: InstructionEvidenceView = {
     },
     {
       role: "owner",
-      text: "  Preserve this exact owner source.\n한국어 원문도 그대로 유지합니다.\n",
+      text: "  Preserve this exact instruction.\n한국어 원문도 그대로 유지합니다.\n",
     },
   ],
   document: "Original selected project document",
 };
 const meta = {
-  title: "Chat/Prompt sources",
+  title: "Chat/System prompt",
   component: InstructionEvidence,
   args: {
-    opened: true,
+    basePath: "",
+    teamHandle: "my",
+    agentHandle: "companion",
+    identity: "owner@example.test",
     copy: instructionEvidenceCopy("en"),
-    state: {
-      type: "ready",
-      selected: "operation",
-      options: [{ value: "operation", label: "Execution · 2026-11-16" }],
-      more: { available: false, read: "ready" },
-      evidence: { type: "ready", value: evidence },
+    agentsLabel: "Agents",
+    replayLabel: "Replay mascot",
+    appearance: {
+      value: "system",
+      label: "Appearance",
+      labels: { system: "System", light: "Light", dark: "Dark" },
+      onChange: (): void => {},
     },
-    onToggle: (): void => {},
-    onSelect: (): void => {},
-    onRead: (): void => {},
-    onMore: (): void => {},
+    prompt,
   },
 } satisfies Meta<typeof InstructionEvidence>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-export const Supplied: Story = {};
+export const Applied: Story = {};
 export const Prepared: Story = {
-  args: {
-    state: {
-      type: "ready",
-      selected: "operation",
-      options: [{ value: "operation", label: "Prepared execution" }],
-      more: { available: false, read: "ready" },
-      evidence: { type: "ready", value: { ...evidence, appliedAt: void 0 } },
-    },
-  },
+  args: { prompt: { ...prompt, appliedAt: void 0 } },
 };
-export const Loading: Story = { args: { state: { type: "loading" } } };
-export const ReadFailure: Story = { args: { state: { type: "error" } } };
-export const Empty: Story = { args: { state: { type: "empty" } } };
-export const SourceReadFailure: Story = {
-  args: {
-    state: {
-      type: "ready",
-      selected: "operation",
-      options: [{ value: "operation", label: "Execution" }],
-      more: { available: false, read: "ready" },
-      evidence: { type: "error" },
-    },
-  },
-};
-export const OlderLoading: Story = {
-  args: {
-    state: {
-      ...meta.args.state,
-      more: { available: true, read: "loading" },
-    },
-  },
-};
-export const OlderReadFailure: Story = {
-  args: {
-    state: {
-      ...meta.args.state,
-      more: { available: true, read: "error" },
-    },
-  },
-};
+export const Empty: Story = { args: { prompt: null } };
+export const Korean: Story = { args: { copy: instructionEvidenceCopy("ko") } };

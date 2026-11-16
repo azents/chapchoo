@@ -278,18 +278,20 @@ impl ConversationControlProcessor {
                             startup_operation.as_deref().unwrap_or(&input.receipt.id);
                         let evidence = self
                             .conversation
-                            .instruction_evidence(
+                            .latest_system_prompt(
                                 actor,
                                 &input.agent_id,
-                                &input.receipt.conversation_id,
-                                effective_operation,
                                 AcceptanceTime::System.now()?,
                             )
                             .await?;
-                        if evidence.instructions != selected
-                            || evidence.tool_catalog
-                                != chapchoo_service::ConversationToolBackend::catalog_definition()?
-                        {
+                        let catalog =
+                            chapchoo_service::ConversationToolBackend::catalog_definition()?;
+                        if evidence.as_ref().is_none_or(|evidence| {
+                            evidence.operation_id != effective_operation
+                                || evidence.conversation_id != input.receipt.conversation_id
+                                || evidence.instructions != selected
+                                || evidence.tool_catalog != catalog
+                        }) {
                             if let Some(latest) = self
                                 .conversation
                                 .connection_startup(

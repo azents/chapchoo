@@ -163,6 +163,12 @@ impl Store {
                 .bind::<Text,_>(kind).bind::<Nullable<Text>,_>(path).bind::<Nullable<Text>,_>(selection_request)
                 .bind::<Bool,_>(false).bind::<Bool,_>(true).bind::<Text,_>(snapshot).bind::<Text,_>(native).bind::<BigInt,_>(admitted_at)
                 .execute(connection).await?;
+            diesel::sql_query(
+                dialect.query("DELETE FROM project_instruction_evidence WHERE agent_id=?"),
+            )
+            .bind::<IdentitySql, _>(agent)
+            .execute(connection)
+            .await?;
             diesel::sql_query(dialect.query("INSERT INTO project_instruction_evidence(operation_id,agent_id,conversation_id,execution_id,sources_json,rendered_document,owner_content,tool_catalog,created_at) VALUES(?,?,?,?,?,?,?,?,?)"))
                 .bind::<IdentitySql,_>(operation).bind::<IdentitySql,_>(agent).bind::<IdentitySql,_>(conversation)
                 .bind::<IdentitySql,_>(route._execution_id).bind::<Text,_>(&sources).bind::<Text,_>(&rendered)

@@ -16,9 +16,7 @@ mod startup;
 mod stops;
 mod supply;
 mod system_prompts;
-pub use system_prompts::{
-    MAX_SYSTEM_PROMPT_BYTES, ProjectInstructionEvidence, ProjectInstructionHistory,
-};
+pub use system_prompts::{MAX_SYSTEM_PROMPT_BYTES, ProjectInstructionEvidence};
 
 use crate::{
     Store, StoreError,

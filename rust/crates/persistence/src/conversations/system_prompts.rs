@@ -1,4 +1,4 @@
-//! Saved owner instructions and immutable operation-qualified original evidence.
+//! Saved owner instructions and the latest operation-qualified prompt payload.
 use super::*;
 use chapchoo_domain::{InstructionSource, InstructionSourceKind, ProjectInstructions};
 
@@ -21,11 +21,6 @@ impl fmt::Debug for ProjectInstructionEvidence {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("ProjectInstructionEvidence([REDACTED])")
     }
-}
-#[derive(Debug)]
-pub struct ProjectInstructionHistory {
-    pub items: Vec<ProjectInstructionEvidence>,
-    pub next_before: Option<String>,
 }
 #[derive(diesel::QueryableByName)]
 struct PromptRow {
@@ -310,6 +305,11 @@ impl Store {
             if selected.execution_id != route._execution_id {
                 return Err(StoreError::Conflict);
             }
+            let current = selected_preparation!(connection, dialect, conversation)
+                .ok_or(StoreError::InvalidTransition)?;
+            if current.operation_id != operation {
+                return Err(StoreError::InvalidTransition);
+            }
             if let Some(previous) = evidence!(connection, dialect, conversation, operation) {
                 if previous.agent_id != agent
                     || previous.execution_id != route._execution_id
@@ -395,6 +395,11 @@ impl Store {
             if selected.execution_id != route._execution_id {
                 return Err(StoreError::Conflict);
             }
+            let current = selected_preparation!(connection, dialect, conversation)
+                .ok_or(StoreError::InvalidTransition)?;
+            if current.operation_id != operation {
+                return Err(StoreError::InvalidTransition);
+            }
             if let Some(previous) = evidence!(connection, dialect, conversation, operation) {
                 if previous.agent_id != agent
                     || previous.execution_id != route._execution_id
@@ -432,77 +437,18 @@ impl Store {
                 .evidence()
         })
     }
-    pub async fn instruction_history(
+    pub async fn latest_system_prompt(
         &self,
         actor: &SecretDigest,
         agent_id: &str,
-        conversation_id: &str,
-        before_operation_id: Option<&str>,
         now: i64,
-    ) -> Result<ProjectInstructionHistory, StoreError> {
+    ) -> Result<Option<ProjectInstructionEvidence>, StoreError> {
         let agent = EntityId::from_dto(EntityKind::Agent, agent_id)?;
-        let conversation = EntityId::from_dto(EntityKind::Conversation, conversation_id)?;
-        let before = before_operation_id
-            .map(|id| EntityId::from_dto(EntityKind::ConversationOperation, id))
-            .transpose()?;
         operation!(self, |connection, dialect| {
             let _ = owned_agent!(connection, dialect, actor, agent, now);
-            let row = conversation!(connection, dialect, conversation);
-            if row.agent_id != agent {
-                return Err(StoreError::NotFound);
-            }
-            let rows = if let Some(before) = before {
-                let cursor = evidence!(connection, dialect, conversation, before)
-                    .ok_or(StoreError::NotFound)?;
-                if cursor.agent_id != agent {
-                    return Err(StoreError::NotFound);
-                }
-                diesel::sql_query(dialect.query("SELECT agent_id,conversation_id,operation_id,execution_id,sources_json,rendered_document,created_at,tool_catalog,applied_snapshot,applied_native_session,applied_at FROM project_instruction_evidence WHERE conversation_id=? AND agent_id=? AND (created_at<? OR (created_at=? AND operation_id<?)) ORDER BY created_at DESC,operation_id DESC LIMIT 101"))
-                    .bind::<IdentitySql,_>(conversation).bind::<IdentitySql,_>(agent)
-                    .bind::<BigInt,_>(cursor.created_at).bind::<BigInt,_>(cursor.created_at).bind::<IdentitySql,_>(before)
-                    .load::<EvidenceRow>(connection).await?
-            } else {
-                diesel::sql_query(dialect.query("SELECT agent_id,conversation_id,operation_id,execution_id,sources_json,rendered_document,created_at,tool_catalog,applied_snapshot,applied_native_session,applied_at FROM project_instruction_evidence WHERE conversation_id=? AND agent_id=? ORDER BY created_at DESC,operation_id DESC LIMIT 101"))
-                    .bind::<IdentitySql,_>(conversation).bind::<IdentitySql,_>(agent)
-                    .load::<EvidenceRow>(connection).await?
-            };
-            let more = rows.len() > 100;
-            let items = rows
-                .into_iter()
-                .take(100)
-                .map(EvidenceRow::evidence)
-                .collect::<Result<Vec<_>, _>>()?;
-            let next_before = if more {
-                items.last().map(|item| item.operation_id.clone())
-            } else {
-                None
-            };
-            Ok(ProjectInstructionHistory { items, next_before })
-        })
-    }
-    pub async fn instruction_evidence(
-        &self,
-        actor: &SecretDigest,
-        agent_id: &str,
-        conversation_id: &str,
-        operation_id: &str,
-        now: i64,
-    ) -> Result<ProjectInstructionEvidence, StoreError> {
-        let agent = EntityId::from_dto(EntityKind::Agent, agent_id)?;
-        let conversation = EntityId::from_dto(EntityKind::Conversation, conversation_id)?;
-        let operation = EntityId::from_dto(EntityKind::ConversationOperation, operation_id)?;
-        operation!(self, |connection, dialect| {
-            let _ = owned_agent!(connection, dialect, actor, agent, now);
-            let row = conversation!(connection, dialect, conversation);
-            if row.agent_id != agent {
-                return Err(StoreError::NotFound);
-            }
-            let evidence = evidence!(connection, dialect, conversation, operation)
-                .ok_or(StoreError::NotFound)?;
-            if evidence.agent_id != agent {
-                return Err(StoreError::Integrity);
-            }
-            evidence.evidence()
+            diesel::sql_query(dialect.query("SELECT e.agent_id,e.conversation_id,e.operation_id,e.execution_id,e.sources_json,e.rendered_document,e.created_at,e.tool_catalog,e.applied_snapshot,e.applied_native_session,e.applied_at FROM agent_conversations a JOIN conversations c ON c.id=a.conversation_id AND c.agent_id=a.agent_id JOIN project_instruction_evidence e ON e.agent_id=a.agent_id AND e.conversation_id=c.id AND e.operation_id=c.current_preparation_operation_id WHERE a.agent_id=?"))
+                .bind::<IdentitySql,_>(agent).get_result::<EvidenceRow>(connection).await.optional()?
+                .map(EvidenceRow::evidence).transpose()
         })
     }
     /// Component reads are source/execution-qualified and never create evidence.

@@ -1,30 +1,17 @@
 import type { InstructionEvidenceCopy } from "./instructionEvidenceCopy";
+import type { ColorModeMenuProps } from "@chapchoo/ui/ColorModeMenu";
 import type { InstructionEvidenceView } from "@chapchoo/web-core/instruction-evidence";
 
-export type InstructionEvidenceState =
-  | { type: "loading" }
-  | { type: "error" }
-  | { type: "empty" }
-  | {
-      type: "ready";
-      selected: string;
-      options: { value: string; label: string }[];
-      more: { available: boolean; read: "ready" | "loading" | "error" };
-      evidence:
-        | { type: "loading" }
-        | { type: "error" }
-        | { type: "ready"; value: InstructionEvidenceView };
-    };
 export interface InstructionEvidenceInput {
-  agentId: string;
-  conversationId: string;
+  basePath: string;
+  teamHandle: string;
+  agentHandle: string;
+  identity: string;
+  prompt: InstructionEvidenceView | null;
 }
-export interface InstructionEvidenceProps {
-  opened: boolean;
+export interface InstructionEvidenceProps extends InstructionEvidenceInput {
   copy: InstructionEvidenceCopy;
-  state: InstructionEvidenceState;
-  onToggle: () => void;
-  onSelect: (operationId: string) => void;
-  onRead: () => void;
-  onMore: () => void;
+  agentsLabel: string;
+  replayLabel: string;
+  appearance: ColorModeMenuProps;
 }
