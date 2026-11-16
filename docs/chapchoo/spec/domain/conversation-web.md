@@ -230,7 +230,9 @@ synchronous admission guard also rejects repeated Enter submission. A failed
 request retains the draft and focus. Enter submission keeps its existing
 composition guard. The textarea has an explicit chat-message
 name and associated label, text input mode, sentence capitalization, autocorrection
-and spellcheck so it is ordinary text entry rather than an address/contact field.
+and spellcheck for ordinary text entry. It explicitly disables stored-field
+autocomplete to opt out of contact/address AutoFill while retaining autocorrection
+and spellcheck.
 These browser hints do not control the operating system's final keyboard UI. The main transcript contains accepted user/Agent messages and
 necessary questions or permission input. Tool, reasoning, plan, terminal, notice
 and state records belong to the recent preview and full history, not duplicate

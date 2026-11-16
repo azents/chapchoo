@@ -47,6 +47,7 @@ test("composer exposes ordinary text-entry semantics matching Azents", async ({
   );
   const input = page.getByRole("textbox", { name: "메시지", exact: true });
   await expect(input).toHaveAttribute("name", "chat-message");
+  await expect(input).toHaveAttribute("autocomplete", "off");
   await expect(input).toHaveAttribute("inputmode", "text");
   await expect(input).toHaveAttribute("autocorrect", "on");
   await expect(input).toHaveAttribute("autocapitalize", "sentences");

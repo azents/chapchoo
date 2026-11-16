@@ -317,6 +317,7 @@ export function Chat(props: ChatProps): ReactElement {
                 <textarea
                   id={f.inputId}
                   name="chat-message"
+                  autoComplete="off"
                   inputMode="text"
                   autoCorrect="on"
                   autoCapitalize="sentences"
