@@ -31,6 +31,7 @@ export function useFloatingChat(
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
   const following = useRef(true);
+  const pinnedTop = useRef(0);
   const historyAnchor = useRef<{ element: HTMLElement; top: number } | null>(
     null,
   );
@@ -65,6 +66,7 @@ export function useFloatingChat(
       const viewport = viewportRef.current;
       if (following.current && viewport) {
         viewport.scrollTop = viewport.scrollHeight;
+        pinnedTop.current = viewport.scrollTop;
       }
     });
   }, []);
@@ -75,6 +77,7 @@ export function useFloatingChat(
     setUnseen(false);
     if (viewportRef.current) {
       viewportRef.current.scrollTop = viewportRef.current.scrollHeight;
+      pinnedTop.current = viewportRef.current.scrollTop;
     }
     schedulePin();
   }, [schedulePin]);
@@ -129,6 +132,7 @@ export function useFloatingChat(
       );
       if (following.current) {
         viewport.scrollTop = viewport.scrollHeight;
+        pinnedTop.current = viewport.scrollTop;
         schedulePin();
       }
     };
@@ -138,6 +142,10 @@ export function useFloatingChat(
     );
     measure();
     const onScroll = (): void => {
+      // A delayed scroll event from our own pin may see a newer animated height.
+      if (following.current && viewport.scrollTop === pinnedTop.current) {
+        return;
+      }
       following.current =
         viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <=
         48;
@@ -156,6 +164,9 @@ export function useFloatingChat(
     viewport.addEventListener("scroll", onScroll, { passive: true });
     viewport.addEventListener("wheel", onIntent, { passive: true });
     viewport.addEventListener("touchstart", onIntent, { passive: true });
+    // Mantine's scrollbar is a sibling of its viewport.
+    const scrollRoot = viewport.parentElement;
+    scrollRoot?.addEventListener("pointerdown", onIntent, { passive: true });
     viewport.addEventListener("keydown", onIntent);
     return (): void => {
       observer.disconnect();
@@ -164,6 +175,7 @@ export function useFloatingChat(
       viewport.removeEventListener("scroll", onScroll);
       viewport.removeEventListener("wheel", onIntent);
       viewport.removeEventListener("touchstart", onIntent);
+      scrollRoot?.removeEventListener("pointerdown", onIntent);
       viewport.removeEventListener("keydown", onIntent);
     };
   }, [schedulePin, active]);
