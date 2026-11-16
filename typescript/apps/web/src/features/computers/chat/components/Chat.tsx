@@ -22,6 +22,7 @@ import { profileStyle } from "../../profilePalette";
 import { ChatPresence } from "../ChatPresence";
 import { OlderRecordsContainer } from "../containers/OlderRecordsContainer";
 import { nativeStatus } from "../copy";
+import { MessageEditor } from "../MessageEditor";
 import { ReturnToLatest } from "../ReturnToLatest";
 import classes from "./Chat.module.css";
 import { ConversationBody, ConversationContent } from "./ConversationBody";
@@ -311,42 +312,21 @@ export function Chat(props: ChatProps): ReactElement {
                 data-readonly={!props.writable || void 0}
                 data-error={Boolean(props.inputError) || void 0}
               >
-                <label htmlFor={f.inputId} className={classes.srOnly}>
-                  {c.message}
-                </label>
-                <textarea
+                <MessageEditor
                   id={f.inputId}
-                  name="chat-message"
-                  inputMode="text"
-                  autoCorrect="on"
-                  autoCapitalize="sentences"
-                  spellCheck
-                  ref={f.textareaRef}
-                  rows={1}
+                  editorRef={f.editorRef}
                   value={props.input}
-                  disabled={!props.writable}
-                  readOnly={props.enqueuePending}
-                  aria-label={c.message}
-                  aria-invalid={Boolean(props.inputError)}
-                  aria-describedby={
-                    props.inputError ? "chat-input-error" : void 0
-                  }
+                  writable={props.writable}
+                  pending={props.enqueuePending}
+                  label={c.message}
+                  error={Boolean(props.inputError)}
                   placeholder={
                     props.writable
                       ? `${agent.name} · ${c.input}`
                       : [props.status, c.readOnly].filter(Boolean).join(" · ")
                   }
-                  onChange={(event) => props.onInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (
-                      event.key === "Enter" &&
-                      !event.shiftKey &&
-                      !event.nativeEvent.isComposing
-                    ) {
-                      event.preventDefault();
-                      props.onSend();
-                    }
-                  }}
+                  onChange={props.onInput}
+                  onSend={props.onSend}
                 />
                 <div className={classes.composerActions}>
                   <div className={classes.composerRight}>
@@ -359,7 +339,7 @@ export function Chat(props: ChatProps): ReactElement {
                       disabled={!props.sendable}
                       onPointerDown={(event) => event.preventDefault()}
                       onClick={() => {
-                        f.textareaRef.current?.focus({ preventScroll: true });
+                        f.editorRef.current?.focus({ preventScroll: true });
                         props.onSend();
                       }}
                     >

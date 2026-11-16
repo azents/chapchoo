@@ -224,14 +224,19 @@ instead of containing it. The document itself does not scroll.
 The header and composer stay available while conversation content
 scrolls internally. Activating Send keeps focus in the composer, including pointer
 and touch activation, rather than transferring it to the button. An in-flight Send
-keeps the textarea enabled and focusable but read-only until acceptance or failure,
+keeps the editor focusable but noneditable until acceptance or failure,
 preserving the submitted draft while disabling further Send activation; the container's
 synchronous admission guard also rejects repeated Enter submission. A failed
-request retains the draft and focus. Enter submission keeps its existing
-composition guard. The textarea has an explicit chat-message
-name and associated label, text input mode, sentence capitalization, autocorrection
-and spellcheck so it is ordinary text entry rather than an address/contact field.
-These browser hints do not control the operating system's final keyboard UI. The main transcript contains accepted user/Agent messages and
+request retains the draft and focus. Enter submits only outside active IME
+composition; Shift+Enter inserts a plain-text newline. The composer uses a
+`contenteditable="plaintext-only"` message editor with a localized accessible
+label and unchanged localized placeholder, text input mode, sentence capitalization,
+autocorrection and spellcheck. It does not disable autocomplete. Paste inserts
+only clipboard plain text at the current selection, never clipboard HTML.
+Unchanged text leaves the native caret/composition intact; accepted clearing and
+other external draft changes synchronize through text content. The editor retains
+the existing input dimensions and five-line scrolling boundary. Operating-system
+keyboard predictions remain platform behavior, separate from DOM focus checks. The main transcript contains accepted user/Agent messages and
 necessary questions or permission input. Tool, reasoning, plan, terminal, notice
 and state records belong to the recent preview and full history, not duplicate
 transcript disclosures. A successfully delivered user receipt remains the main

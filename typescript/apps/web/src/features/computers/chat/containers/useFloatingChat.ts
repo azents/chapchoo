@@ -11,7 +11,7 @@ export interface FloatingChat {
   viewportRef: RefObject<HTMLDivElement | null>;
   contentRef: RefObject<HTMLDivElement | null>;
   overlayRef: RefObject<HTMLElement | null>;
-  textareaRef: RefObject<HTMLTextAreaElement | null>;
+  editorRef: RefObject<HTMLDivElement | null>;
   profileRef: RefObject<HTMLDivElement | null>;
   detached: boolean;
   unseen: boolean;
@@ -20,7 +20,6 @@ export interface FloatingChat {
 }
 /** Measured overlay clearance and explicit latest-follow intent, independent of status size. */
 export function useFloatingChat(
-  input: string,
   conversationKey: string,
   active = true,
   updates: readonly { order: bigint }[] = [],
@@ -31,7 +30,7 @@ export function useFloatingChat(
   const viewportRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
   const following = useRef(true);
   const returning = useRef(false);
@@ -112,22 +111,6 @@ export function useFloatingChat(
       followLatest();
     }
   }, [reducedMotion, followLatest]);
-  useLayoutEffect(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) {
-      return;
-    }
-    textarea.style.height = "auto";
-    const style = getComputedStyle(textarea);
-    const line = Number.parseFloat(style.lineHeight);
-    const padding =
-      Number.parseFloat(style.paddingTop) +
-      Number.parseFloat(style.paddingBottom);
-    const height = textarea.scrollHeight - padding;
-    // DOM measurements are already rendered CSS pixels, including enlarged text.
-    textarea.style.height = `${Math.min(line * 5, Math.max(line, height))}px`;
-    textarea.style.overflowY = height > line * 5 ? "auto" : "hidden";
-  }, [input, active]);
   useLayoutEffect(() => {
     const shell = shellRef.current;
     const overlay = overlayRef.current;
@@ -224,7 +207,7 @@ export function useFloatingChat(
     viewportRef,
     contentRef,
     overlayRef,
-    textareaRef,
+    editorRef,
     profileRef,
     detached,
     unseen,

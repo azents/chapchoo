@@ -168,25 +168,25 @@ for (const outcome of ["failed", "accepted"] as const) {
     await admitted.promise;
     await expect(input).toBeEnabled();
     await expect(input).toBeFocused();
-    await expect(input).toHaveJSProperty("readOnly", true);
+    await expect(input).toHaveAttribute("aria-readonly", "true");
     await expect(input).toHaveAttribute("data-blurs", "0");
     await expect(
       page.getByRole("button", { name: "Send", exact: true }),
     ).toBeDisabled();
     await input.press("End");
     await input.pressSequentially(" must not alter the pending draft");
-    await expect(input).toHaveValue(draft);
+    await expect(input).toHaveText(draft);
     await input.press("Enter");
     release.resolve();
     if (outcome === "failed") {
       await expect(page.locator("#chat-input-error")).toBeVisible();
-      await expect(input).toHaveValue(draft);
+      await expect(input).toHaveText(draft);
     } else {
       await expect(page.locator("#chat-input-error")).toHaveCount(0);
-      await expect(input).toHaveValue("");
+      await expect(input).toHaveText("");
     }
     await expect(input).toBeFocused();
-    await expect(input).toHaveJSProperty("readOnly", false);
+    await expect(input).toHaveAttribute("aria-readonly", "false");
     await expect(input).toHaveAttribute("data-blurs", "0");
     await expect(page.locator("[data-input-operation]")).toHaveCount(0);
     await expect(page.locator("[data-user-bubble]")).toHaveCount(0);
