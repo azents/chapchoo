@@ -19,6 +19,7 @@ export interface ChatPresenceInput {
 export interface ChatPresenceView {
   entries: PresenceEntry[];
   spaced: boolean;
+  historyHead: bigint | null;
   onExited: (key: string) => void;
 }
 export function useChatPresence({
@@ -51,6 +52,13 @@ export function useChatPresence({
       node: current.get(entry.key) ?? entry.node,
     })),
     spaced,
+    historyHead: next.reduce<bigint | null>(
+      (head, entry) =>
+        entry.order !== void 0 && (head === null || entry.order < head)
+          ? entry.order
+          : head,
+      null,
+    ),
     onExited: (key) => {
       setSnapshot((state) => ({
         ...state,
@@ -65,6 +73,7 @@ export function useChatPresence({
 export interface ChatPresenceItemInput {
   entry: PresenceEntry;
   gap: boolean;
+  historyHead: bigint | null;
   onExited: (key: string) => void;
 }
 export interface ChatPresenceItemView {
@@ -78,6 +87,7 @@ export interface ChatPresenceItemView {
 export function useChatPresenceItem({
   entry,
   gap,
+  historyHead,
   onExited,
 }: ChatPresenceItemInput): ChatPresenceItemView {
   const outerRef = useRef<HTMLDivElement>(null);
@@ -85,87 +95,102 @@ export function useChatPresenceItem({
   const running = useRef<Animation[]>([]);
   const settled = useRef(entry.initial);
   const height = useRef<number | null>(null);
+  const previousLayout = useRef({ gap, historyHead });
   const exit = useRef(onExited);
   useLayoutEffect(() => {
     exit.current = onExited;
   }, [onExited]);
   const reduce = useReducedMotion();
   const visibility = useDocumentVisibility();
-  const animate = useCallback((): (() => void) => {
-    const box = outerRef.current;
-    const body = innerRef.current;
-    if (!box || !body) {
-      return () => {};
-    }
-    const target = entry.present ? body.getBoundingClientRect().height : 0;
-    const interrupted = running.current.length > 0;
-    const start = interrupted
-      ? box.getBoundingClientRect().height
-      : (height.current ?? box.getBoundingClientRect().height);
-    const computed = getComputedStyle(body);
-    const opacity = computed.opacity;
-    const transform = computed.transform;
-    running.current.forEach((animation) => animation.cancel());
-    running.current = [];
-    height.current = target;
-    const finish = (): void => {
-      box.style.height = entry.present ? "auto" : "0px";
-      settled.current = true;
-      if (!entry.present) {
-        exit.current(entry.key);
+  const animate = useCallback(
+    (instant = false): (() => void) => {
+      const box = outerRef.current;
+      const body = innerRef.current;
+      if (!box || !body) {
+        return () => {};
       }
-    };
-    if (
-      reduce ||
-      visibility === "hidden" ||
-      (settled.current && !interrupted && start === target)
-    ) {
-      finish();
-      return () => {};
-    }
-    const timing: KeyframeAnimationOptions = {
-      duration: 320,
-      easing: "cubic-bezier(.4,0,.4,1)",
-      fill: "both",
-    };
-    const size = box.animate(
-      [{ height: `${start}px` }, { height: `${target}px` }],
-      timing,
-    );
-    const content = body.animate(
-      [
-        {
-          opacity: settled.current || interrupted ? opacity : 0,
-          transform:
-            settled.current || interrupted ? transform : "translateY(0.625rem)",
-        },
-        {
-          opacity: entry.present ? 1 : 0,
-          transform: entry.present ? "none" : "translateY(-0.3125rem)",
-        },
-      ],
-      timing,
-    );
-    const animations = [size, content];
-    running.current = animations;
-    let cancelled = false;
-    void size.finished.then(
-      () => {
-        if (cancelled || running.current !== animations) {
-          return;
+      const target = entry.present ? body.getBoundingClientRect().height : 0;
+      const interrupted = running.current.length > 0;
+      const start = interrupted
+        ? box.getBoundingClientRect().height
+        : (height.current ?? box.getBoundingClientRect().height);
+      const computed = getComputedStyle(body);
+      const opacity = computed.opacity;
+      const transform = computed.transform;
+      running.current.forEach((animation) => animation.cancel());
+      running.current = [];
+      height.current = target;
+      const finish = (): void => {
+        box.style.height = entry.present ? "auto" : "0px";
+        box.style.overflow = entry.present ? "visible" : "clip";
+        settled.current = true;
+        if (!entry.present) {
+          exit.current(entry.key);
         }
+      };
+      if (
+        instant ||
+        reduce ||
+        visibility === "hidden" ||
+        (settled.current && !interrupted && start === target)
+      ) {
         finish();
-        animations.forEach((animation) => animation.cancel());
-        running.current = [];
-      },
-      () => {},
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [entry.key, entry.present, reduce, visibility]);
+        return () => {};
+      }
+      const timing: KeyframeAnimationOptions = {
+        duration: 320,
+        easing: "cubic-bezier(.4,0,.4,1)",
+        fill: "both",
+      };
+      box.style.overflow = "clip";
+      const size = box.animate(
+        [{ height: `${start}px` }, { height: `${target}px` }],
+        timing,
+      );
+      const content = body.animate(
+        [
+          {
+            opacity: settled.current || interrupted ? opacity : 0,
+            transform:
+              settled.current || interrupted
+                ? transform
+                : "translateY(0.625rem)",
+          },
+          {
+            opacity: entry.present ? 1 : 0,
+            transform: entry.present ? "none" : "translateY(-0.3125rem)",
+          },
+        ],
+        timing,
+      );
+      const animations = [size, content];
+      running.current = animations;
+      let cancelled = false;
+      void size.finished.then(
+        () => {
+          if (cancelled || running.current !== animations) {
+            return;
+          }
+          finish();
+          animations.forEach((animation) => animation.cancel());
+          running.current = [];
+        },
+        () => {},
+      );
+      return () => {
+        cancelled = true;
+      };
+    },
+    [entry.key, entry.present, reduce, visibility],
+  );
   useLayoutEffect(() => {
-    let cancel = animate();
+    const previous = previousLayout.current;
+    previousLayout.current = { gap, historyHead };
+    const prepended =
+      historyHead !== null &&
+      previous.historyHead !== null &&
+      historyHead < previous.historyHead;
+    let cancel = animate(prepended && gap && !previous.gap);
     const body = innerRef.current;
     if (!body) {
       return cancel;
@@ -182,7 +207,7 @@ export function useChatPresenceItem({
       cancel();
       observer.disconnect();
     };
-  }, [animate, entry.present]);
+  }, [animate, entry.present, gap, historyHead]);
   useLayoutEffect(
     () => () => {
       running.current.forEach((animation) => animation.cancel());

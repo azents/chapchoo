@@ -37,6 +37,12 @@ test("initial content stays visible, new content starts collapsed and exits iner
       (node) => node.parentElement?.parentElement?.getAnimations().length,
     ),
   ).toBe(0);
+  expect(
+    await initial.evaluate((node) => {
+      const outer = node.parentElement?.parentElement;
+      return outer ? getComputedStyle(outer).overflow : null;
+    }),
+  ).toBe("visible");
   await page.getByRole("button", { name: "Toggle item" }).click();
   const item = page.getByTestId("dynamic");
   await expect(item).toBeAttached();
@@ -75,6 +81,13 @@ test("initial content stays visible, new content starts collapsed and exits iner
       ),
     )
     .toBe(0);
+  await page.getByRole("button", { name: "Answer request" }).focus();
+  expect(
+    await item.evaluate((node) => {
+      const outer = node.parentElement?.parentElement;
+      return outer ? getComputedStyle(outer).overflow : null;
+    }),
+  ).toBe("visible");
   await page.getByRole("button", { name: "Toggle item" }).click();
   await expect(page.locator('[data-chat-presence="exiting"]')).toHaveCount(2);
   expect(await item.evaluate((node) => node.closest("[inert]") !== null)).toBe(
@@ -118,6 +131,25 @@ test("reversal cancels late exit and prepended history does not animate", async 
         (node) => node.parentElement?.parentElement?.getAnimations().length,
       ),
   ).toBe(0);
+  const previousFirstAnimated = await page
+    .getByTestId("initial")
+    .evaluate(async (node) => {
+      const outer = node.parentElement?.parentElement;
+      if (!outer) {
+        throw new Error("Missing previous first-item wrapper");
+      }
+      // Sample one complete motion interval, rather than checking before ResizeObserver runs.
+      const until = performance.now() + 320;
+      let animated = false;
+      while (performance.now() < until) {
+        await new Promise<void>((resolve) =>
+          requestAnimationFrame(() => resolve()),
+        );
+        animated ||= outer.getAnimations().length > 0;
+      }
+      return animated;
+    });
+  expect(previousFirstAnimated).toBe(false);
   await page.getByRole("button", { name: "Change source" }).click();
   await expect(page.getByTestId("dynamic")).toHaveCount(0);
   await expect(page.locator('[data-chat-presence="exiting"]')).toHaveCount(0);

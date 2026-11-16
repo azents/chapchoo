@@ -9,6 +9,7 @@ import type { ReactElement } from "react";
 export function ChatPresenceView({
   entries,
   spaced,
+  historyHead,
   onExited,
 }: ListProps): ReactElement {
   return (
@@ -18,6 +19,7 @@ export function ChatPresenceView({
           key={entry.key}
           entry={entry}
           gap={spaced && index > 0}
+          historyHead={historyHead}
           onExited={onExited}
         />
       ))}
