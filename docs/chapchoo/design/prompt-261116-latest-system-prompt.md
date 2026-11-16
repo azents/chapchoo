@@ -4,6 +4,7 @@ document_role: primary
 document_type: design
 snapshot_id: prompt-261116
 created: 2026-11-16
+implemented: 2026-11-16
 tags: [agent, instructions, frontend, persistence]
 ---
 
@@ -106,3 +107,14 @@ Intentional history deletion is irreversible; no rollback can recreate it.
   separate system-prompt page; immediate implementation explicitly reiterated.
   All mechanisms above are fixed outcomes or derivations of that scope and the
   unchanged execution/authorization contracts, not additional product choices.
+
+## Implementation verification
+
+Verified locally on 2026-11-16 through the normal commit hooks: Rust
+format/Clippy/rustdoc/full tests (both database engines), generated-client
+verification and live Node/Rust RPC interoperability, document validation, and
+TypeScript format/lint/typecheck. Also passed 168 shared web tests, 38 General
+web tests, 20 Admin tests, both production web builds, the web Storybook build
+and all 179 web browser component tests. Independent integrated review and
+targeted re-review found no issues. The assembled Docker browser journey is
+updated and remains part of PR CI; no live-model compliance claim is made.

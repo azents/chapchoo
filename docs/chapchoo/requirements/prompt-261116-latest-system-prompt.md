@@ -4,6 +4,7 @@ document_role: primary
 document_type: requirements
 snapshot_id: prompt-261116
 created: 2026-11-16
+implemented: 2026-11-16
 tags: [agent, instructions, frontend, persistence]
 ---
 
