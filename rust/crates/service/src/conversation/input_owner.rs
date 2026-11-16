@@ -40,21 +40,23 @@ impl From<chapchoo_persistence::ConversationInputReference> for ConversationInpu
     }
 }
 pub struct AcceptedConversationInput {
-    pub actor: SecretDigest,
     pub agent_id: String,
     pub receipt: ConversationInputReceipt,
+    pub claim_id: String,
+}
+impl AcceptedConversationInput {
+    pub fn authority(&self) -> chapchoo_persistence::ConversationInputAuthority {
+        chapchoo_persistence::ConversationInputAuthority {
+            agent_id: self.agent_id.clone(),
+            conversation_id: self.receipt.conversation_id.clone(),
+            input_id: self.receipt.id.clone(),
+            claim_id: self.claim_id.clone(),
+        }
+    }
 }
 enum Submission {
     New(AcceptConversationInput),
     Retry(RetryConversationInput),
-}
-impl Submission {
-    fn agent_id(&self) -> &str {
-        match self {
-            Self::New(value) => &value.agent_id,
-            Self::Retry(value) => &value.agent_id,
-        }
-    }
 }
 pub type ConversationInputFuture =
     Pin<Box<dyn Future<Output = Result<(), ServiceError>> + Send + 'static>>;
@@ -63,6 +65,7 @@ pub type ConversationInputFuture =
 /// revalidates current authority there. It never waits for model completion.
 pub trait ConversationInputProcessor: Send + Sync {
     fn process(&self, input: AcceptedConversationInput) -> ConversationInputFuture;
+    fn wake(&self, wake: chapchoo_persistence::ConversationInputWake) -> ConversationInputFuture;
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConversationInputOwnership {
@@ -79,9 +82,9 @@ pub struct ConversationInputStatus {
 #[derive(Clone)]
 pub struct ConversationInputService {
     store: Store,
-    processor: Arc<dyn ConversationInputProcessor>,
     work: Arc<InputWork>,
     consumer: Arc<super::input_consumer::Consumer>,
+    dispatcher: Arc<super::input_dispatcher::Dispatcher>,
 }
 macro_rules! safe_debug {($($name:ty),+)=>{$(impl fmt::Debug for $name {
     fn fmt(&self,f:&mut fmt::Formatter<'_>)->fmt::Result {f.write_str(concat!(stringify!($name),"([REDACTED])"))}
@@ -108,11 +111,17 @@ impl ConversationInputService {
     ) -> Result<Self, ServiceError> {
         let work = Arc::new(InputWork::new(capacity)?);
         let consumer = Arc::new(super::input_consumer::Consumer::new(store.clone(), policy)?);
+        let dispatcher = Arc::new(super::input_dispatcher::Dispatcher::new(
+            store.clone(),
+            processor,
+            work.clone(),
+            consumer.clone(),
+        )?);
         Ok(Self {
             store,
-            processor,
             work,
             consumer,
+            dispatcher,
         })
     }
     /// Capacity and task ownership precede database acceptance. The response
@@ -145,9 +154,7 @@ impl ConversationInputService {
         clock: AcceptanceTime,
     ) -> Result<ConversationInputAcceptance, ServiceError> {
         let store = self.store.clone();
-        let processor = self.processor.clone();
         self.consumer.check()?;
-        let consumer = self.consumer.clone();
         self.work
             .run(bytes, move |owner, sender| async move {
                 let admission = owner.admission();
@@ -155,22 +162,12 @@ impl ConversationInputService {
                     Ok(match &draft {
                         Submission::New(value) => {
                             store
-                                .admit_conversation_input_for_consumer(
-                                    &actor,
-                                    value,
-                                    clock.now()?,
-                                    consumer.policy(),
-                                )
+                                .admit_conversation_input(&actor, value, clock.now()?)
                                 .await?
                         }
                         Submission::Retry(value) => {
                             store
-                                .retry_conversation_input_for_consumer(
-                                    &actor,
-                                    value,
-                                    clock.now()?,
-                                    consumer.policy(),
-                                )
+                                .retry_failed_conversation_input(&actor, value, clock.now()?)
                                 .await?
                         }
                     })
@@ -194,25 +191,9 @@ impl ConversationInputService {
                     }
                     ConversationInputAdmission::Accepted(receipt) => receipt,
                 };
-                owner.mark(&receipt.id);
                 drop(admission);
-                let agent_id = draft.agent_id().to_owned();
-                drop(draft); // Release the original submitted body before processing.
                 let _ = sender.send(Ok((&receipt).into()));
-                let conversation_id = receipt.conversation_id.clone();
-                let id = receipt.id.clone();
-                consumer
-                    .run(
-                        store,
-                        conversation_id,
-                        id,
-                        processor.process(AcceptedConversationInput {
-                            actor,
-                            agent_id,
-                            receipt,
-                        }),
-                    )
-                    .await
+                Ok(())
             })
             .await
     }
@@ -289,11 +270,14 @@ impl ConversationInputService {
         }))
     }
     pub fn close(&self) {
+        self.dispatcher.close();
         self.work.close();
     }
     pub async fn finish(&self) -> Result<(), ServiceError> {
+        self.close();
+        let dispatcher = self.dispatcher.finish().await;
         let work = self.work.finish().await;
         let consumer = self.consumer.finish().await;
-        super::input_consumer::combine(work, consumer)
+        super::input_consumer::combine(dispatcher, super::input_consumer::combine(work, consumer))
     }
 }

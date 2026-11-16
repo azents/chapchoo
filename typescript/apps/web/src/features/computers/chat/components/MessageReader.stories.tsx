@@ -92,6 +92,7 @@ function Reader(): ReactElement {
         }}
         copy={chatCopy("en")}
         writable={false}
+        nativeWritable={false}
         agentName="Corgi"
       />
     </Box>

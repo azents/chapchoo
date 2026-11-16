@@ -5,7 +5,10 @@ import {
   TeamManagementClient,
 } from "@chapchoo/rpc-client/accounts";
 import { AuthenticationsClient } from "@chapchoo/rpc-client/authentication";
-import { ConversationsClient } from "@chapchoo/rpc-client/conversations";
+import {
+  ConversationsClient,
+  MessageRole,
+} from "@chapchoo/rpc-client/conversations";
 import type {
   HarnessSupply,
   OwnerConversation,
@@ -138,15 +141,23 @@ export async function nativeConversation(
         },
       );
     });
-  const close = async (
-    expectedRequestId = "conversation-create",
-  ): Promise<void> => {
+  const close = async (expectedRequestId?: string): Promise<void> => {
     try {
       if (agentId) {
+        // Browser Stop and queue-owned Start replace the creation predecessor.
+        // Observe the current owned intent once; never retry a deletion mutation.
+        const predecessor =
+          expectedRequestId ??
+          (await call(agents.get.bind(agents), { agentId })).computer
+            ?.requestId;
+        if (!predecessor)
+          throw new Error(
+            "Conversation cleanup requires its current lifecycle intent",
+          );
         await call(computers.requestLifecycle.bind(computers), {
           agentId,
           requestId: "conversation-delete",
-          expectedRequestId,
+          expectedRequestId: predecessor,
           action: Action.ACTION_DELETE,
         });
         try {
@@ -260,7 +271,15 @@ export async function nativeConversation(
       holdWork: async (): Promise<() => Promise<void>> => {
         const target = await docker.current();
         await docker.holdConversationWork(target);
-        return (): Promise<void> => docker.releaseConversationWork(target);
+        return async (): Promise<void> => {
+          const current = await docker.current();
+          if (current.volume !== target.volume) {
+            throw new Error(
+              "Conversation work barrier lost its original saved volume",
+            );
+          }
+          await docker.releaseConversationWork(current);
+        };
       },
       diagnostics: async () => {
         const current = await call(
@@ -277,6 +296,26 @@ export async function nativeConversation(
           `foreground=${current.observedNative?.foreground ?? -1}`,
           `startup=${startup?.failed ?? (startup?.sessionReady ? 20 : startup?.possibleForwarding ? 10 : 0)}`,
         ];
+        const native = await docker.current();
+        result.push(await docker.conversationPublicationStages(native));
+        if (capture?.conversationId) {
+          const receipts = await call(
+            conversations.messages.bind(conversations),
+            {
+              scope: {
+                agentId: agent.id,
+                conversationId: capture.conversationId,
+              },
+              limit: 25,
+            },
+            2_000,
+          );
+          result.push(
+            `userReceipts=${receipts.messages.filter((message) => message.role === MessageRole.MESSAGE_ROLE_USER).length}`,
+            `agentReceipts=${receipts.messages.filter((message) => message.role === MessageRole.MESSAGE_ROLE_AGENT).length}`,
+            `inputProvenance=${receipts.messages.filter((message) => message.sourceInputRequestId !== undefined).length}`,
+          );
+        }
         if (capture?.snapshotId) {
           const scope = {
             agentId: agent.id,

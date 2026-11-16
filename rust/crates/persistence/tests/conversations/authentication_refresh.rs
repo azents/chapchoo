@@ -149,7 +149,14 @@ pub(super) async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError
         .await?
         .ok_or("Missing route")?;
     store
-        .begin_conversation_input_preparation(&actor, &current_route, &application, f.now)
+        .begin_conversation_input_preparation(
+            &actor,
+            &current_route,
+            &application,
+            f.now,
+            &f.claim(store, application.conversation_id, application.operation_id)
+                .await?,
+        )
         .await?;
     let previous = store
         .execution_authentication_binding(&source, &application)

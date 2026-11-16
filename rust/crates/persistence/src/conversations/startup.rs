@@ -100,14 +100,10 @@ struct LockedId {
 #[derive(diesel::QueryableByName)]
 struct ComputerGate {
     #[diesel(sql_type = Text)]
-    desired_state: String,
-    #[diesel(sql_type = Text)]
     current_request_id: String,
 }
 #[derive(diesel::QueryableByName)]
 struct DispatchGate {
-    #[diesel(sql_type = Text)]
-    desired_state: String,
     #[diesel(sql_type = Nullable<IdentitySql>)]
     current_execution_id: Option<EntityId>,
 }
@@ -645,7 +641,7 @@ impl Store {
             }
             let (execution, _session) = dispatch_route!(connection, dialect, route, computer);
             let gate = diesel::sql_query(
-                dialect.query("SELECT desired_state,current_request_id FROM computers WHERE id=?"),
+                dialect.query("SELECT current_request_id FROM computers WHERE id=?"),
             )
             .bind::<IdentitySql, _>(computer)
             .get_result::<ComputerGate>(connection)
@@ -654,7 +650,7 @@ impl Store {
             let Some(gate) = gate else {
                 return Ok(Vec::new());
             };
-            if gate.desired_state != "RUNNING" {
+            if !super::authority::input_ready!(connection, dialect, computer) {
                 return Ok(Vec::new());
             }
             let agents = diesel::sql_query(dialect.query(
@@ -695,9 +691,34 @@ impl Store {
         agent_id: &str,
         now: i64,
     ) -> Result<Option<ConnectionStartupObservation>, StoreError> {
+        self.connection_startup_for(
+            super::authority::OwnerAuthority::Credential { actor, now },
+            agent_id,
+        )
+        .await
+    }
+    pub async fn queued_connection_startup(
+        &self,
+        authority: &super::ConversationInputAuthority,
+    ) -> Result<Option<ConnectionStartupObservation>, StoreError> {
+        self.connection_startup_for(
+            super::authority::OwnerAuthority::Queued(authority),
+            &authority.agent_id,
+        )
+        .await
+    }
+    async fn connection_startup_for(
+        &self,
+        authority: super::authority::OwnerAuthority<'_>,
+        agent_id: &str,
+    ) -> Result<Option<ConnectionStartupObservation>, StoreError> {
         let agent = EntityId::from_dto(EntityKind::Agent, agent_id)?;
         operation!(self, |connection, dialect| {
-            let _ = super::authority::owned_agent!(connection, dialect, actor, agent, now);
+            let Some((_owner, _now)) =
+                super::authority::owned_authority!(connection, dialect, &authority, agent, None)
+            else {
+                return Ok(None);
+            };
             let current = diesel::sql_query(dialect.query(
                 "SELECT c.id FROM conversations c JOIN agent_conversations a ON a.conversation_id=c.id AND a.agent_id=c.agent_id WHERE a.agent_id=?",
             ))
@@ -708,6 +729,12 @@ impl Store {
             let Some(current) = current else {
                 return Ok(None);
             };
+            if let super::authority::OwnerAuthority::Queued(bound) = &authority
+                && current.id
+                    != EntityId::from_dto(EntityKind::Conversation, &bound.conversation_id)?
+            {
+                return Err(StoreError::Conflict);
+            }
             let Some(head) = latest_startup_head!(connection, dialect, current.id) else {
                 return Ok(None);
             };
@@ -733,11 +760,9 @@ impl Store {
         operation!(self, |connection, dialect| {
             let gate_sql = match dialect {
                 Dialect::Postgres => {
-                    "SELECT desired_state,current_execution_id FROM computers WHERE id=? FOR NO KEY UPDATE"
+                    "SELECT current_execution_id FROM computers WHERE id=? FOR NO KEY UPDATE"
                 }
-                Dialect::Sqlite => {
-                    "SELECT desired_state,current_execution_id FROM computers WHERE id=?"
-                }
+                Dialect::Sqlite => "SELECT current_execution_id FROM computers WHERE id=?",
             };
             let gate = diesel::sql_query(dialect.query(gate_sql))
                 .bind::<IdentitySql, _>(computer)
@@ -758,7 +783,7 @@ impl Store {
             let Some(owned) = owned else {
                 return Ok(false);
             };
-            if gate.desired_state != "RUNNING" {
+            if !super::authority::input_ready!(connection, dialect, computer) {
                 return Ok(false);
             }
             let connected = diesel::sql_query(dialect.query(

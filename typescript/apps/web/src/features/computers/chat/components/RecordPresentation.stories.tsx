@@ -67,6 +67,7 @@ function Fixture({
           }}
           copy={chatCopy(locale)}
           writable={false}
+          nativeWritable={false}
           agentName="Fixture Agent"
           surface="history"
         />

@@ -379,10 +379,19 @@ message ReconciliationAuthority {
   // eligible. This is revalidated against the directory, not a caller identity.
   ExpectedOwner owner = 2;
 }
+// References an existing issued input claim; it creates no native grant.
+// Valid only for that input's Connector Setup/Input, never startup or refresh.
+message QueuedInputAuthority {
+  string agent_id = 1;
+  string conversation_id = 2;
+  string input_id = 3;
+  string claim_id = 4;
+}
 message PeerAuthority {
   oneof context {
     UserAuthority user = 1;
     ReconciliationAuthority reconciliation = 2;
+    QueuedInputAuthority queued_input = 3;
   }
 }
 message ExpectedOwner {

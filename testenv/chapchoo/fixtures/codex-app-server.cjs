@@ -104,6 +104,27 @@ let primaryUsed = false;
 let primaryStarted = false;
 const helperThreads = new Set();
 let cwd = "/workspace";
+// These fixture-only literals contain no request, response or credential data.
+async function publishFixture(which, publication) {
+  if (!["first", "refresh"].includes(which) || !mcp)
+    throw new Error("Fixture publication owner is unavailable");
+  const marker = `/workspace/acceptance-publication-${which}`;
+  const stage = (value) => writeFileSync(marker, `${value}\n`, { mode: 0o600 });
+  stage("mcp-call-started");
+  let result;
+  try {
+    result = await mcp.callTool({
+      name: publication.tool,
+      arguments: publication.arguments,
+    });
+  } catch (error) {
+    stage("mcp-call-exception");
+    throw error;
+  }
+  stage(result.isError ? "mcp-result-error" : "mcp-result-accepted");
+  if (result.isError) throw new Error("Fixture publication was not accepted");
+  return result;
+}
 const turn = (status) => ({ id: turnId, items: [], status, error: null });
 const thread = () => ({
   id: threadId,
@@ -431,12 +452,10 @@ async function request(id, method, params) {
           durationMs: null,
         };
         item("item/started", refreshedPublication);
-        const refreshedResult = await mcp.callTool({
-          name: "send_message",
-          arguments: refreshedPublication.arguments,
-        });
-        if (refreshedResult.isError)
-          throw new Error("Fixture refreshed publication failed");
+        const refreshedResult = await publishFixture(
+          "refresh",
+          refreshedPublication,
+        );
         item("item/completed", {
           ...refreshedPublication,
           status: "completed",
@@ -507,12 +526,7 @@ async function request(id, method, params) {
       };
       item("item/started", publication);
       const publicationStart = performance.now();
-      const result = await mcp.callTool({
-        name: publication.tool,
-        arguments: publication.arguments,
-      });
-      if (result.isError)
-        throw new Error("Fixture publication was not accepted");
+      const result = await publishFixture("first", publication);
       item("item/completed", {
         ...publication,
         status: "completed",

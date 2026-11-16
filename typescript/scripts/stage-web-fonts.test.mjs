@@ -1,6 +1,8 @@
-import { readFile, readdir } from "node:fs/promises";
+import { cp, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -67,5 +69,37 @@ test("both web distributions preserve selected asset bytes and publish the defau
       await readFile(new URL("favicon.ico", root)),
       await readFile(new URL("icons/01-retriever/favicon.ico", assets)),
     );
+    const configRoot = new URL(`../apps/${app}/.storybook/`, import.meta.url);
+    const { default: config } = await import(new URL("main.ts", configRoot));
+    const mappings = config.staticDirs;
+    for (const left of mappings) {
+      for (const right of mappings) {
+        if (left === right) continue;
+        assert.ok(
+          !right.to.startsWith(`${left.to}/`) && right.to !== left.to,
+          "Concurrent Storybook static copies must have disjoint destination trees",
+        );
+      }
+    }
+    const temporary = await mkdtemp(
+      join(tmpdir(), "chapchoo-storybook-assets-"),
+    );
+    try {
+      await Promise.all(
+        mappings.map(({ from, to }) =>
+          cp(resolve(fileURLToPath(configRoot), from), join(temporary, to), {
+            recursive: true,
+          }),
+        ),
+      );
+      const copied = pathToFileURL(`${temporary}/`);
+      await equalTree(
+        new URL("design-assets/", root),
+        new URL("design-assets/", copied),
+      );
+      await equalTree(new URL("fonts/", root), new URL("fonts/", copied));
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
+    }
   }
 });

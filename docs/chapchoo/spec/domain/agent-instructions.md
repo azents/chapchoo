@@ -99,6 +99,13 @@ Server input acceptance stays available while native readiness waits. The existi
 consumer retains accepted input within its finite observation budget and forwards
 it once only after the selected configuration is Ready. No user Apply/restart,
 old-prompt permission or automatic replay is added.
+The runtime-owned connection-startup reconciler alone admits and dispatches
+startup/project refresh through its reconciliation authority, recovery and drain.
+The input processor observes current startup and selected evidence rather than
+dispatching refresh itself. Input-owned Setup remains restricted to that input's
+existing preparation fact. Queued reads, sealing and forwarding resolve the
+current bound submitting session within each Store operation, so token rotation
+does not lose an otherwise valid accepted input.
 
 The native owner waits for standard ACPv2 live work evidence, outstanding response
 requests, input result acknowledgement and started external tools. Every native

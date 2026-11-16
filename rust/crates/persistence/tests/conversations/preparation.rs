@@ -31,49 +31,25 @@ pub(super) async fn initial(
     );
     assert!(matches!(
         store
-            .begin_conversation_input_preparation(&f.other.digest(), &route, &draft, f.now)
+            .begin_conversation_input_preparation(
+                &f.other.digest(),
+                &route,
+                &draft,
+                f.now,
+                &f.claim(store, draft.conversation_id, draft.operation_id)
+                    .await?
+            )
             .await,
         Err(StoreError::NotFound)
     ));
-    let no_native = store
-        .accept_conversation_input(
-            &owner,
-            &AcceptConversationInput {
-                agent_id: f.agent.id.clone(),
-                conversation_id: Some(first.conversation_id.clone()),
-                request_id: "known-no-native".into(),
-                target: ConversationTarget::NotStarted,
-                text: ConversationText::parse("explicit preparation attempt".into())?,
-            },
-            f.now,
-        )
-        .await?;
-    let no_native = Draft {
-        operation_id: &no_native.id,
-        ..draft
-    };
-    rejected_initial_recovery(store, f, &route, &draft).await?;
-    assert!(matches!(
-        store
-            .begin_conversation_input_preparation(&owner, &route, &no_native, f.now)
-            .await?,
-        Admission::Granted {
-            fresh_native_allowed: true,
-            ..
-        }
-    ));
-    store
-        .complete_conversation_input_preparation(
-            &source,
-            &no_native,
-            &Outcome::Failed(Failure::BeforeNativeLaunch),
-        )
-        .await?;
     let selection = store.harness_supply(&owner, &f.agent.id, f.now).await?;
     let selection_id = selection.saved.map(|saved| saved.request_id);
+    let claim = f
+        .claim(store, draft.conversation_id, draft.operation_id)
+        .await?;
     let (one, two) = tokio::join!(
-        store.begin_conversation_input_preparation(&owner, &route, &draft, f.now),
-        store.begin_conversation_input_preparation(&owner, &route, &draft, f.now)
+        store.begin_conversation_input_preparation(&owner, &route, &draft, f.now, &claim),
+        store.begin_conversation_input_preparation(&owner, &route, &draft, f.now, &claim)
     );
     let (granted, existing) = match (one?, two?) {
         (
@@ -134,29 +110,6 @@ pub(super) async fn initial(
             .await,
         Err(StoreError::InvalidTransition)
     ));
-    let pending = store
-        .accept_conversation_input(
-            &owner,
-            &AcceptConversationInput {
-                agent_id: f.agent.id.clone(),
-                conversation_id: Some(first.conversation_id.clone()),
-                request_id: "unresolved-start".into(),
-                target: ConversationTarget::NotStarted,
-                text: ConversationText::parse("independent accepted input".into())?,
-            },
-            f.now,
-        )
-        .await?;
-    let pending = Draft {
-        operation_id: &pending.id,
-        ..draft
-    };
-    assert!(matches!(
-        store
-            .begin_conversation_input_preparation(&owner, &route, &pending, f.now)
-            .await,
-        Err(StoreError::InvalidTransition)
-    ));
     store
         .save_harness_supply(
             &owner,
@@ -170,7 +123,14 @@ pub(super) async fn initial(
         )
         .await?;
     let Admission::Existing(existing) = store
-        .begin_conversation_input_preparation(&owner, &route, &draft, f.now)
+        .begin_conversation_input_preparation(
+            &owner,
+            &route,
+            &draft,
+            f.now,
+            &f.claim(store, draft.conversation_id, draft.operation_id)
+                .await?,
+        )
         .await?
     else {
         return Err("Saved selection granted another startup".into());
@@ -294,6 +254,174 @@ pub(super) async fn initial(
             .await,
         Err(StoreError::Conflict)
     ));
+    Ok(())
+}
+pub(super) async fn rejected_initial_recovery(store: &Store, f: &Fixture) -> Result<(), TestError> {
+    let owner = f.owner.digest();
+    let key = f.connector.digest();
+    let source = f.source(&key);
+    let route = store
+        .resolve_connector_route(&f.agent.computer.id)
+        .await?
+        .ok_or("Missing initial recovery route")?;
+    let mut operations = Vec::new();
+    for request_id in ["initial-rejected", "resume-denied", "retry-rejected"] {
+        operations.push(
+            store
+                .accept_conversation_input(
+                    &owner,
+                    &AcceptConversationInput {
+                        agent_id: f.agent.id.clone(),
+                        conversation_id: None,
+                        request_id: request_id.into(),
+                        target: ConversationTarget::NotStarted,
+                        text: ConversationText::parse("explicit new input".into())?,
+                    },
+                    f.now,
+                )
+                .await?,
+        );
+    }
+    let first = Draft {
+        agent_id: &f.agent.id,
+        conversation_id: &operations[0].conversation_id,
+        operation_id: &operations[0].id,
+    };
+    let denied = Draft {
+        operation_id: &operations[1].id,
+        ..first
+    };
+    let retry = Draft {
+        operation_id: &operations[2].id,
+        ..first
+    };
+    let claim = f
+        .claim(store, first.conversation_id, first.operation_id)
+        .await?;
+    assert!(matches!(
+        store
+            .begin_conversation_input_preparation(&owner, &route, &first, f.now, &claim)
+            .await?,
+        Admission::Granted {
+            fresh_native_allowed: true,
+            ..
+        }
+    ));
+    for blocked in [&denied, &retry] {
+        let candidate = chapchoo_persistence::ConversationInputCandidate {
+            id: blocked.operation_id.into(),
+            agent_id: f.agent.id.clone(),
+            conversation_id: blocked.conversation_id.into(),
+        };
+        assert!(
+            store
+                .claim_conversation_input(&candidate, DirectoryPolicy::default())
+                .await?
+                .is_none()
+        );
+        assert!(matches!(
+            store
+                .begin_conversation_input_preparation(&owner, &route, blocked, f.now, &claim)
+                .await,
+            Err(StoreError::InvalidTransition)
+        ));
+    }
+    store
+        .complete_conversation_input_preparation(
+            &source,
+            &first,
+            &Outcome::Failed(Failure::NativeRejected),
+        )
+        .await?;
+    // Resolve the deliberately blocked middle item before claiming the next FIFO head.
+    store
+        .fail_conversation_input(denied.conversation_id, denied.operation_id)
+        .await?;
+    let retry_claim = f
+        .claim(store, retry.conversation_id, retry.operation_id)
+        .await?;
+    assert!(matches!(
+        store
+            .begin_conversation_input_preparation(&owner, &route, &retry, f.now, &retry_claim)
+            .await?,
+        Admission::Granted {
+            fresh_native_allowed: true,
+            ..
+        }
+    ));
+    store
+        .complete_conversation_input_preparation(
+            &source,
+            &retry,
+            &Outcome::Failed(Failure::BeforeNativeLaunch),
+        )
+        .await?;
+    assert!(matches!(
+        store.begin_conversation_input_preparation(&owner, &route, &first, f.now, &claim).await?,
+        Admission::Existing(facts) if facts.state == State::Known(Outcome::Failed(Failure::NativeRejected))
+    ));
+    Ok(())
+}
+pub(super) async fn replaced(
+    store: &Store,
+    f: &Fixture,
+    first: &chapchoo_persistence::ConversationInputReceipt,
+) -> Result<(), TestError> {
+    let draft = Draft {
+        agent_id: &f.agent.id,
+        conversation_id: &first.conversation_id,
+        operation_id: &first.id,
+    };
+    assert!(matches!(
+        store
+            .conversation_input_preparation(&f.owner.digest(), &draft, f.now)
+            .await,
+        Err(StoreError::NotFound)
+    ));
+    Ok(())
+}
+
+async fn retained_setup_reads(store: &Store, f: &Fixture) -> Result<(), TestError> {
+    let owner = f.owner.digest();
+    let key = f.connector.digest();
+    let source = f.source(&key);
+    let route = store
+        .resolve_connector_route(&f.agent.computer.id)
+        .await?
+        .ok_or("Missing route")?;
+    let first = store
+        .accept_conversation_input(
+            &owner,
+            &AcceptConversationInput {
+                agent_id: f.agent.id.clone(),
+                conversation_id: None,
+                request_id: "setup-read-seed".into(),
+                target: ConversationTarget::NotStarted,
+                text: ConversationText::parse("Retained original seed".into())?,
+            },
+            f.now,
+        )
+        .await?;
+    store
+        .fail_conversation_input(&first.conversation_id, &first.id)
+        .await?;
+    let draft = Draft {
+        agent_id: &f.agent.id,
+        conversation_id: &first.conversation_id,
+        operation_id: &first.id,
+    };
+    let snapshot = super::snapshot("setup-read-source")?;
+    let native = NativeConversationId::parse("setup-read-native".into())?;
+    let instructions = chapchoo_domain::ProjectInstructions::new(vec![
+        chapchoo_domain::InstructionSource {
+            kind: chapchoo_domain::InstructionSourceKind::Product,
+            text: "Preserve existing user files.".into(),
+        },
+        chapchoo_domain::InstructionSource {
+            kind: chapchoo_domain::InstructionSourceKind::Owner,
+            text: "".into(),
+        },
+    ])?;
     let failed = store
         .accept_conversation_input(
             &owner,
@@ -313,7 +441,14 @@ pub(super) async fn initial(
     };
     assert!(matches!(
         store
-            .begin_conversation_input_preparation(&owner, &route, &failed, f.now)
+            .begin_conversation_input_preparation(
+                &owner,
+                &route,
+                &failed,
+                f.now,
+                &f.claim(store, failed.conversation_id, failed.operation_id)
+                    .await?
+            )
             .await?,
         Admission::Granted { .. }
     ));
@@ -325,8 +460,25 @@ pub(super) async fn initial(
         )
         .await?;
     assert!(
-        matches!(store.begin_conversation_input_preparation(&owner,&route,&failed,f.now).await?,Admission::Existing(facts) if facts.state==State::Known(Outcome::Failed(Failure::SourceUnavailable)))
+        matches!(store.begin_conversation_input_preparation(&owner, &route, &failed, f.now, &f.claim(store, failed.conversation_id, failed.operation_id).await?).await?,Admission::Existing(facts) if facts.state==State::Known(Outcome::Failed(Failure::SourceUnavailable)))
     );
+    let pending = store
+        .accept_conversation_input(
+            &owner,
+            &AcceptConversationInput {
+                agent_id: f.agent.id.clone(),
+                conversation_id: Some(first.conversation_id.clone()),
+                request_id: "unresolved-start".into(),
+                target: ConversationTarget::NotStarted,
+                text: ConversationText::parse("independent accepted input".into())?,
+            },
+            f.now,
+        )
+        .await?;
+    let pending = Draft {
+        operation_id: &pending.id,
+        ..draft
+    };
     let scope = chapchoo_persistence::ConversationInputScope {
         agent_id: &f.agent.id,
         conversation_id: &first.conversation_id,
@@ -452,7 +604,14 @@ pub(super) async fn initial(
     // The deleted failure remains the selected historical operation. Recover
     // with a genuinely new pending setup, never by reselecting an old READY fact.
     store
-        .begin_conversation_input_preparation(&owner, &route, &pending, f.now)
+        .begin_conversation_input_preparation(
+            &owner,
+            &route,
+            &pending,
+            f.now,
+            &f.claim(store, pending.conversation_id, pending.operation_id)
+                .await?,
+        )
         .await?;
     store
         .seal_project_instructions(
@@ -476,110 +635,47 @@ pub(super) async fn initial(
         .await?;
     Ok(())
 }
-async fn rejected_initial_recovery(
-    store: &Store,
-    f: &Fixture,
-    route: &chapchoo_persistence::ResolvedRoute,
-    draft: &Draft<'_>,
-) -> Result<(), TestError> {
-    let owner = f.owner.digest();
-    let key = f.connector.digest();
-    let source = f.source(&key);
-    let mut operations = Vec::new();
-    for request_id in ["initial-rejected", "resume-denied", "retry-rejected"] {
-        let input = store
-            .accept_conversation_input(
-                &owner,
-                &AcceptConversationInput {
-                    agent_id: f.agent.id.clone(),
-                    conversation_id: Some(draft.conversation_id.into()),
-                    request_id: request_id.into(),
-                    target: ConversationTarget::NotStarted,
-                    text: ConversationText::parse("explicit new input".into())?,
-                },
-                f.now,
-            )
-            .await?;
-        operations.push(input);
-    }
-    let first = Draft {
-        operation_id: &operations[0].id,
-        ..*draft
-    };
-    let denied = Draft {
-        operation_id: &operations[1].id,
-        ..*draft
-    };
-    let retry = Draft {
-        operation_id: &operations[2].id,
-        ..*draft
-    };
-    assert!(matches!(
-        store
-            .begin_conversation_input_preparation(&owner, route, &first, f.now)
-            .await?,
-        Admission::Granted {
-            fresh_native_allowed: true,
-            ..
-        }
-    ));
-    assert!(matches!(
-        store
-            .begin_conversation_input_preparation(&owner, route, &denied, f.now)
-            .await,
-        Err(StoreError::InvalidTransition)
-    ));
-    assert!(matches!(
-        store
-            .begin_conversation_input_preparation(&owner, route, &retry, f.now)
-            .await,
-        Err(StoreError::InvalidTransition)
-    ));
-    store
-        .complete_conversation_input_preparation(
-            &source,
-            &first,
-            &Outcome::Failed(Failure::NativeRejected),
-        )
-        .await?;
-    assert!(matches!(
-        store
-            .begin_conversation_input_preparation(&owner, route, &retry, f.now)
-            .await?,
-        Admission::Granted {
-            fresh_native_allowed: true,
-            ..
-        }
-    ));
-    store
-        .complete_conversation_input_preparation(
-            &source,
-            &retry,
-            &Outcome::Failed(Failure::BeforeNativeLaunch),
-        )
-        .await?;
-    // The old operation remains settled; only a new explicit input can start.
-    assert!(
-        matches!(store.begin_conversation_input_preparation(&owner, route, &first, f.now).await?,
-        Admission::Existing(facts) if facts.state == State::Known(Outcome::Failed(Failure::NativeRejected)))
-    );
-    Ok(())
+
+#[test]
+fn sqlite_retained_setup_failure_reads() -> Result<(), TestError> {
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("setup-reads.sqlite");
+    let cipher = cipher()?;
+    prepare_sqlite(&path, &cipher)?;
+    let runtime = tokio::runtime::Runtime::new()?;
+    runtime.block_on(async {
+        let store = Store::connect_sqlite(path, cipher).await?;
+        let f = fixture(&store).await?;
+        retained_setup_reads(&store, &f).await
+    })
 }
-pub(super) async fn replaced(
-    store: &Store,
-    f: &Fixture,
-    first: &chapchoo_persistence::ConversationInputReceipt,
-) -> Result<(), TestError> {
-    let draft = Draft {
-        agent_id: &f.agent.id,
-        conversation_id: &first.conversation_id,
-        operation_id: &first.id,
-    };
-    assert!(matches!(
-        store
-            .conversation_input_preparation(&f.owner.digest(), &draft, f.now)
-            .await,
-        Err(StoreError::NotFound)
-    ));
-    Ok(())
+
+#[test]
+fn postgres_retained_setup_failure_reads() -> Result<(), TestError> {
+    let _lock = POSTGRES_CONVERSATION_LOCK
+        .lock()
+        .map_err(|_| "Fixture lock poisoned")?;
+    let base = std::env::var("CHAPCHOO_TEST_POSTGRES_URL")
+        .map_err(|_| "Disposable PostgreSQL is required")?;
+    let mut control = AsyncConnectionWrapper::<AsyncPgConnection>::establish(&base)?;
+    let schema = format!("setup_reads_{}", std::process::id());
+    control.batch_execute(&format!("CREATE SCHEMA {schema}"))?;
+    let separator = if base.contains('?') { '&' } else { '?' };
+    let url = format!("{base}{separator}options=-csearch_path%3D{schema}");
+    let result = (|| -> Result<(), TestError> {
+        let cipher = cipher()?;
+        prepare_postgres(&url, &cipher)?;
+        tokio::runtime::Runtime::new()?.block_on(async {
+            let store = Store::connect_postgres(url, cipher).await?;
+            let f = fixture(&store).await?;
+            retained_setup_reads(&store, &f).await
+        })
+    })();
+    support::combine(
+        result,
+        control
+            .batch_execute(&format!("DROP SCHEMA {schema} CASCADE"))
+            .map_err(Into::into),
+    )
+    .map(|_| ())
 }

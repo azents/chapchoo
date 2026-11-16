@@ -243,10 +243,51 @@ impl Store {
         expected: &crate::ResolvedRoute,
         draft: &ConversationOperationForwarding<'_>,
         now: i64,
+        claim_id: &str,
+    ) -> Result<ConversationForwardingAdmission, StoreError> {
+        self.begin_conversation_input_forwarding_for(
+            super::authority::OwnerAuthority::Credential { actor, now },
+            expected,
+            draft,
+            claim_id,
+        )
+        .await
+    }
+    pub async fn queued_begin_conversation_input_forwarding(
+        &self,
+        authority: &ConversationInputAuthority,
+        expected: &crate::ResolvedRoute,
+        draft: &ConversationOperationForwarding<'_>,
+    ) -> Result<ConversationForwardingAdmission, StoreError> {
+        if authority.input_id != draft.operation_id {
+            return Err(StoreError::InvalidInput);
+        }
+        self.begin_conversation_input_forwarding_for(
+            super::authority::OwnerAuthority::Queued(authority),
+            expected,
+            draft,
+            &authority.claim_id,
+        )
+        .await
+    }
+    async fn begin_conversation_input_forwarding_for(
+        &self,
+        authority: super::authority::OwnerAuthority<'_>,
+        expected: &crate::ResolvedRoute,
+        draft: &ConversationOperationForwarding<'_>,
+        claim_id: &str,
     ) -> Result<ConversationForwardingAdmission, StoreError> {
         let (agent, id, operation_id) = ids(draft)?;
         operation!(self, |connection, dialect| {
-            let owner = owned_agent!(connection, dialect, actor, agent, now);
+            let Some((owner, _now)) = super::authority::owned_authority!(
+                connection,
+                dialect,
+                &authority,
+                agent,
+                Some(id)
+            ) else {
+                return Err(StoreError::InvalidTransition);
+            };
             let (route, session_id) =
                 dispatch_route!(connection, dialect, expected, owner.computer_id);
             let row = conversation!(connection, dialect, id);
@@ -261,9 +302,12 @@ impl Store {
                     previous.delivery()?,
                 ));
             }
-            if row.source_state != "READY" || owner.desired_state == "DELETING" {
+            if row.source_state != "READY"
+                || !super::authority::input_ready!(connection, dialect, owner.computer_id)
+            {
                 return Err(StoreError::InvalidTransition);
             }
+            super::input_queue::require_consumer!(connection, dialect, operation_id, claim_id);
             #[derive(diesel::QueryableByName)]
             struct AppliedProject {
                 #[diesel(sql_type=Text)]
@@ -328,7 +372,7 @@ impl Store {
             {
                 return Err(StoreError::Conflict);
             }
-            super::input_queue::require_consumer!(connection, dialect, operation_id);
+            super::input_queue::require_consumer!(connection, dialect, operation_id, claim_id);
             diesel::sql_query(dialect.query("INSERT INTO conversation_input_delivery(operation_id,execution_id,source_snapshot,native_session_id,delivery_state) VALUES(?,?,?,?,'POSSIBLE')"))
                 .bind::<IdentitySql,_>(operation_id).bind::<IdentitySql,_>(route._execution_id)
                 .bind::<Text,_>(draft.target.snapshot.as_str()).bind::<Text,_>(draft.target.native_session.as_str())

@@ -32,7 +32,18 @@ async fn preparation(
         .await?
         .ok_or("Missing route")?;
     store
-        .begin_conversation_input_preparation(&f.owner.digest(), &route, &draft(f, &input), f.now)
+        .begin_conversation_input_preparation(
+            &f.owner.digest(),
+            &route,
+            &draft(f, &input),
+            f.now,
+            &f.claim(
+                store,
+                (draft(f, &input)).conversation_id,
+                (draft(f, &input)).operation_id,
+            )
+            .await?,
+        )
         .await?;
     Ok(input)
 }
@@ -447,7 +458,14 @@ async fn record_lock_precedes_computer_admission(
         .await?
         .ok_or("Missing route")?;
     store
-        .begin_conversation_input_preparation(&actor, &route, &application, f.now)
+        .begin_conversation_input_preparation(
+            &actor,
+            &route,
+            &application,
+            f.now,
+            &f.claim(store, application.conversation_id, application.operation_id)
+                .await?,
+        )
         .await?;
     let previous = store
         .execution_authentication_binding(&source, &application)

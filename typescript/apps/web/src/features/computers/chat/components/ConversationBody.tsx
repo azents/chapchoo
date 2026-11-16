@@ -666,6 +666,7 @@ export function ConversationBody({
   messages,
   copy,
   writable,
+  nativeWritable,
   agentName,
   agentProfile,
   initiallyExpandedKey = null,
@@ -675,6 +676,7 @@ export function ConversationBody({
   messages?: MessageControls;
   copy: ChatCopy;
   writable: boolean;
+  nativeWritable: boolean;
   agentName: string;
   agentProfile?: { basePath: string; assetKey: string };
   initiallyExpandedKey?: string | null;
@@ -816,7 +818,7 @@ export function ConversationBody({
                   record={record}
                   controls={controls}
                   copy={copy}
-                  writable={writable && controls.read === "ready"}
+                  writable={nativeWritable && controls.read === "ready"}
                   idPrefix="question"
                 />
               )

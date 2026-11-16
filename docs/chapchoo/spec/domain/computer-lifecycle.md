@@ -28,6 +28,16 @@ the Running target against that same Stop returns its current progress; original
 Stop receipt replay remains intact, and a later operation/Delete invalidates the
 captured predecessor. If Stop completed first, ordinary Start admission applies.
 
+An accepted waiting message may own Cloud Start through the same transaction.
+Its durable input identity supplies the stable request and exact captured
+predecessor; current bound-input/session/private-owner/Team qualification is
+rechecked after lifecycle ownership locks with fresh database time. Deleted or
+withdrawn input cannot create new Start intent from a prior lookup. The queue
+does not replace a captured predecessor after a later explicit Stop, and Local
+inputs never obtain this authority. [Conversation waiting](conversation-storage.md#internal-input-owner-and-setup-facts)
+owns rediscovery, FIFO and explicit failed-item recovery; ordinary lifecycle
+eligibility and physical-effect reconciliation remain unchanged.
+
 Old-execution Running observations cannot fulfill this target or reclaim its
 preparation. Current Kubernetes API absence clears the old execution and selects
 Starting for the Running target without a historical terminal witness;

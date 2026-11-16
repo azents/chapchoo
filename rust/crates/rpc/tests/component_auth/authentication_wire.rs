@@ -95,6 +95,9 @@ async fn seal(
                 operation_id: &target.operation_id,
             },
             AcceptanceTime::System.now()?,
+            &context
+                .claim_input(&target.conversation_id, &target.operation_id)
+                .await?,
         )
         .await?;
     Ok(())

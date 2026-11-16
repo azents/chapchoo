@@ -77,10 +77,11 @@ pub(super) async fn exercise(
         conversation_id: draft.conversation_id,
         operation_id: draft.operation_id,
     };
+    let claim = context.claim_input(conversation, &receipt.id).await?;
     assert!(matches!(
         context
             .store
-            .begin_conversation_input_preparation(context.owner, &route, &preparation, now)
+            .begin_conversation_input_preparation(context.owner, &route, &preparation, now, &claim)
             .await?,
         chapchoo_persistence::ConversationPreparationAdmission::Granted { .. }
     ));
@@ -115,7 +116,7 @@ pub(super) async fn exercise(
     assert!(matches!(
         context
             .store
-            .begin_conversation_input_forwarding(context.owner, &route, &draft, now)
+            .begin_conversation_input_forwarding(context.owner, &route, &draft, now, &claim)
             .await
             .map_err(|error| format!("large-input-wire forwarding admission: {error}"))?,
         ConversationForwardingAdmission::Granted(_)
@@ -226,7 +227,8 @@ pub(super) async fn exercise(
                     conversation_id: conversation,
                     operation_id: &setup_input.id,
                 },
-                now
+                now,
+                &context.claim_input(conversation, &setup_input.id).await?,
             )
             .await?,
         chapchoo_persistence::ConversationPreparationAdmission::Granted { .. }

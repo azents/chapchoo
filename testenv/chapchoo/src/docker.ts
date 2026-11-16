@@ -10,6 +10,7 @@ import type { DockerFixtureConfig } from "./config/index.js";
 import {
   cleanupContainerInspection,
   nativeReadinessStatus,
+  publicationStageEvidence,
   runningSuccessor,
 } from "./dockerObservation.js";
 import type { NativeComputer, NativeObservation } from "./dockerObservation.js";
@@ -348,6 +349,14 @@ export class DockerFixture {
   }
   async releaseConversationWork(target: NativeComputer): Promise<void> {
     await this.exec(target, "rm /workspace/acceptance-work-hold");
+  }
+  /** Read only fixed, enum-validated diagnostics from the deterministic fixture. */
+  async conversationPublicationStages(target: NativeComputer): Promise<string> {
+    const output = await this.exec(
+      target,
+      "for stage in first refresh; do if [ -f /workspace/acceptance-publication-$stage ]; then cat /workspace/acceptance-publication-$stage; else printf 'not-recorded\\n'; fi; done",
+    );
+    return publicationStageEvidence(output);
   }
   async writeMarker(target: NativeComputer): Promise<void> {
     await this.exec(

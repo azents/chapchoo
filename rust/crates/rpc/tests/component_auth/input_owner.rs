@@ -11,12 +11,21 @@ struct Processor {
     calls: Arc<AtomicUsize>,
     entered: Arc<tokio::sync::Semaphore>,
     release: Arc<tokio::sync::Semaphore>,
+    fails: bool,
 }
 impl ConversationInputProcessor for Processor {
+    fn wake(&self, _: chapchoo_service::ConversationInputWake) -> ConversationInputFuture {
+        Box::pin(async {
+            Err(chapchoo_service::ServiceError::domain(
+                chapchoo_service::DomainReason::InvalidTransition,
+            ))
+        })
+    }
     fn process(&self, input: AcceptedConversationInput) -> ConversationInputFuture {
         let entered = self.entered.clone();
         let release = self.release.clone();
         let calls = self.calls.clone();
+        let fails = self.fails;
         Box::pin(async move {
             assert_eq!(
                 input.receipt.text.as_str(),
@@ -30,7 +39,15 @@ impl ConversationInputProcessor for Processor {
                 .await
                 .map_err(chapchoo_service::ServiceError::infrastructure)?
                 .forget();
-            Ok(())
+            if fails {
+                Err(chapchoo_service::ServiceError::infrastructure(
+                    std::io::Error::other("Injected processor failure"),
+                ))
+            } else {
+                Err(chapchoo_service::ServiceError::domain(
+                    chapchoo_service::DomainReason::InvalidTransition,
+                ))
+            }
         })
     }
 }
@@ -46,6 +63,7 @@ pub(super) async fn exercise(
         calls: calls.clone(),
         entered: entered.clone(),
         release: release.clone(),
+        fails: false,
     });
     let service = ConversationInputService::new(store.clone(), processor.clone(), 4)?;
     let draft = AcceptConversationInput {
@@ -89,7 +107,7 @@ pub(super) async fn exercise(
         chapchoo_service::DomainReason::Conflict
     );
     // A fresh server owner recovers persisted acceptance, not another process call.
-    let recovered = ConversationInputService::new(store.clone(), processor, 4)?;
+    let recovered = ConversationInputService::new(store.clone(), processor.clone(), 4)?;
     assert_eq!(
         recovered
             .accept(owner.clone(), draft, AcceptanceTime::System)
@@ -111,7 +129,9 @@ pub(super) async fn exercise(
         observed.ownership,
         ConversationInputOwnership::NotObservedHere
     );
-    release.add_permits(4);
+    service.close();
+    recovered.close();
+    release.add_permits(1);
     service.finish().await?;
     recovered.finish().await?;
     assert_eq!(calls.load(Ordering::SeqCst), 1);
@@ -119,9 +139,22 @@ pub(super) async fn exercise(
         store
             .conversation_input_queue_state(&accepted.conversation_id, &accepted.id)
             .await?
-            == chapchoo_persistence::ConversationInputQueueState::Error,
-        "A processor that returns without delivery must close its attempt"
+            == chapchoo_persistence::ConversationInputQueueState::Pending,
+        "A safe pre-attempt readiness return preserves durable waiting"
     );
+    let restarted = ConversationInputService::new(store.clone(), processor, 4)?;
+    entered.acquire().await?.forget();
+    restarted.close();
+    release.add_permits(1);
+    restarted.finish().await?;
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        2,
+        "Restart rediscovery must resume retained waiting without another Send"
+    );
+    store
+        .fail_conversation_input(&accepted.conversation_id, &accepted.id)
+        .await?;
     exercise_terminal(store, owner, agent).await?;
     exercise_retry(store, owner, agent).await?;
     Ok(accepted)
@@ -141,6 +174,7 @@ async fn exercise_retry(
             calls: calls.clone(),
             entered: entered.clone(),
             release: release.clone(),
+            fails: true,
         }),
         4,
     )?;
@@ -162,6 +196,25 @@ async fn exercise_retry(
     entered.acquire().await?.forget();
     release.add_permits(1);
     wait_failed(store, &first).await?;
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            if service
+                .input(
+                    owner,
+                    &agent.id,
+                    &first.conversation_id,
+                    "retry-original",
+                    AcceptanceTime::System,
+                )
+                .await
+                .is_err()
+            {
+                return;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+    })
+    .await?;
     let draft = chapchoo_persistence::RetryConversationInput {
         agent_id: agent.id.clone(),
         conversation_id: first.conversation_id.clone(),
@@ -197,7 +250,10 @@ async fn exercise_retry(
         chapchoo_persistence::ConversationInputQueueState::Pending
     );
     release.add_permits(1);
-    service.finish().await?;
+    assert!(
+        service.finish().await.is_err(),
+        "Retain the processor's actual failure"
+    );
     assert_eq!(calls.load(Ordering::SeqCst), 2);
     Ok(())
 }
@@ -218,14 +274,26 @@ async fn wait_failed(store: &Store, input: &ConversationInputAcceptance) -> Resu
     Ok(())
 }
 
-struct TerminalProcessor(bool);
+struct TerminalProcessor {
+    panic: bool,
+    entered: Arc<tokio::sync::Semaphore>,
+}
 impl ConversationInputProcessor for TerminalProcessor {
-    fn process(&self, _: AcceptedConversationInput) -> ConversationInputFuture {
-        let panic = self.0;
-        Box::pin(async move {
-            assert!(!panic, "Injected consumer panic");
+    fn wake(&self, _: chapchoo_service::ConversationInputWake) -> ConversationInputFuture {
+        Box::pin(async {
             Err(chapchoo_service::ServiceError::domain(
                 chapchoo_service::DomainReason::InvalidTransition,
+            ))
+        })
+    }
+    fn process(&self, _: AcceptedConversationInput) -> ConversationInputFuture {
+        let panic = self.panic;
+        let entered = self.entered.clone();
+        Box::pin(async move {
+            entered.add_permits(1);
+            assert!(!panic, "Injected consumer panic");
+            Err(chapchoo_service::ServiceError::infrastructure(
+                std::io::Error::other("Injected processor failure"),
             ))
         })
     }
@@ -236,6 +304,7 @@ async fn exercise_terminal(
     agent: &chapchoo_persistence::AgentSummary,
 ) -> Result<(), TestError> {
     for panic in [false, true] {
+        let entered = Arc::new(tokio::sync::Semaphore::new(0));
         let policy = chapchoo_service::ComputerPolicy {
             heartbeat_ms: 5,
             directory: chapchoo_persistence::DirectoryPolicy {
@@ -246,7 +315,10 @@ async fn exercise_terminal(
         };
         let service = ConversationInputService::new_with_policy(
             store.clone(),
-            Arc::new(TerminalProcessor(panic)),
+            Arc::new(TerminalProcessor {
+                panic,
+                entered: entered.clone(),
+            }),
             4,
             policy,
         )?;
@@ -265,13 +337,22 @@ async fn exercise_terminal(
             .await?;
         // Poll the authoritative state. Timeout bounds a hang; it does not
         // establish the terminal transition or hide the retained processor error.
+        entered.acquire().await?.forget();
         tokio::time::timeout(std::time::Duration::from_secs(5), async {
             loop {
-                if store
-                    .conversation_input_queue_state(&accepted.conversation_id, &accepted.id)
-                    .await?
-                    == chapchoo_persistence::ConversationInputQueueState::Error
-                {
+                let settled = if panic {
+                    store
+                        .waiting_conversation_inputs(None, &accepted.id)
+                        .await?
+                        .iter()
+                        .any(|row| row.id == accepted.id)
+                } else {
+                    store
+                        .conversation_input_queue_state(&accepted.conversation_id, &accepted.id)
+                        .await?
+                        == chapchoo_persistence::ConversationInputQueueState::Error
+                };
+                if settled {
                     return Ok::<_, TestError>(());
                 }
                 tokio::time::sleep(std::time::Duration::from_millis(5)).await;
@@ -282,6 +363,11 @@ async fn exercise_terminal(
             service.finish().await.is_err(),
             "Retain the original failure"
         );
+        if panic {
+            store
+                .fail_conversation_input(&accepted.conversation_id, &accepted.id)
+                .await?;
+        }
     }
     Ok(())
 }

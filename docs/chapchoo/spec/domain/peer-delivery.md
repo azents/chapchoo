@@ -30,11 +30,34 @@ identity, execution binding and original allocation witness. Canonical current
 context IDs are correlation authority, not substitutes for an existing native
 resource's original labels. Missing/malformed witnesses reject at wire ingress.
 
+## Queued-input authority
+
+Internal `QueuedInputAuthority` carries the issued input ID, actual
+Agent/conversation and exact processing claim. It is not a credential lookup,
+asserted owner or new native grant. The receiving completed Store operation
+resolves the input's current submitting session under the User lock and
+revalidates private ownership, Team/Computer, exact live claim and database time.
+It binds the command to the actual Computer, current lifecycle Request ID,
+current non-retired execution, Agent, conversation and input operation.
+
+Only Connector input-owned Setup with matching possible preparation, saved
+supply/context and sealed instruction evidence, or Input with matching possible
+forwarding and exact native target, is eligible. Known results do not grant
+another effect. Provider commands, convergence, Observe, Answer and Stop reject
+this context. Startup/project-refresh Setup has a different operation and cannot
+borrow an input claim; the existing runtime-owned startup reconciler uses its
+separate reconciliation authority and dispatch gates.
+
+Ordinary user calls retain current credential admission. Queued context changes
+neither exact-call ownership nor delivery retry limits: an uncertain invocation
+is never retransmitted merely because a session rotated or a claim is current.
+
 ## Connections
 
 - [Control admission, streams and calls](computer-control-rpc.md) — Control separates public component authority from trusted peer delivery. Streams and exact-call correlation do not form a durable transport log.
 - [Control directory authority](computer-directory.md) — The durable directory chooses current component owners and excludes expired, revoked or draining authority. Listener and native effect lifetime are separate owners.
 - [Owner-scoped convergence and restoration](reconciliation.md) — Current Connector owners take precedence; reconciliation observes exact resources and advances only authorized, known-unsent work.
+- [Conversation storage](conversation-storage.md) — Durable queued input, exact claims, current submitting sessions and sealed native facts.
 
 ## References
 

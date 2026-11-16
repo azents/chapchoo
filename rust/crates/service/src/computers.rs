@@ -356,6 +356,19 @@ impl ComputersService {
             .await?)
     }
 
+    pub async fn queued_connector_delivery_snapshot(
+        &self,
+        authority: &chapchoo_persistence::ConversationInputAuthority,
+        scope: ComputerRequest<'_>,
+        execution: &str,
+        command: &chapchoo_persistence::QueuedConversationCommand<'_>,
+    ) -> Result<chapchoo_persistence::DeliverySnapshot, ServiceError> {
+        Ok(self
+            .store
+            .queued_connector_delivery_snapshot(authority, scope, execution, command)
+            .await?)
+    }
+
     pub async fn provider_delivery_snapshot(
         &self,
         source: &ProviderSource<'_>,
@@ -639,6 +652,12 @@ impl ComputersService {
             .store
             .request_lifecycle(actor, agent_id, request, clock.now()?)
             .await?)
+    }
+    pub async fn start_waiting_conversation_input(
+        &self,
+        wake: &crate::ConversationInputWake,
+    ) -> Result<AgentSummary, ServiceError> {
+        Ok(self.store.start_waiting_conversation_input(wake).await?)
     }
     pub async fn force_remove_agent(
         &self,

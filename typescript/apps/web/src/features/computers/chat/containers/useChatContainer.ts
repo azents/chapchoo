@@ -125,12 +125,16 @@ export function useChatContainer(props: ChatInput): ChatProps {
     computer.phase === "completed";
   const activity = conversationActivity(region);
   const writable =
-    effectAvailable &&
+    product.access === "authorized" &&
+    !product.stale &&
+    !product.pending &&
+    computer.intent !== "deleting" &&
     reader.read === "ready" &&
     messageReader.read === "ready" &&
     region.header.conversationId === messageReader.region.conversationId &&
-    region.header.state !== "loading" &&
     activity !== "authenticationRequired";
+  const nativeWritable =
+    writable && effectAvailable && region.header.state !== "loading";
   const presentation = chatStatus({
     computer,
     activity,
@@ -162,7 +166,7 @@ export function useChatContainer(props: ChatInput): ChatProps {
     const key = draftKey(record);
     if (
       !record.question ||
-      !writable ||
+      !nativeWritable ||
       !record.responder ||
       answerBusy.current.has(key) ||
       record.answer
@@ -290,7 +294,7 @@ export function useChatContainer(props: ChatInput): ChatProps {
     const source = region.header.source;
     const target = region.header.native;
     if (
-      !writable ||
+      !nativeWritable ||
       !source ||
       !target ||
       !record.question ||
@@ -526,6 +530,7 @@ export function useChatContainer(props: ChatInput): ChatProps {
       stop: conversation.stop,
     }),
     writable,
+    nativeWritable,
     stoppable:
       effectAvailable && Boolean(region.header.native && region.header.workId),
     sendable: writable && !sendMutation.isPending && Boolean(input.trim()),

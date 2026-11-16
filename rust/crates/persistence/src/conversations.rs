@@ -8,6 +8,7 @@ mod input_reads;
 mod inputs;
 mod messages;
 mod native_state;
+mod peer;
 mod preparation;
 mod project_refresh;
 mod projection;
@@ -16,7 +17,12 @@ mod startup;
 mod stops;
 mod supply;
 mod system_prompts;
+mod waiting;
 pub use system_prompts::{MAX_SYSTEM_PROMPT_BYTES, ProjectInstructionEvidence};
+pub use waiting::{
+    ClaimedConversationInput, ConversationInputAuthority, ConversationInputCandidate,
+    ConversationInputWake,
+};
 
 use crate::{
     Store, StoreError,
@@ -66,6 +72,7 @@ pub use native_state::{
     ConversationForeground, ConversationNativeObservation, ConversationNativePreparation,
     ConversationPreparationFreshness,
 };
+pub use peer::{QueuedConversationCommand, QueuedSetupContext};
 pub use preparation::{
     ConversationInputPreparation, ConversationPreparationAdmission, ConversationPreparationFacts,
     ConversationPreparationFailure, ConversationPreparationOutcome, ConversationPreparationState,
@@ -193,12 +200,43 @@ impl Store {
         agent_id: &str,
         now: i64,
     ) -> Result<Option<ConversationSummary>, StoreError> {
+        self.current_conversation_for(
+            authority::OwnerAuthority::Credential { actor, now },
+            agent_id,
+        )
+        .await
+    }
+    pub async fn queued_current_conversation(
+        &self,
+        authority: &ConversationInputAuthority,
+    ) -> Result<Option<ConversationSummary>, StoreError> {
+        self.current_conversation_for(
+            authority::OwnerAuthority::Queued(authority),
+            &authority.agent_id,
+        )
+        .await
+    }
+    async fn current_conversation_for(
+        &self,
+        authority: authority::OwnerAuthority<'_>,
+        agent_id: &str,
+    ) -> Result<Option<ConversationSummary>, StoreError> {
         let agent = EntityId::from_dto(EntityKind::Agent, agent_id)?;
         operation!(self, |connection, dialect| {
-            let _ = owned_agent!(connection, dialect, actor, agent, now);
-            diesel::sql_query(dialect.query("SELECT c.* FROM conversations c JOIN agent_conversations a ON a.conversation_id=c.id AND a.agent_id=c.agent_id WHERE a.agent_id=?"))
+            let Some((_owner, _now)) =
+                authority::owned_authority!(connection, dialect, &authority, agent, None)
+            else {
+                return Ok(None);
+            };
+            let row = diesel::sql_query(dialect.query("SELECT c.* FROM conversations c JOIN agent_conversations a ON a.conversation_id=c.id AND a.agent_id=c.agent_id WHERE a.agent_id=?"))
                 .bind::<IdentitySql,_>(agent).get_result::<ConversationRow>(connection)
-                .await.optional()?.map(|row| row.summary()).transpose()
+                .await.optional()?;
+            if let (Some(row), authority::OwnerAuthority::Queued(bound)) = (&row, &authority)
+                && row.id != EntityId::from_dto(EntityKind::Conversation, &bound.conversation_id)?
+            {
+                return Err(StoreError::Conflict);
+            }
+            row.map(|row| row.summary()).transpose()
         })
     }
 }

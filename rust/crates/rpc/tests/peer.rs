@@ -327,6 +327,72 @@ fn memory_and_tcp_peer_handlers_revalidate_domain_and_exact_reconciler_authority
             tonic::Code::Unimplemented
         );
         for client in &mut clients {
+            let queued = wire::PeerAuthority {
+                context: Some(wire::peer_authority::Context::QueuedInput(
+                    wire::QueuedInputAuthority {
+                        agent_id: agent.id.clone(),
+                        conversation_id: String::new(),
+                        input_id: String::new(),
+                        claim_id: String::new(),
+                    },
+                )),
+            };
+            let mut provider = invocation.clone();
+            provider.authority = Some(queued.clone());
+            assert_eq!(
+                client
+                    .invoke_provider(provider)
+                    .await
+                    .err()
+                    .ok_or("Queued Provider authority was accepted")?
+                    .code(),
+                tonic::Code::PermissionDenied
+            );
+            assert_eq!(
+                client
+                    .converge_provider(wire::ProviderConvergence {
+                        provider_id: key.provider_id.clone(),
+                        owner: Some(owner.clone()),
+                        authority: Some(queued.clone()),
+                        computer: Some(context.clone()),
+                        remaining_ms: 10_000,
+                    })
+                    .await
+                    .err()
+                    .ok_or("Queued convergence authority was accepted")?
+                    .code(),
+                tonic::Code::PermissionDenied
+            );
+            for operation in [
+                wire::connector_command::Operation::Observe(wire::ObserveConnector {}),
+                wire::connector_command::Operation::Answer(Default::default()),
+                wire::connector_command::Operation::Stop(Default::default()),
+            ] {
+                assert_eq!(
+                    client
+                        .invoke_connector(wire::ConnectorInvocation {
+                            computer_id: context.computer_id.clone(),
+                            owner: Some(owner.clone()),
+                            authority: Some(queued.clone()),
+                            command: Some(wire::ConnectorCommand {
+                                identity: Some(wire::CallIdentity {
+                                    request_id: context.request_id.clone(),
+                                    call_id: "queued-denied".into(),
+                                    connection_id: connected.connection_id.clone(),
+                                }),
+                                computer: Some(context.clone()),
+                                remaining_ms: 10_000,
+                                operation: Some(operation),
+                            }),
+                        })
+                        .await
+                        .err()
+                        .ok_or("Unrelated queued Connector command was accepted")?
+                        .code(),
+                    tonic::Code::PermissionDenied
+                );
+            }
+            assert_eq!(connections.pending_calls(), 0);
             let mut missing = invocation.clone();
             missing.authority = None;
             assert_eq!(

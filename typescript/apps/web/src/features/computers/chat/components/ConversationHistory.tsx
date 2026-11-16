@@ -41,6 +41,7 @@ export function ConversationHistory({
             controls={controls}
             copy={copy}
             writable={false}
+            nativeWritable={false}
             agentName={agentName}
             surface="history"
             initiallyExpandedKey={scroll.initialFocus}

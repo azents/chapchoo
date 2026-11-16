@@ -147,28 +147,6 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
             chapchoo_rpc::PeerDelivery::new(app.clone()),
             admission.clone(),
         ));
-        let owner_rpc = chapchoo_rpc::ConversationServices::new(
-            core.clone(),
-            Arc::new(chapchoo_service::ConversationInputService::new(
-                store.clone(),
-                processor.clone(),
-                4,
-            )?),
-            Arc::new(chapchoo_service::ConversationStopService::new(
-                store.clone(),
-                processor.clone(),
-            )?),
-            Arc::new(chapchoo_service::ConversationAnswerService::new(
-                core, processor,
-            )?),
-            admission.clone(),
-        );
-        let owner_cleanup = owner_rpc.clone();
-        let owner_stopped = fixture.shutdown();
-        fixture.server(async move {
-            let _ = owner_stopped.await;
-            owner_cleanup.finish().await
-        });
         let services = ComponentAuthenticationServices::new(
             app.clone(),
             control.id.clone(),
@@ -189,8 +167,6 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
                 .add_service(services.provider_server())
                 .add_service(services.connector_server())
                 .add_service(connections.connector_server())
-                .add_service(captured.server())
-                .add_service(owner_rpc.server())
                 .serve_with_incoming_shutdown(TcpListenerStream::new(listener), async {
                     let _ = stopped.await;
                 }),
@@ -445,26 +421,71 @@ fn component_credential_rpc_preserves_owner_bootstrap_and_operational_roles()
                 &exchanged.token,
             )?)
             .await?;
-        capture::exercise(capture::Context {
-            store: &store,
-            owner: &user.token.digest(),
-            agent: &created,
-            endpoint: &endpoint,
-            source: chapchoo_protocol::conversations::CaptureSource {
-                session_id: bootstrap.session_id.clone(),
-                control_id: connected.instance_id.clone(),
-                connection_id: connected.connection_id.clone(),
+        let accepted = input_owner::exercise(&store, &user.token.digest(), &created).await?;
+        owner_input::seed(
+            &store,
+            &user.token.digest(),
+            &created,
+            &accepted.conversation_id,
+        )
+        .await?;
+        let input_service = Arc::new(chapchoo_service::ConversationInputService::new(
+            store.clone(),
+            processor.clone(),
+            4,
+        )?);
+        let owner_rpc = chapchoo_rpc::ConversationServices::new(
+            core.clone(),
+            input_service.clone(),
+            Arc::new(chapchoo_service::ConversationStopService::new(
+                store.clone(),
+                processor.clone(),
+            )?),
+            Arc::new(chapchoo_service::ConversationAnswerService::new(
+                core, processor,
+            )?),
+            admission.clone(),
+        );
+        let owner_cleanup = owner_rpc.clone();
+        let owner_stopped = fixture.shutdown();
+        fixture.server(async move {
+            let _ = owner_stopped.await;
+            owner_cleanup.finish().await
+        });
+        let capture_listener = TcpListener::bind("127.0.0.1:0").await?;
+        let capture_endpoint = format!("http://{}", capture_listener.local_addr()?);
+        let capture_stopped = fixture.shutdown();
+        fixture.server(
+            Server::builder()
+                .add_service(captured.server())
+                .add_service(owner_rpc.server())
+                .serve_with_incoming_shutdown(TcpListenerStream::new(capture_listener), async {
+                    let _ = capture_stopped.await;
+                }),
+        );
+        capture::exercise(
+            capture::Context {
+                store: &store,
+                owner: &user.token.digest(),
+                agent: &created,
+                endpoint: &capture_endpoint,
+                source: chapchoo_protocol::conversations::CaptureSource {
+                    session_id: bootstrap.session_id.clone(),
+                    control_id: connected.instance_id.clone(),
+                    connection_id: connected.connection_id.clone(),
+                },
+                key: &exchanged.token,
+                user_key: user.token.expose(),
             },
-            key: &exchanged.token,
-            user_key: user.token.expose(),
-        })
+            &input_service,
+        )
         .await?;
         authentication_wire::exercise(
             &capture::Context {
                 store: &store,
                 owner: &user.token.digest(),
                 agent: &created,
-                endpoint: &endpoint,
+                endpoint: &capture_endpoint,
                 source: chapchoo_protocol::conversations::CaptureSource {
                     session_id: bootstrap.session_id.clone(),
                     control_id: connected.instance_id.clone(),

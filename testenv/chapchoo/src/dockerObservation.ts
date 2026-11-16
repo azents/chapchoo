@@ -5,6 +5,22 @@ export interface NativeComputer {
   user: string;
   noCopy: boolean;
 }
+/** Only fixture-defined literals may leave the private native diagnostic read. */
+export function publicationStageEvidence(output: string): string {
+  const stages = output.split(/\r?\n/);
+  if (
+    stages.length !== 2 ||
+    stages.some(
+      (stage) =>
+        !/^(not-recorded|mcp-call-started|mcp-result-accepted|mcp-result-error|mcp-call-exception)$/.test(
+          stage,
+        ),
+    )
+  ) {
+    throw new Error("Conversation fixture publication diagnostics are invalid");
+  }
+  return `publicationFirst=${stages[0]};publicationRefresh=${stages[1]}`;
+}
 /** A listed container may disappear before its bounded diagnostic inspection. */
 export async function cleanupContainerInspection<T>(
   inspect: () => Promise<T>,

@@ -13,7 +13,31 @@ pub(super) struct Context<'a> {
     pub key: &'a str,
     pub user_key: &'a str,
 }
-pub(super) async fn exercise(context: Context<'_>) -> Result<(), TestError> {
+impl Context<'_> {
+    pub(super) async fn claim_input(
+        &self,
+        conversation: &str,
+        input: &str,
+    ) -> Result<String, TestError> {
+        let claimed = self
+            .store
+            .claim_conversation_input(
+                &chapchoo_persistence::ConversationInputCandidate {
+                    id: input.into(),
+                    agent_id: self.agent.id.clone(),
+                    conversation_id: conversation.into(),
+                },
+                chapchoo_persistence::DirectoryPolicy::default(),
+            )
+            .await?
+            .ok_or("Expected fixture FIFO claim")?;
+        Ok(claimed.claim_id)
+    }
+}
+pub(super) async fn exercise(
+    context: Context<'_>,
+    input_service: &chapchoo_service::ConversationInputService,
+) -> Result<(), TestError> {
     let Context {
         store,
         owner,
@@ -24,8 +48,11 @@ pub(super) async fn exercise(context: Context<'_>) -> Result<(), TestError> {
         user_key,
     } = context;
     let now = AcceptanceTime::System.now()?;
-    let accepted = super::input_owner::exercise(store, owner, agent).await?;
-    let conversation = accepted.conversation_id;
+    let conversation = store
+        .current_conversation(owner, &agent.id, now)
+        .await?
+        .ok_or("Missing service-admitted conversation")?
+        .id;
     let mut client = ConnectorCaptureClient::connect(endpoint.to_owned())
         .await?
         .max_decoding_message_size(64 * 1024)
@@ -53,6 +80,9 @@ pub(super) async fn exercise(context: Context<'_>) -> Result<(), TestError> {
         &conversation,
     )
     .await?;
+    // Native wire tests below own explicit Store claims. Stop the product
+    // dispatcher after the owner-transfer recovery test, before seeding them.
+    input_service.finish().await?;
     let bind = capture::BindCaptureRequest {
         source: Some(source.clone()),
         conversation_id: conversation.clone(),

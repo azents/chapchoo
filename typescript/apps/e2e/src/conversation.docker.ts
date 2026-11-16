@@ -38,10 +38,10 @@ test("owner receives intentional server messages and inspects native typed-answe
   let sendStatus = 0;
   page.on("request", (request) => {
     if (request.url().includes("conversations.send")) sendRequests++;
+    if (request.url().includes("conversations.region")) historyReads++;
   });
   page.on("response", (response) => {
     if (response.url().includes("conversations.messages")) messageReads++;
-    if (response.url().includes("conversations.region")) historyReads++;
     if (response.url().includes("conversations.send"))
       sendStatus = response.status();
   });
@@ -83,8 +83,8 @@ test("owner receives intentional server messages and inspects native typed-answe
     const log = page.getByRole("log", { name: "Message", exact: true });
     await expect(message).toBeEnabled({ timeout: 90_000 });
     expect(historyReads).toBe(0);
-    stage = "intentional-publication";
     const releaseWork = await fixture.holdWork();
+    stage = "intentional-publication";
     const inputText = "Exercise the deterministic native conversation";
     await message.fill(inputText);
     const inputStart = performance.now();
@@ -418,6 +418,154 @@ test("owner receives intentional server messages and inspects native typed-answe
       throw new AggregateError(
         [...(failure ? [failure] : []), ...cleanup],
         "Conversation acceptance cleanup was unconfirmed",
+      );
+  }
+  if (failure) throw failure;
+});
+
+// Restored work scope deliberately cannot prove the empty inventory needed for
+// project refresh. Verify deferred Send without changing that separate contract.
+test("a stopped Cloud Computer restores its source and delivers an ordinary message once", async ({
+  browser,
+}) => {
+  test.setTimeout(660_000);
+  const assembly = await Assembly.createDockerBrowser();
+  let fixture: Awaited<ReturnType<typeof nativeConversation>> | null = null;
+  const context = await browser.newContext({
+    locale: "en-US",
+    timezoneId: "UTC",
+  });
+  const page = await context.newPage();
+  let stage = "prerequisite";
+  let failure: Error | null = null;
+  let sends = 0;
+  page.on("request", (request) => {
+    if (request.url().includes("conversations.send")) sends++;
+  });
+  try {
+    fixture = await nativeConversation(assembly);
+    stage = "initial-source";
+    await expect
+      .poll(
+        async () => {
+          const current = await fixture?.current();
+          return Boolean(
+            current?.startup?.sessionReady &&
+            current.conversation?.snapshotId ===
+              current.startup.sessionReady.snapshotId &&
+            current.conversation.nativeSessionId ===
+              current.startup.sessionReady.nativeSessionId,
+          );
+        },
+        { timeout: 180_000 },
+      )
+      .toBe(true);
+    const before = await fixture.current();
+    const target = before.startup?.sessionReady;
+    expect(target).toBeDefined();
+    stage = "login";
+    await page.goto(`${assembly.generalUrl}/login`);
+    await page
+      .getByRole("textbox", { name: /^(Email address|Email)$/ })
+      .fill(assembly.administrator.email);
+    await page
+      .getByLabel(/^Password\s*\*?$/)
+      .fill(assembly.administrator.password);
+    await page.getByRole("button", { name: /^(Log in|Sign in)$/ }).click();
+    await expect(
+      page.getByRole("heading", { name: "Agents", exact: true }),
+    ).toBeVisible();
+    await page.goto(`${assembly.generalUrl}${fixture.chatPath}`);
+    const message = page.getByRole("textbox", { name: "Message", exact: true });
+    const log = page.getByRole("log", { name: "Message", exact: true });
+    stage = "stop-before-send";
+    await page
+      .getByRole("button", { name: /Activity/ })
+      .filter({ has: page.locator("strong") })
+      .click();
+    const activity = page.getByRole("dialog", {
+      name: "Activity",
+      exact: true,
+    });
+    await activity.getByRole("button", { name: "Stop", exact: true }).click();
+    await page
+      .getByRole("dialog", { name: "Stop", exact: true })
+      .getByRole("button", { name: "Confirm", exact: true })
+      .click();
+    await expect(
+      activity.getByText("Computer · Stopped", { exact: true }),
+    ).toBeVisible({ timeout: 180_000 });
+    await activity.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(activity).toBeHidden();
+    await expect(message).toBeEnabled();
+    await expect(message).toHaveAttribute("aria-placeholder", /Send a message/);
+    stage = "ordinary-send-and-automatic-start";
+    const text = "Exercise the deterministic native conversation";
+    await message.fill(text);
+    await page.getByRole("button", { name: "Send", exact: true }).click();
+    await expect(
+      log.getByText("Intentional fixture publication.", { exact: true }),
+    ).toBeVisible({ timeout: 180_000 });
+    await expect(log.getByText(text, { exact: true })).toHaveCount(1);
+    await expect(log.locator("[data-message-id]")).toHaveCount(2);
+    expect(sends).toBe(1);
+    const after = await fixture.current();
+    expect(after.conversation?.conversationId).toBe(
+      before.conversation?.conversationId,
+    );
+    expect(after.observedNative?.target).toEqual(target);
+    expect(await fixture.pendingInputs()).toBe(0);
+    // Finish the deterministic fixture's question so cleanup owns no waiting
+    // responder. This does not attempt unsupported restored-context refresh.
+    stage = "finish-owned-fixture-work";
+    await page
+      .getByRole("heading", {
+        name: "Review the native fixture choices",
+        exact: true,
+      })
+      .waitFor();
+    await page.getByRole("radio", { name: "Stable", exact: true }).check();
+    await page
+      .getByRole("textbox", { name: "Confirmation note", exact: true })
+      .fill("typed native answer");
+    await page
+      .getByRole("button", { name: "Send answers", exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", {
+        name: "Review the native fixture choices",
+        exact: true,
+      }),
+    ).toHaveCount(0);
+    await expect(log.locator("[data-message-id]")).toHaveCount(2);
+  } catch (error) {
+    let diagnostic = "unavailable";
+    try {
+      diagnostic = (await fixture?.diagnostics()) ?? "unavailable";
+    } catch {
+      /* Preserve the original failure. */
+    }
+    failure = new Error(
+      `Stopped-send acceptance failed at ${stage};sends=${sends};${diagnostic}`,
+      { cause: error },
+    );
+  } finally {
+    const cleanup: unknown[] = [];
+    for (const close of [
+      () => context.close(),
+      () => fixture?.close(),
+      () => assembly.close(),
+    ]) {
+      try {
+        await close();
+      } catch (error) {
+        cleanup.push(error);
+      }
+    }
+    if (cleanup.length)
+      throw new AggregateError(
+        [...(failure ? [failure] : []), ...cleanup],
+        "Stopped-send acceptance cleanup was unconfirmed",
       );
   }
   if (failure) throw failure;

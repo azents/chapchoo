@@ -401,6 +401,7 @@ function Fixture({
         }}
         copy={copy}
         writable={mode !== "unavailable" && surface !== "history"}
+        nativeWritable={mode !== "unavailable" && surface !== "history"}
         agentName="Corgi"
         agentProfile={{ basePath: "", assetKey: "03-corgi" }}
         surface={surface}

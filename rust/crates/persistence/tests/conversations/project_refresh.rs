@@ -252,7 +252,14 @@ async fn exercise(
     assert!(
         matches!(
             store
-                .begin_conversation_input_forwarding(&actor, &route, &forwarding, f.now)
+                .begin_conversation_input_forwarding(
+                    &actor,
+                    &route,
+                    &forwarding,
+                    f.now,
+                    &f.claim(store, forwarding.conversation_id, forwarding.operation_id)
+                        .await?
+                )
                 .await,
             Err(StoreError::InvalidTransition)
         ),
@@ -278,7 +285,14 @@ async fn exercise(
     assert!(
         matches!(
             store
-                .begin_conversation_input_forwarding(&actor, &route, &forwarding, f.now)
+                .begin_conversation_input_forwarding(
+                    &actor,
+                    &route,
+                    &forwarding,
+                    f.now,
+                    &f.claim(store, forwarding.conversation_id, forwarding.operation_id)
+                        .await?
+                )
                 .await,
             Err(StoreError::InvalidTransition)
         ),
@@ -305,7 +319,14 @@ async fn exercise(
         operation_id: &input.id,
     };
     store
-        .begin_conversation_input_preparation(&actor, &route, &stale, f.now)
+        .begin_conversation_input_preparation(
+            &actor,
+            &route,
+            &stale,
+            f.now,
+            &f.claim(store, stale.conversation_id, stale.operation_id)
+                .await?,
+        )
         .await?;
     let before_launch =
         ConversationPreparationOutcome::Failed(ConversationPreparationFailure::BeforeNativeLaunch);
@@ -329,7 +350,14 @@ async fn exercise(
         ..stale
     };
     store
-        .begin_conversation_input_preparation(&actor, &route, &recovery, f.now)
+        .begin_conversation_input_preparation(
+            &actor,
+            &route,
+            &recovery,
+            f.now,
+            &f.claim(store, recovery.conversation_id, recovery.operation_id)
+                .await?,
+        )
         .await?;
     assert!(
         store
@@ -358,7 +386,7 @@ async fn exercise(
         operation_id: &recovery_input.id,
         ..forwarding
     };
-    instructions_fixture::apply(store, &actor, &route, &source, &forwarding, f.now).await?;
+    instructions_fixture::apply(store, f, &actor, &route, &source, &forwarding, f.now).await?;
     store
         .complete_conversation_input_preparation(&source, &stale, &before_launch)
         .await?;
@@ -370,7 +398,14 @@ async fn exercise(
     assert!(
         matches!(
             store
-                .begin_conversation_input_forwarding(&actor, &route, &forwarding, f.now)
+                .begin_conversation_input_forwarding(
+                    &actor,
+                    &route,
+                    &forwarding,
+                    f.now,
+                    &f.claim(store, forwarding.conversation_id, forwarding.operation_id)
+                        .await?
+                )
                 .await?,
             chapchoo_persistence::ConversationForwardingAdmission::Granted(_)
         ),
@@ -527,7 +562,18 @@ async fn exercise(
     assert!(
         matches!(
             store
-                .begin_conversation_input_forwarding(&actor, &route, &null_forwarding, f.now)
+                .begin_conversation_input_forwarding(
+                    &actor,
+                    &route,
+                    &null_forwarding,
+                    f.now,
+                    &f.claim(
+                        store,
+                        null_forwarding.conversation_id,
+                        null_forwarding.operation_id
+                    )
+                    .await?
+                )
                 .await,
             Err(StoreError::InvalidTransition)
         ),
@@ -559,7 +605,18 @@ async fn exercise(
         .await?;
     assert!(matches!(
         store
-            .begin_conversation_input_forwarding(&actor, &route, &null_forwarding, f.now)
+            .begin_conversation_input_forwarding(
+                &actor,
+                &route,
+                &null_forwarding,
+                f.now,
+                &f.claim(
+                    store,
+                    null_forwarding.conversation_id,
+                    null_forwarding.operation_id
+                )
+                .await?
+            )
             .await?,
         chapchoo_persistence::ConversationForwardingAdmission::Granted(_)
     ));
@@ -592,8 +649,15 @@ async fn exercise(
     // Owner bytes stay equal so both admissions are individually valid before
     // the shared Team/Computer transaction lock decides the actual winner.
     let race_catalog = br#"{"tools":[{"name":"race-tool"}]}"#;
+    let claim = f
+        .claim(
+            store,
+            race_forwarding.conversation_id,
+            race_forwarding.operation_id,
+        )
+        .await?;
     let (input_admission, refresh_admission) = tokio::join!(
-        store.begin_conversation_input_forwarding(&actor, &route, &race_forwarding, f.now),
+        store.begin_conversation_input_forwarding(&actor, &route, &race_forwarding, f.now, &claim),
         store.admit_project_refresh(
             &route,
             &f.agent.id,
@@ -666,7 +730,18 @@ async fn exercise(
         assert!(
             matches!(
                 store
-                    .begin_conversation_input_forwarding(&actor, &route, &race_forwarding, f.now)
+                    .begin_conversation_input_forwarding(
+                        &actor,
+                        &route,
+                        &race_forwarding,
+                        f.now,
+                        &f.claim(
+                            store,
+                            race_forwarding.conversation_id,
+                            race_forwarding.operation_id
+                        )
+                        .await?
+                    )
                     .await?,
                 chapchoo_persistence::ConversationForwardingAdmission::Granted(_)
             ),

@@ -258,7 +258,7 @@ impl Store {
                 (false, None) => return Err(StoreError::NotFound),
             };
             if input.is_none() {
-                if route.desired_state != "RUNNING" {
+                if !super::authority::input_ready!(connection, dialect, route.computer_id) {
                     return Err(StoreError::InvalidTransition);
                 }
                 let intent = diesel::sql_query(dialect.query(
@@ -328,10 +328,51 @@ impl Store {
         expected: &crate::ResolvedRoute,
         draft: &ConversationInputPreparation<'_>,
         now: i64,
+        claim_id: &str,
+    ) -> Result<ConversationPreparationAdmission, StoreError> {
+        self.begin_conversation_input_preparation_for(
+            super::authority::OwnerAuthority::Credential { actor, now },
+            expected,
+            draft,
+            claim_id,
+        )
+        .await
+    }
+    pub async fn queued_begin_conversation_input_preparation(
+        &self,
+        authority: &ConversationInputAuthority,
+        expected: &crate::ResolvedRoute,
+        draft: &ConversationInputPreparation<'_>,
+    ) -> Result<ConversationPreparationAdmission, StoreError> {
+        if authority.input_id != draft.operation_id {
+            return Err(StoreError::InvalidInput);
+        }
+        self.begin_conversation_input_preparation_for(
+            super::authority::OwnerAuthority::Queued(authority),
+            expected,
+            draft,
+            &authority.claim_id,
+        )
+        .await
+    }
+    async fn begin_conversation_input_preparation_for(
+        &self,
+        authority: super::authority::OwnerAuthority<'_>,
+        expected: &crate::ResolvedRoute,
+        draft: &ConversationInputPreparation<'_>,
+        claim_id: &str,
     ) -> Result<ConversationPreparationAdmission, StoreError> {
         let (agent, id, operation) = ids(draft)?;
         operation!(self, |connection, dialect| {
-            let owner = owned_agent!(connection, dialect, actor, agent, now);
+            let Some((owner, _now)) = super::authority::owned_authority!(
+                connection,
+                dialect,
+                &authority,
+                agent,
+                Some(id)
+            ) else {
+                return Err(StoreError::InvalidTransition);
+            };
             let (route, session_id) =
                 super::delivery::dispatch_route!(connection, dialect, expected, owner.computer_id);
             let row = conversation!(connection, dialect, id);
@@ -347,6 +388,10 @@ impl Store {
                     previous.facts()?,
                 ));
             }
+            if !super::authority::input_ready!(connection, dialect, owner.computer_id) {
+                return Err(StoreError::InvalidTransition);
+            }
+            super::input_queue::require_consumer!(connection, dialect, operation, claim_id);
             let mut retired = false;
             let covered = loop {
                 let head = diesel::sql_query(dialect.query(
@@ -495,7 +540,7 @@ impl Store {
                 HarnessSupply::Managed => ("MANAGED", None),
                 HarnessSupply::Existing(path) => ("EXISTING", Some(path.as_str())),
             };
-            super::input_queue::require_consumer!(connection, dialect, operation);
+            super::input_queue::require_consumer!(connection, dialect, operation, claim_id);
             diesel::sql_query(dialect.query("INSERT INTO conversation_input_preparation(operation_id,execution_id,supply_kind,executable_path,selection_request_id,fresh_native_allowed,require_retained_source,preparation_state) VALUES(?,?,?,?,?,?,?,'POSSIBLE')"))
                 .bind::<IdentitySql,_>(operation).bind::<IdentitySql,_>(route._execution_id).bind::<Text,_>(kind).bind::<Nullable<Text>,_>(path)
                 .bind::<Nullable<Text>,_>(selection_request_id.as_deref()).bind::<diesel::sql_types::Bool,_>(fresh_native_allowed).bind::<diesel::sql_types::Bool,_>(require_retained_source).execute(connection).await?;
@@ -664,9 +709,42 @@ impl Store {
         draft: &ConversationInputPreparation<'_>,
         now: i64,
     ) -> Result<Option<ConversationPreparationFacts>, StoreError> {
+        self.conversation_input_preparation_for(
+            super::authority::OwnerAuthority::Credential { actor, now },
+            draft,
+        )
+        .await
+    }
+    pub async fn queued_conversation_input_preparation(
+        &self,
+        authority: &ConversationInputAuthority,
+        draft: &ConversationInputPreparation<'_>,
+    ) -> Result<Option<ConversationPreparationFacts>, StoreError> {
+        if authority.input_id != draft.operation_id {
+            return Err(StoreError::InvalidInput);
+        }
+        self.conversation_input_preparation_for(
+            super::authority::OwnerAuthority::Queued(authority),
+            draft,
+        )
+        .await
+    }
+    async fn conversation_input_preparation_for(
+        &self,
+        authority: super::authority::OwnerAuthority<'_>,
+        draft: &ConversationInputPreparation<'_>,
+    ) -> Result<Option<ConversationPreparationFacts>, StoreError> {
         let (agent, id, operation) = ids(draft)?;
         operation!(self, |connection, dialect| {
-            let _ = owned_agent!(connection, dialect, actor, agent, now);
+            let Some((_owner, _now)) = super::authority::owned_authority!(
+                connection,
+                dialect,
+                &authority,
+                agent,
+                Some(id)
+            ) else {
+                return Ok(None);
+            };
             let row = conversation!(connection, dialect, id);
             if row.agent_id != agent {
                 return Err(StoreError::NotFound);
