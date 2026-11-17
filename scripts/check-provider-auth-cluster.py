@@ -281,6 +281,8 @@ def main() -> None:
                     str(private / "setup"),
                     str(private / "sa"),
                     str(private / "wrong-audience"),
+                    str(kubeconfig),
+                    "acceptance-computers",
                 ]
             )
             print(output.strip())

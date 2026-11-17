@@ -18,6 +18,21 @@ installation cache, HOME, native state, temporary files, workspace and captured
 source classes are separate under that root. A write probe checks actual storage;
 server HOME and ambient account configuration provide no fallback.
 
+Saved-volume admission prepares the complete private-class inventory, including
+the project-instruction original archive, before consumers run. Each directory is
+opened relative to retained parent descriptors with no symlink following;
+current-user ownership, directory type and inode identity are checked before
+restoring mode 0700 and again after sync. This reestablishes privacy after
+Kubernetes `fsGroup` remount adds group/setgid bits. Unexpected ownership,
+redirected paths and special nodes still fail.
+
+Normalization applies only to the product root and its named private classes.
+It is not recursive chmod: native history, capture bytes, original instruction
+archives, user files and installed executable modes remain unchanged. Strict
+credential/project consumers still reject a class relaxed or replaced after
+storage admission. New credential and instruction publication retains its
+exclusive-file, mode 0600, atomic replacement boundaries.
+
 The single execution actor serializes preparation, applied leases and collection.
 Managed acquisition selects the latest stable Node 24 Linux x86-64/ARM64 release,
 verifies its official SHA-256 archive digest, rejects escaping archive paths/links
