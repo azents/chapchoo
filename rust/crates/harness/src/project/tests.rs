@@ -63,7 +63,6 @@ fn archival_reentry_requires_the_same_original() -> TestResult {
     let saved = tempfile::tempdir()?;
     let storage = NativeStorage::open(saved.path())?;
     let root = directory(storage.saved_handle.as_ref(), ".chapchoo-native")?;
-    mkdirat(&root, "project-source", Mode::from_bits_truncate(0o700))?;
     let source = directory(&root, "project-source")?;
     fs::write(storage.workspace().join(INSTRUCTIONS), b"original")?;
     publish_once(&source, ORIGINAL, b"original")?;
@@ -72,11 +71,6 @@ fn archival_reentry_requires_the_same_original() -> TestResult {
 
     let other_saved = tempfile::tempdir()?;
     let other = NativeStorage::open(other_saved.path())?;
-    fs::create_dir(other.root().join("project-source"))?;
-    fs::set_permissions(
-        other.root().join("project-source"),
-        fs::Permissions::from_mode(0o700),
-    )?;
     fs::write(other.root().join("project-source").join(ORIGINAL), b"other")?;
     fs::write(other.workspace().join(INSTRUCTIONS), b"original")?;
     assert!(other.publish_project_instructions("managed").is_err());

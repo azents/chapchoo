@@ -89,6 +89,12 @@ blocking ownership, file/directory sync and atomic replacement protect managed
 publication. Redirected, special or hard-linked targets fail instead of changing
 their referents. Other workspace files are untouched. File success proves disk
 bytes, not model adoption. Same-UID hostile mutation is not an isolation guarantee.
+The archive directory belongs to the common
+[saved-storage admission inventory](native-harness.md#storage-preparation-and-applied-supply),
+so restored volume permissions are normalized before publication. Publication
+does not create a separate lazily initialized private directory or relax its
+own no-follow/owner checks. Reentry preserves existing archive/marker identities
+and original bytes rather than reconstructing them from the current setting.
 
 ## Common refresh and continuing input
 

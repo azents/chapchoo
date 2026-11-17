@@ -5,6 +5,7 @@ import process from "node:process";
 import console from "node:console";
 import { randomBytes } from "node:crypto";
 import { Buffer } from "node:buffer";
+import { storageReentry } from "./storage-reentry.mjs";
 import { AuthenticationsClient } from "../dist/generated/authentication.js";
 import { setTimeout as delay } from "node:timers/promises";
 import { credentials, Metadata, status } from "@grpc/grpc-js";
@@ -27,6 +28,7 @@ import {
 } from "../dist/generated/control.js";
 const [endpoint, registrationKey, proofFile, saFile, wrongAudienceFile] =
   process.argv.slice(2);
+const [kubeconfig, computerNamespace] = process.argv.slice(7);
 if (
   !/^(127\.0\.0\.1|localhost):\d+$/.test(endpoint ?? "") ||
   !registrationKey ||
@@ -238,6 +240,10 @@ try {
   console.info(
     "Provider acceptance: authenticated, created and Connector connected",
   );
+  const storage = kubeconfig
+    ? storageReentry(kubeconfig, computerNamespace, created.agent.computer.id)
+    : undefined;
+  const previousPod = await storage?.seed();
   await call(
     computers,
     "requestLifecycle",
@@ -267,6 +273,12 @@ try {
       ready(value, Power.POWER_RUNNING) &&
       value.computer?.connector === Connectivity.CONNECTIVITY_CONNECTED,
   );
+  if (storage) {
+    await storage.verify(previousPod);
+    console.info(
+      "Provider acceptance: actual fsGroup volume reentry preserves private storage",
+    );
+  }
   await call(
     computers,
     "requestLifecycle",

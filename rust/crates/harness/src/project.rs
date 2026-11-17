@@ -1,10 +1,10 @@
 //! Exact project instruction publication in the retained default workspace.
-use crate::{Error, NativeStorage};
+use crate::{Error, NativeStorage, storage::PrivateClass};
 use chapchoo_crypto::BearerSecret;
 use nix::{
     errno::Errno,
     fcntl::{AtFlags, OFlag, RenameFlags, openat, renameat, renameat2},
-    sys::stat::{FileStat, Mode, SFlag, fchmod, fstat, fstatat, mkdirat},
+    sys::stat::{FileStat, Mode, SFlag, fchmod, fstat, fstatat},
     unistd::{UnlinkatFlags, getuid, unlinkat},
 };
 use std::{
@@ -31,16 +31,11 @@ impl NativeStorage {
         }
         let root = directory(self.saved_handle.as_ref(), ".chapchoo-native")?;
         let workspace = directory(&root, "workspace")?;
-        match mkdirat(&root, "project-source", Mode::from_bits_truncate(0o700)) {
-            Ok(()) => root.sync_all().map_err(|_| Error::Storage)?,
-            Err(Errno::EEXIST) => {}
-            Err(_) => return Err(Error::Storage),
-        }
-        let source = directory(&root, "project-source")?;
+        let source = directory(&root, PrivateClass::ProjectSource.name())?;
         let check = || {
             same_directory(self.saved_handle.as_ref(), ".chapchoo-native", &root)?;
             same_directory(&root, "workspace", &workspace)?;
-            same_directory(&root, "project-source", &source)
+            same_directory(&root, PrivateClass::ProjectSource.name(), &source)
         };
         check()?;
         preserve_original(&workspace, &source)?;
