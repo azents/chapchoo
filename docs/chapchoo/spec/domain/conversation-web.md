@@ -162,7 +162,9 @@ row design. Selection enters a separate full-height history view at that record 
 keyboard focus on the selected entry after the activity sheet finishes closing.
 Opening history without a selection also leaves focus inside that view. Closing
 the sheet back to the transcript restores the status control.
-User and ordinary native/model text is included in full records. Each chronological record has an
+Full records include user and ordinary native/model text. An internal follow-up
+input appears with its role and content as captured; it does not create a user
+Chat message. Each chronological record has an
 independent single-line summary with a left chevron, ACP-kind icon, title, plain
 opening preview and separate status. Opening a record adds its full content
 below without changing the summary geometry. There is no event aggregation.

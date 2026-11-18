@@ -178,18 +178,17 @@ async function workTurn(id, params, which, args) {
   turnId = `fixture-${which}-turn`;
   reply(id, { turn: turn("inProgress") });
   notify("turn/started", { threadId, turn: turn("inProgress") });
-  if (which === "result") {
-    // An ordinary reply must produce its own correlated native input before
-    // the production publication fence will allow this turn's send.
-    const received = {
-      type: "userMessage",
-      id: "native-work-reply",
-      clientId: params.clientUserMessageId ?? null,
-      content: params.input,
-    };
-    item("item/started", received);
-    item("item/completed", received);
-  }
+  // Codex acknowledges both inputs as native user messages. Only the ordinary
+  // reply has a user Chat receipt; full history retains both native inputs.
+  const received = {
+    type: "userMessage",
+    id:
+      which === "question" ? "native-continuation-input" : "native-work-reply",
+    clientId: params.clientUserMessageId ?? null,
+    content: params.input,
+  };
+  item("item/started", received);
+  item("item/completed", received);
   const publication = {
     type: "mcpToolCall",
     id: `publication-${which}`,

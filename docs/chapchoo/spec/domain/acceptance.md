@@ -27,9 +27,9 @@ through the official SDK and real MCP/RPC boundaries. It starts and updates the
 same work item, observes a qualified automatic follow-up without a user receipt,
 and accepts a fresh reply to the work question before publishing the result and
 removing the summary. Native/final output is not published automatically. Actual
-full records retain native utterances, captured tool inputs/results and the
-explicit typed native answer. Browser reentry checks server-rendered summary
-and receipt HTML independently of hydration.
+full records retain the captured internal follow-up input, native utterances,
+tool inputs/results and the explicit typed native answer. Browser reentry
+checks server-rendered summary and receipt HTML independently of hydration.
 Focused app component tests own receipt-reader races, full-record presentation,
 scoped primary colors, locales and responsive layout rather than duplicating the
 assembled journey. Missing
