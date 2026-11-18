@@ -1,7 +1,8 @@
 use super::*;
 use chapchoo_domain::{SendAction, WorkTask, WorkTaskStatus};
 use chapchoo_persistence::{
-    ConversationDeliveryTarget, ConversationMessageScope, ConversationMessageWindow,
+    ConversationDeliveryTarget, ConversationGoalChange as Goal, ConversationMessageScope,
+    ConversationMessageWindow,
 };
 
 async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
@@ -237,6 +238,121 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
         .await?
         .ok_or("Missing successor")?;
     assert_ne!(restarted.id, first.id);
+    verify_explicit_failure(store, f, &scope, &target, &restarted.id, &start, &question).await
+}
+
+async fn verify_explicit_failure(
+    store: &Store,
+    f: &Fixture,
+    scope: &ConversationMessageScope<'_>,
+    target: &ConversationDeliveryTarget,
+    work: &str,
+    start: &SendAction,
+    question: &SendAction,
+) -> Result<(), TestError> {
+    // This models a trusted Store caller declaring failure, not an execution
+    // fault, a `send` call, or a product entrypoint for harness settlement.
+    let owner = f.owner.digest();
+    let credential = f.connector.digest();
+    let source = f.source(&credential);
+    let id = scope.conversation_id;
+    let independent = "independent-fixture-goal";
+    store
+        .change_conversation_goal(
+            &source,
+            id,
+            target,
+            independent,
+            Goal::Add {
+                objective: "Compare the independent fixture",
+            },
+        )
+        .await?;
+    store
+        .send_conversation_work(&source, scope, question)
+        .await?;
+    let before = store
+        .conversation_messages(&owner, scope, ConversationMessageWindow::Latest, 10, f.now)
+        .await?;
+    let replacement = ConversationDeliveryTarget {
+        snapshot: snapshot("work-replacement")?,
+        native_session: target.native_session.clone(),
+    };
+    store
+        .bind_conversation_source(
+            &source,
+            &SourceBinding {
+                conversation_id: id.into(),
+                expected_previous: Some(target.snapshot.clone()),
+                snapshot: replacement.snapshot.clone(),
+                native_session: replacement.native_session.clone(),
+            },
+        )
+        .await?;
+    store
+        .complete_conversation_source(&source, id, &replacement.snapshot, None)
+        .await?;
+    assert!(matches!(
+        store
+            .change_conversation_goal(&source, id, target, work, Goal::Fail)
+            .await,
+        Err(StoreError::Conflict)
+    ));
+    let current_work = store
+        .conversation_work_summary(&owner, scope, f.now)
+        .await?
+        .ok_or("Stale failure removed the current work")?;
+    assert_eq!(current_work.id, work);
+    assert!(current_work.waiting_for_input);
+    store
+        .change_conversation_goal(&source, id, &replacement, work, Goal::Fail)
+        .await?;
+    assert!(
+        store
+            .conversation_work_summary(&owner, scope, f.now)
+            .await?
+            .is_none()
+    );
+    let remaining: serde_json::Value = serde_json::from_slice(
+        &store
+            .conversation_goal_context(&source, id, &replacement)
+            .await?,
+    )?;
+    assert_eq!(
+        remaining,
+        serde_json::json!([{
+            "goal_key": independent,
+            "objective": "Compare the independent fixture",
+            "disposition": "active",
+        }])
+    );
+    assert!(matches!(
+        store
+            .change_conversation_goal(&source, id, &replacement, work, Goal::Complete)
+            .await,
+        Err(StoreError::InvalidTransition)
+    ));
+    store.send_conversation_work(&source, scope, start).await?;
+    let next = store
+        .conversation_work_summary(&owner, scope, f.now)
+        .await?
+        .ok_or("Missing work after failure")?;
+    assert_ne!(next.id, work);
+    store
+        .change_conversation_goal(&source, id, &replacement, work, Goal::Fail)
+        .await?;
+    let after_retry = store
+        .conversation_work_summary(&owner, scope, f.now)
+        .await?
+        .ok_or("Failure retry removed the successor")?;
+    assert_eq!(after_retry.id, next.id);
+    assert_eq!(
+        store
+            .conversation_messages(&owner, scope, ConversationMessageWindow::Latest, 10, f.now)
+            .await?
+            .through,
+        before.through
+    );
     Ok(())
 }
 

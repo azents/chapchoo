@@ -41,9 +41,24 @@ tags: [backend, frontend]
   alternate legacy tool, no waiting-state side effects for message-only cases.
 - Context checkpoint: backend phase #143 at `8b5e881` passed Rust/dual-DB/RPC
   checks and review. Managed compaction restore is not implemented in that base.
-- Open release gates: qualify the actual `send_message` to `send` cutover and
-  rollback boundary with retained native ownership, not just New and Resume
-  within the new catalog. Independently settable/amendable Goals and explicit
-  harness Work failure remain unqualified in the integrated product; the
-  storage transitions alone do not satisfy those requirements. Do not add a
-  legacy alias, infer failure from a turn, or mark the snapshot implemented.
+- Cutover evidence: isolated Docker retained the conversation, snapshot,
+  native session, saved volume, and receipts across the catalog transition
+  after the legacy effect settled. Paired SQLite and PostgreSQL backup
+  restoration was verified using the original installation root. This is
+  not mixed-version or uncertain-effect handover evidence.
+- Full history checkpoint: the Docker browser journey proves automatic input
+  remains absent from Chat receipts but readable with its body in Full history.
+  Retain captured items regardless of whether their origin is known.
+- Storage verification follow-up (`M1`, `M7`): exercise explicit failure of
+  the exact Work-associated goal using the existing Store operation on both
+  database engines, including the shared summary/context disposition, no
+  publication, unchanged unrelated goals, and source and retry fencing.
+  The test does not measure the admission count. This follow-up changes no
+  production path or authority.
+- Open release gates: the standalone Goal transitions have no product
+  caller. The `send` actions manage one associated goal but cannot add or
+  amend an independent goal, or express an explicit harness Work failure.
+  Revision 17 does not specify a distinct authorized producer and lifecycle
+  for those commands. Do not expose a goal control, infer failure from a
+  turn, or mark the snapshot implemented. `M5` still needs an authenticated,
+  invocation-bound native restore channel with a next-inference barrier.
