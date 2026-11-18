@@ -5,6 +5,7 @@ use crate::{
     store::operation,
 };
 use chapchoo_crypto::{ExternalSecret, ExternalSecretEnvelope};
+use chapchoo_domain::LaunchCapture;
 use diesel::sql_types::Bool;
 
 #[derive(Clone, PartialEq, Eq)]
@@ -159,6 +160,23 @@ struct Selection {
     current_request_id: String,
 }
 #[derive(diesel::QueryableByName)]
+struct LaunchFloor {
+    #[diesel(sql_type=Text)]
+    source_snapshot: String,
+    #[diesel(sql_type=BigInt)]
+    retained_ordinal: i64,
+    #[diesel(sql_type=Nullable<Text>)]
+    retained_occurrence_id: Option<String>,
+}
+impl LaunchFloor {
+    fn matches(&self, capture: &LaunchCapture) -> bool {
+        self.source_snapshot == capture.snapshot.as_str()
+            && self.retained_ordinal == capture.through.as_ref().map_or(0, |p| p.ordinal())
+            && self.retained_occurrence_id.as_deref()
+                == capture.through.as_ref().map(|p| p.occurrence().as_str())
+    }
+}
+#[derive(diesel::QueryableByName)]
 struct SecretRow {
     #[diesel(sql_type=Binary)]
     nonce: Vec<u8>,
@@ -277,6 +295,7 @@ impl Store {
         source: &ConnectorSource<'_>,
         draft: &ConversationInputPreparation<'_>,
         expected_previous_operation: Option<&str>,
+        capture: Option<&LaunchCapture>,
     ) -> Result<AppliedExecutionAuthentication, StoreError> {
         let ids = ids(draft)?;
         let previous = expected_previous_operation
@@ -318,6 +337,13 @@ impl Store {
                 if current.operation_id != prior.operation_id {
                     return Err(StoreError::Conflict);
                 }
+                let retained = diesel::sql_query(dialect.query("SELECT source_snapshot,retained_ordinal,retained_occurrence_id FROM conversation_launch_captures WHERE operation_id=?"))
+                    .bind::<IdentitySql,_>(prior.operation_id).get_result::<LaunchFloor>(connection).await.optional()?;
+                match (retained.as_ref(), capture) {
+                    (None, None) => {}
+                    (Some(retained), Some(capture)) if retained.matches(capture) => {}
+                    _ => return Err(StoreError::Conflict),
+                }
                 return Ok(prior.summary());
             }
             let selected = diesel::sql_query(dialect.query("SELECT authentication_id,current_request_id FROM agent_authentication_selections WHERE agent_id=?"))
@@ -334,6 +360,14 @@ impl Store {
             diesel::sql_query(dialect.query("INSERT INTO execution_authentication_applications(operation_id,execution_id,agent_id,conversation_id,authentication_id,selection_request_id,is_current,admitted_at) VALUES(?,?,?,?,?,?,TRUE,?)"))
                 .bind::<IdentitySql,_>(ids.2).bind::<IdentitySql,_>(context.execution_id).bind::<IdentitySql,_>(ids.0).bind::<IdentitySql,_>(ids.1)
                 .bind::<IdentitySql,_>(selected.authentication_id).bind::<Text,_>(&selected.current_request_id).bind::<BigInt,_>(now).execute(connection).await?;
+            if let Some(capture) = capture {
+                diesel::sql_query(dialect.query("INSERT INTO conversation_launch_captures(operation_id,source_snapshot,retained_ordinal,retained_occurrence_id) VALUES(?,?,?,?)"))
+                    .bind::<IdentitySql,_>(ids.2)
+                    .bind::<Text,_>(capture.snapshot.as_str())
+                    .bind::<BigInt,_>(capture.through.as_ref().map_or(0, |p| p.ordinal()))
+                    .bind::<Nullable<Text>,_>(capture.through.as_ref().map(|p| p.occurrence().as_str()))
+                    .execute(connection).await?;
+            }
             Ok(AppliedExecutionAuthentication {
                 operation_id: draft.operation_id.into(),
                 execution_id: context.execution_id.to_dto(EntityKind::Execution),

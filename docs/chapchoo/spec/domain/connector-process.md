@@ -86,6 +86,18 @@ uncertain-refresh or eligibility failure does not trigger native restart.
 Shutdown closes scheduling and cancels network waiters, while server refresh
 and local blocking publication retain their respective physical owners.
 
+A qualified live ending is reported after capture synchronization has reached
+its exact occurrence. The bounded component call waits for a committed
+[decision](conversation-storage.md#conversation-goals-and-continuation-decisions),
+not native acceptance of an ensuing input. Internal forwarding uses an
+independent grant and the exact still-live ending. A revoked stream cannot
+publish a new continuation. Loss of a possibly committed grant does not authorize
+another native send, and a lost close response retries the close alone. Closing
+an outstanding slot does not depend on a later capture pass succeeding.
+
+The source-qualified Goal context read is component-only. No managed Codex
+compaction hook or native-local restore endpoint is installed by the Connector.
+
 Input commands carry small operation/source references. The worker pulls the
 sealed original text through authenticated 32-KiB byte reads, validates constant
 identity/size/offset and complete UTF-8 assembly, then rechecks the exact source

@@ -560,6 +560,35 @@ Completion names a finite captured boundary already fully ingested; later append
 continue without requiring a native idle period. No native replay, command retry,
 outgoing dispatch journal or upstream-gap repair is performed by these operations.
 
+## Conversation goals and continuation decisions
+
+The conversation owns its goals and a shared automatic-admission count. Goal
+identity and explicit terminal outcomes are independent of any native execution.
+The current projection contains the full active and waiting set. Goal writes
+enforce its 8 KiB UTF-8 serialization bound without truncation. A successful
+empty read returns `[]`, separately from rejection or lookup failure. Goal
+mutation is server-owned; the Connector exposes no goal mutation operation.
+
+Control admits a continuation only for an authenticated current Connector's
+qualified live ending, tied to the exact native launch, work target and captured
+root occurrence. The occurrence must be strictly after that launch's sealed
+pre-start capture boundary, even if older retained records were uploaded later.
+The retained frame corroborates the report; storage does not generate reports
+from history. The transaction records one no-action decision or
+one internal input and its charge. A duplicate of the same live ending can
+recover its decision, not enqueue again. Pending ordinary input takes precedence
+at admission. At least one eligible goal and remaining capacity are required.
+The count allows three automatic admissions between resets. New goal addition and
+fresh explicit user input acceptance reset it in their own transactions; an
+existing acceptance or an internal input does not reset it.
+
+A later user input does not overtake an admitted internal slot for the current
+launch. A separate one-use native forwarding grant reads the current goal
+projection for that slot. Closing the exact slot relinquishes forwarding order,
+not a delivery receipt. A replacement launch does not inherit the slot even
+when it resumes the same source. Internal forwarding does not make a user Chat
+receipt; the native record retains the role observed on ACP.
+
 ## Bounded internal reads
 
 The component-only `chapchoo.conversations.ConnectorCapture` service exposes
@@ -633,6 +662,10 @@ The paired downgrade refuses retained details rather than discarding them.
 Migration 18 adds/backfills the derived current-body extent index from existing
 field bytes and update ordinals without rewriting those values. Its downgrade
 removes only that index, leaving every original field byte and ordinal intact.
+Migration 28 adds conversation goals, their shared count, native launch capture
+boundaries, exact live-ending decisions and internal continuation slots. Its
+paired downgrade rejects loss of retained goals, nonzero counts, launch capture
+boundaries or ending decisions.
 [Explicit preparation/readiness](account-storage.md) includes the new migration
 and product-table binding checks. Downgrades reject loss of original new facts;
 derived extent metadata can be removed without discarding their underlying bytes.

@@ -62,10 +62,11 @@ impl ConversationService {
     pub async fn queued_input_pending(
         &self,
         authority: &ConversationInputAuthority,
+        execution: &str,
     ) -> Result<bool, ServiceError> {
         Ok(self
             .store
-            .queued_conversation_input_pending(authority)
+            .queued_execution_input_pending(authority, execution)
             .await?)
     }
     pub async fn queued_project_instructions(

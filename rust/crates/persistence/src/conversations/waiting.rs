@@ -413,6 +413,35 @@ impl Store {
             Ok(queued_owned_agent!(connection, dialect, authority).is_some())
         })
     }
+    /// Observe an acknowledged forwarding attempt across Control stream replacement.
+    /// The original current execution and owner claim still fence observation.
+    pub async fn queued_execution_input_pending(
+        &self,
+        authority: &ConversationInputAuthority,
+        execution: &str,
+    ) -> Result<bool, StoreError> {
+        let execution = EntityId::from_dto(EntityKind::Execution, execution)?;
+        let input = EntityId::from_dto(EntityKind::ConversationOperation, &authority.input_id)?;
+        operation!(self, |connection, dialect| {
+            let Some((owner, _)) = queued_owned_agent!(connection, dialect, authority) else {
+                return Ok(false);
+            };
+            #[derive(diesel::QueryableByName)]
+            struct PendingOnExecution {
+                #[diesel(sql_type=Bool)]
+                pending: bool,
+            }
+            let row = diesel::sql_query(dialect.query(
+                "SELECT EXISTS(SELECT 1 FROM computers c
+                 JOIN computer_executions e ON e.id=c.current_execution_id AND e.retired_at IS NULL
+                 JOIN conversation_input_delivery d ON d.execution_id=e.id AND d.delivery_state='POSSIBLE'
+                 WHERE c.id=? AND e.id=? AND d.operation_id=? AND c.desired_state='RUNNING') AS pending",
+            ))
+            .bind::<IdentitySql,_>(owner.computer_id).bind::<IdentitySql,_>(execution)
+            .bind::<IdentitySql,_>(input).get_result::<PendingOnExecution>(connection).await?;
+            Ok(row.pending)
+        })
+    }
     /// Stale workers cannot finalize or release a successor's ownership. Native uncertainty is never reclaimable.
     pub async fn release_conversation_input_claim(
         &self,

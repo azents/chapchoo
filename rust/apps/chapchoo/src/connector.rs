@@ -225,6 +225,7 @@ async fn connected(
         },
         key,
     )?;
+    let continuation_route = chapchoo_harness::ContinuationRouteLease::open();
     let mut heartbeat = tokio::time::interval(Duration::from_millis(u64::from(
         connected.heartbeat_interval_ms,
     )));
@@ -240,7 +241,7 @@ async fn connected(
             _=capture_tick.tick()=>{
                 capture_sync.schedule(channel.clone(),chapchoo_protocol::conversations::CaptureSource {
                     session_id:session.into(),control_id:connected.instance_id.clone(),connection_id:connected.connection_id.clone(),
-                },key)?;
+                },key,continuation_route.route())?;
                 operations.publish(channel.clone(),chapchoo_protocol::conversations::CaptureSource {
                     session_id:session.into(),control_id:connected.instance_id.clone(),connection_id:connected.connection_id.clone(),
                 },key)?;

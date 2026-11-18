@@ -40,10 +40,10 @@ fn lock<T>(value: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
-struct Route {
-    channel: Channel,
-    source: CaptureSource,
-    key: BearerSecret,
+pub(super) struct Route {
+    pub(super) channel: Channel,
+    pub(super) source: CaptureSource,
+    pub(super) key: BearerSecret,
 }
 /// Operational updates replace server credentials, never a local capability's
 /// Agent/conversation or its actual native owner's lifetime.
@@ -77,13 +77,21 @@ impl CurrentRoute {
         RouteLease(self.clone())
     }
     fn snapshot(&self) -> Result<Route, AppError> {
+        self.try_snapshot()?
+            .ok_or("No current server tool route".into())
+    }
+    pub(super) fn try_snapshot(&self) -> Result<Option<Route>, AppError> {
         let route = lock(&self.0);
-        let route = route.as_ref().ok_or("No current server tool route")?;
-        Ok(Route {
-            channel: route.channel.clone(),
-            source: route.source.clone(),
-            key: BearerSecret::parse(route.key.expose().to_owned())?,
-        })
+        route
+            .as_ref()
+            .map(|route| {
+                Ok(Route {
+                    channel: route.channel.clone(),
+                    source: route.source.clone(),
+                    key: BearerSecret::parse(route.key.expose().to_owned())?,
+                })
+            })
+            .transpose()
     }
 }
 #[derive(Clone)]

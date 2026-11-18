@@ -46,6 +46,7 @@ enum NoRunningTurn {
 pub(super) async fn submit(
     session: &agent_client_protocol::v2::ActiveSession<Agent>,
     text: &ConversationText,
+    observations: Option<&Observations>,
 ) -> Result<NativePromptAcceptance, Error> {
     let request = Steering {
         session_id: session.session_id().clone(),
@@ -69,11 +70,12 @@ pub(super) async fn submit(
         SteeringResponse::PromptRequired {
             reason: NoRunningTurn::NoRunningTurn,
         } => {
-            let response = session
-                .send_prompt(text.as_str())
-                .block_task()
-                .await
-                .map_err(|_| Error::Protocol)?;
+            let publish = || session.send_prompt(text.as_str());
+            let pending = match observations {
+                Some(observations) => observations.publish_ordinary_prompt(publish)?,
+                None => publish(),
+            };
+            let response = pending.block_task().await.map_err(|_| Error::Protocol)?;
             Ok(NativePromptAcceptance::Inserted {
                 native_message_id: response.message_id.to_string(),
             })

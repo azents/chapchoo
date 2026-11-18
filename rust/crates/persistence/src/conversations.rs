@@ -2,7 +2,9 @@
 
 mod answers;
 pub(crate) mod authority;
+mod continuation;
 mod delivery;
+mod goals;
 mod input_queue;
 mod input_reads;
 mod inputs;
@@ -49,11 +51,13 @@ pub use answers::{
     ConversationLiveRequestReference, ConversationRequestKind, LiveConversationRequest,
 };
 use authority::{connector, owned_agent};
+pub use continuation::{ConversationContinuationDecision, ConversationNormalEnding};
 pub use delivery::{
     ConversationDeliveryTarget, ConversationForwardingAdmission, ConversationForwardingGrant,
     ConversationInputChunk, ConversationInputDelivery, ConversationInputOutcome,
     ConversationInputReportAcknowledgement, ConversationOperationForwarding,
 };
+pub use goals::ConversationGoalChange;
 pub use input_queue::ConversationInputQueueState;
 pub use input_reads::{
     ConversationInputAnchor, ConversationInputScope, RetainedConversationInput,

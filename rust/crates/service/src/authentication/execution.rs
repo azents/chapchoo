@@ -88,6 +88,7 @@ impl ExecutionAuthenticationService {
         &self,
         consumer: &ExecutionAuthenticationConsumer,
         expected_previous: Option<&str>,
+        capture: Option<&chapchoo_domain::LaunchCapture>,
     ) -> Result<AppliedExecutionAuthentication, ServiceError> {
         let _permit = self.permit()?;
         Ok(self
@@ -96,6 +97,7 @@ impl ExecutionAuthenticationService {
                 &consumer.source(),
                 &consumer.application(),
                 expected_previous,
+                capture,
             )
             .await?)
     }

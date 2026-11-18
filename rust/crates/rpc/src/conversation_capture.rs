@@ -3,6 +3,7 @@ mod answers;
 mod assembly;
 mod authentication;
 mod input;
+mod native_hooks;
 mod observations;
 mod setup;
 mod stops;
@@ -185,6 +186,30 @@ impl ConnectorCapture for ConversationCaptureServices {
         request: Request<wire::NativeStateReport>,
     ) -> Result<Response<()>, Status> {
         observations::native(self, request).await
+    }
+    async fn report_native_hook(
+        &self,
+        request: Request<wire::NativeHookReport>,
+    ) -> Result<Response<wire::NativeHookOutcome>, Status> {
+        native_hooks::report(self, request).await
+    }
+    async fn read_goal_context(
+        &self,
+        request: Request<wire::GoalContextRequest>,
+    ) -> Result<Response<wire::GoalContext>, Status> {
+        native_hooks::restore_context(self, request).await
+    }
+    async fn begin_continuation(
+        &self,
+        request: Request<wire::ContinuationHandoff>,
+    ) -> Result<Response<wire::ContinuationGrant>, Status> {
+        native_hooks::begin(self, request).await
+    }
+    async fn close_continuation(
+        &self,
+        request: Request<wire::ContinuationHandoff>,
+    ) -> Result<Response<()>, Status> {
+        native_hooks::close(self, request).await
     }
     async fn report_request(
         &self,

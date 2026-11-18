@@ -8,7 +8,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 struct CountingProvider(AtomicUsize);
 struct CheckProvider(AtomicUsize);
 impl NativeAuthenticationProvider for CheckProvider {
-    fn acquire(&self) -> crate::NativeAuthenticationFuture<'_, crate::NativeAuthentication> {
+    fn acquire(
+        &self,
+        _: chapchoo_domain::LaunchCapture,
+    ) -> crate::NativeAuthenticationFuture<'_, crate::NativeAuthentication> {
         Box::pin(async { Err(Error::Authentication) })
     }
     fn check<'a>(
@@ -29,7 +32,10 @@ fn update(
     })
 }
 impl NativeAuthenticationProvider for CountingProvider {
-    fn acquire(&self) -> crate::NativeAuthenticationFuture<'_, crate::NativeAuthentication> {
+    fn acquire(
+        &self,
+        _: chapchoo_domain::LaunchCapture,
+    ) -> crate::NativeAuthenticationFuture<'_, crate::NativeAuthentication> {
         self.0.fetch_add(1, Ordering::SeqCst);
         Box::pin(async { Err(Error::Authentication) })
     }

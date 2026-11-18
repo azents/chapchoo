@@ -300,6 +300,7 @@ impl Operations {
         let payload = self.payload.clone();
         let stop = self.stop.clone();
         let ordering = self.ordering.clone();
+        let current_route = self.tools_route.clone();
         self.tasks.spawn(async move {
             let outcome = async {
                 use chapchoo_harness::{NativeInputObservation, NativePromptAcceptance};
@@ -360,17 +361,17 @@ impl Operations {
                     return Err("Input stopped before native dispatch".into());
                 }
                 let total = u32::try_from(bytes.len())?;
-                let boundary = client
-                    .pull_input(request(
+                let boundary_request = || {
+                    request(
                         c::InputChunkRequest {
-                            source: Some(origin),
+                            source: Some(origin.clone()),
                             command: Some(command.clone()),
                             offset: total,
                         },
                         &key,
-                    )?)
-                    .await?
-                    .into_inner();
+                    )
+                };
+                let boundary = client.pull_input(boundary_request()?).await?.into_inner();
                 if boundary.offset != total
                     || boundary.total_bytes != total
                     || !boundary.content.is_empty()
@@ -388,16 +389,68 @@ impl Operations {
                     return Err("Native input owner conflicts".into());
                 }
                 permit.ordering = Some(ordering.begin(&binding, &command.operation_id)?);
-                let result = native
-                    .prompt_for_owner(
-                        chapchoo_harness::NativeInputOperation {
-                            operation_id: command.operation_id.clone(),
-                            target,
-                            text,
-                        },
-                        binding,
-                    )
-                    .await?;
+                let operation = chapchoo_harness::NativeInputOperation {
+                    operation_id: command.operation_id.clone(),
+                    target,
+                    text,
+                };
+                let result = loop {
+                    match native
+                        .prompt_for_owner(operation.clone(), binding.clone())
+                        .await
+                    {
+                        Err(chapchoo_harness::Error::EndingDecisionPending) => {}
+                        outcome => break outcome?,
+                    }
+                    // ACP explicitly did not consume the input. Revalidate
+                    // the original grant before another possible publication.
+                    loop {
+                        if stop.is_cancelled() {
+                            return Err("Input transfer stopped before native dispatch".into());
+                        }
+                        if native.pending_ending().await?.is_none()
+                            && let Some(route) = current_route.try_snapshot()?
+                        {
+                            let mut live = ConnectorCaptureClient::new(route.channel)
+                                .max_decoding_message_size(64 * 1024)
+                                .max_encoding_message_size(64 * 1024);
+                            let result = live
+                                .pull_input(request(
+                                    c::InputChunkRequest {
+                                        source: Some(route.source),
+                                        command: Some(command.clone()),
+                                        offset: total,
+                                    },
+                                    &route.key,
+                                )?)
+                                .await;
+                            match result {
+                                Ok(response) => {
+                                    let boundary = response.into_inner();
+                                    if boundary.offset != total
+                                        || boundary.total_bytes != total
+                                        || !boundary.content.is_empty()
+                                    {
+                                        return Err(
+                                            "Deferred input transfer completion conflicts".into()
+                                        );
+                                    }
+                                    break;
+                                }
+                                Err(status)
+                                    if matches!(
+                                        status.code(),
+                                        tonic::Code::Unavailable
+                                            | tonic::Code::DeadlineExceeded
+                                            | tonic::Code::Cancelled
+                                            | tonic::Code::Unauthenticated
+                                    ) => {}
+                                Err(status) => return Err(status.into()),
+                            }
+                        }
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                    }
+                };
                 drop(budget);
                 match result {
                     NativePromptAcceptance::Inserted { .. }

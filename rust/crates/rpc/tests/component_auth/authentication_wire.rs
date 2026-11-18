@@ -246,6 +246,10 @@ pub(super) async fn exercise(
     let begin = c::BeginAuthenticationRequest {
         target: Some(target.clone()),
         expected_previous_operation_id: None,
+        capture: Some(c::LaunchCapture {
+            snapshot_id: "rpc-replacement".into(),
+            through: None,
+        }),
     };
     assert_eq!(
         client
@@ -306,6 +310,8 @@ pub(super) async fn exercise(
         .await?
         .into_inner();
     assert_eq!(applied.authentication_id, id);
+    super::native_state::exercise_ending(context, &target.conversation_id, &applied.operation_id)
+        .await?;
     assert_eq!(
         client
             .begin_authentication(authenticated(begin.clone(), context.key)?)
@@ -515,6 +521,7 @@ pub(super) async fn exercise(
             c::BeginAuthenticationRequest {
                 target: Some(oauth_target.clone()),
                 expected_previous_operation_id: Some(target.operation_id),
+                capture: None,
             },
             context.key,
         )?)

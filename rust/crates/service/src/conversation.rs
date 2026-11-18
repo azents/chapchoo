@@ -209,6 +209,52 @@ impl ConversationService {
             .observe_conversation_request(source, conversation, target, request)
             .await?)
     }
+    pub async fn handle_normal_ending(
+        &self,
+        source: &ConnectorSource<'_>,
+        conversation: &str,
+        ending: &chapchoo_persistence::ConversationNormalEnding,
+    ) -> Result<chapchoo_persistence::ConversationContinuationDecision, ServiceError> {
+        Ok(self
+            .store
+            .admit_conversation_continuation(source, conversation, ending)
+            .await?)
+    }
+    pub async fn read_goal_context(
+        &self,
+        source: &ConnectorSource<'_>,
+        conversation: &str,
+        target: &chapchoo_persistence::ConversationDeliveryTarget,
+    ) -> Result<Vec<u8>, ServiceError> {
+        Ok(self
+            .store
+            .conversation_goal_context(source, conversation, target)
+            .await?)
+    }
+    pub async fn begin_continuation(
+        &self,
+        source: &ConnectorSource<'_>,
+        conversation: &str,
+        operation: &str,
+        ending: &chapchoo_persistence::ConversationNormalEnding,
+    ) -> Result<Option<Vec<u8>>, ServiceError> {
+        Ok(self
+            .store
+            .begin_conversation_continuation(source, conversation, operation, ending)
+            .await?)
+    }
+    pub async fn close_continuation(
+        &self,
+        source: &ConnectorSource<'_>,
+        conversation: &str,
+        operation: &str,
+        ending: &chapchoo_persistence::ConversationNormalEnding,
+    ) -> Result<(), ServiceError> {
+        Ok(self
+            .store
+            .close_conversation_continuation(source, conversation, operation, ending)
+            .await?)
+    }
     pub async fn begin_setup(
         &self,
         actor: &chapchoo_crypto::SecretDigest,

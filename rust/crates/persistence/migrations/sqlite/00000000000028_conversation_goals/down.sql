@@ -1,0 +1,11 @@
+CREATE TEMP TABLE conversation_goal_downgrade_guard(n BIGINT CHECK (n=0));
+INSERT INTO conversation_goal_downgrade_guard SELECT count(*) FROM conversation_goals;
+INSERT INTO conversation_goal_downgrade_guard SELECT count(*) FROM conversation_continuation_counts WHERE admissions<>0;
+INSERT INTO conversation_goal_downgrade_guard SELECT count(*) FROM conversation_ending_decisions;
+INSERT INTO conversation_goal_downgrade_guard SELECT count(*) FROM conversation_launch_captures;
+DROP TABLE conversation_goal_downgrade_guard;
+DROP TABLE conversation_launch_captures;
+DROP TABLE conversation_continuation_inputs;
+DROP TABLE conversation_ending_decisions;
+DROP TABLE conversation_continuation_counts;
+DROP TABLE conversation_goals;

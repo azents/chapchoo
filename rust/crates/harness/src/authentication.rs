@@ -29,7 +29,10 @@ pub type NativeAuthenticationFuture<'a, T> =
 /// Composition supplies actual route/record authority. Acquisition is invoked
 /// only after the actor selects a real launch, never already-live Setup.
 pub trait NativeAuthenticationProvider: Send + Sync {
-    fn acquire(&self) -> NativeAuthenticationFuture<'_, NativeAuthentication>;
+    fn acquire(
+        &self,
+        capture: chapchoo_domain::LaunchCapture,
+    ) -> NativeAuthenticationFuture<'_, NativeAuthentication>;
     fn check<'a>(
         &'a self,
         binding: &'a NativeAuthenticationBinding,

@@ -134,7 +134,7 @@ impl ConversationControlProcessor {
         }
         // Product acceptance has already returned. This finite setup observation
         // budget is not a native task queue or model-completion waiter.
-        let (target, grant, route) = loop {
+        let (target, grant) = loop {
             if !self.admission.load(Ordering::Acquire) || Instant::now() >= deadline {
                 return Ok(());
             }
@@ -312,7 +312,7 @@ impl ConversationControlProcessor {
                             }
                             Err(error) => return Err(error),
                         };
-                        break (target, grant, route);
+                        break (target, grant);
                     }
                 }
                 ConversationPreparationState::PossibleForwarding => {}
@@ -344,18 +344,13 @@ impl ConversationControlProcessor {
         // Connector terminal errors are explicitly reported even when no
         // physical outcome can be asserted.
         while self.admission.load(Ordering::Acquire)
-            && self.conversation.queued_input_pending(&authority).await?
+            && self
+                .conversation
+                .queued_input_pending(&authority, &grant.execution_id)
+                .await?
         {
-            let current = self
-                .computers
-                .resolve_connector_route(&agent.computer.id)
-                .await?;
-            if current.is_none_or(|current| {
-                current.component.control_id != route.component.control_id
-                    || current.component.connection_id != route.component.connection_id
-            }) {
-                return Ok(());
-            }
+            // The acknowledged attempt is owned by the execution, not by a
+            // particular Control stream. This observes; it never redispatches.
             tokio::time::sleep(Duration::from_millis(200)).await;
         }
         Ok(())

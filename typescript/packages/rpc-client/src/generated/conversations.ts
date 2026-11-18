@@ -665,6 +665,48 @@ export interface NativeTarget {
   nativeSessionId: string;
 }
 
+export interface NativeHookReport {
+  source: CaptureSource | undefined;
+  conversationId: string;
+  target: NativeTarget | undefined;
+  normalEnding?: NativeNormalEnding | undefined;
+}
+
+export interface NativeNormalEnding {
+  position: SourcePosition | undefined;
+  workId: string;
+  launchOperationId: string;
+}
+
+export interface NativeHookOutcome {
+  noAction?: Empty | undefined;
+  continuationOperationId?: string | undefined;
+}
+
+export interface ContinuationHandoff {
+  source: CaptureSource | undefined;
+  conversationId: string;
+  target: NativeTarget | undefined;
+  ending: NativeNormalEnding | undefined;
+  operationId: string;
+}
+
+export interface ContinuationGrant {
+  /** Absent after the first grant. Recovery never repeats forwarding authority. */
+  context: GoalContext | undefined;
+}
+
+export interface GoalContextRequest {
+  source: CaptureSource | undefined;
+  conversationId: string;
+  target: NativeTarget | undefined;
+}
+
+export interface GoalContext {
+  /** Complete current projection; success with an empty set is the UTF-8 value `[]`. */
+  projection: Buffer;
+}
+
 export interface InitialNativeContext {
   allowFresh: boolean;
   requireRetainedSource: boolean;
@@ -818,6 +860,13 @@ export interface ExecutionAuthenticationReference {
 export interface BeginAuthenticationRequest {
   target: ExecutionAuthenticationReference | undefined;
   expectedPreviousOperationId?: string | undefined;
+  capture: LaunchCapture | undefined;
+}
+
+export interface LaunchCapture {
+  snapshotId: string;
+  /** Absent means the exact local snapshot was empty before launch. */
+  through: SourcePosition | undefined;
 }
 
 /** Actual-start configuration provenance, not login validity or native liveness. */
@@ -7358,6 +7407,557 @@ export const NativeTarget: MessageFns<NativeTarget> = {
   },
 };
 
+function createBaseNativeHookReport(): NativeHookReport {
+  return { source: undefined, conversationId: "", target: undefined, normalEnding: undefined };
+}
+
+export const NativeHookReport: MessageFns<NativeHookReport> = {
+  encode(message: NativeHookReport, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.source !== undefined) {
+      CaptureSource.encode(message.source, writer.uint32(10).fork()).join();
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(18).string(message.conversationId);
+    }
+    if (message.target !== undefined) {
+      NativeTarget.encode(message.target, writer.uint32(26).fork()).join();
+    }
+    if (message.normalEnding !== undefined) {
+      NativeNormalEnding.encode(message.normalEnding, writer.uint32(34).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): NativeHookReport {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseNativeHookReport();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.source = CaptureSource.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.target = NativeTarget.decode(reader, reader.uint32());
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.normalEnding = NativeNormalEnding.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<NativeHookReport>, I>>(base?: I): NativeHookReport {
+    return NativeHookReport.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<NativeHookReport>, I>>(object: I): NativeHookReport {
+    const message = createBaseNativeHookReport();
+    message.source = (object.source !== undefined && object.source !== null)
+      ? CaptureSource.fromPartial(object.source)
+      : undefined;
+    message.conversationId = object.conversationId ?? "";
+    message.target = (object.target !== undefined && object.target !== null)
+      ? NativeTarget.fromPartial(object.target)
+      : undefined;
+    message.normalEnding = (object.normalEnding !== undefined && object.normalEnding !== null)
+      ? NativeNormalEnding.fromPartial(object.normalEnding)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseNativeNormalEnding(): NativeNormalEnding {
+  return { position: undefined, workId: "", launchOperationId: "" };
+}
+
+export const NativeNormalEnding: MessageFns<NativeNormalEnding> = {
+  encode(message: NativeNormalEnding, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.position !== undefined) {
+      SourcePosition.encode(message.position, writer.uint32(10).fork()).join();
+    }
+    if (message.workId !== "") {
+      writer.uint32(18).string(message.workId);
+    }
+    if (message.launchOperationId !== "") {
+      writer.uint32(26).string(message.launchOperationId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): NativeNormalEnding {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseNativeNormalEnding();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.position = SourcePosition.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.workId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.launchOperationId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<NativeNormalEnding>, I>>(base?: I): NativeNormalEnding {
+    return NativeNormalEnding.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<NativeNormalEnding>, I>>(object: I): NativeNormalEnding {
+    const message = createBaseNativeNormalEnding();
+    message.position = (object.position !== undefined && object.position !== null)
+      ? SourcePosition.fromPartial(object.position)
+      : undefined;
+    message.workId = object.workId ?? "";
+    message.launchOperationId = object.launchOperationId ?? "";
+    return message;
+  },
+};
+
+function createBaseNativeHookOutcome(): NativeHookOutcome {
+  return { noAction: undefined, continuationOperationId: undefined };
+}
+
+export const NativeHookOutcome: MessageFns<NativeHookOutcome> = {
+  encode(message: NativeHookOutcome, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.noAction !== undefined) {
+      Empty.encode(message.noAction, writer.uint32(10).fork()).join();
+    }
+    if (message.continuationOperationId !== undefined) {
+      writer.uint32(18).string(message.continuationOperationId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): NativeHookOutcome {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseNativeHookOutcome();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.noAction = Empty.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.continuationOperationId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<NativeHookOutcome>, I>>(base?: I): NativeHookOutcome {
+    return NativeHookOutcome.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<NativeHookOutcome>, I>>(object: I): NativeHookOutcome {
+    const message = createBaseNativeHookOutcome();
+    message.noAction = (object.noAction !== undefined && object.noAction !== null)
+      ? Empty.fromPartial(object.noAction)
+      : undefined;
+    message.continuationOperationId = object.continuationOperationId ?? undefined;
+    return message;
+  },
+};
+
+function createBaseContinuationHandoff(): ContinuationHandoff {
+  return { source: undefined, conversationId: "", target: undefined, ending: undefined, operationId: "" };
+}
+
+export const ContinuationHandoff: MessageFns<ContinuationHandoff> = {
+  encode(message: ContinuationHandoff, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.source !== undefined) {
+      CaptureSource.encode(message.source, writer.uint32(10).fork()).join();
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(18).string(message.conversationId);
+    }
+    if (message.target !== undefined) {
+      NativeTarget.encode(message.target, writer.uint32(26).fork()).join();
+    }
+    if (message.ending !== undefined) {
+      NativeNormalEnding.encode(message.ending, writer.uint32(34).fork()).join();
+    }
+    if (message.operationId !== "") {
+      writer.uint32(42).string(message.operationId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ContinuationHandoff {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseContinuationHandoff();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.source = CaptureSource.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.target = NativeTarget.decode(reader, reader.uint32());
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.ending = NativeNormalEnding.decode(reader, reader.uint32());
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.operationId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ContinuationHandoff>, I>>(base?: I): ContinuationHandoff {
+    return ContinuationHandoff.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ContinuationHandoff>, I>>(object: I): ContinuationHandoff {
+    const message = createBaseContinuationHandoff();
+    message.source = (object.source !== undefined && object.source !== null)
+      ? CaptureSource.fromPartial(object.source)
+      : undefined;
+    message.conversationId = object.conversationId ?? "";
+    message.target = (object.target !== undefined && object.target !== null)
+      ? NativeTarget.fromPartial(object.target)
+      : undefined;
+    message.ending = (object.ending !== undefined && object.ending !== null)
+      ? NativeNormalEnding.fromPartial(object.ending)
+      : undefined;
+    message.operationId = object.operationId ?? "";
+    return message;
+  },
+};
+
+function createBaseContinuationGrant(): ContinuationGrant {
+  return { context: undefined };
+}
+
+export const ContinuationGrant: MessageFns<ContinuationGrant> = {
+  encode(message: ContinuationGrant, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.context !== undefined) {
+      GoalContext.encode(message.context, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ContinuationGrant {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseContinuationGrant();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.context = GoalContext.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ContinuationGrant>, I>>(base?: I): ContinuationGrant {
+    return ContinuationGrant.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ContinuationGrant>, I>>(object: I): ContinuationGrant {
+    const message = createBaseContinuationGrant();
+    message.context = (object.context !== undefined && object.context !== null)
+      ? GoalContext.fromPartial(object.context)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseGoalContextRequest(): GoalContextRequest {
+  return { source: undefined, conversationId: "", target: undefined };
+}
+
+export const GoalContextRequest: MessageFns<GoalContextRequest> = {
+  encode(message: GoalContextRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.source !== undefined) {
+      CaptureSource.encode(message.source, writer.uint32(10).fork()).join();
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(18).string(message.conversationId);
+    }
+    if (message.target !== undefined) {
+      NativeTarget.encode(message.target, writer.uint32(26).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GoalContextRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGoalContextRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.source = CaptureSource.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.target = NativeTarget.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<GoalContextRequest>, I>>(base?: I): GoalContextRequest {
+    return GoalContextRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GoalContextRequest>, I>>(object: I): GoalContextRequest {
+    const message = createBaseGoalContextRequest();
+    message.source = (object.source !== undefined && object.source !== null)
+      ? CaptureSource.fromPartial(object.source)
+      : undefined;
+    message.conversationId = object.conversationId ?? "";
+    message.target = (object.target !== undefined && object.target !== null)
+      ? NativeTarget.fromPartial(object.target)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseGoalContext(): GoalContext {
+  return { projection: Buffer.alloc(0) };
+}
+
+export const GoalContext: MessageFns<GoalContext> = {
+  encode(message: GoalContext, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.projection.length !== 0) {
+      writer.uint32(10).bytes(message.projection);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GoalContext {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGoalContext();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.projection = Buffer.from(reader.bytes());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<GoalContext>, I>>(base?: I): GoalContext {
+    return GoalContext.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GoalContext>, I>>(object: I): GoalContext {
+    const message = createBaseGoalContext();
+    message.projection = object.projection ?? Buffer.alloc(0);
+    return message;
+  },
+};
+
 function createBaseInitialNativeContext(): InitialNativeContext {
   return { allowFresh: false, requireRetainedSource: false };
 }
@@ -9344,7 +9944,7 @@ export const ExecutionAuthenticationReference: MessageFns<ExecutionAuthenticatio
 };
 
 function createBaseBeginAuthenticationRequest(): BeginAuthenticationRequest {
-  return { target: undefined, expectedPreviousOperationId: undefined };
+  return { target: undefined, expectedPreviousOperationId: undefined, capture: undefined };
 }
 
 export const BeginAuthenticationRequest: MessageFns<BeginAuthenticationRequest> = {
@@ -9354,6 +9954,9 @@ export const BeginAuthenticationRequest: MessageFns<BeginAuthenticationRequest> 
     }
     if (message.expectedPreviousOperationId !== undefined) {
       writer.uint32(18).string(message.expectedPreviousOperationId);
+    }
+    if (message.capture !== undefined) {
+      LaunchCapture.encode(message.capture, writer.uint32(26).fork()).join();
     }
     return writer;
   },
@@ -9387,6 +9990,14 @@ export const BeginAuthenticationRequest: MessageFns<BeginAuthenticationRequest> 
             message.expectedPreviousOperationId = reader.string();
             continue;
           }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.capture = LaunchCapture.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -9408,6 +10019,78 @@ export const BeginAuthenticationRequest: MessageFns<BeginAuthenticationRequest> 
       ? ExecutionAuthenticationReference.fromPartial(object.target)
       : undefined;
     message.expectedPreviousOperationId = object.expectedPreviousOperationId ?? undefined;
+    message.capture = (object.capture !== undefined && object.capture !== null)
+      ? LaunchCapture.fromPartial(object.capture)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseLaunchCapture(): LaunchCapture {
+  return { snapshotId: "", through: undefined };
+}
+
+export const LaunchCapture: MessageFns<LaunchCapture> = {
+  encode(message: LaunchCapture, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.snapshotId !== "") {
+      writer.uint32(10).string(message.snapshotId);
+    }
+    if (message.through !== undefined) {
+      SourcePosition.encode(message.through, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): LaunchCapture {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseLaunchCapture();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.snapshotId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.through = SourcePosition.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<LaunchCapture>, I>>(base?: I): LaunchCapture {
+    return LaunchCapture.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<LaunchCapture>, I>>(object: I): LaunchCapture {
+    const message = createBaseLaunchCapture();
+    message.snapshotId = object.snapshotId ?? "";
+    message.through = (object.through !== undefined && object.through !== null)
+      ? SourcePosition.fromPartial(object.through)
+      : undefined;
     return message;
   },
 };
@@ -10832,6 +11515,42 @@ export const ConnectorCaptureService = {
     responseSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
     responseDeserialize: (value: Buffer): Empty => Empty.decode(value),
   },
+  reportNativeHook: {
+    path: "/chapchoo.conversations.ConnectorCapture/ReportNativeHook" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: NativeHookReport): Buffer => Buffer.from(NativeHookReport.encode(value).finish()),
+    requestDeserialize: (value: Buffer): NativeHookReport => NativeHookReport.decode(value),
+    responseSerialize: (value: NativeHookOutcome): Buffer => Buffer.from(NativeHookOutcome.encode(value).finish()),
+    responseDeserialize: (value: Buffer): NativeHookOutcome => NativeHookOutcome.decode(value),
+  },
+  beginContinuation: {
+    path: "/chapchoo.conversations.ConnectorCapture/BeginContinuation" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ContinuationHandoff): Buffer => Buffer.from(ContinuationHandoff.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ContinuationHandoff => ContinuationHandoff.decode(value),
+    responseSerialize: (value: ContinuationGrant): Buffer => Buffer.from(ContinuationGrant.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ContinuationGrant => ContinuationGrant.decode(value),
+  },
+  closeContinuation: {
+    path: "/chapchoo.conversations.ConnectorCapture/CloseContinuation" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ContinuationHandoff): Buffer => Buffer.from(ContinuationHandoff.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ContinuationHandoff => ContinuationHandoff.decode(value),
+    responseSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
+    responseDeserialize: (value: Buffer): Empty => Empty.decode(value),
+  },
+  readGoalContext: {
+    path: "/chapchoo.conversations.ConnectorCapture/ReadGoalContext" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GoalContextRequest): Buffer => Buffer.from(GoalContextRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GoalContextRequest => GoalContextRequest.decode(value),
+    responseSerialize: (value: GoalContext): Buffer => Buffer.from(GoalContext.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GoalContext => GoalContext.decode(value),
+  },
   reportRequest: {
     path: "/chapchoo.conversations.ConnectorCapture/ReportRequest" as const,
     requestStream: false as const,
@@ -10951,6 +11670,10 @@ export interface ConnectorCaptureServer extends UntypedServiceImplementation {
   pullInput: handleUnaryCall<InputChunkRequest, InputChunk>;
   reportInput: handleUnaryCall<InputReport, InputReportAcknowledgement>;
   reportNative: handleUnaryCall<NativeStateReport, Empty>;
+  reportNativeHook: handleUnaryCall<NativeHookReport, NativeHookOutcome>;
+  beginContinuation: handleUnaryCall<ContinuationHandoff, ContinuationGrant>;
+  closeContinuation: handleUnaryCall<ContinuationHandoff, Empty>;
+  readGoalContext: handleUnaryCall<GoalContextRequest, GoalContext>;
   reportRequest: handleUnaryCall<LiveRequestReport, Empty>;
   checkStop: handleUnaryCall<StopCheck, Empty>;
   reportStop: handleUnaryCall<StopReport, Empty>;
@@ -11126,6 +11849,66 @@ export interface ConnectorCaptureClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  reportNativeHook(
+    request: NativeHookReport,
+    callback: (error: ServiceError | null, response: NativeHookOutcome) => void,
+  ): ClientUnaryCall;
+  reportNativeHook(
+    request: NativeHookReport,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: NativeHookOutcome) => void,
+  ): ClientUnaryCall;
+  reportNativeHook(
+    request: NativeHookReport,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: NativeHookOutcome) => void,
+  ): ClientUnaryCall;
+  beginContinuation(
+    request: ContinuationHandoff,
+    callback: (error: ServiceError | null, response: ContinuationGrant) => void,
+  ): ClientUnaryCall;
+  beginContinuation(
+    request: ContinuationHandoff,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ContinuationGrant) => void,
+  ): ClientUnaryCall;
+  beginContinuation(
+    request: ContinuationHandoff,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ContinuationGrant) => void,
+  ): ClientUnaryCall;
+  closeContinuation(
+    request: ContinuationHandoff,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  closeContinuation(
+    request: ContinuationHandoff,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  closeContinuation(
+    request: ContinuationHandoff,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  readGoalContext(
+    request: GoalContextRequest,
+    callback: (error: ServiceError | null, response: GoalContext) => void,
+  ): ClientUnaryCall;
+  readGoalContext(
+    request: GoalContextRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GoalContext) => void,
+  ): ClientUnaryCall;
+  readGoalContext(
+    request: GoalContextRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GoalContext) => void,
   ): ClientUnaryCall;
   reportRequest(
     request: LiveRequestReport,

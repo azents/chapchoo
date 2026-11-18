@@ -259,6 +259,11 @@ impl State {
                 .current()
                 .is_ok_and(|observed| observed.foreground == NativeForeground::Idle)
                 && live.observations.quiescent()
+                && (live.tools.is_none()
+                    || live
+                        .observations
+                        .pending_ending()
+                        .is_ok_and(|ending| ending.is_none()))
                 && live
                     .requests
                     .try_lock()
@@ -336,7 +341,10 @@ mod tests {
 
     struct UnusedAuthentication(Arc<AtomicUsize>);
     impl NativeAuthenticationProvider for UnusedAuthentication {
-        fn acquire(&self) -> crate::NativeAuthenticationFuture<'_, crate::NativeAuthentication> {
+        fn acquire(
+            &self,
+            _: chapchoo_domain::LaunchCapture,
+        ) -> crate::NativeAuthenticationFuture<'_, crate::NativeAuthentication> {
             self.0.fetch_add(1, Ordering::SeqCst);
             Box::pin(async { Err(Error::Authentication) })
         }

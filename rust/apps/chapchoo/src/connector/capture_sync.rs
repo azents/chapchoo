@@ -1,4 +1,5 @@
-//! Coalesced captured-copy synchronization. It never starts or replays native work.
+//! Coalesced captured-copy synchronization and live ending reporting.
+mod endings;
 mod live;
 use super::*;
 use chapchoo_domain::{EventOccurrenceId, SnapshotId, SourcePosition};
@@ -14,6 +15,7 @@ type PublishedRequests = Arc<tokio::sync::Mutex<BTreeMap<String, captured::LiveR
 pub(super) struct CaptureSync {
     native: NativeHandle,
     published: PublishedRequests,
+    endings: Arc<tokio::sync::Mutex<endings::Delivery>>,
     tasks: JoinSet<Result<(), AppError>>,
     stop: CancellationToken,
 }
@@ -22,6 +24,7 @@ impl CaptureSync {
         Self {
             native,
             published: Arc::default(),
+            endings: Arc::default(),
             tasks: JoinSet::new(),
             stop: CancellationToken::new(),
         }
@@ -31,6 +34,7 @@ impl CaptureSync {
         channel: Channel,
         origin: captured::CaptureSource,
         key: &BearerSecret,
+        route: chapchoo_harness::ContinuationRoute,
     ) -> Result<(), AppError> {
         while let Some(result) = self.tasks.try_join_next() {
             match result? {
@@ -45,6 +49,7 @@ impl CaptureSync {
         }
         let native = self.native.clone();
         let published = self.published.clone();
+        let endings = self.endings.clone();
         let key = BearerSecret::parse(key.expose().to_owned())?;
         let stop = self.stop.clone();
         self.tasks.spawn(async move {
@@ -53,10 +58,22 @@ impl CaptureSync {
             if stop.is_cancelled() {
                 return Ok(());
             }
+            let mut endings = endings.lock().await;
+            // Order release is independent of later capture progress. Keep
+            // capture usable even while the exact Close needs another attempt.
+            let settlement = endings
+                .settle(&native, channel.clone(), &origin, &key)
+                .await;
             let Some(source) = native.capture_reader().current_source().await? else {
-                return Ok(());
+                return settlement;
             };
             synchronize(source, channel.clone(), origin.clone(), &key, &stop).await?;
+            if settlement.is_ok() {
+                endings
+                    .advance(&native, channel.clone(), &origin, &key, &stop, route)
+                    .await?;
+            }
+            settlement?;
             publish_live(native, channel, origin, &key, &stop, published).await
         });
         Ok(())

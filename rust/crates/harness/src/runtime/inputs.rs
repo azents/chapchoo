@@ -140,6 +140,19 @@ impl InputRegistry {
         entry.outcome = Outcome::Known(outcome);
         Ok(())
     }
+    /// ACP explicitly returned PromptRequired and this owner did not publish
+    /// the fallback prompt. This is not recovery from ambiguous delivery.
+    pub(super) fn discard_unconsumed(&mut self, id: &str) -> Result<(), Error> {
+        if !self
+            .entries
+            .get(id)
+            .is_some_and(|entry| matches!(entry.outcome, Outcome::PossibleForwarding))
+        {
+            return Err(Error::OperationConflict);
+        }
+        self.entries.remove(id);
+        Ok(())
+    }
 }
 #[cfg(test)]
 mod tests {
