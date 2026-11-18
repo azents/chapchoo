@@ -43,7 +43,7 @@ mod setup;
 mod steering;
 mod stops;
 use observations::Observations;
-pub use observations::{NativeForeground, NativeObservation, NativeWorkTarget};
+pub use observations::{NativeForeground, NativeNormalEnding, NativeObservation, NativeWorkTarget};
 use setup::SetupRegistry;
 pub use setup::{
     NativeSetupFailure, NativeSetupIntent, NativeSetupObservation, NativeSetupOperation,
@@ -234,6 +234,7 @@ enum Command {
     ),
     Stop(NativeWorkTarget, oneshot::Sender<Result<(), Error>>),
     Observe(oneshot::Sender<Result<NativeObservation, Error>>),
+    NormalEnding(oneshot::Sender<Result<Option<NativeNormalEnding>, Error>>),
     CapturedSource(oneshot::Sender<Result<Option<crate::CaptureLog>, Error>>),
     InputObservation {
         id: String,
@@ -446,6 +447,9 @@ impl NativeOwner {
                     Command::Observe(result) => {
                         let _ = result.send(state.observe());
                     }
+                    Command::NormalEnding(result) => {
+                        let _ = result.send(state.normal_ending());
+                    }
                     Command::CapturedSource(result) => {
                         let outcome = state.captured_source().await;
                         let _ = result.send(outcome);
@@ -525,6 +529,9 @@ impl NativeOwner {
     pub async fn observe(&self) -> Result<NativeObservation, Error> {
         self.handle().observe().await
     }
+    pub async fn normal_ending(&self) -> Result<Option<NativeNormalEnding>, Error> {
+        self.handle().normal_ending().await
+    }
     pub async fn input_observation(
         &self,
         id: String,
@@ -601,6 +608,14 @@ impl NativeHandle {
         let (result, rx) = oneshot::channel();
         self.sender
             .try_send(Command::Observe(result))
+            .map_err(|_| Error::NotAdmitted)?;
+        rx.await.map_err(|_| Error::Process)?
+    }
+    /// Read the latest qualified occurrence while its live owner is still current.
+    pub async fn normal_ending(&self) -> Result<Option<NativeNormalEnding>, Error> {
+        let (result, rx) = oneshot::channel();
+        self.sender
+            .try_send(Command::NormalEnding(result))
             .map_err(|_| Error::NotAdmitted)?;
         rx.await.map_err(|_| Error::Process)?
     }
@@ -750,13 +765,20 @@ impl State {
         if self.blocked || live.protocol.is_finished() {
             return Err(Error::NotAdmitted);
         }
-        live.observations.with_current(target, || {
+        live.observations.publish_stop(target, || {
             live.session
                 .as_ref()
                 .ok_or(Error::NotAdmitted)?
                 .cancel_active_work()
                 .map_err(|_| Error::Protocol)
         })
+    }
+    fn normal_ending(&self) -> Result<Option<NativeNormalEnding>, Error> {
+        let live = self.live.as_ref().ok_or(Error::NotAdmitted)?;
+        if self.blocked || live.protocol.is_finished() {
+            return Err(Error::NotAdmitted);
+        }
+        live.observations.normal_ending()
     }
     async fn start(
         &mut self,
@@ -993,6 +1015,11 @@ impl State {
                 code: -32603,
             })?
             .map_err(Error::ToolsVerification)?;
+        self.live
+            .as_ref()
+            .ok_or(Error::Process)?
+            .observations
+            .enable_normal_endings()?;
         Ok(id)
     }
     async fn respond(&self, response: InteractiveResponse) -> Result<(), Error> {
