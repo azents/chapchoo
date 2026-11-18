@@ -294,6 +294,7 @@ impl Store {
                 None::<EntityId>
             );
             super::goals::reset_continuation_count!(connection, dialect, row.id);
+            super::work::release_work_wait!(connection, dialect, row.id);
             Ok(ConversationInputAdmission::Accepted(
                 ConversationInputReceipt {
                     id: id.to_dto(EntityKind::ConversationOperation),

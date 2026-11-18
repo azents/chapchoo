@@ -381,6 +381,41 @@ impl Conversations for ConversationServices {
             authentication_id: observed.authentication_id,
             applied_supply: observed.applied_supply.map(wire_supply),
         });
+        let work = self
+            .conversation
+            .work_summary(
+                &actor,
+                &chapchoo_service::ConversationMessageScope {
+                    agent_id: &value.agent_id,
+                    conversation_id: &current.id,
+                },
+                now,
+            )
+            .await
+            .map_err(status)?
+            .map(|work| wire::ConversationWorkSummary {
+                id: work.id,
+                title: work.title.as_str().into(),
+                tasks: work
+                    .tasks
+                    .into_iter()
+                    .map(|task| wire::ConversationWorkTask {
+                        text: task.text.as_str().into(),
+                        status: match task.status {
+                            chapchoo_domain::WorkTaskStatus::Pending => {
+                                wire::ConversationWorkTaskStatus::Pending
+                            }
+                            chapchoo_domain::WorkTaskStatus::InProgress => {
+                                wire::ConversationWorkTaskStatus::InProgress
+                            }
+                            chapchoo_domain::WorkTaskStatus::Completed => {
+                                wire::ConversationWorkTaskStatus::Completed
+                            }
+                        } as i32,
+                    })
+                    .collect(),
+                waiting_for_input: work.waiting_for_input,
+            });
         let conversation = wire::CaptureState {
             conversation_id: current.id,
             status: match current.source {
@@ -408,6 +443,7 @@ impl Conversations for ConversationServices {
             observed_native,
             saved_authentication_id,
             startup,
+            work,
         }))
     }
     async fn get_supply(

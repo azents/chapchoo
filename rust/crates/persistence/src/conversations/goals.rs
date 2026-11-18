@@ -78,7 +78,7 @@ pub(super) fn encode(goals: &[GoalRow]) -> Result<Vec<u8>, StoreError> {
     serde_json::to_vec(goals).map_err(|_| StoreError::Integrity)
 }
 
-fn verify_projection_size(goals: &mut [GoalRow]) -> Result<(), StoreError> {
+pub(super) fn verify_projection_size(goals: &mut [GoalRow]) -> Result<(), StoreError> {
     // Reserve the longest live status so input-wait changes cannot overflow.
     for goal in &mut *goals {
         goal.disposition = "waiting_for_input".into();

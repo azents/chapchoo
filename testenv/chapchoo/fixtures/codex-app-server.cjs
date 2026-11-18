@@ -91,7 +91,7 @@ async function connectMcp(servers) {
   mcp = client;
   await client.connect(transport);
   const catalog = await client.listTools();
-  if (catalog.tools.length !== 1 || catalog.tools[0]?.name !== "send_message")
+  if (catalog.tools.length !== 1 || catalog.tools[0]?.name !== "send")
     throw new Error("Fixture requires its exact server-tools catalog");
   mcpTools = catalog.tools;
 }
@@ -106,7 +106,7 @@ const helperThreads = new Set();
 let cwd = "/workspace";
 // These fixture-only literals contain no request, response or credential data.
 async function publishFixture(which, publication) {
-  if (!["first", "refresh"].includes(which) || !mcp)
+  if (!["first", "refresh", "question", "result"].includes(which) || !mcp)
     throw new Error("Fixture publication owner is unavailable");
   const marker = `/workspace/acceptance-publication-${which}`;
   const stage = (value) => writeFileSync(marker, `${value}\n`, { mode: 0o600 });
@@ -151,6 +151,68 @@ const reply = (id, result) => write({ id, result });
 const notify = (method, params) => write({ method, params });
 const item = (method, value) =>
   notify(method, { threadId, turnId, item: value });
+function verifyWorkInstructions(workspace) {
+  const instructions = readFileSync(join(workspace, "AGENTS.md"), "utf8");
+  if (
+    !instructions.includes("Use send to publish a message") ||
+    !instructions.includes("request_input") ||
+    instructions.includes("send_message")
+  )
+    throw new Error(
+      "Fixture requires the revised Conversation Work instructions",
+    );
+  return instructions;
+}
+async function workTurn(id, params, which, args) {
+  if (!authenticated || active || params.threadId !== threadId)
+    throw new Error("Fixture work turn was not admitted");
+  writeFileSync(
+    join(process.env.CODEX_HOME, `${which}-work-turn-once`),
+    "accepted\n",
+    {
+      flag: "wx",
+      mode: 0o600,
+    },
+  );
+  active = true;
+  turnId = `fixture-${which}-turn`;
+  reply(id, { turn: turn("inProgress") });
+  notify("turn/started", { threadId, turn: turn("inProgress") });
+  if (which === "result") {
+    // An ordinary reply must produce its own correlated native input before
+    // the production publication fence will allow this turn's send.
+    const received = {
+      type: "userMessage",
+      id: "native-work-reply",
+      clientId: params.clientUserMessageId ?? null,
+      content: params.input,
+    };
+    item("item/started", received);
+    item("item/completed", received);
+  }
+  const publication = {
+    type: "mcpToolCall",
+    id: `publication-${which}`,
+    server: "chapchoo",
+    tool: "send",
+    arguments: args,
+    status: "inProgress",
+    result: null,
+    error: null,
+    durationMs: null,
+  };
+  item("item/started", publication);
+  const result = await publishFixture(which, publication);
+  item("item/completed", {
+    ...publication,
+    result,
+    status: "completed",
+    durationMs: 0,
+  });
+  active = false;
+  notify("turn/completed", { threadId, turn: turn("completed") });
+  notify("thread/status/changed", { threadId, status: { type: "idle" } });
+}
 function finish(accepted) {
   if (!active) return;
   const text = accepted
@@ -404,16 +466,39 @@ async function request(id, method, params) {
         });
         break;
       }
+      const prompt = params?.input?.[0]?.text;
       if (
-        params?.input?.[0]?.text ===
-        "Continue after refreshing project instructions"
+        prompt?.startsWith(
+          "[Chapchoo system-originated continuation; not a user message]\n",
+        )
       ) {
+        if (
+          turnId !== "fixture-refresh-turn" ||
+          !prompt.includes("Review conversation fixture")
+        )
+          throw new Error("Fixture continuation targeted the wrong work");
+        await workTurn(id, params, "question", {
+          action: "request_input",
+          message: "Which fixture channel should I use?",
+        });
+        break;
+      }
+      if (prompt === "Use the stable fixture channel") {
+        if (turnId !== "fixture-question-turn")
+          throw new Error("Fixture reply came before its question");
+        await workTurn(id, params, "result", {
+          action: "finish",
+          message: "Fixture work finished on stable.",
+        });
+        break;
+      }
+      if (prompt === "Continue after refreshing project instructions") {
         if (
           !authenticated ||
           active ||
           primaryUsed ||
           params.threadId !== threadId ||
-          !readFileSync(join(cwd, "AGENTS.md"), "utf8").includes("PROJECT_BETA")
+          !verifyWorkInstructions(cwd).includes("PROJECT_BETA")
         )
           throw new Error("Fixture refresh input was not admitted");
         // The exclusive durable marker catches duplicate forwarding across
@@ -444,8 +529,15 @@ async function request(id, method, params) {
           type: "mcpToolCall",
           id: "publication-refresh",
           server: "chapchoo",
-          tool: "send_message",
-          arguments: { text: "Refreshed project fixture publication." },
+          tool: "send",
+          arguments: {
+            action: "continue",
+            tasks: [
+              { text: "Check saved instructions", status: "completed" },
+              { text: "Choose a channel", status: "in_progress" },
+            ],
+            message: "Refreshed project fixture publication.",
+          },
           status: "inProgress",
           result: null,
           error: null,
@@ -479,6 +571,7 @@ async function request(id, method, params) {
           "Exercise the deterministic native conversation"
       )
         throw new Error("Fixture turn was not admitted");
+      verifyWorkInstructions(cwd);
       primaryUsed = true;
       active = true;
       reply(id, { turn: turn("inProgress") });
@@ -517,8 +610,16 @@ async function request(id, method, params) {
         type: "mcpToolCall",
         id: "publication-one",
         server: "chapchoo",
-        tool: "send_message",
-        arguments: { text: "Intentional fixture publication." },
+        tool: "send",
+        arguments: {
+          action: "continue",
+          title: "Review conversation fixture",
+          tasks: [
+            { text: "Check saved instructions", status: "in_progress" },
+            { text: "Choose a channel", status: "pending" },
+          ],
+          message: "Intentional fixture publication.",
+        },
         status: "inProgress",
         result: null,
         error: null,

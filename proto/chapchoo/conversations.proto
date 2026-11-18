@@ -78,6 +78,23 @@ message OwnerConversation {
   optional string saved_authentication_id = 3;
   // Preparation owned by connection startup, not by an accepted input.
   InputPreparation startup = 4;
+  ConversationWorkSummary work = 5;
+}
+message ConversationWorkSummary {
+  string id = 1;
+  string title = 2;
+  repeated ConversationWorkTask tasks = 3;
+  bool waiting_for_input = 4;
+}
+message ConversationWorkTask {
+  string text = 1;
+  ConversationWorkTaskStatus status = 2;
+}
+enum ConversationWorkTaskStatus {
+  CONVERSATION_WORK_TASK_STATUS_UNSPECIFIED = 0;
+  CONVERSATION_WORK_TASK_STATUS_PENDING = 1;
+  CONVERSATION_WORK_TASK_STATUS_IN_PROGRESS = 2;
+  CONVERSATION_WORK_TASK_STATUS_COMPLETED = 3;
 }
 message ObservedNative {
   NativeTarget target = 1; SourcePosition position = 2; Foreground foreground = 3; optional string work_id = 4;

@@ -19,7 +19,7 @@ async function savePrompt(page: Page, content: string): Promise<void> {
 }
 
 // Explicit disposable Docker prerequisites are required; no real model is used.
-test("owner receives intentional server messages and inspects native typed-answer records", async ({
+test("owner follows Conversation Work and inspects native typed-answer records", async ({
   browser,
 }) => {
   test.setTimeout(660_000);
@@ -83,6 +83,11 @@ test("owner receives intentional server messages and inspects native typed-answe
     const log = page.getByRole("log", { name: "Message", exact: true });
     await expect(message).toBeEnabled({ timeout: 90_000 });
     expect(historyReads).toBe(0);
+    const summary = page.getByRole("region", {
+      name: "Current work",
+      exact: true,
+    });
+    await expect(summary).toHaveCount(0);
     const releaseWork = await fixture.holdWork();
     stage = "intentional-publication";
     const inputText = "Exercise the deterministic native conversation";
@@ -109,6 +114,35 @@ test("owner receives intentional server messages and inspects native typed-answe
       prestarted.conversation?.conversationId,
     );
     expect(afterInput.observedNative?.target).toEqual(prestartTarget);
+    const workId = afterInput.work?.id;
+    expect(workId).toBeTruthy();
+    await expect(summary.getByRole("button")).toContainText(
+      "Review conversation fixture",
+    );
+    await expect(summary.getByRole("button")).toContainText("0/2");
+    const anchored = await message.boundingBox();
+    await summary.getByRole("button").click();
+    await expect(summary.getByRole("listitem")).toHaveCount(2);
+    expect((await message.boundingBox())?.y).toBeCloseTo(anchored?.y ?? -1, 0);
+    const initialPage = await context.newPage();
+    try {
+      const initial = await initialPage.goto(
+        `${assembly.generalUrl}${fixture.chatPath}`,
+      );
+      const html = await initial?.text();
+      expect(
+        await initialPage.evaluate((source) => {
+          const document = new DOMParser().parseFromString(
+            source ?? "",
+            "text/html",
+          );
+          return document.querySelector('section[aria-label="Current work"]')
+            ?.textContent;
+        }, html),
+      ).toContain("Review conversation fixture");
+    } finally {
+      await initialPage.close();
+    }
     expect(historyReads).toBe(0);
     stage = "running-feedback";
     await expect(
@@ -186,7 +220,23 @@ test("owner receives intentional server messages and inspects native typed-answe
         exact: true,
       }),
     ).toHaveCount(0);
-    await expect(log.locator("[data-message-id]")).toHaveCount(4);
+    stage = "automatic-continuation-and-work-question";
+    await expect(
+      log.getByText("Which fixture channel should I use?", { exact: true }),
+    ).toBeVisible({ timeout: 180_000 });
+    await expect(log.locator("[data-message-id]")).toHaveCount(5);
+    await expect(summary.getByRole("button")).toContainText("1/2");
+    const waiting = await fixture.current();
+    expect(waiting.work?.id).toBe(workId);
+    expect(waiting.work?.waitingForInput).toBe(true);
+    stage = "work-reply-and-finish";
+    await message.fill("Use the stable fixture channel");
+    await page.getByRole("button", { name: "Send", exact: true }).click();
+    await expect(
+      log.getByText("Fixture work finished on stable.", { exact: true }),
+    ).toBeVisible({ timeout: 180_000 });
+    await expect(log.locator("[data-message-id]")).toHaveCount(7);
+    await expect(summary).toHaveCount(0);
     await expect(
       log.getByText(/First assistant output|Second assistant utterance/),
     ).toHaveCount(0);
@@ -244,7 +294,7 @@ test("owner receives intentional server messages and inspects native typed-answe
     });
     await expect(
       history.locator('[data-record-origin="publication"]'),
-    ).toHaveCount(2);
+    ).toHaveCount(4);
     const publication = history
       .locator('[data-record-origin="publication"]')
       .first();
@@ -265,9 +315,7 @@ test("owner receives intentional server messages and inspects native typed-answe
       .filter({ hasText: "Tool input" })
       .click();
     await expect(
-      publication
-        .locator("pre")
-        .filter({ hasText: /"tool"\s*:\s*"send_message"/ }),
+      publication.locator("pre").filter({ hasText: /"tool"\s*:\s*"send"/ }),
     ).toBeVisible();
     const outputs = history.locator('[data-record-origin="assistant"]');
     await expect(outputs).toHaveCount(2);
@@ -369,14 +417,14 @@ test("owner receives intentional server messages and inspects native typed-answe
         (element) => element.textContent,
       );
     }, html);
-    expect(rendered).toHaveLength(4);
+    expect(rendered).toHaveLength(7);
     expect(
       rendered.some((text) =>
         text?.includes("Intentional fixture publication."),
       ),
     ).toBe(true);
     expect(rendered.some((text) => text?.includes(inputText))).toBe(true);
-    await expect(log.locator("[data-message-id]")).toHaveCount(4);
+    await expect(log.locator("[data-message-id]")).toHaveCount(7);
     await expect(
       log.getByText(/First assistant output|Second assistant utterance/),
     ).toHaveCount(0);

@@ -3,12 +3,10 @@
 macro_rules! isolate_pre_waiting_migration {
     ($connection:expr,$migrations:expr) => {{
         let connection = &mut *$connection;
-        if connection
-            .applied_migrations()?
-            .iter()
-            .any(|version| version.to_string() == "00000000000028")
-        {
-            assert_eq!(connection.revert_last_migration($migrations)?.to_string(), "00000000000028");
+        for expected in ["00000000000029","00000000000028"] {
+            if connection.applied_migrations()?.iter().any(|version| version.to_string() == expected) {
+                assert_eq!(connection.revert_last_migration($migrations)?.to_string(), expected);
+            }
         }
         if connection.applied_migrations()?.iter()
             .any(|version| version.to_string() == "00000000000027") {
@@ -167,6 +165,8 @@ mod system_prompts;
 mod target_fence;
 #[path = "conversations/waiting.rs"]
 mod waiting;
+#[path = "conversations/work.rs"]
+mod work;
 
 use base64::{Engine, engine::general_purpose::URL_SAFE};
 use chapchoo_crypto::{

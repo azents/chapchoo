@@ -45,10 +45,10 @@ impl ServerToolBackend for Backend {
         })
     }
     fn catalog(&self) -> Result<Vec<u8>, ServiceError> {
-        Ok(br#"{"tools":[{"name":"send_message","description":"Fixture publication","inputSchema":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false}}]}"#.to_vec())
+        Ok(br#"{"tools":[{"name":"send","description":"Fixture publication","inputSchema":{"type":"object","properties":{"action":{"type":"string","const":"finish"},"message":{"type":"string"}},"required":["action","message"],"additionalProperties":false}}]}"#.to_vec())
     }
     fn validate(&self, name: &str, _: &[u8]) -> Result<(), ServerToolValidation> {
-        if name == "send_message" {
+        if name == "send" {
             Ok(())
         } else {
             Err(ServerToolValidation::UnknownTool)
@@ -66,7 +66,7 @@ impl ServerToolBackend for Backend {
                 connection_id: request.scope.connection_id.clone(),
                 arguments: request.arguments.clone(),
             });
-            if request.arguments == br#"{"text":"/wait-for-cancel"}"# {
+            if request.arguments == br#"{"action":"finish","message":"/wait-for-cancel"}"# {
                 self.waiting.add_permits(1);
                 tokio::select! {
                     _ = cancellation.cancelled() => self.cancelled.add_permits(1),
@@ -77,7 +77,7 @@ impl ServerToolBackend for Backend {
                         .to_vec(),
                 );
             }
-            if request.arguments == br#"{"text":"/oversize-result"}"# {
+            if request.arguments == br#"{"action":"finish","message":"/oversize-result"}"# {
                 return Ok(vec![0; chapchoo_service::MAX_TOOL_PAYLOAD + 1]);
             }
             Ok(br#"{"content":[{"type":"text","text":"Message accepted."}],"structuredContent":{"message_id":"fixture-message"},"isError":false}"#.to_vec())
@@ -224,7 +224,9 @@ async fn official_sdk_http_round_trip_keeps_native_scope_across_server_key_refre
                 .protocol_version,
             ProtocolVersion::V_2025_06_18
         );
-        assert_eq!(client.list_all_tools().await?.len(), 1);
+        let tools = client.list_all_tools().await?;
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].name, "send");
         relay.lock().await.verify().await?;
         let invalid = client
             .call_tool(CallToolRequestParams::new("x".repeat(129)))
@@ -234,11 +236,11 @@ async fn official_sdk_http_round_trip_keeps_native_scope_across_server_key_refre
         assert!(invalid.to_string().contains("invocation was not executed"));
         assert!(!invalid.to_string().contains("may have occurred"));
         let body = "  의도적 메시지 🙂\n원문  ";
-        let arguments = serde_json::from_value(serde_json::json!({"text":body}))?;
+        let arguments = serde_json::from_value(serde_json::json!({"action":"finish","message":body}))?;
         let mut input_receipt = ordering.begin(&binding(), "input-before-fast-agent")?;
         let pending = client.send_request_with_option(
             ClientRequest::CallToolRequest(CallToolRequest::new(
-                CallToolRequestParams::new("send_message").with_arguments(arguments),
+                CallToolRequestParams::new("send").with_arguments(arguments),
             )), PeerRequestOptions::default(),
         ).await?;
         tokio::time::timeout(std::time::Duration::from_secs(5), async {
@@ -265,8 +267,8 @@ async fn official_sdk_http_round_trip_keeps_native_scope_across_server_key_refre
         source.connection_id = "connection-2".into();
         current.update(channel, source, &next)?;
         client
-            .call_tool(CallToolRequestParams::new("send_message").with_arguments(
-                serde_json::from_value(serde_json::json!({"text":"second"}))?,
+            .call_tool(CallToolRequestParams::new("send").with_arguments(
+                serde_json::from_value(serde_json::json!({"action":"finish","message":"second"}))?,
             ))
             .await?;
         {
@@ -282,15 +284,15 @@ async fn official_sdk_http_round_trip_keeps_native_scope_across_server_key_refre
             assert_eq!(calls[1].connection_id, "connection-2");
             let original: serde_json::Value = serde_json::from_slice(&calls[0].arguments)?;
             assert_eq!(
-                original.get("text").and_then(serde_json::Value::as_str),
+                original.get("message").and_then(serde_json::Value::as_str),
                 Some(body)
             );
         }
         // This is the SDK's real typed cancellation notification, not dropping
         // an HTTP connection or using the handler context's generic drop token.
         let pending = client.send_request_with_option(ClientRequest::CallToolRequest(CallToolRequest::new(
-            CallToolRequestParams::new("send_message").with_arguments(
-                serde_json::from_value(serde_json::json!({"text":"/wait-for-cancel"}))?),
+            CallToolRequestParams::new("send").with_arguments(
+                serde_json::from_value(serde_json::json!({"action":"finish","message":"/wait-for-cancel"}))?),
         )), PeerRequestOptions::default()).await?;
         tokio::time::timeout(std::time::Duration::from_secs(10), backend.waiting.acquire()).await??.forget();
         pending.cancel(None).await?;
@@ -327,14 +329,14 @@ async fn official_sdk_http_round_trip_keeps_native_scope_across_server_key_refre
         assert!(response.status().is_success());
         let _ = response.bytes().await?;
 
-        let unsupported = client.call_tool(CallToolRequestParams::new("send_message")
-            .with_arguments(serde_json::from_value(serde_json::json!({"text":"/oversize-result"}))?))
+        let unsupported = client.call_tool(CallToolRequestParams::new("send")
+            .with_arguments(serde_json::from_value(serde_json::json!({"action":"finish","message":"/oversize-result"}))?))
             .await.err().ok_or("Oversized effect result was represented as success")?;
         assert!(unsupported.to_string().contains("cannot be represented"));
         current.withdraw();
         assert!(
             client
-                .call_tool(CallToolRequestParams::new("send_message"))
+                .call_tool(CallToolRequestParams::new("send"))
                 .await
                 .is_err()
         );

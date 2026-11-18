@@ -22,11 +22,14 @@ Docker inputs and composes production web listeners with actual backend,
 Provider, Connector and the official ACP adapter. An execution-owned deterministic
 app-server executable is selected through the existing-CLI capability. Its fixed
 synthetic login/output/request never calls a model. The representative journey
-checks an accepted user receipt, one intentional official-SDK `send_message`
-receipt through the real MCP/RPC boundaries, and the absence of automatic
-native/final-output Chat publication. Actual full records retain the two native
-utterances, update, original publication input/result and explicit typed answer.
-Browser reentry checks server-rendered receipt HTML independently of hydration.
+checks the effective `send` catalog on New and exact Resume, and calls `send`
+through the official SDK and real MCP/RPC boundaries. It starts and updates the
+same work item, observes a qualified automatic follow-up without a user receipt,
+and accepts a fresh reply to the work question before publishing the result and
+removing the summary. Native/final output is not published automatically. Actual
+full records retain native utterances, captured tool inputs/results and the
+explicit typed native answer. Browser reentry checks server-rendered summary
+and receipt HTML independently of hydration.
 Focused app component tests own receipt-reader races, full-record presentation,
 scoped primary colors, locales and responsive layout rather than duplicating the
 assembled journey. Missing

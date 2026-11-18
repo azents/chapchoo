@@ -42,15 +42,16 @@ checks that the first input retains that exact conversation/native target. The
 owner then stops the Computer and submits the first ordinary message while it
 is stopped; queue-owned startup/restoration delivers it without another Send.
 The native work barrier remains on the original saved volume across replacement.
-The
-fixture refuses a duplicate primary New or a synthetic first prompt. Synthetic
-login, accepted user input and one intentional official-SDK `send_message` cross
-the production MCP/RPC and receipt-read boundaries. Ordinary/final native output
-stays out of Chat while actual full records retain its two utterances, update,
-publication input/result and typed inline answer. Reentry checks accepted messages
-in server-rendered HTML before hydration. This proves assembled plumbing, not real
-Codex/model behavior or successful real persisted-context restoration. Missing
-Docker/native prerequisites fail rather than skip.
+The fixture refuses a duplicate primary New or a synthetic first prompt, and
+validates the effective `send` catalog on New and exact Resume. Official SDK
+calls start and update the same work, then a qualified automatic follow-up asks
+a question without a user receipt. A fresh reply precedes the final result and
+summary removal. Ordinary/final native output stays out of Chat while full
+records retain the native utterances, captured tool inputs/results and typed
+inline answer. Reentry checks server-rendered summary and receipt HTML before
+hydration. This proves assembled plumbing, not real Codex/model behavior or
+successful real persisted-context restoration. Missing Docker/native
+prerequisites fail rather than skip.
 
 Build an architecture-matched binary directory containing `chapchoo`, then build
 an isolated image from the repository root:

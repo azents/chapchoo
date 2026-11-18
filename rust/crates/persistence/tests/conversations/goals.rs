@@ -601,6 +601,12 @@ fn sqlite_goal_projection_and_continuation_admission() -> Result<(), TestError> 
     let fixture = rt.block_on(fixture(&store))?;
     rt.block_on(exercise(&store, &fixture))?;
     let mut connection = diesel::SqliteConnection::establish(path.to_str().ok_or("Invalid path")?)?;
+    assert_eq!(
+        connection
+            .revert_last_migration(SQLITE_MIGRATIONS)?
+            .to_string(),
+        "00000000000029"
+    );
     assert!(connection.revert_last_migration(SQLITE_MIGRATIONS).is_err());
     Ok(())
 }
@@ -629,6 +635,12 @@ fn postgres_goal_projection_and_continuation_admission() -> Result<(), TestError
         let fixture = rt.block_on(fixture(&store))?;
         rt.block_on(exercise(&store, &fixture))?;
         let mut connection = AsyncConnectionWrapper::<AsyncPgConnection>::establish(&url)?;
+        assert_eq!(
+            connection
+                .revert_last_migration(POSTGRES_MIGRATIONS)?
+                .to_string(),
+            "00000000000029"
+        );
         assert!(
             connection
                 .revert_last_migration(POSTGRES_MIGRATIONS)

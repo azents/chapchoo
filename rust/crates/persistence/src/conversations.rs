@@ -20,6 +20,7 @@ mod stops;
 mod supply;
 mod system_prompts;
 mod waiting;
+mod work;
 pub use system_prompts::{MAX_SYSTEM_PROMPT_BYTES, ProjectInstructionEvidence};
 pub use waiting::{
     ClaimedConversationInput, ConversationInputAuthority, ConversationInputCandidate,
@@ -99,6 +100,7 @@ pub use stops::{
     ConversationStopState, ConversationWorkTarget,
 };
 pub use supply::{HarnessSupplyReceipt, HarnessSupplySelection, SaveHarnessSupply};
+pub use work::ConversationWorkSummary;
 
 pub struct ConversationSummary {
     pub id: String,

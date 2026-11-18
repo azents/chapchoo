@@ -174,11 +174,18 @@ export interface ConversationHeader {
   native?: z.infer<typeof nativeTarget>;
   foreground: "unavailable" | "idle" | "working" | "requiresAction";
   workId?: string;
+  work?: ConversationWorkSummary;
   appliedSupply?: HarnessSupplyChoice;
   preparation?: NativePreparation;
   startup?: InputPreparation;
   savedAuthenticationId?: string;
   appliedAuthenticationId?: string;
+}
+export interface ConversationWorkSummary {
+  id: string;
+  title: string;
+  tasks: { text: string; status: "pending" | "inProgress" | "completed" }[];
+  waitingForInput: boolean;
 }
 export interface NativePreparation {
   freshness: "current" | "cached";
