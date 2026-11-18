@@ -227,6 +227,9 @@ test("owner follows Conversation Work and inspects native typed-answer records",
     await expect(log.locator("[data-message-id]")).toHaveCount(5);
     const continuationMarker = "Chapchoo system-originated continuation";
     await expect(log.getByText(continuationMarker)).toHaveCount(0);
+    await expect(summary.getByRole("button")).toContainText(
+      "Check revised conversation fixture",
+    );
     await expect(summary.getByRole("button")).toContainText("1/2");
     const waiting = await fixture.current();
     expect(waiting.work?.id).toBe(workId);
@@ -301,7 +304,7 @@ test("owner follows Conversation Work and inspects native typed-answer records",
     await continuation.getByRole("button", { expanded: false }).click();
     await expect(
       continuation.locator("p").filter({ hasText: continuationMarker }),
-    ).toContainText("Review conversation fixture");
+    ).toContainText("Check revised conversation fixture");
     await expect(
       history.locator('[data-record-origin="publication"]'),
     ).toHaveCount(4);

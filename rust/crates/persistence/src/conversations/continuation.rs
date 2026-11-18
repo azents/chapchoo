@@ -191,6 +191,11 @@ impl Store {
             if inserted != 1 {
                 return Err(StoreError::Conflict);
             }
+            // A retained draft Work can exceed the full projection budget.
+            // Record the decision without charging or rewriting that data.
+            if super::goals::current_projection!(connection, dialect, id).is_none() {
+                return Ok(ConversationContinuationDecision::NoAction);
+            }
             let charged = diesel::sql_query(dialect.query(
                 "INSERT INTO conversation_continuation_counts(conversation_id,admissions)
                  SELECT ?,1 WHERE EXISTS (SELECT 1 FROM conversation_goals WHERE conversation_id=? AND disposition='active')

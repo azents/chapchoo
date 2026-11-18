@@ -92,6 +92,10 @@ message, subject to the continuation safety limit.
 - An eligible normal ending results in one follow-up execution that receives
   the conversation's full current goal set with goal states. Inclusion in
   context does not make a goal eligible for automatic work.
+- The Conversation Work goal context includes the complete current ordered
+  task list and each task's status, not just the Work title. A task list update
+  is reflected in subsequent continuation or compaction recovery. The list
+  does not change the rule that settlement must be explicit.
 - A live execution ended by a compaction hook is eligible for the same
   follow-up if the native runtime delivers an otherwise qualifying normal
   ending. It does not need to have made another inference after compaction.
@@ -299,3 +303,7 @@ creating work or a separate waiting state when no work is active (`REQ-6`).
 The requester accepted the consolidated tool details for list replacement,
 silent no-action when there is no work, and the completion/result boundary
 (`REQ-6`).
+
+On 2026-11-19 (KST), the requester clarified that the Conversation Work goal
+context carries its current ordered task list and individual statuses (`REQ-2`,
+`REQ-4`), without introducing Goal management as a product feature.

@@ -55,6 +55,15 @@ tags: [backend, frontend]
   publication, unchanged unrelated goals, and source and retry fencing.
   The test does not measure the admission count. This follow-up changes no
   production path or authority.
+- Work context amendment (`M1`, `M4`, `M5`, `M6`, `M10`; `REQ-1`,
+  `REQ-2`, `REQ-4`, `REQ-5`, `ADR-D20`, `ADR-D26`): project the already
+  authoritative Work title, ordered task list and task states with the
+  goal's disposition, without storing another copy or changing the fixed
+  completion condition. Check the existing full-context byte bound inside
+  each Work write transaction. Verify order/status, empty versus independent
+  context, size-rejection rollback and input-wait retention on both engines.
+  Verify the deterministic product continuation receives the latest tasks.
+  No change to the `send` catalog, public authority, or restore activation.
 - Open release gates: the standalone Goal transitions have no product
   caller. The `send` actions manage one associated goal but cannot add or
   amend an independent goal, or express an explicit harness Work failure.

@@ -80,6 +80,22 @@ authoritative conversation goal set and explicit states under the same
 projection rule (M1, M4, M5). Include waiting goals; settled goals retain their outcome but leave the current set. The projection does not enumerate removed or historical goals. Bound the serialized full context to 8 KiB UTF-8 at goal writes with room for status changes, not by truncating on read. Read at the applicable authorized boundary; the two reads need not
 return identical values when goals change in between.
 
+For Conversation Work, the current goal entry includes its title, the full
+ordered task list and each task's current status alongside the disposition.
+Read the canonical Work row in the same projection; do not retain a second
+task list in the goal record. An empty Work task list is explicit and does
+not change the completion rule. Use the existing bound for the entire
+serialized projection. Validate it in the same transaction as the Work
+write, before any effects commit.
+
+This is the first Work release; there is no deployed title-only Work
+format to migrate. If a retained draft database already contains Work
+that cannot fit, keep the original list and summary. Record no new
+automatic admission when the complete context cannot be delivered.
+Withdraw an already admitted but ungranted slot if it cannot produce
+complete context, so normal input is not held behind it. Neither case
+rewrites data or substitutes a partial or empty context.
+
 Admission tests eligibility separately (M3, M7, M10). At least one goal must be
 eligible to open one automatic follow-up. A waiting or terminal goal may be
 visible in its context without authorizing work on that goal. If A is waiting
@@ -188,3 +204,8 @@ PostgreSQL, Connector ACK or forwarding evidence.
 - Approved Design revision: `17`.
 - Approved authority IDs: `M1`, `M2`, `M3`, `M4`, `M5`, `M6`, `M7`, `M8`, `M9`, `M10`.
 - Approved scope: the reviewed Revision 16 plus the accepted closing decisions ADR-D23–D27, recorded here as Revision 17. The requester authorized implementation, not merge or deployment.
+- On `2026-11-19` (KST), the requester confirmed the ordered Work task list
+  and states are part of Goal context and directed implementation to
+  continue. This clarifies `M1`, `M4`, `M5`, and `M6` under the existing
+  full-context bound. The authority IDs, documented completion actions,
+  and merge and deployment boundaries are unchanged.

@@ -1,13 +1,17 @@
 use super::*;
-use chapchoo_domain::{InstructionSource, InstructionSourceKind, ProjectInstructions};
+use chapchoo_domain::{InstructionSource, InstructionSourceKind, ProjectInstructions, SendAction};
 use chapchoo_persistence::{
     ConnectionStartupAdmission, ConversationContinuationDecision as Decision,
     ConversationDeliveryTarget, ConversationForwardingAdmission, ConversationGoalChange as Goal,
-    ConversationInputPreparation, ConversationNormalEnding, ConversationOperationForwarding,
-    ConversationPreparationOutcome,
+    ConversationInputPreparation, ConversationMessageScope, ConversationNormalEnding,
+    ConversationOperationForwarding, ConversationPreparationOutcome,
 };
 
-async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
+async fn exercise(
+    store: &Store,
+    f: &Fixture,
+    mut fixture_sql: impl FnMut(&str) -> Result<(), TestError>,
+) -> Result<(), TestError> {
     let owner = f.owner.digest();
     let credential = f.connector.digest();
     let source = f.source(&credential);
@@ -134,7 +138,7 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
         .await?;
     assert!(String::from_utf8(projection)?.contains("Objective B"));
     let mut endings = Vec::new();
-    for n in 1..=9 {
+    for n in 1..=11 {
         let ending = ConversationNormalEnding {
             target: target.clone(),
             position: position(n, &format!("fixture-ending-{n}"))?,
@@ -280,7 +284,7 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
     else {
         return Err("Fresh user input did not reset the limit".into());
     };
-    ordinary_follows_continuation(store, f, id, &operation_id, &endings[6]).await?;
+    ordinary_follows_continuation(store, f, id, &operation_id, &endings[6], true).await?;
     assert!(matches!(
         store
             .admit_conversation_continuation(&source, id, &endings[7])
@@ -293,7 +297,58 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
             .await?,
     )?;
     assert!(!current.contains("Objective A") && current.contains("Latest objective"));
-    replaced_launch_does_not_inherit_slot(store, f, id, &endings[8]).await?;
+    let scope = ConversationMessageScope {
+        agent_id: &f.agent.id,
+        conversation_id: id,
+    };
+    store
+        .send_conversation_work(
+            &source,
+            &scope,
+            &SendAction::Continue {
+                title: Some(ConversationText::parse("Retained draft Work".into())?),
+                tasks: Vec::new(),
+                message: None,
+            },
+        )
+        .await?;
+    let Decision::Admitted { operation_id } = store
+        .admit_conversation_continuation(&source, id, &endings[8])
+        .await?
+    else {
+        return Err("Expected an earlier admitted slot".into());
+    };
+    // Only this isolated fixture has a Work row. Simulate a task list
+    // retained from before the full projection was checked at Work writes.
+    let oversized_tasks: Vec<_> = (0..16)
+        .map(|_| serde_json::json!({"text": "x".repeat(600), "status": "pending"}))
+        .collect();
+    fixture_sql(&format!(
+        "UPDATE conversation_work_items SET tasks_json='{}'",
+        serde_json::to_string(&oversized_tasks)?
+    ))?;
+    assert!(matches!(
+        store.conversation_goal_context(&source, id, &target).await,
+        Err(StoreError::Integrity)
+    ));
+    assert_eq!(
+        store
+            .admit_conversation_continuation(&source, id, &endings[9])
+            .await?,
+        Decision::NoAction
+    );
+    ordinary_follows_continuation(store, f, id, &operation_id, &endings[8], false).await?;
+    let retained = store
+        .conversation_work_summary(&owner, &scope, f.now)
+        .await?
+        .ok_or("Oversized context discarded draft Work")?;
+    assert_eq!(retained.tasks.len(), oversized_tasks.len());
+    store
+        .send_conversation_work(&source, &scope, &SendAction::Ignore)
+        .await?;
+    // Remove the synthetic Work overlay before the migration guards run.
+    fixture_sql("DELETE FROM conversation_work_items")?;
+    replaced_launch_does_not_inherit_slot(store, f, id, &endings[10]).await?;
     Ok(())
 }
 
@@ -303,6 +358,7 @@ async fn ordinary_follows_continuation(
     conversation: &str,
     operation: &str,
     ending: &ConversationNormalEnding,
+    expect_grant: bool,
 ) -> Result<(), TestError> {
     let owner = f.owner.digest();
     let credential = f.connector.digest();
@@ -317,7 +373,7 @@ async fn ordinary_follows_continuation(
             &AcceptConversationInput {
                 agent_id: f.agent.id.clone(),
                 conversation_id: Some(conversation.into()),
-                request_id: "later-user-input".into(),
+                request_id: format!("later-user-input-{}", ending.position.ordinal()),
                 target: ConversationTarget::Snapshot(ending.target.snapshot.clone()),
                 text: ConversationText::parse("Later ordinary input".into())?,
             },
@@ -338,22 +394,24 @@ async fn ordinary_follows_continuation(
             .await,
         Err(StoreError::InvalidTransition)
     ));
-    assert!(
+    assert_eq!(
         store
             .begin_conversation_continuation(&source, conversation, operation, ending)
             .await?
             .is_some(),
-        "Later ordinary acceptance revoked a committed internal slot"
+        expect_grant,
     );
-    assert!(matches!(
+    if expect_grant {
+        assert!(matches!(
+            store
+                .begin_conversation_input_forwarding(&owner, &route, &draft, f.now, &claim)
+                .await,
+            Err(StoreError::InvalidTransition)
+        ));
         store
-            .begin_conversation_input_forwarding(&owner, &route, &draft, f.now, &claim)
-            .await,
-        Err(StoreError::InvalidTransition)
-    ));
-    store
-        .close_conversation_continuation(&source, conversation, operation, ending)
-        .await?;
+            .close_conversation_continuation(&source, conversation, operation, ending)
+            .await?;
+    }
     assert!(matches!(
         store
             .begin_conversation_input_forwarding(&owner, &route, &draft, f.now, &claim)
@@ -599,8 +657,11 @@ fn sqlite_goal_projection_and_continuation_admission() -> Result<(), TestError> 
     let rt = tokio::runtime::Runtime::new()?;
     let store = rt.block_on(Store::connect_sqlite(path.clone(), cipher))?;
     let fixture = rt.block_on(fixture(&store))?;
-    rt.block_on(exercise(&store, &fixture))?;
     let mut connection = diesel::SqliteConnection::establish(path.to_str().ok_or("Invalid path")?)?;
+    rt.block_on(exercise(&store, &fixture, |sql| {
+        connection.batch_execute(sql)?;
+        Ok(())
+    }))?;
     assert_eq!(
         connection
             .revert_last_migration(SQLITE_MIGRATIONS)?
@@ -633,8 +694,13 @@ fn postgres_goal_projection_and_continuation_admission() -> Result<(), TestError
         let rt = tokio::runtime::Runtime::new()?;
         let store = rt.block_on(Store::connect_postgres(url.clone(), cipher))?;
         let fixture = rt.block_on(fixture(&store))?;
-        rt.block_on(exercise(&store, &fixture))?;
         let mut connection = AsyncConnectionWrapper::<AsyncPgConnection>::establish(&url)?;
+        rt.block_on(exercise(&store, &fixture, |sql| {
+            tokio::task::block_in_place(|| {
+                connection.batch_execute(sql)?;
+                Ok(())
+            })
+        }))?;
         assert_eq!(
             connection
                 .revert_last_migration(POSTGRES_MIGRATIONS)?

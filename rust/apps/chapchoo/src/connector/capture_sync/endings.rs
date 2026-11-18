@@ -219,6 +219,8 @@ fn continuation_text(projection: Vec<u8>) -> Result<ConversationText, AppError> 
     Ok(ConversationText::parse(format!(
         "[Chapchoo system-originated continuation; not a user message]\n\
         Continue active goals using the current authoritative goal context. \
-        Leave goals waiting for user input on hold.\n{projection}"
+        Leave goals waiting for user input on hold. \
+        For Conversation Work, use the listed tasks and states; checking off \
+        the tasks does not itself settle the work.\n{projection}"
     ))?)
 }

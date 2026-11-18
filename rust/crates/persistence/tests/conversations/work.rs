@@ -159,9 +159,42 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
             .id,
         original.id
     );
+    assert!(matches!(
+        store
+            .send_conversation_work(
+                &source,
+                &scope,
+                &SendAction::Continue {
+                    title: None,
+                    tasks: vec![WorkTask {
+                        text: text(&escaped)?,
+                        status: WorkTaskStatus::Pending,
+                    }],
+                    message: Some(text("Rejected amendment must not publish")?),
+                },
+            )
+            .await,
+        Err(StoreError::InvalidInput)
+    ));
+    let unchanged = store
+        .conversation_work_summary(&owner, &scope, f.now)
+        .await?
+        .ok_or("Rejected amendment removed Work")?;
+    assert_eq!(unchanged.title, first.title);
+    assert_eq!(unchanged.tasks, first.tasks);
+    assert!(unchanged.waiting_for_input);
     let update = SendAction::Continue {
         title: Some(text("Inspect revised records")?),
-        tasks: Vec::new(),
+        tasks: vec![
+            WorkTask {
+                text: text("Report findings")?,
+                status: WorkTaskStatus::Pending,
+            },
+            WorkTask {
+                text: text("Review evidence")?,
+                status: WorkTaskStatus::Completed,
+            },
+        ],
         message: None,
     };
     store
@@ -172,15 +205,49 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
         .await?
         .ok_or("Missing wait")?;
     assert!(waiting.waiting_for_input);
-    assert!(waiting.tasks.is_empty());
+    assert_eq!(waiting.tasks.len(), 2);
     assert_eq!(waiting.id, first.id);
-    assert!(
-        String::from_utf8(
-            store
-                .conversation_goal_context(&source, scope.conversation_id, &target)
-                .await?
-        )?
-        .contains("waiting_for_input")
+    let current: serde_json::Value = serde_json::from_slice(
+        &store
+            .conversation_goal_context(&source, scope.conversation_id, &target)
+            .await?,
+    )?;
+    assert_eq!(
+        current,
+        serde_json::json!([{
+            "goal_key": first.id,
+            "title": "Inspect revised records",
+            "tasks": [
+                {"text": "Report findings", "status": "pending"},
+                {"text": "Review evidence", "status": "completed"},
+            ],
+            "disposition": "waiting_for_input",
+        }])
+    );
+    store
+        .send_conversation_work(
+            &source,
+            &scope,
+            &SendAction::Continue {
+                title: None,
+                tasks: Vec::new(),
+                message: None,
+            },
+        )
+        .await?;
+    let cleared: serde_json::Value = serde_json::from_slice(
+        &store
+            .conversation_goal_context(&source, scope.conversation_id, &target)
+            .await?,
+    )?;
+    assert_eq!(
+        cleared,
+        serde_json::json!([{
+            "goal_key": first.id,
+            "title": "Inspect revised records",
+            "tasks": [],
+            "disposition": "waiting_for_input",
+        }])
     );
     draft.conversation_id = Some(original.conversation_id.clone());
     draft.request_id = "work-fresh-input".into();

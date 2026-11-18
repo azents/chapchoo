@@ -590,11 +590,21 @@ not a delivery receipt. A replacement launch does not inherit the slot even
 when it resumes the same source. Internal forwarding does not make a user Chat
 receipt; the native record retains the role observed on ACP.
 
+If the retained full context exceeds the bound, a new ending records no
+admission; an existing ungranted slot closes without native forwarding.
+The stored Work remains intact, and the exact slot closure releases ordinary
+input ordering. A failed context read is not an authoritative empty set.
+
 ## Conversation Work
 
 The first `send` with `continue` creates active work and its associated Goal
-together. Later `continue` calls update the same work identity, without clearing
-input wait. `request_input` enters wait when work is active. Only genuinely new
+together. Later `continue` calls update the same work identity, without
+clearing input wait. The associated goal context reads the Work title and
+the complete ordered task list with its statuses directly from Work storage.
+It has no separate task copy. An empty list remains explicit, and checking
+all tasks does not settle Work. A change exceeding the full projection
+bound rolls back the task/title changes, reset, and optional publication.
+`request_input` enters wait when work is active. Only genuinely new
 accepted input for that conversation releases the wait; recovering an existing
 acceptance does not. `finish` and `ignore` close the affected work and settle its
 associated Goal, not unrelated Goals. Neither cancels a native turn. A terminal

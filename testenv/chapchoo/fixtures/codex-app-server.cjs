@@ -471,11 +471,20 @@ async function request(id, method, params) {
           "[Chapchoo system-originated continuation; not a user message]\n",
         )
       ) {
+        const context = JSON.parse(prompt.split("\n").at(-1));
+        const [work] = context;
         if (
           turnId !== "fixture-refresh-turn" ||
-          !prompt.includes("Review conversation fixture")
+          context.length !== 1 ||
+          work.title !== "Check revised conversation fixture" ||
+          work.disposition !== "active" ||
+          JSON.stringify(work.tasks) !==
+            JSON.stringify([
+              { text: "Choose a channel", status: "in_progress" },
+              { text: "Check saved instructions", status: "completed" },
+            ])
         )
-          throw new Error("Fixture continuation targeted the wrong work");
+          throw new Error("Fixture continuation did not use amended work");
         await workTurn(id, params, "question", {
           action: "request_input",
           message: "Which fixture channel should I use?",
@@ -531,9 +540,10 @@ async function request(id, method, params) {
           tool: "send",
           arguments: {
             action: "continue",
+            title: "Check revised conversation fixture",
             tasks: [
-              { text: "Check saved instructions", status: "completed" },
               { text: "Choose a channel", status: "in_progress" },
+              { text: "Check saved instructions", status: "completed" },
             ],
             message: "Refreshed project fixture publication.",
           },

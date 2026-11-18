@@ -81,16 +81,24 @@ impl Store {
                 return Ok(None);
             }
             let projection = current_projection!(connection, dialect, id);
+            let state = if projection.is_some() {
+                "POSSIBLE"
+            } else {
+                // Never strand an earlier admitted operation that cannot
+                // produce complete context. No native forwarding was granted.
+                "CLOSED"
+            };
             let changed = diesel::sql_query(dialect.query(
-                "UPDATE conversation_continuation_inputs SET delivery_state='POSSIBLE' WHERE id=? AND delivery_state='ADMITTED'",
+                "UPDATE conversation_continuation_inputs SET delivery_state=? WHERE id=? AND delivery_state='ADMITTED'",
             ))
+            .bind::<Text, _>(state)
             .bind::<IdentitySql, _>(operation)
             .execute(connection)
             .await?;
             if changed != 1 {
                 return Err(StoreError::Conflict);
             }
-            Ok(Some(projection))
+            Ok(projection)
         })
     }
 

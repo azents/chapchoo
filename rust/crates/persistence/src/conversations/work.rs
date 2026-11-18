@@ -1,6 +1,6 @@
 //! Conversation Work and its optional Chat publication share a transaction.
 use super::{
-    goals::{current_goals, reset_continuation_count, verify_projection_size},
+    goals::{insert_goal, reset_continuation_count, verify_current_goal_size},
     messages::append_message,
     records::source_conversation,
     *,
@@ -9,6 +9,7 @@ use crate::ConnectorSource;
 use chapchoo_domain::{SendAction, WorkTask, WorkTaskStatus};
 
 const MAX_TASK_LIST_BYTES: usize = 48 * 1024;
+const WORK_OBJECTIVE: &str = "Complete the tracked tasks and explicitly settle the Work.";
 
 #[derive(Debug)]
 pub struct ConversationWorkSummary {
@@ -31,18 +32,14 @@ struct WorkRow {
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
-struct StoredTask<T> {
+pub(super) struct StoredTask<T> {
     text: T,
     status: WorkTaskStatus,
 }
 
 impl WorkRow {
     fn tasks(&self) -> Result<Vec<WorkTask>, StoreError> {
-        if self.tasks_json.len() > MAX_TASK_LIST_BYTES {
-            return Err(StoreError::Integrity);
-        }
-        serde_json::from_str::<Vec<StoredTask<String>>>(&self.tasks_json)
-            .map_err(|_| StoreError::Integrity)?
+        decode_tasks(&self.tasks_json)?
             .into_iter()
             .map(|task| {
                 Ok(WorkTask {
@@ -62,6 +59,13 @@ impl WorkRow {
             waiting_for_input: self.disposition == "waiting_for_input",
         })
     }
+}
+
+pub(super) fn decode_tasks(json: &str) -> Result<Vec<StoredTask<String>>, StoreError> {
+    if json.len() > MAX_TASK_LIST_BYTES {
+        return Err(StoreError::Integrity);
+    }
+    serde_json::from_str(json).map_err(|_| StoreError::Integrity)
 }
 
 fn encode_tasks(tasks: &[WorkTask]) -> Result<String, StoreError> {
@@ -159,21 +163,15 @@ impl Store {
                         let title = title.as_ref().ok_or(StoreError::InvalidInput)?.as_str();
                         let goal =
                             EntityId::generate(now)?.to_dto(EntityKind::ConversationOperation);
-                        diesel::sql_query(dialect.query(
-                            "INSERT INTO conversation_goals(conversation_id,goal_key,original_objective,objective,disposition) VALUES(?,?,?,?,'active')",
-                        ))
-                        .bind::<IdentitySql,_>(id).bind::<Text,_>(&goal)
-                        .bind::<Text,_>(title).bind::<Text,_>(title)
-                        .execute(connection).await?;
-                        verify_projection_size(&mut current_goals!(connection, dialect, id))?;
+                        insert_goal!(connection, dialect, id, &goal, WORK_OBJECTIVE);
                         diesel::sql_query(dialect.query(
                             "INSERT INTO conversation_work_items(conversation_id,goal_key,title,tasks_json) VALUES(?,?,?,?)",
                         ))
                         .bind::<IdentitySql,_>(id).bind::<Text,_>(&goal)
                         .bind::<Text,_>(title).bind::<Text,_>(json)
                         .execute(connection).await?;
-                        reset_continuation_count!(connection, dialect, id);
                     }
+                    verify_current_goal_size!(connection, dialect, id);
                 }
                 SendAction::RequestInput { .. }
                 | SendAction::Finish { .. }
