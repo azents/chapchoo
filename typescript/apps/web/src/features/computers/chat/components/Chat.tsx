@@ -29,6 +29,7 @@ import { ConversationBody, ConversationContent } from "./ConversationBody";
 import { RecentConversationRecord } from "./ConversationRecord";
 import { OutgoingIcon } from "./OutgoingIcon";
 import { ThinkingIndicator } from "./ThinkingIndicator";
+import { WorkSummary } from "./WorkSummary";
 import type { ChatProps } from "../types";
 import type { ReactElement } from "react";
 
@@ -308,6 +309,11 @@ export function Chat(props: ChatProps): ReactElement {
                   </div>
                 ) : null}
               </ChatPresence>
+              <WorkSummary
+                key={agent.id}
+                work={props.conversation.region.header.work}
+                copy={c.workSummary}
+              />
               <div
                 className={classes.composer}
                 data-readonly={!props.writable || void 0}

@@ -26,8 +26,8 @@ pub use runtime::{
     ScopeEvidence,
 };
 pub use server_tools::{
-    NativeMcpDeclaration, NativeToolLifetime, NativeToolProvision, NativeToolScope,
-    NativeToolsError, NativeToolsFuture, NativeToolsProvider,
+    NativeGoalContext, NativeGoalRestore, NativeMcpDeclaration, NativeToolLifetime,
+    NativeToolProvision, NativeToolScope, NativeToolsError, NativeToolsFuture, NativeToolsProvider,
 };
 pub use storage::NativeStorage;
 

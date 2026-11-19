@@ -1,6 +1,11 @@
 //! Server-owned goal state. Native executions never own an objective.
 
-use super::{delivery::current, records::source_conversation, *};
+use super::{
+    delivery::current,
+    records::source_conversation,
+    work::{StoredTask, decode_tasks},
+    *,
+};
 use crate::ConnectorSource;
 use serde::Serialize;
 
@@ -20,7 +25,7 @@ impl fmt::Debug for ConversationGoalChange<'_> {
     }
 }
 
-#[derive(diesel::QueryableByName, Serialize)]
+#[derive(diesel::QueryableByName)]
 pub(super) struct GoalRow {
     #[diesel(sql_type=Text)]
     goal_key: String,
@@ -28,6 +33,30 @@ pub(super) struct GoalRow {
     objective: String,
     #[diesel(sql_type=Text)]
     disposition: String,
+    #[diesel(sql_type=Nullable<Text>)]
+    work_title: Option<String>,
+    #[diesel(sql_type=Nullable<Text>)]
+    work_tasks_json: Option<String>,
+}
+
+#[derive(Serialize)]
+struct ProjectedGoal<'a> {
+    goal_key: &'a str,
+    disposition: &'a str,
+    #[serde(flatten)]
+    context: GoalContext<'a>,
+}
+
+#[derive(Serialize)]
+#[serde(untagged)]
+enum GoalContext<'a> {
+    Objective {
+        objective: &'a str,
+    },
+    Work {
+        title: &'a str,
+        tasks: Vec<StoredTask<String>>,
+    },
 }
 
 #[derive(diesel::QueryableByName)]
@@ -53,7 +82,9 @@ pub(super) use reset_continuation_count;
 macro_rules! current_goals {
     ($connection:expr,$dialect:expr,$conversation:expr) => {
         diesel::sql_query($dialect.query(
-            "SELECT goal_key,objective,disposition FROM conversation_goals WHERE conversation_id=? AND disposition IN ('active','waiting_for_input') ORDER BY goal_key",
+            "SELECT g.goal_key,g.objective,g.disposition,w.title AS work_title,w.tasks_json AS work_tasks_json
+             FROM conversation_goals g LEFT JOIN conversation_work_items w USING (conversation_id,goal_key)
+             WHERE g.conversation_id=? AND g.disposition IN ('active','waiting_for_input') ORDER BY g.goal_key",
         ))
         .bind::<IdentitySql, _>($conversation)
         .load::<$crate::conversations::goals::GoalRow>($connection)
@@ -63,30 +94,88 @@ macro_rules! current_goals {
 
 macro_rules! current_projection {
     ($connection:expr,$dialect:expr,$conversation:expr) => {{
-        let projection = $crate::conversations::goals::encode(
+        $crate::conversations::goals::bounded_projection(
             &$crate::conversations::goals::current_goals!($connection, $dialect, $conversation),
-        )?;
-        if projection.len() > $crate::conversations::goals::MAX_GOAL_CONTEXT_BYTES {
-            return Err(StoreError::Integrity);
-        }
-        projection
+        )?
     }};
 }
 pub(super) use {current_goals, current_projection};
 
-pub(super) fn encode(goals: &[GoalRow]) -> Result<Vec<u8>, StoreError> {
-    serde_json::to_vec(goals).map_err(|_| StoreError::Integrity)
+macro_rules! verify_current_goal_size {
+    ($connection:expr,$dialect:expr,$conversation:expr) => {
+        $crate::conversations::goals::verify_projection_size(
+            &$crate::conversations::goals::current_goals!($connection, $dialect, $conversation),
+        )?
+    };
 }
 
-fn verify_projection_size(goals: &mut [GoalRow]) -> Result<(), StoreError> {
-    // Reserve the longest live status so input-wait changes cannot overflow.
-    for goal in &mut *goals {
-        goal.disposition = "waiting_for_input".into();
+// Call under the conversation transaction after selecting the authorized
+// goal identity. An insertion and its shared-budget reset are one effect.
+macro_rules! insert_goal {
+    ($connection:expr,$dialect:expr,$conversation:expr,$key:expr,$objective:expr) => {{
+        diesel::sql_query($dialect.query(
+            "INSERT INTO conversation_goals(conversation_id,goal_key,original_objective,objective,disposition) VALUES(?,?,?,?,'active')",
+        ))
+        .bind::<IdentitySql, _>($conversation)
+        .bind::<Text, _>($key)
+        .bind::<Text, _>($objective)
+        .bind::<Text, _>($objective)
+        .execute($connection)
+        .await?;
+        $crate::conversations::goals::reset_continuation_count!(
+            $connection, $dialect, $conversation
+        );
+    }};
+}
+
+pub(super) use {insert_goal, verify_current_goal_size};
+
+pub(super) fn bounded_projection(goals: &[GoalRow]) -> Result<Option<Vec<u8>>, StoreError> {
+    let projection = encode_projection(goals, false)?;
+    Ok((projection.len() <= MAX_GOAL_CONTEXT_BYTES).then_some(projection))
+}
+
+pub(super) fn forwarding_projection(goals: &[GoalRow]) -> Result<Option<Vec<u8>>, StoreError> {
+    if !goals.iter().any(|goal| goal.disposition == "active") {
+        return Ok(None);
     }
-    if encode(goals)?.len() > MAX_GOAL_CONTEXT_BYTES {
+    bounded_projection(goals)
+}
+
+pub(super) fn verify_projection_size(goals: &[GoalRow]) -> Result<(), StoreError> {
+    if encode_projection(goals, true)?.len() > MAX_GOAL_CONTEXT_BYTES {
         return Err(StoreError::InvalidInput);
     }
     Ok(())
+}
+
+fn encode_projection(goals: &[GoalRow], reserve_wait: bool) -> Result<Vec<u8>, StoreError> {
+    let projection = goals
+        .iter()
+        .map(|goal| {
+            let context = match (&goal.work_title, &goal.work_tasks_json) {
+                (Some(title), Some(tasks)) => GoalContext::Work {
+                    title,
+                    tasks: decode_tasks(tasks)?,
+                },
+                (None, None) => GoalContext::Objective {
+                    objective: &goal.objective,
+                },
+                _ => return Err(StoreError::Integrity),
+            };
+            Ok(ProjectedGoal {
+                goal_key: &goal.goal_key,
+                // Reserve the longest live status so input wait never fails for size.
+                disposition: if reserve_wait {
+                    "waiting_for_input"
+                } else {
+                    &goal.disposition
+                },
+                context,
+            })
+        })
+        .collect::<Result<Vec<_>, StoreError>>()?;
+    serde_json::to_vec(&projection).map_err(|_| StoreError::Integrity)
 }
 
 impl Store {
@@ -102,7 +191,7 @@ impl Store {
         operation!(self, |connection, dialect| {
             let row = source_conversation!(connection, dialect, source, id);
             current(&row, row.agent_id, target)?;
-            Ok(current_projection!(connection, dialect, id))
+            current_projection!(connection, dialect, id).ok_or(StoreError::Integrity)
         })
     }
 
@@ -151,27 +240,25 @@ impl Store {
                             Err(StoreError::Conflict)
                         };
                     }
-                    diesel::sql_query(dialect.query("INSERT INTO conversation_goals(conversation_id,goal_key,original_objective,objective,disposition) VALUES(?,?,?,?,'active')"))
-                        .bind::<IdentitySql, _>(id)
-                        .bind::<Text, _>(goal_key)
-                        .bind::<Text, _>(*objective)
-                        .bind::<Text, _>(*objective)
-                        .execute(connection)
-                        .await?;
-                    verify_projection_size(&mut current_goals!(connection, dialect, id))?;
-                    reset_continuation_count!(connection, dialect, id);
+                    insert_goal!(connection, dialect, id, goal_key, *objective);
+                    verify_current_goal_size!(connection, dialect, id);
                 }
                 ConversationGoalChange::Amend { objective } => {
-                    let changed = diesel::sql_query(dialect.query("UPDATE conversation_goals SET objective=? WHERE conversation_id=? AND goal_key=? AND disposition IN ('active','waiting_for_input')"))
-                        .bind::<Text, _>(*objective)
-                        .bind::<IdentitySql, _>(id)
-                        .bind::<Text, _>(goal_key)
-                        .execute(connection)
-                        .await?;
+                    let changed = diesel::sql_query(dialect.query(
+                        "UPDATE conversation_goals SET objective=? WHERE conversation_id=? AND goal_key=?
+                         AND disposition IN ('active','waiting_for_input') AND NOT EXISTS (
+                             SELECT 1 FROM conversation_work_items w
+                             WHERE w.conversation_id=conversation_goals.conversation_id AND w.goal_key=conversation_goals.goal_key)",
+                    ))
+                    .bind::<Text, _>(*objective)
+                    .bind::<IdentitySql, _>(id)
+                    .bind::<Text, _>(goal_key)
+                    .execute(connection)
+                    .await?;
                     if changed != 1 {
                         return Err(StoreError::InvalidTransition);
                     }
-                    verify_projection_size(&mut current_goals!(connection, dialect, id))?;
+                    verify_current_goal_size!(connection, dialect, id);
                 }
                 ConversationGoalChange::Complete => {
                     let prior = prior.ok_or(StoreError::NotFound)?;

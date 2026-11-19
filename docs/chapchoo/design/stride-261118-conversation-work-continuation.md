@@ -1,6 +1,7 @@
 ---
 title: "Conversation Work and Goal Continuation Design"
 created: 2026-11-18
+implemented: 2026-11-19
 document_role: primary
 document_type: design
 snapshot_id: stride-261118
@@ -20,16 +21,16 @@ tags: [backend, frontend, engine]
 
 ## Design Authority
 
-- Design revision: `17`
+- Design revision: `18`
 
 | ID | Material mechanism | Authority | Classification |
 | --- | --- | --- | --- |
-| M1 | Authoritative server goal state in the conversation, with independently maintained goals and explicit addition, amendment, and terminal outcome | `stride-261118/REQ-1`, `REQ-3`, `ADR-D5`, `ADR-D9`, `ADR-D26` | `decided` |
+| M1 | Authoritative server goal state in the conversation, with internal addition, amendment and explicit completion; `send` manages its associated goal | `stride-261118/REQ-1`, `REQ-3`, `ADR-D5`, `ADR-D9`, `ADR-D26`, `ADR-D29` | `decided` |
 | M2 | Typed, authenticated Connector hook reporting and bounded request-response without domain-specific dispatch logic | `stride-261118/REQ-8`, `ADR-D1`, `ADR-D4`, `ADR-D23` | `decided` |
 | M3 | Qualified native normal ending, including an otherwise qualifying `end_turn` after a compaction-hook stop; one committed admission or no-action decision, not a native forwarding acknowledgement | `stride-261118/REQ-2`, `REQ-5`, `REQ-8`, `ADR-D1`, `ADR-D2`, `ADR-D8`, `ADR-D23`, `ADR-D24` | `decided` |
 | M4 | Independently deliver internal continuation without a user Chat receipt, preserving admission ordering, current-source/non-replay checks and the full goal-context projection | `stride-261118/REQ-2`, `REQ-5`, `ADR-D2`, `ADR-D3`, `ADR-D10`, `ADR-D24`; [conversation storage](../spec/domain/conversation-storage.md#conversation-identity-and-product-input) | `derived` |
 | M5 | Current-source, bounded server goal lookup after compaction; apply the full goal-context projection on success before inference and preserve native progress without new context on failure | `stride-261118/REQ-4`, `ADR-D4`, `ADR-D5`, `ADR-D7`, `ADR-D10`, `ADR-D25`, `ADR-D26` | `decided` |
-| M6 | One `send` tool under existing conversation authority; explicit actions, full ordered list replacement, and committed results without replay; commit associated effects together | `stride-261118/REQ-3`, `REQ-5`, `REQ-6`, `ADR-D6`, `ADR-D13`, `ADR-D14`, `ADR-D15`, `ADR-D16`, `ADR-D19`, `ADR-D20`, `ADR-D21`, `ADR-D22`, `ADR-D27`; [Server Tools](../spec/domain/server-tools.md) | `decided` |
+| M6 | One `send` tool under existing conversation authority; explicit actions, full ordered list replacement, and committed results without replay; commit associated effects together | `stride-261118/REQ-3`, `REQ-5`, `REQ-6`, `ADR-D6`, `ADR-D13`, `ADR-D14`, `ADR-D15`, `ADR-D16`, `ADR-D19`, `ADR-D20`, `ADR-D21`, `ADR-D22`, `ADR-D27`, `ADR-D29`; [Server Tools](../spec/domain/server-tools.md) | `decided` |
 | M7 | Conversation Work wait clears on a genuinely new accepted input in that conversation; ordinary text and execution outcome do not settle work | `stride-261118/REQ-3`, `REQ-5`, `REQ-6` | `required` |
 | M8 | Conversation Chat projects the approved single-surface summary and its shared motion/press interactions | `stride-261118/REQ-7` | `required` |
 | M9 | Existing scoped Stop, ordinary user-input delivery, intentional Chat publication, and uncertainty handling | `stride-261118/REQ-5`, `REQ-6`; [Native lifecycle](../spec/domain/native-harness.md), [Conversation storage](../spec/domain/conversation-storage.md), [Server Tools](../spec/domain/server-tools.md) | `existing` |
@@ -37,8 +38,8 @@ tags: [backend, frontend, engine]
 
 ## Ownership and state
 
-- **Goal foundation (M1, M3, M4, M5, M10):** The server owns canonical goal state and the shared admission counter in the conversation. Adding a goal does not replace another; amendments and explicit outcomes affect the relevant goal rather than all goals. Terminal state cannot be inferred from a run outcome, todos, or rendered UI. No goal belongs to an execution. Native source/occurrence identities fence a transport effect, not the lifetime or membership of a goal.
-- **Conversation Work (M6, M7, M8):** The conversation's work title, ordered todos and input-wait/terminal disposition supply product behavior. An open goal with eligible work can continue; terminal work or work waiting for user input cannot. Explicit failure remains a harness outcome, removes the summary, and does not add a failure badge or implicit message. Ordinary user text can inform work but does not itself replace it. Terminal handling must settle the associated eligibility as part of the same authorized transition rather than leave two independent runners.
+- **Goal foundation (M1, M3, M4, M5, M10):** The server owns canonical goal state and the shared admission counter in the conversation. Adding a goal does not replace another; amendments and completion affect only the relevant goal. The goal dispositions are active, waiting for input, and completed. A run outcome, todos, or rendered UI cannot complete a goal. No goal belongs to an execution. Native source/occurrence identities fence a transport effect, not the lifetime or membership of a goal.
+- **Conversation Work (M6, M7, M8):** The work title, ordered todos and input wait are projected while Work is open. The associated goal's completion removes the summary and eligibility together. Ordinary user text can inform work but does not itself replace it.
 - **Harness and Connector (M2, M3, M5, M9):** The live native owner supplies execution evidence. The Connector reports a supported typed occurrence using its current route. Ingress authenticates and validates, dispatches to a registered handler and returns that handler's result under a bounded awaited call. Shared ingress knows neither goals nor continuation policy. The handler does not wait for a later model execution. The harness owns when context must be applied to its next request.
 - **Chat (M8, M9):** User and deliberately published Agent messages remain ordered Chat receipts. Native output remains capture history. Render the active summary above the composer as one glass surface with the straight expanded divider, shared spring and whole-surface light/dark tint. Existing summary appears without an entrance on load; subsequent appearance grows in place and exit overshoots outward then contracts. Content does not fade ahead of the surface; reduced motion omits the animations. Stop leaves work and its summary intact. No product UI is added to Admin.
 
@@ -80,6 +81,22 @@ authoritative conversation goal set and explicit states under the same
 projection rule (M1, M4, M5). Include waiting goals; settled goals retain their outcome but leave the current set. The projection does not enumerate removed or historical goals. Bound the serialized full context to 8 KiB UTF-8 at goal writes with room for status changes, not by truncating on read. Read at the applicable authorized boundary; the two reads need not
 return identical values when goals change in between.
 
+For Conversation Work, the current goal entry includes its title, the full
+ordered task list and each task's current status alongside the disposition.
+Read the canonical Work row in the same projection; do not retain a second
+task list in the goal record. An empty Work task list is explicit and does
+not change the completion rule. Use the existing bound for the entire
+serialized projection. Validate it in the same transaction as the Work
+write, before any effects commit.
+
+This is the first Work release; there is no deployed title-only Work
+format to migrate. If a retained draft database already contains Work
+that cannot fit, keep the original list and summary. Record no new
+automatic admission when the complete context cannot be delivered.
+Withdraw an already admitted but ungranted slot if it cannot produce
+complete context, so normal input is not held behind it. Neither case
+rewrites data or substitutes a partial or empty context.
+
 Admission tests eligibility separately (M3, M7, M10). At least one goal must be
 eligible to open one automatic follow-up. A waiting or terminal goal may be
 visible in its context without authorizing work on that goal. If A is waiting
@@ -106,11 +123,23 @@ observations support evaluating a live owner and local work occurrence, not
 treating the raw terminal reason as an independent idempotency key or
 claiming a developer-role follow-up.
 
-The managed `SessionStart(source=compact)` hook invokes a bounded, read-only Connector-local restore operation tied to the applied source. The Connector reads under current component authority. Neither the hook nor its request can choose another source or carry platform credentials. Direct caller and stale-owner isolation are implementation acceptance gates.
+The managed `SessionStart(source=compact)` hook on official, unmodified
+Codex invokes a bounded, read-only Connector-local restore operation tied to
+the applied source (`ADR-D28`). Accept the local invocation without proving
+hook provenance. It carries no source selector or platform credentials.
+The Connector reads under current component authority and revalidates the
+exact live work and route before returning context. A local direct invocation
+is permitted only within the endpoint's same applied-owner scope; stale owner
+and stopped work are still excluded. No product Goal read API is introduced.
 
 ## `send` transitions and results
 
-Use the existing scoped native tool authority and the same server transaction for all effects requested by one call (M6, M7, M9). The current tool scope, not a model-supplied target ID or text, governs the affected conversation. Require a work action on every call. The first `continue` without active Conversation Work requires a title and task list and starts the work. Later `continue` calls update the same work, require a task list, and may carry a new title. Either may carry a message. The initial call establishes tracked work and its common-goal effect coherently; it does not launch an extra native execution. `request_input` publishes a question and, when work is active, puts that work into input wait in the same transaction. With no active work it publishes only the question, without creating work, a goal, a summary, or a separate wait. `finish` publishes a result and completes the affected active work, if any. Neither a question nor a result sent without active work resets the counter. `ignore` completes the affected work without publication. Reject missing required input or a message supplied with `ignore` instead of changing the requested action. Neither completion cancels the current native execution or settles an unrelated goal. Invalid calls produce no effects. A separate goal failure outcome does not require the Agent to publish a message.
+Use the existing scoped native tool authority and the same server transaction for all effects requested by one call (M6, M7, M9). The current tool scope, not a model-supplied target ID or text, governs the affected conversation. Require a work action on every call. The first `continue` without active Conversation Work requires a title and task list and starts the work. Later `continue` calls update the same work, require a task list, and may carry a new title. Either may carry a message. The initial call establishes tracked work and its common-goal effect coherently; it does not launch an extra native execution. `request_input` publishes a question and, when work is active, puts that work into input wait in the same transaction. With no active work it publishes only the question, without creating work, a goal, a summary, or a separate wait. `finish` publishes a result and completes the affected active work, if any. Neither a question nor a result sent without active work resets the counter. `ignore` completes the affected work without publication. Reject missing required input or a message supplied with `ignore` instead of changing the requested action. Neither completion cancels the current native execution or settles an unrelated goal. Invalid calls produce no effects.
+
+The native `send` description directs the Agent to complete Work even when
+it ends the Work because of failure or cancellation: `finish` for an
+intentional message, or `ignore` for silence. This is explicit Work completion,
+not an effect of Stop or a native execution error.
 
 The `continue` request supplies an entire ordered task list; an empty list
 clears the tasks without completing work. An omitted optional title retains
@@ -185,6 +214,20 @@ PostgreSQL, Connector ACK or forwarding evidence.
 - Mode: Collaborative.
 - Decision owner: requester.
 - Approved on: `2026-11-18` (KST).
-- Approved Design revision: `17`.
+- Approved Design revision: `18`.
 - Approved authority IDs: `M1`, `M2`, `M3`, `M4`, `M5`, `M6`, `M7`, `M8`, `M9`, `M10`.
-- Approved scope: the reviewed Revision 16 plus the accepted closing decisions ADR-D23–D27, recorded here as Revision 17. The requester authorized implementation, not merge or deployment.
+- Approved scope: the reviewed Revision 16 plus ADR-D23–D27 as Revision 17 and
+  the subsequent ordered Work context, managed restore and completion
+  clarifications below. The requester authorized implementation, not merge or deployment.
+- On `2026-11-19` (KST), the requester confirmed the ordered Work task list
+  and states are part of Goal context and directed implementation to
+  continue. This clarifies `M1`, `M4`, `M5`, and `M6` under the existing
+  full-context bound. The authority IDs, documented completion actions,
+  and merge and deployment boundaries are unchanged.
+- On `2026-11-19` (KST), the requester accepted `ADR-D28` for `M5`: use
+  unmodified Codex, trust the Connector-local call without additional caller
+  authentication or isolation, and proceed with implementation. Existing
+  source scope and failure semantics still apply.
+- On `2026-11-19` (KST), the requester corrected `REQ-3` and directed its
+  implementation as `ADR-D29` in Revision 18 (`M1`, `M6`, `M7`); all other
+  authority IDs and the no-merge/no-deployment boundary are unchanged.

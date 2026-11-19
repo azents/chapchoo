@@ -36,6 +36,7 @@ pub use answers::{NativeAnswerObservation, NativeAnswerOperation};
 mod activity;
 mod continuation_route;
 pub use continuation_route::{ContinuationRoute, ContinuationRouteLease};
+mod goal_restore;
 mod observations;
 mod protocol;
 mod requests;
@@ -750,6 +751,7 @@ struct Live {
     stderr: JoinHandle<Result<(), std::io::Error>>,
     done: CancellationToken,
     ended: CancellationToken,
+    restore: Option<goal_restore::Listener>,
     session: Option<agent_client_protocol::v2::ActiveSession<Agent>>,
     requests: Requests,
     _supply: AppliedSupply,
@@ -1020,7 +1022,38 @@ impl State {
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&entrypoint, fs::Permissions::from_mode(0o700))
             .map_err(|_| Error::Storage)?;
+        let observations = Arc::new(Observations::default());
+        if let NativeContext::Resume { session, .. } = &context {
+            observations.bind(source.snapshot()?, session.clone(), config.empty_scope)?;
+        }
+        let restore = if let Some(read) = self
+            .pending_tools
+            .as_ref()
+            .and_then(crate::NativeToolProvision::goal_restore)
+        {
+            let script = launch.path().join("goal-restore.cjs");
+            // Restore is optional for an otherwise valid native turn.
+            fs::write(script, include_str!("runtime/goal-restore.cjs"))
+                .and_then(|()| {
+                    goal_restore::Listener::start(launch.path(), observations.clone(), read)
+                })
+                .ok()
+        } else {
+            None
+        };
         let mut command = self.storage.command(&applied.node);
+        if restore.is_some() {
+            command
+                .env("CHAPCHOO_GOAL_RESTORE_NODE", &applied.node)
+                .env(
+                    "CHAPCHOO_GOAL_RESTORE_SCRIPT",
+                    launch.path().join("goal-restore.cjs"),
+                )
+                .env(
+                    "CHAPCHOO_GOAL_RESTORE_SOCKET",
+                    launch.path().join(goal_restore::SOCKET),
+                );
+        }
         command
             .arg(&applied.adapter)
             .env("CODEX_PATH", entrypoint)
@@ -1043,10 +1076,6 @@ impl State {
                 .map(|_| ())
         });
         let log = source.clone();
-        let observations = Arc::new(Observations::default());
-        if let NativeContext::Resume { session, .. } = &context {
-            observations.bind(source.snapshot()?, session.clone(), config.empty_scope)?;
-        }
         let observed = observations.clone();
         let record: Recorder = Arc::new(move |line| observed.record_live(&log, line));
         let incoming =
@@ -1091,6 +1120,7 @@ impl State {
             stderr,
             done,
             ended,
+            restore,
             session: None,
             requests,
             _supply: applied,
@@ -1180,6 +1210,7 @@ impl State {
         let had_scope = self.scope.is_some();
         self.blocked = true;
         if let Some(live) = &mut self.live {
+            live.restore.take();
             if let Some(session) = &live.session {
                 let _ = session.cancel_active_work();
                 let _ = tokio::time::timeout(Duration::from_secs(2), session.close().block_task())

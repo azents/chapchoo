@@ -6,8 +6,8 @@ title: "Native-owner server tools and explicit publication"
 
 Server tools connect one actual native owner's local HTTP capability to current
 server authority. They are independent of Control commands, native readiness and
-captured model output. The sole production tool, `send_message`, appends an
-intentional message to its fixed product conversation.
+captured model output. The sole production tool, `send`, acts on Conversation
+Work and optionally appends a message to its fixed product conversation.
 
 ## Authority and publication
 
@@ -19,11 +19,23 @@ check current authority. Private Agent ownership and current Team membership
 remain server facts. Native IDs, startup readiness and the UI's selected
 conversation are not publication permission.
 
-`send_message` accepts only a nonempty, bounded UTF-8 `text` field. Unknown
-fields, recipient changes, retry keys and work-state arguments are rejected.
-Accepted bytes are preserved. The completed transaction allocates the immutable
-[chat receipt](conversation-storage.md#independent-chat-receipts); the tool returns
-an acceptance text result and structured `message_id`, not the message body.
+`send` requires an explicit `action`. The first `continue` requires a title and
+the complete ordered task list; later `continue` calls require the replacement
+list and may change the title. A task contains text and `pending`,
+`in_progress` or `completed` status. An empty list removes all tasks without
+closing the work. `continue` may include a message. `request_input` and `finish`
+require a message; without active work they only publish it. `ignore` is silent
+and disallows a message. The tool description directs the Agent to use the
+same explicit completion when ending Work due to failure or cancellation:
+`finish` to send a message or `ignore` to close silently. Unknown fields,
+recipient changes, retry keys and actionless publication are rejected.
+
+The completed transaction applies the
+[work transition](conversation-storage.md#conversation-work) and any immutable
+[chat receipt](conversation-storage.md#independent-chat-receipts) together.
+Supplied text is bounded, nonblank UTF-8 and accepted bytes are preserved.
+The tool returns an acceptance text result and a structured `message_id` only
+if the call published a message; it does not echo the message body.
 There is no recall promise after dispatch. Ordinary commentary/final model output
 stays in captured records and does not invoke this operation.
 
@@ -156,7 +168,7 @@ or model-side tool use.
 
 Actual adapter launch supplies the Codex policy
 `code_mode.direct_only_tool_namespaces = ["mcp__chapchoo"]` and disables strict
-third-party deferral for this profile. The essential `send_message` capability
+third-party deferral for this profile. The essential `send` capability
 is in the initial model tool list, not dependent on a name or description search
 or JavaScript catalog discovery. Other MCP namespaces keep their normal exposure.
 The policy contains no endpoint or credential; ACP still supplies the current

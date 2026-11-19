@@ -8,6 +8,13 @@ import type {
 
 export interface ChatCopy {
   records: RecordCopy;
+  workSummary: {
+    label: string;
+    waiting: string;
+    pending: string;
+    inProgress: string;
+    completed: string;
+  };
   activity: string;
   systemPrompt: string;
   close: string;
@@ -94,6 +101,13 @@ export interface ChatCopy {
 }
 const en: ChatCopy = {
   records: recordCopy("en"),
+  workSummary: {
+    label: "Current work",
+    waiting: "Waiting for your reply",
+    pending: "Pending",
+    inProgress: "In progress",
+    completed: "Completed",
+  },
   activity: "Activity",
   systemPrompt: "System prompt",
   close: "Close",
@@ -191,6 +205,13 @@ const en: ChatCopy = {
 };
 const ko: ChatCopy = {
   records: recordCopy("ko"),
+  workSummary: {
+    label: "현재 작업",
+    waiting: "답변 대기 중",
+    pending: "시작 전",
+    inProgress: "진행 중",
+    completed: "완료",
+  },
   activity: "작업 상태",
   systemPrompt: "시스템 프롬프트",
   close: "닫기",
@@ -288,6 +309,13 @@ const ko: ChatCopy = {
 };
 const ja: ChatCopy = {
   records: recordCopy("ja"),
+  workSummary: {
+    label: "現在の作業",
+    waiting: "返信待ち",
+    pending: "未着手",
+    inProgress: "進行中",
+    completed: "完了",
+  },
   activity: "作業状況",
   systemPrompt: "システムプロンプト",
   close: "閉じる",
@@ -386,6 +414,13 @@ const ja: ChatCopy = {
 };
 const fr: ChatCopy = {
   records: recordCopy("fr"),
+  workSummary: {
+    label: "Travail en cours",
+    waiting: "En attente de votre réponse",
+    pending: "À faire",
+    inProgress: "En cours",
+    completed: "Terminé",
+  },
   activity: "Activité",
   systemPrompt: "Prompt système",
   close: "Fermer",

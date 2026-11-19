@@ -1,5 +1,6 @@
 import {
   CaptureStatus,
+  ConversationWorkTaskStatus,
   Foreground,
   RecordKind,
   RecordField,
@@ -30,6 +31,7 @@ import type {
   ConversationRegion,
   ConversationRecord,
   ConversationSource,
+  ConversationWorkSummary,
   ConversationAnchor,
   InputReceipt,
   InputObservation,
@@ -164,6 +166,33 @@ export function conversationHeader(
           ? "requiresAction"
           : "working",
     workId: observed?.workId,
+    work: workSummary(value.work),
+  };
+}
+function workSummary(
+  summary: Wire.ConversationWorkSummary | undefined,
+): ConversationWorkSummary | undefined {
+  if (!summary) return undefined;
+  const status = (value: Wire.ConversationWorkTaskStatus) => {
+    switch (value) {
+      case ConversationWorkTaskStatus.CONVERSATION_WORK_TASK_STATUS_PENDING:
+        return "pending";
+      case ConversationWorkTaskStatus.CONVERSATION_WORK_TASK_STATUS_IN_PROGRESS:
+        return "inProgress";
+      case ConversationWorkTaskStatus.CONVERSATION_WORK_TASK_STATUS_COMPLETED:
+        return "completed";
+      default:
+        throw new Error("Conversation Work task status is invalid");
+    }
+  };
+  return {
+    id: summary.id,
+    title: summary.title,
+    tasks: summary.tasks.map((task) => ({
+      text: task.text,
+      status: status(task.status),
+    })),
+    waitingForInput: summary.waitingForInput,
   };
 }
 const kinds: Partial<Record<RecordKind, ConversationRecord["kind"]>> = {

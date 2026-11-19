@@ -97,10 +97,11 @@ export function recordInput(
 const publicationInput = z.looseObject({
   server: z.literal("chapchoo"),
   // Interpret immutable older evidence; this grants no execution alias.
-  tool: z.enum(["send_message", "publish_text"]),
+  tool: z.enum(["send", "send_message", "publish_text"]),
   arguments: z.unknown().optional(),
 });
 const publicationText = z.looseObject({ text: z.string() });
+const sendMessage = z.looseObject({ message: z.string() });
 const textResult = z.looseObject({ type: z.literal("text"), text: z.string() });
 const publicationOutput = z.looseObject({
   result: z.looseObject({ content: z.array(z.unknown()).optional() }).nullish(),
@@ -141,9 +142,15 @@ export function recordPublication(
     }
     // Extract known display fields without adjudicating domain arguments.
     // Original payloads, including rejected extra fields, stay inspectable.
-    const body = publicationText.safeParse(input.data.arguments);
+    const text =
+      input.data.tool === "send"
+        ? sendMessage.safeParse(input.data.arguments).data?.message
+        : publicationText.safeParse(input.data.arguments).data?.text;
+    if (input.data.tool === "send" && text === void 0) {
+      return null;
+    }
     return {
-      text: body.success ? body.data.text : void 0,
+      text,
       resultText: publicationResult(record.toolOutput?.json),
     };
   } catch {

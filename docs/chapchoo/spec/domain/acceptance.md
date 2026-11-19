@@ -22,17 +22,26 @@ Docker inputs and composes production web listeners with actual backend,
 Provider, Connector and the official ACP adapter. An execution-owned deterministic
 app-server executable is selected through the existing-CLI capability. Its fixed
 synthetic login/output/request never calls a model. The representative journey
-checks an accepted user receipt, one intentional official-SDK `send_message`
-receipt through the real MCP/RPC boundaries, and the absence of automatic
-native/final-output Chat publication. Actual full records retain the two native
-utterances, update, original publication input/result and explicit typed answer.
-Browser reentry checks server-rendered receipt HTML independently of hydration.
+checks the effective `send` catalog on New and exact Resume, and calls `send`
+through the official SDK and real MCP/RPC boundaries. It starts and updates the
+same work item, observes a qualified automatic follow-up without a user receipt,
+and accepts a fresh reply to the work question before publishing the result and
+removing the summary. Native/final output is not published automatically. Actual
+full records retain the captured internal follow-up input, native utterances,
+tool inputs/results and the explicit typed native answer. Browser reentry
+checks server-rendered summary and receipt HTML independently of hydration.
 Focused app component tests own receipt-reader races, full-record presentation,
 scoped primary colors, locales and responsive layout rather than duplicating the
 assembled journey. Missing
 native prerequisites fail. This is deterministic assembled-plumbing coverage,
 not authenticated Codex/model or general compatibility acceptance. Default
 browser scenarios and browser-free native integration remain separate owners.
+The same journey invokes the shipped restore relay during live Work and verifies
+the complete amended tasks from the real Connector lookup. A separate isolated
+native fixture uses released Codex and ACP with the managed hook and a synthetic
+model endpoint. It verifies same-turn application before the next inference,
+confirmed absence, failure, timeout, and Stop without a next inference. Neither
+fixture is authenticated live-model acceptance.
 Both-engine queue tests own orphan-consumer expiry, no resurrection, manual
 replacement identity and successful-receipt versus deleted-row closure. Integrated
 RPC tests cover processor return/error/panic, while Connector MCP tests own

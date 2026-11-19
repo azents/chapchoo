@@ -40,6 +40,14 @@ export enum MessageRole {
   UNRECOGNIZED = -1,
 }
 
+export enum ConversationWorkTaskStatus {
+  CONVERSATION_WORK_TASK_STATUS_UNSPECIFIED = 0,
+  CONVERSATION_WORK_TASK_STATUS_PENDING = 1,
+  CONVERSATION_WORK_TASK_STATUS_IN_PROGRESS = 2,
+  CONVERSATION_WORK_TASK_STATUS_COMPLETED = 3,
+  UNRECOGNIZED = -1,
+}
+
 export enum PreparationFreshness {
   PREPARATION_FRESHNESS_UNSPECIFIED = 0,
   PREPARATION_FRESHNESS_CURRENT = 1,
@@ -238,6 +246,19 @@ export interface OwnerConversation {
     | undefined;
   /** Preparation owned by connection startup, not by an accepted input. */
   startup: InputPreparation | undefined;
+  work: ConversationWorkSummary | undefined;
+}
+
+export interface ConversationWorkSummary {
+  id: string;
+  title: string;
+  tasks: ConversationWorkTask[];
+  waitingForInput: boolean;
+}
+
+export interface ConversationWorkTask {
+  text: string;
+  status: ConversationWorkTaskStatus;
 }
 
 export interface ObservedNative {
@@ -1951,7 +1972,13 @@ export const OwnerMessageRead: MessageFns<OwnerMessageRead> = {
 };
 
 function createBaseOwnerConversation(): OwnerConversation {
-  return { conversation: undefined, observedNative: undefined, savedAuthenticationId: undefined, startup: undefined };
+  return {
+    conversation: undefined,
+    observedNative: undefined,
+    savedAuthenticationId: undefined,
+    startup: undefined,
+    work: undefined,
+  };
 }
 
 export const OwnerConversation: MessageFns<OwnerConversation> = {
@@ -1967,6 +1994,9 @@ export const OwnerConversation: MessageFns<OwnerConversation> = {
     }
     if (message.startup !== undefined) {
       InputPreparation.encode(message.startup, writer.uint32(34).fork()).join();
+    }
+    if (message.work !== undefined) {
+      ConversationWorkSummary.encode(message.work, writer.uint32(42).fork()).join();
     }
     return writer;
   },
@@ -2016,6 +2046,14 @@ export const OwnerConversation: MessageFns<OwnerConversation> = {
             message.startup = InputPreparation.decode(reader, reader.uint32());
             continue;
           }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.work = ConversationWorkSummary.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2043,6 +2081,167 @@ export const OwnerConversation: MessageFns<OwnerConversation> = {
     message.startup = (object.startup !== undefined && object.startup !== null)
       ? InputPreparation.fromPartial(object.startup)
       : undefined;
+    message.work = (object.work !== undefined && object.work !== null)
+      ? ConversationWorkSummary.fromPartial(object.work)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseConversationWorkSummary(): ConversationWorkSummary {
+  return { id: "", title: "", tasks: [], waitingForInput: false };
+}
+
+export const ConversationWorkSummary: MessageFns<ConversationWorkSummary> = {
+  encode(message: ConversationWorkSummary, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    if (message.title !== "") {
+      writer.uint32(18).string(message.title);
+    }
+    for (const v of message.tasks) {
+      ConversationWorkTask.encode(v!, writer.uint32(26).fork()).join();
+    }
+    if (message.waitingForInput !== false) {
+      writer.uint32(32).bool(message.waitingForInput);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ConversationWorkSummary {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseConversationWorkSummary();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.title = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.tasks.push(ConversationWorkTask.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.waitingForInput = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ConversationWorkSummary>, I>>(base?: I): ConversationWorkSummary {
+    return ConversationWorkSummary.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ConversationWorkSummary>, I>>(object: I): ConversationWorkSummary {
+    const message = createBaseConversationWorkSummary();
+    message.id = object.id ?? "";
+    message.title = object.title ?? "";
+    message.tasks = object.tasks?.map((e) => ConversationWorkTask.fromPartial(e)) || [];
+    message.waitingForInput = object.waitingForInput ?? false;
+    return message;
+  },
+};
+
+function createBaseConversationWorkTask(): ConversationWorkTask {
+  return { text: "", status: 0 };
+}
+
+export const ConversationWorkTask: MessageFns<ConversationWorkTask> = {
+  encode(message: ConversationWorkTask, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.text !== "") {
+      writer.uint32(10).string(message.text);
+    }
+    if (message.status !== 0) {
+      writer.uint32(16).int32(message.status);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ConversationWorkTask {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseConversationWorkTask();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.text = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.status = reader.int32() as any;
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ConversationWorkTask>, I>>(base?: I): ConversationWorkTask {
+    return ConversationWorkTask.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ConversationWorkTask>, I>>(object: I): ConversationWorkTask {
+    const message = createBaseConversationWorkTask();
+    message.text = object.text ?? "";
+    message.status = object.status ?? 0;
     return message;
   },
 };

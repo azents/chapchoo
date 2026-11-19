@@ -20,13 +20,14 @@ function record(): ConversationRecord {
     locations: [],
   };
 }
-for (const tool of ["send_message", "publish_text"]) {
+for (const tool of ["send", "send_message", "publish_text"]) {
   void test(`publication preserves ${tool} structured identity and normalized body`, () => {
     const body = "  **확인한 방법**입니다.\n\n`pnpm test`를 실행하세요. ";
     const original = JSON.stringify({
       server: "chapchoo",
       tool,
-      arguments: { text: body },
+      arguments:
+        tool === "send" ? { action: "finish", message: body } : { text: body },
     });
     const publication: ConversationRecord = {
       ...record(),
@@ -96,6 +97,33 @@ for (const tool of ["send_message", "publish_text"]) {
     }
   });
 }
+
+void test("a silent send remains a tool record with its original arguments and result", () => {
+  const update: ConversationRecord = {
+    ...record(),
+    kind: "tool",
+    title: "mcp.chapchoo.send",
+    toolInput: {
+      json: '{"server":"chapchoo","tool":"send","arguments":{"action":"continue","title":"Review","tasks":[]}}',
+    },
+    toolOutput: {
+      json: '{"result":{"content":[{"type":"text","text":"Work action accepted."}],"structuredContent":{}}}',
+    },
+  };
+  assert.equal(recordPreview(update), update.title);
+  assert.equal(recordPublication(update), null);
+  assert.match(update.toolInput?.json ?? "", /"action":"continue"/);
+  assert.match(update.toolOutput?.json ?? "", /Work action accepted/);
+  assert.equal(
+    recordPublication({
+      ...update,
+      toolInput: {
+        json: '{"server":"chapchoo","tool":"send","arguments":{"action":"ignore"}}',
+      },
+    }),
+    null,
+  );
+});
 
 void test("message preview preserves native chunk whitespace and strips actual Markdown syntax", () => {
   const r = record();

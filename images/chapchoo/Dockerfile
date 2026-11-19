@@ -46,6 +46,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
     && mkdir -p /opt/chapchoo /workspace && chown 10001:10001 /opt/chapchoo /workspace
 WORKDIR /opt/chapchoo
 COPY --chown=10001:10001 LICENSE ./LICENSE
+COPY images/chapchoo/codex-requirements.toml /etc/codex/requirements.toml
 USER 10001:10001
 ENTRYPOINT ["/opt/chapchoo/chapchoo"]
 

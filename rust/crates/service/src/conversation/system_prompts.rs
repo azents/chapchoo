@@ -109,7 +109,7 @@ pub(super) fn selected(
         },
         InstructionSource {
             kind: InstructionSourceKind::Function,
-            text: "Use send_message to send text to the user. Ordinary model output is not delivered to the conversation.".into(),
+            text: "Use send to publish a message or act on Conversation Work. Use continue with a title and ordered tasks to start tracking work; update it with the complete task list. Use request_input to ask a question, finish to send a message and complete work, or ignore to complete it silently. Ordinary model output is not delivered to the conversation.".into(),
         },
     ];
     sources.extend(owner_sources);

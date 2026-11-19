@@ -69,11 +69,12 @@ pub use conversations::{
     ConversationRecordField, ConversationRecordKind, ConversationRecordMetadata,
     ConversationRecordUpdate, ConversationRegionRead, ConversationRequestKind,
     ConversationStopAdmission, ConversationStopReceipt, ConversationStopState, ConversationSummary,
-    ConversationWorkTarget, EventChunkRead, EventMetadataRead, EventPairMetadata,
-    EventPayloadChunk, EventPayloadKind, HarnessSupplyReceipt, HarnessSupplySelection,
-    LiveConversationRequest, MAX_SYSTEM_PROMPT_BYTES, ProjectInstructionEvidence,
-    PublishConversationMessage, QueuedConversationCommand, QueuedSetupContext,
-    RetainedConversationInput, RetryConversationInput, SaveHarnessSupply, SourceBinding,
+    ConversationWorkSummary, ConversationWorkTarget, EventChunkRead, EventMetadataRead,
+    EventPairMetadata, EventPayloadChunk, EventPayloadKind, HarnessSupplyReceipt,
+    HarnessSupplySelection, LiveConversationRequest, MAX_SYSTEM_PROMPT_BYTES,
+    ProjectInstructionEvidence, PublishConversationMessage, QueuedConversationCommand,
+    QueuedSetupContext, RetainedConversationInput, RetryConversationInput, SaveHarnessSupply,
+    SourceBinding,
 };
 pub use creation_results::AgentCreationResult;
 pub use delivery::{DeliveryComputer, DeliveryExecution, DeliverySnapshot};

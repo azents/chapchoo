@@ -1,7 +1,7 @@
 //! Consumer-owned MCP declaration and actual native-owner lifetime.
-use crate::NativeAuthenticationBinding;
+use crate::{ContinuationRoute, NativeAuthenticationBinding, NativeWorkTarget};
 use chapchoo_crypto::BearerSecret;
-use std::{error::Error, fmt, future::Future, pin::Pin};
+use std::{error::Error, fmt, future::Future, pin::Pin, sync::Arc};
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct NativeToolScope {
@@ -31,6 +31,19 @@ impl Error for NativeToolsError {
 }
 pub type NativeToolsFuture<'a, T> =
     Pin<Box<dyn Future<Output = Result<T, NativeToolsError>> + Send + 'a>>;
+pub type NativeGoalRestore =
+    Arc<dyn Fn(NativeWorkTarget) -> NativeToolsFuture<'static, NativeGoalContext> + Send + Sync>;
+
+pub struct NativeGoalContext {
+    pub(crate) projection: Vec<u8>,
+    pub(crate) route: ContinuationRoute,
+}
+
+impl NativeGoalContext {
+    pub fn new(projection: Vec<u8>, route: ContinuationRoute) -> Self {
+        Self { projection, route }
+    }
+}
 pub trait NativeToolsProvider: Send + Sync {
     /// Only the actor's actual launch invokes this, after scope/auth binding.
     fn provide<'a>(
@@ -81,6 +94,7 @@ impl NativeMcpDeclaration {
 pub struct NativeToolProvision {
     declaration: NativeMcpDeclaration,
     lifetime: Box<dyn NativeToolLifetime>,
+    restore_goal: Option<NativeGoalRestore>,
 }
 impl NativeToolProvision {
     pub(crate) fn quiescent(&self) -> bool {
@@ -90,7 +104,15 @@ impl NativeToolProvision {
         Self {
             declaration,
             lifetime,
+            restore_goal: None,
         }
+    }
+    pub fn with_goal_restore(mut self, restore: NativeGoalRestore) -> Self {
+        self.restore_goal = Some(restore);
+        self
+    }
+    pub(crate) fn goal_restore(&self) -> Option<NativeGoalRestore> {
+        self.restore_goal.clone()
     }
     pub(crate) fn declarations(&self) -> Vec<agent_client_protocol::v2::schema::McpServer> {
         vec![self.declaration.wire()]
@@ -119,6 +141,7 @@ macro_rules! redacted {($($ty:ty),+)=>{$(
 redacted!(
     NativeToolScope,
     NativeToolsError,
+    NativeGoalContext,
     NativeMcpDeclaration,
     NativeToolProvision
 );

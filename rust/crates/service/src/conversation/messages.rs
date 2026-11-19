@@ -2,10 +2,11 @@
 use super::ConversationService;
 use crate::ServiceError;
 use chapchoo_crypto::SecretDigest;
+use chapchoo_domain::SendAction;
 use chapchoo_persistence::{
     ConnectorSource, ConversationMessageChunk, ConversationMessageRead, ConversationMessageReceipt,
     ConversationMessageRegion, ConversationMessageScope, ConversationMessageWindow,
-    PublishConversationMessage,
+    ConversationWorkSummary,
 };
 
 impl ConversationService {
@@ -46,14 +47,27 @@ impl ConversationService {
             .await?)
     }
 
-    pub async fn publish_message(
+    pub async fn send_work(
         &self,
         source: &ConnectorSource<'_>,
-        draft: &PublishConversationMessage<'_>,
-    ) -> Result<ConversationMessageReceipt, ServiceError> {
+        scope: &ConversationMessageScope<'_>,
+        action: &SendAction,
+    ) -> Result<Option<ConversationMessageReceipt>, ServiceError> {
         Ok(self
             .store
-            .publish_conversation_message(source, draft)
+            .send_conversation_work(source, scope, action)
+            .await?)
+    }
+
+    pub async fn work_summary(
+        &self,
+        actor: &SecretDigest,
+        scope: &ConversationMessageScope<'_>,
+        now: i64,
+    ) -> Result<Option<ConversationWorkSummary>, ServiceError> {
+        Ok(self
+            .store
+            .conversation_work_summary(actor, scope, now)
             .await?)
     }
 }

@@ -29,7 +29,9 @@ macro_rules! verify_migration {
         let before = diesel::sql_query(&originals).load::<Original>(connection)?;
         let native_facts = "SELECT CAST(count(*) AS BIGINT) AS n FROM conversation_input_preparation";
         let facts = diesel::sql_query(native_facts).get_result::<Count>(connection)?.n;
-        assert_eq!(connection.revert_last_migration($migrations)?.to_string(), "00000000000028");
+        for expected in ["00000000000029", "00000000000028"] {
+            assert_eq!(connection.revert_last_migration($migrations)?.to_string(), expected);
+        }
         assert!(connection.revert_last_migration($migrations).is_err(),
             "Qualified waiting work must prevent downgrade even after session removal");
         // Retire only the synthetic authority when establishing the historical

@@ -195,7 +195,7 @@ The Store/service performs explicit Agent message publication. It checks
 the current authenticated Connector execution/route and actual Agent/conversation
 ownership independently of native readiness, native IDs or the UI's selected
 conversation. The component-only [server-tools boundary](server-tools.md)
-exposes this operation as intentional `send_message` to the fixed native owner.
+exposes this operation as intentional `send` to the fixed native owner.
 There is no owner-selected recipient or publication retry key. Ordinary native
 output does not append independent chat receipts. The
 [Chat browser](conversation-web.md) reads these messages separately from actual
@@ -563,7 +563,7 @@ outgoing dispatch journal or upstream-gap repair is performed by these operation
 ## Conversation goals and continuation decisions
 
 The conversation owns its goals and a shared automatic-admission count. Goal
-identity and explicit terminal outcomes are independent of any native execution.
+identity and explicit completion are independent of any native execution.
 The current projection contains the full active and waiting set. Goal writes
 enforce its 8 KiB UTF-8 serialization bound without truncation. A successful
 empty read returns `[]`, separately from rejection or lookup failure. Goal
@@ -578,9 +578,10 @@ from history. The transaction records one no-action decision or
 one internal input and its charge. A duplicate of the same live ending can
 recover its decision, not enqueue again. Pending ordinary input takes precedence
 at admission. At least one eligible goal and remaining capacity are required.
-The count allows three automatic admissions between resets. New goal addition and
-fresh explicit user input acceptance reset it in their own transactions; an
-existing acceptance or an internal input does not reset it.
+The count allows three automatic admissions between resets. New goal addition,
+an actual ordered Conversation Work task-list change, and fresh explicit user input
+acceptance reset it in their own transactions. An existing acceptance, an
+internal input, a title-only edit, and an unchanged ordered list do not reset it.
 
 A later user input does not overtake an admitted internal slot for the current
 launch. A separate one-use native forwarding grant reads the current goal
@@ -588,6 +589,35 @@ projection for that slot. Closing the exact slot relinquishes forwarding order,
 not a delivery receipt. A replacement launch does not inherit the slot even
 when it resumes the same source. Internal forwarding does not make a user Chat
 receipt; the native record retains the role observed on ACP.
+
+At forwarding, if no eligible goal remains or the complete retained context
+exceeds the bound, the ungranted slot closes without native forwarding. The
+committed decision and charge remain unchanged. A still-eligible unrelated
+goal can support forwarding, using the complete current projection. If the
+retained context exceeds the bound at admission, the ending records no
+admission. Neither case rewrites stored Work. Closing an ungranted slot
+releases ordinary input ordering, and a failed context read is not an
+authoritative empty set.
+
+## Conversation Work
+
+The first `send` with `continue` creates active work and its associated Goal
+together. Later `continue` calls update the same work identity, without
+clearing input wait. The associated goal context reads the Work title and
+the complete ordered task list with its statuses directly from Work storage.
+It has no separate task copy. An empty list remains explicit, and checking
+all tasks does not settle Work. A change exceeding the full projection
+bound rolls back the task/title changes, reset, and optional publication.
+`request_input` enters wait when work is active. Only genuinely new
+accepted input for that conversation releases the wait; recovering an existing
+acceptance does not. `finish` and `ignore` close the affected work and settle its
+associated Goal, not unrelated Goals. Neither cancels a native turn. Completion
+removes the active summary and its Goal from current continuation context.
+
+The owner reads the bounded active summary (title, ordered tasks and input-wait
+status) through `Conversations.Current`. It is independent of captured native
+state and contains no past work or unrelated Goal projection. Migration 29
+retains work identity and its Goal relation; downgrade refuses to discard work.
 
 ## Bounded internal reads
 

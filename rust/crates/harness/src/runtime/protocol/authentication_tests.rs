@@ -127,6 +127,7 @@ async fn already_live_setup_preserves_applied_credentials_without_calling_new_pr
         stderr: tokio::spawn(async { Ok(()) }),
         done: done.clone(),
         ended: CancellationToken::new(),
+        restore: None,
         session: Some(session),
         requests: Arc::default(),
         _supply: AppliedSupply {

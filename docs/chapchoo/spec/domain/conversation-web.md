@@ -19,6 +19,20 @@ input admission. Activity's System prompt link navigates to a separate
 server-rendered page for the latest selected prompt, independently of current
 saved settings and native history. It has no history selection or pagination.
 
+## Conversation Work summary
+
+The active [work summary](conversation-storage.md#conversation-work) appears
+above the unchanged composer. Its single floating surface shows the title and
+completed task count, and expands into the ordered task list with a straight
+divider. It is not inferred from native text or foreground state. Stop does not
+clear it, and terminal work removes it without adding a synthetic message.
+
+Initial summary content is server-rendered without an entrance. Live appearance
+grows in place; exit overshoots before contracting, retaining visible content
+until clipped by the departing surface. Expansion and interaction keep the
+composer anchored. The whole surface provides theme-aware press feedback, and
+reduced motion omits animated transitions.
+
 ## Execution feedback
 
 The transcript ends with a short localized Thinking status (`생각 중` in Korean)
@@ -148,7 +162,9 @@ row design. Selection enters a separate full-height history view at that record 
 keyboard focus on the selected entry after the activity sheet finishes closing.
 Opening history without a selection also leaves focus inside that view. Closing
 the sheet back to the transcript restores the status control.
-User and ordinary native/model text is included in full records. Each chronological record has an
+Full records include user and ordinary native/model text. An internal follow-up
+input appears with its role and content as captured; it does not create a user
+Chat message. Each chronological record has an
 independent single-line summary with a left chevron, ACP-kind icon, title, plain
 opening preview and separate status. Opening a record adds its full content
 below without changing the summary geometry. There is no event aggregation.
@@ -165,8 +181,8 @@ of the actual body, not a generic sent-action title. Their rail follows the
 current scoped Mantine primary filled color.
 
 Publication classification decodes the captured MCP input's exact
-`server: "chapchoo"` and `tool: "send_message"` identity, and retains the
-`publish_text` identity in immutable records captured before the correction.
+`server: "chapchoo"` and `tool: "send"` identity, and retains `send_message`
+and `publish_text` identities in immutable records captured before replacement.
 Historical read-only recognition adds no callable alias or record rewrite.
 A matching display title,
 generic kind or body text is insufficient. The pinned adapter supplies this

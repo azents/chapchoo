@@ -18,6 +18,7 @@ mod agent_profile;
 mod computer;
 mod computer_resource;
 mod conversation;
+mod conversation_work;
 mod display;
 mod email;
 mod form_text;
@@ -44,6 +45,7 @@ pub use conversation::{
     HarnessSupply, InvalidConversationValue, LaunchCapture, NativeConversationId, SnapshotId,
     SourcePosition,
 };
+pub use conversation_work::{SendAction, WorkTask, WorkTaskStatus};
 pub use display::{DisplayPatch, DisplaySettings, InvalidDisplaySettings};
 pub use email::{EmailAddress, InvalidEmail};
 pub use form_text::{FormTextRule, InvalidFormTextRule};
