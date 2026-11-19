@@ -198,7 +198,9 @@ impl Store {
             }
             let charged = diesel::sql_query(dialect.query(
                 "INSERT INTO conversation_continuation_counts(conversation_id,admissions)
-                 SELECT ?,1 WHERE EXISTS (SELECT 1 FROM conversation_goals WHERE conversation_id=? AND disposition='active')
+                 SELECT ?,1 WHERE EXISTS (
+                   SELECT 1 FROM conversation_goals g LEFT JOIN conversation_work_items w USING (conversation_id,goal_key)
+                   WHERE g.conversation_id=? AND g.disposition='active' AND COALESCE(w.reply_ready,TRUE))
                  AND NOT EXISTS (SELECT 1 FROM conversation_inputs WHERE conversation_id=? AND queue_state='PENDING' AND deleted_at IS NULL)
                  ON CONFLICT(conversation_id) DO UPDATE SET admissions=conversation_continuation_counts.admissions+1 WHERE conversation_continuation_counts.admissions<?",
             ))

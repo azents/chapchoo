@@ -216,7 +216,12 @@ async fn exercise(loss: Loss) -> Result<(), AppError> {
             control_id: "control".into(),
             connection_id: "original".into(),
         };
-        let mut delivery = Delivery::default();
+        let ordering = super::super::super::server_tools::Ordering::default();
+        let binding = owner.binding().await?.ok_or("Missing fixture binding")?;
+        let _input_owner = ordering.open(binding.clone());
+        let mut earlier_input = ordering.begin(&binding, "earlier-input")?;
+        earlier_input.attempting(true);
+        let mut delivery = Delivery::new(ordering.clone());
         // An exact local ending alone is never permission to report.
         delivery
             .advance(
@@ -233,6 +238,20 @@ async fn exercise(loss: Loss) -> Result<(), AppError> {
             assert_eq!(control.reports, 0);
             control.through = Some(position(&owner.ending.position));
         }
+        delivery
+            .advance(
+                &owner,
+                channel.clone(),
+                &source,
+                &key,
+                &stop,
+                strand.route(),
+            )
+            .await?;
+        assert_eq!(state.lock().map_err(|_| "fixture lock")?.reports, 0);
+        assert!(owner.ending().await?.is_some());
+        earlier_input.recorded();
+        let _parked_input = ordering.begin(&binding, "parked-input")?;
         let error = delivery
             .advance(&owner, channel, &source, &key, &stop, strand.route())
             .await

@@ -20,11 +20,11 @@ pub(super) struct CaptureSync {
     stop: CancellationToken,
 }
 impl CaptureSync {
-    pub(super) fn new(native: NativeHandle) -> Self {
+    pub(super) fn new(native: NativeHandle, ordering: super::server_tools::Ordering) -> Self {
         Self {
             native,
             published: Arc::default(),
-            endings: Arc::default(),
+            endings: Arc::new(tokio::sync::Mutex::new(endings::Delivery::new(ordering))),
             tasks: JoinSet::new(),
             stop: CancellationToken::new(),
         }
@@ -269,7 +269,7 @@ mod tests {
         let native = chapchoo_harness::NativeOwner::new(chapchoo_harness::NativeStorage::open(
             saved.path(),
         )?)?;
-        let mut sync = CaptureSync::new(native.handle());
+        let mut sync = CaptureSync::new(native.handle(), Default::default());
         let (entered, entry) = tokio::sync::oneshot::channel();
         let (release, released) = tokio::sync::oneshot::channel();
         sync.tasks.spawn(async move {

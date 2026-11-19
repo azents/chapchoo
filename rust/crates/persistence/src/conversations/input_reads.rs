@@ -162,6 +162,7 @@ impl Store {
                 now,
                 Some(original)
             );
+            super::work::accept_reply_work!(connection, dialect, conversation, now);
             Ok(ConversationInputAdmission::Accepted(
                 ConversationInputReceipt {
                     id: id.to_dto(EntityKind::ConversationOperation),

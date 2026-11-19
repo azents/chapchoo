@@ -19,9 +19,11 @@ check current authority. Private Agent ownership and current Team membership
 remain server facts. Native IDs, startup readiness and the UI's selected
 conversation are not publication permission.
 
-`send` requires an explicit `action`. The first `continue` requires a title and
-the complete ordered task list; later `continue` calls require the replacement
-list and may change the title. A task contains text and `pending`,
+`send` requires an explicit `action`. User messages open one reply Work without
+a visible plan. A direct `finish` can publish the answer without `continue`.
+The first `continue` publishes a plan and requires a title and the complete
+ordered task list; later updates replace the list and may change the title.
+A task contains text and `pending`,
 `in_progress` or `completed` status. An empty list removes all tasks without
 closing the work. `continue` may include a message. `request_input` and `finish`
 require a message; without active work they only publish it. `ignore` is silent
@@ -33,7 +35,7 @@ recipient changes, retry keys and actionless publication are rejected.
 The model-facing input schema declares the field types in one object and
 requires only `action` unconditionally. The descriptions guide field selection;
 the server validates required and forbidden fields for each action. The Work
-transaction also requires a title when `continue` starts new work.
+transaction also requires a title when `continue` publishes the first plan.
 
 The completed transaction applies the
 [work transition](conversation-storage.md#conversation-work) and any immutable

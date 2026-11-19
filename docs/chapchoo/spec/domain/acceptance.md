@@ -23,13 +23,16 @@ Provider, Connector and the official ACP adapter. An execution-owned determinist
 app-server executable is selected through the existing-CLI capability. Its fixed
 synthetic login/output/request never calls a model. The representative journey
 checks the effective `send` catalog on New and exact Resume, and calls `send`
-through the official SDK and real MCP/RPC boundaries. It starts and updates the
-same work item, observes a qualified automatic follow-up without a user receipt,
+through the official SDK and real MCP/RPC boundaries. It adds and updates a plan
+on the same Work, observes a qualified automatic follow-up without a user receipt,
 and accepts a fresh reply to the work question before publishing the result and
 removing the summary. Native/final output is not published automatically. Actual
 full records retain the captured internal follow-up input, native utterances,
 tool inputs/results and the explicit typed native answer. Browser reentry
 checks server-rendered summary and receipt HTML independently of hydration.
+The same journey also holds an unanswered message before any `send`, observes
+no summary, and verifies that a normal ending leads to the reply objective and
+a direct Agent receipt without a plan or extra User receipt.
 Focused app component tests own receipt-reader races, full-record presentation,
 scoped primary colors, locales and responsive layout rather than duplicating the
 assembled journey. Missing
