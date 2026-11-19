@@ -81,8 +81,8 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
     ));
     // Simultaneous consumers recover one exact binding, never two live choices.
     let (one, two) = tokio::join!(
-        store.begin_execution_authentication(&source, &start, None),
-        store.begin_execution_authentication(&source, &start, None),
+        store.begin_execution_authentication(&source, &start, None, None),
+        store.begin_execution_authentication(&source, &start, None, None),
     );
     let applied = one?;
     assert_eq!(applied, two?);
@@ -130,7 +130,7 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
     // A saved future choice cannot retarget this operation or its secret read.
     assert_eq!(
         store
-            .begin_execution_authentication(&source, &start, None)
+            .begin_execution_authentication(&source, &start, None, None)
             .await?,
         applied
     );
@@ -219,7 +219,7 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
     ));
     assert!(matches!(
         store
-            .begin_execution_authentication(&source, &start, None)
+            .begin_execution_authentication(&source, &start, None, None)
             .await,
         Err(StoreError::NotFound)
     ));
@@ -236,18 +236,18 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
     let next_draft = draft(f, &next);
     assert!(matches!(
         store
-            .begin_execution_authentication(&source, &next_draft, None)
+            .begin_execution_authentication(&source, &next_draft, None, None)
             .await,
         Err(StoreError::Conflict)
     ));
     let second = store
-        .begin_execution_authentication(&source, &next_draft, Some(&first.id))
+        .begin_execution_authentication(&source, &next_draft, Some(&first.id), None)
         .await?;
     assert_eq!(second.authentication_id, other);
     assert_eq!(second.selection_request_id, "authentication-next-selection");
     assert!(matches!(
         store
-            .begin_execution_authentication(&source, &start, Some(&next.id))
+            .begin_execution_authentication(&source, &start, Some(&next.id), None)
             .await,
         Err(StoreError::InvalidTransition)
     ));
@@ -301,7 +301,7 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
     );
     assert!(matches!(
         store
-            .begin_execution_authentication(&source, &next_draft, Some(&first.id))
+            .begin_execution_authentication(&source, &next_draft, Some(&first.id), None)
             .await,
         Err(StoreError::InvalidTransition)
     ));
@@ -353,7 +353,7 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
     );
     assert!(matches!(
         store
-            .begin_execution_authentication(&source, &next_draft, None)
+            .begin_execution_authentication(&source, &next_draft, None, None)
             .await,
         Err(StoreError::NotFound)
     ));
@@ -472,7 +472,7 @@ async fn record_lock_precedes_computer_admission(
         .await?
         .ok_or("Missing application")?;
     let applied = store
-        .begin_execution_authentication(&source, &application, Some(&previous.operation_id))
+        .begin_execution_authentication(&source, &application, Some(&previous.operation_id), None)
         .await?;
     let mut blocker = AsyncPgConnection::establish(url).await?;
     let pid: BackendPid = diesel_async::RunQueryDsl::get_result(

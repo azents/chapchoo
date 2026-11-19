@@ -184,7 +184,7 @@ async fn exercise(
         matches!(store.admit_connection_startup(computer, &route).await?.pop(), Some(Startup::Dispatch { operation_id: same, .. }) if same == operation_id)
     );
     let applied = store
-        .begin_execution_authentication(&source, &draft, None)
+        .begin_execution_authentication(&source, &draft, None, None)
         .await?;
     assert_eq!(
         applied.authentication_id,

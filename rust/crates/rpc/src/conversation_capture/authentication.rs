@@ -82,10 +82,23 @@ pub(super) async fn begin(
             .ok_or_else(|| Status::invalid_argument("Application target is required"))?,
         credential,
     )?;
+    let capture = value
+        .capture
+        .map(|capture| {
+            Ok::<_, Status>(chapchoo_domain::LaunchCapture {
+                snapshot: snapshot(capture.snapshot_id)?,
+                through: capture.through.map(position).transpose()?,
+            })
+        })
+        .transpose()?;
     Ok(Response::new(applied(
         service
             .authentication
-            .begin(&target, value.expected_previous_operation_id.as_deref())
+            .begin(
+                &target,
+                value.expected_previous_operation_id.as_deref(),
+                capture.as_ref(),
+            )
             .await
             .map_err(status)?,
     )))

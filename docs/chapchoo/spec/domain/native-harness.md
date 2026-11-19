@@ -277,6 +277,15 @@ and retained history do not qualify. Repeated reads return the same
 captured occurrence until a new foreground target replaces it or the owner
 retires. This read does not report an ending to the server or initiate work.
 
+For the managed Connector path, an ordinary new prompt cannot replace an exact
+ending that still awaits its decision. If ACP explicitly did not consume the
+ordinary steer and requires a prompt, the owner defers that fallback without
+a separate ending-wait expiry. The Connector revalidates the original grant on
+the current route before trying again. Uncertain delivery permits no
+such retry. A granted internal input uses the existing ACP prompt method with a
+system-origin marker. The owner checks exact live Idle and ending identity and
+consumes that ending once at the same boundary as enqueue, capture and Stop.
+
 ## Retained captured source
 
 The [default-project refresh](agent-instructions.md) qualifies Setup by exact

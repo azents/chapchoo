@@ -3,7 +3,9 @@ use chapchoo_service::{
     ConversationDeliveryTarget, ConversationForeground as F, ConversationNativeObservation,
     ConversationRequestKind, LiveConversationRequest,
 };
-fn target(value: Option<wire::NativeTarget>) -> Result<ConversationDeliveryTarget, Status> {
+pub(super) fn target(
+    value: Option<wire::NativeTarget>,
+) -> Result<ConversationDeliveryTarget, Status> {
     let value = value.ok_or_else(|| Status::invalid_argument("Native target is required"))?;
     Ok(ConversationDeliveryTarget {
         snapshot: snapshot(value.snapshot_id)?,

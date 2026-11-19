@@ -206,10 +206,10 @@ impl Store {
             }
             let query = match dialect {
                 Dialect::Postgres => {
-                    "SELECT substring(convert_to(submitted_text,'UTF8') FROM CAST(? AS INTEGER) FOR 32768) AS bytes,CAST(octet_length(submitted_text) AS BIGINT) AS total_bytes FROM conversation_inputs WHERE conversation_id=? AND id=?"
+                    "SELECT substring(convert_to(submitted_text,'UTF8') FROM CAST(? AS INTEGER) FOR 32768) AS bytes,CAST(octet_length(submitted_text) AS BIGINT) AS total_bytes FROM conversation_inputs WHERE conversation_id=? AND id=? AND queue_state='PENDING'"
                 }
                 Dialect::Sqlite => {
-                    "SELECT substr(CAST(submitted_text AS BLOB),?,32768) AS bytes,CAST(length(CAST(submitted_text AS BLOB)) AS BIGINT) AS total_bytes FROM conversation_inputs WHERE conversation_id=? AND id=?"
+                    "SELECT substr(CAST(submitted_text AS BLOB),?,32768) AS bytes,CAST(length(CAST(submitted_text AS BLOB)) AS BIGINT) AS total_bytes FROM conversation_inputs WHERE conversation_id=? AND id=? AND queue_state='PENDING'"
                 }
             };
             let chunk = diesel::sql_query(dialect.query(query))
@@ -307,6 +307,14 @@ impl Store {
             {
                 return Err(StoreError::InvalidTransition);
             }
+            super::continuation::require_continuation_order!(
+                connection,
+                dialect,
+                id,
+                route._execution_id,
+                draft.target.snapshot.as_str(),
+                draft.target.native_session.as_str()
+            );
             super::input_queue::require_consumer!(connection, dialect, operation_id, claim_id);
             #[derive(diesel::QueryableByName)]
             struct AppliedProject {

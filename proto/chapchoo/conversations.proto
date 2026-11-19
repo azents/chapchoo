@@ -253,6 +253,10 @@ service ConnectorCapture {
   rpc PullInput(InputChunkRequest) returns (InputChunk);
   rpc ReportInput(InputReport) returns (InputReportAcknowledgement);
   rpc ReportNative(NativeStateReport) returns (google.protobuf.Empty);
+  rpc ReportNativeHook(NativeHookReport) returns (NativeHookOutcome);
+  rpc BeginContinuation(ContinuationHandoff) returns (ContinuationGrant);
+  rpc CloseContinuation(ContinuationHandoff) returns (google.protobuf.Empty);
+  rpc ReadGoalContext(GoalContextRequest) returns (GoalContext);
   rpc ReportRequest(LiveRequestReport) returns (google.protobuf.Empty);
   rpc CheckStop(StopCheck) returns (google.protobuf.Empty);
   rpc ReportStop(StopReport) returns (google.protobuf.Empty);
@@ -321,6 +325,43 @@ message CompleteCaptureRequest {
   SourcePosition boundary = 4;
 }
 message NativeTarget { string snapshot_id = 1; string native_session_id = 2; }
+message NativeHookReport {
+  CaptureSource source = 1;
+  string conversation_id = 2;
+  NativeTarget target = 3;
+  oneof event { NativeNormalEnding normal_ending = 4; }
+}
+message NativeNormalEnding {
+  SourcePosition position = 1;
+  string work_id = 2;
+  string launch_operation_id = 3;
+}
+message NativeHookOutcome {
+  oneof outcome {
+    google.protobuf.Empty no_action = 1;
+    string continuation_operation_id = 2;
+  }
+}
+message ContinuationHandoff {
+  CaptureSource source = 1;
+  string conversation_id = 2;
+  NativeTarget target = 3;
+  NativeNormalEnding ending = 4;
+  string operation_id = 5;
+}
+message ContinuationGrant {
+  // Absent after the first grant. Recovery never repeats forwarding authority.
+  GoalContext context = 1;
+}
+message GoalContextRequest {
+  CaptureSource source = 1;
+  string conversation_id = 2;
+  NativeTarget target = 3;
+}
+message GoalContext {
+  // Complete current projection; success with an empty set is the UTF-8 value `[]`.
+  bytes projection = 1;
+}
 message InitialNativeContext { bool allow_fresh = 1; bool require_retained_source = 2; }
 message HarnessSupply {
   oneof choice { google.protobuf.Empty managed = 1; string existing_codex_path = 2; }
@@ -398,6 +439,12 @@ message ExecutionAuthenticationReference {
 message BeginAuthenticationRequest {
   ExecutionAuthenticationReference target = 1;
   optional string expected_previous_operation_id = 2;
+  LaunchCapture capture = 3;
+}
+message LaunchCapture {
+  string snapshot_id = 1;
+  // Absent means the exact local snapshot was empty before launch.
+  SourcePosition through = 2;
 }
 // Actual-start configuration provenance, not login validity or native liveness.
 message AppliedAuthentication {

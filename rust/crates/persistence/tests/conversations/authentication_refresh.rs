@@ -163,7 +163,7 @@ pub(super) async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError
         .await?
         .ok_or("Missing prior application")?;
     let applied = store
-        .begin_execution_authentication(&source, &application, Some(&previous.operation_id))
+        .begin_execution_authentication(&source, &application, Some(&previous.operation_id), None)
         .await?;
     assert_eq!(applied.authentication_id, oauth);
     // Account and execution consumers coalesce on one record/source attempt.

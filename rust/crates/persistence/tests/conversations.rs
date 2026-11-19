@@ -3,6 +3,13 @@
 macro_rules! isolate_pre_waiting_migration {
     ($connection:expr,$migrations:expr) => {{
         let connection = &mut *$connection;
+        if connection
+            .applied_migrations()?
+            .iter()
+            .any(|version| version.to_string() == "00000000000028")
+        {
+            assert_eq!(connection.revert_last_migration($migrations)?.to_string(), "00000000000028");
+        }
         if connection.applied_migrations()?.iter()
             .any(|version| version.to_string() == "00000000000027") {
             #[derive(diesel::QueryableByName)]
@@ -127,6 +134,8 @@ mod authentication;
 mod consumed_migration;
 #[path = "conversations/delivery.rs"]
 mod delivery;
+#[path = "conversations/goals.rs"]
+mod goals;
 #[path = "conversations/input_reads.rs"]
 mod input_reads;
 #[path = "conversations/instructions_fixture.rs"]

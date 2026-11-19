@@ -20,6 +20,59 @@ pub(super) async fn exercise(
         ordinal: 2,
         occurrence_id: "state-running".into(),
     };
+    let context_request = c::GoalContextRequest {
+        source: Some(context.source.clone()),
+        conversation_id: conversation.into(),
+        target: Some(target.clone()),
+    };
+    assert_eq!(
+        client
+            .read_goal_context(authenticated(context_request.clone(), context.key)?)
+            .await?
+            .into_inner()
+            .projection,
+        b"[]",
+    );
+    assert_eq!(
+        client
+            .read_goal_context(authenticated(context_request.clone(), context.user_key)?)
+            .await
+            .err()
+            .ok_or("Owner credential read component-only Goal context")?
+            .code(),
+        Code::Unauthenticated,
+    );
+    let stale_context = c::GoalContextRequest {
+        target: Some(c::NativeTarget {
+            snapshot_id: "stale-goal-source".into(),
+            ..target.clone()
+        }),
+        ..context_request
+    };
+    assert_eq!(
+        client
+            .read_goal_context(authenticated(stale_context, context.key)?)
+            .await
+            .err()
+            .ok_or("Stale source read Goal context")?
+            .code(),
+        Code::AlreadyExists,
+    );
+    let hook = c::NativeHookReport {
+        source: Some(context.source.clone()),
+        conversation_id: conversation.into(),
+        target: Some(target.clone()),
+        event: None,
+    };
+    assert_eq!(
+        client
+            .report_native_hook(authenticated(hook.clone(), context.key)?)
+            .await
+            .err()
+            .ok_or("Unsupported hook event accepted")?
+            .code(),
+        Code::InvalidArgument,
+    );
     let observed = c::NativeStateReport {
         source: Some(context.source.clone()),
         conversation_id: conversation.into(),
@@ -263,5 +316,123 @@ pub(super) async fn exercise(
             .code(),
         Code::AlreadyExists
     );
+    Ok(())
+}
+
+pub(super) async fn exercise_ending(
+    context: &super::capture::Context<'_>,
+    conversation: &str,
+    launch_operation_id: &str,
+) -> Result<(), TestError> {
+    let mut client = ConnectorCaptureClient::connect(context.endpoint.to_owned()).await?;
+    let running_position = c::SourcePosition {
+        ordinal: 1,
+        occurrence_id: "state-running".into(),
+    };
+    let running = br#"{"method":"session/update","params":{"sessionId":"native-fixture","update":{"sessionUpdate":"state_update","state":"running"}}}"#;
+    client
+        .append(authenticated(
+            c::CapturePiece {
+                source: Some(context.source.clone()),
+                conversation_id: conversation.into(),
+                snapshot_id: "rpc-replacement".into(),
+                position: Some(running_position.clone()),
+                transfer_id: "ending-fixture-running".into(),
+                total_bytes: u32::try_from(running.len())?,
+                offset: 0,
+                content: running.to_vec(),
+            },
+            context.key,
+        )?)
+        .await?;
+    let position = c::SourcePosition {
+        ordinal: 2,
+        occurrence_id: "state-ending".into(),
+    };
+    let hook = c::NativeHookReport {
+        source: Some(context.source.clone()),
+        conversation_id: conversation.into(),
+        target: Some(c::NativeTarget {
+            snapshot_id: "rpc-replacement".into(),
+            native_session_id: "native-fixture".into(),
+        }),
+        event: Some(c::native_hook_report::Event::NormalEnding(
+            c::NativeNormalEnding {
+                position: Some(position.clone()),
+                work_id: "rpc-ending-work".into(),
+                launch_operation_id: launch_operation_id.into(),
+            },
+        )),
+    };
+    let raw = br#"{"method":"session/update","params":{"sessionId":"native-fixture","update":{"sessionUpdate":"state_update","state":"idle","stopReason":"end_turn"}}}"#;
+    let mut mismatched = hook.clone();
+    if let Some(c::native_hook_report::Event::NormalEnding(ending)) = mismatched.event.as_mut() {
+        ending.position = Some(running_position);
+    }
+    assert_eq!(
+        client
+            .report_native_hook(authenticated(mismatched, context.key)?)
+            .await
+            .err()
+            .ok_or("Captured Running update became a normal ending")?
+            .code(),
+        Code::FailedPrecondition,
+    );
+    assert_eq!(
+        client
+            .report_native_hook(authenticated(hook.clone(), context.key)?)
+            .await
+            .err()
+            .ok_or("Unpublished ending accepted")?
+            .code(),
+        Code::FailedPrecondition,
+    );
+    client
+        .append(authenticated(
+            c::CapturePiece {
+                source: hook.source.clone(),
+                conversation_id: hook.conversation_id.clone(),
+                snapshot_id: "rpc-replacement".into(),
+                position: Some(position),
+                transfer_id: "native-ending".into(),
+                total_bytes: u32::try_from(raw.len())?,
+                offset: 0,
+                content: raw.to_vec(),
+            },
+            context.key,
+        )?)
+        .await?;
+    let mut stale = hook.clone();
+    stale
+        .source
+        .as_mut()
+        .ok_or("Fixture lacks source")?
+        .connection_id = "retired-link".into();
+    assert!(
+        client
+            .report_native_hook(authenticated(stale, context.key)?)
+            .await
+            .is_err(),
+        "Stale connection reported an ending",
+    );
+    assert_eq!(
+        client
+            .report_native_hook(authenticated(hook.clone(), context.user_key)?)
+            .await
+            .err()
+            .ok_or("Owner credential reported an ending")?
+            .code(),
+        Code::Unauthenticated,
+    );
+    for _ in 0..2 {
+        assert!(matches!(
+            client
+                .report_native_hook(authenticated(hook.clone(), context.key)?)
+                .await?
+                .into_inner()
+                .outcome,
+            Some(c::native_hook_outcome::Outcome::NoAction(()))
+        ));
+    }
     Ok(())
 }

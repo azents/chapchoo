@@ -87,6 +87,13 @@ opaque_id!(SnapshotId);
 opaque_id!(EventOccurrenceId);
 opaque_id!(NativeConversationId);
 
+/// Exact retained capture boundary before starting a native launch.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LaunchCapture {
+    pub snapshot: SnapshotId,
+    pub through: Option<SourcePosition>,
+}
+
 /// Source position is explicit capture order, not ordering inferred from an ID.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourcePosition {

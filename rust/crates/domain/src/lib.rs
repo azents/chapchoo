@@ -41,7 +41,8 @@ pub use computer_resource::{
 };
 pub use conversation::{
     ConversationSource, ConversationTarget, ConversationText, EventOccurrenceId, ExistingCodexPath,
-    HarnessSupply, InvalidConversationValue, NativeConversationId, SnapshotId, SourcePosition,
+    HarnessSupply, InvalidConversationValue, LaunchCapture, NativeConversationId, SnapshotId,
+    SourcePosition,
 };
 pub use display::{DisplayPatch, DisplaySettings, InvalidDisplaySettings};
 pub use email::{EmailAddress, InvalidEmail};

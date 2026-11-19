@@ -71,7 +71,10 @@ impl Authentication {
     fn request<T>(&self, value: T) -> Result<Request<T>, Error> {
         request(value, &self.key).map_err(|_| Error::Authentication)
     }
-    async fn acquire_once(&self) -> Result<NativeAuthentication, Error> {
+    async fn acquire_once(
+        &self,
+        capture: chapchoo_domain::LaunchCapture,
+    ) -> Result<NativeAuthentication, Error> {
         let mut client = self.client();
         let previous = client
             .get_authentication_binding(self.request(self.target.clone())?)
@@ -83,6 +86,13 @@ impl Authentication {
             .begin_authentication(self.request(c::BeginAuthenticationRequest {
                 target: Some(self.target.clone()),
                 expected_previous_operation_id: previous.map(|value| value.operation_id),
+                capture: Some(c::LaunchCapture {
+                    snapshot_id: capture.snapshot.as_str().into(),
+                    through: capture.through.map(|value| c::SourcePosition {
+                        ordinal: value.ordinal(),
+                        occurrence_id: value.occurrence().as_str().into(),
+                    }),
+                }),
             })?)
             .await
             .map_err(|_| Error::Authentication)?
@@ -175,8 +185,11 @@ impl Authentication {
     }
 }
 impl NativeAuthenticationProvider for Authentication {
-    fn acquire(&self) -> NativeAuthenticationFuture<'_, NativeAuthentication> {
-        Box::pin(self.acquire_once())
+    fn acquire(
+        &self,
+        capture: chapchoo_domain::LaunchCapture,
+    ) -> NativeAuthenticationFuture<'_, NativeAuthentication> {
+        Box::pin(self.acquire_once(capture))
     }
     fn check<'a>(
         &'a self,

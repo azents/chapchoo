@@ -57,6 +57,8 @@ struct Observed {
     live_running: bool,
     stop_published: bool,
     normal_ending: Option<NativeNormalEnding>,
+    ending_decided: bool,
+    continuation_published: bool,
     incoming: BTreeMap<schema::RequestId, SourcePosition>,
     activity: super::activity::ActivityTracker,
 }
@@ -278,6 +280,8 @@ impl Observations {
                     },
                     position: position.clone(),
                 });
+                state.continuation_published = false;
+                state.ending_decided = false;
             }
             state.work = None;
             state.live_running = false;
@@ -300,6 +304,49 @@ impl Observations {
     pub(super) fn normal_ending(&self) -> Result<Option<NativeNormalEnding>, Error> {
         let state = self.0.lock().map_err(|_| Error::Protocol)?;
         Ok(state.normal_ending.clone())
+    }
+    pub(super) fn pending_ending(&self) -> Result<Option<NativeNormalEnding>, Error> {
+        let state = self.0.lock().map_err(|_| Error::Protocol)?;
+        Ok(if state.ending_decided {
+            None
+        } else {
+            state.normal_ending.clone()
+        })
+    }
+    pub(super) fn decide_ending(&self, ending: &NativeNormalEnding) -> Result<(), Error> {
+        let mut state = self.0.lock().map_err(|_| Error::Protocol)?;
+        if state.normal_ending.as_ref() == Some(ending) {
+            state.ending_decided = true;
+        }
+        Ok(())
+    }
+    pub(super) fn publish_ordinary_prompt<T>(
+        &self,
+        publish: impl FnOnce() -> T,
+    ) -> Result<T, Error> {
+        let state = self.0.lock().map_err(|_| Error::Protocol)?;
+        if state.normal_ending.is_some() && !state.ending_decided {
+            return Err(Error::EndingDecisionPending);
+        }
+        Ok(publish())
+    }
+    /// Use the exact live ending at most once. Capture transitions, Stop and
+    /// native enqueue are ordered by this same lock, not by the RPC response.
+    pub(super) fn publish_continuation<T>(
+        &self,
+        ending: &NativeNormalEnding,
+        publish: impl FnOnce() -> T,
+    ) -> Result<T, Error> {
+        let mut state = self.0.lock().map_err(|_| Error::Protocol)?;
+        if state.foreground != Some(NativeForeground::Idle)
+            || state.normal_ending.as_ref() != Some(ending)
+            || state.ending_decided
+            || state.continuation_published
+        {
+            return Err(Error::NotAdmitted);
+        }
+        state.continuation_published = true;
+        Ok(publish())
     }
     pub(super) fn current(&self) -> Result<NativeObservation, Error> {
         let state = self.0.lock().map_err(|_| Error::Protocol)?;
@@ -416,6 +463,43 @@ mod tests {
         assert_eq!(observations.normal_ending()?, Some(ending));
         observations.record_live(&capture, &running)?;
         assert!(observations.normal_ending()?.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn continuation_publication_is_exact_and_single_use() -> Result<(), TestError> {
+        let (_root, capture, observations) = fixture()?;
+        observations.enable_normal_endings()?;
+        let running = state_line("native", "running", None);
+        let ended = state_line("native", "idle", Some("end_turn"));
+        observations.record_live(&capture, &running)?;
+        observations.record_live(&capture, &ended)?;
+        let first = observations.normal_ending()?.ok_or("first ending")?;
+        observations.record_live(&capture, &running)?;
+        observations.record_live(&capture, &ended)?;
+        let current = observations.normal_ending()?.ok_or("second ending")?;
+        let times = std::cell::Cell::new(0);
+        let publish = || times.set(times.get() + 1);
+        assert!(matches!(
+            observations.publish_continuation(&first, publish),
+            Err(Error::NotAdmitted)
+        ));
+        observations.decide_ending(&first)?;
+        assert_eq!(observations.pending_ending()?, Some(current.clone()));
+        assert!(matches!(
+            observations.publish_ordinary_prompt(publish),
+            Err(Error::EndingDecisionPending)
+        ));
+        observations.publish_continuation(&current, publish)?;
+        assert!(matches!(
+            observations.publish_continuation(&current, publish),
+            Err(Error::NotAdmitted)
+        ));
+        assert_eq!(times.get(), 1);
+        observations.decide_ending(&current)?;
+        assert!(observations.pending_ending()?.is_none());
+        observations.publish_ordinary_prompt(publish)?;
+        assert_eq!(times.get(), 2);
         Ok(())
     }
 

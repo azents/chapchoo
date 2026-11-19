@@ -34,6 +34,8 @@ mod inputs;
 use answers::AnswerRegistry;
 pub use answers::{NativeAnswerObservation, NativeAnswerOperation};
 mod activity;
+mod continuation_route;
+pub use continuation_route::{ContinuationRoute, ContinuationRouteLease};
 mod observations;
 mod protocol;
 mod requests;
@@ -232,9 +234,18 @@ enum Command {
         OwnedSemaphorePermit,
         oneshot::Sender<Result<NativePromptAcceptance, Error>>,
     ),
+    Continuation(
+        NativeNormalEnding,
+        ConversationText,
+        ContinuationRoute,
+        OwnedSemaphorePermit,
+        oneshot::Sender<Result<NativePromptAcceptance, Error>>,
+    ),
     Stop(NativeWorkTarget, oneshot::Sender<Result<(), Error>>),
     Observe(oneshot::Sender<Result<NativeObservation, Error>>),
     NormalEnding(oneshot::Sender<Result<Option<NativeNormalEnding>, Error>>),
+    PendingEnding(oneshot::Sender<Result<Option<NativeNormalEnding>, Error>>),
+    DecideEnding(NativeNormalEnding, oneshot::Sender<Result<(), Error>>),
     CapturedSource(oneshot::Sender<Result<Option<crate::CaptureLog>, Error>>),
     InputObservation {
         id: String,
@@ -437,7 +448,14 @@ impl NativeOwner {
                         }
                         let outcome = tokio::select! {
                             _=stopping.cancelled()=>Err(Error::DeliveryUncertain),
-                            outcome=state.input(operation)=>outcome,
+                            outcome=state.input(operation,expected.is_some())=>outcome,
+                        };
+                        let _ = result.send(outcome);
+                    }
+                    Command::Continuation(ending, text, route, _permit, result) => {
+                        let outcome = tokio::select! {
+                            _=stopping.cancelled()=>Err(Error::DeliveryUncertain),
+                            outcome=state.continue_after_ending(ending,text,route)=>outcome,
                         };
                         let _ = result.send(outcome);
                     }
@@ -449,6 +467,23 @@ impl NativeOwner {
                     }
                     Command::NormalEnding(result) => {
                         let _ = result.send(state.normal_ending());
+                    }
+                    Command::PendingEnding(result) => {
+                        let _ = result.send(
+                            state
+                                .live
+                                .as_ref()
+                                .filter(|live| !state.blocked && !live.protocol.is_finished())
+                                .map_or(Ok(None), |live| live.observations.pending_ending()),
+                        );
+                    }
+                    Command::DecideEnding(ending, result) => {
+                        let _ = result.send(
+                            state
+                                .live
+                                .as_ref()
+                                .map_or(Ok(()), |live| live.observations.decide_ending(&ending)),
+                        );
                     }
                     Command::CapturedSource(result) => {
                         let outcome = state.captured_source().await;
@@ -574,6 +609,29 @@ impl NativeHandle {
     ) -> Result<NativePromptAcceptance, Error> {
         self.submit_input(operation, Some(owner)).await
     }
+    /// Consume a caller-authorized continuation at its exact live ending. A
+    /// lost acceptance response cannot make that ending usable again.
+    pub async fn continue_after_ending(
+        &self,
+        ending: NativeNormalEnding,
+        text: ConversationText,
+        route: ContinuationRoute,
+    ) -> Result<NativePromptAcceptance, Error> {
+        let bytes = u32::try_from(text.as_str().len()).map_err(|_| Error::NotAdmitted)?;
+        if text.as_str().len() > MAX_LINE {
+            return Err(Error::NotAdmitted);
+        }
+        let permit = self
+            .payload_budget
+            .clone()
+            .try_acquire_many_owned(bytes)
+            .map_err(|_| Error::NotAdmitted)?;
+        let (result, rx) = oneshot::channel();
+        self.sender
+            .try_send(Command::Continuation(ending, text, route, permit, result))
+            .map_err(|_| Error::NotAdmitted)?;
+        rx.await.map_err(|_| Error::Process)?
+    }
     async fn submit_input(
         &self,
         operation: NativeInputOperation,
@@ -616,6 +674,21 @@ impl NativeHandle {
         let (result, rx) = oneshot::channel();
         self.sender
             .try_send(Command::NormalEnding(result))
+            .map_err(|_| Error::NotAdmitted)?;
+        rx.await.map_err(|_| Error::Process)?
+    }
+    /// A live ending awaiting its owner's decision, never reconstructed from capture.
+    pub async fn pending_ending(&self) -> Result<Option<NativeNormalEnding>, Error> {
+        let (result, rx) = oneshot::channel();
+        self.sender
+            .try_send(Command::PendingEnding(result))
+            .map_err(|_| Error::NotAdmitted)?;
+        rx.await.map_err(|_| Error::Process)?
+    }
+    pub async fn decide_ending(&self, ending: NativeNormalEnding) -> Result<(), Error> {
+        let (result, rx) = oneshot::channel();
+        self.sender
+            .try_send(Command::DecideEnding(ending, result))
             .map_err(|_| Error::NotAdmitted)?;
         rx.await.map_err(|_| Error::Process)?
     }
@@ -718,6 +791,7 @@ impl State {
     async fn input(
         &mut self,
         operation: NativeInputOperation,
+        managed: bool,
     ) -> Result<NativePromptAcceptance, Error> {
         if let Some(previous) = self.inputs.recover(&operation)? {
             return Ok(previous);
@@ -735,16 +809,50 @@ impl State {
         if let Some(previous) = self.inputs.begin(&operation)? {
             return Ok(previous);
         }
-        let outcome = tokio::time::timeout(
+        let outcome = match tokio::time::timeout(
             Duration::from_secs(10),
-            steering::submit(session, &operation.text),
+            steering::submit(
+                session,
+                &operation.text,
+                managed.then_some(live.observations.as_ref()),
+            ),
         )
         .await
-        .map_err(|_| Error::DeliveryUncertain)?
-        .map_err(|_| Error::DeliveryUncertain)?;
+        {
+            Ok(Ok(outcome)) => outcome,
+            Ok(Err(Error::EndingDecisionPending)) => {
+                self.inputs.discard_unconsumed(&operation.operation_id)?;
+                return Err(Error::EndingDecisionPending);
+            }
+            _ => return Err(Error::DeliveryUncertain),
+        };
         self.inputs
             .completed(&operation.operation_id, outcome.clone())?;
         Ok(outcome)
+    }
+    async fn continue_after_ending(
+        &mut self,
+        ending: NativeNormalEnding,
+        text: ConversationText,
+        route: ContinuationRoute,
+    ) -> Result<NativePromptAcceptance, Error> {
+        let live = self.live.as_ref().ok_or(Error::NotAdmitted)?;
+        let session = live.session.as_ref().ok_or(Error::NotAdmitted)?;
+        if self.blocked || live.protocol.is_finished() || session.connection().is_incoming_closed()
+        {
+            return Err(Error::NotAdmitted);
+        }
+        let pending = route.publish(|| {
+            live.observations
+                .publish_continuation(&ending, || session.send_prompt(text.as_str()))
+        })?;
+        let response = tokio::time::timeout(Duration::from_secs(10), pending.block_task())
+            .await
+            .map_err(|_| Error::DeliveryUncertain)?
+            .map_err(|_| Error::DeliveryUncertain)?;
+        Ok(NativePromptAcceptance::Inserted {
+            native_message_id: response.message_id.to_string(),
+        })
     }
     fn observe(&self) -> Result<NativeObservation, Error> {
         let live = self.live.as_ref().ok_or(Error::NotAdmitted)?;
@@ -863,7 +971,14 @@ impl State {
         config: StartConfiguration<'_>,
     ) -> Result<NativeConversationId, Error> {
         let applied = self.preparer.prepare(&supply).await?;
-        let admitted = authentication.acquire().await?;
+        let admitted = authentication
+            .acquire(chapchoo_domain::LaunchCapture {
+                snapshot: source.snapshot()?,
+                through: source
+                    .current_boundary()?
+                    .and_then(|boundary| boundary.through),
+            })
+            .await?;
         authentication.check(&admitted.binding).await?;
         let binding = admitted.binding;
         if !config.scope.matches(&binding) {

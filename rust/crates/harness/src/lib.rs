@@ -17,12 +17,13 @@ pub use preparation::{
 };
 pub use project::MAX_PROJECT_INSTRUCTION_BYTES;
 pub use runtime::{
-    CaptureReplay, InteractiveRequest, InteractiveResponse, NativeAnswerObservation,
-    NativeAnswerOperation, NativeCaptureReader, NativeContext, NativeForeground, NativeHandle,
-    NativeInputObservation, NativeInputOperation, NativeNormalEnding, NativeObservation,
-    NativeOwner, NativePromptAcceptance, NativeReportedOperation, NativeSetupFailure,
-    NativeSetupIntent, NativeSetupObservation, NativeSetupOperation, NativeStopObservation,
-    NativeTextTarget, NativeWorkTarget, Retirement, ScopeEvidence,
+    CaptureReplay, ContinuationRoute, ContinuationRouteLease, InteractiveRequest,
+    InteractiveResponse, NativeAnswerObservation, NativeAnswerOperation, NativeCaptureReader,
+    NativeContext, NativeForeground, NativeHandle, NativeInputObservation, NativeInputOperation,
+    NativeNormalEnding, NativeObservation, NativeOwner, NativePromptAcceptance,
+    NativeReportedOperation, NativeSetupFailure, NativeSetupIntent, NativeSetupObservation,
+    NativeSetupOperation, NativeStopObservation, NativeTextTarget, NativeWorkTarget, Retirement,
+    ScopeEvidence,
 };
 pub use server_tools::{
     NativeMcpDeclaration, NativeToolLifetime, NativeToolProvision, NativeToolScope,
@@ -69,6 +70,8 @@ pub enum Error {
     OperationConflict,
     #[error("Native delivery may have occurred and cannot be replayed")]
     DeliveryUncertain,
+    #[error("The previous native ending awaits a decision; this input was not consumed")]
+    EndingDecisionPending,
     #[error("Native predecessor retirement is unconfirmed")]
     RetirementUnknown,
     #[error("Native start failed and predecessor retirement is unconfirmed")]

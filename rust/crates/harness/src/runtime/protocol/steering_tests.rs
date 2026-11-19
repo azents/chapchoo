@@ -47,7 +47,7 @@ async fn steering_only_prompts_after_explicit_non_consumption() -> Result<(), Te
         acknowledge_title(&mut read, &mut write).await?;
         let session = rx.await??;
         let text = ConversationText::parse("exact \n한글".into())?;
-        let submitted = steering::submit(&session, &text);
+        let submitted = steering::submit(&session, &text, None);
         tokio::pin!(submitted);
         let steer = tokio::select! { request=request(&mut read)=>request?,_=&mut submitted=>return Err("Premature steering result".into()) };
         assert_eq!(steer.method, "_session/steering");
@@ -146,7 +146,7 @@ async fn cancelling_a_steering_waiter_after_publication_never_grants_prompt_fall
     let session = rx.await??;
     let text = ConversationText::parse("once".into())?;
     {
-        let submitted = steering::submit(&session, &text);
+        let submitted = steering::submit(&session, &text, None);
         tokio::pin!(submitted);
         let steer = tokio::select! { request=request(&mut read)=>request?,_=&mut submitted=>return Err("Premature steering result".into()) };
         assert_eq!(steer.method, "_session/steering");
