@@ -12,6 +12,17 @@ rustup toolchain install 1.99.1 --profile minimal --component clippy,rustfmt
 bash scripts/check-rust.sh
 ```
 
+The Rust and RPC quality scripts (`check-rust.sh` and `check-rpc.sh`), including
+their commit-hook invocations, default Cargo's `dev` and `test` debug information
+to `0` to keep verification artifacts smaller. Test assertions, incremental
+compilation, direct Cargo invocations and release builds keep their usual
+settings. To run a check with full debug information, override the profile
+settings for that command:
+
+```sh
+CARGO_PROFILE_DEV_DEBUG=2 CARGO_PROFILE_TEST_DEBUG=2 bash scripts/check-rust.sh
+```
+
 `rust/rust-toolchain.toml` is the toolchain authority. The workspace lockfile is
 committed; checks deny unsafe code, unhandled lint warnings, production unwraps/
 expects and secret-revealing diagnostic formatting. Domain and crypto crates

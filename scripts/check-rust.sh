@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/../rust"
+source ../scripts/rust-check-env.sh
 expected="$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)"
 actual="$(rustc --version | cut -d ' ' -f 2)"
 if [[ "$actual" != "$expected" ]]; then

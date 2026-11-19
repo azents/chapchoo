@@ -1,4 +1,4 @@
-"""Exercise the repository's inherited Rust lint policy, not Clippy's full matrix."""
+"""Exercise the repository's Rust quality tooling, not Clippy's full matrix."""
 
 from __future__ import annotations
 
@@ -15,6 +15,42 @@ import tomllib
 
 ROOT = Path(__file__).resolve().parents[2]
 RUST = ROOT / "rust"
+
+
+class RustCheckDebugDefaultsTest(unittest.TestCase):
+    def test_profiles_default_independently_and_preserve_explicit_overrides(
+        self,
+    ) -> None:
+        dev = "CARGO_PROFILE_DEV_DEBUG"
+        test = "CARGO_PROFILE_TEST_DEBUG"
+        profiles = (dev, test)
+        script = ROOT / "scripts/rust-check-env.sh"
+        for overrides, expected in (
+            ({}, ["0", "0"]),
+            ({dev: "line-tables-only"}, ["line-tables-only", "0"]),
+            ({test: "2"}, ["0", "2"]),
+            ({dev: "2", test: "2"}, ["2", "2"]),
+        ):
+            with self.subTest(overrides=overrides):
+                env = {k: v for k, v in os.environ.items() if k not in profiles}
+                env.update(overrides)
+                result = subprocess.run(
+                    [
+                        "bash",
+                        "-eu",
+                        "-c",
+                        'source "$1"; printenv "$2" "$3"',
+                        "rust-check-env-test",
+                        str(script),
+                        *profiles,
+                    ],
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=True,
+                )
+                self.assertEqual(result.stdout.splitlines(), expected)
 
 
 class RustPolicyTest(unittest.TestCase):
