@@ -46,9 +46,9 @@ impl EndingOwner for NativeHandle {
     }
 }
 
-#[derive(Default)]
 pub(super) struct Delivery {
     closing: Option<Close>,
+    ordering: super::super::server_tools::Ordering,
 }
 struct Close {
     ending: NativeNormalEnding,
@@ -56,6 +56,13 @@ struct Close {
 }
 
 impl Delivery {
+    pub(super) fn new(ordering: super::super::server_tools::Ordering) -> Self {
+        Self {
+            closing: None,
+            ordering,
+        }
+    }
+
     fn client(channel: Channel) -> ConnectorCaptureClient<Channel> {
         ConnectorCaptureClient::new(channel)
             .max_decoding_message_size(64 * 1024)
@@ -105,6 +112,7 @@ impl Delivery {
             })
             || native.ending().await?.as_ref() != Some(&ending)
             || stop.is_cancelled()
+            || self.ordering.input_report_pending(&owner)
         {
             return Ok(());
         }

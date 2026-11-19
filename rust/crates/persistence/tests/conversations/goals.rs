@@ -90,12 +90,10 @@ async fn exercise(
         f.now,
     )
     .await?;
-    assert_eq!(
-        store
-            .conversation_goal_context(&source, id, &target)
-            .await?,
-        b"[]"
-    );
+    let implicit = store
+        .conversation_goal_context(&source, id, &target)
+        .await?;
+    assert_eq!(implicit, b"[]");
     store
         .change_conversation_goal(
             &source,
@@ -211,6 +209,7 @@ async fn exercise(
             .ok_or("No continuation forwarding projection")?,
     )?;
     assert!(projection.contains("Objective A") && projection.contains("Latest objective"));
+    assert!(!projection.contains("Reply to the user's messages"));
     for _ in 0..2 {
         store
             .close_conversation_continuation(&source, id, operation_id, &endings[1])
@@ -755,6 +754,15 @@ fn sqlite_goal_projection_and_continuation_admission() -> Result<(), TestError> 
         connection.batch_execute(sql)?;
         Ok(())
     }))?;
+    assert!(connection.revert_last_migration(SQLITE_MIGRATIONS).is_err());
+    // Isolate the preceding migration guard from new-format fixture data.
+    connection.batch_execute("DELETE FROM conversation_work_items WHERE title=''")?;
+    assert_eq!(
+        connection
+            .revert_last_migration(SQLITE_MIGRATIONS)?
+            .to_string(),
+        "00000000000030"
+    );
     assert_eq!(
         connection
             .revert_last_migration(SQLITE_MIGRATIONS)?
@@ -794,6 +802,18 @@ fn postgres_goal_projection_and_continuation_admission() -> Result<(), TestError
                 Ok(())
             })
         }))?;
+        assert!(
+            connection
+                .revert_last_migration(POSTGRES_MIGRATIONS)
+                .is_err()
+        );
+        connection.batch_execute("DELETE FROM conversation_work_items WHERE title=''")?;
+        assert_eq!(
+            connection
+                .revert_last_migration(POSTGRES_MIGRATIONS)?
+                .to_string(),
+            "00000000000030"
+        );
         assert_eq!(
             connection
                 .revert_last_migration(POSTGRES_MIGRATIONS)?

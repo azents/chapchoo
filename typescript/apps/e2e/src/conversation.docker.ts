@@ -441,6 +441,25 @@ test("owner follows Conversation Work and inspects native typed-answer records",
     await expect(
       log.getByText(/First assistant output|Second assistant utterance/),
     ).toHaveCount(0);
+    stage = "implicit-reply-after-normal-ending";
+    const implicitInput = "Exercise a reply without a work plan";
+    const implicitReply = "Fixture replied without a work plan.";
+    const releaseImplicitTurn = await fixture.holdWork();
+    await message.fill(implicitInput);
+    await page.getByRole("button", { name: "Send", exact: true }).click();
+    await expect(log.getByText(implicitInput, { exact: true })).toBeVisible({
+      timeout: 180_000,
+    });
+    await expect(summary).toHaveCount(0);
+    expect((await fixture.current()).work).toBeUndefined();
+    await expect(log.locator("[data-message-id]")).toHaveCount(8);
+    await releaseImplicitTurn();
+    await expect(log.getByText(implicitReply, { exact: true })).toBeVisible({
+      timeout: 180_000,
+    });
+    await expect(summary).toHaveCount(0);
+    await expect(log.locator("[data-message-id]")).toHaveCount(9);
+    await expect(log.getByText(continuationMarker)).toHaveCount(0);
     const evidence = test.info();
     evidence.annotations.push({
       type: "conversation-read-evidence",

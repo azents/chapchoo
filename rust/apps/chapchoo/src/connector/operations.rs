@@ -102,6 +102,9 @@ impl Operations {
             stop: CancellationToken::new(),
         }
     }
+    pub(super) fn input_ordering(&self) -> super::server_tools::Ordering {
+        self.ordering.clone()
+    }
     pub(super) fn tool_route(
         &self,
         channel: Channel,
@@ -388,18 +391,23 @@ impl Operations {
                 {
                     return Err("Native input owner conflicts".into());
                 }
-                permit.ordering = Some(ordering.begin(&binding, &command.operation_id)?);
+                let ticket = permit
+                    .ordering
+                    .insert(ordering.begin(&binding, &command.operation_id)?);
                 let operation = chapchoo_harness::NativeInputOperation {
                     operation_id: command.operation_id.clone(),
                     target,
                     text,
                 };
                 let result = loop {
+                    ticket.attempting(true);
                     match native
                         .prompt_for_owner(operation.clone(), binding.clone())
                         .await
                     {
-                        Err(chapchoo_harness::Error::EndingDecisionPending) => {}
+                        Err(chapchoo_harness::Error::EndingDecisionPending) => {
+                            ticket.attempting(false);
+                        }
                         outcome => break outcome?,
                     }
                     // ACP explicitly did not consume the input. Revalidate

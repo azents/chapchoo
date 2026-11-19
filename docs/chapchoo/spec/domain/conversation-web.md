@@ -21,8 +21,11 @@ saved settings and native history. It has no history selection or pagination.
 
 ## Conversation Work summary
 
-The active [work summary](conversation-storage.md#conversation-work) appears
-above the unchanged composer. Its single floating surface shows the title and
+The [work summary](conversation-storage.md#conversation-work) appears above the
+unchanged composer only for open Work with an explicitly published plan.
+The default reply objective has no placeholder, checklist item or bubble; a
+direct reply may finish it without a summary ever appearing. A new input does
+not replace a displayed plan. The single floating surface shows the title and
 completed task count, and expands into the ordered task list with a straight
 divider. It is not inferred from native text or foreground state. Stop does not
 clear it, and terminal work removes it without adding a synthetic message.

@@ -13,7 +13,11 @@ enum Outcome {
 #[derive(Default)]
 struct Pending {
     closed: bool,
-    inputs: BTreeMap<String, watch::Sender<Outcome>>,
+    inputs: BTreeMap<String, Input>,
+}
+struct Input {
+    outcome: watch::Sender<Outcome>,
+    attempting: bool,
 }
 pub(in crate::connector) struct Owner {
     binding: NativeAuthenticationBinding,
@@ -65,15 +69,34 @@ impl Ordering {
             if pending.closed || pending.inputs.len() >= 32 || pending.inputs.contains_key(id) {
                 return Err("Native publication ordering is unavailable".into());
             }
-            pending
-                .inputs
-                .insert(id.into(), watch::channel(Outcome::Pending).0);
+            pending.inputs.insert(
+                id.into(),
+                Input {
+                    outcome: watch::channel(Outcome::Pending).0,
+                    attempting: false,
+                },
+            );
         }
         Ok(Ticket {
             owner,
             id: id.into(),
             recorded: false,
         })
+    }
+
+    // An already dispatched prompt may finish before its receipt reaches
+    // Control. Do not fence on tickets parked behind this same ending.
+    pub(in crate::connector) fn input_report_pending(
+        &self,
+        binding: &NativeAuthenticationBinding,
+    ) -> bool {
+        let owner = lock(&self.0).as_ref().and_then(Weak::upgrade);
+        owner
+            .filter(|owner| same_owner(&owner.binding, binding))
+            .is_some_and(|owner| {
+                let pending = lock(&owner.pending);
+                !pending.closed && pending.inputs.values().any(|input| input.attempting)
+            })
     }
 }
 impl Owner {
@@ -82,7 +105,7 @@ impl Owner {
         lock(&self.pending)
             .inputs
             .values()
-            .any(|sender| sender.receiver_count() > 0)
+            .any(|input| input.outcome.receiver_count() > 0)
     }
     pub(in crate::connector) fn snapshot(&self) -> Result<Wait, AppError> {
         let pending = lock(&self.pending);
@@ -93,15 +116,15 @@ impl Owner {
             pending
                 .inputs
                 .values()
-                .map(watch::Sender::subscribe)
+                .map(|input| input.outcome.subscribe())
                 .collect(),
         ))
     }
     pub(super) fn close(&self) {
         let mut pending = lock(&self.pending);
         pending.closed = true;
-        for sender in pending.inputs.values() {
-            sender.send_replace(Outcome::Failed);
+        for input in pending.inputs.values() {
+            input.outcome.send_replace(Outcome::Failed);
         }
     }
 }
@@ -128,10 +151,16 @@ impl Wait {
     }
 }
 impl Ticket {
+    pub(in crate::connector) fn attempting(&self, attempting: bool) {
+        if let Some(input) = lock(&self.owner.pending).inputs.get_mut(&self.id) {
+            input.attempting = attempting;
+        }
+    }
+
     pub(in crate::connector) fn recorded(&mut self) {
         let mut pending = lock(&self.owner.pending);
-        if let Some(sender) = pending.inputs.remove(&self.id) {
-            sender.send_replace(if pending.closed {
+        if let Some(input) = pending.inputs.remove(&self.id) {
+            input.outcome.send_replace(if pending.closed {
                 Outcome::Failed
             } else {
                 Outcome::Recorded
@@ -143,9 +172,9 @@ impl Ticket {
 impl Drop for Ticket {
     fn drop(&mut self) {
         if !self.recorded
-            && let Some(sender) = lock(&self.owner.pending).inputs.remove(&self.id)
+            && let Some(input) = lock(&self.owner.pending).inputs.remove(&self.id)
         {
-            sender.send_replace(Outcome::Failed);
+            input.outcome.send_replace(Outcome::Failed);
         }
     }
 }

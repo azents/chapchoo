@@ -87,7 +87,9 @@ Shutdown closes scheduling and cancels network waiters, while server refresh
 and local blocking publication retain their respective physical owners.
 
 A qualified live ending is reported after capture synchronization has reached
-its exact occurrence. The bounded component call waits for a committed
+its exact occurrence and the current launch has no dispatched input awaiting a
+delivery report. A later input parked behind that ending does not hold the
+report. The bounded component call waits for a committed
 [decision](conversation-storage.md#conversation-goals-and-continuation-decisions),
 not native acceptance of an ensuing input. Internal forwarding uses an
 independent grant and the exact still-live ending. A revoked stream cannot

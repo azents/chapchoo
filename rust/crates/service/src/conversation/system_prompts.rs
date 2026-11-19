@@ -109,7 +109,7 @@ pub(super) fn selected(
         },
         InstructionSource {
             kind: InstructionSourceKind::Function,
-            text: "Use send to publish a message or act on Conversation Work. Use continue with a title and ordered tasks to start tracking work; update it with the complete task list. Use request_input to ask a question, finish to send a message and complete work, or ignore to complete it silently. Ordinary model output is not delivered to the conversation.".into(),
+            text: "Use send to publish a message or act on Conversation Work. User messages share one open reply objective. Use finish to answer directly and complete it without publishing a plan. For work that needs a visible plan, use continue with a title on the first plan and the complete ordered task list on each update. Use request_input to ask and wait, or ignore to complete it silently. Ordinary model output is not delivered to the conversation.".into(),
         },
     ];
     sources.extend(owner_sources);

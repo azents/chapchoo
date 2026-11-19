@@ -564,8 +564,10 @@ outgoing dispatch journal or upstream-gap repair is performed by these operation
 
 The conversation owns its goals and a shared automatic-admission count. Goal
 identity and explicit completion are independent of any native execution.
-The current projection contains the full active and waiting set. Goal writes
-enforce its 8 KiB UTF-8 serialization bound without truncation. A successful
+The current projection contains the full eligible active and waiting set.
+Reply Work with no successfully picked-up input left to address is not
+projected. Goal writes enforce the 8 KiB UTF-8 serialization bound without
+truncation, accounting also for open Work not yet ready to project. A successful
 empty read returns `[]`, separately from rejection or lookup failure. Goal
 mutation is server-owned; the Connector exposes no goal mutation operation.
 
@@ -579,8 +581,9 @@ one internal input and its charge. A duplicate of the same live ending can
 recover its decision, not enqueue again. Pending ordinary input takes precedence
 at admission. At least one eligible goal and remaining capacity are required.
 The count allows three automatic admissions between resets. New goal addition,
-an actual ordered Conversation Work task-list change, and fresh explicit user input
-acceptance reset it in their own transactions. An existing acceptance, an
+an actual ordered Conversation Work task-list change, and fresh user input
+acceptance (including an explicit failed-input replacement) reset it in
+their own transactions. An existing acceptance, an
 internal input, a title-only edit, and an unchanged ordered list do not reset it.
 
 A later user input does not overtake an admitted internal slot for the current
@@ -601,23 +604,34 @@ authoritative empty set.
 
 ## Conversation Work
 
-The first `send` with `continue` creates active work and its associated Goal
-together. Later `continue` calls update the same work identity, without
-clearing input wait. The associated goal context reads the Work title and
-the complete ordered task list with its statuses directly from Work storage.
-It has no separate task copy. An empty list remains explicit, and checking
-all tasks does not settle Work. A change exceeding the full projection
-bound rolls back the task/title changes, reset, and optional publication.
-`request_input` enters wait when work is active. Only genuinely new
-accepted input for that conversation releases the wait; recovering an existing
-acceptance does not. `finish` and `ignore` close the affected work and settle its
-associated Goal, not unrelated Goals. Neither cancels a native turn. Completion
-removes the active summary and its Goal from current continuation context.
+A new accepted user message opens one Work and its associated reply Goal if
+none is open. Further messages retain their identities and queue order while
+joining the same Work. Acceptance alone creates neither a plan nor a Chat
+receipt. Successful native pickup enables the reply Goal for continuation and
+restoration in the same transaction that records the User receipt.
 
-The owner reads the bounded active summary (title, ordered tasks and input-wait
-status) through `Conversations.Current`. It is independent of captured native
-state and contains no past work or unrelated Goal projection. Migration 29
-retains work identity and its Goal relation; downgrade refuses to discard work.
+The first `send` with `continue` requires a title and complete ordered task
+list. It adds a visible plan to the current Work, or opens planned Work if none
+exists. Later updates retain the identity and do not clear input wait. Eligible
+unplanned Work projects the reply objective; eligible planned Work projects
+the title and tasks directly from Work storage. An empty list remains explicit,
+and checking all tasks does not settle Work. A change exceeding the full
+projection bound rolls back the plan update, reset, and optional publication.
+
+`request_input` enters wait. A new accepted input releases the wait without
+changing the plan; acceptance recovery does not. `finish` sends a reply and
+completes Work, and `ignore` completes it silently. None of these actions pauses
+or completes Work if an ordinary input is still pending delivery. Any requested
+Chat receipt still commits; the Work remains open and only a subsequent
+successful pickup makes it eligible to drive continuation again. Delivery
+failure, deletion and a native turn ending are not Work settlement. Actions do
+not settle unrelated Goals or cancel the native turn.
+
+`Conversations.Current` returns the bounded summary only for open Work with a
+published plan. Its title, ordered tasks and input-wait status are independent
+of native observations. Completed Work and unrelated Goals have no summary.
+Migration 30 preserves existing plans and defaults their readiness to true;
+downgrade refuses to discard readiness or reinterpret unpublished Work.
 
 ## Bounded internal reads
 

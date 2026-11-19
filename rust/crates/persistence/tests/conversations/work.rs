@@ -1,7 +1,8 @@
 use super::*;
 use chapchoo_domain::{SendAction, WorkTask, WorkTaskStatus};
 use chapchoo_persistence::{
-    ConversationDeliveryTarget, ConversationMessageScope, ConversationMessageWindow,
+    ConversationDeliveryTarget, ConversationInputAdmission, ConversationMessageScope,
+    ConversationMessageWindow, RetryConversationInput,
 };
 
 async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
@@ -123,6 +124,156 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
             .is_none()
     );
 
+    assert_eq!(
+        store
+            .conversation_goal_context(&source, scope.conversation_id, &target)
+            .await?,
+        b"[]"
+    );
+    super::messages::pickup(
+        store,
+        f,
+        &original,
+        &target.snapshot,
+        &target.native_session,
+    )
+    .await?;
+    let hidden = store
+        .conversation_goal_context(&source, scope.conversation_id, &target)
+        .await?;
+    let context: serde_json::Value = serde_json::from_slice(&hidden)?;
+    let implicit_id = context[0]["goal_key"]
+        .as_str()
+        .ok_or("Missing implicit goal")?;
+    assert_eq!(
+        context,
+        serde_json::json!([{
+            "goal_key": implicit_id,
+            "disposition": "active",
+            "objective": "Reply to the user's messages and explicitly settle the Work.",
+        }])
+    );
+    let direct = SendAction::Finish {
+        message: text("Direct reply without a plan")?,
+    };
+    assert_eq!(
+        store
+            .send_conversation_work(&source, &scope, &direct)
+            .await?
+            .ok_or("Missing direct reply")?
+            .receipt_order,
+        3
+    );
+    assert_eq!(
+        store
+            .conversation_goal_context(&source, scope.conversation_id, &target)
+            .await?,
+        b"[]"
+    );
+    assert!(
+        store
+            .conversation_work_summary(&owner, &scope, f.now)
+            .await?
+            .is_none()
+    );
+
+    draft.conversation_id = Some(original.conversation_id.clone());
+    draft.request_id = "work-plan-input".into();
+    draft.target = ConversationTarget::Snapshot(target.snapshot.clone());
+    let plan_input = store
+        .accept_conversation_input(&owner, &draft, f.now)
+        .await?;
+    assert_eq!(
+        store
+            .accept_conversation_input(&owner, &draft, f.now)
+            .await?
+            .id,
+        plan_input.id
+    );
+    draft.request_id = "work-second-plan-input".into();
+    let second = store
+        .accept_conversation_input(&owner, &draft, f.now)
+        .await?;
+    assert_ne!(plan_input.id, second.id);
+    assert_eq!(
+        store
+            .conversation_goal_context(&source, scope.conversation_id, &target)
+            .await?,
+        b"[]"
+    );
+    super::messages::pickup(
+        store,
+        f,
+        &plan_input,
+        &target.snapshot,
+        &target.native_session,
+    )
+    .await?;
+    let plan_context = store
+        .conversation_goal_context(&source, scope.conversation_id, &target)
+        .await?;
+    let plan: serde_json::Value = serde_json::from_slice(&plan_context)?;
+    let plan_id = plan[0]["goal_key"].as_str().ok_or("Missing reply goal")?;
+    assert_ne!(implicit_id, plan_id);
+    assert_eq!(
+        store
+            .send_conversation_work(&source, &scope, &direct)
+            .await?
+            .ok_or("Missing reply to the first input")?
+            .receipt_order,
+        5
+    );
+    assert_eq!(
+        store
+            .conversation_goal_context(&source, scope.conversation_id, &target)
+            .await?,
+        b"[]"
+    );
+    store
+        .fail_conversation_input(scope.conversation_id, &second.id)
+        .await?;
+    assert_eq!(
+        store
+            .conversation_goal_context(&source, scope.conversation_id, &target)
+            .await?,
+        b"[]",
+        "a failed later input cannot inherit the first reply's readiness"
+    );
+    let retry = RetryConversationInput {
+        agent_id: f.agent.id.clone(),
+        conversation_id: original.conversation_id.clone(),
+        target: draft.target.clone(),
+        request_id: "work-retry-second-plan-input".into(),
+        original_input_id: second.id.clone(),
+        original_request_id: second.request_id.clone(),
+    };
+    let ConversationInputAdmission::Accepted(replacement) = store
+        .retry_failed_conversation_input(&owner, &retry, f.now)
+        .await?
+    else {
+        return Err("Expected a fresh replacement".into());
+    };
+    assert_ne!(replacement.id, second.id);
+    assert!(matches!(
+        store
+            .retry_failed_conversation_input(&owner, &retry, f.now)
+            .await?,
+        ConversationInputAdmission::Existing(value) if value.id == replacement.id
+    ));
+    super::messages::pickup(
+        store,
+        f,
+        &replacement,
+        &target.snapshot,
+        &target.native_session,
+    )
+    .await?;
+    assert_eq!(
+        store
+            .conversation_goal_context(&source, scope.conversation_id, &target)
+            .await?,
+        plan_context
+    );
     let start = SendAction::Continue {
         title: Some(text("Inspect records")?),
         tasks: tasks.clone(),
@@ -138,6 +289,7 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
         .conversation_work_summary(&owner, &scope, f.now)
         .await?
         .ok_or("Missing work")?;
+    assert_eq!(first.id, plan_id);
     assert_eq!(first.tasks, tasks);
     assert!(!first.waiting_for_input);
     assert!(
@@ -150,14 +302,7 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
         .send_conversation_work(&source, &scope, &question)
         .await?
         .ok_or("Missing work question")?;
-    assert_eq!(question_receipt.receipt_order, 2);
-    assert_eq!(
-        store
-            .accept_conversation_input(&owner, &draft, f.now)
-            .await?
-            .id,
-        original.id
-    );
+    assert_eq!(question_receipt.receipt_order, 7);
     assert!(matches!(
         store
             .send_conversation_work(
@@ -251,9 +396,16 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
     draft.conversation_id = Some(original.conversation_id.clone());
     draft.request_id = "work-fresh-input".into();
     draft.target = ConversationTarget::Snapshot(target.snapshot.clone());
-    store
+    let fresh = store
         .accept_conversation_input(&owner, &draft, f.now)
         .await?;
+    assert_eq!(
+        store
+            .accept_conversation_input(&owner, &draft, f.now)
+            .await?
+            .id,
+        fresh.id
+    );
     assert!(
         !store
             .conversation_work_summary(&owner, &scope, f.now)
@@ -261,13 +413,13 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
             .ok_or("Missing resumed work")?
             .waiting_for_input
     );
-    // Reverse the serialization order: the input committed before this question
-    // does not count as a reply to it.
+    // The input is already delivered when the new question enters wait.
+    super::messages::pickup(store, f, &fresh, &target.snapshot, &target.native_session).await?;
     let later_question = store
         .send_conversation_work(&source, &scope, &question)
         .await?
         .ok_or("Missing later question")?;
-    assert_eq!(later_question.receipt_order, 3);
+    assert_eq!(later_question.receipt_order, 9);
     assert!(
         store
             .conversation_work_summary(&owner, &scope, f.now)
@@ -283,7 +435,7 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
         .send_conversation_work(&source, &scope, &finish)
         .await?
         .ok_or("Missing result")?;
-    assert_eq!(result.receipt_order, 4);
+    assert_eq!(result.receipt_order, 10);
     assert!(
         store
             .conversation_work_summary(&owner, &scope, f.now)

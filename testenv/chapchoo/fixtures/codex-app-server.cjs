@@ -109,7 +109,10 @@ const helperThreads = new Set();
 let cwd = "/workspace";
 // These fixture-only literals contain no request, response or credential data.
 async function publishFixture(which, publication) {
-  if (!["first", "refresh", "question", "result"].includes(which) || !mcp)
+  if (
+    !["first", "refresh", "question", "result", "implicit"].includes(which) ||
+    !mcp
+  )
     throw new Error("Fixture publication owner is unavailable");
   const marker = `/workspace/acceptance-publication-${which}`;
   const stage = (value) => writeFileSync(marker, `${value}\n`, { mode: 0o600 });
@@ -166,7 +169,7 @@ function verifyWorkInstructions(workspace) {
     );
   return instructions;
 }
-async function workTurn(id, params, which, args) {
+async function workTurn(id, params, which, args = null) {
   if (!authenticated || active || params.threadId !== threadId)
     throw new Error("Fixture work turn was not admitted");
   writeFileSync(
@@ -181,17 +184,23 @@ async function workTurn(id, params, which, args) {
   turnId = `fixture-${which}-turn`;
   reply(id, { turn: turn("inProgress") });
   notify("turn/started", { threadId, turn: turn("inProgress") });
-  // Codex acknowledges both inputs as native user messages. Only the ordinary
-  // reply has a user Chat receipt; full history retains both native inputs.
+  // Native records include both system continuation and ordinary input.
+  // Only ordinary input creates a User Chat receipt.
   const received = {
     type: "userMessage",
-    id:
-      which === "question" ? "native-continuation-input" : "native-work-reply",
+    id: `native-${which}-input`,
     clientId: params.clientUserMessageId ?? null,
     content: params.input,
   };
   item("item/started", received);
   item("item/completed", received);
+  if (!args) {
+    await awaitWorkRelease();
+    active = false;
+    notify("turn/completed", { threadId, turn: turn("completed") });
+    notify("thread/status/changed", { threadId, status: { type: "idle" } });
+    return;
+  }
   const publication = {
     type: "mcpToolCall",
     id: `publication-${which}`,
@@ -476,6 +485,24 @@ async function request(id, method, params) {
       ) {
         const context = JSON.parse(prompt.split("\n").at(-1));
         const [work] = context;
+        if (turnId === "fixture-unanswered-turn") {
+          if (
+            context.length !== 1 ||
+            work.disposition !== "active" ||
+            work.objective !==
+              "Reply to the user's messages and explicitly settle the Work." ||
+            work.title !== undefined ||
+            work.tasks !== undefined
+          )
+            throw new Error(
+              "Fixture continuation did not use hidden reply work",
+            );
+          await workTurn(id, params, "implicit", {
+            action: "finish",
+            message: "Fixture replied without a work plan.",
+          });
+          break;
+        }
         if (
           turnId !== "fixture-refresh-turn" ||
           context.length !== 1 ||
@@ -501,6 +528,10 @@ async function request(id, method, params) {
           action: "finish",
           message: "Fixture work finished on stable.",
         });
+        break;
+      }
+      if (prompt === "Exercise a reply without a work plan") {
+        await workTurn(id, params, "unanswered");
         break;
       }
       if (prompt === "Continue after refreshing project instructions") {

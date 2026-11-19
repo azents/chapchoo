@@ -16,10 +16,10 @@ impl ConversationToolBackend {
         serde_json::to_vec(&json!({"tools":[{
             "name":"send",
             "description":concat!(
-                "Update Conversation Work and optionally send a Chat message. ",
+                "Reply in Chat or update Conversation Work. User input opens reply work without a visible plan. ",
                 "Use action \"continue\" with the complete ordered tasks array (an empty list clears tasks). ",
-                "Supply title when starting work; omit it on updates to retain the current title. Message is optional. ",
-                "Use \"request_input\" with message to ask and wait, or \"finish\" with message to send and complete work. ",
+                "Supply title when first publishing a plan; omit it on updates to retain the current title. Message is optional. ",
+                "Use \"request_input\" with message to ask and wait, or \"finish\" with message to reply and complete work without a plan. ",
                 "Supply only action for \"ignore\" to complete work silently. ",
                 "When ending work because it failed or was cancelled, complete it the same way: use finish to send a message or ignore to close silently. ",
                 "Ordinary model output is not sent."
@@ -28,7 +28,7 @@ impl ConversationToolBackend {
                 "type":"object",
                 "properties":{
                     "action":{"type":"string","enum":["continue","request_input","finish","ignore"]},
-                    "title":{"type":"string","description":"For continue only. Required to start work; optional on updates."},
+                    "title":{"type":"string","description":"For continue only. Required for the first published plan; optional on updates."},
                     "tasks":{"type":"array","description":"Required for continue only. Full ordered task list.","items":{
                         "type":"object","properties":{
                             "text":{"type":"string"},

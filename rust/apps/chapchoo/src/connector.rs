@@ -65,8 +65,9 @@ pub async fn run(
 ) -> Result<(), AppError> {
     // This owner survives every operational key/stream replacement. Reads and
     // connectivity do not start native work; source-qualified commands do later.
-    let mut capture_sync = capture_sync::CaptureSync::new(native.handle());
     let mut operations = operations::Operations::new(native.handle());
+    let mut capture_sync =
+        capture_sync::CaptureSync::new(native.handle(), operations.input_ordering());
     let primary = reconnect(
         endpoint_url,
         session_id,

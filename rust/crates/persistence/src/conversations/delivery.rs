@@ -501,6 +501,14 @@ impl Store {
                         receipt_now
                     );
                 }
+                diesel::sql_query(dialect.query(
+                    "UPDATE conversation_work_items SET reply_ready=TRUE WHERE conversation_id=? AND reply_ready=FALSE
+                     AND EXISTS (SELECT 1 FROM conversation_goals g WHERE g.conversation_id=conversation_work_items.conversation_id
+                     AND g.goal_key=conversation_work_items.goal_key AND g.disposition IN ('active','waiting_for_input'))",
+                ))
+                .bind::<IdentitySql, _>(id)
+                .execute(connection)
+                .await?;
                 diesel::sql_query(
                     dialect
                         .query("DELETE FROM conversation_inputs WHERE id=? AND conversation_id=?"),

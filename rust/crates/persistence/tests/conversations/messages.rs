@@ -5,7 +5,7 @@ use chapchoo_persistence::{
     ConversationMessageWindow, ConversationOperationForwarding, PublishConversationMessage,
 };
 
-async fn pickup(
+pub(super) async fn pickup(
     store: &Store,
     f: &Fixture,
     input: &chapchoo_persistence::ConversationInputReceipt,

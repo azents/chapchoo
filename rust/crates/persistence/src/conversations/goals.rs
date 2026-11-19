@@ -37,6 +37,8 @@ pub(super) struct GoalRow {
     work_title: Option<String>,
     #[diesel(sql_type=Nullable<Text>)]
     work_tasks_json: Option<String>,
+    #[diesel(sql_type=diesel::sql_types::Bool)]
+    reply_ready: bool,
 }
 
 #[derive(Serialize)]
@@ -82,8 +84,11 @@ pub(super) use reset_continuation_count;
 macro_rules! current_goals {
     ($connection:expr,$dialect:expr,$conversation:expr) => {
         diesel::sql_query($dialect.query(
-            "SELECT g.goal_key,g.objective,g.disposition,w.title AS work_title,w.tasks_json AS work_tasks_json
-             FROM conversation_goals g LEFT JOIN conversation_work_items w USING (conversation_id,goal_key)
+            "SELECT g.goal_key,g.objective,g.disposition,NULLIF(w.title,'') AS work_title,
+                    CASE WHEN w.title<>'' THEN w.tasks_json END AS work_tasks_json,
+                    COALESCE(w.reply_ready,TRUE) AS reply_ready
+             FROM conversation_goals g LEFT JOIN conversation_work_items w
+               ON w.conversation_id=g.conversation_id AND w.goal_key=g.goal_key
              WHERE g.conversation_id=? AND g.disposition IN ('active','waiting_for_input') ORDER BY g.goal_key",
         ))
         .bind::<IdentitySql, _>($conversation)
@@ -136,7 +141,10 @@ pub(super) fn bounded_projection(goals: &[GoalRow]) -> Result<Option<Vec<u8>>, S
 }
 
 pub(super) fn forwarding_projection(goals: &[GoalRow]) -> Result<Option<Vec<u8>>, StoreError> {
-    if !goals.iter().any(|goal| goal.disposition == "active") {
+    if !goals
+        .iter()
+        .any(|goal| goal.disposition == "active" && goal.reply_ready)
+    {
         return Ok(None);
     }
     bounded_projection(goals)
@@ -152,6 +160,9 @@ pub(super) fn verify_projection_size(goals: &[GoalRow]) -> Result<(), StoreError
 fn encode_projection(goals: &[GoalRow], reserve_wait: bool) -> Result<Vec<u8>, StoreError> {
     let projection = goals
         .iter()
+        // Count the Work against the full size bound even before pickup,
+        // but do not tell the model to answer input it hasn't received.
+        .filter(|goal| reserve_wait || goal.reply_ready)
         .map(|goal| {
             let context = match (&goal.work_title, &goal.work_tasks_json) {
                 (Some(title), Some(tasks)) => GoalContext::Work {
