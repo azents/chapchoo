@@ -138,7 +138,7 @@ async fn exercise(
         .await?;
     assert!(String::from_utf8(projection)?.contains("Objective B"));
     let mut endings = Vec::new();
-    for n in 1..=11 {
+    for n in 1..=14 {
         let ending = ConversationNormalEnding {
             target: target.clone(),
             position: position(n, &format!("fixture-ending-{n}"))?,
@@ -344,11 +344,102 @@ async fn exercise(
         .ok_or("Oversized context discarded draft Work")?;
     assert_eq!(retained.tasks.len(), oversized_tasks.len());
     store
-        .send_conversation_work(&source, &scope, &SendAction::Ignore)
+        .send_conversation_work(
+            &source,
+            &scope,
+            &SendAction::Continue {
+                title: None,
+                tasks: vec![],
+                message: None,
+            },
+        )
         .await?;
+    settlement_before_grant(store, f, &scope, &endings[10..13]).await?;
     // Remove the synthetic Work overlay before the migration guards run.
     fixture_sql("DELETE FROM conversation_work_items")?;
-    replaced_launch_does_not_inherit_slot(store, f, id, &endings[10]).await?;
+    store
+        .change_conversation_goal(
+            &source,
+            id,
+            &target,
+            "fixture-c",
+            Goal::Add {
+                objective: "Objective C",
+            },
+        )
+        .await?;
+    replaced_launch_does_not_inherit_slot(store, f, id, &endings[13]).await?;
+    Ok(())
+}
+
+async fn settlement_before_grant(
+    store: &Store,
+    f: &Fixture,
+    scope: &ConversationMessageScope<'_>,
+    endings: &[ConversationNormalEnding],
+) -> Result<(), TestError> {
+    let [first, last, next] = endings else {
+        return Err("Expected three distinct fixture endings".into());
+    };
+    let credential = f.connector.digest();
+    let source = f.source(&credential);
+    let conversation = scope.conversation_id;
+    let work = store
+        .conversation_work_summary(&f.owner.digest(), scope, f.now)
+        .await?
+        .ok_or("Missing fixture Work")?;
+    let Decision::Admitted { operation_id } = store
+        .admit_conversation_continuation(&source, conversation, first)
+        .await?
+    else {
+        return Err("Expected admission before Work failure".into());
+    };
+    store
+        .change_conversation_goal(&source, conversation, &first.target, &work.id, Goal::Fail)
+        .await?;
+    let projection = store
+        .begin_conversation_continuation(&source, conversation, &operation_id, first)
+        .await?
+        .ok_or("Work failure displaced the other eligible goal")?;
+    let projection: serde_json::Value = serde_json::from_slice(&projection)?;
+    assert_eq!(
+        projection,
+        serde_json::json!([{
+            "goal_key": "fixture-b", "objective": "Latest objective", "disposition": "active"
+        }])
+    );
+    store
+        .close_conversation_continuation(&source, conversation, &operation_id, first)
+        .await?;
+
+    let decision = store
+        .admit_conversation_continuation(&source, conversation, last)
+        .await?;
+    let Decision::Admitted { operation_id } = &decision else {
+        return Err("Expected admission before the last Goal failure".into());
+    };
+    store
+        .change_conversation_goal(&source, conversation, &last.target, "fixture-b", Goal::Fail)
+        .await?;
+    assert_eq!(
+        store
+            .admit_conversation_continuation(&source, conversation, next)
+            .await?,
+        Decision::NoAction
+    );
+    ordinary_follows_continuation(store, f, conversation, operation_id, last, false).await?;
+    assert_eq!(
+        store
+            .admit_conversation_continuation(&source, conversation, last)
+            .await?,
+        decision
+    );
+    assert!(
+        store
+            .begin_conversation_continuation(&source, conversation, operation_id, last)
+            .await?
+            .is_none()
+    );
     Ok(())
 }
 

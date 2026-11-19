@@ -135,6 +135,13 @@ pub(super) fn bounded_projection(goals: &[GoalRow]) -> Result<Option<Vec<u8>>, S
     Ok((projection.len() <= MAX_GOAL_CONTEXT_BYTES).then_some(projection))
 }
 
+pub(super) fn forwarding_projection(goals: &[GoalRow]) -> Result<Option<Vec<u8>>, StoreError> {
+    if !goals.iter().any(|goal| goal.disposition == "active") {
+        return Ok(None);
+    }
+    bounded_projection(goals)
+}
+
 pub(super) fn verify_projection_size(goals: &[GoalRow]) -> Result<(), StoreError> {
     if encode_projection(goals, true)?.len() > MAX_GOAL_CONTEXT_BYTES {
         return Err(StoreError::InvalidInput);

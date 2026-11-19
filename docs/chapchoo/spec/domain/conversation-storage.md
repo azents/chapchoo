@@ -590,10 +590,14 @@ not a delivery receipt. A replacement launch does not inherit the slot even
 when it resumes the same source. Internal forwarding does not make a user Chat
 receipt; the native record retains the role observed on ACP.
 
-If the retained full context exceeds the bound, a new ending records no
-admission; an existing ungranted slot closes without native forwarding.
-The stored Work remains intact, and the exact slot closure releases ordinary
-input ordering. A failed context read is not an authoritative empty set.
+At forwarding, if no eligible goal remains or the complete retained context
+exceeds the bound, the ungranted slot closes without native forwarding. The
+committed decision and charge remain unchanged. A still-eligible unrelated
+goal can support forwarding, using the complete current projection. If the
+retained context exceeds the bound at admission, the ending records no
+admission. Neither case rewrites stored Work. Closing an ungranted slot
+releases ordinary input ordering, and a failed context read is not an
+authoritative empty set.
 
 ## Conversation Work
 

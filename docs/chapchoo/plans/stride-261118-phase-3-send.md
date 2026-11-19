@@ -69,7 +69,14 @@ tags: [backend, frontend]
   amend an independent goal, or express an explicit harness Work failure.
   Revision 17 does not specify a distinct authorized producer and lifecycle
   for those commands. Do not expose a goal control, infer failure from a
-  turn, or mark the snapshot implemented.
+  turn, extend the `send` inputs to express failure, or mark the snapshot
+  implemented.
+- Settlement ordering follow-up (`M1`, `M4`, `M7`, `REQ-2`, `REQ-3`):
+  check current eligibility at the existing forwarding grant boundary. If
+  no active goal remains, close the exact ungranted slot without replacing
+  the committed decision or changing its charge. A later user receipt alone
+  never cancels admission. Verify both engines with an explicit internal
+  settlement, a later ordinary input, and another eligible goal.
 - Managed restore follow-up (`M5`, `REQ-4`, `ADR-D7`, `ADR-D8`, `ADR-D25`,
   `ADR-D28`): configure official Codex `SessionStart(compact)`, call the
   existing current-source context RPC through a bounded per-launch local

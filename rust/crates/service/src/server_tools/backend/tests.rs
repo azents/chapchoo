@@ -21,6 +21,7 @@ fn publication_arguments_preserve_text_and_reject_unbound_target_or_retry_fields
         json!({"action":"finish","message":"  "}),
         json!({"action":"request_input"}),
         json!({"action":"ignore","message":"must not publish"}),
+        json!({"action":"ignore","outcome":"failed"}),
         json!({"action":"continue","title":"missing tasks"}),
         json!({"action":"continue","tasks":[],"title":null}),
     ] {
@@ -36,6 +37,10 @@ fn publication_arguments_preserve_text_and_reject_unbound_target_or_retry_fields
     assert!(matches!(
         action("send", br#"{"action":"continue","tasks":[]}"#),
         Ok(SendAction::Continue { title: None, tasks, message: None }) if tasks.is_empty()
+    ));
+    assert!(matches!(
+        action("send", br#"{"action":"ignore"}"#),
+        Ok(SendAction::Ignore)
     ));
     Ok(())
 }

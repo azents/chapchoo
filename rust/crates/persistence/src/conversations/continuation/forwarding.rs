@@ -1,7 +1,7 @@
 //! Qualified internal input forwarding; no browser input or Chat receipt.
 
 use super::*;
-use crate::conversations::goals::current_projection;
+use crate::conversations::goals::{current_goals, forwarding_projection};
 
 #[derive(diesel::QueryableByName)]
 struct DeliveryRow {
@@ -80,12 +80,15 @@ impl Store {
             if row.delivery_state != "ADMITTED" || !row.current_launch {
                 return Ok(None);
             }
-            let projection = current_projection!(connection, dialect, id);
+            // Settlement (or wait) can win after admission. Recheck the
+            // shared Goal set, not the ordinary input queue: later receipts
+            // alone never displace an admitted slot.
+            let projection = forwarding_projection(&current_goals!(connection, dialect, id))?;
             let state = if projection.is_some() {
                 "POSSIBLE"
             } else {
-                // Never strand an earlier admitted operation that cannot
-                // produce complete context. No native forwarding was granted.
+                // Never hold ordinary input behind an ungrantable slot.
+                // The original decision and charge are retained.
                 "CLOSED"
             };
             let changed = diesel::sql_query(dialect.query(
