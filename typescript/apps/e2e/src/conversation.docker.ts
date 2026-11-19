@@ -18,12 +18,21 @@ async function savePrompt(page: Page, content: string): Promise<void> {
   await expect(editor).toHaveCount(0);
 }
 
+function recordConversationBody(started: number | null): void {
+  if (started === null) return;
+  test.info().annotations.push({
+    type: "conversation-body-ms",
+    description: String(Math.round(performance.now() - started)),
+  });
+}
+
 // Explicit disposable Docker prerequisites are required; no real model is used.
 test("owner follows Conversation Work and inspects native typed-answer records", async ({
   browser,
 }) => {
   test.setTimeout(660_000);
-  const assembly = await Assembly.createDockerBrowser();
+  const assembly = await test.step("assembly", () =>
+    Assembly.createDockerBrowser());
   let fixture: Awaited<ReturnType<typeof nativeConversation>> | null = null;
   const context = await browser.newContext({
     locale: "en-US",
@@ -36,6 +45,7 @@ test("owner follows Conversation Work and inspects native typed-answer records",
   let historyReads = 0;
   let sendRequests = 0;
   let sendStatus = 0;
+  let bodyStarted: number | null = null;
   page.on("request", (request) => {
     if (request.url().includes("conversations.send")) sendRequests++;
     if (request.url().includes("conversations.region")) historyReads++;
@@ -46,22 +56,25 @@ test("owner follows Conversation Work and inspects native typed-answer records",
       sendStatus = response.status();
   });
   try {
-    fixture = await nativeConversation(assembly);
+    fixture = await test.step("native-fixture", () =>
+      nativeConversation(assembly));
     stage = "prestart-before-first-send";
-    await expect
-      .poll(
-        async () => {
-          const current = await fixture?.current();
-          const target = current?.startup?.sessionReady;
-          return Boolean(
-            target &&
-            current?.conversation?.snapshotId === target.snapshotId &&
-            current.conversation.nativeSessionId === target.nativeSessionId,
-          );
-        },
-        { timeout: 180_000 },
-      )
-      .toBe(true);
+    await test.step("capture-ready", () =>
+      expect
+        .poll(
+          async () => {
+            const current = await fixture?.current();
+            const target = current?.startup?.sessionReady;
+            return Boolean(
+              target &&
+              current?.conversation?.snapshotId === target.snapshotId &&
+              current.conversation.nativeSessionId === target.nativeSessionId,
+            );
+          },
+          { timeout: 180_000 },
+        )
+        .toBe(true));
+    bodyStarted = performance.now();
     const prestarted = await fixture.current();
     const prestartTarget = prestarted.startup?.sessionReady;
     expect(prestartTarget).toBeDefined();
@@ -465,7 +478,9 @@ test("owner follows Conversation Work and inspects native typed-answer records",
       type: "conversation-read-evidence",
       description: `inputToPublicationMs=${inputToPublicationMs};messageReads=${messageReads};historyReads=${historyReads};ssrReceipts=${rendered.length}`,
     });
+    recordConversationBody(bodyStarted);
   } catch (error) {
+    recordConversationBody(bodyStarted);
     // Only selected numeric facts cross the private fixture boundary.
     let diagnostic = "unavailable";
     try {
@@ -484,9 +499,9 @@ test("owner follows Conversation Work and inspects native typed-answer records",
   } finally {
     const cleanup: unknown[] = [];
     for (const close of [
-      () => context.close(),
-      () => fixture?.close(),
-      () => assembly.close(),
+      () => test.step("browser-context-close", () => context.close()),
+      () => test.step("native-fixture-close", async () => fixture?.close()),
+      () => test.step("assembly-close", () => assembly.close()),
     ]) {
       try {
         await close();
@@ -509,7 +524,8 @@ test("a stopped Cloud Computer restores its source and delivers an ordinary mess
   browser,
 }) => {
   test.setTimeout(660_000);
-  const assembly = await Assembly.createDockerBrowser();
+  const assembly = await test.step("assembly", () =>
+    Assembly.createDockerBrowser());
   let fixture: Awaited<ReturnType<typeof nativeConversation>> | null = null;
   const context = await browser.newContext({
     locale: "en-US",
@@ -519,27 +535,31 @@ test("a stopped Cloud Computer restores its source and delivers an ordinary mess
   let stage = "prerequisite";
   let failure: Error | null = null;
   let sends = 0;
+  let bodyStarted: number | null = null;
   page.on("request", (request) => {
     if (request.url().includes("conversations.send")) sends++;
   });
   try {
-    fixture = await nativeConversation(assembly);
+    fixture = await test.step("native-fixture", () =>
+      nativeConversation(assembly));
     stage = "initial-source";
-    await expect
-      .poll(
-        async () => {
-          const current = await fixture?.current();
-          return Boolean(
-            current?.startup?.sessionReady &&
-            current.conversation?.snapshotId ===
-              current.startup.sessionReady.snapshotId &&
-            current.conversation.nativeSessionId ===
-              current.startup.sessionReady.nativeSessionId,
-          );
-        },
-        { timeout: 180_000 },
-      )
-      .toBe(true);
+    await test.step("capture-ready", () =>
+      expect
+        .poll(
+          async () => {
+            const current = await fixture?.current();
+            return Boolean(
+              current?.startup?.sessionReady &&
+              current.conversation?.snapshotId ===
+                current.startup.sessionReady.snapshotId &&
+              current.conversation.nativeSessionId ===
+                current.startup.sessionReady.nativeSessionId,
+            );
+          },
+          { timeout: 180_000 },
+        )
+        .toBe(true));
+    bodyStarted = performance.now();
     const before = await fixture.current();
     const target = before.startup?.sessionReady;
     expect(target).toBeDefined();
@@ -618,7 +638,9 @@ test("a stopped Cloud Computer restores its source and delivers an ordinary mess
       }),
     ).toHaveCount(0);
     await expect(log.locator("[data-message-id]")).toHaveCount(2);
+    recordConversationBody(bodyStarted);
   } catch (error) {
+    recordConversationBody(bodyStarted);
     let diagnostic = "unavailable";
     try {
       diagnostic = (await fixture?.diagnostics()) ?? "unavailable";
@@ -632,9 +654,9 @@ test("a stopped Cloud Computer restores its source and delivers an ordinary mess
   } finally {
     const cleanup: unknown[] = [];
     for (const close of [
-      () => context.close(),
-      () => fixture?.close(),
-      () => assembly.close(),
+      () => test.step("browser-context-close", () => context.close()),
+      () => test.step("native-fixture-close", async () => fixture?.close()),
+      () => test.step("assembly-close", () => assembly.close()),
     ]) {
       try {
         await close();
