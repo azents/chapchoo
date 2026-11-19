@@ -8,7 +8,7 @@ tags: [backend, engine, frontend]
 
 [Requirements](../requirements/stride-261118-conversation-work-continuation.md) ·
 [ADR](../adr/stride-261118-conversation-work-continuation.md) ·
-[Design](../design/stride-261118-conversation-work-continuation.md), revision 17,
+[Design](../design/stride-261118-conversation-work-continuation.md), revision 18,
 approved `M1`–`M10`. Design delta: `None`.
 
 The primary agent owns implementation and integrated validation. The single
@@ -17,7 +17,7 @@ review of each stable phase diff.
 
 1. **Live ending evidence (M3, M9).** Capture and qualify current root endings
    before foreground clears the work target. Prove exclusion of restored,
-   stopped and failed work. No product effects. See
+   stopped and failed native executions. No product effects. See
    [phase plan](stride-261118-phase-1-native.md).
 2. **Goal and follow-up authority (M1–M5, M9–M10).** Build trusted restore and
    report paths, atomic admission and reset, and independently fenced internal

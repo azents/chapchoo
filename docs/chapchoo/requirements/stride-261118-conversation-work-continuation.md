@@ -43,8 +43,8 @@ intentionally published messages appear in Chat, and the summary is removed.
 ## Goals
 
 - Give the common goal foundation exactly five responsibilities: goal setting,
-  unfinished-goal continuation after normal execution, explicit completion and
-  failure, restoration after compaction, and minimum continuation safety.
+  unfinished-goal continuation after normal execution, explicit completion,
+  restoration after compaction, and minimum continuation safety.
 - Make Conversation Work the first consumer, with explicit messaging and work
   actions and a compact progress view.
 - Allow the Connector to report different supported lifecycle hook events to
@@ -67,9 +67,10 @@ intentionally published messages appear in Chat, and the summary is removed.
 
 ### REQ-1. Set goals independently of execution
 
-The Agent can set and amend goals without attaching them to particular
-executions. More than one distinct goal can remain unfinished in the same
-conversation.
+The common foundation lets internal consumers set and amend goals without
+attaching them to particular executions. More than one distinct goal can
+remain unfinished in the same conversation. Conversation Work is the first
+consumer: the Agent sets and updates its associated goal through `send`.
 
 **Acceptance criteria**
 
@@ -77,8 +78,8 @@ conversation.
   unless explicitly changed or ended. Adding a distinct goal does not implicitly
   replace an existing goal.
 - Starting or stopping an execution alone does not create, replace, or settle a goal.
-- Explicitly completed or failed goals remain recorded as outcomes, not in
-  the current goal set. An update exceeding the supported full-context limit
+- Explicitly completed goals remain recorded outside the current goal set.
+  An update exceeding the supported full-context limit
   is rejected without changing existing goals; settlement remains available.
 
 ### REQ-2. Continue unfinished work after normal execution
@@ -99,24 +100,25 @@ message, subject to the continuation safety limit.
 - A live execution ended by a compaction hook is eligible for the same
   follow-up if the native runtime delivers an otherwise qualifying normal
   ending. It does not need to have made another inference after compaction.
-- A follow-up requires at least one goal eligible to continue. A completed,
-  failed or input-waiting goal cannot cause a follow-up on its own. Waiting on
+- A follow-up requires at least one goal eligible to continue. A completed
+  or input-waiting goal cannot cause a follow-up on its own. Waiting on
   one goal does not block an otherwise eligible goal.
 - Internal continuation does not appear as a user Chat message.
 
-### REQ-3. Record explicit completion and failure
+### REQ-3. Record explicit work completion
 
-Record completion and failure as goal/work outcomes, independent of the outcome
-of a native execution. A failure is a harness outcome, not a separate product
-failure surface.
+Completion is the single terminal disposition for Work and its Goal,
+independent of the current native execution.
 
 **Acceptance criteria**
 
-- Explicit completion or failure prevents automatic continuation of that work.
+- Explicit completion removes the Work summary and prevents automatic
+  continuation of that work.
 - Ordinary model output, a normal native turn ending, or all visible to-dos
   being checked off does not by itself mark the work complete.
-- Work failure removes the work summary without a failure badge or automatically
-  authored Chat message.
+- The `send` tool description directs the Agent to complete Work explicitly
+  when it decides to end the work because it cannot be completed or has been
+  cancelled. Use `finish` with an intentional message or `ignore` without one.
 
 ### REQ-4. Restore current goal context after compaction
 
@@ -127,8 +129,8 @@ unsuccessful restore does not settle a goal or require the execution to stop.
 
 - On successful recovery after compaction, the next model step receives the
   same full current goal set and states as continuation would, including
-  explicit amendments. Waiting or terminal status does not filter a goal out
-  of the current set or make it eligible for work.
+  explicit amendments and waiting goals. Inclusion in that set does not make
+  a goal eligible for work.
 - If goal recovery or application fails or times out, let the current execution
   continue without newly restored goal context when the native runtime keeps it
   running. The restore outcome does not change the authoritative goal or by
@@ -248,9 +250,9 @@ execution ending; the server uses it to evaluate goal continuation.
 
 ## Fixed Constraints
 
-- Goal state and current execution state are distinct. Stop never implies goal
-  failure or persistent pause, and neither view state nor adapter recovery is
-  evidence of work completion.
+- Goal state and current execution state are distinct. Stop leaves Work and its
+  Goal unchanged, and neither view state nor adapter recovery is evidence of
+  work completion.
 - Current conversation permissions and ordinary user-input delivery guarantees
   remain in force. Background continuation cannot impersonate a user.
 - Work summary behavior applies to the conversation Chat surface; it does not
@@ -307,3 +309,7 @@ silent no-action when there is no work, and the completion/result boundary
 On 2026-11-19 (KST), the requester clarified that the Conversation Work goal
 context carries its current ordered task list and individual statuses (`REQ-2`,
 `REQ-4`), without introducing Goal management as a product feature.
+
+On 2026-11-19 (KST), the requester clarified that completion is the only Work
+settlement and directed the `send` tool description to use that settlement
+when the Agent ends Work because of failure or cancellation (`REQ-3`).

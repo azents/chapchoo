@@ -384,23 +384,19 @@ async fn settlement_before_grant(
     let credential = f.connector.digest();
     let source = f.source(&credential);
     let conversation = scope.conversation_id;
-    let work = store
-        .conversation_work_summary(&f.owner.digest(), scope, f.now)
-        .await?
-        .ok_or("Missing fixture Work")?;
     let Decision::Admitted { operation_id } = store
         .admit_conversation_continuation(&source, conversation, first)
         .await?
     else {
-        return Err("Expected admission before Work failure".into());
+        return Err("Expected admission before Work completion".into());
     };
     store
-        .change_conversation_goal(&source, conversation, &first.target, &work.id, Goal::Fail)
+        .send_conversation_work(&source, scope, &SendAction::Ignore)
         .await?;
     let projection = store
         .begin_conversation_continuation(&source, conversation, &operation_id, first)
         .await?
-        .ok_or("Work failure displaced the other eligible goal")?;
+        .ok_or("Work completion displaced the other eligible goal")?;
     let projection: serde_json::Value = serde_json::from_slice(&projection)?;
     assert_eq!(
         projection,
@@ -416,10 +412,16 @@ async fn settlement_before_grant(
         .admit_conversation_continuation(&source, conversation, last)
         .await?;
     let Decision::Admitted { operation_id } = &decision else {
-        return Err("Expected admission before the last Goal failure".into());
+        return Err("Expected admission before the last Goal completed".into());
     };
     store
-        .change_conversation_goal(&source, conversation, &last.target, "fixture-b", Goal::Fail)
+        .change_conversation_goal(
+            &source,
+            conversation,
+            &last.target,
+            "fixture-b",
+            Goal::Complete,
+        )
         .await?;
     assert_eq!(
         store

@@ -25,8 +25,10 @@ list and may change the title. A task contains text and `pending`,
 `in_progress` or `completed` status. An empty list removes all tasks without
 closing the work. `continue` may include a message. `request_input` and `finish`
 require a message; without active work they only publish it. `ignore` is silent
-and disallows a message. Unknown fields, recipient changes, retry keys and
-actionless publication are rejected.
+and disallows a message. The tool description directs the Agent to use the
+same explicit completion when ending Work due to failure or cancellation:
+`finish` to send a message or `ignore` to close silently. Unknown fields,
+recipient changes, retry keys and actionless publication are rejected.
 
 The completed transaction applies the
 [work transition](conversation-storage.md#conversation-work) and any immutable

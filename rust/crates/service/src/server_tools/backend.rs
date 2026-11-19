@@ -15,7 +15,7 @@ impl ConversationToolBackend {
     pub fn catalog_definition() -> Result<Vec<u8>, ServiceError> {
         serde_json::to_vec(&json!({"tools":[{
             "name":"send",
-            "description":"Update Conversation Work and optionally send a Chat message. Continue starts work (requires title on first call) or replaces its complete ordered task list (an empty list clears tasks). Request_input asks a question and waits; finish publishes a result and completes work; ignore completes work silently. Ordinary model output is not sent.",
+            "description":"Update Conversation Work and optionally send a Chat message. Continue starts work (requires title on first call) or replaces its complete ordered task list (an empty list clears tasks). Request_input asks a question and waits; finish sends a message and completes work; ignore completes work silently. When ending work because it failed or was cancelled, complete it the same way: use finish to send a message or ignore to close silently. Ordinary model output is not sent.",
             "inputSchema":{
                 "type":"object",
                 "properties":{

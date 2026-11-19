@@ -563,7 +563,7 @@ outgoing dispatch journal or upstream-gap repair is performed by these operation
 ## Conversation goals and continuation decisions
 
 The conversation owns its goals and a shared automatic-admission count. Goal
-identity and explicit terminal outcomes are independent of any native execution.
+identity and explicit completion are independent of any native execution.
 The current projection contains the full active and waiting set. Goal writes
 enforce its 8 KiB UTF-8 serialization bound without truncation. A successful
 empty read returns `[]`, separately from rejection or lookup failure. Goal
@@ -611,8 +611,8 @@ bound rolls back the task/title changes, reset, and optional publication.
 `request_input` enters wait when work is active. Only genuinely new
 accepted input for that conversation releases the wait; recovering an existing
 acceptance does not. `finish` and `ignore` close the affected work and settle its
-associated Goal, not unrelated Goals. Neither cancels a native turn. A terminal
-associated Goal removes the active summary without manufacturing a message.
+associated Goal, not unrelated Goals. Neither cancels a native turn. Completion
+removes the active summary and its Goal from current continuation context.
 
 The owner reads the bounded active summary (title, ordered tasks and input-wait
 status) through `Conversations.Current`. It is independent of captured native

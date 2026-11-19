@@ -1,6 +1,19 @@
 use super::*;
 
 #[test]
+fn send_catalog_guides_work_closure_on_failure_or_cancellation()
+-> Result<(), Box<dyn std::error::Error>> {
+    let catalog: serde_json::Value =
+        serde_json::from_slice(&ConversationToolBackend::catalog_definition()?)?;
+    let description = catalog["tools"][0]["description"]
+        .as_str()
+        .ok_or("Missing send description")?;
+    assert!(description.contains("When ending work because it failed or was cancelled"));
+    assert!(description.contains("use finish to send a message or ignore to close silently"));
+    Ok(())
+}
+
+#[test]
 fn publication_arguments_preserve_text_and_reject_unbound_target_or_retry_fields()
 -> Result<(), Box<dyn std::error::Error>> {
     let body = "  원문 **공백** 🙂\n다음 줄  ";
@@ -21,7 +34,6 @@ fn publication_arguments_preserve_text_and_reject_unbound_target_or_retry_fields
         json!({"action":"finish","message":"  "}),
         json!({"action":"request_input"}),
         json!({"action":"ignore","message":"must not publish"}),
-        json!({"action":"ignore","outcome":"failed"}),
         json!({"action":"continue","title":"missing tasks"}),
         json!({"action":"continue","tasks":[],"title":null}),
     ] {

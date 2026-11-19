@@ -675,3 +675,16 @@ scope, stale-owner exclusion, same-turn ordering, or failure semantics. No
 new hook credential, process isolation, general Goal endpoint, or alternate
 runner is introduced. An ordinary process in the same Computer may invoke this
 local read for the current execution; do not claim hook-only isolation.
+
+## ADR-D29. Use one explicit completion disposition
+
+**Status: clarified and directed for implementation by the requester on
+2026-11-19 (KST).**
+
+For `REQ-1` and `REQ-3`, the common framework provides internal goal
+operations; `send` is the first consumer and manages its associated goal.
+Completion is the sole terminal disposition. The model-facing tool description
+directs the Agent to use `finish` with a message or `ignore` without one when
+ending Work, including when the Work fails or is cancelled. Both paths use the
+existing completion transaction without an extra action or input. Stopping or
+failing an execution still does not complete Work or imply a normal ending.

@@ -7,7 +7,7 @@ tags: [backend, frontend]
 # Phase execution plan
 
 - Branch/base: `feat/stride-conversation-work-send` → PR #143.
-- Inputs: [approved revision 17](../design/stride-261118-conversation-work-continuation.md),
+- Inputs: [approved revision 18](../design/stride-261118-conversation-work-continuation.md),
   [backend phase](stride-261118-phase-2-admission.md), and the approved summary design reference.
 - PR boundary: server-owned Conversation Work, scoped `send`, its exact native
   catalogue cutover, the private Chat summary, and core product acceptance.
@@ -15,8 +15,8 @@ tags: [backend, frontend]
   projected above the existing composer without changing receipt ordering.
 - Approved mechanisms: `M1`, `M6`–`M10`. Authority: `REQ-1`, `REQ-3`,
   `REQ-5`–`REQ-7`, `ADR-D6`, `ADR-D11`–`ADR-D22`, `ADR-D26`, `ADR-D27`.
-- Design delta: `None` for this phase. No managed compaction restore activation,
-  general Goal lookup, new composer, or Admin UI. `M5` remains separately open.
+- Design delta: `None` against the amended baseline. Managed compaction
+  restore follows `ADR-D28`. No general Goal lookup, new composer, or Admin UI.
 - Interfaces: existing authenticated native tool scope and Chat/API authority;
   `send` supplies an explicit work action and optional publication as approved.
 - Removal obligations: replace `send_message` catalogue, dispatch, instructions
@@ -49,12 +49,12 @@ tags: [backend, frontend]
 - Full history checkpoint: the Docker browser journey proves automatic input
   remains absent from Chat receipts but readable with its body in Full history.
   Retain captured items regardless of whether their origin is known.
-- Storage verification follow-up (`M1`, `M7`): exercise explicit failure of
-  the exact Work-associated goal using the existing Store operation on both
-  database engines, including the shared summary/context disposition, no
-  publication, unchanged unrelated goals, and source and retry fencing.
-  The test does not measure the admission count. This follow-up changes no
-  production path or authority.
+- Completion correction (`M1`, `M6`, `M7`, `ADR-D29`): use the existing
+  completion disposition for `finish` and `ignore`; add explicit terminal
+  guidance to the effective `send` catalogue without changing its inputs.
+  Verify silent completion against the summary, Chat and current Goal
+  context on both database engines. Independent add and amend are internal
+  foundation operations verified by repository tests.
 - Work context amendment (`M1`, `M4`, `M5`, `M6`, `M10`; `REQ-1`,
   `REQ-2`, `REQ-4`, `REQ-5`, `ADR-D20`, `ADR-D26`): project the already
   authoritative Work title, ordered task list and task states with the
@@ -64,19 +64,12 @@ tags: [backend, frontend]
   context, size-rejection rollback and input-wait retention on both engines.
   Verify the deterministic product continuation receives the latest tasks.
   No change to the `send` catalog, public authority, or restore activation.
-- Open release gates: the standalone Goal transitions have no product
-  caller. The `send` actions manage one associated goal but cannot add or
-  amend an independent goal, or express an explicit harness Work failure.
-  Revision 17 does not specify a distinct authorized producer and lifecycle
-  for those commands. Do not expose a goal control, infer failure from a
-  turn, extend the `send` inputs to express failure, or mark the snapshot
-  implemented.
 - Settlement ordering follow-up (`M1`, `M4`, `M7`, `REQ-2`, `REQ-3`):
   check current eligibility at the existing forwarding grant boundary. If
   no active goal remains, close the exact ungranted slot without replacing
   the committed decision or changing its charge. A later user receipt alone
-  never cancels admission. Verify both engines with an explicit internal
-  settlement, a later ordinary input, and another eligible goal.
+  never cancels admission. Verify both engines with `ignore`, explicit
+  internal completion, a later ordinary input, and another eligible goal.
 - Managed restore follow-up (`M5`, `REQ-4`, `ADR-D7`, `ADR-D8`, `ADR-D25`,
   `ADR-D28`): configure official Codex `SessionStart(compact)`, call the
   existing current-source context RPC through a bounded per-launch local
