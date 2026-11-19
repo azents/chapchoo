@@ -85,6 +85,25 @@ async fn finish(mut state: State) -> Result<(), TestError> {
 }
 
 #[tokio::test]
+async fn startup_wire_observations_do_not_prime_the_actor_ending() -> Result<(), TestError> {
+    let (_saved, state, observations) = live_state().await?;
+    let running = json!({"sessionUpdate":"state_update","state":"running"});
+    let ended = json!({"sessionUpdate":"state_update","state":"idle","stopReason":"end_turn"});
+    ingest(&state, &observations, "refresh-native", running.clone())?;
+    ingest(&state, &observations, "refresh-native", ended.clone())?;
+    assert!(state.normal_ending()?.is_none());
+    ingest(&state, &observations, "refresh-native", running.clone())?;
+    assert_eq!(state.observe()?.foreground, NativeForeground::Running);
+    observations.enable_normal_endings()?;
+    ingest(&state, &observations, "refresh-native", ended.clone())?;
+    assert!(state.normal_ending()?.is_none());
+    ingest(&state, &observations, "refresh-native", running)?;
+    ingest(&state, &observations, "refresh-native", ended)?;
+    assert!(state.normal_ending()?.is_some());
+    finish(state).await
+}
+
+#[tokio::test]
 async fn child_interactions_are_explicitly_unsupported_without_root_occurrences()
 -> Result<(), TestError> {
     let saved = tempfile::tempdir()?;

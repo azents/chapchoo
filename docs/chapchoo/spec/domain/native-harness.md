@@ -267,6 +267,16 @@ generation. Native state observations are applied at ordered capture ingress,
 not delayed SDK callback completion. Protocol/capture termination reuses physical
 retirement rather than leaving unrecorded work alive.
 
+The native owner can expose the latest qualified root ending separately from
+foreground state. After session setup and actual tool catalogue verification,
+it correlates a captured live `end_turn` with a prior live Running observation
+and the expiring work target. Capture and Stop publication share one ordering
+boundary; if Stop publishes first for that target, the ending is excluded.
+Startup observations, reasonless Idle, abnormal terminals, child updates
+and retained history do not qualify. Repeated reads return the same
+captured occurrence until a new foreground target replaces it or the owner
+retires. This read does not report an ending to the server or initiate work.
+
 ## Retained captured source
 
 The [default-project refresh](agent-instructions.md) qualifies Setup by exact
