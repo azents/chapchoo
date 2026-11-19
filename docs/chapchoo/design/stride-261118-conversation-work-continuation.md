@@ -1,6 +1,7 @@
 ---
 title: "Conversation Work and Goal Continuation Design"
 created: 2026-11-18
+implemented: 2026-11-19
 document_role: primary
 document_type: design
 snapshot_id: stride-261118
