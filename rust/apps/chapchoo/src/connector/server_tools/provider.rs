@@ -1,7 +1,7 @@
 use super::*;
 use chapchoo_harness::{
-    NativeAuthenticationBinding, NativeMcpDeclaration, NativeToolLifetime, NativeToolProvision,
-    NativeToolScope, NativeToolsError, NativeToolsFuture, NativeToolsProvider,
+    NativeAuthenticationBinding, NativeGoalRestore, NativeMcpDeclaration, NativeToolLifetime,
+    NativeToolProvision, NativeToolScope, NativeToolsError, NativeToolsFuture, NativeToolsProvider,
 };
 
 pub(in crate::connector) struct Provider {
@@ -12,6 +12,44 @@ pub(in crate::connector) struct Provider {
 }
 redacted!(Provider);
 impl Provider {
+    fn goal_restore(&self, conversation_id: String) -> NativeGoalRestore {
+        use chapchoo_protocol::conversations as capture;
+        let routes = self.route.clone();
+        Arc::new(move |target| {
+            let routes = routes.clone();
+            let conversation_id = conversation_id.clone();
+            Box::pin(async move {
+                let route = routes.snapshot().map_err(NativeToolsError::new)?;
+                let mut client = capture::connector_capture_client::ConnectorCaptureClient::new(
+                    route.channel.clone(),
+                )
+                .max_decoding_message_size(16 * 1024)
+                .max_encoding_message_size(16 * 1024);
+                let request = super::super::request(
+                    capture::GoalContextRequest {
+                        source: Some(route.source.clone()),
+                        conversation_id,
+                        target: Some(capture::NativeTarget {
+                            snapshot_id: target.snapshot.as_str().into(),
+                            native_session_id: target.native_session.as_str().into(),
+                        }),
+                    },
+                    &route.key,
+                )
+                .map_err(NativeToolsError::new)?;
+                let response = client
+                    .read_goal_context(request)
+                    .await
+                    .map_err(|error| NativeToolsError::new(error.into()))?
+                    .into_inner();
+                Ok(chapchoo_harness::NativeGoalContext::new(
+                    response.projection,
+                    route.restore_route,
+                ))
+            })
+        })
+    }
+
     pub(in crate::connector) fn new(
         route: CurrentRoute,
         scope: NativeToolScope,
@@ -87,7 +125,8 @@ impl NativeToolsProvider for Provider {
                 Ok(declaration) => Ok(NativeToolProvision::new(
                     declaration,
                     Box::new(Lifetime(relay)),
-                )),
+                )
+                .with_goal_restore(self.goal_restore(binding.conversation_id.clone()))),
                 Err(primary) => {
                     let primary = match relay.finish().await {
                         Ok(()) => primary,

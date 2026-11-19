@@ -95,8 +95,17 @@ publish a new continuation. Loss of a possibly committed grant does not authoriz
 another native send, and a lost close response retries the close alone. Closing
 an outstanding slot does not depend on a later capture pass succeeding.
 
-The source-qualified Goal context read is component-only. No managed Codex
-compaction hook or native-local restore endpoint is installed by the Connector.
+The Computer image declares an official Codex `SessionStart(compact)` hook.
+Its relay connects to a per-launch local socket without supplying a target or
+credential. The Connector trusts local invocations, resolves the fixed
+conversation of the live native owner, and reads its current
+[Goal context](conversation-storage.md#conversation-goals-and-continuation-decisions)
+using the existing component route. A replaced route or a Stop that wins
+before response publication supplies no context. A confirmed empty result
+is distinct from a failed or timed-out lookup. The successful bounded response
+is applied by Codex before the next inference of that turn; a failed lookup
+does not initiate a turn or publish a Chat message. There is no public Goal API
+and no separate authentication of the local hook caller.
 
 Input commands carry small operation/source references. The worker pulls the
 sealed original text through authenticated 32-KiB byte reads, validates constant

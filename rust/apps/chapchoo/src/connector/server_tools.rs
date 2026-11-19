@@ -44,11 +44,14 @@ pub(super) struct Route {
     pub(super) channel: Channel,
     pub(super) source: CaptureSource,
     pub(super) key: BearerSecret,
+    restore_route: chapchoo_harness::ContinuationRoute,
 }
 /// Operational updates replace server credentials, never a local capability's
 /// Agent/conversation or its actual native owner's lifetime.
 #[derive(Clone, Default)]
-pub(super) struct CurrentRoute(Arc<Mutex<Option<Route>>>);
+pub(super) struct CurrentRoute(
+    Arc<Mutex<Option<(Route, chapchoo_harness::ContinuationRouteLease)>>>,
+);
 pub(super) struct RouteLease(CurrentRoute);
 redacted!(CurrentRoute, RouteLease);
 impl Drop for RouteLease {
@@ -63,11 +66,16 @@ impl CurrentRoute {
         source: CaptureSource,
         key: &BearerSecret,
     ) -> Result<(), AppError> {
-        *lock(&self.0) = Some(Route {
-            channel,
-            source,
-            key: BearerSecret::parse(key.expose().to_owned())?,
-        });
+        let lease = chapchoo_harness::ContinuationRouteLease::open();
+        *lock(&self.0) = Some((
+            Route {
+                channel,
+                source,
+                key: BearerSecret::parse(key.expose().to_owned())?,
+                restore_route: lease.route(),
+            },
+            lease,
+        ));
         Ok(())
     }
     pub(super) fn withdraw(&self) {
@@ -84,11 +92,12 @@ impl CurrentRoute {
         let route = lock(&self.0);
         route
             .as_ref()
-            .map(|route| {
+            .map(|(route, _)| {
                 Ok(Route {
                     channel: route.channel.clone(),
                     source: route.source.clone(),
                     key: BearerSecret::parse(route.key.expose().to_owned())?,
+                    restore_route: route.restore_route.clone(),
                 })
             })
             .transpose()

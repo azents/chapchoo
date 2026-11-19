@@ -36,6 +36,12 @@ assembled journey. Missing
 native prerequisites fail. This is deterministic assembled-plumbing coverage,
 not authenticated Codex/model or general compatibility acceptance. Default
 browser scenarios and browser-free native integration remain separate owners.
+The same journey invokes the shipped restore relay during live Work and verifies
+the complete amended tasks from the real Connector lookup. A separate isolated
+native fixture uses released Codex and ACP with the managed hook and a synthetic
+model endpoint. It verifies same-turn application before the next inference,
+confirmed absence, failure, timeout, and Stop without a next inference. Neither
+fixture is authenticated live-model acceptance.
 Both-engine queue tests own orphan-consumer expiry, no resurrection, manual
 replacement identity and successful-receipt versus deleted-row closure. Integrated
 RPC tests cover processor return/error/panic, while Connector MCP tests own

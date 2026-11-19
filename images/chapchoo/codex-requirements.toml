@@ -1,0 +1,8 @@
+# Native Codex applies this hook's context before sampling after compaction.
+[[hooks.SessionStart]]
+matcher = 'compact'
+
+[[hooks.SessionStart.hooks]]
+type = 'command'
+command = '''if [ -n "$CHAPCHOO_GOAL_RESTORE_SCRIPT" ]; then exec "$CHAPCHOO_GOAL_RESTORE_NODE" "$CHAPCHOO_GOAL_RESTORE_SCRIPT"; fi'''
+timeout = 3

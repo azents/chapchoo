@@ -661,3 +661,17 @@ catalogue, dispatch and instructions together; verify New and exact Resume
 without exposing a legacy tool or falling back to a fresh context. Qualify
 only native version/path combinations that pass the release checks. No
 deployment or merge is authorized by this decision.
+
+## ADR-D28. Trust the local restore invocation
+
+**Status: accepted by the requester on 2026-11-19 (KST).**
+
+Keep official, unmodified Codex and ACP. The Connector accepts a local restore
+invocation without independently proving that Codex started the hook. The
+endpoint has no caller-selected identifiers; it reads only the applied native
+owner's current conversation under the existing authenticated Control route.
+This supersedes ADR-D25's direct-caller qualification gate, not its read-only
+scope, stale-owner exclusion, same-turn ordering, or failure semantics. No
+new hook credential, process isolation, general Goal endpoint, or alternate
+runner is introduced. An ordinary process in the same Computer may invoke this
+local read for the current execution; do not claim hook-only isolation.

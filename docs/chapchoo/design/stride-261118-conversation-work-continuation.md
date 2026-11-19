@@ -122,7 +122,14 @@ observations support evaluating a live owner and local work occurrence, not
 treating the raw terminal reason as an independent idempotency key or
 claiming a developer-role follow-up.
 
-The managed `SessionStart(source=compact)` hook invokes a bounded, read-only Connector-local restore operation tied to the applied source. The Connector reads under current component authority. Neither the hook nor its request can choose another source or carry platform credentials. Direct caller and stale-owner isolation are implementation acceptance gates.
+The managed `SessionStart(source=compact)` hook on official, unmodified
+Codex invokes a bounded, read-only Connector-local restore operation tied to
+the applied source (`ADR-D28`). Accept the local invocation without proving
+hook provenance. It carries no source selector or platform credentials.
+The Connector reads under current component authority and revalidates the
+exact live work and route before returning context. A local direct invocation
+is permitted only within the endpoint's same applied-owner scope; stale owner
+and stopped work are still excluded. No product Goal read API is introduced.
 
 ## `send` transitions and results
 
@@ -209,3 +216,7 @@ PostgreSQL, Connector ACK or forwarding evidence.
   continue. This clarifies `M1`, `M4`, `M5`, and `M6` under the existing
   full-context bound. The authority IDs, documented completion actions,
   and merge and deployment boundaries are unchanged.
+- On `2026-11-19` (KST), the requester accepted `ADR-D28` for `M5`: use
+  unmodified Codex, trust the Connector-local call without additional caller
+  authentication or isolation, and proceed with implementation. Existing
+  source scope and failure semantics still apply.

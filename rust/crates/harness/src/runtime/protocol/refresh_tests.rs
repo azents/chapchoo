@@ -27,6 +27,7 @@ async fn live_state() -> Result<(tempfile::TempDir, State, Arc<Observations>), T
         stderr: tokio::spawn(async { Ok(()) }),
         done,
         ended: CancellationToken::new(),
+        restore: None,
         session: None,
         requests: Arc::default(),
         _supply: AppliedSupply {

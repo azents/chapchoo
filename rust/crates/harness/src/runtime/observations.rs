@@ -348,6 +348,32 @@ impl Observations {
         state.continuation_published = true;
         Ok(publish())
     }
+    pub(super) fn restore_work(&self) -> Option<NativeWorkTarget> {
+        let state = self.0.lock().ok()?;
+        if state.foreground != Some(NativeForeground::Running) || state.stop_published {
+            return None;
+        }
+        let (snapshot, native) = state.source.as_ref()?;
+        Some(NativeWorkTarget {
+            snapshot: snapshot.clone(),
+            native_session: native.clone(),
+            work_id: state.work.clone()?,
+        })
+    }
+
+    pub(super) fn publish_restore(&self, work: &NativeWorkTarget, publish: impl FnOnce()) {
+        if let Ok(state) = self.0.lock()
+            && state.foreground == Some(NativeForeground::Running)
+            && !state.stop_published
+            && state.work.as_ref() == Some(&work.work_id)
+            && state.source.as_ref().is_some_and(|(snapshot, native)| {
+                snapshot == &work.snapshot && native == &work.native_session
+            })
+        {
+            publish();
+        }
+    }
+
     pub(super) fn current(&self) -> Result<NativeObservation, Error> {
         let state = self.0.lock().map_err(|_| Error::Protocol)?;
         Ok(NativeObservation {
@@ -432,6 +458,48 @@ mod tests {
         observations.bind(capture.snapshot()?, native, false)?;
         Ok((root, capture, observations))
     }
+
+    #[tokio::test]
+    async fn restore_drops_reply_when_stop_wins_while_reading() -> Result<(), TestError> {
+        use tokio::{io::AsyncReadExt, net::UnixStream, sync::Notify};
+        let (root, capture, observations) = fixture()?;
+        let observations = Arc::new(observations);
+        observations.record_live(&capture, &state_line("native", "running", None))?;
+        let work = observations.restore_work().ok_or("No running work")?;
+        let entered = Arc::new(Notify::new());
+        let release = Arc::new(Notify::new());
+        let read_route = crate::ContinuationRouteLease::open();
+        let read: crate::NativeGoalRestore = {
+            let entered = entered.clone();
+            let release = release.clone();
+            let route = read_route.route();
+            Arc::new(move |_| {
+                let entered = entered.clone();
+                let release = release.clone();
+                let route = route.clone();
+                Box::pin(async move {
+                    entered.notify_one();
+                    release.notified().await;
+                    Ok(crate::NativeGoalContext::new(
+                        b"[{\"title\":\"synthetic\"}]".to_vec(),
+                        route,
+                    ))
+                })
+            })
+        };
+        let _listener =
+            super::super::goal_restore::Listener::start(root.path(), observations.clone(), read)?;
+        let mut socket =
+            UnixStream::connect(root.path().join(super::super::goal_restore::SOCKET)).await?;
+        tokio::time::timeout(Duration::from_secs(2), entered.notified()).await?;
+        observations.publish_stop(&work, || Ok(()))?;
+        release.notify_one();
+        let mut response = Vec::new();
+        tokio::time::timeout(Duration::from_secs(2), socket.read_to_end(&mut response)).await??;
+        assert!(response.is_empty());
+        Ok(())
+    }
+
     #[test]
     fn normal_ending_reuses_exact_live_work_and_occurrence_until_next_work() -> Result<(), TestError>
     {

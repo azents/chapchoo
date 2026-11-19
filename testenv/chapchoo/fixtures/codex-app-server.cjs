@@ -4,6 +4,9 @@
 const { createInterface } = require("node:readline");
 const { existsSync, readFileSync, writeFileSync, watch } = require("node:fs");
 const { join } = require("node:path");
+const { execFile } = require("node:child_process");
+const { promisify } = require("node:util");
+const runFile = promisify(execFile);
 
 /** Optional test-owned barrier: positive native work remains live until release. */
 async function awaitWorkRelease() {
@@ -563,6 +566,25 @@ async function request(id, method, params) {
           result: refreshedResult,
           durationMs: 0,
         });
+        // The real Codex uses the managed SessionStart hook for this call.
+        // This fixture proves the same shipped script and product lookup end to end.
+        const { stdout } = await runFile(
+          process.env.CHAPCHOO_GOAL_RESTORE_NODE,
+          [process.env.CHAPCHOO_GOAL_RESTORE_SCRIPT],
+          { timeout: 2500 },
+        );
+        const restored = JSON.parse(stdout).hookSpecificOutput;
+        const [current] = JSON.parse(
+          restored.additionalContext.split("\n").at(-1),
+        );
+        if (
+          restored.hookEventName !== "SessionStart" ||
+          current.title !== refreshedPublication.arguments.title ||
+          current.disposition !== "active" ||
+          JSON.stringify(current.tasks) !==
+            JSON.stringify(refreshedPublication.arguments.tasks)
+        )
+          throw new Error("Fixture restore did not read the current Work");
         active = false;
         notify("turn/completed", { threadId, turn: turn("completed") });
         notify("thread/status/changed", { threadId, status: { type: "idle" } });

@@ -69,5 +69,10 @@ tags: [backend, frontend]
   amend an independent goal, or express an explicit harness Work failure.
   Revision 17 does not specify a distinct authorized producer and lifecycle
   for those commands. Do not expose a goal control, infer failure from a
-  turn, or mark the snapshot implemented. `M5` still needs an authenticated,
-  invocation-bound native restore channel with a next-inference barrier.
+  turn, or mark the snapshot implemented.
+- Managed restore follow-up (`M5`, `REQ-4`, `ADR-D7`, `ADR-D8`, `ADR-D25`,
+  `ADR-D28`): configure official Codex `SessionStart(compact)`, call the
+  existing current-source context RPC through a bounded per-launch local
+  listener, and verify application before the next inference. No added
+  caller authentication, separate process isolation, or patched native
+  dependencies. Qualify absence, timeout, Stop and source replacement.
