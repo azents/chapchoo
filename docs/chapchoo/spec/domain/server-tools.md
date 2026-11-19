@@ -30,6 +30,11 @@ same explicit completion when ending Work due to failure or cancellation:
 `finish` to send a message or `ignore` to close silently. Unknown fields,
 recipient changes, retry keys and actionless publication are rejected.
 
+The model-facing input schema declares the field types in one object and
+requires only `action` unconditionally. The descriptions guide field selection;
+the server validates required and forbidden fields for each action. The Work
+transaction also requires a title when `continue` starts new work.
+
 The completed transaction applies the
 [work transition](conversation-storage.md#conversation-work) and any immutable
 [chat receipt](conversation-storage.md#independent-chat-receipts) together.

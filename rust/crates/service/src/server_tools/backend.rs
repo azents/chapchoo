@@ -15,26 +15,29 @@ impl ConversationToolBackend {
     pub fn catalog_definition() -> Result<Vec<u8>, ServiceError> {
         serde_json::to_vec(&json!({"tools":[{
             "name":"send",
-            "description":"Update Conversation Work and optionally send a Chat message. Continue starts work (requires title on first call) or replaces its complete ordered task list (an empty list clears tasks). Request_input asks a question and waits; finish sends a message and completes work; ignore completes work silently. When ending work because it failed or was cancelled, complete it the same way: use finish to send a message or ignore to close silently. Ordinary model output is not sent.",
+            "description":concat!(
+                "Update Conversation Work and optionally send a Chat message. ",
+                "Use action \"continue\" with the complete ordered tasks array (an empty list clears tasks). ",
+                "Supply title when starting work; omit it on updates to retain the current title. Message is optional. ",
+                "Use \"request_input\" with message to ask and wait, or \"finish\" with message to send and complete work. ",
+                "Supply only action for \"ignore\" to complete work silently. ",
+                "When ending work because it failed or was cancelled, complete it the same way: use finish to send a message or ignore to close silently. ",
+                "Ordinary model output is not sent."
+            ),
             "inputSchema":{
                 "type":"object",
                 "properties":{
                     "action":{"type":"string","enum":["continue","request_input","finish","ignore"]},
-                    "title":{"type":"string"},
-                    "tasks":{"type":"array","items":{
+                    "title":{"type":"string","description":"For continue only. Required to start work; optional on updates."},
+                    "tasks":{"type":"array","description":"Required for continue only. Full ordered task list.","items":{
                         "type":"object","properties":{
                             "text":{"type":"string"},
                             "status":{"type":"string","enum":["pending","in_progress","completed"]}
                         },"required":["text","status"],"additionalProperties":false
                     }},
-                    "message":{"type":"string"}
+                    "message":{"type":"string","description":"Required for request_input and finish, optional for continue. Omit for ignore."}
                 },
-                "required":["action"],"additionalProperties":false,
-                "oneOf":[
-                    {"properties":{"action":{"const":"continue"}},"required":["tasks"]},
-                    {"properties":{"action":{"enum":["request_input","finish"]},"title":false,"tasks":false},"required":["message"]},
-                    {"properties":{"action":{"const":"ignore"},"title":false,"tasks":false,"message":false}}
-                ]
+                "required":["action"],"additionalProperties":false
             },
             "outputSchema":{"type":"object","properties":{"message_id":{"type":"string"}},"additionalProperties":false}
         }]})).map_err(ServiceError::infrastructure)
