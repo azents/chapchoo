@@ -13,7 +13,6 @@ pub enum ConversationGoalChange<'a> {
     Add { objective: &'a str },
     Amend { objective: &'a str },
     Complete,
-    Fail,
 }
 impl fmt::Debug for ConversationGoalChange<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -174,20 +173,14 @@ impl Store {
                     }
                     verify_projection_size(&mut current_goals!(connection, dialect, id))?;
                 }
-                ConversationGoalChange::Complete | ConversationGoalChange::Fail => {
-                    let disposition = if matches!(change, ConversationGoalChange::Complete) {
-                        "completed"
-                    } else {
-                        "failed"
-                    };
+                ConversationGoalChange::Complete => {
                     let prior = prior.ok_or(StoreError::NotFound)?;
                     match prior.disposition.as_str() {
-                        existing if existing == disposition => return Ok(()),
+                        "completed" => return Ok(()),
                         "active" | "waiting_for_input" => {}
                         _ => return Err(StoreError::InvalidTransition),
                     }
-                    diesel::sql_query(dialect.query("UPDATE conversation_goals SET disposition=? WHERE conversation_id=? AND goal_key=?"))
-                        .bind::<Text, _>(disposition)
+                    diesel::sql_query(dialect.query("UPDATE conversation_goals SET disposition='completed' WHERE conversation_id=? AND goal_key=?"))
                         .bind::<IdentitySql, _>(id)
                         .bind::<Text, _>(goal_key)
                         .execute(connection)

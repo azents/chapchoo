@@ -3,7 +3,7 @@ CREATE TABLE conversation_goals (
     goal_key TEXT NOT NULL,
     original_objective TEXT NOT NULL,
     objective TEXT NOT NULL,
-    disposition TEXT NOT NULL CHECK (disposition IN ('active', 'waiting_for_input', 'completed', 'failed')),
+    disposition TEXT NOT NULL CHECK (disposition IN ('active', 'waiting_for_input', 'completed')),
     PRIMARY KEY (conversation_id, goal_key)
 );
 CREATE TABLE conversation_continuation_counts (
