@@ -15,6 +15,19 @@ function missing(error: unknown): boolean {
   return error instanceof Error && "code" in error && error.code === "ENOENT";
 }
 
+const measuredPhases = new Set([
+  "assembly",
+  "native-fixture",
+  "capture-ready",
+  "browser-context-close",
+  "native-fixture-close",
+  "assembly-close",
+]);
+
+function elapsed(value: number): number | null {
+  return Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
 /** Only public Reporter APIs; transient runner artifacts stay inside a 0700 parent. */
 export default class SafeReporter implements Reporter {
   private privacyFailed = false;
@@ -79,6 +92,23 @@ export default class SafeReporter implements Reporter {
         );
       }
     }
+    const phases = Object.fromEntries(
+      result.steps
+        .filter(
+          (step) =>
+            step.category === "test.step" && measuredPhases.has(step.title),
+        )
+        .map((step) => [step.title, elapsed(step.duration)]),
+    );
+    const body = result.annotations.find(
+      (annotation) => annotation.type === "conversation-body-ms",
+    )?.description;
+    if (body && /^\d{1,12}$/.test(body)) {
+      phases["conversation-body"] = elapsed(Number(body));
+    }
+    process.stdout.write(
+      `Acceptance timing: ${JSON.stringify({ wallMs: elapsed(result.duration), phasesMs: phases })}\n`,
+    );
     process.stdout.write(`${result.status}: ${sanitize(test.title)}\n`);
     if (result.status !== "passed" && result.status !== "skipped") {
       for (const error of result.errors) {

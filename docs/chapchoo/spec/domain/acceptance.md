@@ -67,10 +67,13 @@ runs the independent-image smoke check on those existing local images, and
 exports archives/checksums. This checks root/prefixed startup, runtime isolation,
 static assets, private RPC and shutdown before PR merge without another build
 or product E2E. General CI owns product-test orchestration:
-its single downstream `browser-e2e` job waits only for the x86-64 package and consumes
-that same run's x86-64 archive, verifies its checksum, and runs the four core
-PostgreSQL/browser journeys once using only the bundled executable, Node and web
-outputs. It does not rebuild the product or repeat source/per-architecture E2E.
+its single downstream `browser-e2e` job waits only for the x86-64 package and
+verifies that same run's archive by checksum. Both the four core browser
+journeys and the Docker conversation browser journeys use its bundled
+executable, Node and web outputs. The Docker journeys keep independent
+assemblies and a container-reachable Control listener; neither browser suite
+rebuilds the product. The reporter publishes wall times and named Docker
+setup, scenario and teardown durations without native process output.
 Each architecture's package waits only for its own web and binary producers.
 ARM64 remains a native build/ELF/assembly/image-smoke gate rather than a second
 product-test lane. Snapshot checks the exact images it publishes as well.

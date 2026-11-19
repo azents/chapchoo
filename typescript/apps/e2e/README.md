@@ -69,8 +69,10 @@ docker buildx build --load \
 Select only a disposable, authorized daemon using the same
 `CHAPCHOO_INTEGRATION_DOCKER_{AUTHORIZED,SOCKET,IMAGE,CONTROL_HOST}` inputs as the
 browser-free integration app (`AUTHORIZED=disposable`; `CONTROL_HOST` is optional
-when its bridge gateway reaches the fixture host). Set
-`CHAPCHOO_INTEGRATION_BINARY` to the same absolute executable. Clear ambient
+when its bridge gateway reaches the fixture host). In package mode, use the
+extracted package as `binary-artifacts` when building the fixture. In source
+mode, set `CHAPCHOO_INTEGRATION_BINARY` to the same absolute executable used
+to build the fixture. Clear ambient
 Docker transport variables; Unix socket selection remains explicit. The native
 security profile is unchanged. No real key or model is required. Where the host
 temporary root fails native compiler-cache validation, set
@@ -78,10 +80,12 @@ temporary root fails native compiler-cache validation, set
 never disable validation or change shared-directory permissions.
 
 `CHAPCHOO_E2E_PACKAGE_ROOT` selects an absolute extracted source-free bundle.
-Package mode never falls back to source builds or host Node. The test substrate
-prepares a private PostgreSQL database using the official product CLI and launches
-separate Client+Control and Admin API processes and both webs with root mounts. Source mode uses the same public
-contracts with `/app` and `/admin` mounts and production web listeners.
+Both browser suites use it without source builds or host Node. The test
+substrate prepares a private PostgreSQL database using the official product
+CLI and launches separate Client+Control and Admin API processes and both
+webs with root mounts. Docker mode keeps the Control listener reachable from
+its owned bridge. Source mode uses the same public contracts with `/app` and
+`/admin` mounts and production web listeners.
 
 ## Ownership and lifecycle
 

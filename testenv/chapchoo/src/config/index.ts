@@ -77,6 +77,24 @@ export function integrationBinary(): string | null {
   }
 }
 
+export function assemblyArtifacts(
+  docker: boolean,
+  browser: boolean,
+): { packageRoot: string | null; nativeBinary: string | null } {
+  const packageRoot = browser ? installedPackageRoot() : null;
+  const nativeBinary = docker ? integrationBinary() : null;
+  if (
+    packageRoot &&
+    nativeBinary &&
+    nativeBinary !== realpathSync(join(packageRoot, "chapchoo"))
+  ) {
+    throw new Error(
+      "Docker browser acceptance requires its binary and web artifacts from the same package",
+    );
+  }
+  return { packageRoot, nativeBinary: packageRoot ? null : nativeBinary };
+}
+
 export interface DockerFixtureConfig {
   socket: string;
   image: string;

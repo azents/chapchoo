@@ -5,11 +5,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
+  assemblyArtifacts,
   buildEnvironment,
-  installedPackageRoot,
   safeEnvironment,
   dockerFixtureConfig,
-  integrationBinary,
 } from "./config/index.js";
 import type { DockerFixtureConfig } from "./config/index.js";
 import { DockerFixture } from "./docker.js";
@@ -95,8 +94,10 @@ export class Assembly {
     browser = !realDocker,
   ): Promise<Assembly> {
     const docker = realDocker ? dockerFixtureConfig() : null;
-    const packageRoot = realDocker ? null : installedPackageRoot();
-    const nativeBinary = realDocker ? integrationBinary() : null;
+    const { packageRoot, nativeBinary } = assemblyArtifacts(
+      realDocker,
+      browser,
+    );
     const directory = await mkdtemp(join(tmpdir(), "chapchoo-e2e-"));
     const ports = new Set<number>();
     let assembly: Assembly | null = null;
@@ -283,7 +284,7 @@ export class Assembly {
         "client,control",
         "--listen",
         `${this.docker ? "0.0.0.0" : "127.0.0.1"}:${this.generalPort}`,
-        ...(this.packageRoot && !this.docker
+        ...(this.packageRoot
           ? [
               "--web",
               "both",
@@ -309,7 +310,7 @@ export class Assembly {
       },
     );
     await this.product.ready(
-      this.packageRoot && !this.docker
+      this.packageRoot
         ? /Selected components are ready/
         : /Selected backend service groups are ready/,
       60_000,
