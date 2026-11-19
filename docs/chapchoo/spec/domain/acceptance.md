@@ -62,13 +62,13 @@ Web-core separately owns the actual logout-response HTTP/browser integration.
 Browser delayed-cookie arrival semantics are dependency behavior and are not a
 product acceptance scenario.
 
-The reusable native package workflow assembles images on actual x86-64/ARM64 runners,
-runs the independent-image smoke check on those existing local images, and
-exports archives/checksums. This checks root/prefixed startup, runtime isolation,
-static assets, private RPC and shutdown before PR merge without another build
-or product E2E. General CI owns product-test orchestration:
-its single downstream `browser-e2e` job waits only for the x86-64 package and
-verifies that same run's archive by checksum. Both the four core browser
+General CI assembles archives and verifies native images from the same run's
+architecture-matched outputs. The independent-image smoke checks cover
+root/prefixed startup, runtime isolation, static assets, private RPC and
+shutdown. On x86-64, image checks run in `docker-integration`, in parallel
+with archive preparation; on ARM64, they remain with archive preparation.
+`browser-e2e` waits only for the x86-64 archive and verifies its checksum,
+not the image checks. Both the four core browser
 journeys and the Docker conversation browser journeys use its bundled
 executable, Node and web outputs. The Docker journeys keep independent
 assemblies and a container-reachable Control listener; neither browser suite
@@ -80,11 +80,12 @@ product-test lane. Snapshot checks the exact images it publishes as well.
 Workflow configuration is not an executed success; actual exact-head CI results
 must be reported separately.
 
-The separate required `docker-integration` job owns a browser-free real Docker
-lifecycle. It downloads that same run's native binary artifact for actual
-backend/Control/Provider and the Computer image; no web artifact, server or
-Chromium is required. It starts after the x86-64 binary producer, independently
-of web builds and native packaging. `typescript/apps/integration` calls generated public
+The `docker-integration` job uses the x86-64 web and binary artifacts
+to build and smoke-test the native images, independently of archive preparation.
+The tested backend image is reused for both the browser-free real Docker
+lifecycle and the owned Kubernetes cluster test; it is not rebuilt.
+The lifecycle test itself starts no web servers or Chromium.
+`typescript/apps/integration` calls generated public
 account/Computer RPC and asserts connected Create, Stop/Start with original data,
 successor no-copy including emptied storage, normal Delete and untouched canaries.
 Public Docker SDK support supplies only prerequisites/marker IO. Existing browser

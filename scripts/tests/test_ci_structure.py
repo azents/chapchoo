@@ -64,19 +64,9 @@ class CiStructureTests(unittest.TestCase):
         self.assertNotIn("test:e2e", workflow)
         self.assertNotIn("test-installed-linux.py", workflow)
         self.assertIn(
-            "python3 scripts/test-container-images.py \\\n"
-            "            --backend chapchoo-package-backend:ci \\\n"
-            "            --general chapchoo-package-general:ci \\\n"
-            "            --admin chapchoo-package-admin:ci",
+            "if: inputs.verify-images\n"
+            "        uses: ./.github/actions/verify-native-images",
             workflow,
-        )
-        self.assertLess(
-            workflow.index("uses: docker/bake-action@"),
-            workflow.index("python3 scripts/test-container-images.py"),
-        )
-        self.assertLess(
-            workflow.index("python3 scripts/test-container-images.py"),
-            workflow.index("python3 scripts/package-linux.py"),
         )
         ci = (ROOT / ".github/workflows/ci.yaml").read_text()
         self.assertIn("uses: ./.github/workflows/linux-package.yaml", ci)
@@ -92,15 +82,28 @@ class CiStructureTests(unittest.TestCase):
         self.assertIn('web-artifacts/general/standalone"', workflow)
         self.assertIn('web-artifacts/admin/standalone"', workflow)
         self.assertNotIn("needs:", workflow)
-        self.assertEqual(workflow.count("uses: docker/bake-action@"), 1)
+        self.assertNotIn("uses: docker/bake-action@", workflow)
         self.assertNotIn("push: true", workflow)
-        for filename in ["linux-package.yaml", "snapshot.yaml"]:
-            text = (ROOT / ".github/workflows" / filename).read_text()
-            self.assertIn(
-                "source: .\n          files: images/chapchoo/ci-bake.hcl", text
-            )
-            self.assertIn("fs.read=${{ runner.temp }}/web-artifacts", text)
-            self.assertIn("fs.read=${{ runner.temp }}/binary-artifacts", text)
+
+    def test_native_image_action_bakes_and_checks_all_existing_targets(self) -> None:
+        action = (ROOT / ".github/actions/verify-native-images/action.yaml").read_text()
+        self.assertLess(
+            action.index("docker/bake-action@"),
+            action.index("test-container-images.py"),
+        )
+        self.assertIn("source: .\n        files: images/chapchoo/ci-bake.hcl", action)
+        for artifact in ("web-artifacts", "binary-artifacts"):
+            self.assertIn(f"fs.read=${{{{ inputs.{artifact} }}}}", action)
+        for image in ("backend", "general", "admin"):
+            self.assertIn(f"--{image} chapchoo-package-{image}:ci", action)
+        self.assertNotIn("continue-on-error:", action)
+        self.assertNotIn("push:", action)
+        snapshot = (ROOT / ".github/workflows/snapshot.yaml").read_text()
+        self.assertIn(
+            "source: .\n          files: images/chapchoo/ci-bake.hcl", snapshot
+        )
+        self.assertIn("fs.read=${{ runner.temp }}/web-artifacts", snapshot)
+        self.assertIn("fs.read=${{ runner.temp }}/binary-artifacts", snapshot)
 
     def test_root_workspace_owns_shared_testenv_and_builder_inputs(self) -> None:
         workspace = (ROOT / "pnpm-workspace.yaml").read_text()
@@ -151,19 +154,23 @@ class CiStructureTests(unittest.TestCase):
         )
 
     def test_new_actions_are_immutable_and_cache_has_architecture_scope(self) -> None:
-        for filename in [
-            "ci.yaml",
-            "linux-package.yaml",
-            "build-web.yaml",
-            "build-binary.yaml",
-            "snapshot.yaml",
+        for path in [
+            ".github/workflows/ci.yaml",
+            ".github/workflows/linux-package.yaml",
+            ".github/workflows/build-web.yaml",
+            ".github/workflows/build-binary.yaml",
+            ".github/workflows/snapshot.yaml",
+            ".github/actions/verify-native-images/action.yaml",
         ]:
-            content = (ROOT / ".github/workflows" / filename).read_text()
+            content = (ROOT / path).read_text()
             for action in re.findall(r"uses: ([^\s]+)", content):
-                if action.startswith("./.github/workflows/"):
+                if (
+                    action.startswith("./.github/workflows/")
+                    or action == "./.github/actions/verify-native-images"
+                ):
                     continue
                 self.assertRegex(action, r"^[^@]+@[0-9a-f]{40}$")
-        native = (ROOT / ".github/workflows/linux-package.yaml").read_text()
+        native = (ROOT / ".github/actions/verify-native-images/action.yaml").read_text()
         self.assertEqual(native.count("cache-to=type=gha,scope="), 3)
         for line in native.splitlines():
             if "cache-to=" in line or "cache-from=" in line:
@@ -194,21 +201,29 @@ class CiStructureTests(unittest.TestCase):
             "  docker-integration:", 1
         )
         for required in [
-            "needs: binary-x86",
+            "needs: [web-x86, binary-x86]",
             "name: binary-build-x86_64",
+            "name: web-build-x86_64",
             "binary-artifacts.tar",
-            "--build-context",
+            "uses: ./.github/actions/verify-native-images",
+            "architecture: x86_64",
             "CHAPCHOO_INTEGRATION_BINARY=",
             "CHAPCHOO_INTEGRATION_DOCKER_AUTHORIZED=disposable",
             "CHAPCHOO_INTEGRATION_DOCKER_SOCKET=/var/run/docker.sock",
-            "CHAPCHOO_INTEGRATION_DOCKER_IMAGE=chapchoo-computer-acceptance:ci",
+            "CHAPCHOO_INTEGRATION_DOCKER_IMAGE=chapchoo-package-backend:ci",
             "pnpm --filter @chapchoo/integration test:integration",
+            "python3 scripts/check-provider-auth-cluster.py --image chapchoo-package-backend:ci",
         ]:
             self.assertIn(required, native)
         self.assertIn("pnpm --filter @chapchoo/e2e test:e2e", browser)
         self.assertIn("pnpm --filter @chapchoo/e2e test:conversation", browser)
         self.assertIn("CHAPCHOO_INTEGRATION_DOCKER_AUTHORIZED: disposable", browser)
         self.assertIn("binary-artifacts=$CHAPCHOO_E2E_PACKAGE_ROOT", browser)
+        self.assertLess(
+            native.index("uses: ./.github/actions/verify-native-images"),
+            native.index("pnpm --filter @chapchoo/integration test:integration"),
+        )
+        self.assertNotIn("docker buildx build", native)
         self.assertNotIn("playwright", native)
         image = (ROOT / "images/chapchoo/Dockerfile").read_text()
         self.assertIn("mkdir -p /opt/chapchoo /workspace", image)
@@ -248,7 +263,9 @@ class CiStructureTests(unittest.TestCase):
                 self.assertIn(f"architecture: {machine}\n", job)
             self.assertIn(f"architecture: {machine}\n", jobs[package])
             self.assertIn(f"node-architecture: {node}\n", jobs[package])
-        self.assertIn("needs: binary-x86\n", jobs["docker-integration"])
+        self.assertIn("verify-images: false", jobs["native-build"])
+        self.assertIn("verify-images: true", jobs["native-build-arm"])
+        self.assertIn("needs: [web-x86, binary-x86]\n", jobs["docker-integration"])
         self.assertIn("needs: native-build\n", jobs["browser-e2e"])
         self.assertIn("if: always()", jobs["validate"])
         self.assertIn(
