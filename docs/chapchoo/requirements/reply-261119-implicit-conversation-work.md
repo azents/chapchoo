@@ -1,6 +1,7 @@
 ---
 title: "Implicit Conversation Reply Work Requirements"
 created: 2026-11-19
+implemented: 2026-11-19
 tags: [backend, frontend, engine]
 document_role: primary
 document_type: requirements

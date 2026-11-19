@@ -1,6 +1,7 @@
 ---
 title: "Implicit Conversation Reply Work Design"
 created: 2026-11-19
+implemented: 2026-11-19
 tags: [backend, engine]
 document_role: primary
 document_type: design
