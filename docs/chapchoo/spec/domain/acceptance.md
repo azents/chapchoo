@@ -131,6 +131,10 @@ generated RPC and other contract hooks still execute. Local commit hooks retain
 their original full checks. Cargo, pre-commit environments, Turbo results and
 Next compiler caches are reused with toolchain/dependency-aware keys; source
 verification and actual tests remain required on every full CI execution.
+The hosted Rust quality job installs its pinned toolchain into a job-private
+Rustup home. Its Cargo cache includes the selected toolchain and runner OS
+family, not unrelated toolchains preinstalled on the runner. A cache miss
+still runs the same checks, and release builders are unchanged.
 
 No live Helm/Argo deployment, external TLS/HTTP2 or live product acceptance is
 established yet. Those gates require explicit cluster/namespace, exposure/TLS,
