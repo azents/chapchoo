@@ -57,7 +57,8 @@ pub(super) async fn exercise(
                 c::InputChunkRequest {
                     source: Some(context.source.clone()),
                     command: Some(command.clone()),
-                    offset: 0
+                    offset: 0,
+                    guards_model_start: false,
                 },
                 context.key
             )?)
@@ -130,6 +131,7 @@ pub(super) async fn exercise(
                     source: Some(context.source.clone()),
                     command: Some(command.clone()),
                     offset,
+                    guards_model_start: false,
                 },
                 context.key,
             )?)
@@ -192,6 +194,7 @@ pub(super) async fn exercise(
                     source: Some(context.source.clone()),
                     command: Some(command),
                     offset: 0,
+                    guards_model_start: false,
                 },
                 context.key
             )?)

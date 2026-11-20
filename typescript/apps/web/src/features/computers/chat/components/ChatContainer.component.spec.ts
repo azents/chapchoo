@@ -8,6 +8,80 @@ import {
 } from "./chatContainerFixture";
 import type { Route } from "@playwright/test";
 
+for (const width of [390, 1280]) {
+  test(`model settings preserve the saved choice on cancel at ${width}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    const current = { id: "fixture-a", label: "Fixture Model A" };
+    const alternative = { id: "fixture-b", label: "Fixture Model B" };
+    const unexpected: string[] = [];
+    await page.route("**/api/trpc/**", async (route) => {
+      const method = new URL(route.request().url()).pathname.split("/").at(-1);
+      let value: unknown;
+      switch (method) {
+        case "auth.identity":
+          value = containerUser;
+          break;
+        case "computers.get":
+          if (containerInput.initial.type !== "detail") {
+            throw new Error("Missing fixture Agent");
+          }
+          value = containerInput.initial.agent;
+          break;
+        case "conversations.activity":
+        case "conversations.region":
+          value = containerInput.initialConversation;
+          break;
+        case "conversations.messages":
+          value = containerInput.initialMessages;
+          break;
+        case "conversations.model":
+          value = {
+            target: {
+              conversationId: "conversation",
+              launchOperationId: "fixture-launch",
+              native: { snapshotId: "snapshot", nativeSessionId: "native" },
+            },
+            current,
+            options: { choices: [current, alternative] },
+          };
+          break;
+        default:
+          unexpected.push(method ?? "missing method");
+          await route.abort();
+          return;
+      }
+      await route.fulfill({
+        json: { result: { data: superjson.serialize(value) } },
+      });
+    });
+    await page.goto(
+      "/iframe.html?id=chat-container-transport--enqueue-failure&viewMode=story",
+    );
+    const open = page.getByRole("button", {
+      name: width === 390 ? "Activity: Corgi" : "Activity",
+      exact: true,
+    });
+    await open.click();
+    const sheet = page.getByRole("dialog", { name: "Activity", exact: true });
+    await expect(sheet.getByRole("link", { name: /Corgi/ })).toBeVisible();
+    const model = sheet.getByRole("button", { name: /^Model/ });
+    await expect(model).toContainText(current.label);
+    await model.click();
+    await expect(
+      sheet.getByRole("radio", { name: current.label }),
+    ).toBeChecked();
+    await sheet.getByText(alternative.label, { exact: true }).click();
+    await expect(
+      sheet.getByRole("radio", { name: alternative.label }),
+    ).toBeChecked();
+    await sheet.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(model).toContainText(current.label);
+    expect(unexpected).toEqual([]);
+  });
+}
+
 for (const state of ["stopped", "starting", "restoring"] as const) {
   test(`ordinary message submission remains available while Computer is ${state}`, async ({
     page,
@@ -34,6 +108,9 @@ for (const state of ["stopped", "starting", "restoring"] as const) {
           break;
         case "conversations.messages":
           value = initial.initialMessages;
+          break;
+        case "conversations.model":
+          value = {};
           break;
         case "conversations.send":
           sends.push(route.request().postDataJSON());
@@ -94,6 +171,9 @@ for (const width of [390, 1280]) {
           break;
         case "conversations.messages":
           value = containerInput.initialMessages;
+          break;
+        case "conversations.model":
+          value = {};
           break;
         case "conversations.region":
           reads += 1;
@@ -196,6 +276,9 @@ for (const outcome of ["failed", "accepted"] as const) {
         case "conversations.activity":
           value = containerInput.initialConversation;
           break;
+        case "conversations.model":
+          value = {};
+          break;
         case "conversations.messages":
           value = containerInput.initialMessages;
           break;
@@ -282,6 +365,8 @@ test("Delete removes the queue item and invalidates only the earlier in-flight r
         return reply(route, containerInput.initial.agent);
       case "conversations.messages":
         return reply(route, containerInput.initialMessages);
+      case "conversations.model":
+        return reply(route, {});
       case "conversations.region":
         return reply(route, containerInput.initialConversation);
       case "conversations.deleteInput":

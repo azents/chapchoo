@@ -27,6 +27,7 @@ import {
   harnessSupplyChoice,
   nativeTarget,
 } from "@chapchoo/web-core/conversation-types";
+import { call } from "@chapchoo/web-core/rpc";
 import { z } from "zod";
 import { procedure, router } from "@/shared/server/trpc";
 
@@ -34,7 +35,70 @@ const id = z.string().min(1).max(128);
 const operation = z
   .object({ agentId: id, conversationId: id, requestId: id })
   .strict();
+const modelTarget = z
+  .object({
+    conversationId: id,
+    launchOperationId: id,
+    native: z
+      .object({
+        snapshotId: z.string().min(1).max(512),
+        nativeSessionId: z.string().min(1).max(512),
+      })
+      .strict(),
+  })
+  .strict();
 export const conversationsRouter = router({
+  model: procedure
+    .input(z.object({ agentId: id }).strict())
+    .query(({ ctx, input }) =>
+      attempt(() =>
+        ctx.session.authenticated((token) =>
+          call(
+            ctx.backend.conversations.model.bind(ctx.backend.conversations),
+            input,
+            token,
+          ),
+        ),
+      ),
+    ),
+  saveModel: procedure
+    .input(
+      z
+        .object({
+          agentId: id,
+          target: modelTarget,
+          requestId: id,
+          expectedRequestId: id.optional(),
+          modelId: z.string().min(1).max(256),
+        })
+        .strict(),
+    )
+    .mutation(({ ctx, input }) =>
+      attempt(() =>
+        ctx.session.authenticated((token) =>
+          call(
+            ctx.backend.conversations.saveModel.bind(ctx.backend.conversations),
+            input,
+            token,
+          ),
+        ),
+      ),
+    ),
+  modelSaveResult: procedure
+    .input(z.object({ agentId: id, requestId: id }).strict())
+    .query(({ ctx, input }) =>
+      attempt(() =>
+        ctx.session.authenticated((token) =>
+          call(
+            ctx.backend.conversations.modelSaveResult.bind(
+              ctx.backend.conversations,
+            ),
+            input,
+            token,
+          ),
+        ),
+      ),
+    ),
   messages: procedure
     .input(
       z

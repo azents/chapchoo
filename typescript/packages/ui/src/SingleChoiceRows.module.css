@@ -1,0 +1,60 @@
+.group {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
+}
+
+.legend,
+.choice > input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.choice {
+  display: flex;
+  position: relative;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mantine-spacing-sm);
+  min-block-size: 2.75rem;
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
+  cursor: pointer;
+}
+
+.choice + .choice {
+  border-block-start: 1px solid var(--mantine-color-default-border);
+}
+
+.choice:has(:focus-visible) {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: -2px;
+}
+
+.group:disabled .choice {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.label {
+  overflow-wrap: anywhere;
+}
+
+.indicator {
+  display: grid;
+  place-items: center;
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+  flex: 0 0 auto;
+  border-radius: var(--mantine-radius-xs);
+  font-weight: 700;
+}
+
+.choice:has(:checked) .indicator {
+  color: var(--mantine-color-white);
+  background: var(--mantine-primary-color-filled);
+}

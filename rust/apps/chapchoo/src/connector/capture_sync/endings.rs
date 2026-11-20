@@ -3,7 +3,9 @@
 
 use super::*;
 use chapchoo_domain::ConversationText;
-use chapchoo_harness::{ContinuationRoute, Error, NativeAuthenticationBinding, NativeNormalEnding};
+use chapchoo_harness::{
+    Error, NativeAuthenticationBinding, NativeModelDispatch, NativeNormalEnding,
+};
 use std::future::Future;
 
 #[cfg(test)]
@@ -20,7 +22,8 @@ pub(super) trait EndingOwner {
         &self,
         ending: NativeNormalEnding,
         text: ConversationText,
-        route: ContinuationRoute,
+        operation_id: String,
+        models: NativeModelDispatch,
     ) -> impl Future<Output = Result<(), Error>> + Send;
 }
 
@@ -38,9 +41,10 @@ impl EndingOwner for NativeHandle {
         &self,
         ending: NativeNormalEnding,
         text: ConversationText,
-        route: ContinuationRoute,
+        operation_id: String,
+        models: NativeModelDispatch,
     ) -> Result<(), Error> {
-        self.continue_after_ending(ending, text, route)
+        self.continue_after_ending(ending, text, operation_id, models)
             .await
             .map(|_| ())
     }
@@ -49,6 +53,7 @@ impl EndingOwner for NativeHandle {
 pub(super) struct Delivery {
     closing: Option<Close>,
     ordering: super::super::server_tools::Ordering,
+    models: super::super::models::Reports,
 }
 struct Close {
     ending: NativeNormalEnding,
@@ -56,10 +61,14 @@ struct Close {
 }
 
 impl Delivery {
-    pub(super) fn new(ordering: super::super::server_tools::Ordering) -> Self {
+    pub(super) fn new(
+        ordering: super::super::server_tools::Ordering,
+        models: super::super::models::Reports,
+    ) -> Self {
         Self {
             closing: None,
             ordering,
+            models,
         }
     }
 
@@ -151,7 +160,8 @@ impl Delivery {
             conversation_id: current.conversation_id,
             target: Some(target),
             ending: Some(occurrence),
-            operation_id,
+            operation_id: operation_id.clone(),
+            guards_model_start: true,
         };
         if !route.is_open() {
             // Recover the admission only from the same live ending, without
@@ -173,7 +183,10 @@ impl Delivery {
         {
             let submitted = async {
                 let text = continuation_text(context.projection)?;
-                native.submit(ending, text, route).await?;
+                let models = self
+                    .models
+                    .dispatch(channel.clone(), origin.clone(), key, route)?;
+                native.submit(ending, text, operation_id, models).await?;
                 Ok::<_, AppError>(())
             }
             .await;

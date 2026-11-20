@@ -27,6 +27,7 @@ import { ReturnToLatest } from "../ReturnToLatest";
 import classes from "./Chat.module.css";
 import { ConversationBody, ConversationContent } from "./ConversationBody";
 import { RecentConversationRecord } from "./ConversationRecord";
+import { ModelSelection } from "./ModelSelection";
 import { OutgoingIcon } from "./OutgoingIcon";
 import { ThinkingIndicator } from "./ThinkingIndicator";
 import { WorkSummary } from "./WorkSummary";
@@ -204,17 +205,38 @@ export function Chat(props: ChatProps): ReactElement {
             <div className={classes.right}>
               {props.accountControls}
               <ActionIcon
-                component="a"
-                href={detailHref}
+                onClick={props.onOpen}
                 variant="subtle"
                 size="2.75rem"
-                aria-label={c.detail}
+                aria-haspopup="dialog"
+                aria-label={c.activity}
                 className={classes.more}
               >
                 <Icon name="more" />
               </ActionIcon>
             </div>
           </header>
+          {props.modelSelection?.recovery ? (
+            <Alert color="yellow" role="status">
+              <Group justify="space-between">
+                <Text size="sm">
+                  {props.modelSelection.copy.beforeStart.replace(
+                    "{model}",
+                    props.modelSelection.recovery.label,
+                  )}
+                </Text>
+                <Button
+                  variant="default"
+                  onClick={() => {
+                    props.modelSelection?.recover();
+                    props.onOpen();
+                  }}
+                >
+                  {props.modelSelection.copy.change}
+                </Button>
+              </Group>
+            </Alert>
+          ) : null}
           <div className={classes.timelineShell} ref={f.shellRef}>
             <ScrollArea
               className={classes.scrollRoot}
@@ -413,6 +435,9 @@ export function Chat(props: ChatProps): ReactElement {
                 </span>
                 <Icon name="chevron" />
               </a>
+              {props.modelSelection ? (
+                <ModelSelection controls={props.modelSelection} />
+              ) : null}
               {p.stale ? (
                 <Alert color="yellow" mb="lg">
                   {p.copy.stale}

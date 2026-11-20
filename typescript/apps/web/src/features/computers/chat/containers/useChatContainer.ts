@@ -13,6 +13,7 @@ import { createElement, useContext, useRef, useState } from "react";
 import { trpc } from "@/shared/rpc/client";
 import { useAgentsContainer } from "../../containers/useAgentsContainer";
 import { chatStatus, chatThinking } from "../chatStatus";
+import { useModelSelection } from "../components/ModelSelection";
 import { ConversationHistoryPage } from "../ConversationHistoryPage";
 import { activityStatus, chatCopy } from "../copy";
 import { SupplyPage } from "../SupplyPage";
@@ -115,6 +116,11 @@ export function useChatContainer(props: ChatInput): ChatProps {
     throw new Error("Chat requires an admitted Agent detail snapshot");
   }
   const agent = product.data.agent;
+  const modelSelection = useModelSelection(
+    agent.id,
+    region.header.conversationId ?? null,
+    product.access !== "authorized" || product.stale,
+  );
   const computer = agent.computer;
   const effectAvailable =
     product.access === "authorized" &&
@@ -483,6 +489,7 @@ export function useChatContainer(props: ChatInput): ChatProps {
     copy,
     navigation,
     accountControls,
+    modelSelection,
     supplyControl: createElement(SupplyPage, {
       key: agent.id,
       agentId: agent.id,
@@ -556,7 +563,12 @@ export function useChatContainer(props: ChatInput): ChatProps {
     },
     focus: controlled.focus,
     onOpen: () => setOpened(true),
-    onClose: () => setOpened(false),
+    onClose: () => {
+      if (!modelSelection.busy) {
+        modelSelection.leave();
+        setOpened(false);
+      }
+    },
     onInput: (value) => {
       setInput(value);
       setInputError(false);

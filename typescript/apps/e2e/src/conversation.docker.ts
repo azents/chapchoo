@@ -96,6 +96,37 @@ test("owner follows Conversation Work and inspects native typed-answer records",
     const log = page.getByRole("log", { name: "Message", exact: true });
     await expect(message).toBeEnabled({ timeout: 90_000 });
     expect(historyReads).toBe(0);
+    stage = "open-model-settings";
+    await page.getByRole("button", { name: "Activity", exact: true }).click();
+    const settings = page.getByRole("dialog", {
+      name: "Activity",
+      exact: true,
+    });
+    stage = "open-advertised-model-picker";
+    await settings
+      .getByRole("button", { name: /^Model/ })
+      .click({ timeout: 45_000 });
+    stage = "choose-alternate-model";
+    await settings
+      .getByText("Alternate fixture model", { exact: true })
+      .click();
+    await expect(
+      settings.getByRole("radio", {
+        name: "Alternate fixture model",
+        exact: true,
+      }),
+    ).toBeChecked();
+    stage = "save-alternate-model";
+    await settings.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(
+      settings.getByRole("button", { name: /^Model/ }),
+    ).toContainText("Alternate fixture model");
+    await page.keyboard.press("Escape");
+    await expect(settings).toHaveCount(0);
+    expect(sendRequests).toBe(0);
+    // The Activity sheet also owns the existing recent-activity read. The
+    // following transcript-only activity must not fetch additional history.
+    const historyReadsAfterDetails = historyReads;
     const summary = page.getByRole("region", {
       name: "Current work",
       exact: true,
@@ -103,7 +134,8 @@ test("owner follows Conversation Work and inspects native typed-answer records",
     await expect(summary).toHaveCount(0);
     const releaseWork = await fixture.holdWork();
     stage = "intentional-publication";
-    const inputText = "Exercise the deterministic native conversation";
+    const inputText =
+      "Exercise the deterministic native conversation with a selected model";
     await message.fill(inputText);
     const inputStart = performance.now();
     await page.getByRole("button", { name: "Send", exact: true }).click();
@@ -122,6 +154,7 @@ test("owner follows Conversation Work and inspects native typed-answer records",
       log.getByText("First assistant output", { exact: true }),
     ).toHaveCount(0);
     const inputToPublicationMs = Math.round(performance.now() - inputStart);
+    stage = "verify-first-publication-target-and-work";
     const afterInput = await fixture.current();
     expect(afterInput.conversation?.conversationId).toBe(
       prestarted.conversation?.conversationId,
@@ -156,7 +189,7 @@ test("owner follows Conversation Work and inspects native typed-answer records",
     } finally {
       await initialPage.close();
     }
-    expect(historyReads).toBe(0);
+    expect(historyReads).toBe(historyReadsAfterDetails);
     stage = "running-feedback";
     await expect(
       log.getByRole("status").filter({ hasText: "Thinking" }),

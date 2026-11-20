@@ -43,11 +43,15 @@ pub struct NativeObservation {
     pub preparation: Option<crate::NativePreparationObservation>,
     pub authentication_id: Option<String>,
     pub applied_supply: Option<HarnessSupply>,
+    pub model: Option<NativeModelObservation>,
 }
 #[derive(Default)]
 pub(super) struct Observations(SyncMutex<Observed>, tokio::sync::Notify);
 #[derive(Default)]
 struct Observed {
+    model: Option<NativeModelOptions>,
+    seen_model_update: bool,
+    model_order: i64,
     position: Option<SourcePosition>,
     source: Option<(SnapshotId, NativeConversationId)>,
     observed_session: Option<NativeConversationId>,
@@ -66,6 +70,7 @@ struct Observed {
 struct IncomingRequest {
     id: schema::RequestId,
 }
+
 impl Observations {
     pub(super) fn record_live(&self, source: &crate::CaptureLog, line: &str) -> Result<(), Error> {
         let envelope: SessionEnvelope = serde_json::from_str(line).map_err(|_| Error::Protocol)?;
@@ -145,7 +150,10 @@ impl Observations {
                 session_update: String,
             }
             let kind: UpdateKind = serde_json::from_str(line).map_err(|_| Error::Protocol)?;
-            if kind.params.update.session_update != "state_update" {
+            if !matches!(
+                kind.params.update.session_update.as_str(),
+                "state_update" | "config_option_update"
+            ) {
                 return Ok(());
             }
             if state
@@ -160,6 +168,20 @@ impl Observations {
                 params: schema::UpdateSessionNotification,
             }
             let update: Notification = serde_json::from_str(line).map_err(|_| Error::Protocol)?;
+            if kind.params.update.session_update == "config_option_update" {
+                if live
+                    && let schema::SessionUpdate::ConfigOptionUpdate(values) = &update.params.update
+                {
+                    let model = model_selection::options(&values.config_options);
+                    if state.model != model {
+                        state.model = model;
+                        state.model_order =
+                            state.model_order.checked_add(1).ok_or(Error::Protocol)?;
+                    }
+                    state.seen_model_update = true;
+                }
+                return Ok(());
+            }
             return Self::update_at(state, update.params, Some(position), live);
         }
         if !matches!(
@@ -320,6 +342,7 @@ impl Observations {
         }
         Ok(())
     }
+    #[cfg(test)]
     pub(super) fn publish_ordinary_prompt<T>(
         &self,
         publish: impl FnOnce() -> T,
@@ -332,6 +355,7 @@ impl Observations {
     }
     /// Use the exact live ending at most once. Capture transitions, Stop and
     /// native enqueue are ordered by this same lock, not by the RPC response.
+    #[cfg(test)]
     pub(super) fn publish_continuation<T>(
         &self,
         ending: &NativeNormalEnding,
@@ -348,6 +372,80 @@ impl Observations {
         state.continuation_published = true;
         Ok(publish())
     }
+    fn validate_model_prompt(
+        state: &Observed,
+        kind: &model_selection::PromptKind<'_>,
+        idle: bool,
+    ) -> Result<(), Error> {
+        if idle
+            && state
+                .foreground
+                .is_some_and(|fg| fg != NativeForeground::Idle)
+        {
+            return Err(Error::NotAdmitted);
+        }
+        match kind {
+            model_selection::PromptKind::Ordinary { managed: true }
+                if state.normal_ending.is_some() && !state.ending_decided =>
+            {
+                Err(Error::EndingDecisionPending)
+            }
+            model_selection::PromptKind::Continuation(ending)
+                if state.foreground != Some(NativeForeground::Idle)
+                    || state.normal_ending.as_ref() != Some(*ending)
+                    || state.ending_decided
+                    || state.continuation_published =>
+            {
+                Err(Error::NotAdmitted)
+            }
+            _ => Ok(()),
+        }
+    }
+
+    pub(super) fn check_model_prompt(
+        &self,
+        kind: &model_selection::PromptKind<'_>,
+        idle: bool,
+    ) -> Result<(), Error> {
+        let state = self.0.lock().map_err(|_| Error::Protocol)?;
+        Self::validate_model_prompt(&state, kind, idle)
+    }
+
+    pub(super) fn with_model_idle<T>(
+        &self,
+        kind: &model_selection::PromptKind<'_>,
+        publish: impl FnOnce() -> T,
+    ) -> Result<T, Error> {
+        let state = self.0.lock().map_err(|_| Error::Protocol)?;
+        Self::validate_model_prompt(&state, kind, true)?;
+        Ok(publish())
+    }
+
+    pub(super) fn confirm_model(&self, options: NativeModelOptions) -> Result<(), Error> {
+        let state = self.0.lock().map_err(|_| Error::Protocol)?;
+        if state.model.as_ref().is_some_and(|seen| {
+            seen.option_id == options.option_id && seen.current == options.current
+        }) {
+            Ok(())
+        } else {
+            Err(Error::Protocol)
+        }
+    }
+
+    pub(super) fn publish_model_prompt<T>(
+        &self,
+        kind: &model_selection::PromptKind<'_>,
+        reserved: bool,
+        publish: impl FnOnce() -> T,
+    ) -> Result<T, Error> {
+        let mut state = self.0.lock().map_err(|_| Error::Protocol)?;
+        Self::validate_model_prompt(&state, kind, reserved)?;
+        if matches!(kind, model_selection::PromptKind::Continuation(_)) {
+            state.continuation_published = true;
+        }
+        Ok(publish())
+    }
+
     pub(super) fn restore_work(&self) -> Option<NativeWorkTarget> {
         let state = self.0.lock().ok()?;
         if state.foreground != Some(NativeForeground::Running) || state.stop_published {
@@ -374,6 +472,28 @@ impl Observations {
         }
     }
 
+    pub(super) fn setup_model(&self, values: &[schema::SessionConfigOption]) -> Result<(), Error> {
+        let mut state = self.0.lock().map_err(|_| Error::Protocol)?;
+        if !state.seen_model_update {
+            state.model = model_selection::options(values);
+        }
+        Ok(())
+    }
+
+    pub(super) fn model(
+        &self,
+        launch_operation_id: &str,
+        api_key_source: Option<[u8; 24]>,
+    ) -> Result<NativeModelObservation, Error> {
+        let state = self.0.lock().map_err(|_| Error::Protocol)?;
+        Ok(NativeModelObservation {
+            order: state.model_order,
+            options: state.model.clone(),
+            launch_operation_id: launch_operation_id.to_owned(),
+            api_key_source,
+        })
+    }
+
     pub(super) fn current(&self) -> Result<NativeObservation, Error> {
         let state = self.0.lock().map_err(|_| Error::Protocol)?;
         Ok(NativeObservation {
@@ -389,6 +509,7 @@ impl Observations {
             preparation: None,
             authentication_id: None,
             applied_supply: None,
+            model: None,
             work: match (&state.source, &state.work) {
                 (Some((snapshot, native)), Some(work)) => Some(NativeWorkTarget {
                     snapshot: snapshot.clone(),

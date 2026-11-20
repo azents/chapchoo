@@ -286,6 +286,21 @@ such retry. A granted internal input uses the existing ACP prompt method with a
 system-origin marker. The owner checks exact live Idle and ending identity and
 consumes that ending once at the same boundary as enqueue, capture and Stop.
 
+## Conversation model requests
+
+For the qualified Codex 0.165.0 / codex-acp 2.8.0 pair, the exact prepared
+session's configuration provides the model choices. On the idle ordinary
+prompt path and the one-use Work continuation path, the native owner reserves
+submission, then applies any explicit choice through the supported model
+configuration operation before enqueuing. Explicit steering into existing
+work and recognized native commands do not apply the preference.
+
+Exact prompt insertion closes the submission reservation. The same receipt
+can describe a prompt attached to an existing turn; it does not identify a
+new execution or certify actual model use. A config acknowledgement,
+foreground change or missing receipt alone does not close the fence or
+authorize another publication.
+
 ## Retained captured source
 
 The [default-project refresh](agent-instructions.md) qualifies Setup by exact

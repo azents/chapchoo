@@ -20,10 +20,12 @@ pub use runtime::{
     CaptureReplay, ContinuationRoute, ContinuationRouteLease, InteractiveRequest,
     InteractiveResponse, NativeAnswerObservation, NativeAnswerOperation, NativeCaptureReader,
     NativeContext, NativeForeground, NativeHandle, NativeInputObservation, NativeInputOperation,
-    NativeNormalEnding, NativeObservation, NativeOwner, NativePromptAcceptance,
-    NativeReportedOperation, NativeSetupFailure, NativeSetupIntent, NativeSetupObservation,
-    NativeSetupOperation, NativeStopObservation, NativeTextTarget, NativeWorkTarget, Retirement,
-    ScopeEvidence,
+    NativeModelAuthority, NativeModelChoice, NativeModelDispatch, NativeModelFuture,
+    NativeModelObservation, NativeModelOptions, NativeModelReservation, NativeModelStart,
+    NativeModelStartOutcome, NativeNormalEnding, NativeObservation, NativeOwner,
+    NativePromptAcceptance, NativeReportedOperation, NativeSetupFailure, NativeSetupIntent,
+    NativeSetupObservation, NativeSetupOperation, NativeStopObservation, NativeTextTarget,
+    NativeWorkTarget, Retirement, ScopeEvidence,
 };
 pub use server_tools::{
     NativeGoalContext, NativeGoalRestore, NativeMcpDeclaration, NativeToolLifetime,

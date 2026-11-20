@@ -17,6 +17,7 @@ pub use stop_owner::{
     AcceptedConversationStop, ConversationStopFuture, ConversationStopProcessor,
     ConversationStopService,
 };
+mod model_selection;
 mod normalize;
 mod queued;
 use crate::{DomainReason, ServiceError};
@@ -237,10 +238,17 @@ impl ConversationService {
         conversation: &str,
         operation: &str,
         ending: &chapchoo_persistence::ConversationNormalEnding,
+        guards_model_start: bool,
     ) -> Result<Option<Vec<u8>>, ServiceError> {
         Ok(self
             .store
-            .begin_conversation_continuation(source, conversation, operation, ending)
+            .begin_conversation_continuation_guarded(
+                source,
+                conversation,
+                operation,
+                ending,
+                guards_model_start,
+            )
             .await?)
     }
     pub async fn close_continuation(
@@ -337,10 +345,11 @@ impl ConversationService {
         source: &ConnectorSource<'_>,
         draft: &chapchoo_persistence::ConversationOperationForwarding<'_>,
         offset: u32,
+        guards_model_start: bool,
     ) -> Result<chapchoo_persistence::ConversationInputChunk, ServiceError> {
         Ok(self
             .store
-            .connector_input_chunk(source, draft, offset)
+            .connector_input_chunk_guarded(source, draft, offset, guards_model_start)
             .await?)
     }
     pub async fn report_input(

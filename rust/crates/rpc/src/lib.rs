@@ -7,6 +7,7 @@ mod connection_startup;
 mod control_calls;
 mod control_streams;
 mod conversation_capture;
+mod conversation_models;
 mod conversation_processor;
 mod conversations;
 mod delivery;

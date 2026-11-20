@@ -109,6 +109,9 @@ capture_fixture!(
     pull_input: InputChunkRequest -> captured::InputChunk,
     report_input: InputReport -> captured::InputReportAcknowledgement,
     report_native: NativeStateReport -> (),
+    report_model: ModelObservationReport -> (),
+    reserve_model_start: ModelStartRequest -> captured::ModelStartAdmission,
+    settle_model_start: ModelStartReport -> (),
     read_goal_context: GoalContextRequest -> captured::GoalContext,
     report_request: LiveRequestReport -> (),
     check_stop: StopCheck -> (),
@@ -164,10 +167,11 @@ impl EndingOwner for Owner {
         &self,
         ending: NativeNormalEnding,
         text: ConversationText,
-        route: ContinuationRoute,
+        _operation_id: String,
+        models: NativeModelDispatch,
     ) -> Result<(), Error> {
         assert_eq!(ending, self.ending);
-        assert!(route.is_open());
+        assert!(models.route.is_open());
         assert!(
             text.as_str()
                 .starts_with("[Chapchoo system-originated continuation")
@@ -221,7 +225,7 @@ async fn exercise(loss: Loss) -> Result<(), AppError> {
         let _input_owner = ordering.open(binding.clone());
         let mut earlier_input = ordering.begin(&binding, "earlier-input")?;
         earlier_input.attempting(true);
-        let mut delivery = Delivery::new(ordering.clone());
+        let mut delivery = Delivery::new(ordering.clone(), Default::default());
         // An exact local ending alone is never permission to report.
         delivery
             .advance(

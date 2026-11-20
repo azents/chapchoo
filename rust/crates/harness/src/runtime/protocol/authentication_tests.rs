@@ -147,6 +147,7 @@ async fn already_live_setup_preserves_applied_credentials_without_calling_new_pr
         capture: source.clone(),
         observations: Arc::default(),
         _authentication: binding.clone(),
+        api_key_source: None,
         tools: None,
         instructions: Default::default(),
         tool_catalog: Vec::new(),

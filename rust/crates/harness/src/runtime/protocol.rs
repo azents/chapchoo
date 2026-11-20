@@ -39,6 +39,7 @@ pub(super) async fn connect_authenticated(
     let permission = requests.clone();
     let forms = requests;
     let permission_observation = observations.clone();
+    let setup_observation = observations.clone();
     let form_observation = observations;
     Client
         .v2()
@@ -114,7 +115,7 @@ pub(super) async fn connect_authenticated(
             agent_client_protocol::on_receive_request!(),
         )
         .connect_with(transport, async move |cx: ConnectionTo<Agent>| {
-            let session = match initialize_session(cx, cwd, setup).await {
+            let session = match initialize_session(cx, cwd, setup, &setup_observation).await {
                 Ok(session) => session,
                 Err((stage, cause)) => {
                     let _ = ready.send(Err(Error::ProtocolRejected {
@@ -139,6 +140,7 @@ async fn initialize_session(
         Option<NativeCredentials>,
         Vec<schema::McpServer>,
     ),
+    observations: &Observations,
 ) -> Result<
     agent_client_protocol::v2::ActiveSession<Agent>,
     (crate::ProtocolStage, agent_client_protocol::Error),
@@ -210,22 +212,31 @@ async fn initialize_session(
                 }
                 CaptureReplay::AlreadyCaptured => request,
             };
-            cx.resume_session_from(request)
+            let started = cx
+                .resume_session_from(request)
                 .start_session()
                 .block_task()
                 .await
-                .map_err(|e| (ProtocolStage::Session, e))?
-                .session
+                .map_err(|e| (ProtocolStage::Session, e))?;
+            (started.session, started.response.config_options)
         }
         NativeContext::New => {
-            cx.build_session_from(schema::NewSessionRequest::new(cwd).mcp_servers(mcp))
+            let started = cx
+                .build_session_from(schema::NewSessionRequest::new(cwd).mcp_servers(mcp))
                 .start_session()
                 .block_task()
                 .await
-                .map_err(|e| (ProtocolStage::Session, e))?
-                .session
+                .map_err(|e| (ProtocolStage::Session, e))?;
+            (started.session, started.response.config_options)
         }
     };
+    let (session, model_options) = session;
+    observations.setup_model(&model_options).map_err(|_| {
+        (
+            ProtocolStage::Session,
+            agent_client_protocol::Error::internal_error(),
+        )
+    })?;
     if fresh {
         session
             .connection()

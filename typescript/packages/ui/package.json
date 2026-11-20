@@ -38,6 +38,7 @@
     "./fields": "./src/fields.tsx",
     "./ConfirmationDialog": "./src/ConfirmationDialog.tsx",
     "./Sheet": "./src/Sheet.tsx",
+    "./SingleChoiceRows": "./src/SingleChoiceRows.tsx",
     "./createReactContainer": "./src/createReactContainer.tsx"
   },
   "scripts": {

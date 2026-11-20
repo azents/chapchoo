@@ -101,6 +101,7 @@ async function connectMcp(servers) {
 const threadId = "fixture-thread";
 let turnId = "fixture-turn";
 const model = "fixture-model";
+const alternateModel = "fixture-alternate";
 let authenticated = false;
 let active = false;
 let primaryUsed = false;
@@ -329,22 +330,23 @@ async function request(id, method, params) {
       break;
     case "model/list":
       reply(id, {
-        data: [
-          {
-            id: model,
-            model,
-            displayName: "Deterministic fixture",
-            description: "No model request is made",
-            isDefault: true,
-            supportedReasoningEfforts: [
-              { reasoningEffort: "medium", description: "Fixture default" },
-            ],
-            defaultReasoningEffort: "medium",
-            inputModalities: ["text"],
-            supportsPersonality: false,
-            supportsParallelToolCalls: false,
-          },
-        ],
+        data: [model, alternateModel].map((value) => ({
+          id: value,
+          model: value,
+          displayName:
+            value === model
+              ? "Deterministic fixture"
+              : "Alternate fixture model",
+          description: "No model request is made",
+          isDefault: value === model,
+          supportedReasoningEfforts: [
+            { reasoningEffort: "medium", description: "Fixture default" },
+          ],
+          defaultReasoningEffort: "medium",
+          inputModalities: ["text"],
+          supportsPersonality: false,
+          supportsParallelToolCalls: false,
+        })),
         nextCursor: null,
       });
       break;
@@ -478,6 +480,13 @@ async function request(id, method, params) {
         break;
       }
       const prompt = params?.input?.[0]?.text;
+      if (
+        prompt ===
+          "Exercise the deterministic native conversation with a selected model" &&
+        params.model !== alternateModel
+      ) {
+        throw new Error("The selected model did not reach the native turn");
+      }
       if (
         prompt?.startsWith(
           "[Chapchoo system-originated continuation; not a user message]\n",
@@ -629,8 +638,10 @@ async function request(id, method, params) {
         !Array.isArray(params.input) ||
         params.input.length !== 1 ||
         params.input[0]?.type !== "text" ||
-        params.input[0]?.text !==
-          "Exercise the deterministic native conversation"
+        (params.input[0]?.text !==
+          "Exercise the deterministic native conversation" &&
+          prompt !==
+            "Exercise the deterministic native conversation with a selected model")
       )
         throw new Error("Fixture turn was not admitted");
       verifyWorkInstructions(cwd);

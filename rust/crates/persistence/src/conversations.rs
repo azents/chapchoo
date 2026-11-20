@@ -9,6 +9,7 @@ mod input_queue;
 mod input_reads;
 mod inputs;
 mod messages;
+mod model_selection;
 mod native_state;
 mod peer;
 mod preparation;
@@ -72,6 +73,11 @@ pub use messages::{
     ConversationMessageChunk, ConversationMessageMetadata, ConversationMessageRead,
     ConversationMessageReceipt, ConversationMessageRegion, ConversationMessageRole,
     ConversationMessageScope, ConversationMessageWindow, PublishConversationMessage,
+};
+pub use model_selection::{
+    ConversationModelChoice, ConversationModelObservation, ConversationModelProjection,
+    ConversationModelSave, ConversationModelSaveReceipt, ConversationModelStart,
+    ConversationModelStartAdmission, ConversationModelStartOutcome, ConversationModelTarget,
 };
 pub use native_state::{
     ConversationForeground, ConversationNativeObservation, ConversationNativePreparation,

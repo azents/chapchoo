@@ -43,6 +43,7 @@ pub(super) struct Operations {
     authentication: super::authentication_sync::AuthenticationSync,
     tools_route: super::server_tools::CurrentRoute,
     ordering: super::server_tools::Ordering,
+    models: super::models::Reports,
 }
 impl Operations {
     pub(super) fn stop(&mut self, command: c::StopCommand) -> Result<bool, AppError> {
@@ -90,6 +91,7 @@ impl Operations {
             authentication: super::authentication_sync::AuthenticationSync::new(native.clone()),
             tools_route: super::server_tools::CurrentRoute::default(),
             ordering: super::server_tools::Ordering::default(),
+            models: super::models::Reports::default(),
             native,
             slots: Arc::new(Semaphore::new(32)),
             tasks: JoinSet::new(),
@@ -104,6 +106,9 @@ impl Operations {
     }
     pub(super) fn input_ordering(&self) -> super::server_tools::Ordering {
         self.ordering.clone()
+    }
+    pub(super) fn model_reports(&self) -> super::models::Reports {
+        self.models.clone()
     }
     pub(super) fn tool_route(
         &self,
@@ -304,6 +309,7 @@ impl Operations {
         let stop = self.stop.clone();
         let ordering = self.ordering.clone();
         let current_route = self.tools_route.clone();
+        let models = self.models.clone();
         self.tasks.spawn(async move {
             let outcome = async {
                 use chapchoo_harness::{NativeInputObservation, NativePromptAcceptance};
@@ -316,6 +322,10 @@ impl Operations {
                 if !matches!(observed, NativeInputObservation::Unseen) {
                     return Err("Native input outcome remains uncertain".into());
                 }
+                let mut admitted_route = current_route
+                    .try_snapshot()?
+                    .filter(|route| route.source == origin && route.key.digest() == key.digest())
+                    .ok_or("Input transfer route has changed")?;
                 let mut client = ConnectorCaptureClient::new(channel)
                     .max_decoding_message_size(64 * 1024)
                     .max_encoding_message_size(64 * 1024);
@@ -333,6 +343,7 @@ impl Operations {
                                 source: Some(origin.clone()),
                                 command: Some(command.clone()),
                                 offset,
+                                guards_model_start: true,
                             },
                             &key,
                         )?)
@@ -370,6 +381,7 @@ impl Operations {
                             source: Some(origin.clone()),
                             command: Some(command.clone()),
                             offset: total,
+                            guards_model_start: true,
                         },
                         &key,
                     )
@@ -400,9 +412,15 @@ impl Operations {
                     text,
                 };
                 let result = loop {
+                    let dispatch = models.dispatch(
+                        admitted_route.channel.clone(),
+                        admitted_route.source.clone(),
+                        &admitted_route.key,
+                        admitted_route.restore_route.clone(),
+                    )?;
                     ticket.attempting(true);
                     match native
-                        .prompt_for_owner(operation.clone(), binding.clone())
+                        .prompt_for_owner(operation.clone(), binding.clone(), dispatch)
                         .await
                     {
                         Err(chapchoo_harness::Error::EndingDecisionPending) => {
@@ -419,15 +437,16 @@ impl Operations {
                         if native.pending_ending().await?.is_none()
                             && let Some(route) = current_route.try_snapshot()?
                         {
-                            let mut live = ConnectorCaptureClient::new(route.channel)
+                            let mut live = ConnectorCaptureClient::new(route.channel.clone())
                                 .max_decoding_message_size(64 * 1024)
                                 .max_encoding_message_size(64 * 1024);
                             let result = live
                                 .pull_input(request(
                                     c::InputChunkRequest {
-                                        source: Some(route.source),
+                                        source: Some(route.source.clone()),
                                         command: Some(command.clone()),
                                         offset: total,
+                                        guards_model_start: true,
                                     },
                                     &route.key,
                                 )?)
@@ -443,6 +462,7 @@ impl Operations {
                                             "Deferred input transfer completion conflicts".into()
                                         );
                                     }
+                                    admitted_route = route;
                                     break;
                                 }
                                 Err(status)

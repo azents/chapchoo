@@ -44,7 +44,7 @@ pub(super) struct Route {
     pub(super) channel: Channel,
     pub(super) source: CaptureSource,
     pub(super) key: BearerSecret,
-    restore_route: chapchoo_harness::ContinuationRoute,
+    pub(super) restore_route: chapchoo_harness::ContinuationRoute,
 }
 /// Operational updates replace server credentials, never a local capability's
 /// Agent/conversation or its actual native owner's lifetime.

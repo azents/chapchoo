@@ -7,6 +7,9 @@ service Conversations {
   rpc SystemPrompt(OwnerConversationRequest) returns (CurrentSystemPrompt);
   rpc GetSupply(OwnerConversationRequest) returns (SavedSupply);
   rpc SaveSupply(SaveSupplyRequest) returns (SavedSupply);
+  rpc Model(OwnerConversationRequest) returns (OwnerConversationModel);
+  rpc SaveModel(OwnerModelSave) returns (ModelSaveReceipt);
+  rpc ModelSaveResult(OwnerModelSaveResult) returns (OptionalModelSaveReceipt);
   rpc SubmitInput(OwnerInputPiece) returns (OwnerInputProgress);
   rpc InputResult(OwnerInputResultRequest) returns (OwnerInputStatus);
   rpc Inputs(OwnerInputsRequest) returns (RetainedInputs);
@@ -29,6 +32,31 @@ service Conversations {
 }
 message OwnerConversationRequest { string agent_id = 1; }
 message CurrentSystemPrompt { ProjectInstructionEvidence prompt = 1; }
+message ModelTarget {
+  string conversation_id = 1;
+  NativeTarget native = 2;
+  string launch_operation_id = 3;
+}
+message ModelChoice { string id = 1; string label = 2; }
+message ModelOptions { repeated ModelChoice choices = 1; }
+message OwnerConversationModel {
+  ModelTarget target = 1;
+  ModelChoice current = 2;
+  optional string saved_request_id = 3;
+  ModelOptions options = 4;
+  ModelRecovery recovery = 5;
+}
+message ModelRecovery { string operation_id = 1; ModelChoice model = 2; }
+message OwnerModelSave {
+  string agent_id = 1;
+  ModelTarget target = 2;
+  string request_id = 3;
+  optional string expected_request_id = 4;
+  string model_id = 5;
+}
+message OwnerModelSaveResult { string agent_id = 1; string request_id = 2; }
+message ModelSaveReceipt { string request_id = 1; ModelChoice model = 2; }
+message OptionalModelSaveReceipt { ModelSaveReceipt receipt = 1; }
 enum InstructionSourceKind {
  INSTRUCTION_SOURCE_KIND_UNSPECIFIED = 0;
  INSTRUCTION_SOURCE_KIND_PRODUCT = 1;
@@ -270,6 +298,9 @@ service ConnectorCapture {
   rpc PullInput(InputChunkRequest) returns (InputChunk);
   rpc ReportInput(InputReport) returns (InputReportAcknowledgement);
   rpc ReportNative(NativeStateReport) returns (google.protobuf.Empty);
+  rpc ReportModel(ModelObservationReport) returns (google.protobuf.Empty);
+  rpc ReserveModelStart(ModelStartRequest) returns (ModelStartAdmission);
+  rpc SettleModelStart(ModelStartReport) returns (google.protobuf.Empty);
   rpc ReportNativeHook(NativeHookReport) returns (NativeHookOutcome);
   rpc BeginContinuation(ContinuationHandoff) returns (ContinuationGrant);
   rpc CloseContinuation(ContinuationHandoff) returns (google.protobuf.Empty);
@@ -291,6 +322,43 @@ message CaptureSource {
   string session_id = 1;
   string control_id = 2;
   string connection_id = 3;
+}
+message ModelObservationReport {
+  CaptureSource source = 1;
+  ModelTarget target = 2;
+  int64 order = 3;
+  ModelChoice current = 4;
+  ModelOptions options = 5;
+  // Execution-only exact continuity witness for an applied API key.
+  optional bytes api_key_source = 6;
+}
+message ModelStartTarget {
+  ModelTarget model_target = 1;
+  string operation_id = 2;
+}
+message ModelStartRequest {
+  CaptureSource source = 1;
+  ModelStartTarget target = 2;
+  bool capable = 3;
+}
+message ReservedModelStart { optional string model_id = 1; }
+message ModelStartAdmission {
+  oneof outcome {
+    google.protobuf.Empty ungoverned = 1;
+    ReservedModelStart reserved = 2;
+  }
+}
+message ModelStartReport {
+  CaptureSource source = 1;
+  ModelStartTarget target = 2;
+  oneof outcome {
+    // Exact input insertion, not evidence of a new turn or its model.
+    string inserted_message_id = 3;
+    google.protobuf.Empty not_published = 4;
+    // A supported producer proved both model-specific unavailability and
+    // non-start. Generic rejection or a missing option cannot report this.
+    string model_unavailable_before_start = 5;
+  }
 }
 message SourcePosition { int64 ordinal = 1; string occurrence_id = 2; }
 message CaptureRequest { CaptureSource source = 1; string conversation_id = 2; }
@@ -365,6 +433,7 @@ message ContinuationHandoff {
   NativeTarget target = 3;
   NativeNormalEnding ending = 4;
   string operation_id = 5;
+  bool guards_model_start = 6;
 }
 message ContinuationGrant {
   // Absent after the first grant. Recovery never repeats forwarding authority.
@@ -406,7 +475,10 @@ message InputCommand {
   string agent_id = 1; string conversation_id = 2; string operation_id = 3;
   NativeTarget target = 4;
 }
-message InputChunkRequest { CaptureSource source = 1; InputCommand command = 2; uint32 offset = 3; }
+message InputChunkRequest {
+  CaptureSource source = 1; InputCommand command = 2; uint32 offset = 3;
+  bool guards_model_start = 4;
+}
 message InputChunk { bytes content = 1; uint32 total_bytes = 2; uint32 offset = 3; }
 message InputReport {
   CaptureSource source = 1; InputCommand command = 2;

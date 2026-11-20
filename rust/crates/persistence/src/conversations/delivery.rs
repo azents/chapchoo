@@ -189,11 +189,27 @@ impl Store {
         draft: &ConversationOperationForwarding<'_>,
         offset: u32,
     ) -> Result<ConversationInputChunk, StoreError> {
+        self.connector_input_chunk_guarded(source, draft, offset, false)
+            .await
+    }
+    pub async fn connector_input_chunk_guarded(
+        &self,
+        source: &crate::ConnectorSource<'_>,
+        draft: &ConversationOperationForwarding<'_>,
+        offset: u32,
+        guards_model_start: bool,
+    ) -> Result<ConversationInputChunk, StoreError> {
         let (agent, id, operation) = ids(draft)?;
         operation!(self, |connection, dialect| {
             let row = super::records::source_conversation!(connection, dialect, source, id);
             let route = connector!(connection, dialect, source);
             current(&row, agent, draft.target)?;
+            super::model_selection::starts::require_model_handoff!(
+                connection,
+                dialect,
+                id,
+                guards_model_start
+            );
             let previous =
                 delivery!(connection, dialect, operation).ok_or(StoreError::InvalidTransition)?;
             if !previous.matches(route._execution_id, draft.target)

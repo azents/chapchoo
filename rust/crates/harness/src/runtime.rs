@@ -37,6 +37,12 @@ mod activity;
 mod continuation_route;
 pub use continuation_route::{ContinuationRoute, ContinuationRouteLease};
 mod goal_restore;
+mod model_selection;
+pub use model_selection::{
+    NativeModelAuthority, NativeModelChoice, NativeModelDispatch, NativeModelFuture,
+    NativeModelObservation, NativeModelOptions, NativeModelReservation, NativeModelStart,
+    NativeModelStartOutcome,
+};
 mod observations;
 mod protocol;
 mod requests;
@@ -232,13 +238,15 @@ enum Command {
     Prompt(
         NativeInputOperation,
         Option<NativeAuthenticationBinding>,
+        Option<NativeModelDispatch>,
         OwnedSemaphorePermit,
         oneshot::Sender<Result<NativePromptAcceptance, Error>>,
     ),
     Continuation(
         NativeNormalEnding,
         ConversationText,
-        ContinuationRoute,
+        String,
+        NativeModelDispatch,
         OwnedSemaphorePermit,
         oneshot::Sender<Result<NativePromptAcceptance, Error>>,
     ),
@@ -432,7 +440,7 @@ impl NativeOwner {
                         };
                         let _ = result.send(observed);
                     }
-                    Command::Prompt(operation, expected, _permit, result) => {
+                    Command::Prompt(operation, expected, models, _permit, result) => {
                         if let Some(expected) = expected.as_ref() {
                             match state.current_authentication() {
                                 Ok(Some(current))
@@ -449,14 +457,14 @@ impl NativeOwner {
                         }
                         let outcome = tokio::select! {
                             _=stopping.cancelled()=>Err(Error::DeliveryUncertain),
-                            outcome=state.input(operation,expected.is_some())=>outcome,
+                            outcome=state.input(operation,expected.is_some(),models.as_ref())=>outcome,
                         };
                         let _ = result.send(outcome);
                     }
-                    Command::Continuation(ending, text, route, _permit, result) => {
+                    Command::Continuation(ending, text, operation, models, _permit, result) => {
                         let outcome = tokio::select! {
                             _=stopping.cancelled()=>Err(Error::DeliveryUncertain),
-                            outcome=state.continue_after_ending(ending,text,route)=>outcome,
+                            outcome=state.continue_after_ending(ending,text,operation,&models)=>outcome,
                         };
                         let _ = result.send(outcome);
                     }
@@ -600,15 +608,17 @@ impl NativeHandle {
         &self,
         operation: NativeInputOperation,
     ) -> Result<NativePromptAcceptance, Error> {
-        self.submit_input(operation, None).await
+        self.submit_input(operation, None, None).await
     }
     /// Bind dispatch to the launch whose tool publication fence was installed.
     pub async fn prompt_for_owner(
         &self,
         operation: NativeInputOperation,
         owner: NativeAuthenticationBinding,
+        models: NativeModelDispatch,
     ) -> Result<NativePromptAcceptance, Error> {
-        self.submit_input(operation, Some(owner)).await
+        self.submit_input(operation, Some(owner), Some(models))
+            .await
     }
     /// Consume a caller-authorized continuation at its exact live ending. A
     /// lost acceptance response cannot make that ending usable again.
@@ -616,7 +626,8 @@ impl NativeHandle {
         &self,
         ending: NativeNormalEnding,
         text: ConversationText,
-        route: ContinuationRoute,
+        operation_id: String,
+        models: NativeModelDispatch,
     ) -> Result<NativePromptAcceptance, Error> {
         let bytes = u32::try_from(text.as_str().len()).map_err(|_| Error::NotAdmitted)?;
         if text.as_str().len() > MAX_LINE {
@@ -629,7 +640,14 @@ impl NativeHandle {
             .map_err(|_| Error::NotAdmitted)?;
         let (result, rx) = oneshot::channel();
         self.sender
-            .try_send(Command::Continuation(ending, text, route, permit, result))
+            .try_send(Command::Continuation(
+                ending,
+                text,
+                operation_id,
+                models,
+                permit,
+                result,
+            ))
             .map_err(|_| Error::NotAdmitted)?;
         rx.await.map_err(|_| Error::Process)?
     }
@@ -637,6 +655,7 @@ impl NativeHandle {
         &self,
         operation: NativeInputOperation,
         owner: Option<NativeAuthenticationBinding>,
+        models: Option<NativeModelDispatch>,
     ) -> Result<NativePromptAcceptance, Error> {
         operation.validate()?;
         let bytes = u32::try_from(operation.text.as_str().len()).map_err(|_| Error::NotAdmitted)?;
@@ -647,7 +666,7 @@ impl NativeHandle {
             .map_err(|_| Error::NotAdmitted)?;
         let (result, rx) = oneshot::channel();
         self.sender
-            .try_send(Command::Prompt(operation, owner, permit, result))
+            .try_send(Command::Prompt(operation, owner, models, permit, result))
             .map_err(|_| Error::NotAdmitted)?;
         rx.await.map_err(|_| Error::Process)?
     }
@@ -760,6 +779,7 @@ struct Live {
     capture: crate::CaptureLog,
     observations: Arc<Observations>,
     _authentication: NativeAuthenticationBinding,
+    api_key_source: Option<[u8; 24]>,
     tools: Option<crate::NativeToolProvision>,
     instructions: chapchoo_domain::ProjectInstructions,
     tool_catalog: Vec<u8>,
@@ -794,6 +814,7 @@ impl State {
         &mut self,
         operation: NativeInputOperation,
         managed: bool,
+        models: Option<&NativeModelDispatch>,
     ) -> Result<NativePromptAcceptance, Error> {
         if let Some(previous) = self.inputs.recover(&operation)? {
             return Ok(previous);
@@ -811,14 +832,21 @@ impl State {
         if let Some(previous) = self.inputs.begin(&operation)? {
             return Ok(previous);
         }
-        let outcome = match tokio::time::timeout(
-            Duration::from_secs(10),
-            steering::submit(
-                session,
+        let outcome = match tokio::time::timeout(Duration::from_secs(10), async {
+            if let Some(accepted) =
+                steering::steer(session, &operation.text, models.map(|model| &model.route)).await?
+            {
+                return Ok(accepted);
+            }
+            model_selection::prompt(
+                live,
+                model_selection::PromptKind::Ordinary { managed },
+                &operation.operation_id,
                 &operation.text,
-                managed.then_some(live.observations.as_ref()),
-            ),
-        )
+                models,
+            )
+            .await
+        })
         .await
         {
             Ok(Ok(outcome)) => outcome,
@@ -836,7 +864,8 @@ impl State {
         &mut self,
         ending: NativeNormalEnding,
         text: ConversationText,
-        route: ContinuationRoute,
+        operation_id: String,
+        models: &NativeModelDispatch,
     ) -> Result<NativePromptAcceptance, Error> {
         let live = self.live.as_ref().ok_or(Error::NotAdmitted)?;
         let session = live.session.as_ref().ok_or(Error::NotAdmitted)?;
@@ -844,17 +873,18 @@ impl State {
         {
             return Err(Error::NotAdmitted);
         }
-        let pending = route.publish(|| {
-            live.observations
-                .publish_continuation(&ending, || session.send_prompt(text.as_str()))
-        })?;
-        let response = tokio::time::timeout(Duration::from_secs(10), pending.block_task())
-            .await
-            .map_err(|_| Error::DeliveryUncertain)?
-            .map_err(|_| Error::DeliveryUncertain)?;
-        Ok(NativePromptAcceptance::Inserted {
-            native_message_id: response.message_id.to_string(),
-        })
+        tokio::time::timeout(
+            Duration::from_secs(10),
+            model_selection::prompt(
+                live,
+                model_selection::PromptKind::Continuation(&ending),
+                &operation_id,
+                &text,
+                Some(models),
+            ),
+        )
+        .await
+        .map_err(|_| Error::DeliveryUncertain)?
     }
     fn observe(&self) -> Result<NativeObservation, Error> {
         let live = self.live.as_ref().ok_or(Error::NotAdmitted)?;
@@ -868,6 +898,7 @@ impl State {
         });
         observed.authentication_id = Some(live._authentication.authentication_id.clone());
         observed.applied_supply = Some(live.requested_supply.clone());
+        observed.model = Some(model_selection::observe(live)?);
         Ok(observed)
     }
     fn stop(&self, target: &NativeWorkTarget) -> Result<(), Error> {
@@ -1006,6 +1037,7 @@ impl State {
         let written = self.credential_write.as_mut().ok_or(Error::Process)?.await;
         self.credential_write = None;
         let credentials = written.map_err(|_| Error::Storage)??;
+        let api_key_source = credentials.initial_api_key().map(|_| binding.source);
         authentication.check(&binding).await?;
         let launch = tempfile::Builder::new()
             .prefix("launch-")
@@ -1129,6 +1161,7 @@ impl State {
             capture: source,
             observations,
             _authentication: binding,
+            api_key_source,
             tools: self.pending_tools.take(),
             instructions: config.instructions.clone(),
             tool_catalog: config.tool_catalog.to_vec(),

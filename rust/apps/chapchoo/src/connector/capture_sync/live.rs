@@ -36,6 +36,28 @@ pub(super) async fn publish_live(
     };
     match native.observe().await {
         Ok(observed) => {
+            if let Some(model) = observed.model
+                && let Some(native) = observed.target.as_ref()
+                && native.snapshot.as_str() == target.snapshot_id
+                && native.native_session.as_str() == target.native_session_id
+            {
+                // Observation is optional; an older Control or a changing
+                // owner must not starve native foreground and requests.
+                let report = super::super::models::observe(
+                    &mut client,
+                    &origin,
+                    key,
+                    &current.conversation_id,
+                    native,
+                    model,
+                );
+                if !matches!(
+                    tokio::time::timeout(Duration::from_secs(2), report).await,
+                    Ok(Ok(()))
+                ) {
+                    tracing::debug!("Model observation was not accepted");
+                }
+            }
             if let Some(position) = observed.position {
                 if observed.target.as_ref().is_none_or(|source| {
                     source.snapshot.as_str() != target.snapshot_id
