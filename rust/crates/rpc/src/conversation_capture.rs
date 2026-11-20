@@ -3,6 +3,7 @@ mod answers;
 mod assembly;
 mod authentication;
 mod input;
+mod models;
 mod native_hooks;
 mod observations;
 mod setup;
@@ -186,6 +187,24 @@ impl ConnectorCapture for ConversationCaptureServices {
         request: Request<wire::NativeStateReport>,
     ) -> Result<Response<()>, Status> {
         observations::native(self, request).await
+    }
+    async fn report_model(
+        &self,
+        request: Request<wire::ModelObservationReport>,
+    ) -> Result<Response<()>, Status> {
+        models::observe(self, request).await
+    }
+    async fn reserve_model_start(
+        &self,
+        request: Request<wire::ModelStartRequest>,
+    ) -> Result<Response<wire::ModelStartAdmission>, Status> {
+        models::reserve(self, request).await
+    }
+    async fn settle_model_start(
+        &self,
+        request: Request<wire::ModelStartReport>,
+    ) -> Result<Response<()>, Status> {
+        models::settle(self, request).await
     }
     async fn report_native_hook(
         &self,

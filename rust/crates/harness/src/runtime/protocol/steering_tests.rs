@@ -145,11 +145,23 @@ async fn cancelling_a_steering_waiter_after_publication_never_grants_prompt_fall
     acknowledge_title(&mut read, &mut write).await?;
     let session = rx.await??;
     let text = ConversationText::parse("once".into())?;
+    let lease = ContinuationRouteLease::open();
+    let closed_route = lease.route();
+    drop(lease);
+    let stale_text = ConversationText::parse("stale route must not publish".into())?;
+    assert!(matches!(
+        steering::steer(&session, &stale_text, Some(&closed_route)).await,
+        Err(Error::NotAdmitted)
+    ));
     {
-        let submitted = steering::submit(&session, &text, None);
+        let lease = ContinuationRouteLease::open();
+        let route = lease.route();
+        let submitted = steering::steer(&session, &text, Some(&route));
         tokio::pin!(submitted);
         let steer = tokio::select! { request=request(&mut read)=>request?,_=&mut submitted=>return Err("Premature steering result".into()) };
         assert_eq!(steer.method, "_session/steering");
+        assert_eq!(steer.params["prompt"][0]["text"], "once");
+        drop(lease);
         // The response is deliberately unavailable after native publication.
     }
     done.cancel();

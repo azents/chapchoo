@@ -49,6 +49,30 @@ cannot overwrite newer ones, and an equal captured state cannot change a known
 applied choice. An unknown existing observation may be enriched with its first
 explicit applied fact without changing its work/source meaning.
 
+## Conversation model preference
+
+The private owner under current Team admission can save one advertised model
+for an already prepared conversation. The server stores the selection against
+the retained native session and its verified applied connection. Initial model
+selection belongs to the harness. An exact restore can retain the explicit
+choice; a different session or applied binding does not inherit it. An
+unverified or replaced launch does not project an old choice as current.
+
+A save compares the exact target and previous accepted save request. Its
+operation receipt can recover a lost response without repeating the write or
+overwriting a newer choice. Saving changes no native configuration or work.
+The owner transaction orders saves against one outstanding new-prompt
+submission reservation per conversation. The reservation binds the latest
+saved choice, if any, to the exact operation and native launch. Exact input
+insertion, proven non-publication, or exact physical retirement releases the
+ordering fence; none is a claim about which model executed. Unknown delivery
+remains unresolved and does not grant another attempt. Force Removal hides the
+Agent but does not drop unresolved submission evidence before retirement.
+
+A qualified model-specific non-start report can expose manual recovery for
+the affected choice and conversation. Generic failure, missing options and
+uncertain delivery do not establish that recovery condition.
+
 ## Conversation identity and product input
 
 Conversations and accepted inputs use [repository-issued identities](repository-identity.md)

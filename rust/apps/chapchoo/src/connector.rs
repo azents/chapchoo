@@ -2,6 +2,7 @@
 mod authentication;
 mod authentication_sync;
 mod capture_sync;
+mod models;
 mod operations;
 mod server_tools;
 use crate::AppError;
@@ -66,8 +67,11 @@ pub async fn run(
     // This owner survives every operational key/stream replacement. Reads and
     // connectivity do not start native work; source-qualified commands do later.
     let mut operations = operations::Operations::new(native.handle());
-    let mut capture_sync =
-        capture_sync::CaptureSync::new(native.handle(), operations.input_ordering());
+    let mut capture_sync = capture_sync::CaptureSync::new(
+        native.handle(),
+        operations.input_ordering(),
+        operations.model_reports(),
+    );
     let primary = reconnect(
         endpoint_url,
         session_id,

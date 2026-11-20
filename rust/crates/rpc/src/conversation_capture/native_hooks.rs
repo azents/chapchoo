@@ -80,6 +80,7 @@ pub(super) async fn begin(
             &value.conversation_id,
             &value.operation_id,
             &ending,
+            value.guards_model_start,
         )
         .await
         .map_err(status)?

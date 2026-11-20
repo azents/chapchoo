@@ -1110,6 +1110,11 @@ impl Store {
             .await?;
             diesel::sql_query(dialect.query("UPDATE computer_executions SET retired_at=COALESCE(retired_at,?) WHERE id=? AND computer_id=?"))
                 .bind::<BigInt,_>(now).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Execution,execution_id)?).bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Computer,scope.computer_id)?).execute(connection).await?;
+            // Physical absence was just confirmed for this execution. This
+            // settles its exclusion fence, not whether its prompt ever ran.
+            diesel::sql_query(dialect.query("UPDATE conversation_model_starts SET settlement='RETIRED' WHERE execution_id=? AND settlement IS NULL"))
+                .bind::<IdentitySql,_>(EntityId::from_dto(EntityKind::Execution,execution_id)?)
+                .execute(connection).await?;
             let phase = match current.desired_state.as_str() {
                 "DELETING" if current.current_phase == "UNCERTAIN" => "UNCERTAIN",
                 "DELETING" => "DELETING",

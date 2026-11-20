@@ -76,6 +76,11 @@ pub use conversations::{
     QueuedSetupContext, RetainedConversationInput, RetryConversationInput, SaveHarnessSupply,
     SourceBinding,
 };
+pub use conversations::{
+    ConversationModelChoice, ConversationModelObservation, ConversationModelProjection,
+    ConversationModelSave, ConversationModelSaveReceipt, ConversationModelStart,
+    ConversationModelStartAdmission, ConversationModelStartOutcome, ConversationModelTarget,
+};
 pub use creation_results::AgentCreationResult;
 pub use delivery::{DeliveryComputer, DeliveryExecution, DeliverySnapshot};
 pub use directory::{

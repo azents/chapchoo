@@ -1,4 +1,5 @@
 import type { AgentsInput, AgentsProps } from "../types";
+import type { ModelSelectionControls } from "./components/ModelSelection";
 import type { ChatFocus } from "./containers/useChatFocus";
 import type { FloatingChat } from "./containers/useFloatingChat";
 import type { ChatCopy } from "./copy";
@@ -66,6 +67,7 @@ export interface ChatProps {
   navigation: AppNavigation | null;
   accountControls: ReactNode;
   supplyControl: ReactNode;
+  modelSelection?: ModelSelectionControls;
   secondaryOverlay: boolean;
   agentNavigation: ReactNode;
   conversation: ConversationControls;

@@ -400,6 +400,21 @@ Stop availability is independent of input upload/sending and general conversatio
 reread activity. Current account/Computer admission and the exact observed target
 still apply, and the native owner remains final authority over that work token.
 
+## Conversation model selection
+
+The desktop overflow and mobile character/status controls open the same
+conversation details sheet, with its Agent link. Its **Model** row reflects
+the current scoped saved choice or the harness's observed initial model.
+The picker offers advertised concrete models and requires an explicit save.
+Cancel drops the draft. A conflicting save does not overwrite a newer choice,
+and an ambiguous response can be checked by its original request ID without
+repeating the mutation.
+
+The setting is for new conversation turns. The interface does not claim
+which model an individual turn used. A qualified failure before start can
+offer **Change model** in the same conversation without preselecting an
+alternative; saving never resends the affected request.
+
 ## Owner supply settings
 
 The activity sheet has a separate Codex setup control. Its supplementary read is

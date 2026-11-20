@@ -31,7 +31,7 @@ macro_rules! verify_migration {
         let facts = diesel::sql_query(native_facts).get_result::<Count>(connection)?.n;
         // Remove implicit fixture Work to isolate the older queue migration.
         connection.batch_execute("DELETE FROM conversation_goals WHERE EXISTS (SELECT 1 FROM conversation_work_items w WHERE w.conversation_id=conversation_goals.conversation_id AND w.goal_key=conversation_goals.goal_key AND w.title='')")?;
-        for expected in ["00000000000030", "00000000000029", "00000000000028"] {
+        for expected in ["00000000000031", "00000000000030", "00000000000029", "00000000000028"] {
             assert_eq!(connection.revert_last_migration($migrations)?.to_string(), expected);
         }
         assert!(connection.revert_last_migration($migrations).is_err(),

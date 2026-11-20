@@ -42,12 +42,12 @@ enum NoRunningTurn {
     NoRunningTurn,
 }
 
-/// The producer's explicit non-consumption result is the sole prompt transition.
-pub(super) async fn submit(
+/// None means the producer explicitly did not consume this prompt.
+pub(super) async fn steer(
     session: &agent_client_protocol::v2::ActiveSession<Agent>,
     text: &ConversationText,
-    observations: Option<&Observations>,
-) -> Result<NativePromptAcceptance, Error> {
+    route: Option<&ContinuationRoute>,
+) -> Result<Option<NativePromptAcceptance>, Error> {
     let request = Steering {
         session_id: session.session_id().clone(),
         prompt: vec![schema::ContentBlock::from(text.as_str())],
@@ -57,28 +57,38 @@ pub(super) async fn submit(
             },
         },
     };
-    let response = session
-        .connection()
-        .send_request(request)
-        .block_task()
-        .await
-        .map_err(|_| Error::Protocol)?;
+    let publish = || Ok(session.connection().send_request(request));
+    let pending = match route {
+        Some(route) => route.publish(publish)?,
+        None => publish()?,
+    };
+    let response = pending.block_task().await.map_err(|_| Error::Protocol)?;
     match response {
-        SteeringResponse::Injected => Ok(NativePromptAcceptance::Steered),
-        SteeringResponse::Failed => Ok(NativePromptAcceptance::Failed),
+        SteeringResponse::Injected => Ok(Some(NativePromptAcceptance::Steered)),
+        SteeringResponse::Failed => Ok(Some(NativePromptAcceptance::Failed)),
         SteeringResponse::StartedNewTurn => Err(Error::Protocol),
         SteeringResponse::PromptRequired {
             reason: NoRunningTurn::NoRunningTurn,
-        } => {
-            let publish = || session.send_prompt(text.as_str());
-            let pending = match observations {
-                Some(observations) => observations.publish_ordinary_prompt(publish)?,
-                None => publish(),
-            };
-            let response = pending.block_task().await.map_err(|_| Error::Protocol)?;
-            Ok(NativePromptAcceptance::Inserted {
-                native_message_id: response.message_id.to_string(),
-            })
-        }
+        } => Ok(None),
     }
+}
+
+#[cfg(test)]
+pub(super) async fn submit(
+    session: &agent_client_protocol::v2::ActiveSession<Agent>,
+    text: &ConversationText,
+    observations: Option<&Observations>,
+) -> Result<NativePromptAcceptance, Error> {
+    if let Some(accepted) = steer(session, text, None).await? {
+        return Ok(accepted);
+    }
+    let publish = || session.send_prompt(text.as_str());
+    let pending = match observations {
+        Some(observations) => observations.publish_ordinary_prompt(publish)?,
+        None => publish(),
+    };
+    let response = pending.block_task().await.map_err(|_| Error::Protocol)?;
+    Ok(NativePromptAcceptance::Inserted {
+        native_message_id: response.message_id.to_string(),
+    })
 }

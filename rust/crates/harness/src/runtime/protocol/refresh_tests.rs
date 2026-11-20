@@ -46,6 +46,7 @@ async fn live_state() -> Result<(tempfile::TempDir, State, Arc<Observations>), T
         _launch: launch,
         capture,
         observations: observations.clone(),
+        api_key_source: None,
         _authentication: NativeAuthenticationBinding {
             agent_id: "agent".into(),
             conversation_id: "conversation".into(),

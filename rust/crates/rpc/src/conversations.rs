@@ -446,6 +446,56 @@ impl Conversations for ConversationServices {
             work,
         }))
     }
+    async fn model(
+        &self,
+        request: Request<wire::OwnerConversationRequest>,
+    ) -> Result<Response<wire::OwnerConversationModel>, Status> {
+        self.admit()?;
+        let actor = actor(&request)?;
+        let value = request.into_inner();
+        let model = self
+            .conversation
+            .model(&actor, &value.agent_id, now()?)
+            .await
+            .map_err(status)?;
+        Ok(Response::new(crate::conversation_models::projection(model)))
+    }
+    async fn save_model(
+        &self,
+        request: Request<wire::OwnerModelSave>,
+    ) -> Result<Response<wire::ModelSaveReceipt>, Status> {
+        self.admit()?;
+        let actor = actor(&request)?;
+        let value = request.into_inner();
+        let save = chapchoo_service::ConversationModelSave {
+            target: crate::conversation_models::target(value.target)?,
+            request_id: value.request_id,
+            expected_request_id: value.expected_request_id,
+            model_id: value.model_id,
+        };
+        let result = self
+            .conversation
+            .save_model(&actor, &value.agent_id, &save, now()?)
+            .await
+            .map_err(status)?;
+        Ok(Response::new(crate::conversation_models::receipt(result)))
+    }
+    async fn model_save_result(
+        &self,
+        request: Request<wire::OwnerModelSaveResult>,
+    ) -> Result<Response<wire::OptionalModelSaveReceipt>, Status> {
+        self.admit()?;
+        let actor = actor(&request)?;
+        let value = request.into_inner();
+        let result = self
+            .conversation
+            .model_save_result(&actor, &value.agent_id, &value.request_id, now()?)
+            .await
+            .map_err(status)?;
+        Ok(Response::new(wire::OptionalModelSaveReceipt {
+            receipt: result.map(crate::conversation_models::receipt),
+        }))
+    }
     async fn get_supply(
         &self,
         request: Request<wire::OwnerConversationRequest>,

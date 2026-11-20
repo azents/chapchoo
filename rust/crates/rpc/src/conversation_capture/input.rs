@@ -38,6 +38,7 @@ pub(super) async fn pull(
                 target: &target,
             },
             value.offset,
+            value.guards_model_start,
         )
         .await
         .map_err(status)?;

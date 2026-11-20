@@ -1,0 +1,78 @@
+const english = {
+  details: "Conversation details",
+  model: "Model",
+  change: "Change model",
+  beforeStart: "{model} is unavailable. The request did not start.",
+  apply: "For new conversation turns.",
+  unknown: "No model reported",
+  empty: "No models are available to select.",
+  unavailable: "Model choices are unavailable.",
+  save: "Save",
+  cancel: "Cancel",
+  rejected: "The model was not saved. Refresh the choices and try again.",
+  uncertain:
+    "The save could not be confirmed. Check its result before saving again.",
+  check: "Check save",
+  refresh: "Refresh",
+};
+type Copy = typeof english;
+const translations: Record<string, Copy> = {
+  "ko-KR": {
+    details: "대화 상세",
+    model: "모델",
+    change: "모델 변경",
+    beforeStart: "{model}을(를) 사용할 수 없어 요청을 시작하지 않았습니다.",
+    apply: "새 대화 실행에 사용할 모델입니다.",
+    unknown: "모델 확인 안 됨",
+    empty: "선택할 수 있는 모델이 없습니다.",
+    unavailable: "모델 선택지를 불러올 수 없습니다.",
+    save: "저장",
+    cancel: "취소",
+    rejected:
+      "모델을 저장하지 못했습니다. 목록을 새로고침한 뒤 다시 시도하세요.",
+    uncertain:
+      "저장 여부를 확인하지 못했습니다. 다시 저장하기 전에 결과를 확인하세요.",
+    check: "저장 결과 확인",
+    refresh: "새로고침",
+  },
+  "ja-JP": {
+    details: "会話の詳細",
+    model: "モデル",
+    change: "モデルを変更",
+    beforeStart:
+      "{model} を使用できないため、リクエストは開始されませんでした。",
+    apply: "新しい会話ターンで使うモデルです。",
+    unknown: "モデル未確認",
+    empty: "選択できるモデルがありません。",
+    unavailable: "モデルの選択肢を取得できません。",
+    save: "保存",
+    cancel: "キャンセル",
+    rejected:
+      "モデルを保存できませんでした。選択肢を更新して再試行してください。",
+    uncertain:
+      "保存結果を確認できませんでした。再度保存する前に結果を確認してください。",
+    check: "保存結果を確認",
+    refresh: "更新",
+  },
+  "fr-FR": {
+    details: "Détails de la conversation",
+    model: "Modèle",
+    change: "Changer de modèle",
+    beforeStart: "{model} est indisponible. La demande n’a pas démarré.",
+    apply: "Pour les nouveaux tours de conversation.",
+    unknown: "Modèle non confirmé",
+    empty: "Aucun modèle ne peut être sélectionné.",
+    unavailable: "Les choix de modèle ne sont pas disponibles.",
+    save: "Enregistrer",
+    cancel: "Annuler",
+    rejected:
+      "Le modèle n’a pas été enregistré. Actualisez les choix et réessayez.",
+    uncertain:
+      "L’enregistrement n’a pas pu être confirmé. Vérifiez le résultat avant de réessayer.",
+    check: "Vérifier l’enregistrement",
+    refresh: "Actualiser",
+  },
+};
+export function modelSelectionCopy(locale: string): Copy {
+  return translations[locale] ?? english;
+}

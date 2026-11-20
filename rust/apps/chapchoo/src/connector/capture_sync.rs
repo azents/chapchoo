@@ -14,17 +14,25 @@ type PublishedRequests = Arc<tokio::sync::Mutex<BTreeMap<String, captured::LiveR
 
 pub(super) struct CaptureSync {
     native: NativeHandle,
+    models: super::models::Reports,
     published: PublishedRequests,
     endings: Arc<tokio::sync::Mutex<endings::Delivery>>,
     tasks: JoinSet<Result<(), AppError>>,
     stop: CancellationToken,
 }
 impl CaptureSync {
-    pub(super) fn new(native: NativeHandle, ordering: super::server_tools::Ordering) -> Self {
+    pub(super) fn new(
+        native: NativeHandle,
+        ordering: super::server_tools::Ordering,
+        models: super::models::Reports,
+    ) -> Self {
         Self {
             native,
+            models: models.clone(),
             published: Arc::default(),
-            endings: Arc::new(tokio::sync::Mutex::new(endings::Delivery::new(ordering))),
+            endings: Arc::new(tokio::sync::Mutex::new(endings::Delivery::new(
+                ordering, models,
+            ))),
             tasks: JoinSet::new(),
             stop: CancellationToken::new(),
         }
@@ -50,6 +58,7 @@ impl CaptureSync {
         let native = self.native.clone();
         let published = self.published.clone();
         let endings = self.endings.clone();
+        let models = self.models.clone();
         let key = BearerSecret::parse(key.expose().to_owned())?;
         let stop = self.stop.clone();
         self.tasks.spawn(async move {
@@ -58,6 +67,7 @@ impl CaptureSync {
             if stop.is_cancelled() {
                 return Ok(());
             }
+            models.flush(channel.clone(), &origin, &key).await?;
             let mut endings = endings.lock().await;
             // Order release is independent of later capture progress. Keep
             // capture usable even while the exact Close needs another attempt.
@@ -269,7 +279,7 @@ mod tests {
         let native = chapchoo_harness::NativeOwner::new(chapchoo_harness::NativeStorage::open(
             saved.path(),
         )?)?;
-        let mut sync = CaptureSync::new(native.handle(), Default::default());
+        let mut sync = CaptureSync::new(native.handle(), Default::default(), Default::default());
         let (entered, entry) = tokio::sync::oneshot::channel();
         let (release, released) = tokio::sync::oneshot::channel();
         sync.tasks.spawn(async move {

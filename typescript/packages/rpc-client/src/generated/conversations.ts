@@ -167,6 +167,56 @@ export interface CurrentSystemPrompt {
   prompt: ProjectInstructionEvidence | undefined;
 }
 
+export interface ModelTarget {
+  conversationId: string;
+  native: NativeTarget | undefined;
+  launchOperationId: string;
+}
+
+export interface ModelChoice {
+  id: string;
+  label: string;
+}
+
+export interface ModelOptions {
+  choices: ModelChoice[];
+}
+
+export interface OwnerConversationModel {
+  target: ModelTarget | undefined;
+  current: ModelChoice | undefined;
+  savedRequestId?: string | undefined;
+  options: ModelOptions | undefined;
+  recovery: ModelRecovery | undefined;
+}
+
+export interface ModelRecovery {
+  operationId: string;
+  model: ModelChoice | undefined;
+}
+
+export interface OwnerModelSave {
+  agentId: string;
+  target: ModelTarget | undefined;
+  requestId: string;
+  expectedRequestId?: string | undefined;
+  modelId: string;
+}
+
+export interface OwnerModelSaveResult {
+  agentId: string;
+  requestId: string;
+}
+
+export interface ModelSaveReceipt {
+  requestId: string;
+  model: ModelChoice | undefined;
+}
+
+export interface OptionalModelSaveReceipt {
+  receipt: ModelSaveReceipt | undefined;
+}
+
 export interface InstructionSource {
   kind: InstructionSourceKind;
   text: string;
@@ -610,6 +660,55 @@ export interface CaptureSource {
   connectionId: string;
 }
 
+export interface ModelObservationReport {
+  source: CaptureSource | undefined;
+  target: ModelTarget | undefined;
+  order: bigint;
+  current: ModelChoice | undefined;
+  options:
+    | ModelOptions
+    | undefined;
+  /** Execution-only exact continuity witness for an applied API key. */
+  apiKeySource?: Buffer | undefined;
+}
+
+export interface ModelStartTarget {
+  modelTarget: ModelTarget | undefined;
+  operationId: string;
+}
+
+export interface ModelStartRequest {
+  source: CaptureSource | undefined;
+  target: ModelStartTarget | undefined;
+  capable: boolean;
+}
+
+export interface ReservedModelStart {
+  modelId?: string | undefined;
+}
+
+export interface ModelStartAdmission {
+  ungoverned?: Empty | undefined;
+  reserved?: ReservedModelStart | undefined;
+}
+
+export interface ModelStartReport {
+  source: CaptureSource | undefined;
+  target:
+    | ModelStartTarget
+    | undefined;
+  /** Exact input insertion, not evidence of a new turn or its model. */
+  insertedMessageId?: string | undefined;
+  notPublished?:
+    | Empty
+    | undefined;
+  /**
+   * A supported producer proved both model-specific unavailability and
+   * non-start. Generic rejection or a missing option cannot report this.
+   */
+  modelUnavailableBeforeStart?: string | undefined;
+}
+
 export interface SourcePosition {
   ordinal: bigint;
   occurrenceId: string;
@@ -710,6 +809,7 @@ export interface ContinuationHandoff {
   target: NativeTarget | undefined;
   ending: NativeNormalEnding | undefined;
   operationId: string;
+  guardsModelStart: boolean;
 }
 
 export interface ContinuationGrant {
@@ -772,6 +872,7 @@ export interface InputChunkRequest {
   source: CaptureSource | undefined;
   command: InputCommand | undefined;
   offset: number;
+  guardsModelStart: boolean;
 }
 
 export interface InputChunk {
@@ -1053,6 +1154,687 @@ export const CurrentSystemPrompt: MessageFns<CurrentSystemPrompt> = {
     const message = createBaseCurrentSystemPrompt();
     message.prompt = (object.prompt !== undefined && object.prompt !== null)
       ? ProjectInstructionEvidence.fromPartial(object.prompt)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseModelTarget(): ModelTarget {
+  return { conversationId: "", native: undefined, launchOperationId: "" };
+}
+
+export const ModelTarget: MessageFns<ModelTarget> = {
+  encode(message: ModelTarget, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.conversationId !== "") {
+      writer.uint32(10).string(message.conversationId);
+    }
+    if (message.native !== undefined) {
+      NativeTarget.encode(message.native, writer.uint32(18).fork()).join();
+    }
+    if (message.launchOperationId !== "") {
+      writer.uint32(26).string(message.launchOperationId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ModelTarget {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseModelTarget();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.native = NativeTarget.decode(reader, reader.uint32());
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.launchOperationId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ModelTarget>, I>>(base?: I): ModelTarget {
+    return ModelTarget.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ModelTarget>, I>>(object: I): ModelTarget {
+    const message = createBaseModelTarget();
+    message.conversationId = object.conversationId ?? "";
+    message.native = (object.native !== undefined && object.native !== null)
+      ? NativeTarget.fromPartial(object.native)
+      : undefined;
+    message.launchOperationId = object.launchOperationId ?? "";
+    return message;
+  },
+};
+
+function createBaseModelChoice(): ModelChoice {
+  return { id: "", label: "" };
+}
+
+export const ModelChoice: MessageFns<ModelChoice> = {
+  encode(message: ModelChoice, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    if (message.label !== "") {
+      writer.uint32(18).string(message.label);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ModelChoice {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseModelChoice();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.label = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ModelChoice>, I>>(base?: I): ModelChoice {
+    return ModelChoice.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ModelChoice>, I>>(object: I): ModelChoice {
+    const message = createBaseModelChoice();
+    message.id = object.id ?? "";
+    message.label = object.label ?? "";
+    return message;
+  },
+};
+
+function createBaseModelOptions(): ModelOptions {
+  return { choices: [] };
+}
+
+export const ModelOptions: MessageFns<ModelOptions> = {
+  encode(message: ModelOptions, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.choices) {
+      ModelChoice.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ModelOptions {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseModelOptions();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.choices.push(ModelChoice.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ModelOptions>, I>>(base?: I): ModelOptions {
+    return ModelOptions.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ModelOptions>, I>>(object: I): ModelOptions {
+    const message = createBaseModelOptions();
+    message.choices = object.choices?.map((e) => ModelChoice.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseOwnerConversationModel(): OwnerConversationModel {
+  return { target: undefined, current: undefined, savedRequestId: undefined, options: undefined, recovery: undefined };
+}
+
+export const OwnerConversationModel: MessageFns<OwnerConversationModel> = {
+  encode(message: OwnerConversationModel, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.target !== undefined) {
+      ModelTarget.encode(message.target, writer.uint32(10).fork()).join();
+    }
+    if (message.current !== undefined) {
+      ModelChoice.encode(message.current, writer.uint32(18).fork()).join();
+    }
+    if (message.savedRequestId !== undefined) {
+      writer.uint32(26).string(message.savedRequestId);
+    }
+    if (message.options !== undefined) {
+      ModelOptions.encode(message.options, writer.uint32(34).fork()).join();
+    }
+    if (message.recovery !== undefined) {
+      ModelRecovery.encode(message.recovery, writer.uint32(42).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): OwnerConversationModel {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseOwnerConversationModel();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.target = ModelTarget.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.current = ModelChoice.decode(reader, reader.uint32());
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.savedRequestId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.options = ModelOptions.decode(reader, reader.uint32());
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.recovery = ModelRecovery.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<OwnerConversationModel>, I>>(base?: I): OwnerConversationModel {
+    return OwnerConversationModel.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<OwnerConversationModel>, I>>(object: I): OwnerConversationModel {
+    const message = createBaseOwnerConversationModel();
+    message.target = (object.target !== undefined && object.target !== null)
+      ? ModelTarget.fromPartial(object.target)
+      : undefined;
+    message.current = (object.current !== undefined && object.current !== null)
+      ? ModelChoice.fromPartial(object.current)
+      : undefined;
+    message.savedRequestId = object.savedRequestId ?? undefined;
+    message.options = (object.options !== undefined && object.options !== null)
+      ? ModelOptions.fromPartial(object.options)
+      : undefined;
+    message.recovery = (object.recovery !== undefined && object.recovery !== null)
+      ? ModelRecovery.fromPartial(object.recovery)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseModelRecovery(): ModelRecovery {
+  return { operationId: "", model: undefined };
+}
+
+export const ModelRecovery: MessageFns<ModelRecovery> = {
+  encode(message: ModelRecovery, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.operationId !== "") {
+      writer.uint32(10).string(message.operationId);
+    }
+    if (message.model !== undefined) {
+      ModelChoice.encode(message.model, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ModelRecovery {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseModelRecovery();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.operationId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.model = ModelChoice.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ModelRecovery>, I>>(base?: I): ModelRecovery {
+    return ModelRecovery.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ModelRecovery>, I>>(object: I): ModelRecovery {
+    const message = createBaseModelRecovery();
+    message.operationId = object.operationId ?? "";
+    message.model = (object.model !== undefined && object.model !== null)
+      ? ModelChoice.fromPartial(object.model)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseOwnerModelSave(): OwnerModelSave {
+  return { agentId: "", target: undefined, requestId: "", expectedRequestId: undefined, modelId: "" };
+}
+
+export const OwnerModelSave: MessageFns<OwnerModelSave> = {
+  encode(message: OwnerModelSave, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.agentId !== "") {
+      writer.uint32(10).string(message.agentId);
+    }
+    if (message.target !== undefined) {
+      ModelTarget.encode(message.target, writer.uint32(18).fork()).join();
+    }
+    if (message.requestId !== "") {
+      writer.uint32(26).string(message.requestId);
+    }
+    if (message.expectedRequestId !== undefined) {
+      writer.uint32(34).string(message.expectedRequestId);
+    }
+    if (message.modelId !== "") {
+      writer.uint32(42).string(message.modelId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): OwnerModelSave {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseOwnerModelSave();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.agentId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.target = ModelTarget.decode(reader, reader.uint32());
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.requestId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.expectedRequestId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.modelId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<OwnerModelSave>, I>>(base?: I): OwnerModelSave {
+    return OwnerModelSave.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<OwnerModelSave>, I>>(object: I): OwnerModelSave {
+    const message = createBaseOwnerModelSave();
+    message.agentId = object.agentId ?? "";
+    message.target = (object.target !== undefined && object.target !== null)
+      ? ModelTarget.fromPartial(object.target)
+      : undefined;
+    message.requestId = object.requestId ?? "";
+    message.expectedRequestId = object.expectedRequestId ?? undefined;
+    message.modelId = object.modelId ?? "";
+    return message;
+  },
+};
+
+function createBaseOwnerModelSaveResult(): OwnerModelSaveResult {
+  return { agentId: "", requestId: "" };
+}
+
+export const OwnerModelSaveResult: MessageFns<OwnerModelSaveResult> = {
+  encode(message: OwnerModelSaveResult, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.agentId !== "") {
+      writer.uint32(10).string(message.agentId);
+    }
+    if (message.requestId !== "") {
+      writer.uint32(18).string(message.requestId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): OwnerModelSaveResult {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseOwnerModelSaveResult();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.agentId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.requestId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<OwnerModelSaveResult>, I>>(base?: I): OwnerModelSaveResult {
+    return OwnerModelSaveResult.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<OwnerModelSaveResult>, I>>(object: I): OwnerModelSaveResult {
+    const message = createBaseOwnerModelSaveResult();
+    message.agentId = object.agentId ?? "";
+    message.requestId = object.requestId ?? "";
+    return message;
+  },
+};
+
+function createBaseModelSaveReceipt(): ModelSaveReceipt {
+  return { requestId: "", model: undefined };
+}
+
+export const ModelSaveReceipt: MessageFns<ModelSaveReceipt> = {
+  encode(message: ModelSaveReceipt, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.requestId !== "") {
+      writer.uint32(10).string(message.requestId);
+    }
+    if (message.model !== undefined) {
+      ModelChoice.encode(message.model, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ModelSaveReceipt {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseModelSaveReceipt();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.requestId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.model = ModelChoice.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ModelSaveReceipt>, I>>(base?: I): ModelSaveReceipt {
+    return ModelSaveReceipt.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ModelSaveReceipt>, I>>(object: I): ModelSaveReceipt {
+    const message = createBaseModelSaveReceipt();
+    message.requestId = object.requestId ?? "";
+    message.model = (object.model !== undefined && object.model !== null)
+      ? ModelChoice.fromPartial(object.model)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseOptionalModelSaveReceipt(): OptionalModelSaveReceipt {
+  return { receipt: undefined };
+}
+
+export const OptionalModelSaveReceipt: MessageFns<OptionalModelSaveReceipt> = {
+  encode(message: OptionalModelSaveReceipt, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.receipt !== undefined) {
+      ModelSaveReceipt.encode(message.receipt, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): OptionalModelSaveReceipt {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseOptionalModelSaveReceipt();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.receipt = ModelSaveReceipt.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<OptionalModelSaveReceipt>, I>>(base?: I): OptionalModelSaveReceipt {
+    return OptionalModelSaveReceipt.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<OptionalModelSaveReceipt>, I>>(object: I): OptionalModelSaveReceipt {
+    const message = createBaseOptionalModelSaveReceipt();
+    message.receipt = (object.receipt !== undefined && object.receipt !== null)
+      ? ModelSaveReceipt.fromPartial(object.receipt)
       : undefined;
     return message;
   },
@@ -6640,6 +7422,532 @@ export const CaptureSource: MessageFns<CaptureSource> = {
   },
 };
 
+function createBaseModelObservationReport(): ModelObservationReport {
+  return {
+    source: undefined,
+    target: undefined,
+    order: 0n,
+    current: undefined,
+    options: undefined,
+    apiKeySource: undefined,
+  };
+}
+
+export const ModelObservationReport: MessageFns<ModelObservationReport> = {
+  encode(message: ModelObservationReport, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.source !== undefined) {
+      CaptureSource.encode(message.source, writer.uint32(10).fork()).join();
+    }
+    if (message.target !== undefined) {
+      ModelTarget.encode(message.target, writer.uint32(18).fork()).join();
+    }
+    if (message.order !== 0n) {
+      if (BigInt.asIntN(64, message.order) !== message.order) {
+        throw new globalThis.Error("value provided for field message.order of type int64 too large");
+      }
+      writer.uint32(24).int64(message.order);
+    }
+    if (message.current !== undefined) {
+      ModelChoice.encode(message.current, writer.uint32(34).fork()).join();
+    }
+    if (message.options !== undefined) {
+      ModelOptions.encode(message.options, writer.uint32(42).fork()).join();
+    }
+    if (message.apiKeySource !== undefined) {
+      writer.uint32(50).bytes(message.apiKeySource);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ModelObservationReport {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseModelObservationReport();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.source = CaptureSource.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.target = ModelTarget.decode(reader, reader.uint32());
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.order = reader.int64() as bigint;
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.current = ModelChoice.decode(reader, reader.uint32());
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.options = ModelOptions.decode(reader, reader.uint32());
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.apiKeySource = Buffer.from(reader.bytes());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ModelObservationReport>, I>>(base?: I): ModelObservationReport {
+    return ModelObservationReport.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ModelObservationReport>, I>>(object: I): ModelObservationReport {
+    const message = createBaseModelObservationReport();
+    message.source = (object.source !== undefined && object.source !== null)
+      ? CaptureSource.fromPartial(object.source)
+      : undefined;
+    message.target = (object.target !== undefined && object.target !== null)
+      ? ModelTarget.fromPartial(object.target)
+      : undefined;
+    message.order = (object.order !== undefined && object.order !== null) ? BigInt(object.order) : 0n;
+    message.current = (object.current !== undefined && object.current !== null)
+      ? ModelChoice.fromPartial(object.current)
+      : undefined;
+    message.options = (object.options !== undefined && object.options !== null)
+      ? ModelOptions.fromPartial(object.options)
+      : undefined;
+    message.apiKeySource = object.apiKeySource ?? undefined;
+    return message;
+  },
+};
+
+function createBaseModelStartTarget(): ModelStartTarget {
+  return { modelTarget: undefined, operationId: "" };
+}
+
+export const ModelStartTarget: MessageFns<ModelStartTarget> = {
+  encode(message: ModelStartTarget, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.modelTarget !== undefined) {
+      ModelTarget.encode(message.modelTarget, writer.uint32(10).fork()).join();
+    }
+    if (message.operationId !== "") {
+      writer.uint32(18).string(message.operationId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ModelStartTarget {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseModelStartTarget();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.modelTarget = ModelTarget.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.operationId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ModelStartTarget>, I>>(base?: I): ModelStartTarget {
+    return ModelStartTarget.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ModelStartTarget>, I>>(object: I): ModelStartTarget {
+    const message = createBaseModelStartTarget();
+    message.modelTarget = (object.modelTarget !== undefined && object.modelTarget !== null)
+      ? ModelTarget.fromPartial(object.modelTarget)
+      : undefined;
+    message.operationId = object.operationId ?? "";
+    return message;
+  },
+};
+
+function createBaseModelStartRequest(): ModelStartRequest {
+  return { source: undefined, target: undefined, capable: false };
+}
+
+export const ModelStartRequest: MessageFns<ModelStartRequest> = {
+  encode(message: ModelStartRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.source !== undefined) {
+      CaptureSource.encode(message.source, writer.uint32(10).fork()).join();
+    }
+    if (message.target !== undefined) {
+      ModelStartTarget.encode(message.target, writer.uint32(18).fork()).join();
+    }
+    if (message.capable !== false) {
+      writer.uint32(24).bool(message.capable);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ModelStartRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseModelStartRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.source = CaptureSource.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.target = ModelStartTarget.decode(reader, reader.uint32());
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.capable = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ModelStartRequest>, I>>(base?: I): ModelStartRequest {
+    return ModelStartRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ModelStartRequest>, I>>(object: I): ModelStartRequest {
+    const message = createBaseModelStartRequest();
+    message.source = (object.source !== undefined && object.source !== null)
+      ? CaptureSource.fromPartial(object.source)
+      : undefined;
+    message.target = (object.target !== undefined && object.target !== null)
+      ? ModelStartTarget.fromPartial(object.target)
+      : undefined;
+    message.capable = object.capable ?? false;
+    return message;
+  },
+};
+
+function createBaseReservedModelStart(): ReservedModelStart {
+  return { modelId: undefined };
+}
+
+export const ReservedModelStart: MessageFns<ReservedModelStart> = {
+  encode(message: ReservedModelStart, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.modelId !== undefined) {
+      writer.uint32(10).string(message.modelId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ReservedModelStart {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseReservedModelStart();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.modelId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ReservedModelStart>, I>>(base?: I): ReservedModelStart {
+    return ReservedModelStart.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ReservedModelStart>, I>>(object: I): ReservedModelStart {
+    const message = createBaseReservedModelStart();
+    message.modelId = object.modelId ?? undefined;
+    return message;
+  },
+};
+
+function createBaseModelStartAdmission(): ModelStartAdmission {
+  return { ungoverned: undefined, reserved: undefined };
+}
+
+export const ModelStartAdmission: MessageFns<ModelStartAdmission> = {
+  encode(message: ModelStartAdmission, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.ungoverned !== undefined) {
+      Empty.encode(message.ungoverned, writer.uint32(10).fork()).join();
+    }
+    if (message.reserved !== undefined) {
+      ReservedModelStart.encode(message.reserved, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ModelStartAdmission {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseModelStartAdmission();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.ungoverned = Empty.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.reserved = ReservedModelStart.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ModelStartAdmission>, I>>(base?: I): ModelStartAdmission {
+    return ModelStartAdmission.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ModelStartAdmission>, I>>(object: I): ModelStartAdmission {
+    const message = createBaseModelStartAdmission();
+    message.ungoverned = (object.ungoverned !== undefined && object.ungoverned !== null)
+      ? Empty.fromPartial(object.ungoverned)
+      : undefined;
+    message.reserved = (object.reserved !== undefined && object.reserved !== null)
+      ? ReservedModelStart.fromPartial(object.reserved)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseModelStartReport(): ModelStartReport {
+  return {
+    source: undefined,
+    target: undefined,
+    insertedMessageId: undefined,
+    notPublished: undefined,
+    modelUnavailableBeforeStart: undefined,
+  };
+}
+
+export const ModelStartReport: MessageFns<ModelStartReport> = {
+  encode(message: ModelStartReport, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.source !== undefined) {
+      CaptureSource.encode(message.source, writer.uint32(10).fork()).join();
+    }
+    if (message.target !== undefined) {
+      ModelStartTarget.encode(message.target, writer.uint32(18).fork()).join();
+    }
+    if (message.insertedMessageId !== undefined) {
+      writer.uint32(26).string(message.insertedMessageId);
+    }
+    if (message.notPublished !== undefined) {
+      Empty.encode(message.notPublished, writer.uint32(34).fork()).join();
+    }
+    if (message.modelUnavailableBeforeStart !== undefined) {
+      writer.uint32(42).string(message.modelUnavailableBeforeStart);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ModelStartReport {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseModelStartReport();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.source = CaptureSource.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.target = ModelStartTarget.decode(reader, reader.uint32());
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.insertedMessageId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.notPublished = Empty.decode(reader, reader.uint32());
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.modelUnavailableBeforeStart = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ModelStartReport>, I>>(base?: I): ModelStartReport {
+    return ModelStartReport.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ModelStartReport>, I>>(object: I): ModelStartReport {
+    const message = createBaseModelStartReport();
+    message.source = (object.source !== undefined && object.source !== null)
+      ? CaptureSource.fromPartial(object.source)
+      : undefined;
+    message.target = (object.target !== undefined && object.target !== null)
+      ? ModelStartTarget.fromPartial(object.target)
+      : undefined;
+    message.insertedMessageId = object.insertedMessageId ?? undefined;
+    message.notPublished = (object.notPublished !== undefined && object.notPublished !== null)
+      ? Empty.fromPartial(object.notPublished)
+      : undefined;
+    message.modelUnavailableBeforeStart = object.modelUnavailableBeforeStart ?? undefined;
+    return message;
+  },
+};
+
 function createBaseSourcePosition(): SourcePosition {
   return { ordinal: 0n, occurrenceId: "" };
 }
@@ -7854,7 +9162,14 @@ export const NativeHookOutcome: MessageFns<NativeHookOutcome> = {
 };
 
 function createBaseContinuationHandoff(): ContinuationHandoff {
-  return { source: undefined, conversationId: "", target: undefined, ending: undefined, operationId: "" };
+  return {
+    source: undefined,
+    conversationId: "",
+    target: undefined,
+    ending: undefined,
+    operationId: "",
+    guardsModelStart: false,
+  };
 }
 
 export const ContinuationHandoff: MessageFns<ContinuationHandoff> = {
@@ -7873,6 +9188,9 @@ export const ContinuationHandoff: MessageFns<ContinuationHandoff> = {
     }
     if (message.operationId !== "") {
       writer.uint32(42).string(message.operationId);
+    }
+    if (message.guardsModelStart !== false) {
+      writer.uint32(48).bool(message.guardsModelStart);
     }
     return writer;
   },
@@ -7930,6 +9248,14 @@ export const ContinuationHandoff: MessageFns<ContinuationHandoff> = {
             message.operationId = reader.string();
             continue;
           }
+          case 6: {
+            if (tag !== 48) {
+              break;
+            }
+
+            message.guardsModelStart = reader.bool();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -7958,6 +9284,7 @@ export const ContinuationHandoff: MessageFns<ContinuationHandoff> = {
       ? NativeNormalEnding.fromPartial(object.ending)
       : undefined;
     message.operationId = object.operationId ?? "";
+    message.guardsModelStart = object.guardsModelStart ?? false;
     return message;
   },
 };
@@ -8705,7 +10032,7 @@ export const InputCommand: MessageFns<InputCommand> = {
 };
 
 function createBaseInputChunkRequest(): InputChunkRequest {
-  return { source: undefined, command: undefined, offset: 0 };
+  return { source: undefined, command: undefined, offset: 0, guardsModelStart: false };
 }
 
 export const InputChunkRequest: MessageFns<InputChunkRequest> = {
@@ -8718,6 +10045,9 @@ export const InputChunkRequest: MessageFns<InputChunkRequest> = {
     }
     if (message.offset !== 0) {
       writer.uint32(24).uint32(message.offset);
+    }
+    if (message.guardsModelStart !== false) {
+      writer.uint32(32).bool(message.guardsModelStart);
     }
     return writer;
   },
@@ -8759,6 +10089,14 @@ export const InputChunkRequest: MessageFns<InputChunkRequest> = {
             message.offset = reader.uint32();
             continue;
           }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.guardsModelStart = reader.bool();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -8783,6 +10121,7 @@ export const InputChunkRequest: MessageFns<InputChunkRequest> = {
       ? InputCommand.fromPartial(object.command)
       : undefined;
     message.offset = object.offset ?? 0;
+    message.guardsModelStart = object.guardsModelStart ?? false;
     return message;
   },
 };
@@ -11045,6 +12384,36 @@ export const ConversationsService = {
     responseSerialize: (value: SavedSupply): Buffer => Buffer.from(SavedSupply.encode(value).finish()),
     responseDeserialize: (value: Buffer): SavedSupply => SavedSupply.decode(value),
   },
+  model: {
+    path: "/chapchoo.conversations.Conversations/Model" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: OwnerConversationRequest): Buffer =>
+      Buffer.from(OwnerConversationRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): OwnerConversationRequest => OwnerConversationRequest.decode(value),
+    responseSerialize: (value: OwnerConversationModel): Buffer =>
+      Buffer.from(OwnerConversationModel.encode(value).finish()),
+    responseDeserialize: (value: Buffer): OwnerConversationModel => OwnerConversationModel.decode(value),
+  },
+  saveModel: {
+    path: "/chapchoo.conversations.Conversations/SaveModel" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: OwnerModelSave): Buffer => Buffer.from(OwnerModelSave.encode(value).finish()),
+    requestDeserialize: (value: Buffer): OwnerModelSave => OwnerModelSave.decode(value),
+    responseSerialize: (value: ModelSaveReceipt): Buffer => Buffer.from(ModelSaveReceipt.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ModelSaveReceipt => ModelSaveReceipt.decode(value),
+  },
+  modelSaveResult: {
+    path: "/chapchoo.conversations.Conversations/ModelSaveResult" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: OwnerModelSaveResult): Buffer => Buffer.from(OwnerModelSaveResult.encode(value).finish()),
+    requestDeserialize: (value: Buffer): OwnerModelSaveResult => OwnerModelSaveResult.decode(value),
+    responseSerialize: (value: OptionalModelSaveReceipt): Buffer =>
+      Buffer.from(OptionalModelSaveReceipt.encode(value).finish()),
+    responseDeserialize: (value: Buffer): OptionalModelSaveReceipt => OptionalModelSaveReceipt.decode(value),
+  },
   submitInput: {
     path: "/chapchoo.conversations.Conversations/SubmitInput" as const,
     requestStream: false as const,
@@ -11226,6 +12595,9 @@ export interface ConversationsServer extends UntypedServiceImplementation {
   systemPrompt: handleUnaryCall<OwnerConversationRequest, CurrentSystemPrompt>;
   getSupply: handleUnaryCall<OwnerConversationRequest, SavedSupply>;
   saveSupply: handleUnaryCall<SaveSupplyRequest, SavedSupply>;
+  model: handleUnaryCall<OwnerConversationRequest, OwnerConversationModel>;
+  saveModel: handleUnaryCall<OwnerModelSave, ModelSaveReceipt>;
+  modelSaveResult: handleUnaryCall<OwnerModelSaveResult, OptionalModelSaveReceipt>;
   submitInput: handleUnaryCall<OwnerInputPiece, OwnerInputProgress>;
   inputResult: handleUnaryCall<OwnerInputResultRequest, OwnerInputStatus>;
   inputs: handleUnaryCall<OwnerInputsRequest, RetainedInputs>;
@@ -11307,6 +12679,51 @@ export interface ConversationsClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: SavedSupply) => void,
+  ): ClientUnaryCall;
+  model(
+    request: OwnerConversationRequest,
+    callback: (error: ServiceError | null, response: OwnerConversationModel) => void,
+  ): ClientUnaryCall;
+  model(
+    request: OwnerConversationRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: OwnerConversationModel) => void,
+  ): ClientUnaryCall;
+  model(
+    request: OwnerConversationRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: OwnerConversationModel) => void,
+  ): ClientUnaryCall;
+  saveModel(
+    request: OwnerModelSave,
+    callback: (error: ServiceError | null, response: ModelSaveReceipt) => void,
+  ): ClientUnaryCall;
+  saveModel(
+    request: OwnerModelSave,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ModelSaveReceipt) => void,
+  ): ClientUnaryCall;
+  saveModel(
+    request: OwnerModelSave,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ModelSaveReceipt) => void,
+  ): ClientUnaryCall;
+  modelSaveResult(
+    request: OwnerModelSaveResult,
+    callback: (error: ServiceError | null, response: OptionalModelSaveReceipt) => void,
+  ): ClientUnaryCall;
+  modelSaveResult(
+    request: OwnerModelSaveResult,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: OptionalModelSaveReceipt) => void,
+  ): ClientUnaryCall;
+  modelSaveResult(
+    request: OwnerModelSaveResult,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: OptionalModelSaveReceipt) => void,
   ): ClientUnaryCall;
   submitInput(
     request: OwnerInputPiece,
@@ -11714,6 +13131,34 @@ export const ConnectorCaptureService = {
     responseSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
     responseDeserialize: (value: Buffer): Empty => Empty.decode(value),
   },
+  reportModel: {
+    path: "/chapchoo.conversations.ConnectorCapture/ReportModel" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ModelObservationReport): Buffer =>
+      Buffer.from(ModelObservationReport.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ModelObservationReport => ModelObservationReport.decode(value),
+    responseSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
+    responseDeserialize: (value: Buffer): Empty => Empty.decode(value),
+  },
+  reserveModelStart: {
+    path: "/chapchoo.conversations.ConnectorCapture/ReserveModelStart" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ModelStartRequest): Buffer => Buffer.from(ModelStartRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ModelStartRequest => ModelStartRequest.decode(value),
+    responseSerialize: (value: ModelStartAdmission): Buffer => Buffer.from(ModelStartAdmission.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ModelStartAdmission => ModelStartAdmission.decode(value),
+  },
+  settleModelStart: {
+    path: "/chapchoo.conversations.ConnectorCapture/SettleModelStart" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ModelStartReport): Buffer => Buffer.from(ModelStartReport.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ModelStartReport => ModelStartReport.decode(value),
+    responseSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
+    responseDeserialize: (value: Buffer): Empty => Empty.decode(value),
+  },
   reportNativeHook: {
     path: "/chapchoo.conversations.ConnectorCapture/ReportNativeHook" as const,
     requestStream: false as const,
@@ -11869,6 +13314,9 @@ export interface ConnectorCaptureServer extends UntypedServiceImplementation {
   pullInput: handleUnaryCall<InputChunkRequest, InputChunk>;
   reportInput: handleUnaryCall<InputReport, InputReportAcknowledgement>;
   reportNative: handleUnaryCall<NativeStateReport, Empty>;
+  reportModel: handleUnaryCall<ModelObservationReport, Empty>;
+  reserveModelStart: handleUnaryCall<ModelStartRequest, ModelStartAdmission>;
+  settleModelStart: handleUnaryCall<ModelStartReport, Empty>;
   reportNativeHook: handleUnaryCall<NativeHookReport, NativeHookOutcome>;
   beginContinuation: handleUnaryCall<ContinuationHandoff, ContinuationGrant>;
   closeContinuation: handleUnaryCall<ContinuationHandoff, Empty>;
@@ -12045,6 +13493,51 @@ export interface ConnectorCaptureClient extends Client {
   ): ClientUnaryCall;
   reportNative(
     request: NativeStateReport,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  reportModel(
+    request: ModelObservationReport,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  reportModel(
+    request: ModelObservationReport,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  reportModel(
+    request: ModelObservationReport,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  reserveModelStart(
+    request: ModelStartRequest,
+    callback: (error: ServiceError | null, response: ModelStartAdmission) => void,
+  ): ClientUnaryCall;
+  reserveModelStart(
+    request: ModelStartRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ModelStartAdmission) => void,
+  ): ClientUnaryCall;
+  reserveModelStart(
+    request: ModelStartRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ModelStartAdmission) => void,
+  ): ClientUnaryCall;
+  settleModelStart(
+    request: ModelStartReport,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  settleModelStart(
+    request: ModelStartReport,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  settleModelStart(
+    request: ModelStartReport,
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: Empty) => void,

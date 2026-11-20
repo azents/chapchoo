@@ -73,10 +73,27 @@ impl Store {
         operation: &str,
         ending: &ConversationNormalEnding,
     ) -> Result<Option<Vec<u8>>, StoreError> {
+        self.begin_conversation_continuation_guarded(source, conversation, operation, ending, false)
+            .await
+    }
+    pub async fn begin_conversation_continuation_guarded(
+        &self,
+        source: &ConnectorSource<'_>,
+        conversation: &str,
+        operation: &str,
+        ending: &ConversationNormalEnding,
+        guards_model_start: bool,
+    ) -> Result<Option<Vec<u8>>, StoreError> {
         let id = EntityId::from_dto(EntityKind::Conversation, conversation)?;
         let operation = EntityId::from_dto(EntityKind::ConversationOperation, operation)?;
         operation!(self, |connection, dialect| {
             let row = qualified_continuation!(connection, dialect, source, id, operation, ending);
+            crate::conversations::model_selection::starts::require_model_handoff!(
+                connection,
+                dialect,
+                id,
+                guards_model_start
+            );
             if row.delivery_state != "ADMITTED" || !row.current_launch {
                 return Ok(None);
             }
