@@ -1,5 +1,4 @@
 const english = {
-  details: "Conversation details",
   model: "Model",
   change: "Change model",
   beforeStart: "{model} is unavailable. The request did not start.",
@@ -18,7 +17,6 @@ const english = {
 type Copy = typeof english;
 const translations: Record<string, Copy> = {
   "ko-KR": {
-    details: "대화 상세",
     model: "모델",
     change: "모델 변경",
     beforeStart: "{model}을(를) 사용할 수 없어 요청을 시작하지 않았습니다.",
@@ -36,7 +34,6 @@ const translations: Record<string, Copy> = {
     refresh: "새로고침",
   },
   "ja-JP": {
-    details: "会話の詳細",
     model: "モデル",
     change: "モデルを変更",
     beforeStart:
@@ -55,7 +52,6 @@ const translations: Record<string, Copy> = {
     refresh: "更新",
   },
   "fr-FR": {
-    details: "Détails de la conversation",
     model: "Modèle",
     change: "Changer de modèle",
     beforeStart: "{model} est indisponible. La demande n’a pas démarré.",

@@ -209,7 +209,7 @@ export function Chat(props: ChatProps): ReactElement {
                 variant="subtle"
                 size="2.75rem"
                 aria-haspopup="dialog"
-                aria-label={props.modelSelection?.copy.details ?? c.activity}
+                aria-label={c.activity}
                 className={classes.more}
               >
                 <Icon name="more" />
@@ -412,7 +412,7 @@ export function Chat(props: ChatProps): ReactElement {
           trapFocus={!p.confirmation && !p.detailsOpened}
           onClose={props.onClose}
           size="min(78dvh, 46rem)"
-          title={props.modelSelection?.copy.details ?? c.activity}
+          title={c.activity}
           closeButtonProps={{ "aria-label": c.close }}
           overlayProps={{ backgroundOpacity: 0.12, blur: 0 }}
         >

@@ -60,10 +60,10 @@ for (const width of [390, 1280]) {
       "/iframe.html?id=chat-container-transport--enqueue-failure&viewMode=story",
     );
     const open = page.getByRole("button", {
-      name: width === 390 ? /^Activity: Corgi$/ : "Conversation details",
+      name: width === 390 ? /^Activity: Corgi$/ : "Activity",
     });
     await open.click();
-    const sheet = page.getByRole("dialog", { name: "Conversation details" });
+    const sheet = page.getByRole("dialog", { name: "Activity", exact: true });
     await expect(sheet.getByRole("link", { name: /Corgi/ })).toBeVisible();
     const model = sheet.getByRole("button", { name: /^Model/ });
     await expect(model).toContainText(current.label);

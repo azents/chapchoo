@@ -97,11 +97,9 @@ test("owner follows Conversation Work and inspects native typed-answer records",
     await expect(message).toBeEnabled({ timeout: 90_000 });
     expect(historyReads).toBe(0);
     stage = "open-model-settings";
-    await page
-      .getByRole("button", { name: "Conversation details", exact: true })
-      .click();
+    await page.getByRole("button", { name: "Activity", exact: true }).click();
     const settings = page.getByRole("dialog", {
-      name: "Conversation details",
+      name: "Activity",
       exact: true,
     });
     stage = "open-advertised-model-picker";
@@ -126,7 +124,7 @@ test("owner follows Conversation Work and inspects native typed-answer records",
     await page.keyboard.press("Escape");
     await expect(settings).toHaveCount(0);
     expect(sendRequests).toBe(0);
-    // Conversation details also owns the existing recent-activity read. The
+    // The Activity sheet also owns the existing recent-activity read. The
     // following transcript-only activity must not fetch additional history.
     const historyReadsAfterDetails = historyReads;
     const summary = page.getByRole("region", {
@@ -453,7 +451,7 @@ test("owner follows Conversation Work and inspects native typed-answer records",
       "not on the next message",
     );
     await page
-      .getByRole("dialog", { name: "Conversation details", exact: true })
+      .getByRole("dialog", { name: "Activity", exact: true })
       .getByRole("button", { name: "Close", exact: true })
       .click();
     stage = "reconnect";

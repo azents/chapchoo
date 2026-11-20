@@ -58,6 +58,9 @@ test("current execution controls thinking across idle, attention, read failure a
       case "conversations.messages":
         value = containerInput.initialMessages;
         break;
+      case "conversations.model":
+        value = {};
+        break;
       default:
         unexpected.push(method ?? route.request().url());
         await route.abort();
