@@ -52,6 +52,21 @@ class CiStructureTests(unittest.TestCase):
         self.assertIn('CARGO_PROFILE_DEV_DEBUG: "0"', rust_job)
         self.assertIn('CARGO_PROFILE_TEST_DEBUG: "0"', rust_job)
 
+    def test_rust_quality_cache_uses_only_the_job_toolchain_inventory(self) -> None:
+        workflow = (ROOT / ".github/workflows/ci.yaml").read_text()
+        rust_job = workflow.split("  rust:", 1)[1].split("  repository-checks:", 1)[0]
+        isolation = (
+            'echo "RUSTUP_HOME=$RUNNER_TEMP/rust-quality-rustup" >> "$GITHUB_ENV"'
+        )
+        install = "uses: dtolnay/rust-toolchain@"
+        cache = "uses: Swatinem/rust-cache@"
+        check = "run: bash scripts/check-rust.sh"
+        self.assertEqual(workflow.count(isolation), 1)
+        offsets = [rust_job.index(step) for step in (isolation, install, cache, check)]
+        self.assertEqual(offsets, sorted(offsets))
+        self.assertIn("env-vars: ImageOS", rust_job)
+        self.assertNotIn("add-rust-environment-hash-key: false", rust_job)
+
     def test_native_build_exports_outputs_to_one_downstream_browser_gate(self) -> None:
         workflow = (ROOT / ".github/workflows/linux-package.yaml").read_text()
         for required in [

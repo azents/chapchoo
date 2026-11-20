@@ -71,6 +71,9 @@ jobs:
           --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Isolate the selected Rust toolchain
+        # rust-cache enumerates every rustup toolchain, not just the active one.
+        run: echo "RUSTUP_HOME=$RUNNER_TEMP/rust-quality-rustup" >> "$GITHUB_ENV"
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable installer
         with:
           toolchain: 1.99.1
@@ -79,6 +82,7 @@ jobs:
         with:
           workspaces: rust
           shared-key: rust-quality
+          env-vars: ImageOS
           cache-workspace-crates: true
       - run: bash scripts/check-rust.sh
       - name: Preserve per-crate compilation timing
