@@ -1,0 +1,53 @@
+name: Verify native CI images
+description: Build and smoke-test the local images from the caller's same-run artifacts.
+inputs:
+  architecture:
+    description: Native host architecture and BuildKit cache scope.
+    required: true
+  web-artifacts:
+    description: Unpacked web artifact directory.
+    required: true
+  binary-artifacts:
+    description: Unpacked binary artifact directory.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Assert native Docker architecture
+      shell: bash
+      env:
+        EXPECTED_ARCH: ${{ inputs.architecture }}
+      run: |
+        test "$(uname -m)" = "$EXPECTED_ARCH"
+        test "$(docker info --format '{{.OSType}}')" = linux
+        docker_arch="$(docker info --format '{{.Architecture}}')"
+        case "$EXPECTED_ARCH:$docker_arch" in
+          x86_64:x86_64|x86_64:amd64|aarch64:aarch64|aarch64:arm64) ;;
+          *) echo 'Docker must use the same native architecture'; exit 1 ;;
+        esac
+    - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+    - name: Package existing target outputs into native images
+      uses: docker/bake-action@59cb1203cd42bcefd40a1b6d73b589e48c86040e # v7.5.0
+      env:
+        WEB_ARTIFACTS: ${{ inputs.web-artifacts }}
+        BINARY_ARTIFACTS: ${{ inputs.binary-artifacts }}
+      with:
+        source: .
+        files: images/chapchoo/ci-bake.hcl
+        allow: |
+          fs.read=${{ inputs.web-artifacts }}
+          fs.read=${{ inputs.binary-artifacts }}
+        set: |
+          backend.cache-from=type=gha,scope=backend-${{ inputs.architecture }}
+          backend.cache-to=type=gha,scope=backend-${{ inputs.architecture }},mode=max
+          general-web.cache-from=type=gha,scope=general-${{ inputs.architecture }}
+          general-web.cache-to=type=gha,scope=general-${{ inputs.architecture }},mode=max
+          admin-web.cache-from=type=gha,scope=admin-${{ inputs.architecture }}
+          admin-web.cache-to=type=gha,scope=admin-${{ inputs.architecture }},mode=max
+    - name: Smoke test the existing native images
+      shell: bash
+      run: |
+        python3 scripts/test-container-images.py \
+          --backend chapchoo-package-backend:ci \
+          --general chapchoo-package-general:ci \
+          --admin chapchoo-package-admin:ci
