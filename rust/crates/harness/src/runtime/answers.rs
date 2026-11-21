@@ -181,7 +181,7 @@ impl State {
         let session = live.session.as_ref().ok_or(Error::NotAdmitted)?;
         if self.blocked
             || live.capture.snapshot()? != operation.target.snapshot
-            || session.session_id().to_string() != operation.target.native_session.as_str()
+            || session.id() != operation.target.native_session.as_str()
         {
             return Err(Error::NotAdmitted);
         }

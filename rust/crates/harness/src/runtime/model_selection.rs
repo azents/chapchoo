@@ -162,18 +162,11 @@ pub(super) async fn prompt(
                             .route
                             .publish(|| {
                                 observations.with_model_idle(&kind, || {
-                                    session.set_config_option(
-                                        options.option_id.clone(),
-                                        schema::SessionConfigOptionValue::Id {
-                                            value: model.clone().into(),
-                                        },
-                                    )
+                                    session.enqueue_model(options.option_id.clone(), &model)
                                 })
                             })
                             .map_err(after_admission)?;
-                        let configured = request.block_task().await.map_err(|_| Error::Protocol)?;
-                        let seen = super::model_selection::options(&configured.config_options)
-                            .ok_or(Error::Protocol)?;
+                        let seen = request.await?;
                         if seen.option_id != options.option_id
                             || seen
                                 .current
@@ -193,7 +186,7 @@ pub(super) async fn prompt(
             if let Some(before) = &mut before {
                 before.unsent = false;
             }
-            session.send_prompt(text.as_str())
+            session.enqueue_prompt(text)
         })
     };
     let pending = match dispatch {
@@ -207,11 +200,7 @@ pub(super) async fn prompt(
             error
         }
     })?;
-    let response = pending
-        .block_task()
-        .await
-        .map_err(|_| Error::DeliveryUncertain)?;
-    let native_message_id = response.message_id.to_string();
+    let native_message_id = pending.await?;
     // Settle the ordering fence on exact insertion, not on which turn the
     // harness used or whether it performed inference.
     if reserved && let Some(dispatch) = dispatch {

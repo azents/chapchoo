@@ -34,6 +34,8 @@ mod inputs;
 use answers::AnswerRegistry;
 pub use answers::{NativeAnswerObservation, NativeAnswerOperation};
 mod activity;
+#[cfg(test)]
+mod app_server;
 mod continuation_route;
 pub use continuation_route::{ContinuationRoute, ContinuationRouteLease};
 mod goal_restore;
@@ -46,6 +48,7 @@ pub use model_selection::{
 mod observations;
 mod protocol;
 mod requests;
+mod session;
 use inputs::InputRegistry;
 pub use inputs::{NativeInputObservation, NativeInputOperation, NativeTextTarget};
 mod setup;
@@ -53,6 +56,7 @@ mod steering;
 mod stops;
 use observations::Observations;
 pub use observations::{NativeForeground, NativeNormalEnding, NativeObservation, NativeWorkTarget};
+use session::Session;
 use setup::SetupRegistry;
 pub use setup::{
     NativeSetupFailure, NativeSetupIntent, NativeSetupObservation, NativeSetupOperation,
@@ -771,7 +775,7 @@ struct Live {
     done: CancellationToken,
     ended: CancellationToken,
     restore: Option<goal_restore::Listener>,
-    session: Option<agent_client_protocol::v2::ActiveSession<Agent>>,
+    session: Option<Session>,
     requests: Requests,
     _supply: AppliedSupply,
     requested_supply: HarnessSupply,
@@ -823,9 +827,9 @@ impl State {
         let session = live.session.as_ref().ok_or(Error::NotAdmitted)?;
         if self.blocked
             || live.protocol.is_finished()
-            || session.connection().is_incoming_closed()
+            || session.is_closed()
             || live.capture.snapshot()? != operation.target.snapshot
-            || session.session_id().to_string() != operation.target.native_session.as_str()
+            || session.id() != operation.target.native_session.as_str()
         {
             return Err(Error::NotAdmitted);
         }
@@ -833,8 +837,9 @@ impl State {
             return Ok(previous);
         }
         let outcome = match tokio::time::timeout(Duration::from_secs(10), async {
-            if let Some(accepted) =
-                steering::steer(session, &operation.text, models.map(|model| &model.route)).await?
+            if let Some(accepted) = session
+                .steer(&operation.text, models.map(|model| &model.route))
+                .await?
             {
                 return Ok(accepted);
             }
@@ -869,8 +874,7 @@ impl State {
     ) -> Result<NativePromptAcceptance, Error> {
         let live = self.live.as_ref().ok_or(Error::NotAdmitted)?;
         let session = live.session.as_ref().ok_or(Error::NotAdmitted)?;
-        if self.blocked || live.protocol.is_finished() || session.connection().is_incoming_closed()
-        {
+        if self.blocked || live.protocol.is_finished() || session.is_closed() {
             return Err(Error::NotAdmitted);
         }
         tokio::time::timeout(
@@ -907,11 +911,7 @@ impl State {
             return Err(Error::NotAdmitted);
         }
         live.observations.publish_stop(target, || {
-            live.session
-                .as_ref()
-                .ok_or(Error::NotAdmitted)?
-                .cancel_active_work()
-                .map_err(|_| Error::Protocol)
+            live.session.as_ref().ok_or(Error::NotAdmitted)?.stop()
         })
     }
     fn normal_ending(&self) -> Result<Option<NativeNormalEnding>, Error> {
@@ -959,15 +959,15 @@ impl State {
                 } if live
                     .session
                     .as_ref()
-                    .is_some_and(|live| live.session_id().to_string() == session.as_str()) => {}
+                    .is_some_and(|live| live.id() == session.as_str()) => {}
                 _ => return Err(Error::NotAdmitted),
             }
             return NativeConversationId::parse(
                 live.session
                     .as_ref()
                     .ok_or(Error::Protocol)?
-                    .session_id()
-                    .to_string(),
+                    .id()
+                    .to_owned(),
             )
             .map_err(|_| Error::Protocol);
         }
@@ -1170,8 +1170,9 @@ impl State {
             .await
             .map_err(|_| Error::Protocol)?
             .map_err(|_| Error::Protocol)??;
-        let id = NativeConversationId::parse(session.session_id().to_string())
-            .map_err(|_| Error::Protocol)?;
+        let session = Session::from_acp(session);
+        let id =
+            NativeConversationId::parse(session.id().to_owned()).map_err(|_| Error::Protocol)?;
         self.live
             .as_ref()
             .ok_or(Error::Process)?
@@ -1206,10 +1207,10 @@ impl State {
         }
         let live = self.live.as_ref().ok_or(Error::NotAdmitted)?;
         let session = live.session.as_ref().ok_or(Error::NotAdmitted)?;
-        if live.protocol.is_finished() || session.connection().is_incoming_closed() {
+        if live.protocol.is_finished() || session.is_closed() {
             return Err(Error::NotAdmitted);
         }
-        requests::respond(&live.requests, session.session_id(), response).await
+        session.answer(&live.requests, response).await
     }
     async fn retire(&mut self) -> Result<Retirement, Error> {
         let project_publication = match self.project_write.as_mut() {
@@ -1245,9 +1246,7 @@ impl State {
         if let Some(live) = &mut self.live {
             live.restore.take();
             if let Some(session) = &live.session {
-                let _ = session.cancel_active_work();
-                let _ = tokio::time::timeout(Duration::from_secs(2), session.close().block_task())
-                    .await;
+                session.close().await;
             }
             live.done.cancel();
         }

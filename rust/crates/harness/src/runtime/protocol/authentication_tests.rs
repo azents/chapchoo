@@ -128,7 +128,7 @@ async fn already_live_setup_preserves_applied_credentials_without_calling_new_pr
         done: done.clone(),
         ended: CancellationToken::new(),
         restore: None,
-        session: Some(session),
+        session: Some(Session::from_acp(session)),
         requests: Arc::default(),
         _supply: AppliedSupply {
             lease: Arc::new(launch.path().into()),
