@@ -77,33 +77,40 @@ impl Drop for BeforePublish<'_> {
 
 /// Match only the vetted adapter's built-in command tokens. Slash-prefixed
 /// paths and other ordinary text still go through the governed start.
-fn native_command(text: &str) -> bool {
+fn command_token(text: &str) -> Option<&str> {
     // The pinned adapter uses ECMAScript trim and /\s+/, which include
     // the BOM and exclude NEL (unlike Rust's Unicode whitespace).
     let whitespace = |c: char| (c.is_whitespace() && c != '\u{85}') || c == '\u{feff}';
-    let Some(command) = text.trim_matches(whitespace).strip_prefix('/') else {
-        return false;
-    };
+    let command = text.trim_matches(whitespace).strip_prefix('/')?;
     command
         .trim_matches(whitespace)
         .split(whitespace)
         .next()
-        .is_some_and(|name| {
-            matches!(
-                name.to_lowercase().as_str(),
-                "plan"
-                    | "mcp"
-                    | "skills"
-                    | "status"
-                    | "review"
-                    | "review-branch"
-                    | "review-commit"
-                    | "compact"
-                    | "goal"
-                    | "rename"
-                    | "logout"
-            )
-        })
+        .filter(|name| !name.is_empty())
+}
+
+pub(super) fn is_app_server_compact(session: &Session, text: &str) -> bool {
+    matches!(session, Session::AppServer(_))
+        && command_token(text).is_some_and(|name| name.eq_ignore_ascii_case("compact"))
+}
+
+fn native_command(text: &str) -> bool {
+    command_token(text).is_some_and(|name| {
+        matches!(
+            name.to_lowercase().as_str(),
+            "plan"
+                | "mcp"
+                | "skills"
+                | "status"
+                | "review"
+                | "review-branch"
+                | "review-commit"
+                | "compact"
+                | "goal"
+                | "rename"
+                | "logout"
+        )
+    })
 }
 
 pub(super) async fn prompt(
@@ -115,6 +122,17 @@ pub(super) async fn prompt(
 ) -> Result<NativePromptAcceptance, Error> {
     let session = live.session.as_ref().ok_or(Error::NotAdmitted)?;
     let observations = &live.observations;
+    if let Session::AppServer(thread) = session
+        && matches!(kind, PromptKind::Ordinary { .. })
+        && is_app_server_compact(session, text.as_str())
+    {
+        let publish = || observations.publish_compaction(&kind, |id| thread.enqueue_compact(id));
+        let pending = match dispatch {
+            Some(dispatch) => dispatch.route.publish(publish)?,
+            None => publish()?,
+        };
+        return pending.await;
+    }
     let direct = matches!(session, Session::AppServer(_));
     let vetted = direct || qualified(&live._supply.versions);
     let builtin = (direct || live._supply.versions.adapter == "2.8.0")

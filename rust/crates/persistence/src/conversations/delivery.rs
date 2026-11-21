@@ -11,6 +11,7 @@ pub struct ConversationDeliveryTarget {
 pub enum ConversationInputOutcome {
     Inserted { native_message_id: String },
     Steered,
+    CommandAccepted,
     Failed,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -418,16 +419,11 @@ impl Store {
         outcome: &ConversationInputOutcome,
     ) -> Result<ConversationInputReportAcknowledgement, StoreError> {
         let (agent, id, operation_id) = ids(draft)?;
-        let (state, message) = match outcome {
-            ConversationInputOutcome::Inserted { native_message_id } => {
-                if native_message_id.is_empty() || native_message_id.len() > 512 {
-                    return Err(StoreError::InvalidInput);
-                }
-                ("INSERTED", Some(native_message_id.as_str()))
-            }
-            ConversationInputOutcome::Steered => ("STEERED", None),
-            ConversationInputOutcome::Failed => ("FAILED", None),
-        };
+        if let ConversationInputOutcome::Inserted { native_message_id } = outcome
+            && (native_message_id.is_empty() || native_message_id.len() > 512)
+        {
+            return Err(StoreError::InvalidInput);
+        }
         operation!(self, |connection, dialect| {
             let row = super::records::source_conversation!(connection, dialect, source, id);
             let route = connector!(connection, dialect, source);
@@ -517,14 +513,16 @@ impl Store {
                         receipt_now
                     );
                 }
-                diesel::sql_query(dialect.query(
+                if !matches!(outcome, ConversationInputOutcome::CommandAccepted) {
+                    diesel::sql_query(dialect.query(
                     "UPDATE conversation_work_items SET reply_ready=TRUE WHERE conversation_id=? AND reply_ready=FALSE
                      AND EXISTS (SELECT 1 FROM conversation_goals g WHERE g.conversation_id=conversation_work_items.conversation_id
                      AND g.goal_key=conversation_work_items.goal_key AND g.disposition IN ('active','waiting_for_input'))",
-                ))
-                .bind::<IdentitySql, _>(id)
-                .execute(connection)
-                .await?;
+                    ))
+                    .bind::<IdentitySql, _>(id)
+                    .execute(connection)
+                    .await?;
+                }
                 diesel::sql_query(
                     dialect
                         .query("DELETE FROM conversation_inputs WHERE id=? AND conversation_id=?"),
@@ -535,8 +533,8 @@ impl Store {
                 .await?;
                 return Ok(ConversationInputReportAcknowledgement::Recorded);
             }
-            diesel::sql_query(dialect.query("UPDATE conversation_input_delivery SET delivery_state=?,native_message_id=? WHERE operation_id=?"))
-                .bind::<Text,_>(state).bind::<Nullable<Text>,_>(message).bind::<IdentitySql,_>(operation_id)
+            diesel::sql_query(dialect.query("UPDATE conversation_input_delivery SET delivery_state='FAILED',native_message_id=NULL WHERE operation_id=?"))
+                .bind::<IdentitySql,_>(operation_id)
                 .execute(connection).await?;
             diesel::sql_query(
                 dialect.query("UPDATE conversation_inputs SET queue_state='ERROR' WHERE id=?"),

@@ -483,6 +483,7 @@ impl Operations {
                 match result {
                     NativePromptAcceptance::Inserted { .. }
                     | NativePromptAcceptance::Steered
+                    | NativePromptAcceptance::CommandAccepted
                     | NativePromptAcceptance::Failed => Ok(result),
                 }
             }
@@ -493,6 +494,9 @@ impl Operations {
                 }
                 Ok(chapchoo_harness::NativePromptAcceptance::Steered) => {
                     c::input_report::Result::Steered(())
+                }
+                Ok(chapchoo_harness::NativePromptAcceptance::CommandAccepted) => {
+                    c::input_report::Result::CommandAccepted(())
                 }
                 Ok(chapchoo_harness::NativePromptAcceptance::Failed) => {
                     c::input_report::Result::Failed(())

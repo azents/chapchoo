@@ -225,6 +225,77 @@ fn cross_session_and_credential_traffic_do_not_become_normalized_history() -> Re
     Ok(())
 }
 #[test]
+fn app_server_file_change_activity_preserves_the_paths_and_changes_before_approval()
+-> Result<(), TestError> {
+    let changes = json!([{
+        "path":"/fixture/note","kind":{"type":"add"},"diff":"fixture"
+    }]);
+    let raw = serde_json::to_vec(&json!({"method":"item/started","params":{
+        "threadId":"native","turnId":"turn","item":{
+            "type":"fileChange","id":"patch","status":"inProgress","changes":changes
+        }
+    }}))?;
+    let result = normalized(&raw)?;
+    assert_eq!(result.pair.raw, raw);
+    let record = &result.records[0];
+    assert_eq!(record.kind, Kind::Tool);
+    assert_eq!(record.native_id, "app-server:turn:patch");
+    let input = record
+        .fields
+        .iter()
+        .find(|field| field.field == Field::ToolInput)
+        .ok_or("missing changes")?;
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(bytes(&input.change))?,
+        changes
+    );
+    Ok(())
+}
+
+#[test]
+fn app_server_item_approvals_keep_the_original_frame_and_preserve_native_decisions()
+-> Result<(), TestError> {
+    for (method, params, title, description, ids) in [
+        (
+            "item/commandExecution/requestApproval",
+            json!({"threadId":"native","turnId":"turn","itemId":"exec","startedAtMs":1,
+                "cwd":"/fixture","command":"printf fixture",
+                "availableDecisions":["acceptForSession","cancel"]}),
+            "Allow command execution?",
+            "Directory: /fixture\nCommand: printf fixture",
+            &["approve-for-session", "cancel"][..],
+        ),
+        (
+            "item/fileChange/requestApproval",
+            json!({"threadId":"native","turnId":"turn","itemId":"patch","startedAtMs":2,
+                "reason":"Write fixture data"}),
+            "Allow file changes?",
+            "Review the affected files in the file-change activity.\nWrite fixture data",
+            &["approve-once", "approve-for-session", "cancel"][..],
+        ),
+    ] {
+        let raw = serde_json::to_vec(&json!({"id":"712","method":method,"params":params}))?;
+        let result = normalized(&raw)?;
+        assert_eq!(result.pair.raw, raw);
+        assert_eq!(result.records[0].kind, Kind::Request);
+        assert_eq!(result.records[0].native_id, "occurrence");
+        let projected: schema::RequestPermissionRequest =
+            serde_json::from_slice(bytes(&result.records[0].fields[0].change))?;
+        assert_eq!(projected.title, title);
+        assert_eq!(projected.description.as_deref(), Some(description));
+        assert_eq!(
+            projected
+                .options
+                .iter()
+                .map(|option| option.option_id.0.as_ref())
+                .collect::<Vec<_>>(),
+            ids
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn app_server_approval_projects_only_occurrence_scoped_one_time_choices() -> Result<(), TestError> {
     let original = json!({"id":"712","method":"mcpServer/elicitation/request","params":{
         "threadId":"native","turnId":"turn","serverName":"chapchoo","mode":"form","message":"Look up the fixture value.",

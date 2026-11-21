@@ -145,6 +145,7 @@ pub enum Retirement {
 pub enum NativePromptAcceptance {
     Inserted { native_message_id: String },
     Steered,
+    CommandAccepted,
     Failed,
 }
 impl fmt::Debug for NativePromptAcceptance {
@@ -858,9 +859,10 @@ impl State {
             return Ok(previous);
         }
         let outcome = match tokio::time::timeout(Duration::from_secs(10), async {
-            if let Some(accepted) = session
-                .steer(&operation.text, models.map(|model| &model.route))
-                .await?
+            if !model_selection::is_app_server_compact(session, operation.text.as_str())
+                && let Some(accepted) = session
+                    .steer(&operation.text, models.map(|model| &model.route))
+                    .await?
             {
                 return Ok(accepted);
             }

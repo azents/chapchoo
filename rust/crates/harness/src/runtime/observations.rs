@@ -58,6 +58,7 @@ struct Observed {
     foreground: Option<NativeForeground>,
     work: Option<String>,
     last_app_server_turn: Option<String>,
+    compaction_pending: Option<String>,
     ending_evidence_enabled: bool,
     live_running: bool,
     stop_published: bool,
@@ -243,10 +244,11 @@ impl Observations {
     }
     pub(super) fn quiescent(&self) -> bool {
         self.0.lock().is_ok_and(|state| {
-            state
-                .source
-                .as_ref()
-                .is_some_and(|(_, native)| state.activity.is_quiescent(native.as_str()))
+            state.compaction_pending.is_none()
+                && state
+                    .source
+                    .as_ref()
+                    .is_some_and(|(_, native)| state.activity.is_quiescent(native.as_str()))
         })
     }
     #[cfg(test)]
@@ -391,13 +393,15 @@ impl Observations {
         match terminal {
             Some(normal) if state.work.as_deref() == Some(turn) => {
                 let position = capture.append(raw, None)?;
+                let qualifies = normal && state.compaction_pending.is_none();
                 Self::transition(
                     &mut state,
                     NativeForeground::Idle,
                     Some(position),
                     true,
-                    normal,
+                    qualifies,
                 )?;
+                state.compaction_pending = None;
                 state.last_app_server_turn = Some(turn.to_owned());
             }
             Some(_) => return Ok(()),
@@ -477,6 +481,9 @@ impl Observations {
         kind: &model_selection::PromptKind<'_>,
         idle: bool,
     ) -> Result<(), Error> {
+        if state.compaction_pending.is_some() {
+            return Err(Error::EndingDecisionPending);
+        }
         if idle
             && state
                 .foreground
@@ -553,6 +560,42 @@ impl Observations {
     ) -> Result<T, Error> {
         let state = self.0.lock().map_err(|_| Error::Protocol)?;
         publish(state.work.as_deref())
+    }
+
+    pub(super) fn with_text_work<T>(
+        &self,
+        publish: impl FnOnce(Option<&str>) -> Result<T, Error>,
+    ) -> Result<T, Error> {
+        let state = self.0.lock().map_err(|_| Error::Protocol)?;
+        if state.compaction_pending.is_some() {
+            return Err(Error::EndingDecisionPending);
+        }
+        publish(state.work.as_deref())
+    }
+
+    pub(super) fn publish_compaction<T>(
+        &self,
+        kind: &model_selection::PromptKind<'_>,
+        publish: impl FnOnce(String) -> Result<T, Error>,
+    ) -> Result<T, Error> {
+        let mut state = self.0.lock().map_err(|_| Error::Protocol)?;
+        if state.work.is_some() || state.compaction_pending.is_some() {
+            return Err(Error::EndingDecisionPending);
+        }
+        Self::validate_model_prompt(&state, kind, true)?;
+        let occurrence = token("compact")?;
+        let posted = publish(occurrence.clone())?;
+        state.compaction_pending = Some(occurrence);
+        Ok(posted)
+    }
+
+    pub(super) fn reject_compaction(&self, occurrence: &str) -> Result<(), Error> {
+        let mut state = self.0.lock().map_err(|_| Error::Protocol)?;
+        if state.work.is_none() && state.compaction_pending.as_deref() == Some(occurrence) {
+            state.compaction_pending = None;
+            self.changed();
+        }
+        Ok(())
     }
 
     pub(super) fn restore_work(&self) -> Option<NativeWorkTarget> {

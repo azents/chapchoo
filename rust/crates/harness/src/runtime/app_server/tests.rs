@@ -469,8 +469,14 @@ async fn mcp_approval_answers_bind_to_the_exact_capture_and_never_remember() -> 
         assert!(Approval::offer(target.clone(), position.clone(), "live-turn", invalid)?.is_none());
     }
     for (choice, expected) in [
-        (Choice::ApproveOnce, json!({"action":"accept","content":{}})),
-        (Choice::Decline, json!({"action":"decline","content":null})),
+        (
+            Choice::Selected("approve-once"),
+            json!({"action":"accept","content":{}}),
+        ),
+        (
+            Choice::Selected("decline"),
+            json!({"action":"decline","content":null}),
+        ),
     ] {
         let (mut approval, reply) =
             Approval::offer(target.clone(), position.clone(), "live-turn", frame.clone())?
@@ -478,7 +484,7 @@ async fn mcp_approval_answers_bind_to_the_exact_capture_and_never_remember() -> 
         let wire::ServerReply::Deferred(mut reply) = reply else {
             return Err("deferred expected".into());
         };
-        assert_eq!(approval.tool, "inspect");
+        assert_eq!(approval.question("native").title, "Allow inspect?");
         assert!(matches!(
             approval.answer(&target, &wrong_position, "live-turn", choice),
             Err(Error::NotAdmitted)

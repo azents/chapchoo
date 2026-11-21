@@ -16,9 +16,11 @@ struct Ingress {
     observations: Arc<Observations>,
     root: OnceLock<Root>,
     requests: SyncMutex<BTreeMap<String, LiveRequest>>,
+    file_changes: SyncMutex<BTreeMap<String, String>>,
 }
 
 struct LiveRequest {
+    rpc_id: wire::RequestId,
     turn: String,
     position: chapchoo_domain::SourcePosition,
     kind: RequestKind,
@@ -68,6 +70,7 @@ impl Connection {
             observations,
             root: OnceLock::new(),
             requests: SyncMutex::default(),
+            file_changes: SyncMutex::default(),
         });
         let receive = ingress.clone();
         let (client, driver) = wire::connect_with_requests(read, write, done, move |raw, frame| {
@@ -170,11 +173,17 @@ impl Ingress {
             return Ok(None);
         }
         let method = frame["method"].as_str().ok_or(Error::Protocol)?;
-        if method == "mcpServer/elicitation/request" && frame.get("id").is_some() {
+        if let Some(id) = frame.get("id") {
+            let rpc_id = wire::request_id(id)?;
             return self.observations.with_work(|turn| {
                 let Some(turn) = turn else { return Ok(None) };
-                let approval = tools::Approval::decode(&root.target, turn, &frame);
-                let form = if approval.is_none() {
+                let changes = self.file_changes.lock().map_err(|_| Error::Protocol)?;
+                let locations = frame["params"]["itemId"]
+                    .as_str()
+                    .and_then(|id| changes.get(id))
+                    .map(String::as_str);
+                let approval = tools::Approval::decode(&root.target, turn, &frame, locations);
+                let form = if approval.is_none() && method == "mcpServer/elicitation/request" {
                     forms::Form::offer(
                         root.target.native_session.as_str(),
                         turn,
@@ -204,6 +213,7 @@ impl Ingress {
                 pending.insert(
                     observations::token("request")?,
                     LiveRequest {
+                        rpc_id,
                         turn: turn.to_owned(),
                         position,
                         kind,
@@ -213,11 +223,27 @@ impl Ingress {
                 Ok(Some(reply))
             });
         }
-        if frame.get("id").is_some() {
-            return Ok(None);
-        }
         match method {
+            "serverRequest/resolved" => {
+                let rpc_id = wire::request_id(&frame["params"]["requestId"])?;
+                let mut pending = self.requests.lock().map_err(|_| Error::Protocol)?;
+                let before = pending.len();
+                pending.retain(|_, request| request.rpc_id != rpc_id);
+                if pending.len() != before {
+                    self.observations.changed();
+                }
+            }
             "turn/started" | "turn/completed" => {
+                self.observations.with_work(|turn| {
+                    if method == "turn/completed" && frame["params"]["turn"]["id"].as_str() == turn
+                    {
+                        self.file_changes
+                            .lock()
+                            .map_err(|_| Error::Protocol)?
+                            .clear();
+                    }
+                    Ok(())
+                })?;
                 self.observations
                     .record_app_server_turn(&self.capture, raw, &root.target)?
             }
@@ -236,7 +262,29 @@ impl Ingress {
                     if turn.is_some() && frame["params"]["turnId"].as_str() == turn {
                         if method == "item/started" {
                             root.insertions.observe(&frame)?;
+                            let item = &frame["params"]["item"];
+                            if item["type"] == "fileChange"
+                                && let Some(id) =
+                                    item["id"].as_str().filter(|id| super::valid_key(id))
+                                && let Some(locations) = tools::file_change_locations(item)
+                            {
+                                let mut changes =
+                                    self.file_changes.lock().map_err(|_| Error::Protocol)?;
+                                if changes.len() < 64 && !changes.contains_key(id) {
+                                    self.capture.append(raw, None)?;
+                                    changes.insert(id.to_owned(), locations);
+                                }
+                            }
                         } else {
+                            if method == "item/completed"
+                                && frame["params"]["item"]["type"] == "fileChange"
+                                && let Some(id) = frame["params"]["item"]["id"].as_str()
+                            {
+                                self.file_changes
+                                    .lock()
+                                    .map_err(|_| Error::Protocol)?
+                                    .remove(id);
+                            }
                             self.capture.append(raw, None)?;
                         }
                     }
@@ -319,12 +367,33 @@ impl LiveThread {
     ) -> Result<Option<impl Future<Output = Result<String, Error>> + use<>>, Error> {
         let ingress = &self.connection.ingress;
         let root = ingress.root.get().ok_or(Error::NotAdmitted)?;
-        ingress.observations.with_work(|turn| {
+        ingress.observations.with_text_work(|turn| {
             turn.map(|turn| {
                 let pending = self.thread().steer(&root.insertions, turn, text)?;
                 Ok(async move { Ok(pending.await?.item) })
             })
             .transpose()
+        })
+    }
+
+    pub(in crate::runtime) fn enqueue_compact(
+        &self,
+        occurrence: String,
+    ) -> Result<impl Future<Output = Result<NativePromptAcceptance, Error>> + use<>, Error> {
+        let observations = self.connection.ingress.observations.clone();
+        let response = self.connection.client.enqueue_observed(
+            "thread/compact/start",
+            json!({"threadId": self.id.as_str()}),
+            Some(Box::new(move || {
+                observations.reject_compaction(&occurrence)
+            })),
+        )?;
+        Ok(async move {
+            match response.receive().await {
+                Ok(value) if value == json!({}) => Ok(NativePromptAcceptance::CommandAccepted),
+                Err(wire::CallFailure::Rejected(_)) => Ok(NativePromptAcceptance::Failed),
+                _ => Err(Error::DeliveryUncertain),
+            }
         })
     }
 
@@ -391,14 +460,10 @@ impl LiveThread {
                     InteractiveResponse::Permission { response, .. },
                 ) => {
                     let choice = match response.outcome {
-                        schema::RequestPermissionOutcome::Selected(selected) => {
-                            match selected.option_id.0.as_ref() {
-                                "approve-once" => tools::Choice::ApproveOnce,
-                                "decline" => tools::Choice::Decline,
-                                _ => return Err(Error::NotAdmitted),
-                            }
+                        schema::RequestPermissionOutcome::Selected(ref selected) => {
+                            tools::Choice::Selected(selected.option_id.0.as_ref())
                         }
-                        schema::RequestPermissionOutcome::Cancelled(_) => tools::Choice::Decline,
+                        schema::RequestPermissionOutcome::Cancelled(_) => tools::Choice::Cancelled,
                         _ => return Err(Error::NotAdmitted),
                     };
                     approval.answer(

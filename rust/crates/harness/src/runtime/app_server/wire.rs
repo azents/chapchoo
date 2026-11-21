@@ -30,7 +30,14 @@ pub(super) struct Client {
 
 struct Outbound {
     line: Zeroizing<String>,
-    reply: Option<(u64, oneshot::Sender<Result<Value, i32>>)>,
+    reply: Option<(u64, PendingReply)>,
+}
+
+type ObserveRejection = Box<dyn FnOnce() -> Result<(), Error> + Send>;
+
+struct PendingReply {
+    answer: oneshot::Sender<Result<Value, i32>>,
+    rejection: Option<ObserveRejection>,
 }
 
 #[derive(Debug, Eq, PartialEq, thiserror::Error)]
@@ -45,7 +52,7 @@ pub(super) struct Reply(oneshot::Receiver<Result<Value, i32>>);
 
 #[derive(Clone, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(untagged)]
-enum RequestId {
+pub(super) enum RequestId {
     Number(i64),
     String(String),
 }
@@ -85,6 +92,16 @@ impl Client {
     /// A successful return means publication to this connection's unique
     /// writer, not native acceptance. Dropping Reply does not withdraw it.
     pub(super) fn enqueue(&self, method: &str, params: impl Serialize) -> Result<Reply, Error> {
+        self.enqueue_observed(method, params, None)
+    }
+
+    /// Retain exact rejection handling in the ordered driver even if the waiter expires.
+    pub(super) fn enqueue_observed(
+        &self,
+        method: &str,
+        params: impl Serialize,
+        rejection: Option<ObserveRejection>,
+    ) -> Result<Reply, Error> {
         #[derive(Serialize)]
         struct Request<'a, P> {
             id: u64,
@@ -96,7 +113,11 @@ impl Client {
             .try_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_add(1))
             .map_err(|_| Error::NotAdmitted)?;
         let (send, receive) = oneshot::channel();
-        self.publish(Request { id, method, params }, Some((id, send)))?;
+        let pending = PendingReply {
+            answer: send,
+            rejection,
+        };
+        self.publish(Request { id, method, params }, Some((id, pending)))?;
         Ok(Reply(receive))
     }
 
@@ -107,7 +128,7 @@ impl Client {
     fn publish(
         &self,
         frame: impl Serialize,
-        reply: Option<(u64, oneshot::Sender<Result<Value, i32>>)>,
+        reply: Option<(u64, PendingReply)>,
     ) -> Result<(), Error> {
         let slot = self
             .commands
@@ -252,7 +273,10 @@ async fn drive(
                         _ => return Err(Error::Protocol),
                     };
                     let reply = pending.remove(&id).ok_or(Error::Protocol)?;
-                    let _ = reply.send(result);
+                    if result.is_err() && let Some(reject) = reply.rejection {
+                        reject()?;
+                    }
+                    let _ = reply.answer.send(result);
                 }
             }
             answer = answers.next(), if !answers.is_empty() => {
@@ -273,7 +297,7 @@ async fn drive(
     }
 }
 
-fn request_id(value: &Value) -> Result<RequestId, Error> {
+pub(super) fn request_id(value: &Value) -> Result<RequestId, Error> {
     let id = serde_json::from_value(value.clone()).map_err(|_| Error::Protocol)?;
     if matches!(&id, RequestId::String(s) if !super::valid_key(s)) {
         return Err(Error::Protocol);

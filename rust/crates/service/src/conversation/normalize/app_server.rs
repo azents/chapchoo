@@ -29,6 +29,8 @@ struct Item<'a> {
     result: Option<&'a serde_json::value::RawValue>,
     #[serde(borrow)]
     error: Option<&'a serde_json::value::RawValue>,
+    #[serde(borrow)]
+    changes: Option<&'a serde_json::value::RawValue>,
 }
 
 #[derive(Deserialize)]
@@ -155,6 +157,142 @@ pub(super) fn permission(
     ))
 }
 
+/// Render an already-admitted native approval at its captured occurrence.
+/// The physical owner independently validates the options before answering.
+pub(super) fn item_permission(
+    method: &str,
+    raw: &str,
+    position: &SourcePosition,
+    native: &NativeConversationId,
+) -> Result<Record, NativeNormalizationError> {
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct ItemApproval {
+        thread_id: String,
+        turn_id: String,
+        item_id: String,
+        started_at_ms: i64,
+        reason: Option<String>,
+        command: Option<String>,
+        cwd: Option<String>,
+        network_approval_context: Option<NetworkApproval>,
+        available_decisions: Option<Vec<serde_json::Value>>,
+        additional_permissions: Option<serde_json::Value>,
+        grant_root: Option<String>,
+    }
+    #[derive(Deserialize)]
+    struct NetworkApproval {
+        host: String,
+        protocol: String,
+    }
+    let item: ItemApproval =
+        serde_json::from_str(raw).map_err(|_| NativeNormalizationError::InvalidEvent)?;
+    if item.thread_id != native.as_str() {
+        return Err(NativeNormalizationError::WrongSession);
+    }
+    let valid = |key: &str| {
+        !key.is_empty() && key.len() <= 256 && key.bytes().all(|b| b.is_ascii_graphic())
+    };
+    if !valid(&item.turn_id) || !valid(&item.item_id) || item.started_at_ms < 0 {
+        return Err(NativeNormalizationError::InvalidEvent);
+    }
+    let visible = |text: &str| {
+        text.len() <= 8192
+            && !text.trim().is_empty()
+            && !text
+                .chars()
+                .any(|ch| ch.is_control() && ch != '\n' && ch != '\t')
+    };
+    use schema::PermissionOptionKind::{AllowAlways, AllowOnce, RejectOnce};
+    let decisions = [
+        ("accept", "approve-once", "Allow once", AllowOnce),
+        (
+            "acceptForSession",
+            "approve-for-session",
+            "Allow for this session",
+            AllowAlways,
+        ),
+        ("decline", "decline", "Decline and continue", RejectOnce),
+        ("cancel", "cancel", "Decline and stop the turn", RejectOnce),
+    ];
+    let (title, mut lines, offered) = match method {
+        "item/commandExecution/requestApproval" => {
+            let is_network = item.network_approval_context.is_some();
+            let context = match (item.command, item.cwd, item.network_approval_context) {
+                (Some(command), Some(cwd), None) if visible(&command) && visible(&cwd) => {
+                    format!("Directory: {cwd}\nCommand: {command}")
+                }
+                (None, None, Some(network))
+                    if visible(&network.host) && visible(&network.protocol) =>
+                {
+                    format!(
+                        "Network destination: {} ({})",
+                        network.host, network.protocol
+                    )
+                }
+                _ => return Err(NativeNormalizationError::UnsupportedRequest),
+            };
+            let offered = item.available_decisions.unwrap_or_else(|| {
+                if !is_network && item.additional_permissions.is_some() {
+                    vec![serde_json::json!("accept"), serde_json::json!("cancel")]
+                } else {
+                    vec![
+                        serde_json::json!("accept"),
+                        serde_json::json!("acceptForSession"),
+                        serde_json::json!("decline"),
+                        serde_json::json!("cancel"),
+                    ]
+                }
+            });
+            if !offered
+                .iter()
+                .any(|decision| matches!(decision.as_str(), Some("decline" | "cancel")))
+            {
+                return Err(NativeNormalizationError::UnsupportedRequest);
+            }
+            ("Allow command execution?", vec![context], offered)
+        }
+        "item/fileChange/requestApproval" => {
+            let scope = item
+                .grant_root
+                .filter(|root| visible(root))
+                .map(|root| format!("Requested root: {root}"));
+            let mut lines =
+                vec!["Review the affected files in the file-change activity.".to_owned()];
+            lines.extend(scope);
+            (
+                "Allow file changes?",
+                lines,
+                vec![
+                    serde_json::json!("accept"),
+                    serde_json::json!("acceptForSession"),
+                    serde_json::json!("cancel"),
+                ],
+            )
+        }
+        _ => return Err(NativeNormalizationError::UnsupportedRequest),
+    };
+    if let Some(reason) = item.reason.filter(|reason| visible(reason)) {
+        lines.push(reason);
+    }
+    let options = decisions
+        .into_iter()
+        .filter(|(native, _, _, _)| {
+            offered
+                .iter()
+                .any(|choice| choice.as_str() == Some(*native))
+        })
+        .map(|(_, id, title, kind)| schema::PermissionOption::new(id, title, kind))
+        .collect();
+    let question = schema::RequestPermissionRequest::new(native.as_str(), title, options)
+        .description((!lines.is_empty()).then(|| lines.join("\n")));
+    Ok(record(
+        Kind::Request,
+        position.occurrence().as_str(),
+        vec![replace(Field::Request, &question)?],
+    ))
+}
+
 /// Keep a single foreground state record for both old and new capture lanes.
 /// A native completed event is not automatically a successful continuation.
 pub(super) fn turn(
@@ -224,6 +362,9 @@ pub(super) fn message(
     }
 
     let item = params.item.ok_or(NativeNormalizationError::InvalidEvent)?;
+    if method == "item/started" && item.kind != "fileChange" {
+        return Ok(None);
+    }
     let (kind, fields) = match item.kind {
         "agentMessage" => {
             let text = item.text.ok_or(NativeNormalizationError::InvalidEvent)?;
@@ -253,9 +394,25 @@ pub(super) fn message(
             )
         }
         "mcpToolCall" => (Kind::Tool, mcp_fields(&item)?),
+        "fileChange" => (Kind::Tool, file_change_fields(&item)?),
         _ => return Ok(None),
     };
     Ok(Some(record(kind, &key(params.turn_id, item.id)?, fields)))
+}
+
+fn file_change_fields(item: &Item<'_>) -> Result<Vec<Update>, NativeNormalizationError> {
+    let changes = item.changes.ok_or(NativeNormalizationError::InvalidEvent)?;
+    let status = match item.status {
+        Some("inProgress") => schema::ToolCallStatus::InProgress,
+        Some("completed") => schema::ToolCallStatus::Completed,
+        Some("declined" | "failed") => schema::ToolCallStatus::Failed,
+        _ => return Err(NativeNormalizationError::InvalidEvent),
+    };
+    Ok(vec![
+        replace(Field::Title, &"File changes")?,
+        replace(Field::Status, &status)?,
+        replace(Field::ToolInput, &changes)?,
+    ])
 }
 
 fn mcp_fields(item: &Item<'_>) -> Result<Vec<Update>, NativeNormalizationError> {

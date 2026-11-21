@@ -122,7 +122,9 @@ pub fn normalize_captured_event(
                 fields,
             ));
         }
-        method @ ("item/completed" | "item/agentMessage/delta") => {
+        method @ ("item/started" | "item/completed" | "item/agentMessage/delta")
+            if envelope.id.is_none() =>
+        {
             records.extend(app_server::message(method, envelope.params.get(), native)?);
         }
         method @ ("turn/started" | "turn/completed") if envelope.id.is_none() => {
@@ -130,6 +132,16 @@ pub fn normalize_captured_event(
         }
         "mcpServer/elicitation/request" if envelope.id.is_some() => {
             records.push(app_server::permission(
+                envelope.params.get(),
+                position,
+                native,
+            )?);
+        }
+        method @ ("item/commandExecution/requestApproval" | "item/fileChange/requestApproval")
+            if envelope.id.is_some() =>
+        {
+            records.push(app_server::item_permission(
+                method,
                 envelope.params.get(),
                 position,
                 native,

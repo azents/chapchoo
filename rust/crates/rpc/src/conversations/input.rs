@@ -200,6 +200,9 @@ pub(super) async fn result(
             ConversationInputDelivery::Known(ConversationInputOutcome::Steered) => {
                 wire::input_delivery::Observation::Steered(())
             }
+            ConversationInputDelivery::Known(ConversationInputOutcome::CommandAccepted) => {
+                wire::input_delivery::Observation::CommandAccepted(())
+            }
             ConversationInputDelivery::Known(ConversationInputOutcome::Failed) => {
                 wire::input_delivery::Observation::Failed(())
             }

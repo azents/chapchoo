@@ -67,6 +67,9 @@ pub(super) async fn report(
             ConversationInputOutcome::Inserted { native_message_id }
         }
         Some(wire::input_report::Result::Steered(())) => ConversationInputOutcome::Steered,
+        Some(wire::input_report::Result::CommandAccepted(())) => {
+            ConversationInputOutcome::CommandAccepted
+        }
         Some(wire::input_report::Result::Failed(())) => ConversationInputOutcome::Failed,
         Some(wire::input_report::Result::AttemptError(())) => {
             service
