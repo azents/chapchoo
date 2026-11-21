@@ -486,7 +486,6 @@ fn event_native(raw: &str) -> Result<NativeConversationId, Error> {
         | "item/completed"
         | "item/agentMessage/delta"
         | "turn/started"
-        | "error"
         | "turn/completed" => {
             if envelope.id.is_some() {
                 return Err(Error::CaptureCorrupt);

@@ -459,7 +459,6 @@ export interface InputDelivery {
   insertedNativeMessageId?: string | undefined;
   steered?: Empty | undefined;
   failed?: Empty | undefined;
-  commandAccepted?: Empty | undefined;
 }
 
 /** Absent acceptance/delivery is missing evidence, never permission to redispatch. */
@@ -911,11 +910,7 @@ export interface InputReport {
   insertedNativeMessageId?: string | undefined;
   steered?: Empty | undefined;
   failed?: Empty | undefined;
-  attemptError?:
-    | Empty
-    | undefined;
-  /** Accepted as a native command, without inserting ordinary model input. */
-  commandAccepted?: Empty | undefined;
+  attemptError?: Empty | undefined;
 }
 
 export interface InputReportAcknowledgement {
@@ -4795,13 +4790,7 @@ export const OwnerInputRead: MessageFns<OwnerInputRead> = {
 };
 
 function createBaseInputDelivery(): InputDelivery {
-  return {
-    possibleForwarding: undefined,
-    insertedNativeMessageId: undefined,
-    steered: undefined,
-    failed: undefined,
-    commandAccepted: undefined,
-  };
+  return { possibleForwarding: undefined, insertedNativeMessageId: undefined, steered: undefined, failed: undefined };
 }
 
 export const InputDelivery: MessageFns<InputDelivery> = {
@@ -4817,9 +4806,6 @@ export const InputDelivery: MessageFns<InputDelivery> = {
     }
     if (message.failed !== undefined) {
       Empty.encode(message.failed, writer.uint32(34).fork()).join();
-    }
-    if (message.commandAccepted !== undefined) {
-      Empty.encode(message.commandAccepted, writer.uint32(42).fork()).join();
     }
     return writer;
   },
@@ -4869,14 +4855,6 @@ export const InputDelivery: MessageFns<InputDelivery> = {
             message.failed = Empty.decode(reader, reader.uint32());
             continue;
           }
-          case 5: {
-            if (tag !== 42) {
-              break;
-            }
-
-            message.commandAccepted = Empty.decode(reader, reader.uint32());
-            continue;
-          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -4903,9 +4881,6 @@ export const InputDelivery: MessageFns<InputDelivery> = {
       : undefined;
     message.failed = (object.failed !== undefined && object.failed !== null)
       ? Empty.fromPartial(object.failed)
-      : undefined;
-    message.commandAccepted = (object.commandAccepted !== undefined && object.commandAccepted !== null)
-      ? Empty.fromPartial(object.commandAccepted)
       : undefined;
     return message;
   },
@@ -10493,7 +10468,6 @@ function createBaseInputReport(): InputReport {
     steered: undefined,
     failed: undefined,
     attemptError: undefined,
-    commandAccepted: undefined,
   };
 }
 
@@ -10516,9 +10490,6 @@ export const InputReport: MessageFns<InputReport> = {
     }
     if (message.attemptError !== undefined) {
       Empty.encode(message.attemptError, writer.uint32(50).fork()).join();
-    }
-    if (message.commandAccepted !== undefined) {
-      Empty.encode(message.commandAccepted, writer.uint32(58).fork()).join();
     }
     return writer;
   },
@@ -10584,14 +10555,6 @@ export const InputReport: MessageFns<InputReport> = {
             message.attemptError = Empty.decode(reader, reader.uint32());
             continue;
           }
-          case 7: {
-            if (tag !== 58) {
-              break;
-            }
-
-            message.commandAccepted = Empty.decode(reader, reader.uint32());
-            continue;
-          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -10624,9 +10587,6 @@ export const InputReport: MessageFns<InputReport> = {
       : undefined;
     message.attemptError = (object.attemptError !== undefined && object.attemptError !== null)
       ? Empty.fromPartial(object.attemptError)
-      : undefined;
-    message.commandAccepted = (object.commandAccepted !== undefined && object.commandAccepted !== null)
-      ? Empty.fromPartial(object.commandAccepted)
       : undefined;
     return message;
   },

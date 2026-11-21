@@ -58,7 +58,6 @@ struct Observed {
     foreground: Option<NativeForeground>,
     work: Option<String>,
     last_app_server_turn: Option<String>,
-    turn_command_pending: Option<TurnCommand>,
     ending_evidence_enabled: bool,
     live_running: bool,
     stop_published: bool,
@@ -68,18 +67,6 @@ struct Observed {
     incoming: BTreeMap<schema::RequestId, SourcePosition>,
     activity: super::activity::ActivityTracker,
 }
-struct TurnCommand {
-    occurrence: String,
-    review: Option<ReviewLaunch>,
-}
-
-#[derive(Default)]
-struct ReviewLaunch {
-    accepted: Option<String>,
-    delegate: Option<String>,
-    early_errors: BTreeMap<String, String>,
-}
-
 #[derive(Deserialize)]
 struct IncomingRequest {
     id: schema::RequestId,
@@ -256,11 +243,10 @@ impl Observations {
     }
     pub(super) fn quiescent(&self) -> bool {
         self.0.lock().is_ok_and(|state| {
-            state.turn_command_pending.is_none()
-                && state
-                    .source
-                    .as_ref()
-                    .is_some_and(|(_, native)| state.activity.is_quiescent(native.as_str()))
+            state
+                .source
+                .as_ref()
+                .is_some_and(|(_, native)| state.activity.is_quiescent(native.as_str()))
         })
     }
     #[cfg(test)]
@@ -402,37 +388,19 @@ impl Observations {
         if turn.is_empty() || turn.len() > 128 || !turn.bytes().all(|b| b.is_ascii_graphic()) {
             return Err(Error::Protocol);
         }
-        let review_delegate_candidate = state.work.is_some()
-            && state.work.as_deref() != Some(turn)
-            && state.last_app_server_turn.as_deref() != Some(turn);
         match terminal {
             Some(normal) if state.work.as_deref() == Some(turn) => {
                 let position = capture.append(raw, None)?;
-                let qualifies = normal && state.turn_command_pending.is_none();
                 Self::transition(
                     &mut state,
                     NativeForeground::Idle,
                     Some(position),
                     true,
-                    qualifies,
+                    normal,
                 )?;
-                state.turn_command_pending = None;
                 state.last_app_server_turn = Some(turn.to_owned());
             }
             Some(_) => return Ok(()),
-            None if let Some(review) = state
-                .turn_command_pending
-                .as_mut()
-                .and_then(|command| command.review.as_mut()) =>
-            {
-                // In the pinned release the auxiliary start follows the
-                // outer review marker, and owns the interrupt address only.
-                if review_delegate_candidate && review.delegate.is_none() {
-                    review.delegate.get_or_insert_with(|| turn.to_owned());
-                    self.changed();
-                }
-                return Ok(());
-            }
             None if state.work.as_deref() == Some(turn)
                 || state.last_app_server_turn.as_deref() == Some(turn) =>
             {
@@ -509,9 +477,6 @@ impl Observations {
         kind: &model_selection::PromptKind<'_>,
         idle: bool,
     ) -> Result<(), Error> {
-        if state.turn_command_pending.is_some() {
-            return Err(Error::EndingDecisionPending);
-        }
         if idle
             && state
                 .foreground
@@ -599,149 +564,6 @@ impl Observations {
         publish(state.work.as_deref().filter(|_| !state.stop_published))
     }
 
-    pub(super) fn with_text_work<T>(
-        &self,
-        publish: impl FnOnce(Option<&str>) -> Result<T, Error>,
-    ) -> Result<T, Error> {
-        let state = self.0.lock().map_err(|_| Error::Protocol)?;
-        if state.turn_command_pending.is_some() {
-            return Err(Error::EndingDecisionPending);
-        }
-        publish(state.work.as_deref())
-    }
-
-    pub(super) fn publish_turn_command<T>(
-        &self,
-        kind: &model_selection::PromptKind<'_>,
-        review: bool,
-        publish: impl FnOnce(String) -> Result<T, Error>,
-    ) -> Result<T, Error> {
-        let mut state = self.0.lock().map_err(|_| Error::Protocol)?;
-        if state.work.is_some() || state.turn_command_pending.is_some() {
-            return Err(Error::EndingDecisionPending);
-        }
-        Self::validate_model_prompt(&state, kind, true)?;
-        let occurrence = token("turn-command")?;
-        let posted = publish(occurrence.clone())?;
-        state.turn_command_pending = Some(TurnCommand {
-            occurrence,
-            review: review.then(ReviewLaunch::default),
-        });
-        Ok(posted)
-    }
-
-    pub(super) fn reject_turn_command(&self, occurrence: &str) -> Result<(), Error> {
-        let mut state = self.0.lock().map_err(|_| Error::Protocol)?;
-        if state.work.is_none()
-            && state
-                .turn_command_pending
-                .as_ref()
-                .is_some_and(|command| command.occurrence == occurrence)
-        {
-            state.turn_command_pending = None;
-            self.changed();
-        }
-        Ok(())
-    }
-
-    pub(super) fn review_accepted(
-        &self,
-        capture: &crate::CaptureLog,
-        occurrence: &str,
-        turn: &str,
-    ) -> Result<(), Error> {
-        let mut state = self.0.lock().map_err(|_| Error::Protocol)?;
-        let started = state.work.is_some();
-        if let Some(command) = state.turn_command_pending.as_mut()
-            && command.occurrence == occurrence
-            && let Some(review) = command.review.as_mut()
-        {
-            if !started && let Some(raw) = review.early_errors.remove(turn) {
-                capture.append(&raw, None)?;
-                state.turn_command_pending = None;
-                self.changed();
-            } else {
-                review.accepted = Some(turn.to_owned());
-                review.early_errors.clear();
-            }
-        }
-        Ok(())
-    }
-
-    pub(super) fn review_failed_to_start(
-        &self,
-        capture: &crate::CaptureLog,
-        turn: &str,
-        raw: &str,
-    ) -> Result<(), Error> {
-        let mut state = self.0.lock().map_err(|_| Error::Protocol)?;
-        if state.work.is_some() {
-            return Ok(());
-        }
-        let Some(review) = state
-            .turn_command_pending
-            .as_mut()
-            .and_then(|command| command.review.as_mut())
-        else {
-            return Ok(());
-        };
-        if review.accepted.as_deref() == Some(turn) {
-            capture.append(raw, None)?;
-            state.turn_command_pending = None;
-            self.changed();
-        } else if review.accepted.is_none() && review.early_errors.len() < 16 && raw.len() <= 8192 {
-            review
-                .early_errors
-                .entry(turn.to_owned())
-                .or_insert_with(|| raw.to_owned());
-        }
-        Ok(())
-    }
-
-    pub(super) fn review_started(
-        &self,
-        capture: &crate::CaptureLog,
-        raw: &str,
-        turn: &str,
-    ) -> Result<(), Error> {
-        let mut state = self.0.lock().map_err(|_| Error::Protocol)?;
-        if state.work.is_none()
-            && state.last_app_server_turn.as_deref() != Some(turn)
-            && state
-                .turn_command_pending
-                .as_ref()
-                .and_then(|command| command.review.as_ref())
-                .is_some_and(|review| {
-                    review
-                        .accepted
-                        .as_deref()
-                        .is_none_or(|accepted| accepted == turn)
-                })
-        {
-            let position = capture.append(raw, None)?;
-            state.work = Some(turn.to_owned());
-            state.normal_ending = None;
-            Self::transition(
-                &mut state,
-                NativeForeground::Running,
-                Some(position),
-                true,
-                false,
-            )?;
-            self.changed();
-        }
-        Ok(())
-    }
-
-    pub(super) fn is_review_turn(&self, turn: &str) -> Result<bool, Error> {
-        let state = self.0.lock().map_err(|_| Error::Protocol)?;
-        Ok(state.work.as_deref() == Some(turn)
-            && state
-                .turn_command_pending
-                .as_ref()
-                .is_some_and(|command| command.review.is_some()))
-    }
-
     pub(super) fn restore_work(&self) -> Option<NativeWorkTarget> {
         let state = self.0.lock().ok()?;
         if state.foreground != Some(NativeForeground::Running) || state.stop_published {
@@ -807,15 +629,11 @@ impl Observations {
             applied_supply: None,
             model: None,
             work: match (&state.source, &state.work) {
-                (Some((snapshot, native)), Some(work))
-                    if Self::interrupt_target(&state, work).is_ok() =>
-                {
-                    Some(NativeWorkTarget {
-                        snapshot: snapshot.clone(),
-                        native_session: native.clone(),
-                        work_id: work.clone(),
-                    })
-                }
+                (Some((snapshot, native)), Some(work)) => Some(NativeWorkTarget {
+                    snapshot: snapshot.clone(),
+                    native_session: native.clone(),
+                    work_id: work.clone(),
+                }),
                 _ => None,
             },
         })
@@ -824,19 +642,10 @@ impl Observations {
     pub(super) fn matches(&self, target: &NativeWorkTarget) -> Result<bool, Error> {
         Ok(self.current()?.work.as_ref() == Some(target))
     }
-    #[cfg(test)]
     pub(super) fn publish_stop(
         &self,
         target: &NativeWorkTarget,
         publish: impl FnOnce() -> Result<(), Error>,
-    ) -> Result<(), Error> {
-        self.publish_stop_at(target, |_| publish())
-    }
-
-    pub(super) fn publish_stop_at(
-        &self,
-        target: &NativeWorkTarget,
-        publish: impl FnOnce(&str) -> Result<(), Error>,
     ) -> Result<(), Error> {
         let mut state = self.0.lock().map_err(|_| Error::Protocol)?;
         if state.source.as_ref().is_none_or(|(snapshot, native)| {
@@ -845,32 +654,9 @@ impl Observations {
         {
             return Err(Error::NotAdmitted);
         }
-        publish(Self::interrupt_target(&state, &target.work_id)?)?;
+        publish()?;
         state.stop_published = true;
         Ok(())
-    }
-
-    fn interrupt_target<'a>(state: &'a Observed, work: &'a str) -> Result<&'a str, Error> {
-        match state
-            .turn_command_pending
-            .as_ref()
-            .and_then(|command| command.review.as_ref())
-        {
-            Some(review) => review.delegate.as_deref().ok_or(Error::NotAdmitted),
-            None => Ok(work),
-        }
-    }
-
-    pub(super) fn with_interrupt_target<T>(
-        &self,
-        publish: impl FnOnce(&str) -> Result<T, Error>,
-    ) -> Result<Option<T>, Error> {
-        let state = self.0.lock().map_err(|_| Error::Protocol)?;
-        state
-            .work
-            .as_deref()
-            .map(|work| publish(Self::interrupt_target(&state, work)?))
-            .transpose()
     }
 }
 pub(super) fn token(prefix: &str) -> Result<String, Error> {

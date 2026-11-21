@@ -476,45 +476,6 @@ pub(super) fn sandbox_permission(
     ))
 }
 
-/// Only a correlated pre-start review failure enters this capture lane.
-pub(super) fn review_error(
-    raw: &str,
-    position: &SourcePosition,
-    native: &NativeConversationId,
-) -> Result<Record, NativeNormalizationError> {
-    #[derive(Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    struct Failure {
-        thread_id: String,
-        turn_id: String,
-        will_retry: bool,
-    }
-    let failure: Failure =
-        serde_json::from_str(raw).map_err(|_| NativeNormalizationError::InvalidEvent)?;
-    if failure.thread_id != native.as_str() {
-        return Err(NativeNormalizationError::WrongSession);
-    }
-    if failure.will_retry
-        || failure.turn_id.is_empty()
-        || failure.turn_id.len() > 256
-        || !failure.turn_id.bytes().all(|byte| byte.is_ascii_graphic())
-    {
-        return Err(NativeNormalizationError::InvalidEvent);
-    }
-    Ok(record(
-        Kind::Notice,
-        position.occurrence().as_str(),
-        vec![
-            replace(Field::Title, &"Review could not start")?,
-            replace(
-                Field::Description,
-                &"Codex could not start the review. Check the review target and the workspace, then submit a new command.",
-            )?,
-            replace(Field::Status, &"error")?,
-        ],
-    ))
-}
-
 /// Keep a single foreground state record for both old and new capture lanes.
 /// A native completed event is not automatically a successful continuation.
 pub(super) fn turn(
@@ -584,20 +545,8 @@ pub(super) fn message(
     }
 
     let item = params.item.ok_or(NativeNormalizationError::InvalidEvent)?;
-    if method == "item/started" {
-        if item.kind == "enteredReviewMode" {
-            return Ok(Some(record(
-                Kind::State,
-                native.as_str(),
-                vec![replace(
-                    Field::Foreground,
-                    &serde_json::json!({"state":"running"}),
-                )?],
-            )));
-        }
-        if item.kind != "fileChange" {
-            return Ok(None);
-        }
+    if method == "item/started" && item.kind != "fileChange" {
+        return Ok(None);
     }
     let (kind, fields) = match item.kind {
         "agentMessage" => {

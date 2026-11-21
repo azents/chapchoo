@@ -130,13 +130,6 @@ pub fn normalize_captured_event(
         method @ ("turn/started" | "turn/completed") if envelope.id.is_none() => {
             records.push(app_server::turn(method, envelope.params.get(), native)?);
         }
-        "error" if envelope.id.is_none() => {
-            records.push(app_server::review_error(
-                envelope.params.get(),
-                position,
-                native,
-            )?);
-        }
         "mcpServer/elicitation/request" if envelope.id.is_some() => {
             records.push(app_server::permission(
                 envelope.params.get(),

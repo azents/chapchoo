@@ -207,7 +207,6 @@ message InputDelivery {
   oneof observation {
     google.protobuf.Empty possible_forwarding = 1; string inserted_native_message_id = 2;
     google.protobuf.Empty steered = 3; google.protobuf.Empty failed = 4;
-    google.protobuf.Empty command_accepted = 5;
   }
 }
 // Absent acceptance/delivery is missing evidence, never permission to redispatch.
@@ -500,14 +499,7 @@ message InputChunk { bytes content = 1; uint32 total_bytes = 2; uint32 offset = 
 message InputReport {
   CaptureSource source = 1; InputCommand command = 2;
   // Attempt error is queue failure, not evidence of physical nonexecution.
-  oneof result {
-    string inserted_native_message_id = 3;
-    google.protobuf.Empty steered = 4;
-    google.protobuf.Empty failed = 5;
-    google.protobuf.Empty attempt_error = 6;
-    // Accepted as a native command, without inserting ordinary model input.
-    google.protobuf.Empty command_accepted = 7;
-  }
+  oneof result { string inserted_native_message_id = 3; google.protobuf.Empty steered = 4; google.protobuf.Empty failed = 5; google.protobuf.Empty attempt_error = 6; }
 }
 message InputReportAcknowledgement {
   // Closure after explicit deletion does not establish a normal user receipt.

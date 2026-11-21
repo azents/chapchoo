@@ -94,10 +94,10 @@ impl Session {
         })
     }
 
-    pub(super) fn stop(&self, native_turn: &str) -> Result<(), Error> {
+    pub(super) fn stop(&self, target: &NativeWorkTarget) -> Result<(), Error> {
         match self {
             Self::Acp(session) => session.cancel_active_work().map_err(|_| Error::Protocol),
-            Self::AppServer(thread) => thread.stop(native_turn),
+            Self::AppServer(thread) => thread.stop(&target.work_id),
         }
     }
 

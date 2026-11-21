@@ -30,14 +30,7 @@ pub(super) struct Client {
 
 struct Outbound {
     line: Zeroizing<String>,
-    reply: Option<(u64, PendingReply)>,
-}
-
-pub(super) type ObserveReply = Box<dyn FnOnce(&Result<Value, i32>) -> Result<(), Error> + Send>;
-
-struct PendingReply {
-    answer: oneshot::Sender<Result<Value, i32>>,
-    observe: Option<ObserveReply>,
+    reply: Option<(u64, oneshot::Sender<Result<Value, i32>>)>,
 }
 
 #[derive(Debug, Eq, PartialEq, thiserror::Error)]
@@ -92,16 +85,6 @@ impl Client {
     /// A successful return means publication to this connection's unique
     /// writer, not native acceptance. Dropping Reply does not withdraw it.
     pub(super) fn enqueue(&self, method: &str, params: impl Serialize) -> Result<Reply, Error> {
-        self.enqueue_observed(method, params, None)
-    }
-
-    /// Keep observing exact replies in wire order after the waiter expires.
-    pub(super) fn enqueue_observed(
-        &self,
-        method: &str,
-        params: impl Serialize,
-        observe: Option<ObserveReply>,
-    ) -> Result<Reply, Error> {
         #[derive(Serialize)]
         struct Request<'a, P> {
             id: u64,
@@ -113,11 +96,7 @@ impl Client {
             .try_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_add(1))
             .map_err(|_| Error::NotAdmitted)?;
         let (send, receive) = oneshot::channel();
-        let pending = PendingReply {
-            answer: send,
-            observe,
-        };
-        self.publish(Request { id, method, params }, Some((id, pending)))?;
+        self.publish(Request { id, method, params }, Some((id, send)))?;
         Ok(Reply(receive))
     }
 
@@ -128,7 +107,7 @@ impl Client {
     fn publish(
         &self,
         frame: impl Serialize,
-        reply: Option<(u64, PendingReply)>,
+        reply: Option<(u64, oneshot::Sender<Result<Value, i32>>)>,
     ) -> Result<(), Error> {
         let slot = self
             .commands
@@ -273,10 +252,7 @@ async fn drive(
                         _ => return Err(Error::Protocol),
                     };
                     let reply = pending.remove(&id).ok_or(Error::Protocol)?;
-                    if let Some(observe) = reply.observe {
-                        observe(&result)?;
-                    }
-                    let _ = reply.answer.send(result);
+                    let _ = reply.send(result);
                 }
             }
             answer = answers.next(), if !answers.is_empty() => {

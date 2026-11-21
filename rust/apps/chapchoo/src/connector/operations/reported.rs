@@ -8,7 +8,7 @@ impl Publication {
             Ok(recorded) => {
                 if recorded
                     && matches!(&pending.0, Report::Input(report) if matches!(
-                        report.result, Some(c::input_report::Result::InsertedNativeMessageId(_) | c::input_report::Result::Steered(()) | c::input_report::Result::CommandAccepted(()))
+                        report.result, Some(c::input_report::Result::InsertedNativeMessageId(_) | c::input_report::Result::Steered(()))
                     ))
                     && let Some(ticket) = pending.1.ordering.as_mut()
                 {
@@ -51,9 +51,6 @@ impl Report {
                         }
                     }
                     c::input_report::Result::Steered(()) => NativePromptAcceptance::Steered,
-                    c::input_report::Result::CommandAccepted(()) => {
-                        NativePromptAcceptance::CommandAccepted
-                    }
                     c::input_report::Result::Failed(()) => NativePromptAcceptance::Failed,
                     c::input_report::Result::AttemptError(()) => {
                         return Err("Queue attempt error has no known native result".into());

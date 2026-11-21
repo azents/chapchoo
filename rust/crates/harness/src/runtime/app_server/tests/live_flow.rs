@@ -19,16 +19,10 @@ async fn new_session_steers_and_stops_only_its_exact_live_turn() -> TestResult {
         let driver = tokio::spawn(driver);
         let (read, mut write) = split(peer);
         let mut input = FramedRead::new(read, LinesCodec::new());
-        let compact_ack_observed = tokio::sync::Notify::new();
-        let review_ack_observed = tokio::sync::Notify::new();
-        let review_marker_observed = tokio::sync::Notify::new();
-        let compact_waiter_abandoned = tokio::sync::Notify::new();
         let barrier_finished = tokio::sync::Notify::new();
         let stop_fence_checked = tokio::sync::Notify::new();
         let server = async {
             let mut published = Vec::new();
-            let mut compact_count = 0;
-            let mut review_count = 0;
             while let Some(line) = input.next().await {
                 let message: Value = serde_json::from_str(&line?)?;
                 let method = message["method"].as_str().ok_or("Missing method")?;
@@ -51,50 +45,10 @@ async fn new_session_steers_and_stops_only_its_exact_live_turn() -> TestResult {
                         }
                         "thread/name/set" => {
                             assert_eq!(params["threadId"], "new-root");
-                            assert!(params["name"].is_string());
                             json!({})
                         }
                         "model/list" | "mcpServerStatus/list" => {
                             json!({"data":[],"nextCursor":null})
-                        }
-                        "thread/compact/start" => {
-                            assert_eq!(params, &json!({"threadId":"new-root"}));
-                            compact_count += 1;
-                            if compact_count == 1 {
-                                compact_waiter_abandoned.notified().await;
-                                send(&mut write, json!({"id":message["id"],"error":{"code":-32000,"message":"Rejected fixture"}})).await?;
-                                continue;
-                            }
-                            send(&mut write, json!({"id":message["id"],"result":{}})).await?;
-                            compact_ack_observed.notified().await;
-                            for (event, status) in [("turn/started","inProgress"), ("turn/completed","completed")] {
-                                send(&mut write, json!({"method":event,"params":{
-                                    "threadId":"new-root","turn":{"id":"compaction","status":status}
-                                }})).await?;
-                            }
-                            continue;
-                        }
-                        "review/start" => {
-                            assert_eq!(params, &json!({"threadId":"new-root","delivery":"inline","target":{"type":"baseBranch","branch":"main"}}));
-                            review_count += 1;
-                            if review_count == 1 {
-                                send(&mut write, json!({"method":"error","params":{"threadId":"new-root","turnId":"failed-review","willRetry":false,"error":{"message":"Fixture preflight failed"}}})).await?;
-                                send(&mut write, json!({"id":message["id"],"result":{"reviewThreadId":"new-root","turn":{"id":"failed-review","status":"inProgress"}}})).await?;
-                                continue;
-                            }
-                            send(&mut write, json!({"id":message["id"],"result":{"reviewThreadId":"new-root","turn":{"id":"review","status":"inProgress"}}})).await?;
-                            review_ack_observed.notified().await;
-                            send(&mut write, json!({"method":"item/started","params":{"threadId":"new-root","turnId":"review","item":{"id":"review-start","type":"enteredReviewMode","review":"Fixture review"}}})).await?;
-                            review_marker_observed.notified().await;
-                            send(&mut write, json!({"method":"turn/started","params":{"threadId":"new-root","turn":{"id":"auxiliary-turn","status":"inProgress"}}})).await?;
-                            send(&mut write, json!({"method":"item/completed","params":{"threadId":"new-root","turnId":"review","item":{"id":"internal","type":"userMessage","content":[{"type":"text","text":"Internal review prompt"}]}}})).await?;
-                            send(&mut write, json!({"method":"item/completed","params":{"threadId":"new-root","turnId":"review","item":{"id":"review-output","type":"exitedReviewMode","review":"Reviewed fixture."}}})).await?;
-                            let stop: Value = serde_json::from_str(&input.next().await.ok_or("Missing review interrupt")??)?;
-                            assert_eq!(stop["method"], "turn/interrupt");
-                            assert_eq!(stop["params"], json!({"threadId":"new-root","turnId":"auxiliary-turn"}));
-                            send(&mut write, json!({"id":stop["id"],"result":{}})).await?;
-                            send(&mut write, json!({"method":"turn/completed","params":{"threadId":"new-root","turn":{"id":"review","status":"interrupted"}}})).await?;
-                            continue;
                         }
                         "turn/start" | "turn/steer" => {
                             assert_eq!(params["threadId"], "new-root");
@@ -239,11 +193,6 @@ async fn new_session_steers_and_stops_only_its_exact_live_turn() -> TestResult {
                     "thread/name/set",
                     "model/list",
                     "mcpServerStatus/list",
-                    "thread/compact/start",
-                    "thread/compact/start",
-                    "review/start",
-                    "review/start",
-                    "thread/name/set",
                     "turn/start",
                     "turn/steer",
                     "turn/interrupt",
@@ -277,56 +226,6 @@ async fn new_session_steers_and_stops_only_its_exact_live_turn() -> TestResult {
             observed.enable_normal_endings()?;
             let text = ConversationText::parse("Fixture input".into())?;
             let Session::AppServer(thread) = &session else { return Err("Not App Server".into()) };
-            let kind = crate::runtime::model_selection::PromptKind::Ordinary { managed: true };
-            let abandoned = observed.publish_turn_command(&kind, false, |id| thread.enqueue_command(super::super::commands::Command::Compact, Some(id)))?;
-            drop(abandoned);
-            assert!(!observed.quiescent());
-            compact_waiter_abandoned.notify_one();
-            while !observed.quiescent() {
-                observed.wait_change().await;
-            }
-            let compact = observed.publish_turn_command(&kind, false, |id| thread.enqueue_command(super::super::commands::Command::Compact, Some(id)))?;
-            assert!(matches!(compact.await?, crate::NativePromptAcceptance::CommandAccepted));
-            assert!(observed.current()?.work.is_none());
-            assert!(observed.normal_ending()?.is_none());
-            assert!(!observed.quiescent());
-            assert!(matches!(session.steer(&text, None).await, Err(Error::EndingDecisionPending)));
-            compact_ack_observed.notify_one();
-            while !observed.quiescent() {
-                observed.wait_change().await;
-            }
-            assert!(observed.normal_ending()?.is_none());
-            use super::super::commands::Command;
-            let command = Command::parse("review-branch", "main").ok_or("Missing native review command")?;
-            let failed_review = observed.publish_turn_command(&kind, true, |id| thread.enqueue_command(command, Some(id)))?;
-            assert!(matches!(failed_review.await?, crate::NativePromptAcceptance::CommandAccepted));
-            assert!(observed.quiescent());
-            let review = observed.publish_turn_command(&kind, true, |id| thread.enqueue_command(command, Some(id)))?;
-            assert!(matches!(review.await?, crate::NativePromptAcceptance::CommandAccepted));
-            assert!(!observed.quiescent());
-            review_ack_observed.notify_one();
-            while observed.current()?.foreground != NativeForeground::Running {
-                observed.wait_change().await;
-            }
-            assert!(observed.current()?.work.is_none());
-            review_marker_observed.notify_one();
-            loop {
-                if let Some(work) = observed.current()?.work {
-                    assert_eq!(work.work_id, "review");
-                    match observed.publish_stop_at(&work, |native| session.stop(native)) {
-                        Ok(()) => break,
-                        Err(Error::NotAdmitted) => {},
-                        Err(error) => return Err(error.into()),
-                    }
-                }
-                observed.wait_change().await;
-            }
-            while !observed.quiescent() {
-                observed.wait_change().await;
-            }
-            assert!(observed.normal_ending()?.is_none());
-            let rename = observed.with_model_idle(&kind, || thread.enqueue_command(Command::Rename("Fixture rename"), None))??;
-            assert!(matches!(rename.await?, crate::NativePromptAcceptance::CommandAccepted));
             assert!(session.steer(&text, None).await?.is_none());
             assert_eq!(session.enqueue_prompt(&text, None, &Default::default())?.await?, "first");
             assert!(matches!(session.steer(&text, None).await?,
@@ -431,10 +330,10 @@ async fn new_session_steers_and_stops_only_its_exact_live_turn() -> TestResult {
             let mut wrong = work.clone();
             wrong.work_id = "old".into();
             assert!(matches!(
-                observed.publish_stop_at(&wrong, |native| session.stop(native)),
+                observed.publish_stop(&wrong, || session.stop(&wrong)),
                 Err(Error::NotAdmitted)
             ));
-            observed.publish_stop_at(&work, |native| session.stop(native))?;
+            observed.publish_stop(&work, || session.stop(&work))?;
             assert!(thread.pending()?.is_empty());
             assert!(matches!(thread.respond(permission(id, "grant-session")?, Some(&at)), Err(Error::NotAdmitted)));
             stop_fence_checked.notify_one();
