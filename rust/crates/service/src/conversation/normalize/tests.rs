@@ -190,6 +190,55 @@ fn cross_session_and_credential_traffic_do_not_become_normalized_history() -> Re
     Ok(())
 }
 #[test]
+fn app_server_approval_projects_only_occurrence_scoped_one_time_choices() -> Result<(), TestError> {
+    let original = json!({"id":"712","method":"mcpServer/elicitation/request","params":{
+        "threadId":"native","turnId":"turn","serverName":"chapchoo","mode":"form","message":"Look up the fixture value.",
+        "requestedSchema":{"type":"object","properties":{}},
+        "_meta":{"codex_approval_kind":"mcp_tool_call","tool_name":"lookup","persist":"always"}
+    }});
+    let raw = serde_json::to_vec(&original)?;
+    let result = normalized(&raw)?;
+    assert_eq!(result.pair.raw, raw);
+    let record = &result.records[0];
+    assert_eq!(record.kind, Kind::Request);
+    assert_eq!(record.native_id, "occurrence");
+    let projected: schema::RequestPermissionRequest =
+        serde_json::from_slice(bytes(&record.fields[0].change))?;
+    assert_eq!(projected.session_id.to_string(), "native");
+    assert_eq!(projected.title, "Allow lookup?");
+    assert_eq!(
+        projected.description.as_deref(),
+        Some("Look up the fixture value.")
+    );
+    assert_eq!(
+        projected
+            .options
+            .iter()
+            .map(|choice| choice.option_id.0.as_ref())
+            .collect::<Vec<_>>(),
+        ["approve-once", "decline"]
+    );
+    assert!(projected.meta.is_none());
+
+    let mut ordinary = original.clone();
+    ordinary["params"]["_meta"] = serde_json::Value::Null;
+    let result = normalized(&serde_json::to_vec(&ordinary)?)?;
+    assert!(
+        result.records[0]
+            .fields
+            .iter()
+            .all(|field| field.field != Field::Request)
+    );
+    let mut foreign = original.clone();
+    foreign["params"]["threadId"] = json!("other");
+    assert!(matches!(
+        normalized(&serde_json::to_vec(&foreign)?),
+        Err(NativeNormalizationError::WrongSession)
+    ));
+    Ok(())
+}
+
+#[test]
 fn original_permissions_use_occurrence_identity_not_reusable_rpc_id() -> Result<(), TestError> {
     let request = json!({"id":1,"method":"session/request_permission","params":{"sessionId":"native","title":"Choose","options":[{"optionId":"allow","name":"Allow once","kind":"allow_once"},{"optionId":"reject","name":"Reject once","kind":"reject_once"}]}});
     let result = normalized(&serde_json::to_vec(&request)?)?;

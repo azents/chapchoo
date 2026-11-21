@@ -40,6 +40,7 @@ impl fmt::Debug for NormalizedCapture {
 #[derive(Deserialize)]
 struct Envelope {
     method: String,
+    id: Option<schema::RequestId>,
     params: Box<serde_json::value::RawValue>,
 }
 
@@ -123,6 +124,13 @@ pub fn normalize_captured_event(
         }
         method @ ("item/completed" | "item/agentMessage/delta") => {
             records.extend(app_server::message(method, envelope.params.get(), native)?);
+        }
+        "mcpServer/elicitation/request" if envelope.id.is_some() => {
+            records.push(app_server::permission(
+                envelope.params.get(),
+                position,
+                native,
+            )?);
         }
         _ => return Err(NativeNormalizationError::InvalidEvent),
     }

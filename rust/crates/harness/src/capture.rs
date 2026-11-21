@@ -467,6 +467,7 @@ fn next(reader: &mut impl BufRead) -> Result<Option<CapturedEvent>, Error> {
 #[derive(Deserialize)]
 struct EventEnvelope {
     method: String,
+    id: Option<agent_client_protocol::v2::schema::RequestId>,
     params: EventParams,
 }
 #[derive(Deserialize)]
@@ -482,6 +483,7 @@ fn event_native(raw: &str) -> Result<NativeConversationId, Error> {
             envelope.params.session_id
         }
         "item/completed" | "item/agentMessage/delta" => envelope.params.thread_id,
+        "mcpServer/elicitation/request" if envelope.id.is_some() => envelope.params.thread_id,
         _ => None,
     };
     native(id.as_deref().ok_or(Error::CaptureCorrupt)?)

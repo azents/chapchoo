@@ -29,6 +29,95 @@ struct Part {
     text: Option<String>,
 }
 
+/// Project into the existing permission question shape used by the browser and
+/// answer validator. Only the original wire frame enters the raw capture lane.
+pub(super) fn permission(
+    raw: &str,
+    position: &SourcePosition,
+    native: &NativeConversationId,
+) -> Result<Record, NativeNormalizationError> {
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Frame {
+        thread_id: String,
+        turn_id: Option<String>,
+        server_name: String,
+        mode: String,
+        message: Option<String>,
+        #[serde(rename = "_meta")]
+        meta: Option<Meta>,
+        requested_schema: Option<EmptyForm>,
+    }
+    #[derive(Deserialize)]
+    struct Meta {
+        codex_approval_kind: Option<String>,
+        tool_name: Option<String>,
+    }
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct EmptyForm {
+        #[serde(rename = "type")]
+        kind: String,
+        properties: serde_json::Map<String, serde_json::Value>,
+    }
+    let frame: Frame =
+        serde_json::from_str(raw).map_err(|_| NativeNormalizationError::InvalidEvent)?;
+    if frame.thread_id != native.as_str() {
+        return Err(NativeNormalizationError::WrongSession);
+    }
+    let key = |value: &str| {
+        !value.is_empty() && value.len() <= 256 && value.bytes().all(|byte| byte.is_ascii_graphic())
+    };
+    let tool = frame
+        .meta
+        .filter(|meta| meta.codex_approval_kind.as_deref() == Some("mcp_tool_call"))
+        .and_then(|meta| meta.tool_name)
+        .filter(|name| key(name));
+    let fields = if let Some(tool) = tool
+        && frame.turn_id.as_deref().is_some_and(key)
+        && frame.server_name == "chapchoo"
+        && frame.mode == "form"
+        && frame
+            .requested_schema
+            .is_some_and(|f| f.kind == "object" && f.properties.is_empty())
+    {
+        let question = schema::RequestPermissionRequest::new(
+            native.as_str(),
+            format!("Allow {tool}?"),
+            vec![
+                schema::PermissionOption::new(
+                    "approve-once",
+                    "Allow once",
+                    schema::PermissionOptionKind::AllowOnce,
+                ),
+                schema::PermissionOption::new(
+                    "decline",
+                    "Decline",
+                    schema::PermissionOptionKind::RejectOnce,
+                ),
+            ],
+        )
+        .description(frame.message.filter(|message| {
+            message.len() <= 8192
+                && !message.trim().is_empty()
+                && !message
+                    .chars()
+                    .any(|ch| ch.is_control() && ch != '\n' && ch != '\t')
+        }));
+        vec![replace(Field::Request, &question)?]
+    } else {
+        vec![
+            replace(Field::Title, &"Unsupported approval request")?,
+            replace(Field::Status, &"unsupported")?,
+        ]
+    };
+    Ok(record(
+        Kind::Request,
+        position.occurrence().as_str(),
+        fields,
+    ))
+}
+
 pub(super) fn message(
     method: &str,
     raw: &str,

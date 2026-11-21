@@ -69,6 +69,35 @@ fn exact_native_thread_can_append_without_replacing_legacy_capture() -> Result<(
     Ok(())
 }
 #[test]
+fn app_server_approval_requires_a_request_and_the_exact_native_thread() -> Result<(), TestError> {
+    let (_dir, _storage, log) = setup()?;
+    let mut request = serde_json::json!({
+        "method":"mcpServer/elicitation/request",
+        "params":{"threadId":"native","turnId":"turn","serverName":"chapchoo","mode":"form"},
+    });
+    assert!(matches!(
+        log.append(&request.to_string(), None),
+        Err(Error::CaptureCorrupt)
+    ));
+    request["id"] = 7.into();
+    request["params"]["threadId"] = "foreign".into();
+    assert!(matches!(
+        log.append(&request.to_string(), None),
+        Err(Error::CaptureConflict)
+    ));
+    request["params"]["threadId"] = "native".into();
+    let raw = request.to_string();
+    let position = log.append(&raw, None)?;
+    assert_eq!(position.ordinal(), 1);
+    let event = log
+        .begin(&log.snapshot()?, None)?
+        .next_event()?
+        .ok_or("Missing approval")?;
+    assert_eq!(event.raw, raw);
+    Ok(())
+}
+
+#[test]
 fn finite_complete_boundary_does_not_follow_later_append() -> Result<(), TestError> {
     let (_dir, _storage, log) = setup()?;
     let first = log.append(
