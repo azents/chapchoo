@@ -403,6 +403,19 @@ export class DockerFixture {
   async verifyNoRetainedMarker(target: NativeComputer): Promise<void> {
     await this.exec(target, "test ! -e /workspace/acceptance-marker");
   }
+
+  async verifyReplacementCredential(target: NativeComputer): Promise<void> {
+    if (
+      (await this.exec(
+        target,
+        "cat /workspace/acceptance-direct-credential",
+      )) !== "replacement"
+    ) {
+      throw new Error(
+        "New direct owner did not log in with the replacement fixture key",
+      );
+    }
+  }
   /** Remove only this fixture's user marker, preserving Connector-owned state. */
   async clearSaved(target: NativeComputer): Promise<void> {
     await this.exec(target, "rm /workspace/acceptance-marker");

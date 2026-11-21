@@ -689,6 +689,8 @@ test("a stopped Cloud Computer restores its source and delivers an ordinary mess
     await activity.getByRole("button", { name: "Close", exact: true }).click();
     await expect(activity).toBeHidden();
     if (replacementPackage && replacementImage && originalExecution) {
+      stage = "replace-retained-cohort-fixture-key";
+      await fixture.replaceFixtureKey();
       stage = "replace-product-after-retirement";
       await assembly.replaceDockerBrowserPackage(
         originalExecution,
@@ -726,6 +728,7 @@ test("a stopped Cloud Computer restores its source and delivers an ordinary mess
       expect(successor.container).not.toEqual(originalExecution.container);
       expect(await docker.readMarker(successor)).toEqual("saved-original-data");
       expect(await docker.conversationAdmission(successor)).toBe("resume");
+      await docker.verifyReplacementCredential(successor);
       expect(await docker.containerAbsent(originalExecution.container)).toBe(
         true,
       );

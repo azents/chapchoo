@@ -3,6 +3,7 @@ use crate::runtime::{
     InteractiveRequest, InteractiveResponse, NativeContext, NativeForeground,
     observations::Observations, session::Session,
 };
+use tokio::{io::AsyncReadExt, net::UnixStream};
 
 #[tokio::test]
 async fn new_session_steers_and_stops_only_its_exact_live_turn() -> TestResult {
@@ -231,6 +232,43 @@ async fn new_session_steers_and_stops_only_its_exact_live_turn() -> TestResult {
             assert!(matches!(session.steer(&text, None).await?,
                 Some(crate::runtime::NativePromptAcceptance::Inserted { native_message_id })
                     if native_message_id == "steered"));
+            let work = observed.current()?.work.ok_or("No direct Goal restore target")?;
+            assert_eq!(work.work_id, "active");
+            let route = crate::ContinuationRouteLease::open();
+            let launch = tempfile::tempdir()?;
+            let read: crate::NativeGoalRestore = {
+                let expected = work.clone();
+                let route = route.route();
+                Arc::new(move |actual| {
+                    let expected = expected.clone();
+                    let route = route.clone();
+                    Box::pin(async move {
+                        if actual != expected {
+                            return Err(crate::NativeToolsError::new("Wrong direct Goal target".into()));
+                        }
+                        Ok(crate::NativeGoalContext::new(
+                            br#"[{"title":"Fixture current Goal"}]"#.to_vec(),
+                            route,
+                        ))
+                    })
+                })
+            };
+            use crate::runtime::goal_restore::{Listener, SOCKET};
+            let _listener = Listener::start(launch.path(), observed.clone(), read)?;
+            let mut socket = UnixStream::connect(launch.path().join(SOCKET)).await?;
+            let mut restored = Vec::new();
+            socket.read_to_end(&mut restored).await?;
+            let restored: Value = serde_json::from_slice(&restored)?;
+            assert_eq!(restored["hookSpecificOutput"]["hookEventName"], "SessionStart");
+            assert_eq!(
+                restored["hookSpecificOutput"]["additionalContext"],
+                "Current Conversation Goal context (authoritative):\n[{\"title\":\"Fixture current Goal\"}]"
+            );
+            drop(route);
+            let mut socket = UnixStream::connect(launch.path().join(SOCKET)).await?;
+            let mut retired = Vec::new();
+            socket.read_to_end(&mut retired).await?;
+            assert!(retired.is_empty());
             let (id, occurrence) = loop {
                 if let Some(InteractiveRequest::Form { id, occurrence, request }) = thread.pending()?.pop() {
                     assert_eq!(request.message, "Enable the fixture?");

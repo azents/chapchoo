@@ -63,6 +63,7 @@ export async function nativeConversation(
   holdWork: () => Promise<() => Promise<void>>;
   diagnostics: () => Promise<string>;
   pendingInputs: () => Promise<number>;
+  replaceFixtureKey: () => Promise<void>;
   close: (expectedRequestId?: string) => Promise<void>;
 }> {
   const docker = assembly.docker;
@@ -228,6 +229,7 @@ export async function nativeConversation(
     }
     if (!authenticationId)
       throw new Error("Conversation fixture key registration was not observed");
+    const appliedAuthenticationId = authenticationId;
     stage = "create";
     // Freeze only this owned Provider before creating work. Select the explicit
     // supply before any Connector can start.
@@ -390,6 +392,28 @@ export async function nativeConversation(
           knownIds: [],
         });
         return pending.inputs.length;
+      },
+      replaceFixtureKey: async () => {
+        if (fresh)
+          throw new Error("Replacement applies only to the retained cohort");
+        stage = "replace-fixture-key";
+        const replacement = Buffer.from("disposable-replaced-conversation-key");
+        try {
+          const changed = await call(keys.replaceKey.bind(keys), {
+            scope: { personal: {} },
+            requestId: "conversation-key-replacement",
+            authenticationId: appliedAuthenticationId,
+            expectedRequestId: "conversation-key",
+            key: replacement,
+          });
+          if (changed.record?.authenticationId !== appliedAuthenticationId) {
+            throw new Error(
+              "Key replacement did not retain its registered identity",
+            );
+          }
+        } finally {
+          replacement.fill(0);
+        }
       },
       close,
     };

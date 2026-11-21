@@ -104,6 +104,7 @@ const model = "fixture-model";
 const alternateModel = "fixture-alternate";
 let authenticated = false;
 let directClient = false;
+let usesReplacementKey = false;
 let active = false;
 let primaryUsed = false;
 let primaryStarted = false;
@@ -290,6 +291,8 @@ async function request(id, method, params) {
       )
         throw new Error("Fixture requires explicit synthetic key login");
       authenticated = true;
+      usesReplacementKey =
+        params.apiKey === "disposable-replaced-conversation-key";
       if (params.apiKey === "disposable-fresh-conversation-key") {
         threadId = "fixture-fresh-thread";
       }
@@ -407,6 +410,12 @@ async function request(id, method, params) {
             "/workspace/acceptance-direct-admission",
             method === "thread/start" ? "start\n" : "resume\n",
           );
+          if (usesReplacementKey) {
+            writeFileSync(
+              "/workspace/acceptance-direct-credential",
+              "replacement\n",
+            );
+          }
         }
       }
       cwd = params.cwd;

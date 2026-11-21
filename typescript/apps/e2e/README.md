@@ -102,8 +102,10 @@ pnpm --filter @chapchoo/e2e test:conversation --grep 'a stopped Cloud Computer'
 
 This variant seeds a turn before the change and uses the product's Stop
 operation. Only after confirming the previous container is absent does the
-fixture replace its product and provider processes, migrate its private
-PostgreSQL database, and send to the original conversation. The test checks
+fixture replace the synthetic API key on the same authentication record,
+replace its product and provider processes, migrate its private PostgreSQL
+database, and send to the original conversation after observing native login
+with the replacement key. The test checks
 native and conversation identity, old message IDs, the original workspace
 marker and a single delivery after the change. It then creates a separate
 conversation with a different synthetic key and verifies its first delivery
