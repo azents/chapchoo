@@ -90,6 +90,10 @@ impl NativeMcpDeclaration {
             ]),
         )
     }
+    #[cfg(test)]
+    pub(crate) fn http_credentials(&self) -> (&str, &BearerSecret) {
+        (self.url.as_str(), &self.key)
+    }
 }
 pub struct NativeToolProvision {
     declaration: NativeMcpDeclaration,

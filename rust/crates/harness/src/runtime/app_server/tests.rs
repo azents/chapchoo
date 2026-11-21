@@ -314,6 +314,66 @@ async fn lost_reply_is_uncertain_and_does_not_republish() -> TestResult {
 }
 
 #[tokio::test]
+async fn start_and_resume_require_the_same_launch_local_mcp_declaration() -> TestResult {
+    let (local, remote) = duplex(4096);
+    let (read, write) = split(local);
+    let (server_read, mut output) = split(remote);
+    let mut input = FramedRead::new(server_read, LinesCodec::new());
+    let done = CancellationToken::new();
+    let (link, driver) = wire::connect(read, write, done.clone(), |_| Ok(None));
+    let driver = tokio::spawn(driver);
+    let bearer = chapchoo_crypto::BearerSecret::generate()?;
+    let authorization = zeroize::Zeroizing::new(format!("Bearer {}", bearer.expose()));
+    let declaration = crate::NativeMcpDeclaration::http("http://127.0.0.1:12345/mcp", bearer)?;
+    let server = async {
+        for (method, existing) in [("thread/start", false), ("thread/resume", true)] {
+            let frame = input.next().await.ok_or("Missing setup request")??;
+            let request: Value = serde_json::from_str(&frame)?;
+            let params = &request["params"];
+            assert_eq!(request["method"], method);
+            assert_eq!(params["cwd"], "/fixture");
+            assert_eq!(params["threadId"].as_str(), existing.then_some("same"));
+            assert_eq!(params["excludeTurns"].as_bool(), existing.then_some(true));
+            assert_eq!(params["approvalPolicy"], "on-request");
+            let server = &params["config"]["mcp_servers"]["chapchoo"];
+            assert_eq!(server["url"], "http://127.0.0.1:12345/mcp");
+            assert_eq!(server["required"], true);
+            assert_eq!(server["default_tools_approval_mode"], "prompt");
+            assert!(
+                server["http_headers"]["Authorization"].as_str() == Some(authorization.as_str())
+            );
+            send(
+                &mut output,
+                json!({"id":request["id"],"result":{"thread":{"id":"same"}}}),
+            )
+            .await?;
+        }
+        Ok::<(), Box<dyn std::error::Error>>(())
+    };
+    let exercise = async {
+        let original = Thread::open(&link, Path::new("/fixture"), None, Some(&declaration)).await?;
+        let resumed = Thread::open(
+            &link,
+            Path::new("/fixture"),
+            Some(&original.id),
+            Some(&declaration),
+        )
+        .await?;
+        assert_eq!(resumed.id, original.id);
+        Ok::<(), Box<dyn std::error::Error>>(())
+    };
+    let (server, exercise) = tokio::time::timeout(Duration::from_secs(2), async {
+        tokio::join!(server, exercise)
+    })
+    .await?;
+    server?;
+    exercise?;
+    done.cancel();
+    driver.await??;
+    Ok(())
+}
+
+#[tokio::test]
 async fn a_different_resume_id_is_never_adopted() -> TestResult {
     let (client_side, server_side) = duplex(2048);
     let (read, write) = split(client_side);

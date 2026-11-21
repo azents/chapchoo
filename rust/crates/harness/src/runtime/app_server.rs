@@ -1,5 +1,6 @@
 //! Versioned operations for the official Codex App Server.
 mod events;
+mod tools;
 mod wire;
 
 use crate::{Error, ProtocolStage};
@@ -190,19 +191,53 @@ impl<'a> Thread<'a> {
         id: &NativeConversationId,
         cwd: &Path,
     ) -> Result<Self, Error> {
+        Self::open(link, cwd, Some(id), None).await
+    }
+
+    async fn open(
+        link: &'a Client,
+        cwd: &Path,
+        existing: Option<&NativeConversationId>,
+        mcp: Option<&crate::NativeMcpDeclaration>,
+    ) -> Result<Self, Error> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Open<'a> {
+            cwd: &'a Path,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            thread_id: Option<&'a str>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            exclude_turns: Option<bool>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            approval_policy: Option<&'static str>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            config: Option<tools::Config<'a>>,
+        }
+        let prepared = mcp.map(tools::Prepared::new);
         let response = call(
             link,
             ProtocolStage::Session,
-            "thread/resume",
-            json!({"threadId": id.as_str(), "cwd": cwd, "excludeTurns": true}),
+            if existing.is_some() {
+                "thread/resume"
+            } else {
+                "thread/start"
+            },
+            Open {
+                cwd,
+                thread_id: existing.map(NativeConversationId::as_str),
+                exclude_turns: existing.map(|_| true),
+                approval_policy: mcp.map(|_| "on-request"),
+                config: prepared.as_ref().map(tools::Prepared::config),
+            },
         )
         .await?;
-        if response["thread"]["id"].as_str() != Some(id.as_str()) {
+        let id = response["thread"]["id"].as_str().ok_or(Error::Protocol)?;
+        if existing.is_some_and(|existing| existing.as_str() != id) {
             return Err(Error::CaptureConflict);
         }
         Ok(Self {
             link,
-            id: id.clone(),
+            id: NativeConversationId::parse(id.to_owned()).map_err(|_| Error::Protocol)?,
         })
     }
 
