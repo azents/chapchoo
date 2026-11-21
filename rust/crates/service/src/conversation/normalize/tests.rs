@@ -199,9 +199,12 @@ fn app_server_mcp_completion_preserves_input_and_result_in_the_tool_record() -> 
         Ok(serde_json::from_slice(bytes(&field.change))?)
     };
     assert_eq!(get(Field::Status)?, "completed");
-    assert_eq!(get(Field::ToolInput)?["count"], 9223372036854775807_i64);
+    let input = get(Field::ToolInput)?;
+    assert_eq!(input["server"], "chapchoo");
+    assert_eq!(input["tool"], "send");
+    assert_eq!(input["arguments"]["count"], 9223372036854775807_i64);
     assert_eq!(
-        get(Field::ToolOutput)?["content"][0]["text"],
+        get(Field::ToolOutput)?["result"]["content"][0]["text"],
         "Message accepted."
     );
     Ok(())

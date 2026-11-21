@@ -271,20 +271,39 @@ fn mcp_fields(item: &Item<'_>) -> Result<Vec<Update>, NativeNormalizationError> 
         _ => return Err(NativeNormalizationError::InvalidEvent),
     };
     let mut fields = vec![
-        replace(Field::Title, &format!("{server}/{tool}"))?,
+        replace(Field::Title, &format!("mcp.{server}.{tool}"))?,
         replace(Field::Description, &tool)?,
         replace(Field::Status, &status)?,
     ];
-    for (field, value) in [
-        (Field::ToolInput, item.arguments),
-        (Field::ToolOutput, item.result.or(item.error)),
-    ] {
-        if let Some(value) = value {
-            fields.push(Update {
-                field,
-                change: Change::Replace(value.get().as_bytes().to_vec()),
-            });
-        }
+    #[derive(Serialize)]
+    struct ToolInput<'a> {
+        server: &'a str,
+        tool: &'a str,
+        arguments: &'a serde_json::value::RawValue,
+    }
+    #[derive(Serialize)]
+    struct ToolOutput<'a> {
+        result: Option<&'a serde_json::value::RawValue>,
+        error: Option<&'a serde_json::value::RawValue>,
+    }
+    if let Some(arguments) = item.arguments {
+        fields.push(replace(
+            Field::ToolInput,
+            &ToolInput {
+                server,
+                tool,
+                arguments,
+            },
+        )?);
+    }
+    if item.result.is_some() || item.error.is_some() {
+        fields.push(replace(
+            Field::ToolOutput,
+            &ToolOutput {
+                result: item.result,
+                error: item.error,
+            },
+        )?);
     }
     Ok(fields)
 }

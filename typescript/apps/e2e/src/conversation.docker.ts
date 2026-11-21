@@ -121,9 +121,17 @@ test("owner follows Conversation Work and inspects native typed-answer records",
         exact: true,
       }),
     ).toBeChecked();
+    stage = "choose-reasoning-effort";
+    await picker.getByText("High", { exact: true }).click();
+    await expect(
+      picker.getByRole("radio", { name: "High", exact: true }),
+    ).toBeChecked();
+    stage = "choose-speed";
+    await picker.getByText("Fast", { exact: true }).click();
+    await expect(
+      picker.getByRole("radio", { name: "Fast", exact: true }),
+    ).toBeChecked();
     stage = "save-alternate-model";
-    await picker.getByRole("radio", { name: "High", exact: true }).check();
-    await picker.getByRole("radio", { name: "Fast", exact: true }).check();
     await picker.getByRole("button", { name: "Save", exact: true }).click();
     await expect(
       settings.getByRole("button", { name: /^Model/ }),
