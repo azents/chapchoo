@@ -472,17 +472,19 @@ struct EventEnvelope {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct EventParams {
-    session_id: String,
+    session_id: Option<String>,
+    thread_id: Option<String>,
 }
 fn event_native(raw: &str) -> Result<NativeConversationId, Error> {
     let envelope: EventEnvelope = serde_json::from_str(raw).map_err(|_| Error::CaptureCorrupt)?;
-    if !matches!(
-        envelope.method.as_str(),
-        "session/update" | "session/request_permission" | "elicitation/create"
-    ) {
-        return Err(Error::CaptureCorrupt);
-    }
-    native(&envelope.params.session_id)
+    let id = match envelope.method.as_str() {
+        "session/update" | "session/request_permission" | "elicitation/create" => {
+            envelope.params.session_id
+        }
+        "item/completed" | "item/agentMessage/delta" => envelope.params.thread_id,
+        _ => None,
+    };
+    native(id.as_deref().ok_or(Error::CaptureCorrupt)?)
 }
 
 #[cfg(test)]

@@ -27,6 +27,41 @@ fn bytes(change: &Change) -> &[u8] {
     }
 }
 #[test]
+fn app_server_final_message_replaces_deltas_under_the_same_record_key() -> Result<(), TestError> {
+    let delta = serde_json::to_vec(&json!({
+        "method": "item/agentMessage/delta",
+        "params": {"threadId": "native", "turnId": "turn", "itemId": "item", "delta": "Partial"},
+    }))?;
+    let message = serde_json::to_vec(&json!({
+        "method": "item/completed",
+        "params": {"threadId": "native", "turnId": "turn",
+            "item": {"type": "agentMessage", "id": "item", "text": "Final"}},
+    }))?;
+    let delta_capture = normalized(&delta)?;
+    let final_capture = normalized(&message)?;
+    assert_eq!(delta_capture.pair.raw, delta);
+    assert_eq!(final_capture.pair.raw, message);
+    let partial = &delta_capture.records[0];
+    let final_record = &final_capture.records[0];
+    assert_eq!(partial.kind, Kind::Assistant);
+    assert_eq!(partial.native_id, final_record.native_id);
+    assert!(matches!(partial.fields[0].change, Change::Append(_)));
+    assert!(matches!(final_record.fields[0].change, Change::Replace(_)));
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(bytes(&final_record.fields[0].change))?,
+        json!({"type": "text", "text": "Final"}),
+    );
+    let foreign = serde_json::to_vec(&json!({
+        "method": "item/agentMessage/delta",
+        "params": {"threadId": "other", "turnId": "turn", "itemId": "item", "delta": "Partial"},
+    }))?;
+    assert!(matches!(
+        normalized(&foreign),
+        Err(NativeNormalizationError::WrongSession)
+    ));
+    Ok(())
+}
+#[test]
 fn utterances_use_typed_entity_and_role_without_merging_by_text() -> Result<(), TestError> {
     for (native, kind) in [
         ("user_message_chunk", Kind::User),

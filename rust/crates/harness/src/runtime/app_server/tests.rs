@@ -9,6 +9,56 @@ use tokio_util::{
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
+#[test]
+fn only_exact_root_live_events_yield_operation_evidence() -> TestResult {
+    use events::{Observation, root_observation};
+
+    let root = NativeConversationId::parse("root".into())?;
+    let item = json!({
+        "method": "item/started",
+        "params": {"threadId": "root", "turnId": "turn",
+            "item": {"type": "userMessage", "id": "item", "clientId": "operation"}}
+    });
+    assert_eq!(
+        root_observation(&root, &item)?,
+        Some(Observation::InputInserted {
+            turn: "turn",
+            item: "item",
+            operation: "operation",
+        })
+    );
+    for frame in [
+        json!({"id": 1, "result": {"turn": {"id": "turn"}}}),
+        json!({"method": "thread/status/changed", "params": {"threadId": "root", "status": {"type": "idle"}}}),
+        json!({"method": "turn/completed", "params": {"threadId": "child", "turn": {"id": "child-turn", "rootTurnId": "turn", "status": "completed"}}}),
+        json!({"method": "item/completed", "params": item["params"]}),
+    ] {
+        assert_eq!(root_observation(&root, &frame)?, None);
+    }
+    let mut frame =
+        json!({"method": "turn/started", "params": {"threadId": "root", "turn": {"id": "turn"}}});
+    assert_eq!(
+        root_observation(&root, &frame)?,
+        Some(Observation::Started { turn: "turn" })
+    );
+    frame["method"] = json!("turn/completed");
+    for (status, normal) in [
+        ("completed", true),
+        ("interrupted", false),
+        ("failed", false),
+    ] {
+        frame["params"]["turn"]["status"] = json!(status);
+        assert_eq!(
+            root_observation(&root, &frame)?,
+            Some(Observation::Terminal {
+                turn: "turn",
+                normal
+            })
+        );
+    }
+    Ok(())
+}
+
 async fn recv(reader: &mut (impl AsyncRead + Unpin)) -> TestResult<Value> {
     let frame = FramedRead::new(reader, LinesCodec::new())
         .next()

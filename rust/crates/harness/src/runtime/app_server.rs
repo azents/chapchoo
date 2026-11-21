@@ -1,4 +1,5 @@
 //! Versioned operations for the official Codex App Server.
+mod events;
 mod wire;
 
 use crate::{Error, ProtocolStage};

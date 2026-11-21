@@ -8,6 +8,8 @@ use chapchoo_persistence::{
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
+mod app_server;
+
 #[derive(Debug, Clone, Copy)]
 pub enum NativeNormalizationError {
     InvalidEvent,
@@ -118,6 +120,9 @@ pub fn normalize_captured_event(
                 position.occurrence().as_str(),
                 fields,
             ));
+        }
+        method @ ("item/completed" | "item/agentMessage/delta") => {
+            records.extend(app_server::message(method, envelope.params.get(), native)?);
         }
         _ => return Err(NativeNormalizationError::InvalidEvent),
     }
