@@ -7,7 +7,34 @@ use crate::{
     runtime::{CaptureReplay, InteractiveRequest, InteractiveResponse, NativeContext},
 };
 use std::{path::PathBuf, process::Stdio};
-use tokio::process::Command;
+use tokio::process::{Child, Command};
+
+fn fixture_process(
+    binary: &Path,
+    home: &Path,
+    state: &Path,
+    cwd: &Path,
+    origin: &str,
+) -> TestResult<Child> {
+    Ok(Command::new(binary)
+        .env_clear()
+        .env("PATH", std::env::var_os("PATH").ok_or("Missing PATH")?)
+        .env("HOME", home)
+        .env("CODEX_HOME", state)
+        .env("OPENAI_BASE_URL", format!("{origin}/v1"))
+        .env("HTTP_PROXY", "http://127.0.0.1:9")
+        .env("HTTPS_PROXY", "http://127.0.0.1:9")
+        .env("ALL_PROXY", "http://127.0.0.1:9")
+        .env("NO_PROXY", "127.0.0.1")
+        .env("OTEL_SDK_DISABLED", "true")
+        .current_dir(cwd)
+        .args(["app-server", "--listen", "stdio://"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .kill_on_drop(true)
+        .spawn()?)
+}
 
 #[tokio::test]
 #[ignore = "requires a caller-owned Codex 0.171.0 process fixture on loopback"]
@@ -39,24 +66,7 @@ async fn released_resume_preserves_capture_and_answers_scoped_tool_approval() ->
         // The fixture accepts this process's dynamically scoped bearer and no
         // production credential. The URL was checked before handing it over.
         let provision = crate::NativeMcpDeclaration::http(&format!("{origin}/mcp"), bearer)?;
-        let mut child = Command::new(binary)
-            .env_clear()
-            .env("PATH", std::env::var_os("PATH").ok_or("Missing PATH")?)
-            .env("HOME", temp.path())
-            .env("CODEX_HOME", &home)
-            .env("OPENAI_BASE_URL", format!("{origin}/v1"))
-            .env("HTTP_PROXY", "http://127.0.0.1:9")
-            .env("HTTPS_PROXY", "http://127.0.0.1:9")
-            .env("ALL_PROXY", "http://127.0.0.1:9")
-            .env("NO_PROXY", "127.0.0.1")
-            .env("OTEL_SDK_DISABLED", "true")
-            .current_dir(&cwd)
-            .args(["app-server", "--listen", "stdio://"])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .kill_on_drop(true)
-            .spawn()?;
+        let mut child = fixture_process(&binary, temp.path(), &home, &cwd, &origin)?;
         let done = CancellationToken::new();
         let observations = Arc::new(Observations::default());
         let (connection, driver) = Connection::connect(
@@ -149,7 +159,39 @@ async fn released_resume_preserves_capture_and_answers_scoped_tool_approval() ->
         assert!(contains_approval);
         done.cancel();
         driven.await??;
-        child.wait().await?;
+        assert!(child.wait().await?.success());
+        let fresh = tempfile::tempdir()?;
+        let fresh_storage = NativeStorage::open(fresh.path())?;
+        let fresh_capture = CaptureLog::create(&fresh_storage)?;
+        let fresh_cwd = fresh_storage.workspace();
+        let fresh_state = fresh_storage.state();
+        std::fs::copy(home.join("config.toml"), fresh_state.join("config.toml"))?;
+        assert!(fresh_capture.is_empty()?);
+        let mut child = fixture_process(&binary, fresh.path(), &fresh_state, &fresh_cwd, &origin)?;
+        let observed = Arc::new(Observations::default());
+        let done = CancellationToken::new();
+        let (connection, driver) = Connection::connect(
+            child.stdout.take().ok_or("Missing stdout")?,
+            child.stdin.take().ok_or("Missing stdin")?,
+            done.clone(),
+            fresh_capture.clone(),
+            observed.clone(),
+        );
+        let driver = tokio::spawn(driver);
+        // Public API-key login on a private fresh state directory. The value is
+        // inert and this child reaches only the fixture server.
+        let thread = connection.open(&fresh_cwd, &NativeContext::New, &provision, Some("fixture-fresh-api-key"), true).await?;
+        assert_ne!(thread.id(), id.as_str());
+        assert_ne!(fresh_capture.snapshot()?, snapshot);
+        observed.enable_normal_endings()?;
+        let fresh_text = ConversationText::parse("First input after the fixture cutover.".into())?;
+        thread.enqueue_prompt(&fresh_text, None, &Default::default())?.await?;
+        while observed.normal_ending()?.is_none() {
+            observed.wait_change().await;
+        }
+        done.cancel();
+        driver.await??;
+        assert!(child.wait().await?.success());
         Ok(())
     }).await?
 }
