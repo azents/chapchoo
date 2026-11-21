@@ -82,10 +82,12 @@ impl Store {
                 return Ok(ConversationModelStartAdmission::Ungoverned);
             }
             let model_id = current.and_then(|row| row.saved_model_id.clone());
+            let retained_tuning = current.and_then(|row| row.saved_tuning.as_deref());
+            let tuning = tuning_from_storage(retained_tuning)?;
             let inserted = diesel::sql_query(dialect.query(
                 "INSERT INTO conversation_model_starts
-                 (conversation_id,operation_id,source_snapshot,native_session_id,execution_id,launch_operation_id,connection_id,model_id)
-                 VALUES(?,?,?,?,?,?,?,?) ON CONFLICT (conversation_id,operation_id) DO NOTHING",
+                 (conversation_id,operation_id,source_snapshot,native_session_id,execution_id,launch_operation_id,connection_id,model_id,tuning)
+                 VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT (conversation_id,operation_id) DO NOTHING",
             ))
             .bind::<IdentitySql, _>(conversation)
             .bind::<IdentitySql, _>(operation)
@@ -95,12 +97,13 @@ impl Store {
             .bind::<IdentitySql, _>(launch)
             .bind::<IdentitySql, _>(connection_id)
             .bind::<Nullable<Text>, _>(&model_id)
+            .bind::<Nullable<Text>, _>(retained_tuning)
             .execute(connection)
             .await?;
             if inserted != 1 {
                 return Err(StoreError::Conflict);
             }
-            Ok(ConversationModelStartAdmission::Reserved { model_id })
+            Ok(ConversationModelStartAdmission::Reserved { model_id, tuning })
         })
     }
 

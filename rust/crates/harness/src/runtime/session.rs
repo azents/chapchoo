@@ -55,10 +55,11 @@ impl Session {
         &self,
         text: &ConversationText,
         model: Option<&str>,
+        tuning: &chapchoo_domain::ConversationModelTuning,
     ) -> Result<impl Future<Output = Result<String, Error>> + use<>, Error> {
         let (acp, direct) = match self {
             Self::Acp(session) => (Some(session.send_prompt(text.as_str())), None),
-            Self::AppServer(thread) => (None, Some(thread.enqueue_prompt(text, model)?)),
+            Self::AppServer(thread) => (None, Some(thread.enqueue_prompt(text, model, tuning)?)),
         };
         Ok(async move {
             if let Some(pending) = direct {

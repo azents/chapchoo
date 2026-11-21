@@ -7,7 +7,9 @@ mod tools;
 mod wire;
 
 use crate::{Error, ProtocolStage};
-use chapchoo_domain::{ConversationText, NativeConversationId};
+use chapchoo_domain::{
+    ConversationModelCapabilities, ConversationSpeed, ConversationText, NativeConversationId,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{collections::BTreeSet, path::Path};
@@ -103,6 +105,39 @@ struct Candidate {
     default_effort: Option<String>,
     tiers: Vec<String>,
     default_tier: Option<String>,
+}
+
+impl Candidate {
+    fn capabilities(&self) -> ConversationModelCapabilities {
+        // The per-turn baseline is supported independently of the paid tiers
+        // listed by the applied connection.
+        let mut speeds = vec![ConversationSpeed::Standard];
+        if self.tiers.iter().any(|tier| tier == "priority") {
+            speeds.push(ConversationSpeed::Fast);
+        }
+        if self.tiers.iter().any(|tier| tier == "ultrafast") {
+            speeds.push(ConversationSpeed::Ultrafast);
+        }
+        ConversationModelCapabilities {
+            efforts: self.efforts.clone(),
+            speeds,
+        }
+    }
+}
+
+fn service_tier(speed: ConversationSpeed) -> &'static str {
+    match speed {
+        ConversationSpeed::Standard => "default",
+        ConversationSpeed::Fast => "priority",
+        ConversationSpeed::Ultrafast => "ultrafast",
+    }
+}
+
+#[derive(Default)]
+struct TurnOptions<'a> {
+    model: Option<&'a str>,
+    effort: Option<&'a str>,
+    tier: Option<&'a str>,
 }
 
 const MAX_CANDIDATES: usize = 128;
@@ -257,19 +292,24 @@ impl<'a> Thread<'a> {
         input: &ConversationText,
         service_tier_for_turn: Option<&str>,
     ) -> Result<impl Future<Output = Result<events::Inserted, Error>> + use<>, Error> {
-        self.submit_with_model(insertions, input, None, service_tier_for_turn)
+        self.submit_with_options(
+            insertions,
+            input,
+            TurnOptions {
+                tier: service_tier_for_turn,
+                ..TurnOptions::default()
+            },
+        )
     }
 
-    fn submit_with_model(
+    fn submit_with_options(
         &self,
         insertions: &events::Insertions,
         input: &ConversationText,
-        model: Option<&str>,
-        service_tier_for_turn: Option<&str>,
+        options: TurnOptions<'_>,
     ) -> Result<impl Future<Output = Result<events::Inserted, Error>> + use<>, Error> {
-        let (reply, receipt) = insertions.publish(None, |marker| {
-            self.enqueue_start(marker, input, model, service_tier_for_turn)
-        })?;
+        let (reply, receipt) =
+            insertions.publish(None, |marker| self.enqueue_start(marker, input, options))?;
         Ok(attributed_insertion(reply, receipt, "/turn/id"))
     }
 
@@ -310,8 +350,7 @@ impl<'a> Thread<'a> {
         &self,
         client_message_id: &str,
         input: &ConversationText,
-        model: Option<&str>,
-        service_tier_for_turn: Option<&str>,
+        options: TurnOptions<'_>,
     ) -> Result<Reply, Error> {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
@@ -322,6 +361,8 @@ impl<'a> Thread<'a> {
             #[serde(skip_serializing_if = "Option::is_none")]
             model: Option<&'a str>,
             #[serde(skip_serializing_if = "Option::is_none")]
+            effort: Option<&'a str>,
+            #[serde(skip_serializing_if = "Option::is_none")]
             service_tier_for_turn: Option<&'a str>,
         }
         self.link.enqueue(
@@ -330,8 +371,9 @@ impl<'a> Thread<'a> {
                 thread_id: self.id.as_str(),
                 client_user_message_id: client_message_id,
                 input: [json!({"type": "text", "text": input.as_str()})],
-                model,
-                service_tier_for_turn,
+                model: options.model,
+                effort: options.effort,
+                service_tier_for_turn: options.tier,
             },
         )
     }

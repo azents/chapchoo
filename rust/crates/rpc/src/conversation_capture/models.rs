@@ -1,19 +1,12 @@
 use super::*;
-use crate::conversation_models::target;
+use crate::conversation_models::{from_wire_choice, target, wire_tuning};
 use chapchoo_service::{
-    ConversationModelChoice, ConversationModelObservation, ConversationModelStart,
-    ConversationModelStartAdmission, ConversationModelStartOutcome,
+    ConversationModelObservation, ConversationModelStart, ConversationModelStartAdmission,
+    ConversationModelStartOutcome,
 };
 
 fn origin(value: Option<&wire::CaptureSource>) -> Result<&wire::CaptureSource, Status> {
     value.ok_or_else(|| Status::invalid_argument("Native source is required"))
-}
-
-fn choice(value: wire::ModelChoice) -> ConversationModelChoice {
-    ConversationModelChoice {
-        id: value.id,
-        label: value.label,
-    }
 }
 
 fn start(
@@ -39,10 +32,11 @@ pub(super) async fn observe(
     let observation = ConversationModelObservation {
         target: target(value.target)?,
         order: value.order,
-        current: value.current.map(choice),
+        current: value.current.map(from_wire_choice).transpose()?,
         options: value
             .options
-            .map(|items| items.choices.into_iter().map(choice).collect()),
+            .map(|items| items.choices.into_iter().map(from_wire_choice).collect())
+            .transpose()?,
         api_key_source: value
             .api_key_source
             .map(|bytes| bytes.try_into())
@@ -75,8 +69,11 @@ pub(super) async fn reserve(
         ConversationModelStartAdmission::Ungoverned => {
             wire::model_start_admission::Outcome::Ungoverned(())
         }
-        ConversationModelStartAdmission::Reserved { model_id } => {
-            wire::model_start_admission::Outcome::Reserved(wire::ReservedModelStart { model_id })
+        ConversationModelStartAdmission::Reserved { model_id, tuning } => {
+            wire::model_start_admission::Outcome::Reserved(wire::ReservedModelStart {
+                model_id,
+                tuning: wire_tuning(tuning),
+            })
         }
     };
     Ok(Response::new(wire::ModelStartAdmission {

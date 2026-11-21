@@ -41,9 +41,9 @@ pub use computer_resource::{
     NativeReservation, NativeScope, ProviderKind, ProviderSubstrate, ResourceRole,
 };
 pub use conversation::{
-    ConversationSource, ConversationTarget, ConversationText, EventOccurrenceId, ExistingCodexPath,
-    HarnessSupply, InvalidConversationValue, LaunchCapture, NativeConversationId, SnapshotId,
-    SourcePosition,
+    ConversationModelCapabilities, ConversationModelTuning, ConversationSource, ConversationSpeed,
+    ConversationTarget, ConversationText, EventOccurrenceId, ExistingCodexPath, HarnessSupply,
+    InvalidConversationValue, LaunchCapture, NativeConversationId, SnapshotId, SourcePosition,
 };
 pub use conversation_work::{SendAction, WorkTask, WorkTaskStatus};
 pub use display::{DisplayPatch, DisplaySettings, InvalidDisplaySettings};

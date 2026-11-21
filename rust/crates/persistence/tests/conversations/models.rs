@@ -77,10 +77,15 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
     let first = ConversationModelChoice {
         id: "fixture-a".into(),
         label: "Fixture A".into(),
+        capabilities: None,
     };
     let second = ConversationModelChoice {
         id: "fixture-b".into(),
         label: "Fixture B".into(),
+        capabilities: Some(chapchoo_domain::ConversationModelCapabilities {
+            efforts: vec!["medium".into()],
+            speeds: vec![chapchoo_domain::ConversationSpeed::Standard],
+        }),
     };
     store
         .observe_conversation_model(
@@ -99,6 +104,10 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
         request_id: "model-owner-save-b".into(),
         expected_request_id: None,
         model_id: second.id.clone(),
+        tuning: chapchoo_domain::ConversationModelTuning {
+            effort: Some("medium".into()),
+            speed: Some(chapchoo_domain::ConversationSpeed::Standard),
+        },
     };
     assert!(
         store
@@ -109,7 +118,8 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
     let receipt = store
         .save_conversation_model(&owner, &f.agent.id, &saved, f.now)
         .await?;
-    assert_eq!(receipt.model, second);
+    assert_eq!(receipt.model.id, second.id);
+    assert_eq!(receipt.tuning, saved.tuning);
     let active_source = ConversationDeliveryTarget {
         snapshot,
         native_session,
@@ -142,13 +152,15 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
     };
     assert!(matches!(
         store.reserve_conversation_model_start(&source, &start).await?,
-        ConversationModelStartAdmission::Reserved { model_id: Some(id) } if id == second.id
+        ConversationModelStartAdmission::Reserved { model_id: Some(id), tuning }
+            if id == second.id && tuning == saved.tuning
     ));
     let next = ConversationModelSave {
         target: target.clone(),
         request_id: "model-owner-save-a".into(),
         expected_request_id: Some(saved.request_id.clone()),
         model_id: "fixture-a".into(),
+        tuning: Default::default(),
     };
     assert!(matches!(
         store
@@ -185,13 +197,11 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
             .id,
         "fixture-a"
     );
-    assert_eq!(
-        store
-            .save_conversation_model(&owner, &f.agent.id, &saved, f.now)
-            .await?
-            .model,
-        second,
-    );
+    let repeated = store
+        .save_conversation_model(&owner, &f.agent.id, &saved, f.now)
+        .await?;
+    assert_eq!(repeated.model.id, second.id);
+    assert_eq!(repeated.tuning, saved.tuning);
     assert_eq!(
         store
             .conversation_model(&owner, &f.agent.id, f.now)
@@ -252,7 +262,8 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
         };
         assert!(matches!(
             store.reserve_conversation_model_start(&source, &start).await?,
-            ConversationModelStartAdmission::Reserved { model_id: Some(value) } if value == "fixture-a"
+            ConversationModelStartAdmission::Reserved { model_id: Some(value), tuning }
+                if value == "fixture-a" && tuning.is_inherited()
         ));
         assert!(matches!(
             store

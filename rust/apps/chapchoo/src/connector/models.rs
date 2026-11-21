@@ -1,10 +1,11 @@
 //! Connector-owned retained outcomes for model-governed starts.
 
 use super::*;
+use chapchoo_domain::{ConversationModelTuning, ConversationSpeed};
 use chapchoo_harness::{
-    ContinuationRoute, Error, NativeModelAuthority, NativeModelDispatch, NativeModelFuture,
-    NativeModelObservation, NativeModelReservation, NativeModelStart, NativeModelStartOutcome,
-    NativeTextTarget,
+    ContinuationRoute, Error, NativeModelAuthority, NativeModelChoice, NativeModelDispatch,
+    NativeModelFuture, NativeModelObservation, NativeModelReservation, NativeModelStart,
+    NativeModelStartOutcome, NativeTextTarget,
 };
 use chapchoo_protocol::conversations::{
     self as wire, connector_capture_client::ConnectorCaptureClient,
@@ -51,6 +52,44 @@ fn start_target(start: &NativeModelStart) -> wire::ModelStartTarget {
         operation_id: start.operation_id.clone(),
     }
 }
+fn wire_choice(value: NativeModelChoice) -> wire::ModelChoice {
+    wire::ModelChoice {
+        id: value.id,
+        label: value.label,
+        capabilities: value.capabilities.map(|options| wire::ModelCapabilities {
+            efforts: options.efforts,
+            speeds: options
+                .speeds
+                .into_iter()
+                .map(|speed| {
+                    (match speed {
+                        ConversationSpeed::Standard => wire::ModelSpeed::Standard,
+                        ConversationSpeed::Fast => wire::ModelSpeed::Fast,
+                        ConversationSpeed::Ultrafast => wire::ModelSpeed::Ultrafast,
+                    }) as i32
+                })
+                .collect(),
+        }),
+    }
+}
+
+fn from_wire_tuning(value: Option<wire::ModelTuning>) -> Result<ConversationModelTuning, Error> {
+    let value = value.unwrap_or_default();
+    let speed = value
+        .speed
+        .map(|speed| match wire::ModelSpeed::try_from(speed) {
+            Ok(wire::ModelSpeed::Standard) => Ok(ConversationSpeed::Standard),
+            Ok(wire::ModelSpeed::Fast) => Ok(ConversationSpeed::Fast),
+            Ok(wire::ModelSpeed::Ultrafast) => Ok(ConversationSpeed::Ultrafast),
+            _ => Err(Error::Protocol),
+        })
+        .transpose()?;
+    Ok(ConversationModelTuning {
+        effort: value.effort,
+        speed,
+    })
+}
+
 pub(super) async fn observe(
     client: &mut ConnectorCaptureClient<Channel>,
     origin: &wire::CaptureSource,
@@ -61,19 +100,9 @@ pub(super) async fn observe(
 ) -> Result<(), AppError> {
     let (current, options) = seen.options.map_or((None, None), |option| {
         (
-            option.current.map(|current| wire::ModelChoice {
-                id: current.id,
-                label: current.label,
-            }),
+            option.current.map(wire_choice),
             Some(wire::ModelOptions {
-                choices: option
-                    .options
-                    .into_iter()
-                    .map(|choice| wire::ModelChoice {
-                        id: choice.id,
-                        label: choice.label,
-                    })
-                    .collect(),
+                choices: option.options.into_iter().map(wire_choice).collect(),
             }),
         )
     });
@@ -201,7 +230,10 @@ impl NativeModelAuthority for Authority {
                     Ok(NativeModelReservation::Ungoverned)
                 }
                 Some(wire::model_start_admission::Outcome::Reserved(reserved)) => {
-                    Ok(NativeModelReservation::Reserved(reserved.model_id))
+                    Ok(NativeModelReservation::Reserved {
+                        model: reserved.model_id,
+                        tuning: from_wire_tuning(reserved.tuning)?,
+                    })
                 }
                 None => Err(Error::Protocol),
             }

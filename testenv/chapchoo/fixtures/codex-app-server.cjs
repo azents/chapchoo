@@ -341,9 +341,15 @@ async function request(id, method, params) {
           isDefault: value === model,
           supportedReasoningEfforts: [
             { reasoningEffort: "medium", description: "Fixture default" },
+            ...(value === alternateModel
+              ? [{ reasoningEffort: "high", description: "Fixture high" }]
+              : []),
           ],
           defaultReasoningEffort: "medium",
-          serviceTiers: [],
+          serviceTiers:
+            value === alternateModel
+              ? [{ id: "priority", name: "Fast", description: "Fixture fast" }]
+              : [],
           defaultServiceTier: null,
           inputModalities: ["text"],
           supportsPersonality: false,
@@ -485,9 +491,11 @@ async function request(id, method, params) {
       if (
         prompt ===
           "Exercise the deterministic native conversation with a selected model" &&
-        params.model !== alternateModel
+        (params.model !== alternateModel ||
+          params.effort !== "high" ||
+          params.serviceTierForTurn !== "priority")
       ) {
-        throw new Error("The selected model did not reach the native turn");
+        throw new Error("The saved preferences did not reach the native turn");
       }
       if (
         prompt?.startsWith(

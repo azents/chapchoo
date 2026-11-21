@@ -1,5 +1,7 @@
 //! Exact, execution-local App Server ingress and operations.
-use super::{Thread, call, events, forms, initialize, model_catalog, tools, wire};
+use super::{
+    Thread, TurnOptions, call, events, forms, initialize, model_catalog, service_tier, tools, wire,
+};
 use crate::{CaptureLog, NativeMcpDeclaration, ProtocolStage, runtime::*};
 use serde_json::{Value, json};
 use std::{
@@ -114,6 +116,7 @@ impl Connection {
             .unwrap_or_default()
             .into_iter()
             .map(|candidate| NativeModelChoice {
+                capabilities: Some(candidate.capabilities()),
                 id: candidate.id,
                 label: candidate.label,
             })
@@ -260,6 +263,7 @@ impl LiveThread {
         &self,
         text: &ConversationText,
         model: Option<&str>,
+        tuning: &chapchoo_domain::ConversationModelTuning,
     ) -> Result<impl Future<Output = Result<String, Error>> + use<>, Error> {
         if model.is_some_and(|id| {
             !self
@@ -270,15 +274,32 @@ impl LiveThread {
         }) {
             return Err(Error::NotAdmitted);
         }
+        if !tuning.is_inherited()
+            && !self.options.options.iter().any(|candidate| {
+                Some(candidate.id.as_str()) == model
+                    && candidate
+                        .capabilities
+                        .as_ref()
+                        .is_some_and(|options| options.accepts(tuning))
+            })
+        {
+            return Err(Error::NotAdmitted);
+        }
         let root = self
             .connection
             .ingress
             .root
             .get()
             .ok_or(Error::NotAdmitted)?;
-        let pending = self
-            .thread()
-            .submit_with_model(&root.insertions, text, model, None)?;
+        let pending = self.thread().submit_with_options(
+            &root.insertions,
+            text,
+            TurnOptions {
+                model,
+                effort: tuning.effort.as_deref(),
+                tier: tuning.speed.map(service_tier),
+            },
+        )?;
         Ok(async move { Ok(pending.await?.item) })
     }
 

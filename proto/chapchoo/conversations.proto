@@ -37,7 +37,21 @@ message ModelTarget {
   NativeTarget native = 2;
   string launch_operation_id = 3;
 }
-message ModelChoice { string id = 1; string label = 2; }
+enum ModelSpeed {
+  MODEL_SPEED_UNSPECIFIED = 0;
+  MODEL_SPEED_STANDARD = 1;
+  MODEL_SPEED_FAST = 2;
+  MODEL_SPEED_ULTRAFAST = 3;
+}
+message ModelCapabilities {
+  repeated string efforts = 1;
+  repeated ModelSpeed speeds = 2;
+}
+message ModelTuning {
+  optional string effort = 1;
+  optional ModelSpeed speed = 2;
+}
+message ModelChoice { string id = 1; string label = 2; ModelCapabilities capabilities = 3; }
 message ModelOptions { repeated ModelChoice choices = 1; }
 message OwnerConversationModel {
   ModelTarget target = 1;
@@ -45,6 +59,7 @@ message OwnerConversationModel {
   optional string saved_request_id = 3;
   ModelOptions options = 4;
   ModelRecovery recovery = 5;
+  ModelTuning saved_tuning = 6;
 }
 message ModelRecovery { string operation_id = 1; ModelChoice model = 2; }
 message OwnerModelSave {
@@ -53,9 +68,10 @@ message OwnerModelSave {
   string request_id = 3;
   optional string expected_request_id = 4;
   string model_id = 5;
+  ModelTuning tuning = 6;
 }
 message OwnerModelSaveResult { string agent_id = 1; string request_id = 2; }
-message ModelSaveReceipt { string request_id = 1; ModelChoice model = 2; }
+message ModelSaveReceipt { string request_id = 1; ModelChoice model = 2; ModelTuning tuning = 3; }
 message OptionalModelSaveReceipt { ModelSaveReceipt receipt = 1; }
 enum InstructionSourceKind {
  INSTRUCTION_SOURCE_KIND_UNSPECIFIED = 0;
@@ -341,7 +357,7 @@ message ModelStartRequest {
   ModelStartTarget target = 2;
   bool capable = 3;
 }
-message ReservedModelStart { optional string model_id = 1; }
+message ReservedModelStart { optional string model_id = 1; ModelTuning tuning = 2; }
 message ModelStartAdmission {
   oneof outcome {
     google.protobuf.Empty ungoverned = 1;

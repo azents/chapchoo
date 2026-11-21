@@ -143,7 +143,7 @@ async fn new_session_steers_and_stops_only_its_exact_live_turn() -> TestResult {
             observed.enable_normal_endings()?;
             let text = ConversationText::parse("Fixture input".into())?;
             assert!(session.steer(&text, None).await?.is_none());
-            assert_eq!(session.enqueue_prompt(&text, None)?.await?, "first");
+            assert_eq!(session.enqueue_prompt(&text, None, &Default::default())?.await?, "first");
             assert!(matches!(session.steer(&text, None).await?,
                 Some(crate::runtime::NativePromptAcceptance::Inserted { native_message_id })
                     if native_message_id == "steered"));

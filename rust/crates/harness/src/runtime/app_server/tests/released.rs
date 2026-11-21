@@ -74,7 +74,7 @@ async fn released_resume_preserves_capture_and_answers_scoped_tool_approval() ->
         assert!(thread.models().is_some());
         observations.enable_normal_endings()?;
         let text = ConversationText::parse("Approve the local fixture tool.".into())?;
-        let inserted = tokio::time::timeout(Duration::from_secs(15), thread.enqueue_prompt(&text, None)?)
+        let inserted = tokio::time::timeout(Duration::from_secs(15), thread.enqueue_prompt(&text, None, &Default::default())?)
             .await.map_err(|_| "No attributed insertion")??;
         assert!(!inserted.is_empty());
         let (request_id, position) = loop {
@@ -102,6 +102,37 @@ async fn released_resume_preserves_capture_and_answers_scoped_tool_approval() ->
         };
         assert_eq!(ending.work, work);
         assert_eq!(ending.work.snapshot, snapshot);
+        let models = thread.models().ok_or("Missing model catalogue")?;
+        let astra = models.options.iter().find(|model| model.id == "gpt-6-astra")
+            .ok_or("Missing fixture model")?;
+        let supported = astra.capabilities.as_ref().ok_or("Missing model capabilities")?;
+        let unsupported = chapchoo_domain::ConversationModelTuning {
+            effort: Some("unadvertised".into()), speed: None,
+        };
+        assert!(matches!(thread.enqueue_prompt(&text, Some(&astra.id), &unsupported), Err(Error::NotAdmitted)));
+        let mut preceding = ending.work.work_id.clone();
+        for (label, speed) in [
+            ("standard", ConversationSpeed::Standard),
+            ("fast", ConversationSpeed::Fast),
+            ("ultrafast", ConversationSpeed::Ultrafast),
+        ] {
+            if !supported.speeds.contains(&speed) {
+                continue;
+            }
+            let tuning = chapchoo_domain::ConversationModelTuning {
+                effort: Some("low".into()), speed: Some(speed),
+            };
+            let text = ConversationText::parse(format!("Fixture speed {label}"))?;
+            thread.enqueue_prompt(&text, Some(&astra.id), &tuning)?.await?;
+            preceding = loop {
+                if let Some(ending) = observations.normal_ending()?
+                    && ending.work.work_id != preceding
+                {
+                    break ending.work.work_id;
+                }
+                observations.wait_change().await;
+            };
+        }
         let mut pass = captured.begin(&snapshot, None)?;
         let original = pass.next_event()?.ok_or("No historical capture")?;
         assert_eq!(original.raw, prefix);

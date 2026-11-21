@@ -111,6 +111,9 @@ test("owner follows Conversation Work and inspects native typed-answer records",
       name: "Change model",
       exact: true,
     });
+    await expect(
+      picker.getByRole("radio", { name: "Fast", exact: true }),
+    ).toHaveCount(0);
     await picker.getByText("Alternate fixture model", { exact: true }).click();
     await expect(
       picker.getByRole("radio", {
@@ -119,6 +122,8 @@ test("owner follows Conversation Work and inspects native typed-answer records",
       }),
     ).toBeChecked();
     stage = "save-alternate-model";
+    await picker.getByRole("radio", { name: "High", exact: true }).check();
+    await picker.getByRole("radio", { name: "Fast", exact: true }).check();
     await picker.getByRole("button", { name: "Save", exact: true }).click();
     await expect(
       settings.getByRole("button", { name: /^Model/ }),

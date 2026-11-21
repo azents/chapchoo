@@ -24,6 +24,14 @@ export const protobufPackage = "chapchoo.conversations";
 
 export const protobufFileName = "conversations.proto";
 
+export enum ModelSpeed {
+  MODEL_SPEED_UNSPECIFIED = 0,
+  MODEL_SPEED_STANDARD = 1,
+  MODEL_SPEED_FAST = 2,
+  MODEL_SPEED_ULTRAFAST = 3,
+  UNRECOGNIZED = -1,
+}
+
 export enum InstructionSourceKind {
   INSTRUCTION_SOURCE_KIND_UNSPECIFIED = 0,
   INSTRUCTION_SOURCE_KIND_PRODUCT = 1,
@@ -173,9 +181,20 @@ export interface ModelTarget {
   launchOperationId: string;
 }
 
+export interface ModelCapabilities {
+  efforts: string[];
+  speeds: ModelSpeed[];
+}
+
+export interface ModelTuning {
+  effort?: string | undefined;
+  speed?: ModelSpeed | undefined;
+}
+
 export interface ModelChoice {
   id: string;
   label: string;
+  capabilities: ModelCapabilities | undefined;
 }
 
 export interface ModelOptions {
@@ -188,6 +207,7 @@ export interface OwnerConversationModel {
   savedRequestId?: string | undefined;
   options: ModelOptions | undefined;
   recovery: ModelRecovery | undefined;
+  savedTuning: ModelTuning | undefined;
 }
 
 export interface ModelRecovery {
@@ -201,6 +221,7 @@ export interface OwnerModelSave {
   requestId: string;
   expectedRequestId?: string | undefined;
   modelId: string;
+  tuning: ModelTuning | undefined;
 }
 
 export interface OwnerModelSaveResult {
@@ -211,6 +232,7 @@ export interface OwnerModelSaveResult {
 export interface ModelSaveReceipt {
   requestId: string;
   model: ModelChoice | undefined;
+  tuning: ModelTuning | undefined;
 }
 
 export interface OptionalModelSaveReceipt {
@@ -685,6 +707,7 @@ export interface ModelStartRequest {
 
 export interface ReservedModelStart {
   modelId?: string | undefined;
+  tuning: ModelTuning | undefined;
 }
 
 export interface ModelStartAdmission {
@@ -1240,8 +1263,156 @@ export const ModelTarget: MessageFns<ModelTarget> = {
   },
 };
 
+function createBaseModelCapabilities(): ModelCapabilities {
+  return { efforts: [], speeds: [] };
+}
+
+export const ModelCapabilities: MessageFns<ModelCapabilities> = {
+  encode(message: ModelCapabilities, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.efforts) {
+      writer.uint32(10).string(v!);
+    }
+    if (message.speeds.length !== 0) {
+      writer.uint32(18).fork();
+      for (const v of message.speeds) {
+        writer.int32(v);
+      }
+      writer.join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ModelCapabilities {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseModelCapabilities();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.efforts.push(reader.string());
+            continue;
+          }
+          case 2: {
+            if (tag === 16) {
+              message.speeds.push(reader.int32() as any);
+
+              continue;
+            }
+
+            if (tag === 18) {
+              const end2 = reader.uint32() + reader.pos;
+              while (reader.pos < end2) {
+                message.speeds.push(reader.int32() as any);
+              }
+
+              continue;
+            }
+
+            break;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ModelCapabilities>, I>>(base?: I): ModelCapabilities {
+    return ModelCapabilities.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ModelCapabilities>, I>>(object: I): ModelCapabilities {
+    const message = createBaseModelCapabilities();
+    message.efforts = object.efforts?.map((e) => e) || [];
+    message.speeds = object.speeds?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseModelTuning(): ModelTuning {
+  return { effort: undefined, speed: undefined };
+}
+
+export const ModelTuning: MessageFns<ModelTuning> = {
+  encode(message: ModelTuning, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.effort !== undefined) {
+      writer.uint32(10).string(message.effort);
+    }
+    if (message.speed !== undefined) {
+      writer.uint32(16).int32(message.speed);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ModelTuning {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseModelTuning();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.effort = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.speed = reader.int32() as any;
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ModelTuning>, I>>(base?: I): ModelTuning {
+    return ModelTuning.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ModelTuning>, I>>(object: I): ModelTuning {
+    const message = createBaseModelTuning();
+    message.effort = object.effort ?? undefined;
+    message.speed = object.speed ?? undefined;
+    return message;
+  },
+};
+
 function createBaseModelChoice(): ModelChoice {
-  return { id: "", label: "" };
+  return { id: "", label: "", capabilities: undefined };
 }
 
 export const ModelChoice: MessageFns<ModelChoice> = {
@@ -1251,6 +1422,9 @@ export const ModelChoice: MessageFns<ModelChoice> = {
     }
     if (message.label !== "") {
       writer.uint32(18).string(message.label);
+    }
+    if (message.capabilities !== undefined) {
+      ModelCapabilities.encode(message.capabilities, writer.uint32(26).fork()).join();
     }
     return writer;
   },
@@ -1284,6 +1458,14 @@ export const ModelChoice: MessageFns<ModelChoice> = {
             message.label = reader.string();
             continue;
           }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.capabilities = ModelCapabilities.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1303,6 +1485,9 @@ export const ModelChoice: MessageFns<ModelChoice> = {
     const message = createBaseModelChoice();
     message.id = object.id ?? "";
     message.label = object.label ?? "";
+    message.capabilities = (object.capabilities !== undefined && object.capabilities !== null)
+      ? ModelCapabilities.fromPartial(object.capabilities)
+      : undefined;
     return message;
   },
 };
@@ -1363,7 +1548,14 @@ export const ModelOptions: MessageFns<ModelOptions> = {
 };
 
 function createBaseOwnerConversationModel(): OwnerConversationModel {
-  return { target: undefined, current: undefined, savedRequestId: undefined, options: undefined, recovery: undefined };
+  return {
+    target: undefined,
+    current: undefined,
+    savedRequestId: undefined,
+    options: undefined,
+    recovery: undefined,
+    savedTuning: undefined,
+  };
 }
 
 export const OwnerConversationModel: MessageFns<OwnerConversationModel> = {
@@ -1382,6 +1574,9 @@ export const OwnerConversationModel: MessageFns<OwnerConversationModel> = {
     }
     if (message.recovery !== undefined) {
       ModelRecovery.encode(message.recovery, writer.uint32(42).fork()).join();
+    }
+    if (message.savedTuning !== undefined) {
+      ModelTuning.encode(message.savedTuning, writer.uint32(50).fork()).join();
     }
     return writer;
   },
@@ -1439,6 +1634,14 @@ export const OwnerConversationModel: MessageFns<OwnerConversationModel> = {
             message.recovery = ModelRecovery.decode(reader, reader.uint32());
             continue;
           }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.savedTuning = ModelTuning.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1468,6 +1671,9 @@ export const OwnerConversationModel: MessageFns<OwnerConversationModel> = {
       : undefined;
     message.recovery = (object.recovery !== undefined && object.recovery !== null)
       ? ModelRecovery.fromPartial(object.recovery)
+      : undefined;
+    message.savedTuning = (object.savedTuning !== undefined && object.savedTuning !== null)
+      ? ModelTuning.fromPartial(object.savedTuning)
       : undefined;
     return message;
   },
@@ -1543,7 +1749,14 @@ export const ModelRecovery: MessageFns<ModelRecovery> = {
 };
 
 function createBaseOwnerModelSave(): OwnerModelSave {
-  return { agentId: "", target: undefined, requestId: "", expectedRequestId: undefined, modelId: "" };
+  return {
+    agentId: "",
+    target: undefined,
+    requestId: "",
+    expectedRequestId: undefined,
+    modelId: "",
+    tuning: undefined,
+  };
 }
 
 export const OwnerModelSave: MessageFns<OwnerModelSave> = {
@@ -1562,6 +1775,9 @@ export const OwnerModelSave: MessageFns<OwnerModelSave> = {
     }
     if (message.modelId !== "") {
       writer.uint32(42).string(message.modelId);
+    }
+    if (message.tuning !== undefined) {
+      ModelTuning.encode(message.tuning, writer.uint32(50).fork()).join();
     }
     return writer;
   },
@@ -1619,6 +1835,14 @@ export const OwnerModelSave: MessageFns<OwnerModelSave> = {
             message.modelId = reader.string();
             continue;
           }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.tuning = ModelTuning.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1643,6 +1867,9 @@ export const OwnerModelSave: MessageFns<OwnerModelSave> = {
     message.requestId = object.requestId ?? "";
     message.expectedRequestId = object.expectedRequestId ?? undefined;
     message.modelId = object.modelId ?? "";
+    message.tuning = (object.tuning !== undefined && object.tuning !== null)
+      ? ModelTuning.fromPartial(object.tuning)
+      : undefined;
     return message;
   },
 };
@@ -1715,7 +1942,7 @@ export const OwnerModelSaveResult: MessageFns<OwnerModelSaveResult> = {
 };
 
 function createBaseModelSaveReceipt(): ModelSaveReceipt {
-  return { requestId: "", model: undefined };
+  return { requestId: "", model: undefined, tuning: undefined };
 }
 
 export const ModelSaveReceipt: MessageFns<ModelSaveReceipt> = {
@@ -1725,6 +1952,9 @@ export const ModelSaveReceipt: MessageFns<ModelSaveReceipt> = {
     }
     if (message.model !== undefined) {
       ModelChoice.encode(message.model, writer.uint32(18).fork()).join();
+    }
+    if (message.tuning !== undefined) {
+      ModelTuning.encode(message.tuning, writer.uint32(26).fork()).join();
     }
     return writer;
   },
@@ -1758,6 +1988,14 @@ export const ModelSaveReceipt: MessageFns<ModelSaveReceipt> = {
             message.model = ModelChoice.decode(reader, reader.uint32());
             continue;
           }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.tuning = ModelTuning.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1778,6 +2016,9 @@ export const ModelSaveReceipt: MessageFns<ModelSaveReceipt> = {
     message.requestId = object.requestId ?? "";
     message.model = (object.model !== undefined && object.model !== null)
       ? ModelChoice.fromPartial(object.model)
+      : undefined;
+    message.tuning = (object.tuning !== undefined && object.tuning !== null)
+      ? ModelTuning.fromPartial(object.tuning)
       : undefined;
     return message;
   },
@@ -7708,13 +7949,16 @@ export const ModelStartRequest: MessageFns<ModelStartRequest> = {
 };
 
 function createBaseReservedModelStart(): ReservedModelStart {
-  return { modelId: undefined };
+  return { modelId: undefined, tuning: undefined };
 }
 
 export const ReservedModelStart: MessageFns<ReservedModelStart> = {
   encode(message: ReservedModelStart, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.modelId !== undefined) {
       writer.uint32(10).string(message.modelId);
+    }
+    if (message.tuning !== undefined) {
+      ModelTuning.encode(message.tuning, writer.uint32(18).fork()).join();
     }
     return writer;
   },
@@ -7740,6 +7984,14 @@ export const ReservedModelStart: MessageFns<ReservedModelStart> = {
             message.modelId = reader.string();
             continue;
           }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.tuning = ModelTuning.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -7758,6 +8010,9 @@ export const ReservedModelStart: MessageFns<ReservedModelStart> = {
   fromPartial<I extends Exact<DeepPartial<ReservedModelStart>, I>>(object: I): ReservedModelStart {
     const message = createBaseReservedModelStart();
     message.modelId = object.modelId ?? undefined;
+    message.tuning = (object.tuning !== undefined && object.tuning !== null)
+      ? ModelTuning.fromPartial(object.tuning)
+      : undefined;
     return message;
   },
 };

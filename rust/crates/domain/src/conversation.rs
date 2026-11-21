@@ -6,6 +6,50 @@ use std::{fmt, path::Path};
 #[error("Invalid conversation value")]
 pub struct InvalidConversationValue;
 
+/// Saved settings describe an intended future execution, not an observed bill
+/// or an assertion that the native model applied the request.
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ConversationModelTuning {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effort: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speed: Option<ConversationSpeed>,
+}
+
+impl ConversationModelTuning {
+    pub fn is_inherited(&self) -> bool {
+        self.effort.is_none() && self.speed.is_none()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConversationSpeed {
+    Standard,
+    Fast,
+    Ultrafast,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ConversationModelCapabilities {
+    pub efforts: Vec<String>,
+    pub speeds: Vec<ConversationSpeed>,
+}
+
+impl ConversationModelCapabilities {
+    pub fn accepts(&self, selection: &ConversationModelTuning) -> bool {
+        selection
+            .effort
+            .as_ref()
+            .is_none_or(|value| self.efforts.contains(value))
+            && selection
+                .speed
+                .is_none_or(|value| self.speeds.contains(&value))
+    }
+}
+
 /// Owner-selected supply, never an implicit PATH/ambient-auth discovery policy.
 #[derive(Clone, PartialEq, Eq, Default)]
 pub enum HarnessSupply {

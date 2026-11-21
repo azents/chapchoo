@@ -25,6 +25,20 @@ type Edit = {
   expectedRequestId: string | null;
 };
 
+type Speed = 1 | 2 | 3;
+type Tuning = { effort?: string; speed?: Speed };
+
+function supportedSpeed(value?: number): Speed | null {
+  return value === 1 || value === 2 || value === 3 ? value : null;
+}
+
+function effortName(value: string): string {
+  if (value === "xhigh") {
+    return "Extra high";
+  }
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
 function matchesEdit(
   edit: Edit,
   target: ModelTarget,
@@ -67,6 +81,7 @@ export function useModelSelection(
 ) {
   const [edit, setEdit] = useState<Edit | null>(null);
   const [draft, setDraft] = useState<string | null>(null);
+  const [tuning, setTuning] = useState<Tuning>({});
   const [saving, setSaving] = useState<Saving>({ state: "idle" });
   const copy = modelSelectionCopy(useLocale());
   const actionInFlight = useRef(false);
@@ -93,23 +108,52 @@ export function useModelSelection(
   const canEdit = target !== null && !query.isError && !unavailable;
   const choices = stillCurrent ? scoped?.options?.choices : void 0;
   const current = scoped?.current;
+  const saved = scoped?.savedTuning;
+  const candidate = choices?.find((choice) => choice.id === draft);
+  const capabilities = candidate?.capabilities;
+  const speeds = capabilities?.speeds.flatMap((value) => {
+    const speed = supportedSpeed(value);
+    return speed === null ? [] : [speed];
+  });
+  const effortChoices = capabilities?.efforts.length
+    ? [
+        { id: "", label: copy.inherit },
+        ...capabilities.efforts.map((id) => ({ id, label: effortName(id) })),
+      ]
+    : [];
+  const speedChoices = speeds?.length
+    ? [
+        { id: "", label: copy.inherit },
+        ...speeds.map((speed) => ({
+          id: String(speed),
+          label:
+            speed === 1
+              ? copy.standard
+              : speed === 2
+                ? copy.fast
+                : copy.ultrafast,
+        })),
+      ]
+    : [];
   const recovery =
     query.isError || unavailable ? null : scoped?.recovery?.model;
   const busy = saving.state === "saving";
   const locked = busy || saving.state === "uncertain";
+  const canSave =
+    !unavailable &&
+    !locked &&
+    stillCurrent &&
+    !query.isError &&
+    candidate !== void 0 &&
+    (tuning.effort === void 0 ||
+      capabilities?.efforts.includes(tuning.effort) === true) &&
+    (tuning.speed === void 0 || speeds?.includes(tuning.speed) === true) &&
+    (draft !== current?.id ||
+      tuning.effort !== saved?.effort ||
+      tuning.speed !== saved?.speed);
 
   async function save(): Promise<void> {
-    if (
-      actionInFlight.current ||
-      locked ||
-      unavailable ||
-      query.isError ||
-      !edit ||
-      !stillCurrent ||
-      !draft ||
-      !choices?.some((choice) => choice.id === draft) ||
-      draft === current?.id
-    ) {
+    if (actionInFlight.current || !canSave) {
       return;
     }
     const requestId = crypto.randomUUID();
@@ -120,7 +164,8 @@ export function useModelSelection(
         agentId,
         requestId,
         target: edit.target,
-        modelId: draft,
+        modelId: candidate.id,
+        tuning,
         expectedRequestId: edit.expectedRequestId ?? void 0,
       });
       if (receipt.requestId !== requestId || !receipt.model) {
@@ -140,6 +185,7 @@ export function useModelSelection(
           ? {
               ...previous,
               current: receipt.model,
+              savedTuning: receipt.tuning,
               savedRequestId: receipt.requestId,
               recovery: void 0,
             }
@@ -189,6 +235,7 @@ export function useModelSelection(
     if (!locked && !actionInFlight.current) {
       setEdit(null);
       setDraft(null);
+      setTuning({});
       setSaving({ state: "idle" });
     }
   }
@@ -198,6 +245,14 @@ export function useModelSelection(
       return;
     }
     setDraft(useCurrent ? (current?.id ?? null) : null);
+    setTuning(
+      useCurrent
+        ? {
+            effort: saved?.effort,
+            speed: supportedSpeed(saved?.speed) ?? void 0,
+          }
+        : {},
+    );
     setEdit({
       target,
       expectedRequestId: scoped?.savedRequestId ?? null,
@@ -218,17 +273,27 @@ export function useModelSelection(
     leave,
     error: query.isError || (edit !== null && !stillCurrent),
     loading: query.isPending && query.isFetching,
-    canSave:
-      !unavailable &&
-      !locked &&
-      stillCurrent &&
-      !query.isError &&
-      !!draft &&
-      draft !== current?.id &&
-      choices?.some((choice) => choice.id === draft) === true,
+    canSave,
+    tuning,
+    effortChoices,
+    speedChoices,
     edit: () => enter(true),
     recover: () => enter(false),
-    choose: setDraft,
+    choose: (id: string): void => {
+      if (id !== draft) {
+        setDraft(id);
+        setTuning({});
+      }
+    },
+    chooseEffort: (value: string): void => {
+      setTuning((previous) => ({ ...previous, effort: value || void 0 }));
+    },
+    chooseSpeed: (value: string): void => {
+      setTuning((previous) => ({
+        ...previous,
+        speed: supportedSpeed(Number(value)) ?? void 0,
+      }));
+    },
     save: () => {
       void save();
     },
@@ -317,6 +382,24 @@ export function ModelSelectionPage({
           onChange={controls.choose}
         />
       )}
+      {controls.effortChoices.length > 0 ? (
+        <SingleChoiceRows
+          label={copy.effort}
+          choices={controls.effortChoices}
+          value={controls.tuning.effort ?? ""}
+          disabled={controls.locked}
+          onChange={controls.chooseEffort}
+        />
+      ) : null}
+      {controls.speedChoices.length > 0 ? (
+        <SingleChoiceRows
+          label={copy.speed}
+          choices={controls.speedChoices}
+          value={controls.tuning.speed?.toString() ?? ""}
+          disabled={controls.locked}
+          onChange={controls.chooseSpeed}
+        />
+      ) : null}
       {controls.saving.state === "rejected" ? (
         <Alert color="red">{copy.rejected}</Alert>
       ) : null}

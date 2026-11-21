@@ -1,6 +1,7 @@
 //! Model options observed from the owned strict-v2 session.
 
 use super::*;
+use chapchoo_domain::ConversationModelTuning;
 use std::collections::HashSet;
 use std::{future::Future, pin::Pin};
 
@@ -10,7 +11,10 @@ pub type NativeModelFuture<'a> =
 #[derive(Debug)]
 pub enum NativeModelReservation {
     Ungoverned,
-    Reserved(Option<String>),
+    Reserved {
+        model: Option<String>,
+        tuning: ConversationModelTuning,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -126,6 +130,7 @@ pub(super) async fn prompt(
     let mut before = None;
     let mut reserved = false;
     let mut model_for_turn = None;
+    let mut tuning_for_turn = ConversationModelTuning::default();
     if let Some(dispatch) = dispatch.filter(|_| !builtin) {
         dispatch
             .route
@@ -142,13 +147,14 @@ pub(super) async fn prompt(
                     before.unsent = false;
                 }
             }
-            NativeModelReservation::Reserved(model) => {
-                if !vetted {
+            NativeModelReservation::Reserved { model, tuning } => {
+                if !vetted || (!direct && !tuning.is_inherited()) {
                     return Err(Error::Protocol);
                 }
                 reserved = true;
                 if direct {
                     model_for_turn = model;
+                    tuning_for_turn = tuning;
                 } else if let Some(model) = model {
                     let options = observations
                         .model(&start.launch_operation_id, live.api_key_source)?
@@ -187,7 +193,8 @@ pub(super) async fn prompt(
     }
     let mut publish = || {
         observations.publish_model_prompt(&kind, reserved, || {
-            let pending = session.enqueue_prompt(text, model_for_turn.as_deref())?;
+            let pending =
+                session.enqueue_prompt(text, model_for_turn.as_deref(), &tuning_for_turn)?;
             if let Some(before) = &mut before {
                 before.unsent = false;
             }
@@ -231,6 +238,7 @@ fn after_admission(error: Error) -> Error {
 pub struct NativeModelChoice {
     pub id: String,
     pub label: String,
+    pub capabilities: Option<chapchoo_domain::ConversationModelCapabilities>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -313,6 +321,7 @@ pub(super) fn options(config: &[schema::SessionConfigOption]) -> Option<NativeMo
         .map(|choice| NativeModelChoice {
             id: choice.value.0.to_string(),
             label: choice.name.clone(),
+            capabilities: None,
         })
         .collect::<Vec<_>>();
     let current = options
