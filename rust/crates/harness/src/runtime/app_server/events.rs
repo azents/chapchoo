@@ -2,6 +2,8 @@
 //! results do not enter this live notification lane.
 use chapchoo_domain::NativeConversationId;
 use serde_json::Value;
+use std::sync::Mutex;
+use tokio::sync::oneshot;
 
 use super::valid_key;
 use crate::Error;
@@ -75,4 +77,83 @@ fn required_key(value: &Value) -> Result<&str, Error> {
         .as_str()
         .filter(|key| valid_key(key))
         .ok_or(Error::Protocol)
+}
+
+/// One insertion can be in flight on the actor's serial submission lane.
+/// Dropping the waiter does not discard this reservation or grant a retry.
+pub(super) struct Insertions {
+    root: NativeConversationId,
+    pending: Mutex<Option<Pending>>,
+}
+
+struct Pending {
+    marker: String,
+    expected_turn: Option<String>,
+    reply: oneshot::Sender<Inserted>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(super) struct Inserted {
+    pub(super) turn: String,
+    pub(super) item: String,
+}
+
+impl Insertions {
+    pub(super) fn new(root: NativeConversationId) -> Self {
+        Self {
+            root,
+            pending: Mutex::new(None),
+        }
+    }
+
+    /// Reserve and enqueue together. Only a known pre-publication failure
+    /// clears the reservation without a matching live event.
+    pub(super) fn publish<T>(
+        &self,
+        expected_turn: Option<&str>,
+        enqueue: impl FnOnce(&str) -> Result<T, Error>,
+    ) -> Result<(T, oneshot::Receiver<Inserted>), Error> {
+        let mut slot = self.pending.lock().map_err(|_| Error::Protocol)?;
+        if slot.is_some() {
+            return Err(Error::DeliveryUncertain);
+        }
+        let marker = super::super::observations::token("insertion")?;
+        let (reply, receipt) = oneshot::channel();
+        let posted = enqueue(&marker)?;
+        *slot = Some(Pending {
+            marker,
+            expected_turn: expected_turn.map(str::to_owned),
+            reply,
+        });
+        Ok((posted, receipt))
+    }
+
+    pub(super) fn observe(&self, frame: &Value) -> Result<(), Error> {
+        let Some(Observation::InputInserted {
+            turn,
+            item,
+            operation,
+        }) = root_observation(&self.root, frame)?
+        else {
+            return Ok(());
+        };
+        let mut slot = self.pending.lock().map_err(|_| Error::Protocol)?;
+        let Some(pending) = slot.as_ref().filter(|pending| pending.marker == operation) else {
+            return Ok(());
+        };
+        if pending
+            .expected_turn
+            .as_deref()
+            .is_some_and(|target| target != turn)
+        {
+            return Err(Error::Protocol);
+        }
+        if let Some(pending) = slot.take() {
+            let _ = pending.reply.send(Inserted {
+                turn: turn.to_owned(),
+                item: item.to_owned(),
+            });
+        }
+        Ok(())
+    }
 }

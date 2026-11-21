@@ -1,6 +1,6 @@
 use super::*;
 use futures_util::{SinkExt, StreamExt};
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 use tokio::io::{AsyncRead, AsyncWrite, duplex, split};
 use tokio_util::{
     codec::{FramedRead, FramedWrite, LinesCodec},
@@ -83,12 +83,16 @@ async fn exact_resume_and_standard_are_sent_on_the_same_direct_connection() -> T
         let mut input = FramedRead::new(read_server, LinesCodec::new());
         let mut output = write_server;
         let done = CancellationToken::new();
-        let (link, driver) = wire::connect(read, write, done.clone(), |frame| {
+        let exact = NativeConversationId::parse("existing".into())?;
+        let insertions = Arc::new(events::Insertions::new(exact.clone()));
+        let observed = insertions.clone();
+        let (link, driver) = wire::connect(read, write, done.clone(), move |frame| {
             if frame["method"] == "fixture/request" {
                 // Even the exact same numeric ID is a different request.
                 Ok(Some(json!({"id": frame["id"], "result": {"seen": true}})))
             } else {
-                Err(Error::Protocol)
+                observed.observe(&frame)?;
+                Ok(None)
             }
         });
         let driver = tokio::spawn(driver);
@@ -119,7 +123,10 @@ async fn exact_resume_and_standard_are_sent_on_the_same_direct_connection() -> T
                     }
                     "turn/start" => {
                         assert_eq!(value["params"]["threadId"], "existing");
-                        assert_eq!(value["params"]["clientUserMessageId"], "op");
+                        let marker = value["params"]["clientUserMessageId"]
+                            .as_str()
+                            .ok_or("Missing insertion marker")?;
+                        assert!(marker.starts_with("insertion-"));
                         assert_eq!(value["params"]["serviceTierForTurn"], "default");
                         assert!(value["params"].get("serviceTier").is_none());
                         let same_id = &value["id"];
@@ -137,6 +144,16 @@ async fn exact_resume_and_standard_are_sent_on_the_same_direct_connection() -> T
                             json!({"id": same_id, "result": {"turn": {"id": "t"}}}),
                         )
                         .await?;
+                        for (thread, item) in [("child", "wrong"), ("existing", "attributed")] {
+                            send(
+                                &mut output,
+                                json!({"method": "item/started", "params": {
+                                    "threadId": thread, "turnId": "t",
+                                    "item": {"type": "userMessage", "id": item, "clientId": marker},
+                                }}),
+                            )
+                            .await?;
+                        }
                         break;
                     }
                     _ => return Err("Unexpected method".into()),
@@ -157,14 +174,11 @@ async fn exact_resume_and_standard_are_sent_on_the_same_direct_connection() -> T
         };
         let exercise = async {
             initialize(&link, Some("fixture")).await?;
-            let exact = NativeConversationId::parse("existing".into())?;
             let thread = Thread::resume(&link, &exact, Path::new("/fixture")).await?;
             let input = ConversationText::parse("fixture prompt".into())?;
-            let received = thread
-                .enqueue_start("op", &input, Some("default"))?
-                .receive()
-                .await?;
-            assert_eq!(received["turn"]["id"], "t");
+            let received = thread.submit(&insertions, &input, Some("default"))?.await?;
+            assert_eq!(received.turn, "t");
+            assert_eq!(received.item, "attributed");
             done.cancel();
             Ok::<(), Box<dyn std::error::Error>>(())
         };
@@ -176,6 +190,106 @@ async fn exact_resume_and_standard_are_sent_on_the_same_direct_connection() -> T
         Ok(())
     })
     .await?
+}
+
+#[tokio::test]
+async fn unobserved_insertion_keeps_lane_reserved_after_waiter_cancellation() -> TestResult {
+    let root = NativeConversationId::parse("existing".into())?;
+    let insertions = events::Insertions::new(root);
+    assert!(matches!(
+        insertions.publish(None, |_| Err::<(), _>(Error::NotAdmitted)),
+        Err(Error::NotAdmitted)
+    ));
+    let (marker, receipt) = insertions.publish(Some("expected"), |marker| Ok(marker.to_owned()))?;
+    drop(receipt);
+    let mut event = json!({
+        "method": "item/started",
+        "params": {"threadId": "existing", "turnId": "later",
+            "item": {"type": "userMessage", "id": "item", "clientId": marker}}
+    });
+    assert!(insertions.observe(&event).is_err());
+    assert!(matches!(
+        insertions.publish(None, |_| Ok(())),
+        Err(Error::DeliveryUncertain)
+    ));
+    event["params"]["turnId"] = json!("expected");
+    insertions.observe(&event)?;
+    let (next_marker, mut receipt) = insertions.publish(None, |marker| Ok(marker.to_owned()))?;
+    assert_ne!(next_marker, marker);
+    insertions.observe(&event)?;
+    assert!(matches!(
+        receipt.try_recv(),
+        Err(tokio::sync::oneshot::error::TryRecvError::Empty)
+    ));
+    Ok(())
+}
+
+#[tokio::test]
+async fn steering_and_stop_send_only_the_exact_native_turn() -> TestResult {
+    let (local, remote) = duplex(4096);
+    let (read, write) = split(local);
+    let (server_read, mut output) = split(remote);
+    let mut input = FramedRead::new(server_read, LinesCodec::new());
+    let done = CancellationToken::new();
+    let id = NativeConversationId::parse("root".into())?;
+    let insertions = Arc::new(events::Insertions::new(id.clone()));
+    let observed = insertions.clone();
+    let (link, driver) = wire::connect(read, write, done.clone(), move |frame| {
+        observed.observe(&frame)?;
+        Ok(None)
+    });
+    let driver = tokio::spawn(driver);
+    let thread = Thread { link: &link, id };
+    assert!(matches!(thread.interrupt(""), Err(Error::NotAdmitted)));
+    let server = async {
+        let request: Value = serde_json::from_str(&input.next().await.ok_or("Missing steer")??)?;
+        assert_eq!(request["method"], "turn/steer");
+        let marker = request["params"]["clientUserMessageId"]
+            .as_str()
+            .ok_or("Missing marker")?;
+        assert_eq!(
+            request["params"],
+            json!({"threadId": "root", "expectedTurnId": "exact",
+                   "clientUserMessageId": marker, "input": [{"type": "text", "text": "follow up"}]})
+        );
+        // A live insertion may precede the method response.
+        send(
+            &mut output,
+            json!({"method": "item/started", "params": {
+                "threadId": "root", "turnId": "exact",
+                "item": {"type": "userMessage", "id": "inserted", "clientId": marker},
+            }}),
+        )
+        .await?;
+        send(
+            &mut output,
+            json!({"id": request["id"], "result": {"turnId": "exact"}}),
+        )
+        .await?;
+        let request: Value = serde_json::from_str(&input.next().await.ok_or("Missing Stop")??)?;
+        assert_eq!(request["method"], "turn/interrupt");
+        assert_eq!(
+            request["params"],
+            json!({"threadId": "root", "turnId": "exact"})
+        );
+        send(&mut output, json!({"id": request["id"], "result": {}})).await
+    };
+    let exercise = async {
+        let text = ConversationText::parse("follow up".into())?;
+        let inserted = thread.steer(&insertions, "exact", &text)?.await?;
+        assert_eq!(inserted.item, "inserted");
+        assert_eq!(thread.interrupt("exact")?.receive().await?, json!({}));
+        Ok::<(), Box<dyn std::error::Error>>(())
+    };
+    let (server, exercise) = tokio::time::timeout(Duration::from_secs(2), async {
+        tokio::join!(server, exercise)
+    })
+    .await?;
+    server?;
+    exercise?;
+    done.cancel();
+    driver.await??;
+    Ok(())
 }
 
 #[tokio::test]

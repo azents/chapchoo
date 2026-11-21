@@ -206,7 +206,51 @@ impl<'a> Thread<'a> {
         })
     }
 
-    /// This only enqueues a request. A response is not the correlated insertion.
+    fn submit(
+        &self,
+        insertions: &events::Insertions,
+        input: &ConversationText,
+        service_tier_for_turn: Option<&str>,
+    ) -> Result<impl Future<Output = Result<events::Inserted, Error>> + use<>, Error> {
+        let (reply, receipt) = insertions.publish(None, |marker| {
+            self.enqueue_start(marker, input, service_tier_for_turn)
+        })?;
+        Ok(attributed_insertion(reply, receipt, "/turn/id"))
+    }
+
+    fn steer(
+        &self,
+        insertions: &events::Insertions,
+        expected_turn: &str,
+        input: &ConversationText,
+    ) -> Result<impl Future<Output = Result<events::Inserted, Error>> + use<>, Error> {
+        if !valid_key(expected_turn) {
+            return Err(Error::NotAdmitted);
+        }
+        let (reply, receipt) = insertions.publish(Some(expected_turn), |marker| {
+            self.link.enqueue(
+                "turn/steer",
+                json!({
+                    "threadId": self.id.as_str(),
+                    "expectedTurnId": expected_turn,
+                    "clientUserMessageId": marker,
+                    "input": [{"type": "text", "text": input.as_str()}],
+                }),
+            )
+        })?;
+        Ok(attributed_insertion(reply, receipt, "/turnId"))
+    }
+
+    fn interrupt(&self, exact_turn: &str) -> Result<Reply, Error> {
+        if !valid_key(exact_turn) {
+            return Err(Error::NotAdmitted);
+        }
+        self.link.enqueue(
+            "turn/interrupt",
+            json!({"threadId": self.id.as_str(), "turnId": exact_turn}),
+        )
+    }
+
     fn enqueue_start(
         &self,
         client_message_id: &str,
@@ -232,6 +276,28 @@ impl<'a> Thread<'a> {
             },
         )
     }
+}
+
+async fn attributed_insertion(
+    reply: Reply,
+    receipt: tokio::sync::oneshot::Receiver<events::Inserted>,
+    turn_pointer: &'static str,
+) -> Result<events::Inserted, Error> {
+    // The notification may arrive on either side of the RPC reply. The reply
+    // alone doesn't prove insertion or a new turn.
+    let response = reply
+        .receive()
+        .await
+        .map_err(|_| Error::DeliveryUncertain)?;
+    let turn = response
+        .pointer(turn_pointer)
+        .and_then(Value::as_str)
+        .ok_or(Error::DeliveryUncertain)?;
+    let inserted = receipt.await.map_err(|_| Error::DeliveryUncertain)?;
+    if inserted.turn != turn {
+        return Err(Error::DeliveryUncertain);
+    }
+    Ok(inserted)
 }
 
 #[cfg(test)]
