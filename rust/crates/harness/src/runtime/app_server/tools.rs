@@ -31,6 +31,11 @@ impl<'a> Prepared<'a> {
                     },
                     required: true,
                     default_tools_approval_mode: "prompt",
+                    tools: ToolOverrides {
+                        send: ToolApproval {
+                            approval_mode: "approve",
+                        },
+                    },
                     omit_tools_from: ["code_mode", "deferred"],
                 },
             },
@@ -62,7 +67,18 @@ struct Server<'a> {
     http_headers: Headers<'a>,
     required: bool,
     default_tools_approval_mode: &'static str,
+    tools: ToolOverrides,
     omit_tools_from: [&'static str; 2],
+}
+
+#[derive(Serialize)]
+struct ToolOverrides {
+    send: ToolApproval,
+}
+
+#[derive(Serialize)]
+struct ToolApproval {
+    approval_mode: &'static str,
 }
 
 #[derive(Serialize)]

@@ -549,6 +549,10 @@ async fn start_and_resume_require_the_same_launch_local_mcp_declaration() -> Tes
             assert_eq!(server["url"], "http://127.0.0.1:12345/mcp");
             assert_eq!(server["required"], true);
             assert_eq!(server["default_tools_approval_mode"], "prompt");
+            assert_eq!(
+                server["tools"],
+                json!({"send": {"approval_mode": "approve"}})
+            );
             assert_eq!(server["omit_tools_from"], json!(["code_mode", "deferred"]));
             assert!(
                 server["http_headers"]["Authorization"].as_str() == Some(authorization.as_str())
