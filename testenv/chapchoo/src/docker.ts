@@ -93,6 +93,13 @@ export class DockerFixture {
     }
     this.canonicalProvider = providerId;
   }
+  verifyBoundProvider(providerId: string): void {
+    if (this.providerId !== providerId) {
+      throw new Error(
+        "Cutover did not preserve its registered fixture Provider",
+      );
+    }
+  }
   private get providerId(): string {
     if (this.canonicalProvider === null) {
       throw new Error("Canonical fixture Provider identity is not bound");
@@ -147,6 +154,7 @@ export class DockerFixture {
       architecture: version.Arch,
       image: this.image,
     };
+    if (this.initialized) return;
     this.initialized = true;
     // Canary objects use a disjoint fixture label, never Provider ownership.
     this.volumeName = `${this.run}-volume`;
@@ -209,6 +217,19 @@ export class DockerFixture {
   }
   async successor(previous: NativeComputer): Promise<NativeComputer | null> {
     return runningSuccessor(previous, await this.observe());
+  }
+  async verifyRetired(previous: NativeComputer): Promise<void> {
+    const observed = await this.observe();
+    if (
+      observed.type !== "absent" ||
+      observed.daemon !== previous.daemon ||
+      observed.volume !== previous.volume ||
+      !(await this.containerAbsent(previous.container))
+    ) {
+      throw new Error(
+        "Cutover requires confirmed retirement and the original saved volume",
+      );
+    }
   }
   private async observe(): Promise<NativeObservation> {
     await this.verifyDaemon();
@@ -366,6 +387,34 @@ export class DockerFixture {
   }
   async readMarker(target: NativeComputer): Promise<string> {
     return this.exec(target, "cat /workspace/acceptance-marker");
+  }
+  async conversationAdmission(
+    target: NativeComputer,
+  ): Promise<"start" | "resume"> {
+    const recorded = await this.exec(
+      target,
+      "cat /workspace/acceptance-direct-admission",
+    );
+    if (recorded !== "start" && recorded !== "resume") {
+      throw new Error("Missing exact direct fixture admission");
+    }
+    return recorded;
+  }
+  async verifyNoRetainedMarker(target: NativeComputer): Promise<void> {
+    await this.exec(target, "test ! -e /workspace/acceptance-marker");
+  }
+
+  async verifyReplacementCredential(target: NativeComputer): Promise<void> {
+    if (
+      (await this.exec(
+        target,
+        "cat /workspace/acceptance-direct-credential",
+      )) !== "replacement"
+    ) {
+      throw new Error(
+        "New direct owner did not log in with the replacement fixture key",
+      );
+    }
   }
   /** Remove only this fixture's user marker, preserving Connector-owned state. */
   async clearSaved(target: NativeComputer): Promise<void> {

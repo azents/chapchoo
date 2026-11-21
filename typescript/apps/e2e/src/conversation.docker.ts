@@ -111,12 +111,25 @@ test("owner follows Conversation Work and inspects native typed-answer records",
       name: "Change model",
       exact: true,
     });
+    await expect(
+      picker.getByRole("radio", { name: "Fast", exact: true }),
+    ).toHaveCount(0);
     await picker.getByText("Alternate fixture model", { exact: true }).click();
     await expect(
       picker.getByRole("radio", {
         name: "Alternate fixture model",
         exact: true,
       }),
+    ).toBeChecked();
+    stage = "choose-reasoning-effort";
+    await picker.getByText("High", { exact: true }).click();
+    await expect(
+      picker.getByRole("radio", { name: "High", exact: true }),
+    ).toBeChecked();
+    stage = "choose-speed";
+    await picker.getByText("Fast", { exact: true }).click();
+    await expect(
+      picker.getByRole("radio", { name: "Fast", exact: true }),
     ).toBeChecked();
     stage = "save-alternate-model";
     await picker.getByRole("button", { name: "Save", exact: true }).click();
@@ -553,6 +566,20 @@ test("owner follows Conversation Work and inspects native typed-answer records",
   if (failure) throw failure;
 });
 
+async function finishFixtureQuestion(page: Page): Promise<void> {
+  const question = page.getByRole("heading", {
+    name: "Review the native fixture choices",
+    exact: true,
+  });
+  await expect(question).toBeVisible();
+  await page.getByRole("radio", { name: "Stable", exact: true }).check();
+  await page
+    .getByRole("textbox", { name: "Confirmation note", exact: true })
+    .fill("typed native answer");
+  await page.getByRole("button", { name: "Send answers", exact: true }).click();
+  await expect(question).toHaveCount(0);
+}
+
 // Restored work scope deliberately cannot prove the empty inventory needed for
 // project refresh. Verify deferred Send without changing that separate contract.
 test("a stopped Cloud Computer restores its source and delivers an ordinary message once", async ({
@@ -571,10 +598,15 @@ test("a stopped Cloud Computer restores its source and delivers an ordinary mess
   let failure: Error | null = null;
   let sends = 0;
   let bodyStarted: number | null = null;
+  const replacementPackage = process.env.CHAPCHOO_E2E_NEXT_PACKAGE_ROOT;
+  const replacementImage = process.env.CHAPCHOO_E2E_NEXT_DOCKER_IMAGE;
   page.on("request", (request) => {
     if (request.url().includes("conversations.send")) sends++;
   });
   try {
+    if (Boolean(replacementPackage) !== Boolean(replacementImage)) {
+      throw new Error("Cutover requires both a replacement package and image");
+    }
     fixture = await test.step("native-fixture", () =>
       nativeConversation(assembly));
     stage = "initial-source";
@@ -613,6 +645,30 @@ test("a stopped Cloud Computer restores its source and delivers an ordinary mess
     await page.goto(`${assembly.generalUrl}${fixture.chatPath}`);
     const message = page.getByRole("textbox", { name: "Message", exact: true });
     const log = page.getByRole("log", { name: "Message", exact: true });
+    const text = "Exercise the deterministic native conversation";
+    const publication = log.getByText("Intentional fixture publication.", {
+      exact: true,
+    });
+    const rows = log.locator("[data-message-id]");
+    const docker = assembly.docker;
+    const originalExecution = replacementPackage
+      ? await docker?.current()
+      : null;
+    let originalRows: (string | null)[] = [];
+    if (replacementPackage && replacementImage) {
+      stage = "seed-previous-product-history";
+      if (!docker || !originalExecution)
+        throw new Error("Previous execution was not verified");
+      await docker.writeMarker(originalExecution);
+      await message.fill(text);
+      await page.getByRole("button", { name: "Send", exact: true }).click();
+      await expect(publication).toHaveCount(1, { timeout: 180_000 });
+      await finishFixtureQuestion(page);
+      await expect(rows).toHaveCount(2);
+      originalRows = await rows.evaluateAll((nodes) =>
+        nodes.map((node) => node.getAttribute("data-message-id")),
+      );
+    }
     stage = "stop-before-send";
     await page
       .getByRole("button", { name: /Activity/ })
@@ -632,47 +688,119 @@ test("a stopped Cloud Computer restores its source and delivers an ordinary mess
     ).toBeVisible({ timeout: 180_000 });
     await activity.getByRole("button", { name: "Close", exact: true }).click();
     await expect(activity).toBeHidden();
+    if (replacementPackage && replacementImage && originalExecution) {
+      stage = "replace-retained-cohort-fixture-key";
+      await fixture.replaceFixtureKey();
+      stage = "replace-product-after-retirement";
+      await assembly.replaceDockerBrowserPackage(
+        originalExecution,
+        replacementPackage,
+        replacementImage,
+      );
+      await page.goto(`${assembly.generalUrl}${fixture.chatPath}`);
+      await expect(rows).toHaveCount(2);
+      expect(
+        await rows.evaluateAll((nodes) =>
+          nodes.map((node) => node.getAttribute("data-message-id")),
+        ),
+      ).toEqual(originalRows);
+    }
     await expect(message).toBeEnabled();
     await expect(message).toHaveAttribute("aria-placeholder", /Send a message/);
     stage = "ordinary-send-and-automatic-start";
-    const text = "Exercise the deterministic native conversation";
     await message.fill(text);
     await page.getByRole("button", { name: "Send", exact: true }).click();
-    await expect(
-      log.getByText("Intentional fixture publication.", { exact: true }),
-    ).toBeVisible({ timeout: 180_000 });
-    await expect(log.getByText(text, { exact: true })).toHaveCount(1);
-    await expect(log.locator("[data-message-id]")).toHaveCount(2);
-    expect(sends).toBe(1);
+    const count = originalRows.length > 0 ? 2 : 1;
+    await expect(publication).toHaveCount(count, { timeout: 180_000 });
+    await expect(log.getByText(text, { exact: true })).toHaveCount(count);
+    await expect(rows).toHaveCount(count * 2);
+    expect(sends).toBe(count);
     const after = await fixture.current();
     expect(after.conversation?.conversationId).toBe(
       before.conversation?.conversationId,
     );
     expect(after.observedNative?.target).toEqual(target);
     expect(await fixture.pendingInputs()).toBe(0);
+    if (docker && originalExecution) {
+      const successor = await docker.successor(originalExecution);
+      if (!successor) throw new Error("Replacement execution was not verified");
+      expect(successor.volume).toEqual(originalExecution.volume);
+      expect(successor.container).not.toEqual(originalExecution.container);
+      expect(await docker.readMarker(successor)).toEqual("saved-original-data");
+      expect(await docker.conversationAdmission(successor)).toBe("resume");
+      await docker.verifyReplacementCredential(successor);
+      expect(await docker.containerAbsent(originalExecution.container)).toBe(
+        true,
+      );
+      expect(
+        (
+          await rows.evaluateAll((nodes) =>
+            nodes.map((node) => node.getAttribute("data-message-id")),
+          )
+        ).slice(0, originalRows.length),
+      ).toEqual(originalRows);
+    }
     // Finish the deterministic fixture's question so cleanup owns no waiting
     // responder. This does not attempt unsupported restored-context refresh.
     stage = "finish-owned-fixture-work";
-    await page
-      .getByRole("heading", {
-        name: "Review the native fixture choices",
-        exact: true,
-      })
-      .waitFor();
-    await page.getByRole("radio", { name: "Stable", exact: true }).check();
-    await page
-      .getByRole("textbox", { name: "Confirmation note", exact: true })
-      .fill("typed native answer");
-    await page
-      .getByRole("button", { name: "Send answers", exact: true })
-      .click();
-    await expect(
-      page.getByRole("heading", {
-        name: "Review the native fixture choices",
-        exact: true,
-      }),
-    ).toHaveCount(0);
-    await expect(log.locator("[data-message-id]")).toHaveCount(2);
+    await finishFixtureQuestion(page);
+    await expect(rows).toHaveCount(count * 2);
+    if (docker && originalExecution) {
+      stage = "fresh-after-cutover";
+      const retained = fixture;
+      const retainedExecution = await docker.current();
+      fixture = null;
+      await retained.close();
+      fixture = await nativeConversation(
+        assembly,
+        undefined,
+        "fresh-after-cutover",
+      );
+      stage = "fresh-capture-ready";
+      const freshFixture = fixture;
+      await expect
+        .poll(
+          async () => {
+            const current = await freshFixture.current();
+            const ready = current.startup?.sessionReady;
+            return (
+              ready?.nativeSessionId === "fixture-fresh-thread" &&
+              ready.snapshotId === current.conversation?.snapshotId &&
+              ready.nativeSessionId === current.conversation?.nativeSessionId
+            );
+          },
+          { timeout: 180_000 },
+        )
+        .toBe(true);
+      stage = "fresh-isolation";
+      const fresh = await fixture.current();
+      expect(fresh.conversation?.conversationId).not.toBe(
+        before.conversation?.conversationId,
+      );
+      expect(fresh.conversation?.nativeSessionId).not.toBe(
+        target?.nativeSessionId,
+      );
+      const freshExecution = await docker.current();
+      expect(freshExecution.volume).not.toBe(retainedExecution.volume);
+      expect(await docker.conversationAdmission(freshExecution)).toBe("start");
+      await docker.verifyNoRetainedMarker(freshExecution);
+      await page.goto(`${assembly.generalUrl}${fixture.chatPath}`);
+      const freshText = "Send the first message to the new conversation";
+      stage = "fresh-first-delivery";
+      await expect(rows).toHaveCount(0);
+      await message.fill(freshText);
+      await page.getByRole("button", { name: "Send", exact: true }).click();
+      await expect(publication).toHaveCount(1, { timeout: 180_000 });
+      await expect(log.getByText(freshText, { exact: true })).toHaveCount(1);
+      await expect(log.getByText(text, { exact: true })).toHaveCount(0);
+      await expect(rows).toHaveCount(2);
+      await finishFixtureQuestion(page);
+      expect(sends).toBe(count + 1);
+      expect(await fixture.pendingInputs()).toBe(0);
+      expect((await fixture.current()).observedNative?.target).toEqual(
+        fresh.startup?.sessionReady,
+      );
+    }
     recordConversationBody(bodyStarted);
   } catch (error) {
     recordConversationBody(bodyStarted);

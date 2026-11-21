@@ -124,10 +124,15 @@ tool Submit behind the successful normal user-receipt acknowledgement.
 
 Answer commands likewise carry small operation/source references. Complete
 original typed values are pulled with consistent responder token, captured
-occurrence and kind, followed by the final empty-suffix check. Conversion uses
-supported ACP SDK response types. The native actor checks its actual responder
-before consuming it and reports local responder acceptance or exact rejection;
-neither queue admission nor local acceptance proves remote consumption.
+occurrence and kind, followed by the final empty-suffix check. The Connector
+passes typed permission or form responses to the native owner. That owner
+answers ACP v2 through its SDK or maps the response to the exact App Server
+request. Direct Codex offers include command execution, file changes tied to
+the matching item, sandbox permission profiles, approved server-tool requests
+and supported forms. The actor checks the current turn and responder before
+consuming it and reports local acceptance or exact rejection; neither queue
+admission nor local acceptance proves remote consumption. Stop withdraws
+authority to answer the stopped direct turn.
 
 An invocation lease covers each operation kind/identity from local admission
 through native result, durable report and native-fact release. Concurrent
@@ -203,7 +208,7 @@ or cancel publication.
 - [Control directory authority](computer-directory.md) — The durable directory chooses current component owners and excludes expired, revoked or draining authority. Listener and native effect lifetime are separate owners.
 - [Control admission, streams and calls](computer-control-rpc.md) — Control separates public component authority from trusted peer delivery. Streams and exact-call correlation do not form a durable transport log.
 - [Provider process and allocation acknowledgements](provider-process.md) — External trusted Providers own native IO, while authenticated server operations own durable mutations and evidence acknowledgements.
-- [Native preparation and lifetime](native-harness.md) — Saved storage, managed/existing supply, strict ACP v2 and verified private-scope cleanup.
+- [Native preparation and lifetime](native-harness.md) — Saved storage, Codex App Server or ACP v2 supply, and verified private-scope cleanup.
 - [Conversation storage](conversation-storage.md) — Exact captured source, atomic pair publication and bounded component transfer.
 
 ## References

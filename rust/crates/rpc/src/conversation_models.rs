@@ -1,4 +1,7 @@
-use chapchoo_domain::{NativeConversationId, SnapshotId};
+use chapchoo_domain::{
+    ConversationModelCapabilities, ConversationModelTuning, ConversationSpeed,
+    NativeConversationId, SnapshotId,
+};
 use chapchoo_protocol::conversations as wire;
 use chapchoo_service::{
     ConversationModelChoice, ConversationModelProjection, ConversationModelSaveReceipt,
@@ -36,7 +39,66 @@ fn choice(value: ConversationModelChoice) -> wire::ModelChoice {
     wire::ModelChoice {
         id: value.id,
         label: value.label,
+        capabilities: value.capabilities.map(|options| wire::ModelCapabilities {
+            efforts: options.efforts,
+            speeds: options.speeds.into_iter().map(wire_speed).collect(),
+        }),
     }
+}
+
+fn speed(value: i32) -> Result<ConversationSpeed, Status> {
+    match wire::ModelSpeed::try_from(value) {
+        Ok(wire::ModelSpeed::Standard) => Ok(ConversationSpeed::Standard),
+        Ok(wire::ModelSpeed::Fast) => Ok(ConversationSpeed::Fast),
+        Ok(wire::ModelSpeed::Ultrafast) => Ok(ConversationSpeed::Ultrafast),
+        _ => Err(Status::invalid_argument("Unknown response speed")),
+    }
+}
+
+fn wire_speed(value: ConversationSpeed) -> i32 {
+    (match value {
+        ConversationSpeed::Standard => wire::ModelSpeed::Standard,
+        ConversationSpeed::Fast => wire::ModelSpeed::Fast,
+        ConversationSpeed::Ultrafast => wire::ModelSpeed::Ultrafast,
+    }) as i32
+}
+
+pub(crate) fn from_wire_choice(
+    value: wire::ModelChoice,
+) -> Result<ConversationModelChoice, Status> {
+    Ok(ConversationModelChoice {
+        id: value.id,
+        label: value.label,
+        capabilities: value
+            .capabilities
+            .map(|options| {
+                let speeds = options
+                    .speeds
+                    .into_iter()
+                    .map(speed)
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok::<_, Status>(ConversationModelCapabilities {
+                    efforts: options.efforts,
+                    speeds,
+                })
+            })
+            .transpose()?,
+    })
+}
+
+pub(crate) fn tuning(value: Option<wire::ModelTuning>) -> Result<ConversationModelTuning, Status> {
+    let value = value.unwrap_or_default();
+    Ok(ConversationModelTuning {
+        effort: value.effort,
+        speed: value.speed.map(speed).transpose()?,
+    })
+}
+
+pub(crate) fn wire_tuning(value: ConversationModelTuning) -> Option<wire::ModelTuning> {
+    (!value.is_inherited()).then(|| wire::ModelTuning {
+        effort: value.effort,
+        speed: value.speed.map(wire_speed),
+    })
 }
 
 pub(crate) fn projection(
@@ -53,6 +115,7 @@ pub(crate) fn projection(
             }),
             current: model.model.map(choice),
             saved_request_id: model.saved_request_id,
+            saved_tuning: wire_tuning(model.tuning),
             options: model.options.map(|items| wire::ModelOptions {
                 choices: items.into_iter().map(choice).collect(),
             }),
@@ -64,5 +127,6 @@ pub(crate) fn receipt(value: ConversationModelSaveReceipt) -> wire::ModelSaveRec
     wire::ModelSaveReceipt {
         request_id: value.request_id,
         model: Some(choice(value.model)),
+        tuning: wire_tuning(value.tuning),
     }
 }

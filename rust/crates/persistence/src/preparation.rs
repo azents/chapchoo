@@ -10,7 +10,7 @@ use std::{error::Error, fs::OpenOptions, path::Path};
 
 pub const SQLITE_MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/sqlite");
 pub const POSTGRES_MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/postgres");
-pub(crate) const VERSIONS: [&str; 31] = [
+pub(crate) const VERSIONS: [&str; 32] = [
     "00000000000001",
     "00000000000002",
     "00000000000003",
@@ -42,6 +42,7 @@ pub(crate) const VERSIONS: [&str; 31] = [
     "00000000000029",
     "00000000000030",
     "00000000000031",
+    "00000000000032",
 ];
 const PG_LOCK: i64 = 1_960_261_029;
 #[cfg(test)]

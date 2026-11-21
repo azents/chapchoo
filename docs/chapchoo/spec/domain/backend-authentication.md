@@ -258,9 +258,12 @@ the receiver must discard a partial old transfer rather than combine sources.
 Requests/responses retain the 64-KiB frame bound. Sixteen read/materialization
 permits bound database/encoding work, and refresh work has its separate bounded
 lifetime. Debug output omits every credential message field and nested payload.
-API keys are delivered for explicit ACP login; their presence is not a model
-validity/entitlement claim. ChatGPT conversion validates the inspected native
-shape and admitted account, not JWT signatures or live native adoption.
+API keys are delivered for explicit native login. On the direct Codex path the
+applied key is passed to App Server at startup; staging the key alone does not
+prove login, model validity or entitlement. ChatGPT conversion validates the
+inspected native shape and admitted account, not JWT signatures or live native
+adoption. Codex reads that external-token file at startup without a second
+login or refresh callback.
 The refresh-free native file includes RFC 3339 `last_refresh`, derived from the
 existing applied-execution admission instant. That stable input is reused for
 every piece and descriptor rematerialization; wall-clock encoding or catalogue

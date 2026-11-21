@@ -754,12 +754,14 @@ fn sqlite_goal_projection_and_continuation_admission() -> Result<(), TestError> 
         connection.batch_execute(sql)?;
         Ok(())
     }))?;
-    assert_eq!(
-        connection
-            .revert_last_migration(SQLITE_MIGRATIONS)?
-            .to_string(),
-        "00000000000031"
-    );
+    for expected in ["00000000000032", "00000000000031"] {
+        assert_eq!(
+            connection
+                .revert_last_migration(SQLITE_MIGRATIONS)?
+                .to_string(),
+            expected
+        );
+    }
     assert!(connection.revert_last_migration(SQLITE_MIGRATIONS).is_err());
     // Isolate the preceding migration guard from new-format fixture data.
     connection.batch_execute("DELETE FROM conversation_work_items WHERE title=''")?;
@@ -808,12 +810,14 @@ fn postgres_goal_projection_and_continuation_admission() -> Result<(), TestError
                 Ok(())
             })
         }))?;
-        assert_eq!(
-            connection
-                .revert_last_migration(POSTGRES_MIGRATIONS)?
-                .to_string(),
-            "00000000000031"
-        );
+        for expected in ["00000000000032", "00000000000031"] {
+            assert_eq!(
+                connection
+                    .revert_last_migration(POSTGRES_MIGRATIONS)?
+                    .to_string(),
+                expected
+            );
+        }
         assert!(
             connection
                 .revert_last_migration(POSTGRES_MIGRATIONS)

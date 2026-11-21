@@ -78,15 +78,26 @@ struct CapturedEnding {
     raw_event: Vec<u8>,
 }
 
-fn verify_terminal(raw: &[u8], target: &ConversationDeliveryTarget) -> Result<(), StoreError> {
+fn verify_terminal(
+    raw: &[u8],
+    target: &ConversationDeliveryTarget,
+    work_id: &str,
+) -> Result<(), StoreError> {
     #[derive(serde::Deserialize)]
-    struct Event {
-        method: String,
-        params: Params,
+    #[serde(tag = "method")]
+    enum Event {
+        #[serde(rename = "session/update")]
+        Acp { params: AcpParams },
+        #[serde(rename = "turn/completed")]
+        Codex {
+            params: CodexParams,
+            #[serde(default, rename = "id", deserialize_with = "present")]
+            reply_id_present: bool,
+        },
     }
     #[derive(serde::Deserialize)]
     #[serde(rename_all = "camelCase")]
-    struct Params {
+    struct AcpParams {
         session_id: String,
         update: Update,
     }
@@ -97,13 +108,39 @@ fn verify_terminal(raw: &[u8], target: &ConversationDeliveryTarget) -> Result<()
         state: String,
         stop_reason: String,
     }
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct CodexParams {
+        thread_id: String,
+        turn: Turn,
+    }
+    #[derive(serde::Deserialize)]
+    struct Turn {
+        id: String,
+        status: String,
+    }
+    fn present<'de, D: serde::Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
+        <serde::de::IgnoredAny as serde::Deserialize>::deserialize(d).map(|_| true)
+    }
     let actual: Event = serde_json::from_slice(raw).map_err(|_| StoreError::InvalidTransition)?;
-    if actual.method == "session/update"
-        && actual.params.session_id == target.native_session.as_str()
-        && actual.params.update.session_update == "state_update"
-        && actual.params.update.state == "idle"
-        && actual.params.update.stop_reason == "end_turn"
-    {
+    let matches = match actual {
+        Event::Acp { params } => {
+            params.session_id == target.native_session.as_str()
+                && params.update.session_update == "state_update"
+                && params.update.state == "idle"
+                && params.update.stop_reason == "end_turn"
+        }
+        Event::Codex {
+            params,
+            reply_id_present,
+        } => {
+            !reply_id_present
+                && params.thread_id == target.native_session.as_str()
+                && params.turn.id == work_id
+                && params.turn.status == "completed"
+        }
+    };
+    if matches {
         Ok(())
     } else {
         Err(StoreError::InvalidTransition)
@@ -178,7 +215,7 @@ impl Store {
             .bind::<IdentitySql, _>(id).bind::<Text, _>(snapshot)
             .bind::<Text, _>(occurrence).bind::<BigInt, _>(ordinal)
             .get_result::<CapturedEnding>(connection).await.optional()?.ok_or(StoreError::InvalidTransition)?;
-            verify_terminal(&captured.raw_event, &ending.target)?;
+            verify_terminal(&captured.raw_event, &ending.target, &ending.work_id)?;
             let now = crate::directory::database_now!(connection, dialect);
             let inserted = diesel::sql_query(dialect.query(
                 "INSERT INTO conversation_ending_decisions(conversation_id,execution_id,launch_operation_id,source_snapshot,native_session_id,ordinal,occurrence_id,work_id) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING",
@@ -223,3 +260,6 @@ impl Store {
         })
     }
 }
+
+#[cfg(test)]
+mod terminal_tests;

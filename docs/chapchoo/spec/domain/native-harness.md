@@ -37,7 +37,7 @@ The single execution actor serializes preparation, applied leases and collection
 Managed acquisition selects the latest stable Node 24 Linux x86-64/ARM64 release,
 verifies its official SHA-256 archive digest, rejects escaping archive paths/links
 and bounds download/extracted size. Managed npm resolves the adapter `^2.5.0` and
-Codex `^0.165.0` dependency closure with scripts disabled, a fixed official
+Codex `0.171.0` dependency closure with scripts disabled, a fixed official
 registry, separate empty user/global configuration and an isolated cache. Complete
 publication validates the lock's registry/integrity records, selected package
 versions, layout and actual Codex version. Native optional-package aliases are
@@ -103,8 +103,8 @@ sessions, workspace and captured events remain separate. Same-UID isolation is
 not claimed.
 
 The actual-start actor now invokes this helper for external-token startup. For
-API keys it first removes only residual owned `auth.json`, then uses explicit ACP
-login rather than initial file seeding. API-key file serialization remains for
+API keys it first removes only residual owned `auth.json`, then uses explicit
+native login rather than initial file seeding. API-key file serialization remains for
 replacement, whose live caller uses the same admitted record. File publication alone
 proves no cache reload, immediate adoption, model entitlement or external revoke.
 
@@ -155,10 +155,11 @@ dispatch rechecks the stable application binding in the serialized actor before
 native submission; a successor cannot borrow a predecessor's publication ticket.
 
 An actual launch checks scope against its admitted authentication binding and
-retains a tool provision before starting the native process. Strict-v2
-initialization requires advertised HTTP MCP capability. Both New and exact
-Resume carry the same consumer-owned HTTP declaration through public SDK
-builders. Effective initialization/catalog verification is part of the
+retains a tool provision before starting the native process. ACP v2
+initialization requires advertised HTTP MCP capability and carries the
+consumer-owned declaration through the SDK. Codex App Server receives the
+same declaration through the admitted thread's launch configuration. Both use
+the authenticated relay's initialization and catalogue evidence within the
 remaining thirty-second native startup budget, after the exact native identity
 and capture binding are retained. Failed verification cannot erase that source
 or permit a fresh context. It neither invokes a tool nor asserts no possible
@@ -197,8 +198,12 @@ native behavior and is not asserted by file publication.
 
 ### Session protocol and operation ownership
 
-The public Rust ACP SDK uses strict `Client.v2()`; an incompatible initialization
-fails without a v1 session. Native stdin/stdout/stderr, protocol driver, pending
+Codex starts the official App Server over local stdio for both managed and
+explicit executable supplies. New conversations open a thread; existing
+conversations resume the exact retained thread ID in the same workspace.
+An incompatible release or mismatched resume fails without an ACP fallback
+or a substitute thread. The ACP adapter uses strict `Client.v2()`, without
+a v1 fallback. Native stdin/stdout/stderr, protocol driver, pending
 responders and applied installation lease belong to the execution actor, not a
 server waiter. A bounded command queue retains admitted work after a caller drops
 its response receiver. Cloneable operation handles share the same queue and byte
@@ -215,7 +220,10 @@ Prompt acceptance preserves its exact native message ID, not completion.
 Losing an acknowledgement leaves that operation's possible-forwarding fence
 intact; timeout never grants replay. Normal completion does not stop the owner.
 
-Input uses the producer's `_session/steering` extension with
+Codex App Server steering carries the expected active turn. A successful
+insertion correlates the request marker in the root user-message event with
+the turn in the reply. A reply alone does not establish insertion. ACP
+input uses the producer's `_session/steering` extension with
 `idleBehavior: promptRequired`. Only explicit `promptRequired/noRunningTurn`
 permits an ordinary prompt. Failed/malformed/unsupported responses, cancelled
 waiters and response loss never permit that transition. Steering acceptance does
@@ -223,9 +231,10 @@ not invent a native user-message ID. Ordinary prompt acceptance preserves its
 exact native insertion ID; neither is completion. Normal task completion does
 not shut down the owner.
 
-Native setup requires the owned captured source. An initial source restore can
-request retained history from `start`; an existing captured copy resumes without
-requesting history again. Restore failure does not create a fresh context.
+Native setup requires the owned captured source. ACP v2 can request retained
+history from `start` when restoring an initial copy. Direct Codex resumes the
+exact thread only when its capture has already been retained and does not replay
+the history. Restore failure does not create a fresh context.
 Original incoming session update, permission
 and elicitation envelopes reach the capture boundary before typed SDK decoding;
 unknown fields survive. Authentication requests/results are excluded. Pending
@@ -269,11 +278,13 @@ retirement rather than leaving unrecorded work alive.
 
 The native owner can expose the latest qualified root ending separately from
 foreground state. After session setup and actual tool catalogue verification,
-it correlates a captured live `end_turn` with a prior live Running observation
-and the expiring work target. Capture and Stop publication share one ordering
+it correlates a captured normal terminal with a prior live Running observation
+and the expiring work target. For App Server this is a matched root
+`turn/completed` with status `completed`; retained ACP uses `end_turn`.
+Capture and Stop publication share one ordering
 boundary; if Stop publishes first for that target, the ending is excluded.
-Startup observations, reasonless Idle, abnormal terminals, child updates
-and retained history do not qualify. Repeated reads return the same
+Startup observations, reasonless Idle, abnormal terminals, child updates,
+repeated turn IDs and retained history do not qualify. Repeated reads return the same
 captured occurrence until a new foreground target replaces it or the owner
 retires. This read does not report an ending to the server or initiate work.
 
@@ -282,18 +293,19 @@ ending that still awaits its decision. If ACP explicitly did not consume the
 ordinary steer and requires a prompt, the owner defers that fallback without
 a separate ending-wait expiry. The Connector revalidates the original grant on
 the current route before trying again. Uncertain delivery permits no
-such retry. A granted internal input uses the existing ACP prompt method with a
-system-origin marker. The owner checks exact live Idle and ending identity and
+such retry. A granted internal input uses the current owner's submission
+operation with its continuation context. The owner checks exact live Idle and ending identity and
 consumes that ending once at the same boundary as enqueue, capture and Stop.
 
 ## Conversation model requests
 
-For the qualified Codex 0.165.0 / codex-acp 2.8.0 pair, the exact prepared
-session's configuration provides the model choices. On the idle ordinary
-prompt path and the one-use Work continuation path, the native owner reserves
-submission, then applies any explicit choice through the supported model
-configuration operation before enqueuing. Explicit steering into existing
-work and recognized native commands do not apply the preference.
+The prepared Codex connection supplies its model catalog and candidate-specific
+reasoning and speed capabilities. On the idle ordinary prompt and one-use Work
+continuation paths, the owner binds one authorized preference tuple and sends
+explicit values with the start request. Omitted speed and explicit Standard are
+distinct: only the latter sends an explicit per-turn baseline override. Fast
+and Ultrafast require the selected model's own tier advertisement. Deliberate
+steering uses its expected turn without setting model, effort or speed.
 
 Exact prompt insertion closes the submission reservation. The same receipt
 can describe a prompt attached to an existing turn; it does not identify a

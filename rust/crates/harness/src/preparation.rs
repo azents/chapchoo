@@ -262,7 +262,7 @@ impl Preparer {
                 "--json",
             ])
             .arg(format!("{ADAPTER}@^2.5.0"))
-            .arg(format!("{CODEX}@^0.165.0"))
+            .arg(format!("{CODEX}@0.171.0"))
             .stdin(Stdio::null())
             .stdout(log)
             .stderr(Stdio::null())
@@ -451,7 +451,7 @@ fn compatible_adapter(value: &str) -> bool {
         .is_ok_and(|v| v.major == 2 && v >= Version::new(2, 5, 0) && v.pre.is_empty())
 }
 fn compatible_codex(value: &str) -> bool {
-    Version::parse(value).is_ok_and(|v| v.major == 0 && v.minor == 165 && v.pre.is_empty())
+    value == "0.171.0"
 }
 async fn download(client: &reqwest::Client, url: &str, limit: usize) -> Result<Vec<u8>, Error> {
     let mut response = client.get(url).send().await.map_err(acquisition_failure)?;

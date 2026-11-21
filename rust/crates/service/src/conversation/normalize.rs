@@ -8,6 +8,8 @@ use chapchoo_persistence::{
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
+mod app_server;
+
 #[derive(Debug, Clone, Copy)]
 pub enum NativeNormalizationError {
     InvalidEvent,
@@ -38,6 +40,7 @@ impl fmt::Debug for NormalizedCapture {
 #[derive(Deserialize)]
 struct Envelope {
     method: String,
+    id: Option<schema::RequestId>,
     params: Box<serde_json::value::RawValue>,
 }
 
@@ -118,6 +121,45 @@ pub fn normalize_captured_event(
                 position.occurrence().as_str(),
                 fields,
             ));
+        }
+        method @ ("item/started" | "item/completed" | "item/agentMessage/delta")
+            if envelope.id.is_none() =>
+        {
+            records.extend(app_server::message(method, envelope.params.get(), native)?);
+        }
+        method @ ("turn/started" | "turn/completed") if envelope.id.is_none() => {
+            records.push(app_server::turn(method, envelope.params.get(), native)?);
+        }
+        "mcpServer/elicitation/request" if envelope.id.is_some() => {
+            records.push(app_server::permission(
+                envelope.params.get(),
+                position,
+                native,
+            )?);
+        }
+        method @ ("item/commandExecution/requestApproval" | "item/fileChange/requestApproval")
+            if envelope.id.is_some() =>
+        {
+            records.push(app_server::item_permission(
+                method,
+                envelope.params.get(),
+                position,
+                native,
+            )?);
+        }
+        "item/permissions/requestApproval" if envelope.id.is_some() => {
+            records.push(app_server::sandbox_permission(
+                envelope.params.get(),
+                position,
+                native,
+            )?);
+        }
+        "item/tool/requestUserInput" if envelope.id.is_some() => {
+            records.push(app_server::user_input(
+                envelope.params.get(),
+                position,
+                native,
+            )?);
         }
         _ => return Err(NativeNormalizationError::InvalidEvent),
     }

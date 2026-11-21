@@ -467,22 +467,43 @@ fn next(reader: &mut impl BufRead) -> Result<Option<CapturedEvent>, Error> {
 #[derive(Deserialize)]
 struct EventEnvelope {
     method: String,
+    id: Option<agent_client_protocol::v2::schema::RequestId>,
     params: EventParams,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct EventParams {
-    session_id: String,
+    session_id: Option<String>,
+    thread_id: Option<String>,
 }
 fn event_native(raw: &str) -> Result<NativeConversationId, Error> {
     let envelope: EventEnvelope = serde_json::from_str(raw).map_err(|_| Error::CaptureCorrupt)?;
-    if !matches!(
-        envelope.method.as_str(),
-        "session/update" | "session/request_permission" | "elicitation/create"
-    ) {
-        return Err(Error::CaptureCorrupt);
-    }
-    native(&envelope.params.session_id)
+    let id = match envelope.method.as_str() {
+        "session/update" | "session/request_permission" | "elicitation/create" => {
+            envelope.params.session_id
+        }
+        "item/started"
+        | "item/completed"
+        | "item/agentMessage/delta"
+        | "turn/started"
+        | "turn/completed" => {
+            if envelope.id.is_some() {
+                return Err(Error::CaptureCorrupt);
+            }
+            envelope.params.thread_id
+        }
+        "mcpServer/elicitation/request"
+        | "item/commandExecution/requestApproval"
+        | "item/fileChange/requestApproval"
+        | "item/permissions/requestApproval"
+        | "item/tool/requestUserInput"
+            if envelope.id.is_some() =>
+        {
+            envelope.params.thread_id
+        }
+        _ => None,
+    };
+    native(id.as_deref().ok_or(Error::CaptureCorrupt)?)
 }
 
 #[cfg(test)]

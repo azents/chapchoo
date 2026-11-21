@@ -90,6 +90,9 @@ impl NativeMcpDeclaration {
             ]),
         )
     }
+    pub(crate) fn http_credentials(&self) -> (&str, &BearerSecret) {
+        (self.url.as_str(), &self.key)
+    }
 }
 pub struct NativeToolProvision {
     declaration: NativeMcpDeclaration,
@@ -116,6 +119,9 @@ impl NativeToolProvision {
     }
     pub(crate) fn declarations(&self) -> Vec<agent_client_protocol::v2::schema::McpServer> {
         vec![self.declaration.wire()]
+    }
+    pub(crate) fn declaration(&self) -> &NativeMcpDeclaration {
+        &self.declaration
     }
     pub(crate) fn close(&self) {
         self.lifetime.close();

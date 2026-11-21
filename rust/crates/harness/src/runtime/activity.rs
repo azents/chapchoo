@@ -25,6 +25,7 @@ pub(super) struct ActivityTracker {
     unassociated: BTreeSet<String>,
     calls: BTreeMap<(String, String), bool>,
     terminals: BTreeMap<(String, String), bool>,
+    app_server_child_turns: BTreeMap<String, String>,
 }
 impl fmt::Debug for ActivityTracker {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -157,6 +158,112 @@ impl ActivityTracker {
             && self.calls.values().all(|finished| *finished)
             && self.terminals.values().all(|finished| *finished)
     }
+
+    /// Track App Server effects separately from root turn completion. The
+    /// pinned producer can finish a turn before an independent child settles.
+    pub(super) fn app_server_item(
+        &mut self,
+        root: &str,
+        turn: &str,
+        frame: &serde_json::Value,
+        finished: bool,
+    ) {
+        if self
+            .record_app_server_item(root, turn, frame, finished)
+            .is_err()
+        {
+            // Incomplete activity evidence fences owner replacement, not
+            // ordinary operation of the already-admitted process.
+            self.mark_uncertain();
+        }
+    }
+
+    fn record_app_server_item(
+        &mut self,
+        root: &str,
+        turn: &str,
+        item: &serde_json::Value,
+        finished: bool,
+    ) -> Result<(), Error> {
+        let kind = item["type"].as_str().ok_or(Error::Protocol)?;
+        if kind == "subAgentActivity" {
+            let child = item["agentThreadId"].as_str().ok_or(Error::Protocol)?;
+            if child == root {
+                return Err(Error::Protocol);
+            }
+            let work = match item["kind"].as_str() {
+                Some("started" | "interacted") => Work::Active,
+                Some("completed" | "interrupted") => Work::Idle,
+                _ => Work::Unknown,
+            };
+            return self.app_server_child(child, turn, work);
+        }
+        if !matches!(
+            kind,
+            "mcpToolCall" | "dynamicToolCall" | "commandExecution" | "collabAgentToolCall"
+        ) {
+            return Ok(());
+        }
+        let id = item["id"].as_str().ok_or(Error::Protocol)?;
+        valid_id(id)?;
+        valid_id(turn)?;
+        let key = (turn.to_owned(), id.to_owned());
+        if self.calls.len() >= MAX_CALLS && !self.calls.contains_key(&key) {
+            return Err(Error::NotAdmitted);
+        }
+        match (finished, item["status"].as_str()) {
+            (false, Some("inProgress")) => {
+                self.calls.entry(key).or_insert(false);
+            }
+            (true, Some("completed" | "failed" | "declined" | "interrupted")) => {
+                if self.calls.remove(&key).is_none() {
+                    return Ok(());
+                }
+            }
+            _ => return Err(Error::Protocol),
+        }
+        if kind == "collabAgentToolCall" {
+            if item["senderThreadId"].as_str() != Some(root) {
+                return Err(Error::Protocol);
+            }
+            let targets = item["receiverThreadIds"]
+                .as_array()
+                .ok_or(Error::Protocol)?;
+            let states = item["agentsStates"].as_object().ok_or(Error::Protocol)?;
+            if targets.len() > MAX_SESSIONS || states.len() > MAX_SESSIONS {
+                return Err(Error::NotAdmitted);
+            }
+            for target in targets {
+                let child = target
+                    .as_str()
+                    .filter(|child| *child != root)
+                    .ok_or(Error::Protocol)?;
+                let work = match states.get(child).and_then(|state| state["status"].as_str()) {
+                    Some("pendingInit" | "running") => Work::Active,
+                    Some("completed" | "interrupted" | "errored" | "shutdown") => Work::Idle,
+                    _ => Work::Unknown,
+                };
+                self.app_server_child(child, turn, work)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn app_server_child(&mut self, child: &str, turn: &str, work: Work) -> Result<(), Error> {
+        valid_id(turn)?;
+        if work == Work::Idle
+            && self.app_server_child_turns.get(child).map(String::as_str) != Some(turn)
+        {
+            return Ok(());
+        }
+        self.add_session(child, work)?;
+        if work != Work::Idle {
+            self.app_server_child_turns
+                .insert(child.to_owned(), turn.to_owned());
+        }
+        Ok(())
+    }
+
     fn observe_inner(&mut self, line: &str) -> Result<(), Error> {
         if line.len() > MAX_FRAME_BYTES {
             return Err(Error::NotAdmitted);
@@ -298,6 +405,24 @@ mod tests {
             session,
             json!({"sessionUpdate":"terminal_update","terminalId":id,"exitStatus":{"exitCode":code,"signal":null}}),
         )
+    }
+    #[test]
+    fn app_server_effects_keep_root_idle_from_qualifying_replacement() -> Result<(), TestError> {
+        let mut tracker = ActivityTracker::new("root", true)?;
+        let effect = |status| json!({"type":"mcpToolCall","id":"tool","status":status});
+        tracker.app_server_item("root", "live", &effect("inProgress"), false);
+        tracker.app_server_item("root", "old", &effect("completed"), true);
+        assert!(!tracker.is_quiescent("root"));
+        tracker.app_server_item("root", "live", &effect("completed"), true);
+        assert!(tracker.is_quiescent("root"));
+        let child = |kind| json!({"type":"subAgentActivity","kind":kind,"agentThreadId":"child"});
+        tracker.app_server_item("root", "live", &child("started"), true);
+        assert!(!tracker.is_quiescent("root"));
+        tracker.app_server_item("root", "old", &child("completed"), true);
+        assert!(!tracker.is_quiescent("root"));
+        tracker.app_server_item("root", "live", &child("completed"), true);
+        assert!(tracker.is_quiescent("root"));
+        Ok(())
     }
     #[test]
     fn v2_first_upsert_and_independent_terminal_outlive_root_idle() -> Result<(), TestError> {

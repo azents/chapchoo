@@ -34,6 +34,7 @@ mod inputs;
 use answers::AnswerRegistry;
 pub use answers::{NativeAnswerObservation, NativeAnswerOperation};
 mod activity;
+mod app_server;
 mod continuation_route;
 pub use continuation_route::{ContinuationRoute, ContinuationRouteLease};
 mod goal_restore;
@@ -46,6 +47,7 @@ pub use model_selection::{
 mod observations;
 mod protocol;
 mod requests;
+mod session;
 use inputs::InputRegistry;
 pub use inputs::{NativeInputObservation, NativeInputOperation, NativeTextTarget};
 mod setup;
@@ -53,6 +55,7 @@ mod steering;
 mod stops;
 use observations::Observations;
 pub use observations::{NativeForeground, NativeNormalEnding, NativeObservation, NativeWorkTarget};
+use session::Session;
 use setup::SetupRegistry;
 pub use setup::{
     NativeSetupFailure, NativeSetupIntent, NativeSetupObservation, NativeSetupOperation,
@@ -507,6 +510,10 @@ impl NativeOwner {
                             && !state.blocked
                             && !live.protocol.is_finished()
                         {
+                            if let Some(Session::AppServer(thread)) = &live.session {
+                                let _ = result.send(thread.pending().unwrap_or_default());
+                                continue;
+                            }
                             let mut pending = live.requests.lock().await;
                             pending.retain(|_, (_, r)| !r.cancelled());
                             for (id, (occurrence, r)) in pending.iter() {
@@ -764,14 +771,32 @@ struct DeferredSetup {
     result: oneshot::Sender<Result<NativeSetupObservation, Error>>,
     deadline: tokio::time::Instant,
 }
+#[derive(Clone, Copy)]
+enum Transport {
+    CodexAppServer,
+    // Retained for an ACP harness composition; it is not a Codex supply.
+    #[allow(dead_code)]
+    Acp,
+}
+impl Transport {
+    fn for_supply(supply: &HarnessSupply) -> Self {
+        match supply {
+            HarnessSupply::Managed | HarnessSupply::Existing(_) => Self::CodexAppServer,
+        }
+    }
+}
+enum PendingSession {
+    Acp(oneshot::Receiver<Result<agent_client_protocol::v2::ActiveSession<Agent>, Error>>),
+    AppServer(app_server::Connection, NativeCredentials),
+}
 struct Live {
     child: Child,
-    protocol: JoinHandle<Result<(), agent_client_protocol::Error>>,
+    protocol: JoinHandle<Result<(), Error>>,
     stderr: JoinHandle<Result<(), std::io::Error>>,
     done: CancellationToken,
     ended: CancellationToken,
     restore: Option<goal_restore::Listener>,
-    session: Option<agent_client_protocol::v2::ActiveSession<Agent>>,
+    session: Option<Session>,
     requests: Requests,
     _supply: AppliedSupply,
     requested_supply: HarnessSupply,
@@ -823,9 +848,9 @@ impl State {
         let session = live.session.as_ref().ok_or(Error::NotAdmitted)?;
         if self.blocked
             || live.protocol.is_finished()
-            || session.connection().is_incoming_closed()
+            || session.is_closed()
             || live.capture.snapshot()? != operation.target.snapshot
-            || session.session_id().to_string() != operation.target.native_session.as_str()
+            || session.id() != operation.target.native_session.as_str()
         {
             return Err(Error::NotAdmitted);
         }
@@ -833,8 +858,9 @@ impl State {
             return Ok(previous);
         }
         let outcome = match tokio::time::timeout(Duration::from_secs(10), async {
-            if let Some(accepted) =
-                steering::steer(session, &operation.text, models.map(|model| &model.route)).await?
+            if let Some(accepted) = session
+                .steer(&operation.text, models.map(|model| &model.route))
+                .await?
             {
                 return Ok(accepted);
             }
@@ -869,8 +895,7 @@ impl State {
     ) -> Result<NativePromptAcceptance, Error> {
         let live = self.live.as_ref().ok_or(Error::NotAdmitted)?;
         let session = live.session.as_ref().ok_or(Error::NotAdmitted)?;
-        if self.blocked || live.protocol.is_finished() || session.connection().is_incoming_closed()
-        {
+        if self.blocked || live.protocol.is_finished() || session.is_closed() {
             return Err(Error::NotAdmitted);
         }
         tokio::time::timeout(
@@ -910,8 +935,7 @@ impl State {
             live.session
                 .as_ref()
                 .ok_or(Error::NotAdmitted)?
-                .cancel_active_work()
-                .map_err(|_| Error::Protocol)
+                .stop(target)
         })
     }
     fn normal_ending(&self) -> Result<Option<NativeNormalEnding>, Error> {
@@ -959,15 +983,15 @@ impl State {
                 } if live
                     .session
                     .as_ref()
-                    .is_some_and(|live| live.session_id().to_string() == session.as_str()) => {}
+                    .is_some_and(|live| live.id() == session.as_str()) => {}
                 _ => return Err(Error::NotAdmitted),
             }
             return NativeConversationId::parse(
                 live.session
                     .as_ref()
                     .ok_or(Error::Protocol)?
-                    .session_id()
-                    .to_string(),
+                    .id()
+                    .to_owned(),
             )
             .map_err(|_| Error::Protocol);
         }
@@ -1004,6 +1028,7 @@ impl State {
         config: StartConfiguration<'_>,
     ) -> Result<NativeConversationId, Error> {
         let applied = self.preparer.prepare(&supply).await?;
+        let transport = Transport::for_supply(&supply);
         let admitted = authentication
             .acquire(chapchoo_domain::LaunchCapture {
                 snapshot: source.snapshot()?,
@@ -1043,17 +1068,6 @@ impl State {
             .prefix("launch-")
             .tempdir_in(self.storage.temporary())
             .map_err(|_| Error::Storage)?;
-        let executable = serde_json::to_string(&applied.codex).map_err(|_| Error::Integrity)?;
-        let marker = serde_json::to_string(&launch.path().join("native-launch-claimed"))
-            .map_err(|_| Error::Integrity)?;
-        let wrapper = include_str!("runtime/launch.js")
-            .replace("__CHAPCHOO_EXECUTABLE__", &executable)
-            .replace("__CHAPCHOO_MARKER__", &marker);
-        let entrypoint = launch.path().join("codex-launch.cjs");
-        fs::write(&entrypoint, wrapper).map_err(|_| Error::Storage)?;
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&entrypoint, fs::Permissions::from_mode(0o700))
-            .map_err(|_| Error::Storage)?;
         let observations = Arc::new(Observations::default());
         if let NativeContext::Resume { session, .. } = &context {
             observations.bind(source.snapshot()?, session.clone(), config.empty_scope)?;
@@ -1073,7 +1087,33 @@ impl State {
         } else {
             None
         };
-        let mut command = self.storage.command(&applied.node);
+        let mut command = match transport {
+            Transport::CodexAppServer => {
+                let mut command = self.storage.command(&applied.codex);
+                command.args(["-c", "cli_auth_credentials_store=\"file\"", "app-server"]);
+                command
+            }
+            Transport::Acp => {
+                let executable =
+                    serde_json::to_string(&applied.codex).map_err(|_| Error::Integrity)?;
+                let marker = serde_json::to_string(&launch.path().join("native-launch-claimed"))
+                    .map_err(|_| Error::Integrity)?;
+                let wrapper = include_str!("runtime/launch.js")
+                    .replace("__CHAPCHOO_EXECUTABLE__", &executable)
+                    .replace("__CHAPCHOO_MARKER__", &marker);
+                let entrypoint = launch.path().join("codex-launch.cjs");
+                fs::write(&entrypoint, wrapper).map_err(|_| Error::Storage)?;
+                use std::os::unix::fs::PermissionsExt;
+                fs::set_permissions(&entrypoint, fs::Permissions::from_mode(0o700))
+                    .map_err(|_| Error::Storage)?;
+                let mut command = self.storage.command(&applied.node);
+                command
+                    .arg(&applied.adapter)
+                    .env("CODEX_PATH", entrypoint)
+                    .env("CODEX_CONFIG", native_tool_config());
+                command
+            }
+        };
         if restore.is_some() {
             command
                 .env("CHAPCHOO_GOAL_RESTORE_NODE", &applied.node)
@@ -1087,11 +1127,6 @@ impl State {
                 );
         }
         command
-            .arg(&applied.adapter)
-            .env("CODEX_PATH", entrypoint)
-            // ACP forwards this policy on both New and exact Resume. Keep the
-            // scoped MCP endpoint in the ACP declaration, not in static config.
-            .env("CODEX_CONFIG", native_tool_config())
             .env("PATH", explicit_path(&applied.node)?)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -1107,45 +1142,68 @@ impl State {
                 .await
                 .map(|_| ())
         });
-        let log = source.clone();
-        let observed = observations.clone();
-        let record: Recorder = Arc::new(move |line| observed.record_live(&log, line));
-        let incoming =
-            FramedRead::new(stdout, LinesCodec::new_with_max_length(MAX_LINE)).map(move |line| {
-                let line = line.map_err(std::io::Error::other)?;
-                capture(&line, record.as_ref()).map_err(std::io::Error::other)?;
-                Ok::<_, std::io::Error>(line)
-            });
-        let outgoing = SinkExt::<String>::sink_map_err(
-            FramedWrite::new(stdin, LinesCodec::new_with_max_length(MAX_LINE)),
-            std::io::Error::other,
-        );
         let requests: Requests = Arc::default();
-        let (ready, ready_rx) = oneshot::channel();
         let done = CancellationToken::new();
-        let cwd = self.storage.workspace();
         let ended = CancellationToken::new();
         let completion = ended.clone();
-        let declarations = self
-            .pending_tools
-            .as_ref()
-            .ok_or(Error::NotAdmitted)?
-            .declarations();
         let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
-        let driver = protocol::connect_authenticated(
-            Lines::new(outgoing, incoming),
-            requests.clone(),
-            observations.clone(),
-            ready,
-            done.clone(),
-            cwd,
-            (context, Some(credentials), declarations),
-        );
-        let protocol = tokio::spawn(async move {
-            let result = driver.await;
-            completion.cancel();
-            result
-        });
+        let (pending, protocol) = match transport {
+            Transport::CodexAppServer => {
+                let (connection, driver) = app_server::Connection::connect(
+                    stdout,
+                    stdin,
+                    done.clone(),
+                    source.clone(),
+                    observations.clone(),
+                );
+                (
+                    PendingSession::AppServer(connection, credentials),
+                    tokio::spawn(async move {
+                        let result = driver.await;
+                        completion.cancel();
+                        result
+                    }),
+                )
+            }
+            Transport::Acp => {
+                let log = source.clone();
+                let observed = observations.clone();
+                let record: Recorder = Arc::new(move |line| observed.record_live(&log, line));
+                let incoming = FramedRead::new(stdout, LinesCodec::new_with_max_length(MAX_LINE))
+                    .map(move |line| {
+                        let line = line.map_err(std::io::Error::other)?;
+                        capture(&line, record.as_ref()).map_err(std::io::Error::other)?;
+                        Ok::<_, std::io::Error>(line)
+                    });
+                let outgoing = SinkExt::<String>::sink_map_err(
+                    FramedWrite::new(stdin, LinesCodec::new_with_max_length(MAX_LINE)),
+                    std::io::Error::other,
+                );
+                let (ready, ready_rx) = oneshot::channel();
+                let declarations = self
+                    .pending_tools
+                    .as_ref()
+                    .ok_or(Error::NotAdmitted)?
+                    .declarations();
+                let driver = protocol::connect_authenticated(
+                    Lines::new(outgoing, incoming),
+                    requests.clone(),
+                    observations.clone(),
+                    ready,
+                    done.clone(),
+                    self.storage.workspace(),
+                    (context.clone(), Some(credentials), declarations),
+                );
+                (
+                    PendingSession::Acp(ready_rx),
+                    tokio::spawn(async move {
+                        let result = driver.await.map_err(|_| Error::Protocol);
+                        completion.cancel();
+                        result
+                    }),
+                )
+            }
+        };
         self.live = Some(Live {
             child,
             protocol,
@@ -1166,12 +1224,35 @@ impl State {
             instructions: config.instructions.clone(),
             tool_catalog: config.tool_catalog.to_vec(),
         });
-        let session = tokio::time::timeout_at(deadline, ready_rx)
-            .await
-            .map_err(|_| Error::Protocol)?
-            .map_err(|_| Error::Protocol)??;
-        let id = NativeConversationId::parse(session.session_id().to_string())
-            .map_err(|_| Error::Protocol)?;
+        let session = tokio::time::timeout_at(deadline, async {
+            match pending {
+                PendingSession::Acp(ready) => Ok(Session::from_acp(
+                    ready.await.map_err(|_| Error::Protocol)??,
+                )),
+                PendingSession::AppServer(connection, credentials) => {
+                    let declaration = self
+                        .live
+                        .as_ref()
+                        .and_then(|live| live.tools.as_ref())
+                        .ok_or(Error::NotAdmitted)?
+                        .declaration();
+                    connection
+                        .open(
+                            &self.storage.workspace(),
+                            &context,
+                            declaration,
+                            credentials.initial_api_key(),
+                            config.empty_scope,
+                        )
+                        .await
+                        .map(Session::AppServer)
+                }
+            }
+        })
+        .await
+        .map_err(|_| Error::Protocol)??;
+        let id =
+            NativeConversationId::parse(session.id().to_owned()).map_err(|_| Error::Protocol)?;
         self.live
             .as_ref()
             .ok_or(Error::Process)?
@@ -1201,15 +1282,22 @@ impl State {
         Ok(id)
     }
     async fn respond(&self, response: InteractiveResponse) -> Result<(), Error> {
+        self.respond_to(response, None).await
+    }
+    async fn respond_to(
+        &self,
+        response: InteractiveResponse,
+        exact: Option<&chapchoo_domain::SourcePosition>,
+    ) -> Result<(), Error> {
         if self.blocked {
             return Err(Error::NotAdmitted);
         }
         let live = self.live.as_ref().ok_or(Error::NotAdmitted)?;
         let session = live.session.as_ref().ok_or(Error::NotAdmitted)?;
-        if live.protocol.is_finished() || session.connection().is_incoming_closed() {
+        if live.protocol.is_finished() || session.is_closed() {
             return Err(Error::NotAdmitted);
         }
-        requests::respond(&live.requests, session.session_id(), response).await
+        session.answer(&live.requests, response, exact).await
     }
     async fn retire(&mut self) -> Result<Retirement, Error> {
         let project_publication = match self.project_write.as_mut() {
@@ -1245,9 +1333,7 @@ impl State {
         if let Some(live) = &mut self.live {
             live.restore.take();
             if let Some(session) = &live.session {
-                let _ = session.cancel_active_work();
-                let _ = tokio::time::timeout(Duration::from_secs(2), session.close().block_task())
-                    .await;
+                session.close().await;
             }
             live.done.cancel();
         }

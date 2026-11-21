@@ -54,6 +54,7 @@ export async function nativeConversation(
   supply: HarnessSupply = {
     existingCodexPath: "/opt/chapchoo/codex-fixture",
   },
+  cohort: "initial" | "fresh-after-cutover" = "initial",
 ): Promise<{
   agentId: string;
   chatPath: string;
@@ -62,9 +63,11 @@ export async function nativeConversation(
   holdWork: () => Promise<() => Promise<void>>;
   diagnostics: () => Promise<string>;
   pendingInputs: () => Promise<number>;
+  replaceFixtureKey: () => Promise<void>;
   close: (expectedRequestId?: string) => Promise<void>;
 }> {
   const docker = assembly.docker;
+  const fresh = cohort === "fresh-after-cutover";
   if (!docker)
     throw new Error("Conversation acceptance requires an owned Docker fixture");
   const endpoint = assembly.generalRpcEndpoint;
@@ -156,7 +159,9 @@ export async function nativeConversation(
           );
         await call(computers.requestLifecycle.bind(computers), {
           agentId,
-          requestId: "conversation-delete",
+          requestId: fresh
+            ? "fresh-conversation-delete"
+            : "conversation-delete",
           expectedRequestId: predecessor,
           action: Action.ACTION_DELETE,
         });
@@ -175,14 +180,16 @@ export async function nativeConversation(
     }
   };
   try {
-    await assembly.initializeAdministrator();
+    if (!fresh) await assembly.initializeAdministrator();
     stage = "login";
     token = (await call(auth.passwordLogin.bind(auth), assembly.administrator))
       .token;
     stage = "team";
     const team = (await call(teams.listTeams.bind(teams), {})).items[0];
     if (!team) throw new Error("Conversation fixture requires a personal Team");
-    provider = await assembly.startDockerProvider();
+    provider = fresh
+      ? await assembly.reuseCutoverProvider()
+      : await assembly.startDockerProvider();
     stage = "provider";
     const available = await poll(
       () => call(catalog.list.bind(catalog), { limit: 20 }),
@@ -191,22 +198,29 @@ export async function nativeConversation(
     const providerId = available.items[0]?.id;
     if (!providerId)
       throw new Error("Conversation fixture requires its registered Provider");
-    docker.bindProvider(providerId);
+    if (fresh) docker.verifyBoundProvider(providerId);
+    else docker.bindProvider(providerId);
     stage = "image";
     const image = (
       await call(agents.listProfileImages.bind(agents), { limit: 20 })
     ).items[0];
     if (!image)
       throw new Error("Conversation fixture requires a catalogue image");
-    const key = Buffer.from("disposable-native-conversation-key");
+    const key = Buffer.from(
+      fresh
+        ? "disposable-fresh-conversation-key"
+        : "disposable-native-conversation-key",
+    );
     let authenticationId: string | undefined;
     stage = "key";
     try {
       authenticationId = (
         await call(keys.registerKey.bind(keys), {
           scope: { personal: {} },
-          requestId: "conversation-key",
-          name: "Deterministic fixture only",
+          requestId: fresh ? "fresh-conversation-key" : "conversation-key",
+          name: fresh
+            ? "Fresh deterministic fixture only"
+            : "Deterministic fixture only",
           key,
         })
       ).record?.authenticationId;
@@ -215,18 +229,22 @@ export async function nativeConversation(
     }
     if (!authenticationId)
       throw new Error("Conversation fixture key registration was not observed");
+    const appliedAuthenticationId = authenticationId;
     stage = "create";
     // Freeze only this owned Provider before creating work. Select the explicit
     // supply before any Connector can start.
+    const creationRequest = fresh
+      ? "fresh-conversation-create"
+      : "conversation-create";
     const agent = await provider.whileSuspended(async () => {
       const agent = (
         await call(agents.create.bind(agents), {
-          requestId: "conversation-create",
+          requestId: creationRequest,
           providerId,
           authenticationId,
           teamId: team.id,
-          handle: "chat-agent",
-          name: "Conversation fixture",
+          handle: fresh ? "fresh-chat-agent" : "chat-agent",
+          name: fresh ? "Fresh conversation fixture" : "Conversation fixture",
           profileImageId: image.id,
           paletteKey: "sage",
         })
@@ -255,7 +273,7 @@ export async function nativeConversation(
           value.computer?.power === Power.POWER_RUNNING &&
           value.computer.connector === Connectivity.CONNECTIVITY_CONNECTED &&
           value.computer.phase === Phase.PHASE_COMPLETED &&
-          value.computer.requestId === "conversation-create"
+          value.computer.requestId === creationRequest
         );
       },
     );
@@ -374,6 +392,28 @@ export async function nativeConversation(
           knownIds: [],
         });
         return pending.inputs.length;
+      },
+      replaceFixtureKey: async () => {
+        if (fresh)
+          throw new Error("Replacement applies only to the retained cohort");
+        stage = "replace-fixture-key";
+        const replacement = Buffer.from("disposable-replaced-conversation-key");
+        try {
+          const changed = await call(keys.replaceKey.bind(keys), {
+            scope: { personal: {} },
+            requestId: "conversation-key-replacement",
+            authenticationId: appliedAuthenticationId,
+            expectedRequestId: "conversation-key",
+            key: replacement,
+          });
+          if (changed.record?.authenticationId !== appliedAuthenticationId) {
+            throw new Error(
+              "Key replacement did not retain its registered identity",
+            );
+          }
+        } finally {
+          replacement.fill(0);
+        }
       },
       close,
     };

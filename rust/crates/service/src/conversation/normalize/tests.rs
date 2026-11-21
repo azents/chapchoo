@@ -27,6 +27,41 @@ fn bytes(change: &Change) -> &[u8] {
     }
 }
 #[test]
+fn app_server_final_message_replaces_deltas_under_the_same_record_key() -> Result<(), TestError> {
+    let delta = serde_json::to_vec(&json!({
+        "method": "item/agentMessage/delta",
+        "params": {"threadId": "native", "turnId": "turn", "itemId": "item", "delta": "Partial"},
+    }))?;
+    let message = serde_json::to_vec(&json!({
+        "method": "item/completed",
+        "params": {"threadId": "native", "turnId": "turn",
+            "item": {"type": "agentMessage", "id": "item", "text": "Final"}},
+    }))?;
+    let delta_capture = normalized(&delta)?;
+    let final_capture = normalized(&message)?;
+    assert_eq!(delta_capture.pair.raw, delta);
+    assert_eq!(final_capture.pair.raw, message);
+    let partial = &delta_capture.records[0];
+    let final_record = &final_capture.records[0];
+    assert_eq!(partial.kind, Kind::Assistant);
+    assert_eq!(partial.native_id, final_record.native_id);
+    assert!(matches!(partial.fields[0].change, Change::Append(_)));
+    assert!(matches!(final_record.fields[0].change, Change::Replace(_)));
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(bytes(&final_record.fields[0].change))?,
+        json!({"type": "text", "text": "Final"}),
+    );
+    let foreign = serde_json::to_vec(&json!({
+        "method": "item/agentMessage/delta",
+        "params": {"threadId": "other", "turnId": "turn", "itemId": "item", "delta": "Partial"},
+    }))?;
+    assert!(matches!(
+        normalized(&foreign),
+        Err(NativeNormalizationError::WrongSession)
+    ));
+    Ok(())
+}
+#[test]
 fn utterances_use_typed_entity_and_role_without_merging_by_text() -> Result<(), TestError> {
     for (native, kind) in [
         ("user_message_chunk", Kind::User),
@@ -139,6 +174,41 @@ fn original_unknown_event_is_retained_without_fabricated_user_records() -> Resul
     assert!(!format!("{result:?}").contains("unknown"));
     Ok(())
 }
+
+#[test]
+fn app_server_mcp_completion_preserves_input_and_result_in_the_tool_record() -> Result<(), TestError>
+{
+    let raw = serde_json::to_vec(&json!({"method":"item/completed","params":{
+        "threadId":"native","turnId":"turn","item":{
+            "id":"tool","type":"mcpToolCall","server":"chapchoo","tool":"send","status":"completed",
+            "arguments":{"action":"continue","count":9223372036854775807_i64},
+            "result":{"content":[{"type":"text","text":"Message accepted."}]}
+        }
+    }}))?;
+    let projected = normalized(&raw)?;
+    assert_eq!(projected.pair.raw, raw);
+    let record = &projected.records[0];
+    assert_eq!(record.kind, Kind::Tool);
+    assert_eq!(record.native_id, "app-server:turn:tool");
+    let get = |name| -> Result<serde_json::Value, TestError> {
+        let field = record
+            .fields
+            .iter()
+            .find(|field| field.field == name)
+            .ok_or("Missing field")?;
+        Ok(serde_json::from_slice(bytes(&field.change))?)
+    };
+    assert_eq!(get(Field::Status)?, "completed");
+    let input = get(Field::ToolInput)?;
+    assert_eq!(input["server"], "chapchoo");
+    assert_eq!(input["tool"], "send");
+    assert_eq!(input["arguments"]["count"], 9223372036854775807_i64);
+    assert_eq!(
+        get(Field::ToolOutput)?["result"]["content"][0]["text"],
+        "Message accepted."
+    );
+    Ok(())
+}
 #[test]
 fn cross_session_and_credential_traffic_do_not_become_normalized_history() -> Result<(), TestError>
 {
@@ -154,6 +224,247 @@ fn cross_session_and_credential_traffic_do_not_become_normalized_history() -> Re
     }
     Ok(())
 }
+#[test]
+fn app_server_file_change_activity_preserves_the_paths_and_changes_before_approval()
+-> Result<(), TestError> {
+    let changes = json!([{
+        "path":"/fixture/note","kind":{"type":"add"},"diff":"fixture"
+    }]);
+    let raw = serde_json::to_vec(&json!({"method":"item/started","params":{
+        "threadId":"native","turnId":"turn","item":{
+            "type":"fileChange","id":"patch","status":"inProgress","changes":changes
+        }
+    }}))?;
+    let result = normalized(&raw)?;
+    assert_eq!(result.pair.raw, raw);
+    let record = &result.records[0];
+    assert_eq!(record.kind, Kind::Tool);
+    assert_eq!(record.native_id, "app-server:turn:patch");
+    let input = record
+        .fields
+        .iter()
+        .find(|field| field.field == Field::ToolInput)
+        .ok_or("missing changes")?;
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(bytes(&input.change))?,
+        changes
+    );
+    Ok(())
+}
+
+#[test]
+fn app_server_native_questions_project_choice_and_optional_note_in_the_same_occurrence()
+-> Result<(), TestError> {
+    let body = json!({"id":"q1","method":"item/tool/requestUserInput","params":{
+        "threadId":"native","turnId":"turn","itemId":"question","isBlocking":true,
+        "questions":[{"id":"format","header":"Fixture","question":"Which format?",
+            "isOther":true,"options":[{"label":"Text","description":"Plain text"}]}]
+    }});
+    let raw = serde_json::to_vec(&body)?;
+    let result = normalized(&raw)?;
+    assert_eq!(result.pair.raw, raw);
+    assert_eq!(result.records[0].native_id, "occurrence");
+    let projected: serde_json::Value =
+        serde_json::from_slice(bytes(&result.records[0].fields[0].change))?;
+    assert_eq!(projected["requestedSchema"]["required"], json!(["format"]));
+    let fields = &projected["requestedSchema"]["properties"];
+    assert_eq!(fields["format"]["oneOf"][0]["const"], "Text");
+    assert_eq!(fields["format"]["oneOf"][1]["const"], "None of the above");
+    assert_eq!(fields["chapchoo-note-0"]["type"], "string");
+    let mut secret = body;
+    secret["params"]["questions"][0]["isSecret"] = json!(true);
+    assert!(matches!(
+        normalized(&serde_json::to_vec(&secret)?),
+        Err(NativeNormalizationError::UnsupportedRequest)
+    ));
+    Ok(())
+}
+
+#[test]
+fn app_server_sandbox_grant_shows_the_actual_profile_and_scope_options() -> Result<(), TestError> {
+    let body = json!({"id":46,"method":"item/permissions/requestApproval","params":{
+        "threadId":"native","turnId":"turn","itemId":"permission","startedAtMs":14,"cwd":"/fixture/**literal**",
+        "permissions":{"network":{"enabled":false},"fileSystem":{"read":["/fixture/in"]}},
+        "reason":"Read the fixture input.\n```\n**literal reason**"
+    }});
+    let raw = serde_json::to_vec(&body)?;
+    let result = normalized(&raw)?;
+    assert_eq!(result.pair.raw, raw);
+    assert_eq!(result.records[0].native_id, "occurrence");
+    let request: schema::RequestPermissionRequest =
+        serde_json::from_slice(bytes(&result.records[0].fields[0].change))?;
+    assert_eq!(request.title, "Grant sandbox permissions?");
+    let details = request.description.ok_or("permission details missing")?;
+    assert!(details.contains("```\n/fixture/**literal**\n```"));
+    assert!(details.contains("````\nRead the fixture input.\n```\n**literal reason**\n````"));
+    assert!(details.contains("/fixture/in"));
+    assert!(details.contains(r#""enabled": false"#));
+    assert_eq!(
+        request
+            .options
+            .iter()
+            .map(|option| option.option_id.0.as_ref())
+            .collect::<Vec<_>>(),
+        [
+            "grant-turn",
+            "grant-turn-strict",
+            "grant-session",
+            "deny-permissions"
+        ]
+    );
+    Ok(())
+}
+
+#[test]
+fn app_server_item_approvals_keep_the_original_frame_and_preserve_native_decisions()
+-> Result<(), TestError> {
+    for (method, params, title, description, ids) in [
+        (
+            "item/commandExecution/requestApproval",
+            json!({"threadId":"native","turnId":"turn","itemId":"exec","startedAtMs":1,
+                "cwd":"/fixture","command":"printf fixture",
+                "availableDecisions":["acceptForSession","cancel"]}),
+            "Allow command execution?",
+            "Directory: /fixture\nCommand: printf fixture",
+            &["approve-for-session", "cancel"][..],
+        ),
+        (
+            "item/fileChange/requestApproval",
+            json!({"threadId":"native","turnId":"turn","itemId":"patch","startedAtMs":2,
+                "reason":"Write fixture data"}),
+            "Allow file changes?",
+            "Review the affected files in the file-change activity.\nWrite fixture data",
+            &["approve-once", "approve-for-session", "cancel"][..],
+        ),
+    ] {
+        let raw = serde_json::to_vec(&json!({"id":"712","method":method,"params":params}))?;
+        let result = normalized(&raw)?;
+        assert_eq!(result.pair.raw, raw);
+        assert_eq!(result.records[0].kind, Kind::Request);
+        assert_eq!(result.records[0].native_id, "occurrence");
+        let projected: schema::RequestPermissionRequest =
+            serde_json::from_slice(bytes(&result.records[0].fields[0].change))?;
+        assert_eq!(projected.title, title);
+        assert_eq!(projected.description.as_deref(), Some(description));
+        assert_eq!(
+            projected
+                .options
+                .iter()
+                .map(|option| option.option_id.0.as_ref())
+                .collect::<Vec<_>>(),
+            ids
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn app_server_approval_projects_only_occurrence_scoped_one_time_choices() -> Result<(), TestError> {
+    let original = json!({"id":"712","method":"mcpServer/elicitation/request","params":{
+        "threadId":"native","turnId":"turn","serverName":"chapchoo","mode":"form","message":"Look up the fixture value.",
+        "requestedSchema":{"type":"object","properties":{}},
+        "_meta":{"codex_approval_kind":"mcp_tool_call","tool_name":"lookup","persist":"always"}
+    }});
+    let raw = serde_json::to_vec(&original)?;
+    let result = normalized(&raw)?;
+    assert_eq!(result.pair.raw, raw);
+    let record = &result.records[0];
+    assert_eq!(record.kind, Kind::Request);
+    assert_eq!(record.native_id, "occurrence");
+    let projected: schema::RequestPermissionRequest =
+        serde_json::from_slice(bytes(&record.fields[0].change))?;
+    assert_eq!(projected.session_id.to_string(), "native");
+    assert_eq!(projected.title, "Allow lookup?");
+    assert_eq!(
+        projected.description.as_deref(),
+        Some("Look up the fixture value.")
+    );
+    assert_eq!(
+        projected
+            .options
+            .iter()
+            .map(|choice| choice.option_id.0.as_ref())
+            .collect::<Vec<_>>(),
+        ["approve-once", "decline"]
+    );
+    assert!(projected.meta.is_none());
+
+    let mut ordinary = original.clone();
+    ordinary["params"]["_meta"] = serde_json::Value::Null;
+    let result = normalized(&serde_json::to_vec(&ordinary)?)?;
+    assert!(
+        result.records[0]
+            .fields
+            .iter()
+            .all(|field| field.field != Field::Request)
+    );
+    let mut foreign = original.clone();
+    foreign["params"]["threadId"] = json!("other");
+    assert!(matches!(
+        normalized(&serde_json::to_vec(&foreign)?),
+        Err(NativeNormalizationError::WrongSession)
+    ));
+    Ok(())
+}
+
+#[test]
+fn app_server_form_projects_typed_fields_without_extension_metadata() -> Result<(), TestError> {
+    let raw = serde_json::to_vec(
+        &json!({"id":17,"method":"mcpServer/elicitation/request","params":{
+            "threadId":"native","turnId":"turn","serverName":"chapchoo","mode":"form","message":"Enable fixture?",
+            "requestedSchema":{"type":"object","properties":{"enabled":{"type":"boolean"}},"required":["enabled"]},
+            "_meta":{"fixture":"not part of the question"}
+        }}),
+    )?;
+    let result = normalized(&raw)?;
+    assert_eq!(result.pair.raw, raw);
+    let request: schema::CreateElicitationRequest =
+        serde_json::from_slice(bytes(&result.records[0].fields[0].change))?;
+    assert_eq!(request.message, "Enable fixture?");
+    assert!(request.meta.is_none());
+    let schema::ElicitationMode::Form(form) = request.mode else {
+        return Err("Expected a form".into());
+    };
+    assert!(
+        matches!(form.scope, schema::ElicitationScope::Session(scope) if scope.session_id.to_string() == "native")
+    );
+    assert!(matches!(
+        form.requested_schema.properties.get("enabled"),
+        Some(schema::ElicitationPropertySchema::Boolean(_))
+    ));
+    Ok(())
+}
+
+#[test]
+fn app_server_turn_capture_preserves_raw_identity_and_projects_foreground() -> Result<(), TestError>
+{
+    for (method, status, state) in [
+        ("turn/started", "inProgress", "running"),
+        ("turn/completed", "completed", "idle"),
+        ("turn/completed", "failed", "idle"),
+        ("turn/completed", "interrupted", "idle"),
+    ] {
+        let raw = serde_json::to_vec(&json!({
+            "method":method,"params":{"threadId":"native","turn":{"id":"turn","status":status}}
+        }))?;
+        let captured = normalized(&raw)?;
+        assert_eq!(captured.pair.raw, raw);
+        let record = &captured.records[0];
+        assert_eq!(record.kind, Kind::State);
+        assert_eq!(record.native_id, "native");
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(bytes(&record.fields[0].change))?,
+            json!({"state":state}),
+        );
+    }
+    let synthetic_reply = br#"{"id":1,"method":"turn/completed","params":{"threadId":"native","turn":{"id":"turn","status":"completed"}}}"#;
+    assert!(matches!(
+        normalized(synthetic_reply),
+        Err(NativeNormalizationError::InvalidEvent)
+    ));
+    Ok(())
+}
+
 #[test]
 fn original_permissions_use_occurrence_identity_not_reusable_rpc_id() -> Result<(), TestError> {
     let request = json!({"id":1,"method":"session/request_permission","params":{"sessionId":"native","title":"Choose","options":[{"optionId":"allow","name":"Allow once","kind":"allow_once"},{"optionId":"reject","name":"Reject once","kind":"reject_once"}]}});

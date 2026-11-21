@@ -1,6 +1,7 @@
 //! Model options observed from the owned strict-v2 session.
 
 use super::*;
+use chapchoo_domain::ConversationModelTuning;
 use std::collections::HashSet;
 use std::{future::Future, pin::Pin};
 
@@ -10,7 +11,10 @@ pub type NativeModelFuture<'a> =
 #[derive(Debug)]
 pub enum NativeModelReservation {
     Ungoverned,
-    Reserved(Option<String>),
+    Reserved {
+        model: Option<String>,
+        tuning: ConversationModelTuning,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -111,8 +115,10 @@ pub(super) async fn prompt(
 ) -> Result<NativePromptAcceptance, Error> {
     let session = live.session.as_ref().ok_or(Error::NotAdmitted)?;
     let observations = &live.observations;
-    let vetted = qualified(&live._supply.versions);
-    let builtin = live._supply.versions.adapter == "2.8.0"
+    let direct = matches!(session, Session::AppServer(_));
+    let vetted = direct || qualified(&live._supply.versions);
+    let builtin = !direct
+        && live._supply.versions.adapter == "2.8.0"
         && matches!(kind, PromptKind::Ordinary { .. })
         && native_command(text.as_str());
     let target = observations.current()?.target.ok_or(Error::NotAdmitted)?;
@@ -124,6 +130,8 @@ pub(super) async fn prompt(
     };
     let mut before = None;
     let mut reserved = false;
+    let mut model_for_turn = None;
+    let mut tuning_for_turn = ConversationModelTuning::default();
     if let Some(dispatch) = dispatch.filter(|_| !builtin) {
         dispatch
             .route
@@ -140,12 +148,15 @@ pub(super) async fn prompt(
                     before.unsent = false;
                 }
             }
-            NativeModelReservation::Reserved(model) => {
-                if !vetted {
+            NativeModelReservation::Reserved { model, tuning } => {
+                if !vetted || (!direct && !tuning.is_inherited()) {
                     return Err(Error::Protocol);
                 }
                 reserved = true;
-                if let Some(model) = model {
+                if direct {
+                    model_for_turn = model;
+                    tuning_for_turn = tuning;
+                } else if let Some(model) = model {
                     let options = observations
                         .model(&start.launch_operation_id, live.api_key_source)?
                         .options
@@ -162,18 +173,11 @@ pub(super) async fn prompt(
                             .route
                             .publish(|| {
                                 observations.with_model_idle(&kind, || {
-                                    session.set_config_option(
-                                        options.option_id.clone(),
-                                        schema::SessionConfigOptionValue::Id {
-                                            value: model.clone().into(),
-                                        },
-                                    )
+                                    session.enqueue_model(options.option_id.clone(), &model)
                                 })
                             })
-                            .map_err(after_admission)?;
-                        let configured = request.block_task().await.map_err(|_| Error::Protocol)?;
-                        let seen = super::model_selection::options(&configured.config_options)
-                            .ok_or(Error::Protocol)?;
+                            .map_err(after_admission)??;
+                        let seen = request.await?;
                         if seen.option_id != options.option_id
                             || seen
                                 .current
@@ -190,10 +194,12 @@ pub(super) async fn prompt(
     }
     let mut publish = || {
         observations.publish_model_prompt(&kind, reserved, || {
+            let pending =
+                session.enqueue_prompt(text, model_for_turn.as_deref(), &tuning_for_turn)?;
             if let Some(before) = &mut before {
                 before.unsent = false;
             }
-            session.send_prompt(text.as_str())
+            Ok(pending)
         })
     };
     let pending = match dispatch {
@@ -207,11 +213,7 @@ pub(super) async fn prompt(
             error
         }
     })?;
-    let response = pending
-        .block_task()
-        .await
-        .map_err(|_| Error::DeliveryUncertain)?;
-    let native_message_id = response.message_id.to_string();
+    let native_message_id = pending.await?;
     // Settle the ordering fence on exact insertion, not on which turn the
     // harness used or whether it performed inference.
     if reserved && let Some(dispatch) = dispatch {
@@ -237,6 +239,7 @@ fn after_admission(error: Error) -> Error {
 pub struct NativeModelChoice {
     pub id: String,
     pub label: String,
+    pub capabilities: Option<chapchoo_domain::ConversationModelCapabilities>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -272,7 +275,9 @@ pub(super) fn observe(live: &Live) -> Result<NativeModelObservation, Error> {
     let mut model = live
         .observations
         .model(&live._authentication.operation_id, live.api_key_source)?;
-    if !qualified(&live._supply.versions) {
+    if let Some(Session::AppServer(thread)) = &live.session {
+        model.options = thread.models();
+    } else if !qualified(&live._supply.versions) {
         // An installed successor can prove replacement even when its model
         // commands and options are not qualified.
         model.options = None;
@@ -317,6 +322,7 @@ pub(super) fn options(config: &[schema::SessionConfigOption]) -> Option<NativeMo
         .map(|choice| NativeModelChoice {
             id: choice.value.0.to_string(),
             label: choice.name.clone(),
+            capabilities: None,
         })
         .collect::<Vec<_>>();
     let current = options

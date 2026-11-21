@@ -37,6 +37,67 @@ fn setup() -> Result<(tempfile::TempDir, NativeStorage, CaptureLog), TestError> 
     Ok((dir, storage, log))
 }
 #[test]
+fn exact_native_thread_can_append_without_replacing_legacy_capture() -> Result<(), TestError> {
+    let (_dir, storage, log) = setup()?;
+    let old = event("legacy");
+    let first = log.append(&old, None)?;
+    let snapshot = log.snapshot()?;
+    drop(log);
+    let log = CaptureLog::open(&storage)?;
+    let exact = NativeConversationId::parse("native".into())?;
+    log.bind_native(&exact)?;
+    let mut notification = serde_json::json!({
+        "method": "item/agentMessage/delta",
+        "params": {"threadId": "other", "turnId": "turn", "itemId": "item", "delta": "text"},
+    });
+    assert!(matches!(
+        log.append(&notification.to_string(), None),
+        Err(Error::CaptureConflict)
+    ));
+    notification["params"]["threadId"] = "native".into();
+    let new = notification.to_string();
+    let second = log.append(&new, None)?;
+    assert_eq!(second.ordinal(), first.ordinal() + 1);
+    assert_eq!(log.snapshot()?, snapshot);
+    drop(log);
+    let log = CaptureLog::open(&storage)?;
+    assert_eq!(log.native_session()?, Some(exact));
+    let mut pass = log.begin(&snapshot, None)?;
+    assert_eq!(pass.next_event()?.ok_or("Legacy event")?.raw, old);
+    assert_eq!(pass.next_event()?.ok_or("App Server event")?.raw, new);
+    assert!(pass.next_event()?.is_none());
+    Ok(())
+}
+#[test]
+fn app_server_approval_requires_a_request_and_the_exact_native_thread() -> Result<(), TestError> {
+    let (_dir, _storage, log) = setup()?;
+    let mut request = serde_json::json!({
+        "method":"mcpServer/elicitation/request",
+        "params":{"threadId":"native","turnId":"turn","serverName":"chapchoo","mode":"form"},
+    });
+    assert!(matches!(
+        log.append(&request.to_string(), None),
+        Err(Error::CaptureCorrupt)
+    ));
+    request["id"] = 7.into();
+    request["params"]["threadId"] = "foreign".into();
+    assert!(matches!(
+        log.append(&request.to_string(), None),
+        Err(Error::CaptureConflict)
+    ));
+    request["params"]["threadId"] = "native".into();
+    let raw = request.to_string();
+    let position = log.append(&raw, None)?;
+    assert_eq!(position.ordinal(), 1);
+    let event = log
+        .begin(&log.snapshot()?, None)?
+        .next_event()?
+        .ok_or("Missing approval")?;
+    assert_eq!(event.raw, raw);
+    Ok(())
+}
+
+#[test]
 fn finite_complete_boundary_does_not_follow_later_append() -> Result<(), TestError> {
     let (_dir, _storage, log) = setup()?;
     let first = log.append(

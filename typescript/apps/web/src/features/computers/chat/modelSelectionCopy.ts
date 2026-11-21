@@ -14,6 +14,12 @@ const english = {
     "The save could not be confirmed. Check its result before saving again.",
   check: "Check save",
   refresh: "Refresh",
+  effort: "Reasoning effort",
+  speed: "Speed",
+  inherit: "Model default",
+  standard: "Standard",
+  fast: "Fast",
+  ultrafast: "Ultrafast",
 };
 type Copy = typeof english;
 const translations: Record<string, Copy> = {
@@ -34,6 +40,12 @@ const translations: Record<string, Copy> = {
       "저장 여부를 확인하지 못했습니다. 다시 저장하기 전에 결과를 확인하세요.",
     check: "저장 결과 확인",
     refresh: "새로고침",
+    effort: "추론 강도",
+    speed: "응답 속도",
+    inherit: "모델 기본값",
+    standard: "표준",
+    fast: "빠름",
+    ultrafast: "매우 빠름",
   },
   "ja-JP": {
     model: "モデル",
@@ -53,6 +65,12 @@ const translations: Record<string, Copy> = {
       "保存結果を確認できませんでした。再度保存する前に結果を確認してください。",
     check: "保存結果を確認",
     refresh: "更新",
+    effort: "推論の強度",
+    speed: "応答速度",
+    inherit: "モデルの既定値",
+    standard: "標準",
+    fast: "高速",
+    ultrafast: "超高速",
   },
   "fr-FR": {
     model: "Modèle",
@@ -71,6 +89,12 @@ const translations: Record<string, Copy> = {
       "L’enregistrement n’a pas pu être confirmé. Vérifiez le résultat avant de réessayer.",
     check: "Vérifier l’enregistrement",
     refresh: "Actualiser",
+    effort: "Effort de raisonnement",
+    speed: "Vitesse de réponse",
+    inherit: "Réglage par défaut du modèle",
+    standard: "Standard",
+    fast: "Rapide",
+    ultrafast: "Ultrarapide",
   },
 };
 export function modelSelectionCopy(locale: string): Copy {

@@ -33,7 +33,7 @@ async function awaitWorkRelease() {
   });
 }
 if (process.argv.includes("--version")) {
-  process.stdout.write("codex-cli 0.165.0\n");
+  process.stdout.write("codex-cli 0.171.0\n");
   return;
 }
 if (!process.argv.includes("app-server")) {
@@ -98,11 +98,13 @@ async function connectMcp(servers) {
     throw new Error("Fixture requires its exact server-tools catalog");
   mcpTools = catalog.tools;
 }
-const threadId = "fixture-thread";
+let threadId = "fixture-thread";
 let turnId = "fixture-turn";
 const model = "fixture-model";
 const alternateModel = "fixture-alternate";
 let authenticated = false;
+let directClient = false;
+let usesReplacementKey = false;
 let active = false;
 let primaryUsed = false;
 let primaryStarted = false;
@@ -146,7 +148,7 @@ const thread = () => ({
   },
   path: null,
   cwd,
-  cliVersion: "0.165.0",
+  cliVersion: "0.171.0",
   turns: [],
   name: null,
   agentNickname: null,
@@ -273,6 +275,7 @@ function finish(accepted) {
 async function request(id, method, params) {
   switch (method) {
     case "initialize":
+      directClient = params?.clientInfo?.name === "chapchoo";
       reply(id, {
         userAgent: "chapchoo-deterministic-fixture",
         codexHome: process.env.CODEX_HOME ?? null,
@@ -288,6 +291,11 @@ async function request(id, method, params) {
       )
         throw new Error("Fixture requires explicit synthetic key login");
       authenticated = true;
+      usesReplacementKey =
+        params.apiKey === "disposable-replaced-conversation-key";
+      if (params.apiKey === "disposable-fresh-conversation-key") {
+        threadId = "fixture-fresh-thread";
+      }
       reply(id, { type: "apiKey" });
       notify("account/login/completed", {
         loginId: null,
@@ -341,8 +349,16 @@ async function request(id, method, params) {
           isDefault: value === model,
           supportedReasoningEfforts: [
             { reasoningEffort: "medium", description: "Fixture default" },
+            ...(value === alternateModel
+              ? [{ reasoningEffort: "high", description: "Fixture high" }]
+              : []),
           ],
           defaultReasoningEffort: "medium",
+          serviceTiers:
+            value === alternateModel
+              ? [{ id: "priority", name: "Fast", description: "Fixture fast" }]
+              : [],
+          defaultServiceTier: null,
           inputModalities: ["text"],
           supportsPersonality: false,
           supportsParallelToolCalls: false,
@@ -377,16 +393,30 @@ async function request(id, method, params) {
           throw new Error("Fixture primary thread was started twice");
         if (
           method === "thread/resume" &&
-          (params.threadId !== threadId || !existsSync(retainedThread))
+          (params.threadId !== threadId ||
+            !existsSync(retainedThread) ||
+            readFileSync(retainedThread, "utf8").trim() !== threadId)
         )
           throw new Error("Fixture exact retained thread is unavailable");
         primaryStarted = true;
         await connectMcp(params.config?.mcp_servers);
         if (method === "thread/start")
-          writeFileSync(retainedThread, "fixture-thread\n", {
+          writeFileSync(retainedThread, `${threadId}\n`, {
             flag: "wx",
             mode: 0o600,
           });
+        if (directClient) {
+          writeFileSync(
+            "/workspace/acceptance-direct-admission",
+            method === "thread/start" ? "start\n" : "resume\n",
+          );
+          if (usesReplacementKey) {
+            writeFileSync(
+              "/workspace/acceptance-direct-credential",
+              "replacement\n",
+            );
+          }
+        }
       }
       cwd = params.cwd;
       reply(id, {
@@ -483,9 +513,11 @@ async function request(id, method, params) {
       if (
         prompt ===
           "Exercise the deterministic native conversation with a selected model" &&
-        params.model !== alternateModel
+        (params.model !== alternateModel ||
+          params.effort !== "high" ||
+          params.serviceTierForTurn !== "priority")
       ) {
-        throw new Error("The selected model did not reach the native turn");
+        throw new Error("The saved preferences did not reach the native turn");
       }
       if (
         prompt?.startsWith(
@@ -641,7 +673,11 @@ async function request(id, method, params) {
         (params.input[0]?.text !==
           "Exercise the deterministic native conversation" &&
           prompt !==
-            "Exercise the deterministic native conversation with a selected model")
+            "Exercise the deterministic native conversation with a selected model" &&
+          !(
+            threadId === "fixture-fresh-thread" &&
+            prompt === "Send the first message to the new conversation"
+          ))
       )
         throw new Error("Fixture turn was not admitted");
       verifyWorkInstructions(cwd);
@@ -714,7 +750,7 @@ async function request(id, method, params) {
         params: {
           threadId,
           turnId,
-          serverName: "deterministic-fixture",
+          serverName: "chapchoo",
           mode: "form",
           message: "Review the native fixture choices",
           requestedSchema: {

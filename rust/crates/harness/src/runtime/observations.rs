@@ -57,6 +57,7 @@ struct Observed {
     observed_session: Option<NativeConversationId>,
     foreground: Option<NativeForeground>,
     work: Option<String>,
+    app_server_turns: std::collections::BTreeSet<String>,
     ending_evidence_enabled: bool,
     live_running: bool,
     stop_published: bool,
@@ -285,6 +286,16 @@ impl Observations {
             schema::StateUpdate::RequiresAction(_) => NativeForeground::RequiresAction,
             _ => NativeForeground::OtherActive,
         };
+        Self::transition(state, foreground, position, live, normal)
+    }
+
+    fn transition(
+        state: &mut Observed,
+        foreground: NativeForeground,
+        position: Option<SourcePosition>,
+        live: bool,
+        normal: bool,
+    ) -> Result<(), Error> {
         if foreground == NativeForeground::Idle {
             if live
                 && state.ending_evidence_enabled
@@ -321,6 +332,96 @@ impl Observations {
         }
         state.foreground = Some(foreground);
         state.position = position;
+        Ok(())
+    }
+
+    /// Keep independent runtime effects out of the root foreground record.
+    pub(super) fn record_app_server_item(
+        &self,
+        root: &NativeConversationId,
+        turn: &str,
+        item: &serde_json::Value,
+        finished: bool,
+    ) -> Result<(), Error> {
+        let mut state = self.0.lock().map_err(|_| Error::Protocol)?;
+        if state
+            .source
+            .as_ref()
+            .is_none_or(|(_, source)| source != root)
+        {
+            return Err(Error::CaptureConflict);
+        }
+        let child_starts = item["type"] == "subAgentActivity"
+            && matches!(item["kind"].as_str(), Some("started" | "interacted"));
+        if (finished && !child_starts) || state.work.as_deref() == Some(turn) {
+            state
+                .activity
+                .app_server_item(root.as_str(), turn, item, finished);
+        }
+        Ok(())
+    }
+
+    /// Bind a captured native turn to the same publication fence used by Stop
+    /// and continuation. History and RPC replies do not enter this lane.
+    pub(super) fn record_app_server_turn(
+        &self,
+        capture: &crate::CaptureLog,
+        raw: &str,
+        target: &NativeTextTarget,
+    ) -> Result<(), Error> {
+        use super::app_server::events::{Observation, root_observation};
+
+        let frame = serde_json::from_str(raw).map_err(|_| Error::Protocol)?;
+        let (turn, terminal) = match root_observation(&target.native_session, &frame)? {
+            Some(Observation::Started { turn }) => (turn, None),
+            Some(Observation::Terminal { turn, normal }) => (turn, Some(normal)),
+            _ => return Ok(()),
+        };
+        let mut state = self.0.lock().map_err(|_| Error::Protocol)?;
+        if state.source.as_ref().is_none_or(|(snapshot, session)| {
+            snapshot != &target.snapshot || session != &target.native_session
+        }) || capture.snapshot()? != target.snapshot
+            || capture.native_session()?.as_ref() != Some(&target.native_session)
+        {
+            return Err(Error::CaptureConflict);
+        }
+        if turn.is_empty() || turn.len() > 128 || !turn.bytes().all(|b| b.is_ascii_graphic()) {
+            return Err(Error::Protocol);
+        }
+        match terminal {
+            Some(normal) if state.work.as_deref() == Some(turn) => {
+                let position = capture.append(raw, None)?;
+                Self::transition(
+                    &mut state,
+                    NativeForeground::Idle,
+                    Some(position),
+                    true,
+                    normal,
+                )?;
+            }
+            Some(_) => return Ok(()),
+            None if state.app_server_turns.contains(turn) => return Ok(()),
+            None if state.work.is_some() => return Err(Error::Protocol),
+            None => {
+                // Do not forget earlier IDs while this connection can still
+                // send their notifications. On exhaustion retire the owner.
+                if state.app_server_turns.len() >= 65_536 {
+                    return Err(Error::Protocol);
+                }
+                let position = capture.append(raw, None)?;
+                state.app_server_turns.insert(turn.to_owned());
+                state.work = Some(turn.to_owned());
+                state.normal_ending = None;
+                Self::transition(
+                    &mut state,
+                    NativeForeground::Running,
+                    Some(position),
+                    true,
+                    false,
+                )?;
+            }
+        }
+        self.changed();
         Ok(())
     }
     pub(super) fn normal_ending(&self) -> Result<Option<NativeNormalEnding>, Error> {
@@ -436,14 +537,32 @@ impl Observations {
         &self,
         kind: &model_selection::PromptKind<'_>,
         reserved: bool,
-        publish: impl FnOnce() -> T,
+        publish: impl FnOnce() -> Result<T, Error>,
     ) -> Result<T, Error> {
         let mut state = self.0.lock().map_err(|_| Error::Protocol)?;
         Self::validate_model_prompt(&state, kind, reserved)?;
+        let posted = publish()?;
         if matches!(kind, model_selection::PromptKind::Continuation(_)) {
             state.continuation_published = true;
         }
-        Ok(publish())
+        Ok(posted)
+    }
+
+    pub(super) fn with_work<T>(
+        &self,
+        publish: impl FnOnce(Option<&str>) -> Result<T, Error>,
+    ) -> Result<T, Error> {
+        let state = self.0.lock().map_err(|_| Error::Protocol)?;
+        publish(state.work.as_deref())
+    }
+
+    /// Interactive replies and Stop share the same native publication fence.
+    pub(super) fn with_interactive_work<T>(
+        &self,
+        publish: impl FnOnce(Option<&str>) -> Result<T, Error>,
+    ) -> Result<T, Error> {
+        let state = self.0.lock().map_err(|_| Error::Protocol)?;
+        publish(state.work.as_deref().filter(|_| !state.stop_published))
     }
 
     pub(super) fn restore_work(&self) -> Option<NativeWorkTarget> {

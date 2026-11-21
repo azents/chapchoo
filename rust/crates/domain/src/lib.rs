@@ -27,6 +27,7 @@ mod password;
 mod project_instructions;
 mod provider_request;
 mod role;
+mod sandbox_permissions;
 
 pub use agent_profile::{AgentPalette, InvalidAgentPalette};
 pub use computer::{
@@ -41,9 +42,9 @@ pub use computer_resource::{
     NativeReservation, NativeScope, ProviderKind, ProviderSubstrate, ResourceRole,
 };
 pub use conversation::{
-    ConversationSource, ConversationTarget, ConversationText, EventOccurrenceId, ExistingCodexPath,
-    HarnessSupply, InvalidConversationValue, LaunchCapture, NativeConversationId, SnapshotId,
-    SourcePosition,
+    ConversationModelCapabilities, ConversationModelTuning, ConversationSource, ConversationSpeed,
+    ConversationTarget, ConversationText, EventOccurrenceId, ExistingCodexPath, HarnessSupply,
+    InvalidConversationValue, LaunchCapture, NativeConversationId, SnapshotId, SourcePosition,
 };
 pub use conversation_work::{SendAction, WorkTask, WorkTaskStatus};
 pub use display::{DisplayPatch, DisplaySettings, InvalidDisplaySettings};
@@ -57,3 +58,4 @@ pub use project_instructions::{
 };
 pub use provider_request::{InvalidProviderKeyRequest, ProviderKeyRequestId};
 pub use role::{MembershipRole, TeamKind, TeamRole};
+pub use sandbox_permissions::SandboxPermissionProfile;

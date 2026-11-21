@@ -472,6 +472,7 @@ impl Conversations for ConversationServices {
             request_id: value.request_id,
             expected_request_id: value.expected_request_id,
             model_id: value.model_id,
+            tuning: crate::conversation_models::tuning(value.tuning)?,
         };
         let result = self
             .conversation

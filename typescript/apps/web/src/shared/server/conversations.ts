@@ -70,6 +70,15 @@ export const conversationsRouter = router({
           requestId: id,
           expectedRequestId: id.optional(),
           modelId: z.string().min(1).max(256),
+          tuning: z
+            .object({
+              effort: z.string().min(1).max(256).optional(),
+              speed: z
+                .union([z.literal(1), z.literal(2), z.literal(3)])
+                .optional(),
+            })
+            .strict()
+            .optional(),
         })
         .strict(),
     )
@@ -78,7 +87,7 @@ export const conversationsRouter = router({
         ctx.session.authenticated((token) =>
           call(
             ctx.backend.conversations.saveModel.bind(ctx.backend.conversations),
-            input,
+            { ...input, tuning: input.tuning },
             token,
           ),
         ),
