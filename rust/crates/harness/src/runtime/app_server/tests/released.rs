@@ -2,14 +2,12 @@
 //! The fixture prepares the previous thread and closes its native process.
 use super::*;
 use crate::runtime::observations::Observations;
-use crate::{CaptureLog, NativeStorage, runtime::NativeTextTarget};
+use crate::{
+    CaptureLog, NativeStorage,
+    runtime::{CaptureReplay, InteractiveRequest, InteractiveResponse, NativeContext},
+};
 use std::{path::PathBuf, process::Stdio};
-use tokio::{process::Command, sync::mpsc};
-
-enum Seen {
-    Approval(tools::Approval, chapchoo_domain::SourcePosition),
-    Terminal(String, bool),
-}
+use tokio::process::Command;
 
 #[tokio::test]
 #[ignore = "requires a caller-owned Codex 0.171.0 process fixture on loopback"]
@@ -37,7 +35,6 @@ async fn released_resume_preserves_capture_and_answers_scoped_tool_approval() ->
         let snapshot = retained.snapshot()?;
         drop(retained);
         let captured = CaptureLog::open(&storage)?;
-        let target = NativeTextTarget { snapshot: snapshot.clone(), native_session: id.clone() };
         let bearer = chapchoo_crypto::BearerSecret::generate()?;
         // The fixture accepts this process's dynamically scoped bearer and no
         // production credential. The URL was checked before handing it over.
@@ -60,79 +57,50 @@ async fn released_resume_preserves_capture_and_answers_scoped_tool_approval() ->
             .stderr(Stdio::null())
             .kill_on_drop(true)
             .spawn()?;
-        let (tx, mut rx) = mpsc::channel(16);
         let done = CancellationToken::new();
-        let insertions = Arc::new(events::Insertions::new(id.clone()));
-        let live_insertions = insertions.clone();
-        let live_log = captured.clone();
-        let live_target = target.clone();
         let observations = Arc::new(Observations::default());
-        observations.bind(snapshot.clone(), id.clone(), false)?;
-        let live_observations = observations.clone();
-        let (client, driver) = wire::connect_with_requests(
+        let (connection, driver) = Connection::connect(
             child.stdout.take().ok_or("Missing stdout")?,
             child.stdin.take().ok_or("Missing stdin")?,
             done.clone(),
-            move |raw, frame| {
-                live_insertions.observe(&frame)?;
-                live_observations.record_app_server_turn(&live_log, raw, &live_target)?;
-                if let Some(events::Observation::Terminal { turn, normal }) =
-                    events::root_observation(&live_target.native_session, &frame)?
-                {
-                    tx.try_send(Seen::Terminal(turn.to_owned(), normal)).map_err(|_| Error::Protocol)?;
-                }
-                if frame["params"]["threadId"] != live_target.native_session.as_str() {
-                    return Ok(None);
-                }
-                match frame["method"].as_str() {
-                    Some("mcpServer/elicitation/request") => {
-                        let work = live_observations.current()?.work.ok_or(Error::NotAdmitted)?;
-                        let position = live_log.append(raw, None)?;
-                        let (approval, reply) = tools::Approval::offer(live_target.clone(), position.clone(), &work.work_id, frame)?
-                            .ok_or(Error::NotAdmitted)?;
-                        tx.try_send(Seen::Approval(approval, position)).map_err(|_| Error::Protocol)?;
-                        Ok(Some(reply))
-                    }
-                    Some("item/completed" | "item/agentMessage/delta") => {
-                        live_log.append(raw, None)?;
-                        Ok(None)
-                    }
-                    _ => Ok(None),
-                }
-            },
+            captured.clone(),
+            observations.clone(),
         );
         let driven = tokio::spawn(driver);
-        initialize(&client, None).await?;
-        let thread = Thread::open(&client, &cwd, Some(&id), Some(&provision)).await?;
-        assert_eq!(thread.id, id);
-        let catalog = model_catalog(&client).await?;
-        assert!(!catalog.is_empty());
-        let status = call(&client, ProtocolStage::Session, "mcpServerStatus/list", json!({
-            "threadId": id.as_str(), "serverName": "chapchoo",
-        })).await?;
-        assert!(status["data"].as_array().is_some_and(|servers| servers.iter().any(|server| {
-            server["name"] == "chapchoo" && server["tools"].get("echo").is_some()
-        })), "The scoped echo tool must be discoverable before submission");
+        let thread = connection.open(&cwd, &NativeContext::Resume {
+            session: id.clone(), replay: CaptureReplay::AlreadyCaptured,
+        }, &provision, None, false).await?;
+        assert_eq!(thread.id(), id.as_str());
+        assert!(thread.models().is_some());
         observations.enable_normal_endings()?;
         let text = ConversationText::parse("Approve the local fixture tool.".into())?;
-        let inserted = thread.submit(&insertions, &text, Some("default"))?.await?;
-        let (mut approval, position) = match rx.recv().await {
-            Some(Seen::Approval(approval, position)) => (approval, position),
-            Some(Seen::Terminal(_, true)) => return Err("Turn completed without requesting approval".into()),
-            Some(Seen::Terminal(_, false)) => return Err("Turn failed before requesting approval".into()),
-            None => { driven.await??; return Err("Driver closed before approval".into()); }
+        let inserted = tokio::time::timeout(Duration::from_secs(15), thread.enqueue_prompt(&text, None)?)
+            .await.map_err(|_| "No attributed insertion")??;
+        assert!(!inserted.is_empty());
+        let (request_id, position) = loop {
+            if let Some(InteractiveRequest::Permission { id, occurrence, request }) = thread.pending()?.pop() {
+                assert_eq!(request.title, "Allow echo?");
+                break (id, occurrence);
+            }
+            assert_ne!(observations.current()?.foreground, crate::runtime::NativeForeground::Idle,
+                "Turn ended without offering approval");
+            observations.wait_change().await;
         };
-        assert_eq!(approval.tool, "echo");
-        assert!(matches!(approval.answer(&target, &position, "different-turn", tools::Choice::ApproveOnce), Err(Error::NotAdmitted)));
-        approval.answer(&target, &position, &inserted.turn, tools::Choice::ApproveOnce)?;
-        assert!(matches!(approval.answer(&target, &position, &inserted.turn, tools::Choice::ApproveOnce), Err(Error::NotAdmitted)));
-        let Some(Seen::Terminal(turn, normal)) = rx.recv().await else {
-            return Err("No terminal turn".into());
+        let work = observations.current()?.work.ok_or("No active turn for approval")?;
+        let answer = InteractiveResponse::Permission {
+            id: request_id,
+            response: serde_json::from_value(json!({"outcome":{"outcome":"selected","optionId":"approve-once"}}))?,
         };
-        assert!(normal);
-        assert_eq!(turn, inserted.turn);
-        let ending = observations.normal_ending()?.ok_or("No source-qualified ending")?;
-        assert_eq!(ending.work.work_id, inserted.turn);
+        assert!(matches!(thread.respond(answer.clone(), Some(&first)), Err(Error::NotAdmitted)));
+        thread.respond(answer.clone(), Some(&position))?;
+        assert!(matches!(thread.respond(answer, Some(&position)), Err(Error::NotAdmitted)));
+        let ending = loop {
+            if let Some(ending) = observations.normal_ending()? {
+                break ending;
+            }
+            observations.wait_change().await;
+        };
+        assert_eq!(ending.work, work);
         assert_eq!(ending.work.snapshot, snapshot);
         let mut pass = captured.begin(&snapshot, None)?;
         let original = pass.next_event()?.ok_or("No historical capture")?;
@@ -143,7 +111,7 @@ async fn released_resume_preserves_capture_and_answers_scoped_tool_approval() ->
             if event.position == position {
                 let frame: Value = serde_json::from_str(&event.raw)?;
                 assert_eq!(frame["method"], "mcpServer/elicitation/request");
-                assert_eq!(frame["params"]["turnId"], inserted.turn);
+                assert_eq!(frame["params"]["turnId"], work.work_id);
                 contains_approval = true;
             }
         }

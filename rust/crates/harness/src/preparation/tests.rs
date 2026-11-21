@@ -23,7 +23,7 @@ fn transient_cache_fallback_never_masks_integrity_or_compatibility_failure() -> 
         NativeComponentVersions {
             node: "v24.0.0".into(),
             adapter: "2.5.0".into(),
-            codex: "0.165.0".into(),
+            codex: "0.171.0".into(),
         }
     );
     assert!(matches!(
@@ -49,8 +49,8 @@ fn fixture(root: &Path, marker: char) -> Result<PathBuf, TestError> {
         ("node_modules/@agentclientprotocol/codex-acp/dist/index.js",b"adapter".as_slice()),
         ("node_modules/@agentclientprotocol/codex-acp/package.json",br#"{"version":"2.5.0"}"#.as_slice()),
         ("node_modules/@openai/codex/bin/codex.js",b"codex".as_slice()),
-        ("node_modules/@openai/codex/package.json",br#"{"version":"0.165.0"}"#.as_slice()),
-        ("package-lock.json",br#"{"lockfileVersion":3,"packages":{"":{},"node_modules/@openai/codex":{"resolved":"https://registry.npmjs.org/@openai/codex/-/codex-0.165.0.tgz","integrity":"sha512-fixture"}}}"#.as_slice()),
+        ("node_modules/@openai/codex/package.json",br#"{"version":"0.171.0"}"#.as_slice()),
+        ("package-lock.json",br#"{"lockfileVersion":3,"packages":{"":{},"node_modules/@openai/codex":{"resolved":"https://registry.npmjs.org/@openai/codex/-/codex-0.171.0.tgz","integrity":"sha512-fixture"}}}"#.as_slice()),
     ] {
         let target = path.join(name);
         fs::create_dir_all(target.parent().ok_or("Missing parent")?)?;
@@ -61,7 +61,7 @@ fn fixture(root: &Path, marker: char) -> Result<PathBuf, TestError> {
         node_version: "v24.0.0".into(),
         node_sha256: "a".repeat(64),
         adapter_version: "2.5.0".into(),
-        codex_version: "0.165.0".into(),
+        codex_version: "0.171.0".into(),
         files: file_digests(&path)?,
     };
     fs::write(path.join("complete.json"), serde_json::to_vec(&complete)?)?;
@@ -149,7 +149,7 @@ fn publication_checks_full_lock_sources_and_platform_aliases_remain_owned_by_npm
     let root = tempfile::tempdir()?;
     fs::write(root.path().join("package-lock.json"),br#"{"lockfileVersion":3,"packages":{"":{},"node_modules/native":{"resolved":"http://untrusted.invalid/native.tgz","integrity":"sha512-fixture"}}}"#)?;
     assert!(matches!(validate_lock(root.path()), Err(Error::Integrity)));
-    assert!(compatible_codex("0.165.0"));
+    assert!(compatible_codex("0.171.0"));
     assert!(!compatible_codex("0.166.0"));
     assert!(!compatible_adapter("3.0.0"));
     // Native optional-package aliases are npm's ecosystem resolution, not parsed

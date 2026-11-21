@@ -33,7 +33,7 @@ async function awaitWorkRelease() {
   });
 }
 if (process.argv.includes("--version")) {
-  process.stdout.write("codex-cli 0.165.0\n");
+  process.stdout.write("codex-cli 0.171.0\n");
   return;
 }
 if (!process.argv.includes("app-server")) {
@@ -146,7 +146,7 @@ const thread = () => ({
   },
   path: null,
   cwd,
-  cliVersion: "0.165.0",
+  cliVersion: "0.171.0",
   turns: [],
   name: null,
   agentNickname: null,
@@ -343,6 +343,8 @@ async function request(id, method, params) {
             { reasoningEffort: "medium", description: "Fixture default" },
           ],
           defaultReasoningEffort: "medium",
+          serviceTiers: [],
+          defaultServiceTier: null,
           inputModalities: ["text"],
           supportsPersonality: false,
           supportsParallelToolCalls: false,

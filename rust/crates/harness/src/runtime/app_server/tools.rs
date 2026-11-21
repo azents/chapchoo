@@ -1,6 +1,6 @@
 //! Launch-local HTTP tool declaration. The credential is only serialized into
 //! the private transport; neither argv nor a native config file carries it.
-use crate::{Error, NativeMcpDeclaration};
+use crate::{Error, NativeMcpDeclaration, runtime::schema};
 use chapchoo_domain::SourcePosition;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -112,6 +112,7 @@ pub(super) struct Approval {
     position: SourcePosition,
     turn: String,
     pub(super) tool: String,
+    description: Option<String>,
     responder: Option<oneshot::Sender<Result<Value, i32>>>,
 }
 
@@ -122,6 +123,7 @@ pub(super) enum Choice {
 }
 
 impl Approval {
+    #[cfg(test)]
     /// Decode only the pinned native tool-approval shape, never a plain
     /// elicitation, persistence request, or another server's form.
     pub(super) fn offer(
@@ -130,11 +132,19 @@ impl Approval {
         active_turn: &str,
         request: Value,
     ) -> Result<Option<(Self, super::wire::ServerReply)>, Error> {
+        Ok(Self::decode(&target, active_turn, &request)
+            .map(|details| Self::prepare(target, position, active_turn, details)))
+    }
+
+    pub(super) fn decode(
+        target: &super::super::NativeTextTarget,
+        active_turn: &str,
+        request: &Value,
+    ) -> Option<(String, Option<String>)> {
         if request["method"] != "mcpServer/elicitation/request" || request.get("id").is_none() {
-            return Ok(None);
+            return None;
         }
-        let elicitation: Elicitation =
-            serde_json::from_value(request["params"].clone()).map_err(|_| Error::NotAdmitted)?;
+        let elicitation: Elicitation = serde_json::from_value(request["params"].clone()).ok()?;
         if !super::valid_key(active_turn)
             || elicitation.thread_id != target.native_session.as_str()
             || elicitation.turn_id.as_deref() != Some(active_turn)
@@ -144,27 +154,78 @@ impl Approval {
                 .requested_schema
                 .is_some_and(|schema| schema.kind == "object" && schema.properties.is_empty())
         {
-            return Ok(None);
+            return None;
         }
-        let Some(tool) = elicitation
+        let tool = elicitation
             .meta
             .filter(|meta| meta.codex_approval_kind.as_deref() == Some("mcp_tool_call"))
             .and_then(|meta| meta.tool_name)
-            .filter(|name| super::valid_key(name))
-        else {
-            return Ok(None);
-        };
+            .filter(|name| super::valid_key(name))?;
+        let description = request["params"]["message"]
+            .as_str()
+            .filter(|message| {
+                message.len() <= 8192
+                    && !message.trim().is_empty()
+                    && !message
+                        .chars()
+                        .any(|ch| ch.is_control() && ch != '\n' && ch != '\t')
+            })
+            .map(str::to_owned);
+        Some((tool, description))
+    }
+
+    pub(super) fn prepare(
+        target: super::super::NativeTextTarget,
+        position: SourcePosition,
+        active_turn: &str,
+        (tool, description): (String, Option<String>),
+    ) -> (Self, super::wire::ServerReply) {
         let (responder, reply) = oneshot::channel();
-        Ok(Some((
+        (
             Self {
                 target,
                 position,
                 turn: active_turn.to_owned(),
                 tool,
+                description,
                 responder: Some(responder),
             },
             super::wire::ServerReply::Deferred(reply),
-        )))
+        )
+    }
+
+    pub(super) fn cancelled(&self) -> bool {
+        self.responder
+            .as_ref()
+            .is_none_or(oneshot::Sender::is_closed)
+    }
+
+    pub(super) fn position(&self) -> &SourcePosition {
+        &self.position
+    }
+
+    pub(super) fn turn(&self) -> &str {
+        &self.turn
+    }
+
+    pub(super) fn question(&self, root: &str) -> schema::RequestPermissionRequest {
+        schema::RequestPermissionRequest::new(
+            root,
+            format!("Allow {}?", self.tool),
+            vec![
+                schema::PermissionOption::new(
+                    "approve-once",
+                    "Allow once",
+                    schema::PermissionOptionKind::AllowOnce,
+                ),
+                schema::PermissionOption::new(
+                    "decline",
+                    "Decline",
+                    schema::PermissionOptionKind::RejectOnce,
+                ),
+            ],
+        )
+        .description(self.description.clone())
     }
 
     pub(super) fn answer(

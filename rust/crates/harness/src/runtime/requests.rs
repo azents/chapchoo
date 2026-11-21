@@ -25,17 +25,27 @@ pub(super) fn supported_permission(request: &schema::RequestPermissionRequest) -
             .all(|option| options.insert(option.option_id.to_string()))
 }
 
+#[cfg(test)]
 pub(super) async fn respond(
     requests: &Requests,
     session: &schema::SessionId,
     response: InteractiveResponse,
 ) -> Result<(), Error> {
+    respond_exact(requests, session, response, None).await
+}
+
+pub(super) async fn respond_exact(
+    requests: &Requests,
+    session: &schema::SessionId,
+    response: InteractiveResponse,
+    exact: Option<&chapchoo_domain::SourcePosition>,
+) -> Result<(), Error> {
     let id = match &response {
         InteractiveResponse::Permission { id, .. } | InteractiveResponse::Form { id, .. } => id,
     };
     let mut pending = requests.lock().await;
-    let (_, request) = pending.get(id).ok_or(Error::NotAdmitted)?;
-    if request.cancelled() {
+    let (position, request) = pending.get(id).ok_or(Error::NotAdmitted)?;
+    if request.cancelled() || exact.is_some_and(|expected| position != expected) {
         return Err(Error::NotAdmitted);
     }
     match (request, &response) {

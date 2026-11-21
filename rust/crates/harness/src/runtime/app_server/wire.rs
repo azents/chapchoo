@@ -51,6 +51,7 @@ enum RequestId {
 }
 
 pub(super) enum ServerReply {
+    #[cfg(test)]
     Immediate(Value),
     Deferred(oneshot::Receiver<Result<Value, i32>>),
 }
@@ -77,6 +78,10 @@ impl Reply {
 }
 
 impl Client {
+    pub(super) fn is_closed(&self) -> bool {
+        self.commands.is_closed()
+    }
+
     /// A successful return means publication to this connection's unique
     /// writer, not native acceptance. Dropping Reply does not withdraw it.
     pub(super) fn enqueue(&self, method: &str, params: impl Serialize) -> Result<Reply, Error> {
@@ -119,6 +124,7 @@ impl Client {
 
 /// The caller owns the task returned by the driver and the physical child.
 /// Non-reply messages reach the consumer synchronously, in wire order.
+#[cfg(test)]
 pub(super) fn connect(
     read: impl AsyncRead + Unpin,
     write: impl AsyncWrite + Unpin,
@@ -213,6 +219,7 @@ async fn drive(
                         message["params"]["threadId"].as_str().filter(|id| super::valid_key(id)).map(str::to_owned)
                     });
                     match (id, ingress(&line, message)?) {
+                        #[cfg(test)]
                         (Some(_), Some(ServerReply::Immediate(response))) => {
                             send_response(&mut output, &done, &response).await?;
                         }

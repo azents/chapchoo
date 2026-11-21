@@ -185,19 +185,8 @@ impl State {
         {
             return Err(Error::NotAdmitted);
         }
-        let token = match &operation.response {
-            InteractiveResponse::Permission { id, .. } | InteractiveResponse::Form { id, .. } => id,
-        };
-        // The actor cannot replace its native owner across this check and respond.
-        // Incoming cancellation may close the responder, which respond rechecks.
-        {
-            let pending = live.requests.lock().await;
-            let (occurrence, _) = pending.get(token).ok_or(Error::NotAdmitted)?;
-            if occurrence != &operation.occurrence {
-                return Err(Error::NotAdmitted);
-            }
-        }
-        self.respond(operation.response.clone()).await
+        self.respond_to(operation.response.clone(), Some(&operation.occurrence))
+            .await
     }
 }
 impl NativeHandle {

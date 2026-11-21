@@ -1,5 +1,7 @@
 //! Versioned operations for the official Codex App Server.
 pub(super) mod events;
+mod live;
+pub(super) use live::{Connection, LiveThread};
 mod tools;
 mod wire;
 
@@ -14,6 +16,7 @@ use wire::{CallFailure, Client, Reply};
 struct Thread<'a> {
     link: &'a Client,
     id: NativeConversationId,
+    model: Option<String>,
 }
 
 async fn call(
@@ -186,6 +189,7 @@ fn valid_key(key: &str) -> bool {
 }
 
 impl<'a> Thread<'a> {
+    #[cfg(test)]
     async fn resume(
         link: &'a Client,
         id: &NativeConversationId,
@@ -241,17 +245,29 @@ impl<'a> Thread<'a> {
         Ok(Self {
             link,
             id: NativeConversationId::parse(id.to_owned()).map_err(|_| Error::Protocol)?,
+            model: response["model"].as_str().map(str::to_owned),
         })
     }
 
+    #[cfg(test)]
     fn submit(
         &self,
         insertions: &events::Insertions,
         input: &ConversationText,
         service_tier_for_turn: Option<&str>,
     ) -> Result<impl Future<Output = Result<events::Inserted, Error>> + use<>, Error> {
+        self.submit_with_model(insertions, input, None, service_tier_for_turn)
+    }
+
+    fn submit_with_model(
+        &self,
+        insertions: &events::Insertions,
+        input: &ConversationText,
+        model: Option<&str>,
+        service_tier_for_turn: Option<&str>,
+    ) -> Result<impl Future<Output = Result<events::Inserted, Error>> + use<>, Error> {
         let (reply, receipt) = insertions.publish(None, |marker| {
-            self.enqueue_start(marker, input, service_tier_for_turn)
+            self.enqueue_start(marker, input, model, service_tier_for_turn)
         })?;
         Ok(attributed_insertion(reply, receipt, "/turn/id"))
     }
@@ -293,6 +309,7 @@ impl<'a> Thread<'a> {
         &self,
         client_message_id: &str,
         input: &ConversationText,
+        model: Option<&str>,
         service_tier_for_turn: Option<&str>,
     ) -> Result<Reply, Error> {
         #[derive(Serialize)]
@@ -302,6 +319,8 @@ impl<'a> Thread<'a> {
             client_user_message_id: &'a str,
             input: [Value; 1],
             #[serde(skip_serializing_if = "Option::is_none")]
+            model: Option<&'a str>,
+            #[serde(skip_serializing_if = "Option::is_none")]
             service_tier_for_turn: Option<&'a str>,
         }
         self.link.enqueue(
@@ -310,6 +329,7 @@ impl<'a> Thread<'a> {
                 thread_id: self.id.as_str(),
                 client_user_message_id: client_message_id,
                 input: [json!({"type": "text", "text": input.as_str()})],
+                model,
                 service_tier_for_turn,
             },
         )

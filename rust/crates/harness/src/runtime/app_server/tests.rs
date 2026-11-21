@@ -355,7 +355,11 @@ async fn steering_and_stop_send_only_the_exact_native_turn() -> TestResult {
         Ok(None)
     });
     let driver = tokio::spawn(driver);
-    let thread = Thread { link: &link, id };
+    let thread = Thread {
+        link: &link,
+        id,
+        model: None,
+    };
     assert!(matches!(thread.interrupt(""), Err(Error::NotAdmitted)));
     let server = async {
         let request: Value = serde_json::from_str(&input.next().await.ok_or("Missing steer")??)?;

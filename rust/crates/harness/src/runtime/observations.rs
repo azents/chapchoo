@@ -57,7 +57,6 @@ struct Observed {
     observed_session: Option<NativeConversationId>,
     foreground: Option<NativeForeground>,
     work: Option<String>,
-    #[cfg(test)]
     last_app_server_turn: Option<String>,
     ending_evidence_enabled: bool,
     live_running: bool,
@@ -338,7 +337,6 @@ impl Observations {
 
     /// Bind a captured native turn to the same publication fence used by Stop
     /// and continuation. History and RPC replies do not enter this lane.
-    #[cfg(test)]
     pub(super) fn record_app_server_turn(
         &self,
         capture: &crate::CaptureLog,
@@ -396,6 +394,7 @@ impl Observations {
                 )?;
             }
         }
+        self.changed();
         Ok(())
     }
     pub(super) fn normal_ending(&self) -> Result<Option<NativeNormalEnding>, Error> {
@@ -511,14 +510,23 @@ impl Observations {
         &self,
         kind: &model_selection::PromptKind<'_>,
         reserved: bool,
-        publish: impl FnOnce() -> T,
+        publish: impl FnOnce() -> Result<T, Error>,
     ) -> Result<T, Error> {
         let mut state = self.0.lock().map_err(|_| Error::Protocol)?;
         Self::validate_model_prompt(&state, kind, reserved)?;
+        let posted = publish()?;
         if matches!(kind, model_selection::PromptKind::Continuation(_)) {
             state.continuation_published = true;
         }
-        Ok(publish())
+        Ok(posted)
+    }
+
+    pub(super) fn with_work<T>(
+        &self,
+        publish: impl FnOnce(Option<&str>) -> Result<T, Error>,
+    ) -> Result<T, Error> {
+        let state = self.0.lock().map_err(|_| Error::Protocol)?;
+        publish(state.work.as_deref())
     }
 
     pub(super) fn restore_work(&self) -> Option<NativeWorkTarget> {

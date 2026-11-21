@@ -111,8 +111,9 @@ pub(super) async fn prompt(
 ) -> Result<NativePromptAcceptance, Error> {
     let session = live.session.as_ref().ok_or(Error::NotAdmitted)?;
     let observations = &live.observations;
-    let vetted = qualified(&live._supply.versions);
-    let builtin = live._supply.versions.adapter == "2.8.0"
+    let direct = matches!(session, Session::AppServer(_));
+    let vetted = direct || qualified(&live._supply.versions);
+    let builtin = (direct || live._supply.versions.adapter == "2.8.0")
         && matches!(kind, PromptKind::Ordinary { .. })
         && native_command(text.as_str());
     let target = observations.current()?.target.ok_or(Error::NotAdmitted)?;
@@ -124,6 +125,7 @@ pub(super) async fn prompt(
     };
     let mut before = None;
     let mut reserved = false;
+    let mut model_for_turn = None;
     if let Some(dispatch) = dispatch.filter(|_| !builtin) {
         dispatch
             .route
@@ -145,7 +147,9 @@ pub(super) async fn prompt(
                     return Err(Error::Protocol);
                 }
                 reserved = true;
-                if let Some(model) = model {
+                if direct {
+                    model_for_turn = model;
+                } else if let Some(model) = model {
                     let options = observations
                         .model(&start.launch_operation_id, live.api_key_source)?
                         .options
@@ -165,7 +169,7 @@ pub(super) async fn prompt(
                                     session.enqueue_model(options.option_id.clone(), &model)
                                 })
                             })
-                            .map_err(after_admission)?;
+                            .map_err(after_admission)??;
                         let seen = request.await?;
                         if seen.option_id != options.option_id
                             || seen
@@ -183,10 +187,11 @@ pub(super) async fn prompt(
     }
     let mut publish = || {
         observations.publish_model_prompt(&kind, reserved, || {
+            let pending = session.enqueue_prompt(text, model_for_turn.as_deref())?;
             if let Some(before) = &mut before {
                 before.unsent = false;
             }
-            session.enqueue_prompt(text)
+            Ok(pending)
         })
     };
     let pending = match dispatch {
@@ -261,7 +266,9 @@ pub(super) fn observe(live: &Live) -> Result<NativeModelObservation, Error> {
     let mut model = live
         .observations
         .model(&live._authentication.operation_id, live.api_key_source)?;
-    if !qualified(&live._supply.versions) {
+    if let Some(Session::AppServer(thread)) = &live.session {
+        model.options = thread.models();
+    } else if !qualified(&live._supply.versions) {
         // An installed successor can prove replacement even when its model
         // commands and options are not qualified.
         model.options = None;
