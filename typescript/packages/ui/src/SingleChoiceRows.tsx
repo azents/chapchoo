@@ -1,5 +1,6 @@
 import { useId } from "react";
 import type { ReactElement } from "react";
+import { NavigationIcon } from "./NavigationIcon";
 import classes from "./SingleChoiceRows.module.css";
 
 export function SingleChoiceRows({
@@ -30,7 +31,9 @@ export function SingleChoiceRows({
           />
           <span className={classes.label}>{choice.label}</span>
           <span className={classes.indicator} aria-hidden="true">
-            {choice.id === value ? "✓" : ""}
+            {choice.id === value ? (
+              <NavigationIcon name="check" size="sm" />
+            ) : null}
           </span>
         </label>
       ))}

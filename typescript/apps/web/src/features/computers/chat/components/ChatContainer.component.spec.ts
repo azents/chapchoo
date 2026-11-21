@@ -9,12 +9,16 @@ import {
 import type { Route } from "@playwright/test";
 
 for (const width of [390, 1280]) {
-  test(`model settings preserve the saved choice on cancel at ${width}`, async ({
+  test(`model picker opens its own page and highlights the selection at ${width}`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 844 });
     const current = { id: "fixture-a", label: "Fixture Model A" };
     const alternative = { id: "fixture-b", label: "Fixture Model B" };
+    const saveRequested = Promise.withResolvers<void>();
+    const approveSave = Promise.withResolvers<void>();
+    let saved = current;
+    let saves = 0;
     const unexpected: string[] = [];
     await page.route("**/api/trpc/**", async (route) => {
       const method = new URL(route.request().url()).pathname.split("/").at(-1);
@@ -43,10 +47,34 @@ for (const width of [390, 1280]) {
               launchOperationId: "fixture-launch",
               native: { snapshotId: "snapshot", nativeSessionId: "native" },
             },
-            current,
+            current: saved,
             options: { choices: [current, alternative] },
           };
           break;
+        case "conversations.saveModel": {
+          const payload: unknown = route.request().postDataJSON();
+          if (
+            !payload ||
+            typeof payload !== "object" ||
+            !("json" in payload) ||
+            !payload.json ||
+            typeof payload.json !== "object" ||
+            !("requestId" in payload.json) ||
+            typeof payload.json.requestId !== "string" ||
+            !("modelId" in payload.json) ||
+            payload.json.modelId !== alternative.id
+          ) {
+            throw new Error(
+              "Expected an explicit save for the alternative model",
+            );
+          }
+          saves += 1;
+          saveRequested.resolve();
+          await approveSave.promise;
+          saved = alternative;
+          value = { requestId: payload.json.requestId, model: saved };
+          break;
+        }
         default:
           unexpected.push(method ?? "missing method");
           await route.abort();
@@ -69,15 +97,75 @@ for (const width of [390, 1280]) {
     const model = sheet.getByRole("button", { name: /^Model/ });
     await expect(model).toContainText(current.label);
     await model.click();
-    await expect(
-      sheet.getByRole("radio", { name: current.label }),
-    ).toBeChecked();
-    await sheet.getByText(alternative.label, { exact: true }).click();
-    await expect(
-      sheet.getByRole("radio", { name: alternative.label }),
-    ).toBeChecked();
-    await sheet.getByRole("button", { name: "Cancel", exact: true }).click();
+    const picker = page.getByRole("dialog", {
+      name: "Change model",
+      exact: true,
+    });
+    const back = picker.getByRole("button", { name: "Back", exact: true });
+    await expect(back).toBeFocused();
+    await expect(page.getByRole("dialog")).toHaveCount(1);
+    await expect(picker.getByRole("link", { name: /Corgi/ })).toHaveCount(0);
+    const selected = picker.locator("label").filter({ hasText: current.label });
+    const other = picker
+      .locator("label")
+      .filter({ hasText: alternative.label });
+    await expect(selected.getByRole("radio")).toBeChecked();
+    const highlight = await selected.evaluate(
+      (row) => getComputedStyle(row).backgroundColor,
+    );
+    const plain = await other.evaluate(
+      (row) => getComputedStyle(row).backgroundColor,
+    );
+    expect(highlight).not.toBe(plain);
+    await expect(selected).toHaveCSS("font-weight", "600");
+    const indicator = selected.locator("span[aria-hidden]");
+    const [rowBox, square, glyph] = await Promise.all([
+      selected.boundingBox(),
+      indicator.boundingBox(),
+      indicator.locator("svg").boundingBox(),
+    ]);
+    if (!rowBox || !square || !glyph) {
+      throw new Error("Expected a visible square checkmark");
+    }
+    expect(square.y + square.height / 2).toBeCloseTo(
+      rowBox.y + rowBox.height / 2,
+      0,
+    );
+    expect(glyph.x + glyph.width / 2).toBeCloseTo(
+      square.x + square.width / 2,
+      0,
+    );
+    expect(glyph.y + glyph.height / 2).toBeCloseTo(
+      square.y + square.height / 2,
+      0,
+    );
+    await other.click();
+    await expect(other.getByRole("radio")).toBeChecked();
+    await expect(other).toHaveCSS("background-color", highlight);
+    await expect(selected).toHaveCSS("background-color", plain);
+    await back.click();
+    await expect(model).toBeFocused();
     await expect(model).toContainText(current.label);
+    await model.click();
+    await expect(selected.getByRole("radio")).toBeChecked();
+    await other.click();
+    await picker.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(model).toContainText(current.label);
+    expect(saves).toBe(0);
+    await model.click();
+    await other.click();
+    await picker.getByRole("button", { name: "Save", exact: true }).click();
+    await saveRequested.promise;
+    try {
+      await expect(back).toBeDisabled();
+      await page.keyboard.press("Escape");
+      await expect(picker).toBeVisible();
+    } finally {
+      approveSave.resolve();
+    }
+    await expect(model).toContainText(alternative.label);
+    await expect(model).toBeFocused();
+    expect(saves).toBe(1);
     expect(unexpected).toEqual([]);
   });
 }

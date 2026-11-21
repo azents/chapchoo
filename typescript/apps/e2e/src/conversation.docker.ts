@@ -107,17 +107,19 @@ test("owner follows Conversation Work and inspects native typed-answer records",
       .getByRole("button", { name: /^Model/ })
       .click({ timeout: 45_000 });
     stage = "choose-alternate-model";
-    await settings
-      .getByText("Alternate fixture model", { exact: true })
-      .click();
+    const picker = page.getByRole("dialog", {
+      name: "Change model",
+      exact: true,
+    });
+    await picker.getByText("Alternate fixture model", { exact: true }).click();
     await expect(
-      settings.getByRole("radio", {
+      picker.getByRole("radio", {
         name: "Alternate fixture model",
         exact: true,
       }),
     ).toBeChecked();
     stage = "save-alternate-model";
-    await settings.getByRole("button", { name: "Save", exact: true }).click();
+    await picker.getByRole("button", { name: "Save", exact: true }).click();
     await expect(
       settings.getByRole("button", { name: /^Model/ }),
     ).toContainText("Alternate fixture model");
