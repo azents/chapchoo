@@ -1,5 +1,6 @@
 "use client";
 
+import { NavigationIcon } from "@chapchoo/ui/NavigationIcon";
 import { SingleChoiceRows } from "@chapchoo/ui/SingleChoiceRows";
 import { Alert, Button, Group, Stack, Text } from "@mantine/core";
 import { TRPCClientError } from "@trpc/client";
@@ -7,7 +8,7 @@ import { useLocale } from "next-intl";
 import { useRef, useState } from "react";
 import { trpc } from "@/shared/rpc/client";
 import { modelSelectionCopy } from "../modelSelectionCopy";
-import type { ReactElement } from "react";
+import type { ReactElement, Ref } from "react";
 
 type Saving =
   | { state: "idle" | "rejected" }
@@ -242,35 +243,55 @@ export function useModelSelection(
 
 export type ModelSelectionControls = ReturnType<typeof useModelSelection>;
 
-export function ModelSelection({
+export function ModelSelectionEntry({
   controls,
+  buttonRef,
 }: {
   controls: ModelSelectionControls;
+  buttonRef?: Ref<HTMLButtonElement>;
 }): ReactElement {
   const { copy } = controls;
-  if (!controls.editing) {
-    return (
-      <Button
-        variant="default"
-        fullWidth
-        onClick={controls.edit}
-        disabled={!controls.canEdit}
-        justify="space-between"
-        rightSection={
-          <Text size="sm" c="dimmed">
-            {controls.current?.label ?? copy.unknown}
-          </Text>
-        }
-      >
-        {copy.model}
-      </Button>
-    );
-  }
+  return (
+    <Button
+      variant="default"
+      fullWidth
+      ref={buttonRef}
+      onClick={controls.edit}
+      disabled={!controls.canEdit}
+      justify="space-between"
+      rightSection={
+        <Text size="sm" c="dimmed">
+          {controls.current?.label ?? copy.unknown}
+        </Text>
+      }
+    >
+      {copy.model}
+    </Button>
+  );
+}
+
+export function ModelSelectionPage({
+  controls,
+  actionRef,
+}: {
+  controls: ModelSelectionControls;
+  actionRef?: Ref<HTMLButtonElement>;
+}): ReactElement {
+  const { copy } = controls;
   return (
     <Stack gap="sm">
-      <Text size="md" fw={600}>
-        {copy.change}
-      </Text>
+      <Group>
+        <Button
+          variant="subtle"
+          leftSection={<NavigationIcon name="back" />}
+          ref={controls.locked ? null : actionRef}
+          disabled={controls.locked}
+          onClick={controls.leave}
+          data-autofocus={!controls.locked || void 0}
+        >
+          {copy.back}
+        </Button>
+      </Group>
       <Text size="sm" c="dimmed">
         {copy.apply}
       </Text>
@@ -303,7 +324,12 @@ export function ModelSelection({
         <Alert color="yellow">
           <Stack gap="xs">
             {copy.uncertain}
-            <Button variant="default" onClick={controls.check}>
+            <Button
+              ref={actionRef}
+              variant="default"
+              onClick={controls.check}
+              data-autofocus
+            >
               {copy.check}
             </Button>
           </Stack>

@@ -403,10 +403,12 @@ still apply, and the native owner remains final authority over that work token.
 ## Conversation model selection
 
 The desktop overflow and mobile character/status controls open the same
-conversation details sheet, with its Agent link. Its **Model** row reflects
-the current scoped saved choice or the harness's observed initial model.
-The picker offers advertised concrete models and requires an explicit save.
-Cancel drops the draft. A conflicting save does not overwrite a newer choice,
+**Activity** sheet, with its Agent link. Its **Model** row reflects the
+current scoped saved choice or the harness's observed initial model.
+The row opens a separate page in the sheet, with the selected option
+highlighted and an aligned trailing check. Back and Cancel discard the
+draft; a confirmed save returns to Activity with the new choice. A
+conflicting save does not overwrite a newer choice,
 and an ambiguous response can be checked by its original request ID without
 repeating the mutation.
 

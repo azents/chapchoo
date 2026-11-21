@@ -30,6 +30,21 @@
   border-block-start: 1px solid var(--mantine-color-default-border);
 }
 
+.choice:first-of-type {
+  border-start-start-radius: inherit;
+  border-start-end-radius: inherit;
+}
+
+.choice:last-of-type {
+  border-end-start-radius: inherit;
+  border-end-end-radius: inherit;
+}
+
+.choice:has(> input:checked) {
+  background: var(--chapchoo-color-selected);
+  font-weight: 600;
+}
+
 .choice:has(:focus-visible) {
   outline: 2px solid var(--mantine-primary-color-filled);
   outline-offset: -2px;
@@ -51,7 +66,6 @@
   block-size: 1.25rem;
   flex: 0 0 auto;
   border-radius: var(--mantine-radius-xs);
-  font-weight: 700;
 }
 
 .choice:has(:checked) .indicator {

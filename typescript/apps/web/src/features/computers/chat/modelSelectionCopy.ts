@@ -1,6 +1,7 @@
 const english = {
   model: "Model",
   change: "Change model",
+  back: "Back",
   beforeStart: "{model} is unavailable. The request did not start.",
   apply: "For new conversation turns.",
   unknown: "No model reported",
@@ -19,6 +20,7 @@ const translations: Record<string, Copy> = {
   "ko-KR": {
     model: "모델",
     change: "모델 변경",
+    back: "뒤로",
     beforeStart: "{model}을(를) 사용할 수 없어 요청을 시작하지 않았습니다.",
     apply: "새 대화 실행에 사용할 모델입니다.",
     unknown: "모델 확인 안 됨",
@@ -36,6 +38,7 @@ const translations: Record<string, Copy> = {
   "ja-JP": {
     model: "モデル",
     change: "モデルを変更",
+    back: "戻る",
     beforeStart:
       "{model} を使用できないため、リクエストは開始されませんでした。",
     apply: "新しい会話ターンで使うモデルです。",
@@ -54,6 +57,7 @@ const translations: Record<string, Copy> = {
   "fr-FR": {
     model: "Modèle",
     change: "Changer de modèle",
+    back: "Retour",
     beforeStart: "{model} est indisponible. La demande n’a pas démarré.",
     apply: "Pour les nouveaux tours de conversation.",
     unknown: "Modèle non confirmé",

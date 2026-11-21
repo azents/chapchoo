@@ -17,6 +17,7 @@ import {
   ScrollArea,
   Text,
 } from "@mantine/core";
+import { useLayoutEffect, useRef } from "react";
 import { ComputerControls } from "../../components/ComputerControls";
 import { profileStyle } from "../../profilePalette";
 import { ChatPresence } from "../ChatPresence";
@@ -27,7 +28,7 @@ import { ReturnToLatest } from "../ReturnToLatest";
 import classes from "./Chat.module.css";
 import { ConversationBody, ConversationContent } from "./ConversationBody";
 import { RecentConversationRecord } from "./ConversationRecord";
-import { ModelSelection } from "./ModelSelection";
+import { ModelSelectionEntry, ModelSelectionPage } from "./ModelSelection";
 import { OutgoingIcon } from "./OutgoingIcon";
 import { ThinkingIndicator } from "./ThinkingIndicator";
 import { WorkSummary } from "./WorkSummary";
@@ -79,6 +80,23 @@ function Navigation(props: ChatProps): ReactElement {
 
 export function Chat(props: ChatProps): ReactElement {
   const { product: p, copy: c, floating: f, agent } = props;
+  const selection = props.modelSelection;
+  const picker = selection?.editing ? selection : null;
+  const pickerOpen = picker !== null;
+  const checkingNeeded = picker?.saving.state === "uncertain";
+  const modelButton = useRef<HTMLButtonElement>(null);
+  const pickerAction = useRef<HTMLButtonElement>(null);
+  const wasPickerOpen = useRef(false);
+  useLayoutEffect(() => {
+    if (props.opened) {
+      if (pickerOpen && (!wasPickerOpen.current || checkingNeeded)) {
+        pickerAction.current?.focus();
+      } else if (!pickerOpen && wasPickerOpen.current) {
+        modelButton.current?.focus();
+      }
+    }
+    wasPickerOpen.current = props.opened && pickerOpen;
+  }, [props.opened, pickerOpen, checkingNeeded]);
   if (p.access !== "authorized") {
     return (
       <PageFailure
@@ -407,158 +425,177 @@ export function Chat(props: ChatProps): ReactElement {
             }
             props.focus.activityClosed();
           }}
-          closeOnEscape={!p.confirmation && !p.detailsOpened}
-          closeOnClickOutside={!p.confirmation && !p.detailsOpened}
+          closeOnEscape={!p.confirmation && !p.detailsOpened && !picker?.busy}
+          closeOnClickOutside={
+            !p.confirmation && !p.detailsOpened && !picker?.busy
+          }
           trapFocus={!p.confirmation && !p.detailsOpened}
           onClose={props.onClose}
           size="min(78dvh, 46rem)"
-          title={c.activity}
-          closeButtonProps={{ "aria-label": c.close }}
+          title={picker?.copy.change ?? c.activity}
+          closeButtonProps={{
+            "aria-label": c.close,
+            disabled: picker?.busy === true,
+          }}
           overlayProps={{ backgroundOpacity: 0.12, blur: 0 }}
         >
-          <SheetViewport className={classes.panelBody}>
-            <div
-              className={classes.activityScroll}
-              role="region"
-              aria-label={c.activity}
-              style={profileStyle(agent.paletteKey)}
-            >
-              <a className={classes.detailIdentity} href={detailHref}>
-                <CharacterArtwork
-                  basePath={p.basePath}
-                  assetKey={agent.profileImage.assetKey}
-                  className={classes.detailPortrait}
+          {picker ? (
+            <SheetViewport key="model" className={classes.panelBody}>
+              <div className={classes.activityScroll}>
+                <ModelSelectionPage
+                  controls={picker}
+                  actionRef={pickerAction}
                 />
-                <span className={classes.detailIdentityText}>
-                  <strong>{agent.name}</strong>
-                  <span>{c.detail}</span>
-                </span>
-                <Icon name="chevron" />
-              </a>
-              {props.modelSelection ? (
-                <ModelSelection controls={props.modelSelection} />
-              ) : null}
-              {p.stale ? (
-                <Alert color="yellow" mb="lg">
-                  {p.copy.stale}
-                </Alert>
-              ) : null}
-              {p.error && !p.confirmation ? (
-                <Alert color="red" mb="lg">
-                  {p.error}
-                </Alert>
-              ) : null}
-              <ComputerControls
-                {...p}
-                agent={agent}
-                onDetailsExit={props.focus.nestedClosed}
-              />
-              {props.supplyControl}
-              <Button
-                component="a"
-                variant="default"
-                fullWidth
-                mt="md"
-                href={`${agentChatPath(p.basePath, p.data.teamHandle, props.agent.handle)}/system-prompt`}
-              >
-                {c.systemPrompt}
-              </Button>
-              <div className={classes.summary}>
-                <span>
-                  {agent.name} · {c.codex}
-                </span>
-                <h2>{c.execution}</h2>
-                <p>{props.status}</p>
-                {props.activity === "authenticationRequired" ? (
-                  <Button component="a" href={detailHref} variant="default">
-                    {c.authenticationSettings}
-                  </Button>
-                ) : null}
-                {props.conversation.stop !== "idle" ? (
-                  <p role="status">{c[props.conversation.stop]}</p>
-                ) : null}
-                {props.conversation.region.header.workId ? (
-                  <Button
-                    variant="default"
-                    onClick={props.onStop}
-                    disabled={
-                      !props.stoppable || props.conversation.stop !== "idle"
-                    }
-                    leftSection={<Icon name="stop" />}
-                  >
-                    {c.stop}
-                  </Button>
-                ) : null}
               </div>
-              {currentPlan ? (
-                <div className={classes.taskHeading}>
-                  <h3>{c.plan}</h3>
-                </div>
-              ) : null}
-              {currentPlan?.plan?.type === "items" ? (
-                <ol className={classes.tasks}>
-                  {currentPlan.plan.items.map((item, index) => (
-                    <li key={index}>
-                      <span>
-                        {item.content} · {nativeStatus(c, item.status)}
-                      </span>
-                    </li>
-                  ))}
-                </ol>
-              ) : currentPlan?.plan?.type === "text" ? (
-                <ConversationContent
-                  parts={[{ type: "text", text: currentPlan.plan.text }]}
+            </SheetViewport>
+          ) : (
+            <SheetViewport key="activity" className={classes.panelBody}>
+              <div
+                className={classes.activityScroll}
+                role="region"
+                aria-label={c.activity}
+                style={profileStyle(agent.paletteKey)}
+              >
+                <a className={classes.detailIdentity} href={detailHref}>
+                  <CharacterArtwork
+                    basePath={p.basePath}
+                    assetKey={agent.profileImage.assetKey}
+                    className={classes.detailPortrait}
+                  />
+                  <span className={classes.detailIdentityText}>
+                    <strong>{agent.name}</strong>
+                    <span>{c.detail}</span>
+                  </span>
+                  <Icon name="chevron" />
+                </a>
+                {selection ? (
+                  <ModelSelectionEntry
+                    controls={selection}
+                    buttonRef={modelButton}
+                  />
+                ) : null}
+                {p.stale ? (
+                  <Alert color="yellow" mb="lg">
+                    {p.copy.stale}
+                  </Alert>
+                ) : null}
+                {p.error && !p.confirmation ? (
+                  <Alert color="red" mb="lg">
+                    {p.error}
+                  </Alert>
+                ) : null}
+                <ComputerControls
+                  {...p}
+                  agent={agent}
+                  onDetailsExit={props.focus.nestedClosed}
                 />
-              ) : currentPlan ? (
-                <ConversationContent parts={currentPlan.content} />
-              ) : null}
-              <section className={classes.tools}>
+                {props.supplyControl}
                 <Button
-                  variant="subtle"
+                  component="a"
+                  variant="default"
                   fullWidth
-                  rightSection={<Icon name="chevron" />}
-                  onClick={() => props.conversation.onHistory()}
-                  classNames={{ inner: classes.historyLinkInner }}
+                  mt="md"
+                  href={`${agentChatPath(p.basePath, p.data.teamHandle, props.agent.handle)}/system-prompt`}
                 >
-                  {c.history}
+                  {c.systemPrompt}
                 </Button>
-                <div
-                  className={
-                    records.length > 5 || props.recentRecords.older
-                      ? classes.recentFade
-                      : void 0
-                  }
-                >
-                  {props.recentRead === "error" ? (
-                    <Group role="alert" gap="xs" justify="space-between">
-                      <Text size="sm" c="dimmed">
-                        {c.recordsError}
-                      </Text>
-                      <Button
-                        variant="subtle"
-                        size="xs"
-                        onClick={props.onReadRecent}
-                      >
-                        {c.retry}
-                      </Button>
-                    </Group>
-                  ) : props.recentRead === "loading" ? (
-                    <Text role="status" size="sm" c="dimmed">
-                      {c.loading}
-                    </Text>
+                <div className={classes.summary}>
+                  <span>
+                    {agent.name} · {c.codex}
+                  </span>
+                  <h2>{c.execution}</h2>
+                  <p>{props.status}</p>
+                  {props.activity === "authenticationRequired" ? (
+                    <Button component="a" href={detailHref} variant="default">
+                      {c.authenticationSettings}
+                    </Button>
                   ) : null}
-                  {records.slice(-5).map((record) => (
-                    <RecentConversationRecord
-                      key={record.key}
-                      record={record}
-                      copy={c}
-                      onOpen={() => props.conversation.onHistory(record)}
-                    />
-                  ))}
+                  {props.conversation.stop !== "idle" ? (
+                    <p role="status">{c[props.conversation.stop]}</p>
+                  ) : null}
+                  {props.conversation.region.header.workId ? (
+                    <Button
+                      variant="default"
+                      onClick={props.onStop}
+                      disabled={
+                        !props.stoppable || props.conversation.stop !== "idle"
+                      }
+                      leftSection={<Icon name="stop" />}
+                    >
+                      {c.stop}
+                    </Button>
+                  ) : null}
                 </div>
-              </section>
-            </div>
-          </SheetViewport>
+                {currentPlan ? (
+                  <div className={classes.taskHeading}>
+                    <h3>{c.plan}</h3>
+                  </div>
+                ) : null}
+                {currentPlan?.plan?.type === "items" ? (
+                  <ol className={classes.tasks}>
+                    {currentPlan.plan.items.map((item, index) => (
+                      <li key={index}>
+                        <span>
+                          {item.content} · {nativeStatus(c, item.status)}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                ) : currentPlan?.plan?.type === "text" ? (
+                  <ConversationContent
+                    parts={[{ type: "text", text: currentPlan.plan.text }]}
+                  />
+                ) : currentPlan ? (
+                  <ConversationContent parts={currentPlan.content} />
+                ) : null}
+                <section className={classes.tools}>
+                  <Button
+                    variant="subtle"
+                    fullWidth
+                    rightSection={<Icon name="chevron" />}
+                    onClick={() => props.conversation.onHistory()}
+                    classNames={{ inner: classes.historyLinkInner }}
+                  >
+                    {c.history}
+                  </Button>
+                  <div
+                    className={
+                      records.length > 5 || props.recentRecords.older
+                        ? classes.recentFade
+                        : void 0
+                    }
+                  >
+                    {props.recentRead === "error" ? (
+                      <Group role="alert" gap="xs" justify="space-between">
+                        <Text size="sm" c="dimmed">
+                          {c.recordsError}
+                        </Text>
+                        <Button
+                          variant="subtle"
+                          size="xs"
+                          onClick={props.onReadRecent}
+                        >
+                          {c.retry}
+                        </Button>
+                      </Group>
+                    ) : props.recentRead === "loading" ? (
+                      <Text role="status" size="sm" c="dimmed">
+                        {c.loading}
+                      </Text>
+                    ) : null}
+                    {records.slice(-5).map((record) => (
+                      <RecentConversationRecord
+                        key={record.key}
+                        record={record}
+                        copy={c}
+                        onOpen={() => props.conversation.onHistory(record)}
+                      />
+                    ))}
+                  </div>
+                </section>
+              </div>
+            </SheetViewport>
+          )}
         </Sheet>
         <Sheet
           opened={props.historyOpened}
