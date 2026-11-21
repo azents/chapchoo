@@ -222,6 +222,16 @@ impl Ingress {
                     .record_app_server_turn(&self.capture, raw, &root.target)?
             }
             "item/started" | "item/completed" | "item/agentMessage/delta" => {
+                if matches!(method, "item/started" | "item/completed")
+                    && let Some(turn) = frame["params"]["turnId"].as_str()
+                {
+                    self.observations.record_app_server_item(
+                        &root.target.native_session,
+                        turn,
+                        &frame["params"]["item"],
+                        method == "item/completed",
+                    )?;
+                }
                 self.observations.with_work(|turn| {
                     if turn.is_some() && frame["params"]["turnId"].as_str() == turn {
                         if method == "item/started" {

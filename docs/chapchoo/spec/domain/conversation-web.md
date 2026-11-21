@@ -405,15 +405,18 @@ still apply, and the native owner remains final authority over that work token.
 The desktop overflow and mobile character/status controls open the same
 **Activity** sheet, with its Agent link. Its **Model** row reflects the
 current scoped saved choice or the harness's observed initial model.
-The row opens a separate page in the sheet, with the selected option
-highlighted and an aligned trailing check. Back and Cancel discard the
-draft; a confirmed save returns to Activity with the new choice. A
+The row opens **Change model** in the same sheet. The selected candidate
+determines which reasoning levels and speeds are offered on that page. When
+available, the single-select speed list distinguishes Model default, Standard,
+Fast and Ultrafast. Changing models clears the draft tuning. One Save accepts
+the tuple; Back and Cancel discard it. A confirmed save returns to Activity. A
 conflicting save does not overwrite a newer choice,
 and an ambiguous response can be checked by its original request ID without
 repeating the mutation.
 
-The setting is for new conversation turns. The interface does not claim
-which model an individual turn used. A qualified failure before start can
+The setting is for new conversation turns. The interface distinguishes saved
+preferences from the model, effort or tier actually used for an individual
+turn. A qualified failure before start can
 offer **Change model** in the same conversation without preselecting an
 alternative; saving never resends the affected request.
 

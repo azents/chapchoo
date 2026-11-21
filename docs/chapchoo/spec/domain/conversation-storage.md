@@ -52,7 +52,8 @@ explicit applied fact without changing its work/source meaning.
 ## Conversation model preference
 
 The private owner under current Team admission can save one advertised model
-for an already prepared conversation. The server stores the selection against
+and its optional supported effort and speed for an already prepared
+conversation. The server stores the tuple against
 the retained native session and its verified applied connection. Initial model
 selection belongs to the harness. An exact restore can retain the explicit
 choice; a different session or applied binding does not inherit it. An
@@ -63,7 +64,7 @@ operation receipt can recover a lost response without repeating the write or
 overwriting a newer choice. Saving changes no native configuration or work.
 The owner transaction orders saves against one outstanding new-prompt
 submission reservation per conversation. The reservation binds the latest
-saved choice, if any, to the exact operation and native launch. Exact input
+saved tuple, if any, to the exact operation and native launch. Exact input
 insertion, proven non-publication, or exact physical retirement releases the
 ordering fence; none is a claim about which model executed. Unknown delivery
 remains unresolved and does not grant another attempt. Force Removal hides the
@@ -572,8 +573,8 @@ capture ordinal and within-event index order records, not lexical native IDs.
 Field omission preserves content, replacement clears or replaces it and append
 adds only the actual new content. Original raw events remain separately retained.
 
-The internal conversation service decodes native events through the public ACP v2
-schema and checks the DB-bound native session. It normalizes typed utterances,
+The internal conversation service decodes retained ACP v2 events and live App
+Server events and checks the DB-bound native session. It normalizes typed utterances,
 activity, formal content, foreground and request facts without inventing live
 response authority from history. Unsupported required requests retain an error,
 not a fabricated user refusal or browser consent URL. Credential protocol traffic
@@ -615,7 +616,7 @@ launch. A separate one-use native forwarding grant reads the current goal
 projection for that slot. Closing the exact slot relinquishes forwarding order,
 not a delivery receipt. A replacement launch does not inherit the slot even
 when it resumes the same source. Internal forwarding does not make a user Chat
-receipt; the native record retains the role observed on ACP.
+receipt; the native record retains the role reported by the harness.
 
 At forwarding, if no eligible goal remains or the complete retained context
 exceeds the bound, the ungranted slot closes without native forwarding. The

@@ -335,6 +335,32 @@ impl Observations {
         Ok(())
     }
 
+    /// Keep independent runtime effects out of the root foreground record.
+    pub(super) fn record_app_server_item(
+        &self,
+        root: &NativeConversationId,
+        turn: &str,
+        item: &serde_json::Value,
+        finished: bool,
+    ) -> Result<(), Error> {
+        let mut state = self.0.lock().map_err(|_| Error::Protocol)?;
+        if state
+            .source
+            .as_ref()
+            .is_none_or(|(_, source)| source != root)
+        {
+            return Err(Error::CaptureConflict);
+        }
+        let child_starts = item["type"] == "subAgentActivity"
+            && matches!(item["kind"].as_str(), Some("started" | "interacted"));
+        if (finished && !child_starts) || state.work.as_deref() == Some(turn) {
+            state
+                .activity
+                .app_server_item(root.as_str(), turn, item, finished);
+        }
+        Ok(())
+    }
+
     /// Bind a captured native turn to the same publication fence used by Stop
     /// and continuation. History and RPC replies do not enter this lane.
     pub(super) fn record_app_server_turn(
