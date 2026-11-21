@@ -9,6 +9,7 @@ use tokio_util::{
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
+mod live_flow;
 mod released;
 
 #[test]

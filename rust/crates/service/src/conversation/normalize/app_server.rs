@@ -46,7 +46,7 @@ pub(super) fn permission(
         message: Option<String>,
         #[serde(rename = "_meta")]
         meta: Option<Meta>,
-        requested_schema: Option<EmptyForm>,
+        requested_schema: Option<serde_json::Value>,
     }
     #[derive(Deserialize)]
     struct Meta {
@@ -68,6 +68,33 @@ pub(super) fn permission(
     let key = |value: &str| {
         !value.is_empty() && value.len() <= 256 && value.bytes().all(|byte| byte.is_ascii_graphic())
     };
+    if frame
+        .meta
+        .as_ref()
+        .is_none_or(|meta| meta.codex_approval_kind.is_none())
+        && frame.turn_id.as_deref().is_some_and(key)
+        && frame.server_name == "chapchoo"
+        && frame.mode == "form"
+        && let Some(message) = frame
+            .message
+            .as_ref()
+            .filter(|text| !text.is_empty() && text.len() <= 8192)
+        && let Some(schema) = frame.requested_schema.as_ref()
+        && let Ok(schema) = serde_json::from_value::<schema::ElicitationSchema>(schema.clone())
+        && !schema.properties.is_empty()
+        && validate_form(&schema).is_ok()
+    {
+        let form = schema::ElicitationFormMode::new(
+            schema::ElicitationSessionScope::new(native.as_str()),
+            schema,
+        );
+        let request = schema::CreateElicitationRequest::new(form, message);
+        return Ok(record(
+            Kind::Request,
+            position.occurrence().as_str(),
+            vec![replace(Field::Request, &request)?],
+        ));
+    }
     let tool = frame
         .meta
         .filter(|meta| meta.codex_approval_kind.as_deref() == Some("mcp_tool_call"))
@@ -79,6 +106,7 @@ pub(super) fn permission(
         && frame.mode == "form"
         && frame
             .requested_schema
+            .and_then(|schema| serde_json::from_value::<EmptyForm>(schema).ok())
             .is_some_and(|f| f.kind == "object" && f.properties.is_empty())
     {
         let question = schema::RequestPermissionRequest::new(

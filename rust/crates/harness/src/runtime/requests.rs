@@ -25,6 +25,16 @@ pub(super) fn supported_permission(request: &schema::RequestPermissionRequest) -
             .all(|option| options.insert(option.option_id.to_string()))
 }
 
+pub(super) fn form_response(
+    request: &schema::CreateElicitationRequest,
+    response: &schema::CreateElicitationResponse,
+) -> bool {
+    match &request.mode {
+        schema::ElicitationMode::Form(form) => forms::response(form, response),
+        _ => false,
+    }
+}
+
 #[cfg(test)]
 pub(super) async fn respond(
     requests: &Requests,

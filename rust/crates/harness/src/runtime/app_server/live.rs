@@ -1,5 +1,5 @@
 //! Exact, execution-local App Server ingress and operations.
-use super::{Thread, call, events, initialize, model_catalog, tools, wire};
+use super::{Thread, call, events, forms, initialize, model_catalog, tools, wire};
 use crate::{CaptureLog, NativeMcpDeclaration, ProtocolStage, runtime::*};
 use serde_json::{Value, json};
 use std::{
@@ -13,7 +13,28 @@ struct Ingress {
     capture: CaptureLog,
     observations: Arc<Observations>,
     root: OnceLock<Root>,
-    approvals: SyncMutex<BTreeMap<String, tools::Approval>>,
+    requests: SyncMutex<BTreeMap<String, LiveRequest>>,
+}
+
+struct LiveRequest {
+    turn: String,
+    position: chapchoo_domain::SourcePosition,
+    kind: RequestKind,
+}
+
+enum RequestKind {
+    Permission(tools::Approval),
+    Form(forms::Form),
+}
+
+impl LiveRequest {
+    fn current(&self, turn: Option<&str>) -> bool {
+        Some(self.turn.as_str()) == turn
+            && match &self.kind {
+                RequestKind::Permission(approval) => !approval.cancelled(),
+                RequestKind::Form(form) => !form.cancelled(),
+            }
+    }
 }
 
 struct Root {
@@ -44,7 +65,7 @@ impl Connection {
             capture,
             observations,
             root: OnceLock::new(),
-            approvals: SyncMutex::default(),
+            requests: SyncMutex::default(),
         });
         let receive = ingress.clone();
         let (client, driver) = wire::connect_with_requests(read, write, done, move |raw, frame| {
@@ -149,15 +170,42 @@ impl Ingress {
         if method == "mcpServer/elicitation/request" && frame.get("id").is_some() {
             return self.observations.with_work(|turn| {
                 let Some(turn) = turn else { return Ok(None) };
-                let Some(details) = tools::Approval::decode(&root.target, turn, &frame) else {
-                    return Ok(None);
+                let approval = tools::Approval::decode(&root.target, turn, &frame);
+                let form = if approval.is_none() {
+                    forms::Form::offer(
+                        root.target.native_session.as_str(),
+                        turn,
+                        frame["params"].clone(),
+                    )
+                } else {
+                    None
                 };
-                let mut pending = self.approvals.lock().map_err(|_| Error::Protocol)?;
-                pending.retain(|_, request| request.turn() == turn && !request.cancelled());
+                if approval.is_none() && form.is_none() {
+                    return Ok(None);
+                }
+                let mut pending = self.requests.lock().map_err(|_| Error::Protocol)?;
+                pending.retain(|_, request| request.current(Some(turn)));
                 let position = self.capture.append(raw, None)?;
-                let (approval, reply) =
-                    tools::Approval::prepare(root.target.clone(), position, turn, details);
-                pending.insert(observations::token("request")?, approval);
+                let (kind, reply) = if let Some(details) = approval {
+                    let (approval, reply) = tools::Approval::prepare(
+                        root.target.clone(),
+                        position.clone(),
+                        turn,
+                        details,
+                    );
+                    (RequestKind::Permission(approval), reply)
+                } else {
+                    let (form, reply) = form.ok_or(Error::Protocol)?;
+                    (RequestKind::Form(form), reply)
+                };
+                pending.insert(
+                    observations::token("request")?,
+                    LiveRequest {
+                        turn: turn.to_owned(),
+                        position,
+                        kind,
+                    },
+                );
                 self.observations.changed();
                 Ok(Some(reply))
             });
@@ -267,14 +315,21 @@ impl LiveThread {
     pub(in crate::runtime) fn pending(&self) -> Result<Vec<InteractiveRequest>, Error> {
         let ingress = &self.connection.ingress;
         ingress.observations.with_work(|turn| {
-            let mut approvals = ingress.approvals.lock().map_err(|_| Error::Protocol)?;
-            approvals.retain(|_, request| Some(request.turn()) == turn && !request.cancelled());
-            Ok(approvals
+            let mut requests = ingress.requests.lock().map_err(|_| Error::Protocol)?;
+            requests.retain(|_, request| request.current(turn));
+            Ok(requests
                 .iter()
-                .map(|(id, request)| InteractiveRequest::Permission {
-                    id: id.clone(),
-                    occurrence: request.position().clone(),
-                    request: request.question(self.id()),
+                .map(|(id, request)| match &request.kind {
+                    RequestKind::Permission(approval) => InteractiveRequest::Permission {
+                        id: id.clone(),
+                        occurrence: request.position.clone(),
+                        request: approval.question(self.id()),
+                    },
+                    RequestKind::Form(form) => InteractiveRequest::Form {
+                        id: id.clone(),
+                        occurrence: request.position.clone(),
+                        request: form.request.clone(),
+                    },
                 })
                 .collect())
         })
@@ -285,36 +340,57 @@ impl LiveThread {
         response: InteractiveResponse,
         exact: Option<&chapchoo_domain::SourcePosition>,
     ) -> Result<(), Error> {
-        let InteractiveResponse::Permission { id, response } = response else {
-            return Err(Error::NotAdmitted);
-        };
-        let choice = match response.outcome {
-            schema::RequestPermissionOutcome::Selected(selected) => {
-                match selected.option_id.0.as_ref() {
-                    "approve-once" => tools::Choice::ApproveOnce,
-                    "decline" => tools::Choice::Decline,
-                    _ => return Err(Error::NotAdmitted),
-                }
+        let id = match &response {
+            InteractiveResponse::Permission { id, .. } | InteractiveResponse::Form { id, .. } => {
+                id.clone()
             }
-            schema::RequestPermissionOutcome::Cancelled(_) => tools::Choice::Decline,
-            _ => return Err(Error::NotAdmitted),
         };
         let ingress = &self.connection.ingress;
         let root = ingress.root.get().ok_or(Error::NotAdmitted)?;
         ingress.observations.with_work(|turn| {
-            let mut approvals = ingress.approvals.lock().map_err(|_| Error::Protocol)?;
-            let request = approvals.get_mut(&id).ok_or(Error::NotAdmitted)?;
-            if request.cancelled() || exact.is_some_and(|position| position != request.position()) {
+            let mut requests = ingress.requests.lock().map_err(|_| Error::Protocol)?;
+            let request = requests.get_mut(&id).ok_or(Error::NotAdmitted)?;
+            if !request.current(turn) || exact.is_some_and(|position| *position != request.position)
+            {
                 return Err(Error::NotAdmitted);
             }
-            let position = request.position().clone();
-            request.answer(
-                &root.target,
-                &position,
-                turn.ok_or(Error::NotAdmitted)?,
-                choice,
-            )?;
-            approvals.remove(&id);
+            match (&mut request.kind, response) {
+                (
+                    RequestKind::Permission(approval),
+                    InteractiveResponse::Permission { response, .. },
+                ) => {
+                    let choice = match response.outcome {
+                        schema::RequestPermissionOutcome::Selected(selected) => {
+                            match selected.option_id.0.as_ref() {
+                                "approve-once" => tools::Choice::ApproveOnce,
+                                "decline" => tools::Choice::Decline,
+                                _ => return Err(Error::NotAdmitted),
+                            }
+                        }
+                        schema::RequestPermissionOutcome::Cancelled(_) => tools::Choice::Decline,
+                        _ => return Err(Error::NotAdmitted),
+                    };
+                    approval.answer(
+                        &root.target,
+                        &request.position,
+                        turn.ok_or(Error::NotAdmitted)?,
+                        choice,
+                    )?;
+                    requests.remove(&id);
+                }
+                (RequestKind::Form(form), InteractiveResponse::Form { response, .. }) => {
+                    let reply = form.prepare_reply(response)?;
+                    let Some(LiveRequest {
+                        kind: RequestKind::Form(form),
+                        ..
+                    }) = requests.remove(&id)
+                    else {
+                        return Err(Error::Protocol);
+                    };
+                    form.answer(reply)?;
+                }
+                _ => return Err(Error::NotAdmitted),
+            }
             Ok(())
         })
     }

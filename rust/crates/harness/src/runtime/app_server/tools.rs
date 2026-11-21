@@ -200,14 +200,6 @@ impl Approval {
             .is_none_or(oneshot::Sender::is_closed)
     }
 
-    pub(super) fn position(&self) -> &SourcePosition {
-        &self.position
-    }
-
-    pub(super) fn turn(&self) -> &str {
-        &self.turn
-    }
-
     pub(super) fn question(&self, root: &str) -> schema::RequestPermissionRequest {
         schema::RequestPermissionRequest::new(
             root,

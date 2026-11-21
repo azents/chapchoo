@@ -239,6 +239,34 @@ fn app_server_approval_projects_only_occurrence_scoped_one_time_choices() -> Res
 }
 
 #[test]
+fn app_server_form_projects_typed_fields_without_extension_metadata() -> Result<(), TestError> {
+    let raw = serde_json::to_vec(
+        &json!({"id":17,"method":"mcpServer/elicitation/request","params":{
+            "threadId":"native","turnId":"turn","serverName":"chapchoo","mode":"form","message":"Enable fixture?",
+            "requestedSchema":{"type":"object","properties":{"enabled":{"type":"boolean"}},"required":["enabled"]},
+            "_meta":{"fixture":"not part of the question"}
+        }}),
+    )?;
+    let result = normalized(&raw)?;
+    assert_eq!(result.pair.raw, raw);
+    let request: schema::CreateElicitationRequest =
+        serde_json::from_slice(bytes(&result.records[0].fields[0].change))?;
+    assert_eq!(request.message, "Enable fixture?");
+    assert!(request.meta.is_none());
+    let schema::ElicitationMode::Form(form) = request.mode else {
+        return Err("Expected a form".into());
+    };
+    assert!(
+        matches!(form.scope, schema::ElicitationScope::Session(scope) if scope.session_id.to_string() == "native")
+    );
+    assert!(matches!(
+        form.requested_schema.properties.get("enabled"),
+        Some(schema::ElicitationPropertySchema::Boolean(_))
+    ));
+    Ok(())
+}
+
+#[test]
 fn app_server_turn_capture_preserves_raw_identity_and_projects_foreground() -> Result<(), TestError>
 {
     for (method, status, state) in [
