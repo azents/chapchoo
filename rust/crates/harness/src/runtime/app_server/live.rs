@@ -228,6 +228,15 @@ impl Ingress {
             });
         }
         match method {
+            "error" if frame["params"]["willRetry"] == false => {
+                if let Some(turn) = frame["params"]["turnId"]
+                    .as_str()
+                    .filter(|id| super::valid_key(id))
+                {
+                    self.observations
+                        .review_failed_to_start(&self.capture, turn, raw)?;
+                }
+            }
             "serverRequest/resolved" => {
                 let rpc_id = wire::request_id(&frame["params"]["requestId"])?;
                 let mut pending = self.requests.lock().map_err(|_| Error::Protocol)?;
@@ -252,6 +261,28 @@ impl Ingress {
                     .record_app_server_turn(&self.capture, raw, &root.target)?
             }
             "item/started" | "item/completed" | "item/agentMessage/delta" => {
+                if method == "item/started"
+                    && frame["params"]["item"]["type"] == "enteredReviewMode"
+                {
+                    if let Some(turn) = frame["params"]["turnId"]
+                        .as_str()
+                        .filter(|id| super::valid_key(id))
+                        && frame["params"]["item"]["id"]
+                            .as_str()
+                            .is_some_and(super::valid_key)
+                    {
+                        self.observations.review_started(&self.capture, raw, turn)?;
+                    }
+                    return Ok(None);
+                }
+                if frame["params"]["item"]["type"] == "userMessage"
+                    && let Some(turn) = frame["params"]["turnId"].as_str()
+                    && self.observations.is_review_turn(turn)?
+                {
+                    // The review task creates an internal prompt of its own.
+                    // No user message is published by the product in this lane.
+                    return Ok(None);
+                }
                 if matches!(method, "item/started" | "item/completed")
                     && let Some(turn) = frame["params"]["turnId"].as_str()
                 {
@@ -380,21 +411,61 @@ impl LiveThread {
         })
     }
 
-    pub(in crate::runtime) fn enqueue_compact(
+    pub(in crate::runtime) fn enqueue_command(
         &self,
-        occurrence: String,
+        command: super::commands::Command<'_>,
+        occurrence: Option<String>,
     ) -> Result<impl Future<Output = Result<NativePromptAcceptance, Error>> + use<>, Error> {
-        let observations = self.connection.ingress.observations.clone();
-        let response = self.connection.client.enqueue_observed(
-            "thread/compact/start",
-            json!({"threadId": self.id.as_str()}),
-            Some(Box::new(move || {
-                observations.reject_compaction(&occurrence)
-            })),
-        )?;
+        use super::commands::Command;
+        let root = self.id.as_str().to_owned();
+        let (method, params) = match command {
+            Command::Compact => ("thread/compact/start", json!({"threadId":root})),
+            Command::Review(target) => (
+                "review/start",
+                json!({"threadId":root,"delivery":"inline","target":target}),
+            ),
+            Command::Rename(name) => ("thread/name/set", json!({"threadId":root,"name":name})),
+            Command::Invalid => return Err(Error::NotAdmitted),
+        };
+        let observer: Option<wire::ObserveReply> = if let Some(occurrence) = occurrence {
+            let observations = self.connection.ingress.observations.clone();
+            let capture = self.connection.ingress.capture.clone();
+            let expected_root = root.clone();
+            Some(Box::new(move |reply| match reply {
+                Err(_) => observations.reject_turn_command(&occurrence),
+                Ok(reply)
+                    if method == "review/start" && reply["reviewThreadId"] == expected_root =>
+                {
+                    if let Some(turn) = reply["turn"]["id"]
+                        .as_str()
+                        .filter(|id| super::valid_key(id))
+                    {
+                        observations.review_accepted(&capture, &occurrence, turn)?;
+                    }
+                    Ok(())
+                }
+                Ok(_) => Ok(()),
+            }))
+        } else {
+            None
+        };
+        let response = self
+            .connection
+            .client
+            .enqueue_observed(method, params, observer)?;
         Ok(async move {
             match response.receive().await {
-                Ok(value) if value == json!({}) => Ok(NativePromptAcceptance::CommandAccepted),
+                Ok(value)
+                    if match method {
+                        "review/start" => {
+                            value["reviewThreadId"] == root
+                                && value["turn"]["id"].as_str().is_some_and(super::valid_key)
+                        }
+                        _ => value == json!({}),
+                    } =>
+                {
+                    Ok(NativePromptAcceptance::CommandAccepted)
+                }
                 Err(wire::CallFailure::Rejected(_)) => Ok(NativePromptAcceptance::Failed),
                 _ => Err(Error::DeliveryUncertain),
             }
@@ -410,7 +481,7 @@ impl LiveThread {
         let ingress = &self.connection.ingress;
         if let Ok(Some(receipt)) = ingress
             .observations
-            .with_work(|turn| turn.map(|turn| self.thread().interrupt(turn)).transpose())
+            .with_interrupt_target(|turn| self.thread().interrupt(turn))
         {
             let _ = tokio::time::timeout(Duration::from_secs(2), receipt.receive()).await;
         }

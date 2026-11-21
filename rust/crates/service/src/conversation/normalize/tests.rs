@@ -225,6 +225,32 @@ fn cross_session_and_credential_traffic_do_not_become_normalized_history() -> Re
     Ok(())
 }
 #[test]
+fn app_server_review_preflight_failure_keeps_raw_and_shows_safe_notice() -> Result<(), TestError> {
+    let raw = serde_json::to_vec(&json!({"method":"error","params":{
+        "threadId":"native","turnId":"review-turn","willRetry":false,
+        "error":{"message":"Fixture private details"}
+    }}))?;
+    let result = normalized(&raw)?;
+    assert_eq!(result.pair.raw, raw);
+    assert_eq!(result.records[0].kind, Kind::Notice);
+    assert_eq!(result.records[0].native_id, "occurrence");
+    assert!(!String::from_utf8(result.pair.normalized)?.contains("Fixture private details"));
+    Ok(())
+}
+
+#[test]
+fn app_server_preserves_review_marker_without_duplicating_assistant_output() -> Result<(), TestError>
+{
+    let raw = serde_json::to_vec(&json!({"method":"item/completed","params":{
+        "threadId":"native","turnId":"review-turn","item":{"id":"result","type":"exitedReviewMode","review":"Reviewed fixture."}
+    }}))?;
+    let result = normalized(&raw)?;
+    assert_eq!(result.pair.raw, raw);
+    assert!(result.records.is_empty());
+    Ok(())
+}
+
+#[test]
 fn app_server_file_change_activity_preserves_the_paths_and_changes_before_approval()
 -> Result<(), TestError> {
     let changes = json!([{

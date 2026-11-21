@@ -77,25 +77,32 @@ impl Drop for BeforePublish<'_> {
 
 /// Match only the vetted adapter's built-in command tokens. Slash-prefixed
 /// paths and other ordinary text still go through the governed start.
-fn command_token(text: &str) -> Option<&str> {
+fn command_parts(text: &str) -> Option<(&str, &str)> {
     // The pinned adapter uses ECMAScript trim and /\s+/, which include
     // the BOM and exclude NEL (unlike Rust's Unicode whitespace).
     let whitespace = |c: char| (c.is_whitespace() && c != '\u{85}') || c == '\u{feff}';
-    let command = text.trim_matches(whitespace).strip_prefix('/')?;
-    command
+    let command = text
         .trim_matches(whitespace)
+        .strip_prefix('/')?
+        .trim_matches(whitespace);
+    let name = command
         .split(whitespace)
         .next()
-        .filter(|name| !name.is_empty())
+        .filter(|name| !name.is_empty())?;
+    Some((name, command.get(name.len()..)?.trim_matches(whitespace)))
 }
 
-pub(super) fn is_app_server_compact(session: &Session, text: &str) -> bool {
-    matches!(session, Session::AppServer(_))
-        && command_token(text).is_some_and(|name| name.eq_ignore_ascii_case("compact"))
+fn app_server_command(text: &str) -> Option<super::app_server::commands::Command<'_>> {
+    let (name, rest) = command_parts(text)?;
+    super::app_server::commands::Command::parse(name, rest)
+}
+
+pub(super) fn is_dispatched_command(session: &Session, text: &str) -> bool {
+    matches!(session, Session::AppServer(_)) && app_server_command(text).is_some()
 }
 
 fn native_command(text: &str) -> bool {
-    command_token(text).is_some_and(|name| {
+    command_parts(text).is_some_and(|(name, _)| {
         matches!(
             name.to_lowercase().as_str(),
             "plan"
@@ -124,9 +131,21 @@ pub(super) async fn prompt(
     let observations = &live.observations;
     if let Session::AppServer(thread) = session
         && matches!(kind, PromptKind::Ordinary { .. })
-        && is_app_server_compact(session, text.as_str())
+        && let Some(command) = app_server_command(text.as_str())
     {
-        let publish = || observations.publish_compaction(&kind, |id| thread.enqueue_compact(id));
+        if matches!(command, super::app_server::commands::Command::Invalid) {
+            return Ok(NativePromptAcceptance::Failed);
+        }
+        let publish = || {
+            if command.starts_turn() {
+                let review = matches!(command, super::app_server::commands::Command::Review(_));
+                observations.publish_turn_command(&kind, review, |id| {
+                    thread.enqueue_command(command, Some(id))
+                })
+            } else {
+                observations.with_model_idle(&kind, || thread.enqueue_command(command, None))?
+            }
+        };
         let pending = match dispatch {
             Some(dispatch) => dispatch.route.publish(publish)?,
             None => publish()?,
@@ -394,5 +413,41 @@ mod tests {
         ] {
             assert!(!native_command(input), "{input:?}");
         }
+    }
+
+    #[test]
+    fn inline_review_and_rename_preserve_typed_arguments() -> Result<(), Box<dyn std::error::Error>>
+    {
+        use super::super::app_server::commands::Command;
+        for (text, target) in [
+            ("/review", serde_json::json!({"type":"uncommittedChanges"})),
+            (
+                "/review Inspect the API surface",
+                serde_json::json!({"type":"custom","instructions":"Inspect the API surface"}),
+            ),
+            (
+                " /REVIEW-BRANCH release/v3 ",
+                serde_json::json!({"type":"baseBranch","branch":"release/v3"}),
+            ),
+            (
+                "/review-commit aabbcc",
+                serde_json::json!({"type":"commit","sha":"aabbcc"}),
+            ),
+        ] {
+            let Some(Command::Review(parsed)) = app_server_command(text) else {
+                return Err("No review target".into());
+            };
+            assert_eq!(serde_json::to_value(parsed)?, target);
+        }
+        assert!(matches!(
+            app_server_command("/rename A new title"),
+            Some(Command::Rename("A new title"))
+        ));
+        assert!(matches!(
+            app_server_command("/review-branch"),
+            Some(Command::Invalid)
+        ));
+        assert!(app_server_command("/workspace/review").is_none());
+        Ok(())
     }
 }

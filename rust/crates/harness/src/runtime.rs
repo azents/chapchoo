@@ -859,7 +859,7 @@ impl State {
             return Ok(previous);
         }
         let outcome = match tokio::time::timeout(Duration::from_secs(10), async {
-            if !model_selection::is_app_server_compact(session, operation.text.as_str())
+            if !model_selection::is_dispatched_command(session, operation.text.as_str())
                 && let Some(accepted) = session
                     .steer(&operation.text, models.map(|model| &model.route))
                     .await?
@@ -933,11 +933,11 @@ impl State {
         if self.blocked || live.protocol.is_finished() {
             return Err(Error::NotAdmitted);
         }
-        live.observations.publish_stop(target, || {
+        live.observations.publish_stop_at(target, |native_turn| {
             live.session
                 .as_ref()
                 .ok_or(Error::NotAdmitted)?
-                .stop(target)
+                .stop(native_turn)
         })
     }
     fn normal_ending(&self) -> Result<Option<NativeNormalEnding>, Error> {

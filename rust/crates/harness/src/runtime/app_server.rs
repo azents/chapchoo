@@ -1,4 +1,5 @@
 //! Versioned operations for the official Codex App Server.
+pub(super) mod commands;
 pub(super) mod events;
 mod forms;
 mod live;

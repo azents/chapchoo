@@ -33,11 +33,11 @@ struct Outbound {
     reply: Option<(u64, PendingReply)>,
 }
 
-type ObserveRejection = Box<dyn FnOnce() -> Result<(), Error> + Send>;
+pub(super) type ObserveReply = Box<dyn FnOnce(&Result<Value, i32>) -> Result<(), Error> + Send>;
 
 struct PendingReply {
     answer: oneshot::Sender<Result<Value, i32>>,
-    rejection: Option<ObserveRejection>,
+    observe: Option<ObserveReply>,
 }
 
 #[derive(Debug, Eq, PartialEq, thiserror::Error)]
@@ -95,12 +95,12 @@ impl Client {
         self.enqueue_observed(method, params, None)
     }
 
-    /// Retain exact rejection handling in the ordered driver even if the waiter expires.
+    /// Keep observing exact replies in wire order after the waiter expires.
     pub(super) fn enqueue_observed(
         &self,
         method: &str,
         params: impl Serialize,
-        rejection: Option<ObserveRejection>,
+        observe: Option<ObserveReply>,
     ) -> Result<Reply, Error> {
         #[derive(Serialize)]
         struct Request<'a, P> {
@@ -115,7 +115,7 @@ impl Client {
         let (send, receive) = oneshot::channel();
         let pending = PendingReply {
             answer: send,
-            rejection,
+            observe,
         };
         self.publish(Request { id, method, params }, Some((id, pending)))?;
         Ok(Reply(receive))
@@ -273,8 +273,8 @@ async fn drive(
                         _ => return Err(Error::Protocol),
                     };
                     let reply = pending.remove(&id).ok_or(Error::Protocol)?;
-                    if result.is_err() && let Some(reject) = reply.rejection {
-                        reject()?;
+                    if let Some(observe) = reply.observe {
+                        observe(&result)?;
                     }
                     let _ = reply.answer.send(result);
                 }
