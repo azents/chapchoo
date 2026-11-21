@@ -9,7 +9,7 @@ use super::valid_key;
 use crate::Error;
 
 #[derive(Debug, PartialEq, Eq)]
-pub(super) enum Observation<'a> {
+pub(in crate::runtime) enum Observation<'a> {
     Started {
         turn: &'a str,
     },
@@ -24,7 +24,7 @@ pub(super) enum Observation<'a> {
     },
 }
 
-pub(super) fn root_observation<'a>(
+pub(in crate::runtime) fn root_observation<'a>(
     root: &NativeConversationId,
     frame: &'a Value,
 ) -> Result<Option<Observation<'a>>, Error> {
@@ -42,9 +42,10 @@ pub(super) fn root_observation<'a>(
         return Ok(None);
     }
     let observation = match method {
-        "turn/started" => Observation::Started {
+        "turn/started" if params["turn"]["status"] == "inProgress" => Observation::Started {
             turn: required_key(&params["turn"]["id"])?,
         },
+        "turn/started" => return Err(Error::Protocol),
         "turn/completed" => {
             let normal = match params["turn"]["status"].as_str() {
                 Some("completed") => true,

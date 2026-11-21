@@ -239,6 +239,36 @@ fn app_server_approval_projects_only_occurrence_scoped_one_time_choices() -> Res
 }
 
 #[test]
+fn app_server_turn_capture_preserves_raw_identity_and_projects_foreground() -> Result<(), TestError>
+{
+    for (method, status, state) in [
+        ("turn/started", "inProgress", "running"),
+        ("turn/completed", "completed", "idle"),
+        ("turn/completed", "failed", "idle"),
+        ("turn/completed", "interrupted", "idle"),
+    ] {
+        let raw = serde_json::to_vec(&json!({
+            "method":method,"params":{"threadId":"native","turn":{"id":"turn","status":status}}
+        }))?;
+        let captured = normalized(&raw)?;
+        assert_eq!(captured.pair.raw, raw);
+        let record = &captured.records[0];
+        assert_eq!(record.kind, Kind::State);
+        assert_eq!(record.native_id, "native");
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(bytes(&record.fields[0].change))?,
+            json!({"state":state}),
+        );
+    }
+    let synthetic_reply = br#"{"id":1,"method":"turn/completed","params":{"threadId":"native","turn":{"id":"turn","status":"completed"}}}"#;
+    assert!(matches!(
+        normalized(synthetic_reply),
+        Err(NativeNormalizationError::InvalidEvent)
+    ));
+    Ok(())
+}
+
+#[test]
 fn original_permissions_use_occurrence_identity_not_reusable_rpc_id() -> Result<(), TestError> {
     let request = json!({"id":1,"method":"session/request_permission","params":{"sessionId":"native","title":"Choose","options":[{"optionId":"allow","name":"Allow once","kind":"allow_once"},{"optionId":"reject","name":"Reject once","kind":"reject_once"}]}});
     let result = normalized(&serde_json::to_vec(&request)?)?;

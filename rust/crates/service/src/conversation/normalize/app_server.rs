@@ -118,6 +118,49 @@ pub(super) fn permission(
     ))
 }
 
+/// Keep a single foreground state record for both old and new capture lanes.
+/// A native completed event is not automatically a successful continuation.
+pub(super) fn turn(
+    method: &str,
+    raw: &str,
+    native: &NativeConversationId,
+) -> Result<Record, NativeNormalizationError> {
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Frame {
+        thread_id: String,
+        turn: Turn,
+    }
+    #[derive(Deserialize)]
+    struct Turn {
+        id: String,
+        status: String,
+    }
+    let frame: Frame =
+        serde_json::from_str(raw).map_err(|_| NativeNormalizationError::InvalidEvent)?;
+    if frame.thread_id != native.as_str() {
+        return Err(NativeNormalizationError::WrongSession);
+    }
+    if frame.turn.id.is_empty()
+        || frame.turn.id.len() > 128
+        || !frame.turn.id.bytes().all(|byte| byte.is_ascii_graphic())
+    {
+        return Err(NativeNormalizationError::InvalidEvent);
+    }
+    let state = match (method, frame.turn.status.as_str()) {
+        ("turn/started", "inProgress") => serde_json::json!({"state": "running"}),
+        ("turn/completed", "completed" | "failed" | "interrupted") => {
+            serde_json::json!({"state": "idle"})
+        }
+        _ => return Err(NativeNormalizationError::InvalidEvent),
+    };
+    Ok(record(
+        Kind::State,
+        native.as_str(),
+        vec![replace(Field::Foreground, &state)?],
+    ))
+}
+
 pub(super) fn message(
     method: &str,
     raw: &str,

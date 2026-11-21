@@ -1,6 +1,7 @@
 //! Opt-in qualification against a disposable, loopback-only Codex fixture.
 //! The fixture prepares the previous thread and closes its native process.
 use super::*;
+use crate::runtime::observations::Observations;
 use crate::{CaptureLog, NativeStorage, runtime::NativeTextTarget};
 use std::{path::PathBuf, process::Stdio};
 use tokio::{process::Command, sync::mpsc};
@@ -65,31 +66,29 @@ async fn released_resume_preserves_capture_and_answers_scoped_tool_approval() ->
         let live_insertions = insertions.clone();
         let live_log = captured.clone();
         let live_target = target.clone();
-        let mut active_turn = None::<String>;
+        let observations = Arc::new(Observations::default());
+        observations.bind(snapshot.clone(), id.clone(), false)?;
+        let live_observations = observations.clone();
         let (client, driver) = wire::connect_with_requests(
             child.stdout.take().ok_or("Missing stdout")?,
             child.stdin.take().ok_or("Missing stdin")?,
             done.clone(),
             move |raw, frame| {
                 live_insertions.observe(&frame)?;
-                match events::root_observation(&live_target.native_session, &frame)? {
-                    Some(events::Observation::Started { turn }) => active_turn = Some(turn.to_owned()),
-                    Some(events::Observation::Terminal { turn, normal })
-                        if active_turn.as_deref() == Some(turn) =>
-                    {
-                        tx.try_send(Seen::Terminal(turn.to_owned(), normal)).map_err(|_| Error::Protocol)?;
-                        active_turn = None;
-                    }
-                    _ => {}
+                live_observations.record_app_server_turn(&live_log, raw, &live_target)?;
+                if let Some(events::Observation::Terminal { turn, normal }) =
+                    events::root_observation(&live_target.native_session, &frame)?
+                {
+                    tx.try_send(Seen::Terminal(turn.to_owned(), normal)).map_err(|_| Error::Protocol)?;
                 }
                 if frame["params"]["threadId"] != live_target.native_session.as_str() {
                     return Ok(None);
                 }
                 match frame["method"].as_str() {
                     Some("mcpServer/elicitation/request") => {
-                        let turn = active_turn.as_deref().ok_or(Error::NotAdmitted)?;
+                        let work = live_observations.current()?.work.ok_or(Error::NotAdmitted)?;
                         let position = live_log.append(raw, None)?;
-                        let (approval, reply) = tools::Approval::offer(live_target.clone(), position.clone(), turn, frame)?
+                        let (approval, reply) = tools::Approval::offer(live_target.clone(), position.clone(), &work.work_id, frame)?
                             .ok_or(Error::NotAdmitted)?;
                         tx.try_send(Seen::Approval(approval, position)).map_err(|_| Error::Protocol)?;
                         Ok(Some(reply))
@@ -114,6 +113,7 @@ async fn released_resume_preserves_capture_and_answers_scoped_tool_approval() ->
         assert!(status["data"].as_array().is_some_and(|servers| servers.iter().any(|server| {
             server["name"] == "chapchoo" && server["tools"].get("echo").is_some()
         })), "The scoped echo tool must be discoverable before submission");
+        observations.enable_normal_endings()?;
         let text = ConversationText::parse("Approve the local fixture tool.".into())?;
         let inserted = thread.submit(&insertions, &text, Some("default"))?.await?;
         let (mut approval, position) = match rx.recv().await {
@@ -131,6 +131,9 @@ async fn released_resume_preserves_capture_and_answers_scoped_tool_approval() ->
         };
         assert!(normal);
         assert_eq!(turn, inserted.turn);
+        let ending = observations.normal_ending()?.ok_or("No source-qualified ending")?;
+        assert_eq!(ending.work.work_id, inserted.turn);
+        assert_eq!(ending.work.snapshot, snapshot);
         let mut pass = captured.begin(&snapshot, None)?;
         let original = pass.next_event()?.ok_or("No historical capture")?;
         assert_eq!(original.raw, prefix);

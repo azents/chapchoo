@@ -125,6 +125,9 @@ pub fn normalize_captured_event(
         method @ ("item/completed" | "item/agentMessage/delta") => {
             records.extend(app_server::message(method, envelope.params.get(), native)?);
         }
+        method @ ("turn/started" | "turn/completed") if envelope.id.is_none() => {
+            records.push(app_server::turn(method, envelope.params.get(), native)?);
+        }
         "mcpServer/elicitation/request" if envelope.id.is_some() => {
             records.push(app_server::permission(
                 envelope.params.get(),

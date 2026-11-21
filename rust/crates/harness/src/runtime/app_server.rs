@@ -1,5 +1,5 @@
 //! Versioned operations for the official Codex App Server.
-mod events;
+pub(super) mod events;
 mod tools;
 mod wire;
 

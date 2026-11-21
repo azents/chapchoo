@@ -57,6 +57,8 @@ struct Observed {
     observed_session: Option<NativeConversationId>,
     foreground: Option<NativeForeground>,
     work: Option<String>,
+    #[cfg(test)]
+    last_app_server_turn: Option<String>,
     ending_evidence_enabled: bool,
     live_running: bool,
     stop_published: bool,
@@ -285,6 +287,16 @@ impl Observations {
             schema::StateUpdate::RequiresAction(_) => NativeForeground::RequiresAction,
             _ => NativeForeground::OtherActive,
         };
+        Self::transition(state, foreground, position, live, normal)
+    }
+
+    fn transition(
+        state: &mut Observed,
+        foreground: NativeForeground,
+        position: Option<SourcePosition>,
+        live: bool,
+        normal: bool,
+    ) -> Result<(), Error> {
         if foreground == NativeForeground::Idle {
             if live
                 && state.ending_evidence_enabled
@@ -321,6 +333,69 @@ impl Observations {
         }
         state.foreground = Some(foreground);
         state.position = position;
+        Ok(())
+    }
+
+    /// Bind a captured native turn to the same publication fence used by Stop
+    /// and continuation. History and RPC replies do not enter this lane.
+    #[cfg(test)]
+    pub(super) fn record_app_server_turn(
+        &self,
+        capture: &crate::CaptureLog,
+        raw: &str,
+        target: &NativeTextTarget,
+    ) -> Result<(), Error> {
+        use super::app_server::events::{Observation, root_observation};
+
+        let frame = serde_json::from_str(raw).map_err(|_| Error::Protocol)?;
+        let (turn, terminal) = match root_observation(&target.native_session, &frame)? {
+            Some(Observation::Started { turn }) => (turn, None),
+            Some(Observation::Terminal { turn, normal }) => (turn, Some(normal)),
+            _ => return Ok(()),
+        };
+        let mut state = self.0.lock().map_err(|_| Error::Protocol)?;
+        if state.source.as_ref().is_none_or(|(snapshot, session)| {
+            snapshot != &target.snapshot || session != &target.native_session
+        }) || capture.snapshot()? != target.snapshot
+            || capture.native_session()?.as_ref() != Some(&target.native_session)
+        {
+            return Err(Error::CaptureConflict);
+        }
+        if turn.is_empty() || turn.len() > 128 || !turn.bytes().all(|b| b.is_ascii_graphic()) {
+            return Err(Error::Protocol);
+        }
+        match terminal {
+            Some(normal) if state.work.as_deref() == Some(turn) => {
+                let position = capture.append(raw, None)?;
+                Self::transition(
+                    &mut state,
+                    NativeForeground::Idle,
+                    Some(position),
+                    true,
+                    normal,
+                )?;
+                state.last_app_server_turn = Some(turn.to_owned());
+            }
+            Some(_) => return Ok(()),
+            None if state.work.as_deref() == Some(turn)
+                || state.last_app_server_turn.as_deref() == Some(turn) =>
+            {
+                return Ok(());
+            }
+            None if state.work.is_some() => return Err(Error::Protocol),
+            None => {
+                let position = capture.append(raw, None)?;
+                state.work = Some(turn.to_owned());
+                state.normal_ending = None;
+                Self::transition(
+                    &mut state,
+                    NativeForeground::Running,
+                    Some(position),
+                    true,
+                    false,
+                )?;
+            }
+        }
         Ok(())
     }
     pub(super) fn normal_ending(&self) -> Result<Option<NativeNormalEnding>, Error> {

@@ -482,7 +482,12 @@ fn event_native(raw: &str) -> Result<NativeConversationId, Error> {
         "session/update" | "session/request_permission" | "elicitation/create" => {
             envelope.params.session_id
         }
-        "item/completed" | "item/agentMessage/delta" => envelope.params.thread_id,
+        "item/completed" | "item/agentMessage/delta" | "turn/started" | "turn/completed" => {
+            if envelope.id.is_some() {
+                return Err(Error::CaptureCorrupt);
+            }
+            envelope.params.thread_id
+        }
         "mcpServer/elicitation/request" if envelope.id.is_some() => envelope.params.thread_id,
         _ => None,
     };

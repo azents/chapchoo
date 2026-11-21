@@ -12,6 +12,65 @@ type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 mod released;
 
 #[test]
+fn stop_and_matched_terminals_share_the_capture_ordering_fence() -> TestResult {
+    use crate::runtime::{NativeForeground, NativeTextTarget, observations::Observations};
+
+    let dir = tempfile::tempdir()?;
+    let storage = crate::NativeStorage::open(dir.path())?;
+    let capture = crate::CaptureLog::create(&storage)?;
+    let root = NativeConversationId::parse("root".into())?;
+    capture.bind_native(&root)?;
+    let target = NativeTextTarget {
+        snapshot: capture.snapshot()?,
+        native_session: root,
+    };
+    let state = Observations::default();
+    state.bind(
+        target.snapshot.clone(),
+        target.native_session.clone(),
+        false,
+    )?;
+    state.enable_normal_endings()?;
+    let started = |id: &str| {
+        json!({"method":"turn/started","params":{"threadId":"root","turn":{"id":id,"status":"inProgress"}}}).to_string()
+    };
+    let completed = |thread: &str, id: &str, status: &str| {
+        json!({"method":"turn/completed","params":{"threadId":thread,"turn":{"id":id,"status":status}}}).to_string()
+    };
+    let unrelated = completed("root", "old", "completed");
+    state.record_app_server_turn(&capture, &unrelated, &target)?;
+    assert!(capture.is_empty()?);
+    state.record_app_server_turn(&capture, &started("exact"), &target)?;
+    let running = state.current()?;
+    assert_eq!(running.foreground, NativeForeground::Running);
+    let work = running.work.ok_or("Missing live turn")?;
+    assert_eq!(work.work_id, "exact");
+    for frame in [&unrelated, &completed("child", "exact", "completed")] {
+        state.record_app_server_turn(&capture, frame, &target)?;
+    }
+    assert_eq!(state.current()?.work, Some(work.clone()));
+    state.publish_stop(&work, || Ok(()))?;
+    state.record_app_server_turn(&capture, &completed("root", "exact", "completed"), &target)?;
+    assert_eq!(state.current()?.foreground, NativeForeground::Idle);
+    assert!(state.normal_ending()?.is_none());
+    state.record_app_server_turn(&capture, &started("exact"), &target)?;
+    assert!(
+        state.current()?.work.is_none(),
+        "Do not reopen a completed turn"
+    );
+
+    state.record_app_server_turn(&capture, &started("later"), &target)?;
+    let terminal = completed("root", "later", "completed");
+    state.record_app_server_turn(&capture, &terminal, &target)?;
+    let ending = state.normal_ending()?.ok_or("Missing ending")?;
+    assert_eq!(ending.work.work_id, "later");
+    state.record_app_server_turn(&capture, &terminal, &target)?;
+    assert_eq!(state.normal_ending()?, Some(ending.clone()));
+    assert_eq!(ending.position.ordinal(), 4);
+    Ok(())
+}
+
+#[test]
 fn only_exact_root_live_events_yield_operation_evidence() -> TestResult {
     use events::{Observation, root_observation};
 
@@ -37,8 +96,7 @@ fn only_exact_root_live_events_yield_operation_evidence() -> TestResult {
     ] {
         assert_eq!(root_observation(&root, &frame)?, None);
     }
-    let mut frame =
-        json!({"method": "turn/started", "params": {"threadId": "root", "turn": {"id": "turn"}}});
+    let mut frame = json!({"method": "turn/started", "params": {"threadId": "root", "turn": {"id": "turn", "status":"inProgress"}}});
     assert_eq!(
         root_observation(&root, &frame)?,
         Some(Observation::Started { turn: "turn" })
