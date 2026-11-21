@@ -57,7 +57,7 @@ struct Observed {
     observed_session: Option<NativeConversationId>,
     foreground: Option<NativeForeground>,
     work: Option<String>,
-    last_app_server_turn: Option<String>,
+    app_server_turns: std::collections::BTreeSet<String>,
     ending_evidence_enabled: bool,
     live_running: bool,
     stop_published: bool,
@@ -398,17 +398,18 @@ impl Observations {
                     true,
                     normal,
                 )?;
-                state.last_app_server_turn = Some(turn.to_owned());
             }
             Some(_) => return Ok(()),
-            None if state.work.as_deref() == Some(turn)
-                || state.last_app_server_turn.as_deref() == Some(turn) =>
-            {
-                return Ok(());
-            }
+            None if state.app_server_turns.contains(turn) => return Ok(()),
             None if state.work.is_some() => return Err(Error::Protocol),
             None => {
+                // Do not forget earlier IDs while this connection can still
+                // send their notifications. On exhaustion retire the owner.
+                if state.app_server_turns.len() >= 65_536 {
+                    return Err(Error::Protocol);
+                }
                 let position = capture.append(raw, None)?;
+                state.app_server_turns.insert(turn.to_owned());
                 state.work = Some(turn.to_owned());
                 state.normal_ending = None;
                 Self::transition(

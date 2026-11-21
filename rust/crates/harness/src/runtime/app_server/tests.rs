@@ -68,6 +68,21 @@ fn stop_and_matched_terminals_share_the_capture_ordering_fence() -> TestResult {
     state.record_app_server_turn(&capture, &terminal, &target)?;
     assert_eq!(state.normal_ending()?, Some(ending.clone()));
     assert_eq!(ending.position.ordinal(), 4);
+    state.decide_ending(&ending)?;
+    state.record_app_server_turn(&capture, &started("exact"), &target)?;
+    state.record_app_server_turn(&capture, &completed("root", "exact", "completed"), &target)?;
+    let observed = state.current()?;
+    assert_eq!(observed.foreground, NativeForeground::Idle);
+    assert!(observed.work.is_none());
+    assert!(state.pending_ending()?.is_none());
+    assert_eq!(state.normal_ending()?, Some(ending));
+    assert_eq!(
+        observed
+            .position
+            .ok_or("Missing capture position")?
+            .ordinal(),
+        4
+    );
     Ok(())
 }
 

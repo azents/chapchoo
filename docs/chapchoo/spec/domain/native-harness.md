@@ -155,10 +155,11 @@ dispatch rechecks the stable application binding in the serialized actor before
 native submission; a successor cannot borrow a predecessor's publication ticket.
 
 An actual launch checks scope against its admitted authentication binding and
-retains a tool provision before starting the native process. Strict-v2
-initialization requires advertised HTTP MCP capability. Both New and exact
-Resume carry the same consumer-owned HTTP declaration through public SDK
-builders. Effective initialization/catalog verification is part of the
+retains a tool provision before starting the native process. ACP v2
+initialization requires advertised HTTP MCP capability and carries the
+consumer-owned declaration through the SDK. Codex App Server receives the
+same declaration through the admitted thread's launch configuration. Both use
+the authenticated relay's initialization and catalogue evidence within the
 remaining thirty-second native startup budget, after the exact native identity
 and capture binding are retained. Failed verification cannot erase that source
 or permit a fresh context. It neither invokes a tool nor asserts no possible
@@ -230,9 +231,10 @@ not invent a native user-message ID. Ordinary prompt acceptance preserves its
 exact native insertion ID; neither is completion. Normal task completion does
 not shut down the owner.
 
-Native setup requires the owned captured source. An initial source restore can
-request retained history from `start`; an existing captured copy resumes without
-requesting history again. Restore failure does not create a fresh context.
+Native setup requires the owned captured source. ACP v2 can request retained
+history from `start` when restoring an initial copy. Direct Codex resumes the
+exact thread only when its capture has already been retained and does not replay
+the history. Restore failure does not create a fresh context.
 Original incoming session update, permission
 and elicitation envelopes reach the capture boundary before typed SDK decoding;
 unknown fields survive. Authentication requests/results are excluded. Pending
@@ -281,8 +283,8 @@ and the expiring work target. For App Server this is a matched root
 `turn/completed` with status `completed`; retained ACP uses `end_turn`.
 Capture and Stop publication share one ordering
 boundary; if Stop publishes first for that target, the ending is excluded.
-Startup observations, reasonless Idle, abnormal terminals, child updates
-and retained history do not qualify. Repeated reads return the same
+Startup observations, reasonless Idle, abnormal terminals, child updates,
+repeated turn IDs and retained history do not qualify. Repeated reads return the same
 captured occurrence until a new foreground target replaces it or the owner
 retires. This read does not report an ending to the server or initiate work.
 
