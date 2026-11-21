@@ -724,7 +724,7 @@ async function request(id, method, params) {
         params: {
           threadId,
           turnId,
-          serverName: "deterministic-fixture",
+          serverName: "chapchoo",
           mode: "form",
           message: "Review the native fixture choices",
           requestedSchema: {
