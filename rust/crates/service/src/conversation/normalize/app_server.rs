@@ -293,6 +293,189 @@ pub(super) fn item_permission(
     ))
 }
 
+/// Project the admitted tool questions with the same captured field IDs.
+pub(super) fn user_input(
+    raw: &str,
+    position: &SourcePosition,
+    native: &NativeConversationId,
+) -> Result<Record, NativeNormalizationError> {
+    use std::collections::BTreeSet;
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Input {
+        thread_id: String,
+        turn_id: String,
+        item_id: String,
+        questions: Vec<Question>,
+    }
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Question {
+        id: String,
+        header: String,
+        question: String,
+        options: Option<Vec<Choice>>,
+        #[serde(default)]
+        is_other: bool,
+        #[serde(default)]
+        is_secret: bool,
+    }
+    #[derive(Deserialize)]
+    struct Choice {
+        label: String,
+        description: String,
+    }
+    use serde_json::json;
+    let input: Input =
+        serde_json::from_str(raw).map_err(|_| NativeNormalizationError::InvalidEvent)?;
+    if input.thread_id != native.as_str() {
+        return Err(NativeNormalizationError::WrongSession);
+    }
+    let key = |id: &str| {
+        !id.is_empty() && id.len() <= 256 && id.bytes().all(|byte| byte.is_ascii_graphic())
+    };
+    if !key(&input.turn_id) || !key(&input.item_id) || !(1..=16).contains(&input.questions.len()) {
+        return Err(NativeNormalizationError::UnsupportedRequest);
+    }
+    let mut ids: BTreeSet<_> = input.questions.iter().map(|q| q.id.clone()).collect();
+    if ids.len() != input.questions.len() {
+        return Err(NativeNormalizationError::UnsupportedRequest);
+    }
+    let mut properties = serde_json::Map::new();
+    let mut required = Vec::new();
+    for (index, q) in input.questions.into_iter().enumerate() {
+        if q.is_secret
+            || !key(&q.id)
+            || q.question.trim().is_empty()
+            || q.question.len() > 8192
+            || q.header.len() > 8192
+        {
+            return Err(NativeNormalizationError::UnsupportedRequest);
+        }
+        let mut field =
+            json!({"type":"string","title":q.question,"description":q.header,"maxLength":8192});
+        if let Some(options) = q.options.filter(|options| !options.is_empty()) {
+            let mut labels = BTreeSet::new();
+            if options.len() > 32 {
+                return Err(NativeNormalizationError::UnsupportedRequest);
+            }
+            let mut choices = Vec::new();
+            for option in options {
+                if option.label.trim().is_empty()
+                    || option.label.len() > 8192
+                    || option.description.len() > 8192
+                    || !labels.insert(option.label.clone())
+                {
+                    return Err(NativeNormalizationError::UnsupportedRequest);
+                }
+                choices.push(json!({"const":option.label,"title":option.label,"description":option.description}));
+            }
+            if q.is_other {
+                if !labels.contains("None of the above") {
+                    choices.push(json!({"const":"None of the above","title":"None of the above"}));
+                }
+                let mut name = format!("chapchoo-note-{index}");
+                while !ids.insert(name.clone()) {
+                    name.push('-');
+                }
+                properties.insert(
+                    name,
+                    json!({"type":"string","title":"Additional answer or note","maxLength":8192}),
+                );
+            }
+            field["oneOf"] = json!(choices);
+        }
+        required.push(q.id.clone());
+        properties.insert(q.id, field);
+    }
+    let form = serde_json::from_value(
+        json!({"type":"object","properties":properties,"required":required}),
+    )
+    .map_err(|_| NativeNormalizationError::UnsupportedRequest)?;
+    validate_form(&form)?;
+    let request = schema::CreateElicitationRequest::new(
+        schema::ElicitationFormMode::new(
+            schema::ElicitationSessionScope::new(native.as_str()),
+            form,
+        ),
+        "Codex needs your input to continue.",
+    );
+    Ok(record(
+        Kind::Request,
+        position.occurrence().as_str(),
+        vec![replace(Field::Request, &request)?],
+    ))
+}
+
+/// Render the admitted profile at its exact capture occurrence. The live
+/// owner independently validates the profile and owns the native grant.
+pub(super) fn sandbox_permission(
+    raw: &str,
+    position: &SourcePosition,
+    native: &NativeConversationId,
+) -> Result<Record, NativeNormalizationError> {
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Request {
+        thread_id: String,
+        turn_id: String,
+        item_id: String,
+        started_at_ms: i64,
+        cwd: String,
+        reason: Option<String>,
+        environment_id: Option<String>,
+        permissions: chapchoo_domain::SandboxPermissionProfile,
+    }
+    let params: Request =
+        serde_json::from_str(raw).map_err(|_| NativeNormalizationError::InvalidEvent)?;
+    if params.thread_id != native.as_str() {
+        return Err(NativeNormalizationError::WrongSession);
+    }
+    if [&params.turn_id, &params.item_id].into_iter().any(|id| {
+        id.is_empty() || id.len() > 256 || !id.bytes().all(|byte| byte.is_ascii_graphic())
+    }) || params.started_at_ms < 0
+    {
+        return Err(NativeNormalizationError::UnsupportedRequest);
+    }
+    let description = params
+        .permissions
+        .consent_description(
+            &params.cwd,
+            params.environment_id.as_deref(),
+            params.reason.as_deref(),
+        )
+        .ok_or(NativeNormalizationError::UnsupportedRequest)?;
+    use schema::PermissionOptionKind::{AllowAlways, AllowOnce, RejectOnce};
+    let options = [
+        ("grant-turn", "Grant for this turn", AllowOnce),
+        (
+            "grant-turn-strict",
+            "Grant for this turn with strict review",
+            AllowOnce,
+        ),
+        ("grant-session", "Grant for this session", AllowAlways),
+        (
+            "deny-permissions",
+            "Do not grant these permissions",
+            RejectOnce,
+        ),
+    ]
+    .into_iter()
+    .map(|(id, label, kind)| schema::PermissionOption::new(id, label, kind))
+    .collect();
+    let request = schema::RequestPermissionRequest::new(
+        native.as_str(),
+        "Grant sandbox permissions?",
+        options,
+    )
+    .description(Some(description));
+    Ok(record(
+        Kind::Request,
+        position.occurrence().as_str(),
+        vec![replace(Field::Request, &request)?],
+    ))
+}
+
 /// Keep a single foreground state record for both old and new capture lanes.
 /// A native completed event is not automatically a successful continuation.
 pub(super) fn turn(

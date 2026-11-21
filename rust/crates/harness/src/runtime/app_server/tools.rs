@@ -124,6 +124,7 @@ pub(super) struct ApprovalDetails {
 enum ApprovalReply {
     Elicitation,
     Item(Vec<ItemDecision>),
+    Sandbox(super::sandbox::Proposal),
 }
 
 #[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
@@ -214,7 +215,7 @@ struct NetworkApproval {
     protocol: String,
 }
 
-fn visible(text: &str) -> bool {
+pub(super) fn visible(text: &str) -> bool {
     text.len() <= 8192
         && !text.trim().is_empty()
         && !text
@@ -346,6 +347,18 @@ impl Approval {
                     file_locations,
                 );
             }
+            "item/permissions/requestApproval" => {
+                let (proposal, description) = super::sandbox::Proposal::parse(
+                    target.native_session.as_str(),
+                    active_turn,
+                    request["params"].clone(),
+                )?;
+                return Some(ApprovalDetails {
+                    title: "Grant sandbox permissions?".into(),
+                    description: Some(description),
+                    reply: ApprovalReply::Sandbox(proposal),
+                });
+            }
             "mcpServer/elicitation/request" => {}
             _ => return None,
         }
@@ -404,6 +417,7 @@ impl Approval {
 
     pub(super) fn question(&self, root: &str) -> schema::RequestPermissionRequest {
         let options = match &self.details.reply {
+            ApprovalReply::Sandbox(_) => super::sandbox::Proposal::options(),
             ApprovalReply::Item(decisions) => {
                 decisions.iter().map(|decision| decision.option()).collect()
             }
@@ -435,6 +449,9 @@ impl Approval {
             return Err(Error::NotAdmitted);
         }
         let reply = match (&self.details.reply, choice) {
+            (ApprovalReply::Sandbox(proposal), choice) => {
+                proposal.answer(choice).ok_or(Error::NotAdmitted)?
+            }
             (ApprovalReply::Elicitation, Choice::Selected("approve-once")) => {
                 json!({"action": "accept", "content": {}})
             }

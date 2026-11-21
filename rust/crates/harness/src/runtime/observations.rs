@@ -562,6 +562,15 @@ impl Observations {
         publish(state.work.as_deref())
     }
 
+    /// Interactive replies and Stop share the same native publication fence.
+    pub(super) fn with_interactive_work<T>(
+        &self,
+        publish: impl FnOnce(Option<&str>) -> Result<T, Error>,
+    ) -> Result<T, Error> {
+        let state = self.0.lock().map_err(|_| Error::Protocol)?;
+        publish(state.work.as_deref().filter(|_| !state.stop_published))
+    }
+
     pub(super) fn with_text_work<T>(
         &self,
         publish: impl FnOnce(Option<&str>) -> Result<T, Error>,

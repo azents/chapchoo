@@ -7,6 +7,7 @@ use tokio::sync::oneshot;
 pub(super) struct Form {
     pub(super) request: schema::CreateElicitationRequest,
     reply: oneshot::Sender<Result<Value, i32>>,
+    questions: Option<super::questions::Questions>,
 }
 
 #[derive(Deserialize)]
@@ -55,12 +56,36 @@ impl Form {
             ),
             native.message,
         );
+        Self::prepare(request, None)
+    }
+
+    pub(super) fn user_input(
+        root: &str,
+        turn: &str,
+        params: Value,
+    ) -> Option<(Self, super::wire::ServerReply)> {
+        let (questions, fields) = super::questions::Questions::parse(root, turn, params)?;
+        let request = schema::CreateElicitationRequest::new(
+            schema::ElicitationFormMode::new(schema::ElicitationSessionScope::new(root), fields),
+            "Codex needs your input to continue.",
+        );
+        Self::prepare(request, Some(questions))
+    }
+
+    fn prepare(
+        request: schema::CreateElicitationRequest,
+        questions: Option<super::questions::Questions>,
+    ) -> Option<(Self, super::wire::ServerReply)> {
         if !requests::supported_form(&request) {
             return None;
         }
         let (reply, receive) = oneshot::channel();
         Some((
-            Self { request, reply },
+            Self {
+                request,
+                reply,
+                questions,
+            },
             super::wire::ServerReply::Deferred(receive),
         ))
     }
@@ -75,6 +100,9 @@ impl Form {
     ) -> Result<Value, Error> {
         if !requests::form_response(&self.request, &response) {
             return Err(Error::NotAdmitted);
+        }
+        if let Some(questions) = &self.questions {
+            return questions.answer(response.action);
         }
         match response.action {
             schema::ElicitationAction::Accept(answer) => {

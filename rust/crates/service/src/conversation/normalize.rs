@@ -147,6 +147,20 @@ pub fn normalize_captured_event(
                 native,
             )?);
         }
+        "item/permissions/requestApproval" if envelope.id.is_some() => {
+            records.push(app_server::sandbox_permission(
+                envelope.params.get(),
+                position,
+                native,
+            )?);
+        }
+        "item/tool/requestUserInput" if envelope.id.is_some() => {
+            records.push(app_server::user_input(
+                envelope.params.get(),
+                position,
+                native,
+            )?);
+        }
         _ => return Err(NativeNormalizationError::InvalidEvent),
     }
     let normalized =

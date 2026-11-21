@@ -175,7 +175,7 @@ impl Ingress {
         let method = frame["method"].as_str().ok_or(Error::Protocol)?;
         if let Some(id) = frame.get("id") {
             let rpc_id = wire::request_id(id)?;
-            return self.observations.with_work(|turn| {
+            return self.observations.with_interactive_work(|turn| {
                 let Some(turn) = turn else { return Ok(None) };
                 let changes = self.file_changes.lock().map_err(|_| Error::Protocol)?;
                 let locations = frame["params"]["itemId"]
@@ -183,14 +183,18 @@ impl Ingress {
                     .and_then(|id| changes.get(id))
                     .map(String::as_str);
                 let approval = tools::Approval::decode(&root.target, turn, &frame, locations);
-                let form = if approval.is_none() && method == "mcpServer/elicitation/request" {
-                    forms::Form::offer(
+                let form = match method {
+                    "mcpServer/elicitation/request" if approval.is_none() => forms::Form::offer(
                         root.target.native_session.as_str(),
                         turn,
                         frame["params"].clone(),
-                    )
-                } else {
-                    None
+                    ),
+                    "item/tool/requestUserInput" => forms::Form::user_input(
+                        root.target.native_session.as_str(),
+                        turn,
+                        frame["params"].clone(),
+                    ),
+                    _ => None,
                 };
                 if approval.is_none() && form.is_none() {
                     return Ok(None);
@@ -414,9 +418,12 @@ impl LiveThread {
 
     pub(in crate::runtime) fn pending(&self) -> Result<Vec<InteractiveRequest>, Error> {
         let ingress = &self.connection.ingress;
-        ingress.observations.with_work(|turn| {
+        ingress.observations.with_interactive_work(|turn| {
+            let Some(turn) = turn else {
+                return Ok(Vec::new());
+            };
             let mut requests = ingress.requests.lock().map_err(|_| Error::Protocol)?;
-            requests.retain(|_, request| request.current(turn));
+            requests.retain(|_, request| request.current(Some(turn)));
             Ok(requests
                 .iter()
                 .map(|(id, request)| match &request.kind {
@@ -447,7 +454,7 @@ impl LiveThread {
         };
         let ingress = &self.connection.ingress;
         let root = ingress.root.get().ok_or(Error::NotAdmitted)?;
-        ingress.observations.with_work(|turn| {
+        ingress.observations.with_interactive_work(|turn| {
             let mut requests = ingress.requests.lock().map_err(|_| Error::Protocol)?;
             let request = requests.get_mut(&id).ok_or(Error::NotAdmitted)?;
             if !request.current(turn) || exact.is_some_and(|position| *position != request.position)

@@ -27,6 +27,7 @@ mod password;
 mod project_instructions;
 mod provider_request;
 mod role;
+mod sandbox_permissions;
 
 pub use agent_profile::{AgentPalette, InvalidAgentPalette};
 pub use computer::{
@@ -57,3 +58,4 @@ pub use project_instructions::{
 };
 pub use provider_request::{InvalidProviderKeyRequest, ProviderKeyRequestId};
 pub use role::{MembershipRole, TeamKind, TeamRole};
+pub use sandbox_permissions::SandboxPermissionProfile;

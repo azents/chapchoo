@@ -495,6 +495,8 @@ fn event_native(raw: &str) -> Result<NativeConversationId, Error> {
         "mcpServer/elicitation/request"
         | "item/commandExecution/requestApproval"
         | "item/fileChange/requestApproval"
+        | "item/permissions/requestApproval"
+        | "item/tool/requestUserInput"
             if envelope.id.is_some() =>
         {
             envelope.params.thread_id

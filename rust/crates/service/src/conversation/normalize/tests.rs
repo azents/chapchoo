@@ -253,6 +253,69 @@ fn app_server_file_change_activity_preserves_the_paths_and_changes_before_approv
 }
 
 #[test]
+fn app_server_native_questions_project_choice_and_optional_note_in_the_same_occurrence()
+-> Result<(), TestError> {
+    let body = json!({"id":"q1","method":"item/tool/requestUserInput","params":{
+        "threadId":"native","turnId":"turn","itemId":"question","isBlocking":true,
+        "questions":[{"id":"format","header":"Fixture","question":"Which format?",
+            "isOther":true,"options":[{"label":"Text","description":"Plain text"}]}]
+    }});
+    let raw = serde_json::to_vec(&body)?;
+    let result = normalized(&raw)?;
+    assert_eq!(result.pair.raw, raw);
+    assert_eq!(result.records[0].native_id, "occurrence");
+    let projected: serde_json::Value =
+        serde_json::from_slice(bytes(&result.records[0].fields[0].change))?;
+    assert_eq!(projected["requestedSchema"]["required"], json!(["format"]));
+    let fields = &projected["requestedSchema"]["properties"];
+    assert_eq!(fields["format"]["oneOf"][0]["const"], "Text");
+    assert_eq!(fields["format"]["oneOf"][1]["const"], "None of the above");
+    assert_eq!(fields["chapchoo-note-0"]["type"], "string");
+    let mut secret = body;
+    secret["params"]["questions"][0]["isSecret"] = json!(true);
+    assert!(matches!(
+        normalized(&serde_json::to_vec(&secret)?),
+        Err(NativeNormalizationError::UnsupportedRequest)
+    ));
+    Ok(())
+}
+
+#[test]
+fn app_server_sandbox_grant_shows_the_actual_profile_and_scope_options() -> Result<(), TestError> {
+    let body = json!({"id":46,"method":"item/permissions/requestApproval","params":{
+        "threadId":"native","turnId":"turn","itemId":"permission","startedAtMs":14,"cwd":"/fixture/**literal**",
+        "permissions":{"network":{"enabled":false},"fileSystem":{"read":["/fixture/in"]}},
+        "reason":"Read the fixture input.\n```\n**literal reason**"
+    }});
+    let raw = serde_json::to_vec(&body)?;
+    let result = normalized(&raw)?;
+    assert_eq!(result.pair.raw, raw);
+    assert_eq!(result.records[0].native_id, "occurrence");
+    let request: schema::RequestPermissionRequest =
+        serde_json::from_slice(bytes(&result.records[0].fields[0].change))?;
+    assert_eq!(request.title, "Grant sandbox permissions?");
+    let details = request.description.ok_or("permission details missing")?;
+    assert!(details.contains("```\n/fixture/**literal**\n```"));
+    assert!(details.contains("````\nRead the fixture input.\n```\n**literal reason**\n````"));
+    assert!(details.contains("/fixture/in"));
+    assert!(details.contains(r#""enabled": false"#));
+    assert_eq!(
+        request
+            .options
+            .iter()
+            .map(|option| option.option_id.0.as_ref())
+            .collect::<Vec<_>>(),
+        [
+            "grant-turn",
+            "grant-turn-strict",
+            "grant-session",
+            "deny-permissions"
+        ]
+    );
+    Ok(())
+}
+
+#[test]
 fn app_server_item_approvals_keep_the_original_frame_and_preserve_native_decisions()
 -> Result<(), TestError> {
     for (method, params, title, description, ids) in [

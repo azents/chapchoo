@@ -22,6 +22,7 @@ async fn new_session_steers_and_stops_only_its_exact_live_turn() -> TestResult {
         let compact_ack_observed = tokio::sync::Notify::new();
         let compact_waiter_abandoned = tokio::sync::Notify::new();
         let barrier_finished = tokio::sync::Notify::new();
+        let stop_fence_checked = tokio::sync::Notify::new();
         let server = async {
             let mut published = Vec::new();
             let mut compact_count = 0;
@@ -97,6 +98,10 @@ async fn new_session_steers_and_stops_only_its_exact_live_turn() -> TestResult {
                         }
                         "turn/interrupt" => {
                             assert_eq!(params, &json!({"threadId":"new-root","turnId":"active"}));
+                            stop_fence_checked.notified().await;
+                            send(&mut write, json!({"method":"serverRequest/resolved","params":{
+                                "threadId":"new-root","requestId":"stop-grant"
+                            }})).await?;
                             send(&mut write, json!({"method":"turn/completed","params":{
                             "threadId":"new-root","turn":{"id":"active","status":"interrupted"}
                         }})).await?;
@@ -126,6 +131,11 @@ async fn new_session_steers_and_stops_only_its_exact_live_turn() -> TestResult {
                             "threadId":"new-root","turnId":"active","itemId":"patch","startedAtMs":2,
                             "reason":"Write the fixture"
                         }), "cancel"),
+                        (22, "item/permissions/requestApproval", json!({
+                            "threadId":"new-root","turnId":"active","itemId":"sandbox",
+                            "startedAtMs":3,"cwd":"/fixture","reason":"Read the fixture input",
+                            "permissions":{"network":{"enabled":false},"fileSystem":{"read":["/fixture/in"]}}
+                        }), "grant-turn-strict"),
                         (19, "item/commandExecution/requestApproval", json!({
                             "threadId":"new-root","turnId":"old","itemId":"stale","startedAtMs":3,
                             "command":"printf stale","cwd":"/fixture"
@@ -146,10 +156,24 @@ async fn new_session_steers_and_stops_only_its_exact_live_turn() -> TestResult {
                         if decision.is_empty() {
                             assert_eq!(answer["id"], id);
                             assert_eq!(answer["error"]["code"], -32601);
+                        } else if id == 22 {
+                            assert_eq!(answer, json!({"id":22,"result":{
+                                "permissions":{"network":{"enabled":false},"fileSystem":{"read":["/fixture/in"]}},
+                                "scope":"turn","strictAutoReview":true
+                            }}));
                         } else {
                             assert_eq!(answer, json!({"id":id,"result":{"decision":decision}}));
                         }
                     }
+                    send(&mut write, json!({"id":"native-question","method":"item/tool/requestUserInput","params":{
+                        "threadId":"new-root","turnId":"active","itemId":"question","isBlocking":true,
+                        "questions":[{"id":"format","header":"Fixture","question":"Which format?",
+                            "isOther":true,"options":[{"label":"Text","description":"Plain text"}]}]
+                    }})).await?;
+                    let reply: Value = serde_json::from_str(&input.next().await.ok_or("Missing native tool question reply")??)?;
+                    assert_eq!(reply, json!({"id":"native-question","result":{"answers":{
+                        "format":{"answers":["None of the above","user_note: Markdown"]}
+                    }}}));
                     send(&mut write, file_change_started("resolved")).await?;
                     send(&mut write, json!({"id":"resolved-first","method":"item/fileChange/requestApproval",
                         "params":{"threadId":"new-root","turnId":"active","itemId":"resolved","startedAtMs":5}
@@ -172,6 +196,10 @@ async fn new_session_steers_and_stops_only_its_exact_live_turn() -> TestResult {
                     })).await?;
                     let barrier: Value = serde_json::from_str(&input.next().await.ok_or("Missing second barrier")??)?;
                     assert_eq!(barrier["id"], "barrier");
+                    send(&mut write, json!({"id":"stop-grant","method":"item/permissions/requestApproval","params":{
+                        "threadId":"new-root","turnId":"active","itemId":"sandbox",
+                        "startedAtMs":5,"cwd":"/fixture","permissions":{"network":{"enabled":true}}
+                    }})).await?;
                     barrier_finished.notify_one();
                 }
             }
@@ -267,6 +295,7 @@ async fn new_session_steers_and_stops_only_its_exact_live_turn() -> TestResult {
             for (title, option) in [
                 ("Allow command execution?", "approve-once"),
                 ("Allow file changes?", "cancel"),
+                ("Grant sandbox permissions?", "grant-turn-strict"),
             ] {
                 let (approval, position) = loop {
                     if let Some(InteractiveRequest::Permission { id, occurrence, request }) = thread.pending()?.pop() {
@@ -286,6 +315,24 @@ async fn new_session_steers_and_stops_only_its_exact_live_turn() -> TestResult {
                 thread.respond(permission(approval.clone(), option)?, Some(&position))?;
                 assert!(matches!(thread.respond(permission(approval, option)?, Some(&position)), Err(Error::NotAdmitted)));
             }
+            let (id, at) = loop {
+                if let Some(InteractiveRequest::Form { id, occurrence, request }) = thread.pending()?.pop() {
+                    assert_eq!(request.message, "Codex needs your input to continue.");
+                    break (id, occurrence);
+                }
+                observed.wait_change().await;
+            };
+            let answer = |choice| -> TestResult<InteractiveResponse> {
+                Ok(InteractiveResponse::Form {
+                    id: id.clone(),
+                    response: serde_json::from_value(json!({"action":"accept","content":{
+                        "format":choice,"chapchoo-note-0":" Markdown "
+                    }}))?,
+                })
+            };
+            assert!(matches!(thread.respond(answer("Not offered")?, Some(&at)), Err(Error::NotAdmitted)));
+            thread.respond(answer("None of the above")?, Some(&at))?;
+            assert!(matches!(thread.respond(answer("Text")?, Some(&at)), Err(Error::NotAdmitted)));
             let mut retired = None;
             for expected in ["Barrier 1", "Barrier 2"] {
                 let (barrier, at, pending) = loop {
@@ -314,6 +361,12 @@ async fn new_session_steers_and_stops_only_its_exact_live_turn() -> TestResult {
                 thread.respond(response, Some(&at))?;
             }
             barrier_finished.notified().await;
+            let (id, at) = loop {
+                if let Some(InteractiveRequest::Permission { id, occurrence, .. }) = thread.pending()?.pop() {
+                    break (id, occurrence);
+                }
+                observed.wait_change().await;
+            };
             let work = observed.current()?.work.ok_or("No live turn")?;
             let mut wrong = work.clone();
             wrong.work_id = "old".into();
@@ -322,6 +375,9 @@ async fn new_session_steers_and_stops_only_its_exact_live_turn() -> TestResult {
                 Err(Error::NotAdmitted)
             ));
             observed.publish_stop(&work, || session.stop(&work))?;
+            assert!(thread.pending()?.is_empty());
+            assert!(matches!(thread.respond(permission(id, "grant-session")?, Some(&at)), Err(Error::NotAdmitted)));
+            stop_fence_checked.notify_one();
             while observed.current()?.foreground != NativeForeground::Idle {
                 observed.wait_change().await;
             }
