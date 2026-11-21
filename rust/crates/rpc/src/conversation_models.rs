@@ -1,6 +1,6 @@
 use chapchoo_domain::{
-    ConversationModelCapabilities, ConversationModelTuning, ConversationSpeed,
-    NativeConversationId, SnapshotId,
+    ConversationModelCapabilities, ConversationModelTuning, ConversationPermissionMode,
+    ConversationSpeed, NativeConversationId, SnapshotId,
 };
 use chapchoo_protocol::conversations as wire;
 use chapchoo_service::{
@@ -91,6 +91,7 @@ pub(crate) fn tuning(value: Option<wire::ModelTuning>) -> Result<ConversationMod
     Ok(ConversationModelTuning {
         effort: value.effort,
         speed: value.speed.map(speed).transpose()?,
+        permission_mode: value.permission_mode.map(permission_mode).transpose()?,
     })
 }
 
@@ -98,7 +99,25 @@ pub(crate) fn wire_tuning(value: ConversationModelTuning) -> Option<wire::ModelT
     (!value.is_inherited()).then(|| wire::ModelTuning {
         effort: value.effort,
         speed: value.speed.map(wire_speed),
+        permission_mode: value.permission_mode.map(wire_permission_mode),
     })
+}
+
+pub(crate) fn permission_mode(value: i32) -> Result<ConversationPermissionMode, Status> {
+    match wire::PermissionMode::try_from(value) {
+        Ok(wire::PermissionMode::ApproveForMe) => Ok(ConversationPermissionMode::ApproveForMe),
+        Ok(wire::PermissionMode::FullAccess) => Ok(ConversationPermissionMode::FullAccess),
+        Ok(wire::PermissionMode::AskForApproval) => Ok(ConversationPermissionMode::AskForApproval),
+        _ => Err(Status::invalid_argument("Unknown permission mode")),
+    }
+}
+
+fn wire_permission_mode(value: ConversationPermissionMode) -> i32 {
+    (match value {
+        ConversationPermissionMode::ApproveForMe => wire::PermissionMode::ApproveForMe,
+        ConversationPermissionMode::FullAccess => wire::PermissionMode::FullAccess,
+        ConversationPermissionMode::AskForApproval => wire::PermissionMode::AskForApproval,
+    }) as i32
 }
 
 pub(crate) fn projection(
@@ -118,6 +137,11 @@ pub(crate) fn projection(
             saved_tuning: wire_tuning(model.tuning),
             options: model.options.map(|items| wire::ModelOptions {
                 choices: items.into_iter().map(choice).collect(),
+                permission_modes: model
+                    .permission_modes
+                    .into_iter()
+                    .map(wire_permission_mode)
+                    .collect(),
             }),
         }
     })

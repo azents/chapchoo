@@ -85,18 +85,23 @@ export function Chat(props: ChatProps): ReactElement {
   const pickerOpen = picker !== null;
   const checkingNeeded = picker?.saving.state === "uncertain";
   const modelButton = useRef<HTMLButtonElement>(null);
+  const permissionButton = useRef<HTMLButtonElement>(null);
   const pickerAction = useRef<HTMLButtonElement>(null);
-  const wasPickerOpen = useRef(false);
+  const wasPickerOpen = useRef<"model" | "permission" | null>(null);
+  const pickerKind = picker?.editKind;
   useLayoutEffect(() => {
     if (props.opened) {
       if (pickerOpen && (!wasPickerOpen.current || checkingNeeded)) {
         pickerAction.current?.focus();
       } else if (!pickerOpen && wasPickerOpen.current) {
-        modelButton.current?.focus();
+        (wasPickerOpen.current === "permission"
+          ? permissionButton
+          : modelButton
+        ).current?.focus();
       }
     }
-    wasPickerOpen.current = props.opened && pickerOpen;
-  }, [props.opened, pickerOpen, checkingNeeded]);
+    wasPickerOpen.current = props.opened ? (pickerKind ?? null) : null;
+  }, [props.opened, pickerOpen, pickerKind, checkingNeeded]);
   if (p.access !== "authorized") {
     return (
       <PageFailure
@@ -432,7 +437,13 @@ export function Chat(props: ChatProps): ReactElement {
           trapFocus={!p.confirmation && !p.detailsOpened}
           onClose={props.onClose}
           size="min(78dvh, 46rem)"
-          title={picker?.copy.change ?? c.activity}
+          title={
+            picker
+              ? pickerKind === "permission"
+                ? picker.copy.changePermission
+                : picker.copy.change
+              : c.activity
+          }
           closeButtonProps={{
             "aria-label": c.close,
             disabled: picker?.busy === true,
@@ -472,6 +483,13 @@ export function Chat(props: ChatProps): ReactElement {
                   <ModelSelectionEntry
                     controls={selection}
                     buttonRef={modelButton}
+                  />
+                ) : null}
+                {selection && selection.permissionChoices.length > 0 ? (
+                  <ModelSelectionEntry
+                    controls={selection}
+                    kind="permission"
+                    buttonRef={permissionButton}
                   />
                 ) : null}
                 {p.stale ? (

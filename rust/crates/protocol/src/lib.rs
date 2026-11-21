@@ -55,6 +55,7 @@ pub mod conversations {
         ModelCapabilities,
         ModelTuning,
         ModelSpeed,
+        PermissionMode,
         ModelOptions,
         OwnerConversationModel,
         ModelRecovery,

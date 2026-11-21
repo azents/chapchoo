@@ -345,6 +345,22 @@ metadata does not create a finite pass; only `begin` fixes that boundary.
 
 ## Restricted physical ownership
 
+### Codex conversation permission modes
+
+The direct Codex owner discovers the supported profiles, reviewer availability
+and requirements from the connected App Server. For a new `turn/start`, it
+applies one coherent preset: workspace sandbox with automatic review, disabled
+Codex sandbox with approval policy `never`, or workspace sandbox with user
+review. Without an explicit choice it tries those eligible presets in that
+order. An explicit choice that is no longer available does not authorize a
+different preset. New starts on the same retained conversation reapply the
+whole preset; `turn/steer` does not change it. If discovery yields no preset,
+a resumed disabled sandbox cannot serve as an implicit default.
+
+These settings do not change Computer isolation, ownership or server-tool
+authorization. Auto review can deny requests; Full Access does not automatically
+allow MCP operations that independently require approval.
+
 Child environment is cleared and rebuilt from the applied descriptor, including
 explicit native HOME/state/TMP, cwd and selected executables. Platform bootstrap
 and operational credentials are not inherited. A transient single-use native

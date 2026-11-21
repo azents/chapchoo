@@ -15,11 +15,36 @@ pub struct ConversationModelTuning {
     pub effort: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub speed: Option<ConversationSpeed>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub permission_mode: Option<ConversationPermissionMode>,
 }
 
 impl ConversationModelTuning {
     pub fn is_inherited(&self) -> bool {
-        self.effort.is_none() && self.speed.is_none()
+        !self.has_model_tuning() && self.permission_mode.is_none()
+    }
+
+    pub fn has_model_tuning(&self) -> bool {
+        self.effort.is_some() || self.speed.is_some()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConversationPermissionMode {
+    ApproveForMe,
+    FullAccess,
+    AskForApproval,
+}
+
+impl ConversationPermissionMode {
+    pub const DEFAULT_ORDER: [Self; 3] =
+        [Self::ApproveForMe, Self::FullAccess, Self::AskForApproval];
+
+    pub fn default_from(available: &[Self]) -> Option<Self> {
+        Self::DEFAULT_ORDER
+            .into_iter()
+            .find(|mode| available.contains(mode))
     }
 }
 

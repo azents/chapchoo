@@ -2,7 +2,9 @@
 
 use super::*;
 use crate::ConnectorSource;
-use chapchoo_domain::{ConversationModelCapabilities, ConversationModelTuning};
+use chapchoo_domain::{
+    ConversationModelCapabilities, ConversationModelTuning, ConversationPermissionMode,
+};
 use diesel::sql_types::Bool;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -40,6 +42,7 @@ pub struct ConversationModelObservation {
     pub options: Option<Vec<ConversationModelChoice>>,
     /// An opaque continuity witness for an applied API key, never the key.
     pub api_key_source: Option<[u8; 24]>,
+    pub permission_modes: Vec<ConversationPermissionMode>,
 }
 
 pub struct ConversationModelProjection {
@@ -49,6 +52,7 @@ pub struct ConversationModelProjection {
     pub options: Option<Vec<ConversationModelChoice>>,
     pub recovery_operation_id: Option<String>,
     pub tuning: ConversationModelTuning,
+    pub permission_modes: Vec<ConversationPermissionMode>,
 }
 
 pub struct ConversationModelSave {
@@ -124,25 +128,94 @@ fn valid_choice(value: &ConversationModelChoice) -> bool {
         })
 }
 
-fn tuning_from_storage(value: Option<&str>) -> Result<ConversationModelTuning, StoreError> {
+// The saved model label is also used for a permission-only receipt. In that
+// case it is display evidence, not an instruction to pin the native model.
+#[derive(Default, Serialize, Deserialize)]
+struct StoredTuning {
+    #[serde(flatten)]
+    tuning: ConversationModelTuning,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    inherit_model: bool,
+}
+
+fn stored_tuning(value: Option<&str>) -> Result<StoredTuning, StoreError> {
     value
         .map(|data| serde_json::from_str(data).map_err(|_| StoreError::Integrity))
         .transpose()
         .map(|value| value.unwrap_or_default())
 }
 
-fn tuning_payload(tuning: &ConversationModelTuning) -> Result<Option<String>, StoreError> {
-    (!tuning.is_inherited())
+fn tuning_from_storage(value: Option<&str>) -> Result<ConversationModelTuning, StoreError> {
+    Ok(stored_tuning(value)?.tuning)
+}
+
+fn tuning_payload(tuning: &StoredTuning) -> Result<Option<String>, StoreError> {
+    (tuning.inherit_model || !tuning.tuning.is_inherited())
         .then(|| serde_json::to_string(tuning).map_err(|_| StoreError::InvalidInput))
         .transpose()
 }
 
+#[cfg(test)]
+mod stored_permissions {
+    use super::*;
+
+    #[test]
+    fn stored_permission_preserves_inheritance_and_reads_existing_tuning() -> Result<(), StoreError>
+    {
+        let old = stored_tuning(Some(r#"{"effort":"high","speed":"fast"}"#))?;
+        assert_eq!(old.tuning.effort.as_deref(), Some("high"));
+        assert_eq!(old.tuning.permission_mode, None);
+        assert!(!old.inherit_model);
+        let chosen = StoredTuning {
+            inherit_model: true,
+            tuning: ConversationModelTuning {
+                permission_mode: Some(ConversationPermissionMode::AskForApproval),
+                ..Default::default()
+            },
+        };
+        let saved = tuning_payload(&chosen)?;
+        let read = stored_tuning(saved.as_deref())?;
+        assert_eq!(read.tuning, chosen.tuning);
+        assert!(read.inherit_model);
+        Ok(())
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(untagged)]
+enum AdvertisedOptions {
+    Models(Vec<ConversationModelChoice>),
+    WithPermissions {
+        models: Vec<ConversationModelChoice>,
+        permission_modes: Vec<ConversationPermissionMode>,
+    },
+}
+
+impl AdvertisedOptions {
+    fn split(
+        self,
+    ) -> (
+        Vec<ConversationModelChoice>,
+        Vec<ConversationPermissionMode>,
+    ) {
+        match self {
+            Self::Models(models) => (models, Vec::new()),
+            Self::WithPermissions {
+                models,
+                permission_modes,
+            } => (models, permission_modes),
+        }
+    }
+}
+
 fn option_payload(
     options: Option<&[ConversationModelChoice]>,
+    permission_modes: &[ConversationPermissionMode],
 ) -> Result<Option<String>, StoreError> {
-    let Some(options) = options else {
+    if options.is_none() && permission_modes.is_empty() {
         return Ok(None);
-    };
+    }
+    let options = options.unwrap_or_default();
     let mut ids = HashSet::new();
     if options.len() > 128
         || options
@@ -151,7 +224,25 @@ fn option_payload(
     {
         return Err(StoreError::InvalidInput);
     }
-    let json = serde_json::to_string(options).map_err(|_| StoreError::InvalidInput)?;
+    if permission_modes.len() > 3
+        || permission_modes
+            .iter()
+            .copied()
+            .collect::<HashSet<_>>()
+            .len()
+            != permission_modes.len()
+    {
+        return Err(StoreError::InvalidInput);
+    }
+    let json = if permission_modes.is_empty() {
+        serde_json::to_string(options)
+    } else {
+        serde_json::to_string(&AdvertisedOptions::WithPermissions {
+            models: options.to_vec(),
+            permission_modes: permission_modes.to_vec(),
+        })
+    }
+    .map_err(|_| StoreError::InvalidInput)?;
     if json.len() > 48 * 1024 {
         return Err(StoreError::InvalidInput);
     }
@@ -198,7 +289,7 @@ impl ScopeRow {
             && self.launch_operation_id == launch
     }
 
-    fn options(&self) -> Result<Option<Vec<ConversationModelChoice>>, StoreError> {
+    fn options(&self) -> Result<Option<AdvertisedOptions>, StoreError> {
         self.advertised_options
             .as_ref()
             .map(|value| serde_json::from_str(value).map_err(|_| StoreError::Integrity))
@@ -206,7 +297,10 @@ impl ScopeRow {
     }
 
     fn projection(self) -> Result<ConversationModelProjection, StoreError> {
-        let options = self.options()?;
+        let (options, permission_modes) = self
+            .options()?
+            .map(AdvertisedOptions::split)
+            .map_or((None, Vec::new()), |(models, modes)| (Some(models), modes));
         let choice = |id: String, label| ConversationModelChoice {
             capabilities: options
                 .as_ref()
@@ -215,7 +309,12 @@ impl ScopeRow {
             id,
             label,
         };
-        let model = match (self.saved_model_id, self.saved_model_label) {
+        let stored = stored_tuning(self.saved_tuning.as_deref())?;
+        let model = match if stored.inherit_model {
+            (None, None)
+        } else {
+            (self.saved_model_id, self.saved_model_label)
+        } {
             (Some(id), Some(label)) => Some(choice(id, label)),
             (None, None) => match (self.observed_current_id, self.observed_current_label) {
                 (Some(id), Some(label)) => Some(choice(id, label)),
@@ -237,8 +336,9 @@ impl ScopeRow {
             },
             model,
             saved_request_id: self.saved_request_id,
-            tuning: tuning_from_storage(self.saved_tuning.as_deref())?,
+            tuning: stored.tuning,
             options,
+            permission_modes,
             recovery_operation_id: self
                 .recovery_operation_id
                 .map(|value| value.to_dto(EntityKind::ConversationOperation)),
@@ -449,7 +549,6 @@ impl Store {
         if !valid_model_id(&draft.model_id) {
             return Err(StoreError::InvalidInput);
         }
-        let tuning = tuning_payload(&draft.tuning)?;
         let agent = EntityId::from_dto(EntityKind::Agent, agent_id)?;
         let (conversation, launch) = draft.target.ids()?;
         operation!(self, |connection, dialect| {
@@ -511,11 +610,22 @@ impl Store {
                     return Err(StoreError::InvalidTransition);
                 }
             }
-            let choice = scope
+            let (choices, permission_modes) = scope
                 .options()?
-                .and_then(|list| list.into_iter().find(|item| item.id == draft.model_id))
+                .map(AdvertisedOptions::split)
                 .ok_or(StoreError::InvalidTransition)?;
-            if !draft.tuning.is_inherited()
+            if draft
+                .tuning
+                .permission_mode
+                .is_some_and(|mode| !permission_modes.contains(&mode))
+            {
+                return Err(StoreError::InvalidTransition);
+            }
+            let choice = choices
+                .into_iter()
+                .find(|item| item.id == draft.model_id)
+                .ok_or(StoreError::InvalidTransition)?;
+            if draft.tuning.has_model_tuning()
                 && !choice
                     .capabilities
                     .as_ref()
@@ -523,6 +633,15 @@ impl Store {
             {
                 return Err(StoreError::InvalidTransition);
             }
+            let previously = stored_tuning(scope.saved_tuning.as_deref())?;
+            let inherit_model = (scope.saved_model_id.is_none() || previously.inherit_model)
+                && scope.observed_current_id.as_deref() == Some(&draft.model_id)
+                && !draft.tuning.has_model_tuning()
+                && previously.tuning.permission_mode != draft.tuning.permission_mode;
+            let tuning = tuning_payload(&StoredTuning {
+                tuning: draft.tuning.clone(),
+                inherit_model,
+            })?;
             diesel::sql_query(dialect.query("UPDATE conversation_model_scopes SET saved_model_id=?,saved_model_label=?,saved_tuning=?,saved_request_id=?,recovery_operation_id=NULL WHERE conversation_id=?"))
                 .bind::<Text, _>(&choice.id).bind::<Text, _>(&choice.label)
                 .bind::<Nullable<Text>, _>(&tuning)
@@ -561,7 +680,10 @@ impl Store {
         {
             return Err(StoreError::InvalidInput);
         }
-        let choices = option_payload(observation.options.as_deref())?;
+        let choices = option_payload(
+            observation.options.as_deref(),
+            &observation.permission_modes,
+        )?;
         let current_id = observation.current.as_ref().map(|value| value.id.as_str());
         let current_label = observation
             .current

@@ -1,5 +1,5 @@
 use super::*;
-use crate::conversation_models::{from_wire_choice, target, wire_tuning};
+use crate::conversation_models::{from_wire_choice, permission_mode, target, wire_tuning};
 use chapchoo_service::{
     ConversationModelObservation, ConversationModelStart, ConversationModelStartAdmission,
     ConversationModelStartOutcome,
@@ -29,14 +29,29 @@ pub(super) async fn observe(
     let credential = actor(&request)?;
     let value = request.into_inner();
     let origin = origin(value.source.as_ref())?;
+    let (options, permission_modes) = match value.options {
+        Some(items) => (
+            Some(
+                items
+                    .choices
+                    .into_iter()
+                    .map(from_wire_choice)
+                    .collect::<Result<Vec<_>, _>>()?,
+            ),
+            items
+                .permission_modes
+                .into_iter()
+                .map(permission_mode)
+                .collect::<Result<Vec<_>, _>>()?,
+        ),
+        None => (None, Vec::new()),
+    };
     let observation = ConversationModelObservation {
         target: target(value.target)?,
         order: value.order,
         current: value.current.map(from_wire_choice).transpose()?,
-        options: value
-            .options
-            .map(|items| items.choices.into_iter().map(from_wire_choice).collect())
-            .transpose()?,
+        options,
+        permission_modes,
         api_key_source: value
             .api_key_source
             .map(|bytes| bytes.try_into())

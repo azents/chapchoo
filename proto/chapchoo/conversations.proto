@@ -47,12 +47,22 @@ message ModelCapabilities {
   repeated string efforts = 1;
   repeated ModelSpeed speeds = 2;
 }
+enum PermissionMode {
+  PERMISSION_MODE_UNSPECIFIED = 0;
+  PERMISSION_MODE_APPROVE_FOR_ME = 1;
+  PERMISSION_MODE_FULL_ACCESS = 2;
+  PERMISSION_MODE_ASK_FOR_APPROVAL = 3;
+}
 message ModelTuning {
   optional string effort = 1;
   optional ModelSpeed speed = 2;
+  optional PermissionMode permission_mode = 3;
 }
 message ModelChoice { string id = 1; string label = 2; ModelCapabilities capabilities = 3; }
-message ModelOptions { repeated ModelChoice choices = 1; }
+message ModelOptions {
+  repeated ModelChoice choices = 1;
+  repeated PermissionMode permission_modes = 2;
+}
 message OwnerConversationModel {
   ModelTarget target = 1;
   ModelChoice current = 2;

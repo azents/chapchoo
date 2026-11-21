@@ -334,7 +334,22 @@ async function request(id, method, params) {
       });
       break;
     case "permissionProfile/list":
-      reply(id, { data: [], nextCursor: null });
+      reply(id, {
+        data: [
+          { id: ":workspace", allowed: true },
+          { id: ":danger-full-access", allowed: true },
+        ],
+        nextCursor: null,
+      });
+      break;
+    case "configRequirements/read":
+      reply(id, { requirements: null });
+      break;
+    case "experimentalFeature/list":
+      reply(id, {
+        data: [{ name: "guardian_approval", enabled: true }],
+        nextCursor: null,
+      });
       break;
     case "model/list":
       reply(id, {
@@ -515,7 +530,10 @@ async function request(id, method, params) {
           "Exercise the deterministic native conversation with a selected model" &&
         (params.model !== alternateModel ||
           params.effort !== "high" ||
-          params.serviceTierForTurn !== "priority")
+          params.serviceTierForTurn !== "priority" ||
+          params.permissions !== ":workspace" ||
+          params.approvalPolicy !== "on-request" ||
+          params.approvalsReviewer !== "user")
       ) {
         throw new Error("The saved preferences did not reach the native turn");
       }

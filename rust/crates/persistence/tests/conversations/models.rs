@@ -96,6 +96,7 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
                 current: Some(first.clone()),
                 options: Some(vec![first, second.clone()]),
                 api_key_source: Some(*material.source.as_bytes()),
+                permission_modes: vec![chapchoo_domain::ConversationPermissionMode::ApproveForMe],
             },
         )
         .await?;
@@ -107,6 +108,7 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
         tuning: chapchoo_domain::ConversationModelTuning {
             effort: Some("medium".into()),
             speed: Some(chapchoo_domain::ConversationSpeed::Standard),
+            permission_mode: Some(chapchoo_domain::ConversationPermissionMode::ApproveForMe),
         },
     };
     assert!(

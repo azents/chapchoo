@@ -48,7 +48,7 @@ for (const width of [390, 1280]) {
               native: { snapshotId: "snapshot", nativeSessionId: "native" },
             },
             current: saved,
-            options: { choices: [current, alternative] },
+            options: { choices: [current, alternative], permissionModes: [] },
           };
           break;
         case "conversations.saveModel": {

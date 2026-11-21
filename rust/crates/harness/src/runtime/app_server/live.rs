@@ -1,8 +1,10 @@
 //! Exact, execution-local App Server ingress and operations.
 use super::{
-    Thread, TurnOptions, call, events, forms, initialize, model_catalog, service_tier, tools, wire,
+    Thread, TurnOptions, call, events, forms, initialize, model_catalog, permissions, service_tier,
+    tools, wire,
 };
 use crate::{CaptureLog, NativeMcpDeclaration, ProtocolStage, runtime::*};
+use chapchoo_domain::ConversationPermissionMode;
 use serde_json::{Value, json};
 use std::{
     future::Future,
@@ -55,6 +57,7 @@ pub(in crate::runtime) struct LiveThread {
     connection: Connection,
     id: NativeConversationId,
     options: NativeModelOptions,
+    full_access_at_open: bool,
 }
 
 impl Connection {
@@ -101,6 +104,7 @@ impl Connection {
         initialize(&self.client, initial_key).await?;
         let opened = Thread::open(&self.client, cwd, existing, Some(mcp)).await?;
         let id = opened.id;
+        let full_access_at_open = opened.full_access;
         if existing.is_none() {
             call(
                 &self.client,
@@ -112,8 +116,14 @@ impl Connection {
             )
             .await?;
         }
-        let options = tokio::time::timeout(Duration::from_secs(5), model_catalog(&self.client))
-            .await
+        let (catalogue, permission_modes) = tokio::join!(
+            tokio::time::timeout(Duration::from_secs(5), model_catalog(&self.client)),
+            tokio::time::timeout(
+                Duration::from_secs(5),
+                permissions::discover(&self.client, cwd, id.as_str()),
+            ),
+        );
+        let options = catalogue
             .ok()
             .and_then(Result::ok)
             .unwrap_or_default()
@@ -155,10 +165,15 @@ impl Connection {
         Ok(LiveThread {
             connection: self,
             id,
+            full_access_at_open,
             options: NativeModelOptions {
                 option_id: "model".into(),
                 current,
                 options,
+                permission_modes: permission_modes
+                    .ok()
+                    .and_then(Result::ok)
+                    .unwrap_or_default(),
             },
         })
     }
@@ -314,11 +329,13 @@ impl LiveThread {
             link: &self.connection.client,
             id: self.id.clone(),
             model: None,
+            full_access: self.full_access_at_open,
         }
     }
 
     pub(in crate::runtime) fn models(&self) -> Option<NativeModelOptions> {
-        (!self.options.options.is_empty()).then(|| self.options.clone())
+        (!self.options.options.is_empty() || !self.options.permission_modes.is_empty())
+            .then(|| self.options.clone())
     }
 
     pub(in crate::runtime) fn enqueue_prompt(
@@ -336,7 +353,7 @@ impl LiveThread {
         }) {
             return Err(Error::NotAdmitted);
         }
-        if !tuning.is_inherited()
+        if tuning.has_model_tuning()
             && !self.options.options.iter().any(|candidate| {
                 Some(candidate.id.as_str()) == model
                     && candidate
@@ -345,6 +362,16 @@ impl LiveThread {
                         .is_some_and(|options| options.accepts(tuning))
             })
         {
+            return Err(Error::NotAdmitted);
+        }
+        let permission_modes = &self.options.permission_modes;
+        let permissions = match tuning.permission_mode {
+            Some(mode) if permission_modes.contains(&mode) => Some(mode.into()),
+            Some(_) => return Err(Error::NotAdmitted),
+            None => ConversationPermissionMode::default_from(permission_modes).map(Into::into),
+        };
+        if permissions.is_none() && self.full_access_at_open {
+            // A retained disabled sandbox is not a newly resolved default.
             return Err(Error::NotAdmitted);
         }
         let root = self
@@ -360,6 +387,7 @@ impl LiveThread {
                 model,
                 effort: tuning.effort.as_deref(),
                 tier: tuning.speed.map(service_tier),
+                permissions,
             },
         )?;
         Ok(async move { Ok(pending.await?.item) })

@@ -136,6 +136,23 @@ test("owner follows Conversation Work and inspects native typed-answer records",
     await expect(
       settings.getByRole("button", { name: /^Model/ }),
     ).toContainText("Alternate fixture model");
+    stage = "choose-native-permissions";
+    const permissionEntry = settings.getByRole("button", {
+      name: /^Permissions/,
+    });
+    await expect(permissionEntry).toContainText("Approve for me");
+    await permissionEntry.click();
+    const permissions = page.getByRole("dialog", {
+      name: "Change permissions",
+    });
+    await expect(
+      permissions.getByRole("radio", { name: "Approve for me" }),
+    ).toBeChecked();
+    await permissions.getByRole("radio", { name: "Ask for approval" }).click();
+    await permissions
+      .getByRole("button", { name: "Save", exact: true })
+      .click();
+    await expect(permissionEntry).toContainText("Ask for approval");
     await page.keyboard.press("Escape");
     await expect(settings).toHaveCount(0);
     expect(sendRequests).toBe(0);

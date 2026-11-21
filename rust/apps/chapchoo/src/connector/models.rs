@@ -1,7 +1,7 @@
 //! Connector-owned retained outcomes for model-governed starts.
 
 use super::*;
-use chapchoo_domain::{ConversationModelTuning, ConversationSpeed};
+use chapchoo_domain::{ConversationModelTuning, ConversationPermissionMode, ConversationSpeed};
 use chapchoo_harness::{
     ContinuationRoute, Error, NativeModelAuthority, NativeModelChoice, NativeModelDispatch,
     NativeModelFuture, NativeModelObservation, NativeModelReservation, NativeModelStart,
@@ -87,6 +87,19 @@ fn from_wire_tuning(value: Option<wire::ModelTuning>) -> Result<ConversationMode
     Ok(ConversationModelTuning {
         effort: value.effort,
         speed,
+        permission_mode: value
+            .permission_mode
+            .map(|mode| match wire::PermissionMode::try_from(mode) {
+                Ok(wire::PermissionMode::ApproveForMe) => {
+                    Ok(ConversationPermissionMode::ApproveForMe)
+                }
+                Ok(wire::PermissionMode::FullAccess) => Ok(ConversationPermissionMode::FullAccess),
+                Ok(wire::PermissionMode::AskForApproval) => {
+                    Ok(ConversationPermissionMode::AskForApproval)
+                }
+                _ => Err(Error::Protocol),
+            })
+            .transpose()?,
     })
 }
 
@@ -103,6 +116,23 @@ pub(super) async fn observe(
             option.current.map(wire_choice),
             Some(wire::ModelOptions {
                 choices: option.options.into_iter().map(wire_choice).collect(),
+                permission_modes: option
+                    .permission_modes
+                    .into_iter()
+                    .map(|mode| {
+                        (match mode {
+                            ConversationPermissionMode::ApproveForMe => {
+                                wire::PermissionMode::ApproveForMe
+                            }
+                            ConversationPermissionMode::FullAccess => {
+                                wire::PermissionMode::FullAccess
+                            }
+                            ConversationPermissionMode::AskForApproval => {
+                                wire::PermissionMode::AskForApproval
+                            }
+                        }) as i32
+                    })
+                    .collect(),
             }),
         )
     });
