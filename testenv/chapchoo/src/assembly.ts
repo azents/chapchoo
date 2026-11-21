@@ -64,6 +64,7 @@ export class Assembly {
   private closed = false;
   private product: OwnedChild | null = null;
   private productReady = false;
+  private backendEnv: NodeJS.ProcessEnv | null = null;
 
   private constructor(
     private readonly directory: string,
@@ -71,7 +72,7 @@ export class Assembly {
     private readonly adminPort: number,
     generalWebPort: number,
     adminWebPort: number,
-    private readonly packageRoot: string | null,
+    private packageRoot: string | null,
     docker: DockerFixtureConfig | null,
     private readonly nativeBinary: string | null,
   ) {
@@ -203,7 +204,7 @@ export class Assembly {
       safeEnvironment(),
       35_000,
     );
-    const backendEnv = {
+    this.backendEnv = {
       ...safeEnvironment(),
       // The fixture runner needs development tools; the installed command does
       // not. Its deployment PATH deliberately contains no host Node/pnpm/Turbo.
@@ -213,6 +214,15 @@ export class Assembly {
       CHAPCHOO_POSTGRES_URL: `postgresql://fixture@localhost/postgres?host=${encodeURIComponent(socket)}`,
       CHAPCHOO_SECRET_KEY: `${secret()}=`,
     };
+    await this.startServices(browser, true);
+  }
+
+  private async startServices(
+    browser: boolean,
+    bootstrap: boolean,
+  ): Promise<void> {
+    const backendEnv = this.backendEnv;
+    if (!backendEnv) throw new Error("Private backend state is unavailable");
     const rust = join(repository, "rust");
     if (!this.packageRoot && !this.nativeBinary) {
       await this.owner.run(
@@ -240,7 +250,7 @@ export class Assembly {
     const bootstrapProviders = this.docker
       ? ["fixture-provider", this.docker.registrationKey]
       : ["fixture-provider"];
-    for (const id of bootstrapProviders) {
+    for (const id of bootstrap ? bootstrapProviders : []) {
       await this.owner.run(
         "Provider bootstrap credential issuance",
         binary,
@@ -482,6 +492,34 @@ export class Assembly {
       },
     );
   }
+  /** Test-only cutover after product Stop removed the exact previous execution. */
+  async replaceDockerBrowserPackage(
+    previous: Awaited<ReturnType<DockerFixture["current"]>>,
+    packageRoot: string,
+    image: string,
+  ): Promise<void> {
+    if (this.closed || !this.docker || !this.packageRoot || this.nativeBinary) {
+      throw new Error(
+        "Cutover requires an owned installed Docker browser fixture",
+      );
+    }
+    if (packageRoot === this.packageRoot || !packageRoot.startsWith("/")) {
+      throw new Error(
+        "Cutover requires a distinct absolute replacement package",
+      );
+    }
+    await access(join(packageRoot, "chapchoo"));
+    await access(join(packageRoot, "runtime/bin/node"));
+    await this.docker.verifyRetired(previous);
+    await this.owner.stopAll();
+    this.productReady = false;
+    await this.docker.verifyRetired(previous);
+    this.packageRoot = packageRoot;
+    this.docker.config.image = image;
+    await this.startServices(true, false);
+    await this.startDockerProvider();
+  }
+
   get savedAllocations(): number {
     return this.kubernetes?.savedAllocations ?? 0;
   }

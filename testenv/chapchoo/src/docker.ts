@@ -147,6 +147,7 @@ export class DockerFixture {
       architecture: version.Arch,
       image: this.image,
     };
+    if (this.initialized) return;
     this.initialized = true;
     // Canary objects use a disjoint fixture label, never Provider ownership.
     this.volumeName = `${this.run}-volume`;
@@ -209,6 +210,19 @@ export class DockerFixture {
   }
   async successor(previous: NativeComputer): Promise<NativeComputer | null> {
     return runningSuccessor(previous, await this.observe());
+  }
+  async verifyRetired(previous: NativeComputer): Promise<void> {
+    const observed = await this.observe();
+    if (
+      observed.type !== "absent" ||
+      observed.daemon !== previous.daemon ||
+      observed.volume !== previous.volume ||
+      !(await this.containerAbsent(previous.container))
+    ) {
+      throw new Error(
+        "Cutover requires confirmed retirement and the original saved volume",
+      );
+    }
   }
   private async observe(): Promise<NativeObservation> {
     await this.verifyDaemon();

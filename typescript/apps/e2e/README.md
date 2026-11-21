@@ -87,6 +87,27 @@ webs with root mounts. Docker mode keeps the Control listener reachable from
 its owned bridge. Source mode uses the same public contracts with `/app` and
 `/admin` mounts and production web listeners.
 
+### Rehearse the Codex cutover
+
+In a disposable Docker fixture, use the checksum-verified previous package as
+`CHAPCHOO_E2E_PACKAGE_ROOT` and its matching fixture image as
+`CHAPCHOO_INTEGRATION_DOCKER_IMAGE`. Build each image with its release's own
+`codex-app-server.cjs` fixture. Set `CHAPCHOO_E2E_NEXT_PACKAGE_ROOT` to the
+checksum-verified replacement package and `CHAPCHOO_E2E_NEXT_DOCKER_IMAGE` to
+its matching image, then run:
+
+```sh
+pnpm --filter @chapchoo/e2e test:conversation --grep 'a stopped Cloud Computer'
+```
+
+This variant seeds a turn before the change and uses the product's Stop
+operation. Only after confirming the previous container is absent does the
+fixture replace its product and provider processes, migrate its private
+PostgreSQL database, and send to the original conversation. The test checks
+native and conversation identity, old message IDs, the original workspace
+marker and a single delivery after the change. This is not a production
+rollout or a real-model test.
+
 ## Ownership and lifecycle
 
 - `testenv/chapchoo` owns reusable Assembly/process/configuration/seed support.
