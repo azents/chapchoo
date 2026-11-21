@@ -19,6 +19,11 @@ check current authority. Private Agent ownership and current Team membership
 remain server facts. Native IDs, startup readiness and the UI's selected
 conversation are not publication permission.
 
+For both new and resumed Codex threads, the launch-local `chapchoo` declaration
+exempts only its built-in `send` from the Codex tool approval prompt. The
+declaration still defaults to prompting for any other tool on that server.
+This changes the Codex prompt, not the relay's authorization to publish.
+
 `send` requires an explicit `action`. User messages open one reply Work without
 a visible plan. A direct `finish` can publish the answer without `continue`.
 The first `continue` publishes a plan and requires a title and the complete
