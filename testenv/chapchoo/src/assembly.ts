@@ -64,6 +64,7 @@ export class Assembly {
   private closed = false;
   private product: OwnedChild | null = null;
   private productReady = false;
+  private cutoverProvider: OwnedChild | null = null;
   private backendEnv: NodeJS.ProcessEnv | null = null;
 
   private constructor(
@@ -517,7 +518,20 @@ export class Assembly {
     this.packageRoot = packageRoot;
     this.docker.config.image = image;
     await this.startServices(true, false);
-    await this.startDockerProvider();
+    this.cutoverProvider = await this.startDockerProvider();
+  }
+
+  async reuseCutoverProvider(): Promise<OwnedChild> {
+    if (
+      !this.cutoverProvider ||
+      !this.docker ||
+      !(await this.docker.productAbsent())
+    ) {
+      throw new Error(
+        "Fresh cohort requires a replaced product and verified retirement of the retained cohort",
+      );
+    }
+    return this.cutoverProvider;
   }
 
   get savedAllocations(): number {

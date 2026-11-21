@@ -98,11 +98,12 @@ async function connectMcp(servers) {
     throw new Error("Fixture requires its exact server-tools catalog");
   mcpTools = catalog.tools;
 }
-const threadId = "fixture-thread";
+let threadId = "fixture-thread";
 let turnId = "fixture-turn";
 const model = "fixture-model";
 const alternateModel = "fixture-alternate";
 let authenticated = false;
+let directClient = false;
 let active = false;
 let primaryUsed = false;
 let primaryStarted = false;
@@ -273,6 +274,7 @@ function finish(accepted) {
 async function request(id, method, params) {
   switch (method) {
     case "initialize":
+      directClient = params?.clientInfo?.name === "chapchoo";
       reply(id, {
         userAgent: "chapchoo-deterministic-fixture",
         codexHome: process.env.CODEX_HOME ?? null,
@@ -288,6 +290,9 @@ async function request(id, method, params) {
       )
         throw new Error("Fixture requires explicit synthetic key login");
       authenticated = true;
+      if (params.apiKey === "disposable-fresh-conversation-key") {
+        threadId = "fixture-fresh-thread";
+      }
       reply(id, { type: "apiKey" });
       notify("account/login/completed", {
         loginId: null,
@@ -385,16 +390,24 @@ async function request(id, method, params) {
           throw new Error("Fixture primary thread was started twice");
         if (
           method === "thread/resume" &&
-          (params.threadId !== threadId || !existsSync(retainedThread))
+          (params.threadId !== threadId ||
+            !existsSync(retainedThread) ||
+            readFileSync(retainedThread, "utf8").trim() !== threadId)
         )
           throw new Error("Fixture exact retained thread is unavailable");
         primaryStarted = true;
         await connectMcp(params.config?.mcp_servers);
         if (method === "thread/start")
-          writeFileSync(retainedThread, "fixture-thread\n", {
+          writeFileSync(retainedThread, `${threadId}\n`, {
             flag: "wx",
             mode: 0o600,
           });
+        if (directClient) {
+          writeFileSync(
+            "/workspace/acceptance-direct-admission",
+            method === "thread/start" ? "start\n" : "resume\n",
+          );
+        }
       }
       cwd = params.cwd;
       reply(id, {
@@ -651,7 +664,11 @@ async function request(id, method, params) {
         (params.input[0]?.text !==
           "Exercise the deterministic native conversation" &&
           prompt !==
-            "Exercise the deterministic native conversation with a selected model")
+            "Exercise the deterministic native conversation with a selected model" &&
+          !(
+            threadId === "fixture-fresh-thread" &&
+            prompt === "Send the first message to the new conversation"
+          ))
       )
         throw new Error("Fixture turn was not admitted");
       verifyWorkInstructions(cwd);

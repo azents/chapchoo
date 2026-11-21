@@ -93,6 +93,13 @@ export class DockerFixture {
     }
     this.canonicalProvider = providerId;
   }
+  verifyBoundProvider(providerId: string): void {
+    if (this.providerId !== providerId) {
+      throw new Error(
+        "Cutover did not preserve its registered fixture Provider",
+      );
+    }
+  }
   private get providerId(): string {
     if (this.canonicalProvider === null) {
       throw new Error("Canonical fixture Provider identity is not bound");
@@ -380,6 +387,21 @@ export class DockerFixture {
   }
   async readMarker(target: NativeComputer): Promise<string> {
     return this.exec(target, "cat /workspace/acceptance-marker");
+  }
+  async conversationAdmission(
+    target: NativeComputer,
+  ): Promise<"start" | "resume"> {
+    const recorded = await this.exec(
+      target,
+      "cat /workspace/acceptance-direct-admission",
+    );
+    if (recorded !== "start" && recorded !== "resume") {
+      throw new Error("Missing exact direct fixture admission");
+    }
+    return recorded;
+  }
+  async verifyNoRetainedMarker(target: NativeComputer): Promise<void> {
+    await this.exec(target, "test ! -e /workspace/acceptance-marker");
   }
   /** Remove only this fixture's user marker, preserving Connector-owned state. */
   async clearSaved(target: NativeComputer): Promise<void> {

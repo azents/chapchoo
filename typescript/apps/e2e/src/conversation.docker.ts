@@ -725,6 +725,10 @@ test("a stopped Cloud Computer restores its source and delivers an ordinary mess
       expect(successor.volume).toEqual(originalExecution.volume);
       expect(successor.container).not.toEqual(originalExecution.container);
       expect(await docker.readMarker(successor)).toEqual("saved-original-data");
+      expect(await docker.conversationAdmission(successor)).toBe("resume");
+      expect(await docker.containerAbsent(originalExecution.container)).toBe(
+        true,
+      );
       expect(
         (
           await rows.evaluateAll((nodes) =>
@@ -738,6 +742,62 @@ test("a stopped Cloud Computer restores its source and delivers an ordinary mess
     stage = "finish-owned-fixture-work";
     await finishFixtureQuestion(page);
     await expect(rows).toHaveCount(count * 2);
+    if (docker && originalExecution) {
+      stage = "fresh-after-cutover";
+      const retained = fixture;
+      const retainedExecution = await docker.current();
+      fixture = null;
+      await retained.close();
+      fixture = await nativeConversation(
+        assembly,
+        undefined,
+        "fresh-after-cutover",
+      );
+      stage = "fresh-capture-ready";
+      const freshFixture = fixture;
+      await expect
+        .poll(
+          async () => {
+            const current = await freshFixture.current();
+            const ready = current.startup?.sessionReady;
+            return (
+              ready?.nativeSessionId === "fixture-fresh-thread" &&
+              ready.snapshotId === current.conversation?.snapshotId &&
+              ready.nativeSessionId === current.conversation?.nativeSessionId
+            );
+          },
+          { timeout: 180_000 },
+        )
+        .toBe(true);
+      stage = "fresh-isolation";
+      const fresh = await fixture.current();
+      expect(fresh.conversation?.conversationId).not.toBe(
+        before.conversation?.conversationId,
+      );
+      expect(fresh.conversation?.nativeSessionId).not.toBe(
+        target?.nativeSessionId,
+      );
+      const freshExecution = await docker.current();
+      expect(freshExecution.volume).not.toBe(retainedExecution.volume);
+      expect(await docker.conversationAdmission(freshExecution)).toBe("start");
+      await docker.verifyNoRetainedMarker(freshExecution);
+      await page.goto(`${assembly.generalUrl}${fixture.chatPath}`);
+      const freshText = "Send the first message to the new conversation";
+      stage = "fresh-first-delivery";
+      await expect(rows).toHaveCount(0);
+      await message.fill(freshText);
+      await page.getByRole("button", { name: "Send", exact: true }).click();
+      await expect(publication).toHaveCount(1, { timeout: 180_000 });
+      await expect(log.getByText(freshText, { exact: true })).toHaveCount(1);
+      await expect(log.getByText(text, { exact: true })).toHaveCount(0);
+      await expect(rows).toHaveCount(2);
+      await finishFixtureQuestion(page);
+      expect(sends).toBe(count + 1);
+      expect(await fixture.pendingInputs()).toBe(0);
+      expect((await fixture.current()).observedNative?.target).toEqual(
+        fresh.startup?.sessionReady,
+      );
+    }
     recordConversationBody(bodyStarted);
   } catch (error) {
     recordConversationBody(bodyStarted);

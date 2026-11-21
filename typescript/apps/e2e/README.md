@@ -105,8 +105,11 @@ operation. Only after confirming the previous container is absent does the
 fixture replace its product and provider processes, migrate its private
 PostgreSQL database, and send to the original conversation. The test checks
 native and conversation identity, old message IDs, the original workspace
-marker and a single delivery after the change. This is not a production
-rollout or a real-model test.
+marker and a single delivery after the change. It then creates a separate
+conversation with a different synthetic key and verifies its first delivery
+and empty prior history. The fixture distinguishes a direct `thread/resume`
+for the original conversation from a direct `thread/start` for the new one.
+This is not a production rollout or a real-model test.
 
 ## Ownership and lifecycle
 
