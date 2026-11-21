@@ -211,6 +211,8 @@ impl<'a> Thread<'a> {
             #[serde(skip_serializing_if = "Option::is_none")]
             approval_policy: Option<&'static str>,
             #[serde(skip_serializing_if = "Option::is_none")]
+            approvals_reviewer: Option<&'static str>,
+            #[serde(skip_serializing_if = "Option::is_none")]
             config: Option<tools::Config<'a>>,
         }
         let prepared = mcp.map(tools::Prepared::new);
@@ -227,6 +229,7 @@ impl<'a> Thread<'a> {
                 thread_id: existing.map(NativeConversationId::as_str),
                 exclude_turns: existing.map(|_| true),
                 approval_policy: mcp.map(|_| "on-request"),
+                approvals_reviewer: mcp.map(|_| "user"),
                 config: prepared.as_ref().map(tools::Prepared::config),
             },
         )

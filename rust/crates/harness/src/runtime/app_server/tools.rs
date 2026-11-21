@@ -31,6 +31,7 @@ impl<'a> Prepared<'a> {
                     },
                     required: true,
                     default_tools_approval_mode: "prompt",
+                    omit_tools_from: ["code_mode", "deferred"],
                 },
             },
             code_mode: CodeMode {
@@ -61,6 +62,7 @@ struct Server<'a> {
     http_headers: Headers<'a>,
     required: bool,
     default_tools_approval_mode: &'static str,
+    omit_tools_from: [&'static str; 2],
 }
 
 #[derive(Serialize)]
