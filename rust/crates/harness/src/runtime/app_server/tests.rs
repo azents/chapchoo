@@ -75,6 +75,62 @@ async fn send(writer: &mut (impl AsyncWrite + Unpin), value: Value) -> TestResul
 }
 
 #[tokio::test]
+async fn deferred_requests_remain_ordered_and_cancel_by_typed_id_and_thread() -> TestResult {
+    use tokio::sync::{mpsc, oneshot};
+
+    tokio::time::timeout(Duration::from_secs(5), async {
+        let (local, remote) = duplex(4096);
+        let (read, write) = split(local);
+        let (server_read, server_write) = split(remote);
+        let mut input = FramedRead::new(server_read, LinesCodec::new());
+        let mut output = FramedWrite::new(server_write, LinesCodec::new());
+        let (published, mut requests) = mpsc::channel(8);
+        let done = CancellationToken::new();
+        let (link, driver) = wire::connect_with_requests(read, write, done.clone(), move |raw, frame| {
+            let answer = if frame["method"] == "fixture/request" {
+                let (tx, rx) = oneshot::channel();
+                published.try_send((raw.to_owned(), Some(tx))).map_err(|_| Error::Protocol)?;
+                Some(wire::ServerReply::Deferred(rx))
+            } else {
+                published.try_send((raw.to_owned(), None)).map_err(|_| Error::Protocol)?;
+                None
+            };
+            Ok(answer)
+        });
+        let driver = tokio::spawn(driver);
+        let outstanding = link.enqueue("model/list", json!({}))?;
+        let call: Value = serde_json::from_str(&input.next().await.ok_or("missing client request")??)?;
+        assert_eq!(call["id"], 1);
+        let number = r#"{"method": "fixture/request", "id":1,"params":{"threadId":"root"}}"#;
+        let string = r#"{"method":"fixture/request","id":"1","params":{"threadId":"root"}}"#;
+        output.send(number).await?;
+        output.send(string).await?;
+        let (original, number_answer) = requests.recv().await.ok_or("numeric request")?;
+        assert_eq!(original, number);
+        let mut number_answer = number_answer.ok_or("numeric answer")?;
+        let (_, string_answer) = requests.recv().await.ok_or("string request")?;
+        let string_answer = string_answer.ok_or("string answer")?;
+        output.send(json!({"id":1,"result":{"data":[]}}).to_string()).await?;
+        assert_eq!(outstanding.receive().await?, json!({"data":[]}));
+        output.send(json!({"method":"serverRequest/resolved","params":{"threadId":"foreign","requestId":1}}).to_string()).await?;
+        let _ = requests.recv().await.ok_or("foreign resolution")?;
+        assert!(!number_answer.is_closed());
+        output.send(json!({"method":"serverRequest/resolved","params":{"threadId":"root","requestId":1}}).to_string()).await?;
+        let _ = requests.recv().await.ok_or("root resolution")?;
+        number_answer.closed().await;
+        assert!(number_answer.send(Ok(json!({"action":"accept"}))).is_err());
+        assert!(!string_answer.is_closed());
+        string_answer.send(Ok(json!({"action":"decline"}))).map_err(|_| "answer closed")?;
+        let response: Value = serde_json::from_str(&input.next().await.ok_or("missing response")??)?;
+        assert_eq!(response, json!({"id":"1","result":{"action":"decline"}}));
+        done.cancel();
+        driver.await??;
+        Ok(())
+    })
+    .await?
+}
+
+#[tokio::test]
 async fn exact_resume_and_standard_are_sent_on_the_same_direct_connection() -> TestResult {
     tokio::time::timeout(Duration::from_secs(5), async {
         let (client_side, server_side) = duplex(2048);
@@ -310,6 +366,73 @@ async fn lost_reply_is_uncertain_and_does_not_republish() -> TestResult {
         client.enqueue("turn/start", json!({})),
         Err(Error::NotAdmitted)
     ));
+    Ok(())
+}
+
+#[tokio::test]
+async fn mcp_approval_answers_bind_to_the_exact_capture_and_never_remember() -> TestResult {
+    use chapchoo_domain::{EventOccurrenceId, SnapshotId, SourcePosition};
+    use tools::{Approval, Choice};
+
+    let target = super::super::NativeTextTarget {
+        snapshot: SnapshotId::parse("snapshot".into())?,
+        native_session: NativeConversationId::parse("native".into())?,
+    };
+    let position = SourcePosition::new(1, EventOccurrenceId::parse("decision".into())?)?;
+    let wrong_position = SourcePosition::new(1, EventOccurrenceId::parse("other".into())?)?;
+    let frame = json!({
+        "id": 7, "method": "mcpServer/elicitation/request",
+        "params": {
+            "threadId": "native", "turnId": "live-turn", "serverName": "chapchoo", "mode": "form",
+            "requestedSchema": {"type": "object", "properties": {}},
+            "_meta": {"codex_approval_kind":"mcp_tool_call", "tool_name":"inspect", "persist":"always"}
+        }
+    });
+    for (field, value) in [
+        ("threadId", json!("elsewhere")),
+        ("turnId", Value::Null),
+        ("serverName", json!("another")),
+        ("mode", json!("url")),
+        ("_meta", json!({"tool_name":"inspect"})),
+        (
+            "requestedSchema",
+            json!({"type":"object", "properties":{"extra":{"type":"string"}}}),
+        ),
+    ] {
+        let mut invalid = frame.clone();
+        invalid["params"][field] = value;
+        assert!(Approval::offer(target.clone(), position.clone(), "live-turn", invalid)?.is_none());
+    }
+    for (choice, expected) in [
+        (Choice::ApproveOnce, json!({"action":"accept","content":{}})),
+        (Choice::Decline, json!({"action":"decline","content":null})),
+    ] {
+        let (mut approval, reply) =
+            Approval::offer(target.clone(), position.clone(), "live-turn", frame.clone())?
+                .ok_or("approval expected")?;
+        let wire::ServerReply::Deferred(mut reply) = reply else {
+            return Err("deferred expected".into());
+        };
+        assert_eq!(approval.tool, "inspect");
+        assert!(matches!(
+            approval.answer(&target, &wrong_position, "live-turn", choice),
+            Err(Error::NotAdmitted)
+        ));
+        assert!(matches!(
+            approval.answer(&target, &position, "later-turn", choice),
+            Err(Error::NotAdmitted)
+        ));
+        assert!(matches!(
+            reply.try_recv(),
+            Err(tokio::sync::oneshot::error::TryRecvError::Empty)
+        ));
+        approval.answer(&target, &position, "live-turn", choice)?;
+        assert!(matches!(
+            approval.answer(&target, &position, "live-turn", choice),
+            Err(Error::NotAdmitted)
+        ));
+        assert_eq!(reply.await?.map_err(|_| "reply rejected")?, expected);
+    }
     Ok(())
 }
 

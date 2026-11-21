@@ -1,7 +1,11 @@
 //! Local App Server JSONL: independent request ownership and ordered ingress.
 use crate::Error;
-use futures_util::{SinkExt, StreamExt};
-use serde::Serialize;
+use futures_util::{
+    SinkExt, StreamExt,
+    future::{AbortHandle, Abortable},
+    stream::FuturesUnordered,
+};
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
     collections::BTreeMap,
@@ -38,6 +42,30 @@ pub(super) enum CallFailure {
 }
 
 pub(super) struct Reply(oneshot::Receiver<Result<Value, i32>>);
+
+#[derive(Clone, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(untagged)]
+enum RequestId {
+    Number(i64),
+    String(String),
+}
+
+pub(super) enum ServerReply {
+    Immediate(Value),
+    Deferred(oneshot::Receiver<Result<Value, i32>>),
+}
+
+struct PendingServerRequest {
+    generation: u64,
+    thread: String,
+    abort: AbortHandle,
+}
+
+impl Drop for PendingServerRequest {
+    fn drop(&mut self) {
+        self.abort.abort();
+    }
+}
 
 impl Reply {
     pub(super) async fn receive(self) -> Result<Value, CallFailure> {
@@ -95,7 +123,20 @@ pub(super) fn connect(
     read: impl AsyncRead + Unpin,
     write: impl AsyncWrite + Unpin,
     done: CancellationToken,
-    ingress: impl FnMut(Value) -> Result<Option<Value>, Error>,
+    mut ingress: impl FnMut(Value) -> Result<Option<Value>, Error>,
+) -> (Client, impl Future<Output = Result<(), Error>>) {
+    connect_with_requests(read, write, done, move |_, message| {
+        ingress(message).map(|reply| reply.map(ServerReply::Immediate))
+    })
+}
+
+/// The ordered ingress callback may retain a responder without blocking
+/// reads. It receives the actual wire bytes, not a reserialized envelope.
+pub(super) fn connect_with_requests(
+    read: impl AsyncRead + Unpin,
+    write: impl AsyncWrite + Unpin,
+    done: CancellationToken,
+    ingress: impl FnMut(&str, Value) -> Result<Option<ServerReply>, Error>,
 ) -> (Client, impl Future<Output = Result<(), Error>>) {
     let (commands, outbound) = mpsc::channel(CAPACITY);
     (
@@ -112,12 +153,15 @@ async fn drive(
     write: impl AsyncWrite + Unpin,
     done: CancellationToken,
     mut outbound: mpsc::Receiver<Outbound>,
-    mut ingress: impl FnMut(Value) -> Result<Option<Value>, Error>,
+    mut ingress: impl FnMut(&str, Value) -> Result<Option<ServerReply>, Error>,
 ) -> Result<(), Error> {
     let codec = || LinesCodec::new_with_max_length(super::super::MAX_LINE);
     let mut input = FramedRead::new(read, codec());
     let mut output = FramedWrite::new(write, codec());
     let mut pending = BTreeMap::new();
+    let mut incoming = BTreeMap::<RequestId, PendingServerRequest>::new();
+    let mut answers = FuturesUnordered::new();
+    let mut generation = 0_u64;
     loop {
         tokio::select! {
             () = done.cancelled() => return Ok(()),
@@ -143,17 +187,52 @@ async fn drive(
                     if !message["method"].is_string() || message.get("result").is_some() || message.get("error").is_some() {
                         return Err(Error::Protocol);
                     }
-                    // A server request may reuse the client ID space; it can
-                    // never satisfy an outbound request.
-                    if let Some(response) = ingress(message)? {
-                        let response = serde_json::to_string(&response).map_err(|_| Error::Protocol)?;
-                        if response.len() > super::super::MAX_LINE {
+                    let id = message.get("id").map(request_id).transpose()?;
+                    if id.as_ref().is_some_and(|id| incoming.contains_key(id)) {
+                        return Err(Error::Protocol);
+                    }
+                    if message["method"] == "serverRequest/resolved" {
+                        if id.is_some() {
                             return Err(Error::Protocol);
                         }
-                        tokio::select! {
-                            () = done.cancelled() => return Ok(()),
-                            result = output.send(response.as_str()) => result.map_err(|_| Error::Protocol)?,
+                        let scope = &message["params"];
+                        let resolved = request_id(&scope["requestId"])?;
+                        if incoming.get(&resolved).is_some_and(|target| {
+                            scope["threadId"].as_str() == Some(target.thread.as_str())
+                        }) {
+                            incoming.remove(&resolved);
                         }
+                    }
+                    // Reject over-capacity requests before allowing them to be
+                    // captured as user-answerable. Do not drop an open request.
+                    if let Some(id) = &id && answers.len() >= CAPACITY {
+                        send_response(&mut output, &done, &error_response(id, -32603)).await?;
+                        continue;
+                    }
+                    let thread = id.as_ref().and_then(|_| {
+                        message["params"]["threadId"].as_str().filter(|id| super::valid_key(id)).map(str::to_owned)
+                    });
+                    match (id, ingress(&line, message)?) {
+                        (Some(_), Some(ServerReply::Immediate(response))) => {
+                            send_response(&mut output, &done, &response).await?;
+                        }
+                        (Some(id), Some(ServerReply::Deferred(answer))) => {
+                            let thread = thread.ok_or(Error::Protocol)?;
+                            generation = generation.checked_add(1).ok_or(Error::Protocol)?;
+                            let epoch = generation;
+                            let (abort, registration) = AbortHandle::new_pair();
+                            incoming.insert(id.clone(), PendingServerRequest {
+                                generation: epoch, thread, abort,
+                            });
+                            answers.push(async move {
+                                (id, epoch, Abortable::new(answer, registration).await)
+                            });
+                        }
+                        (Some(id), None) => {
+                            send_response(&mut output, &done, &error_response(&id, -32601)).await?;
+                        }
+                        (None, None) => {}
+                        (None, Some(_)) => return Err(Error::Protocol),
                     }
                 } else {
                     let id = message["id"].as_u64().ok_or(Error::Protocol)?;
@@ -169,6 +248,47 @@ async fn drive(
                     let _ = reply.send(result);
                 }
             }
+            answer = answers.next(), if !answers.is_empty() => {
+                let Some((id, epoch, answer)) = answer else { return Err(Error::Protocol) };
+                if !incoming.get(&id).is_some_and(|entry| entry.generation == epoch) {
+                    continue;
+                }
+                incoming.remove(&id);
+                let response = match answer {
+                    Ok(Ok(Ok(result))) => json!({"id": id, "result": result}),
+                    Ok(Ok(Err(code))) => error_response(&id, code),
+                    Ok(Err(_)) => error_response(&id, -32603),
+                    Err(_) => continue,
+                };
+                send_response(&mut output, &done, &response).await?;
+            }
         }
+    }
+}
+
+fn request_id(value: &Value) -> Result<RequestId, Error> {
+    let id = serde_json::from_value(value.clone()).map_err(|_| Error::Protocol)?;
+    if matches!(&id, RequestId::String(s) if !super::valid_key(s)) {
+        return Err(Error::Protocol);
+    }
+    Ok(id)
+}
+
+fn error_response(id: &RequestId, code: i32) -> Value {
+    json!({"id": id, "error": {"code": code, "message": "Request not handled"}})
+}
+
+async fn send_response(
+    output: &mut FramedWrite<impl AsyncWrite + Unpin, LinesCodec>,
+    done: &CancellationToken,
+    response: &Value,
+) -> Result<(), Error> {
+    let line = Zeroizing::new(serde_json::to_string(response).map_err(|_| Error::Protocol)?);
+    if line.len() > super::super::MAX_LINE {
+        return Err(Error::Protocol);
+    }
+    tokio::select! {
+        () = done.cancelled() => Ok(()),
+        result = output.send(line.as_str()) => result.map_err(|_| Error::Protocol),
     }
 }
