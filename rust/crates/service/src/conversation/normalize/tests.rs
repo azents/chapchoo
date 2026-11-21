@@ -174,6 +174,38 @@ fn original_unknown_event_is_retained_without_fabricated_user_records() -> Resul
     assert!(!format!("{result:?}").contains("unknown"));
     Ok(())
 }
+
+#[test]
+fn app_server_mcp_completion_preserves_input_and_result_in_the_tool_record() -> Result<(), TestError>
+{
+    let raw = serde_json::to_vec(&json!({"method":"item/completed","params":{
+        "threadId":"native","turnId":"turn","item":{
+            "id":"tool","type":"mcpToolCall","server":"chapchoo","tool":"send","status":"completed",
+            "arguments":{"action":"continue","count":9223372036854775807_i64},
+            "result":{"content":[{"type":"text","text":"Message accepted."}]}
+        }
+    }}))?;
+    let projected = normalized(&raw)?;
+    assert_eq!(projected.pair.raw, raw);
+    let record = &projected.records[0];
+    assert_eq!(record.kind, Kind::Tool);
+    assert_eq!(record.native_id, "app-server:turn:tool");
+    let get = |name| -> Result<serde_json::Value, TestError> {
+        let field = record
+            .fields
+            .iter()
+            .find(|field| field.field == name)
+            .ok_or("Missing field")?;
+        Ok(serde_json::from_slice(bytes(&field.change))?)
+    };
+    assert_eq!(get(Field::Status)?, "completed");
+    assert_eq!(get(Field::ToolInput)?["count"], 9223372036854775807_i64);
+    assert_eq!(
+        get(Field::ToolOutput)?["content"][0]["text"],
+        "Message accepted."
+    );
+    Ok(())
+}
 #[test]
 fn cross_session_and_credential_traffic_do_not_become_normalized_history() -> Result<(), TestError>
 {

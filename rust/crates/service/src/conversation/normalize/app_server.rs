@@ -20,6 +20,15 @@ struct Item<'a> {
     kind: &'a str,
     text: Option<String>,
     content: Option<Vec<Part>>,
+    server: Option<&'a str>,
+    tool: Option<&'a str>,
+    status: Option<&'a str>,
+    #[serde(borrow)]
+    arguments: Option<&'a serde_json::value::RawValue>,
+    #[serde(borrow)]
+    result: Option<&'a serde_json::value::RawValue>,
+    #[serde(borrow)]
+    error: Option<&'a serde_json::value::RawValue>,
 }
 
 #[derive(Deserialize)]
@@ -243,9 +252,41 @@ pub(super) fn message(
                 }],
             )
         }
+        "mcpToolCall" => (Kind::Tool, mcp_fields(&item)?),
         _ => return Ok(None),
     };
     Ok(Some(record(kind, &key(params.turn_id, item.id)?, fields)))
+}
+
+fn mcp_fields(item: &Item<'_>) -> Result<Vec<Update>, NativeNormalizationError> {
+    let names = item.server.zip(item.tool).filter(|(server, tool)| {
+        [*server, *tool].into_iter().all(|name| {
+            !name.is_empty() && name.len() <= 256 && name.bytes().all(|b| b.is_ascii_graphic())
+        })
+    });
+    let (server, tool) = names.ok_or(NativeNormalizationError::InvalidEvent)?;
+    let status = match item.status {
+        Some("completed") => schema::ToolCallStatus::Completed,
+        Some("failed") => schema::ToolCallStatus::Failed,
+        _ => return Err(NativeNormalizationError::InvalidEvent),
+    };
+    let mut fields = vec![
+        replace(Field::Title, &format!("{server}/{tool}"))?,
+        replace(Field::Description, &tool)?,
+        replace(Field::Status, &status)?,
+    ];
+    for (field, value) in [
+        (Field::ToolInput, item.arguments),
+        (Field::ToolOutput, item.result.or(item.error)),
+    ] {
+        if let Some(value) = value {
+            fields.push(Update {
+                field,
+                change: Change::Replace(value.get().as_bytes().to_vec()),
+            });
+        }
+    }
+    Ok(fields)
 }
 
 fn key(turn: &str, item: &str) -> Result<String, NativeNormalizationError> {
