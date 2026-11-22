@@ -387,6 +387,12 @@ test("owner follows Conversation Work and inspects native typed-answer records",
     await continuation.getByRole("button", { expanded: false }).click();
     await expect(
       continuation.locator("p").filter({ hasText: continuationMarker }),
+    ).toHaveText(`${continuationMarker} kind: continuation`);
+    await expect(
+      continuation.locator("p").filter({
+        hasText:
+          "Continue active goals using the current authoritative goal context.",
+      }),
     ).toContainText("Check revised conversation fixture");
     await expect(
       history.locator('[data-record-origin="publication"]'),
