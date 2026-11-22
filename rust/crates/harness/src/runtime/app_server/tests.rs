@@ -375,6 +375,7 @@ async fn steering_and_stop_send_only_the_exact_native_turn() -> TestResult {
         link: &link,
         id,
         model: None,
+        full_access: false,
     };
     assert!(matches!(thread.interrupt(""), Err(Error::NotAdmitted)));
     let server = async {

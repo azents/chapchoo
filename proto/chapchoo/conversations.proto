@@ -47,12 +47,22 @@ message ModelCapabilities {
   repeated string efforts = 1;
   repeated ModelSpeed speeds = 2;
 }
+enum PermissionMode {
+  PERMISSION_MODE_UNSPECIFIED = 0;
+  PERMISSION_MODE_APPROVE_FOR_ME = 1;
+  PERMISSION_MODE_FULL_ACCESS = 2;
+  PERMISSION_MODE_ASK_FOR_APPROVAL = 3;
+}
 message ModelTuning {
   optional string effort = 1;
   optional ModelSpeed speed = 2;
+  optional PermissionMode permission_mode = 3;
 }
 message ModelChoice { string id = 1; string label = 2; ModelCapabilities capabilities = 3; }
-message ModelOptions { repeated ModelChoice choices = 1; }
+message ModelOptions {
+  repeated ModelChoice choices = 1;
+  repeated PermissionMode permission_modes = 2;
+}
 message OwnerConversationModel {
   ModelTarget target = 1;
   ModelChoice current = 2;
@@ -67,7 +77,7 @@ message OwnerModelSave {
   ModelTarget target = 2;
   string request_id = 3;
   optional string expected_request_id = 4;
-  string model_id = 5;
+  optional string model_id = 5;
   ModelTuning tuning = 6;
 }
 message OwnerModelSaveResult { string agent_id = 1; string request_id = 2; }
@@ -356,6 +366,7 @@ message ModelStartRequest {
   CaptureSource source = 1;
   ModelStartTarget target = 2;
   bool capable = 3;
+  bool permission_mode_capable = 4;
 }
 message ReservedModelStart { optional string model_id = 1; ModelTuning tuning = 2; }
 message ModelStartAdmission {

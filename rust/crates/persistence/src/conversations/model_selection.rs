@@ -2,7 +2,9 @@
 
 use super::*;
 use crate::ConnectorSource;
-use chapchoo_domain::{ConversationModelCapabilities, ConversationModelTuning};
+use chapchoo_domain::{
+    ConversationModelCapabilities, ConversationModelTuning, ConversationPermissionMode,
+};
 use diesel::sql_types::Bool;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -40,6 +42,7 @@ pub struct ConversationModelObservation {
     pub options: Option<Vec<ConversationModelChoice>>,
     /// An opaque continuity witness for an applied API key, never the key.
     pub api_key_source: Option<[u8; 24]>,
+    pub permission_modes: Vec<ConversationPermissionMode>,
 }
 
 pub struct ConversationModelProjection {
@@ -49,19 +52,20 @@ pub struct ConversationModelProjection {
     pub options: Option<Vec<ConversationModelChoice>>,
     pub recovery_operation_id: Option<String>,
     pub tuning: ConversationModelTuning,
+    pub permission_modes: Vec<ConversationPermissionMode>,
 }
 
 pub struct ConversationModelSave {
     pub target: ConversationModelTarget,
     pub request_id: String,
     pub expected_request_id: Option<String>,
-    pub model_id: String,
+    pub model_id: Option<String>,
     pub tuning: ConversationModelTuning,
 }
 
 pub struct ConversationModelSaveReceipt {
     pub request_id: String,
-    pub model: ConversationModelChoice,
+    pub model: Option<ConversationModelChoice>,
     pub accepted_at: i64,
     pub tuning: ConversationModelTuning,
 }
@@ -71,6 +75,7 @@ pub struct ConversationModelStart {
     pub operation_id: String,
     /// True only if this owner can apply the model and prove a qualified start.
     pub capable: bool,
+    pub permission_mode_capable: bool,
 }
 
 pub enum ConversationModelStartAdmission {
@@ -137,12 +142,61 @@ fn tuning_payload(tuning: &ConversationModelTuning) -> Result<Option<String>, St
         .transpose()
 }
 
+#[cfg(test)]
+mod stored_permissions {
+    use super::*;
+
+    #[test]
+    fn stored_permission_preserves_inheritance_and_reads_existing_tuning() -> Result<(), StoreError>
+    {
+        let old = tuning_from_storage(Some(r#"{"effort":"high","speed":"fast"}"#))?;
+        assert_eq!(old.effort.as_deref(), Some("high"));
+        assert_eq!(old.permission_mode, None);
+        let chosen = ConversationModelTuning {
+            permission_mode: Some(ConversationPermissionMode::AskForApproval),
+            ..Default::default()
+        };
+        let saved = tuning_payload(&chosen)?;
+        assert_eq!(tuning_from_storage(saved.as_deref())?, chosen);
+        Ok(())
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(untagged)]
+enum AdvertisedOptions {
+    Models(Vec<ConversationModelChoice>),
+    WithPermissions {
+        models: Vec<ConversationModelChoice>,
+        permission_modes: Vec<ConversationPermissionMode>,
+    },
+}
+
+impl AdvertisedOptions {
+    fn split(
+        self,
+    ) -> (
+        Vec<ConversationModelChoice>,
+        Vec<ConversationPermissionMode>,
+    ) {
+        match self {
+            Self::Models(models) => (models, Vec::new()),
+            Self::WithPermissions {
+                models,
+                permission_modes,
+            } => (models, permission_modes),
+        }
+    }
+}
+
 fn option_payload(
     options: Option<&[ConversationModelChoice]>,
+    permission_modes: &[ConversationPermissionMode],
 ) -> Result<Option<String>, StoreError> {
-    let Some(options) = options else {
+    if options.is_none() && permission_modes.is_empty() {
         return Ok(None);
-    };
+    }
+    let options = options.unwrap_or_default();
     let mut ids = HashSet::new();
     if options.len() > 128
         || options
@@ -151,7 +205,25 @@ fn option_payload(
     {
         return Err(StoreError::InvalidInput);
     }
-    let json = serde_json::to_string(options).map_err(|_| StoreError::InvalidInput)?;
+    if permission_modes.len() > 3
+        || permission_modes
+            .iter()
+            .copied()
+            .collect::<HashSet<_>>()
+            .len()
+            != permission_modes.len()
+    {
+        return Err(StoreError::InvalidInput);
+    }
+    let json = if permission_modes.is_empty() {
+        serde_json::to_string(options)
+    } else {
+        serde_json::to_string(&AdvertisedOptions::WithPermissions {
+            models: options.to_vec(),
+            permission_modes: permission_modes.to_vec(),
+        })
+    }
+    .map_err(|_| StoreError::InvalidInput)?;
     if json.len() > 48 * 1024 {
         return Err(StoreError::InvalidInput);
     }
@@ -198,7 +270,7 @@ impl ScopeRow {
             && self.launch_operation_id == launch
     }
 
-    fn options(&self) -> Result<Option<Vec<ConversationModelChoice>>, StoreError> {
+    fn options(&self) -> Result<Option<AdvertisedOptions>, StoreError> {
         self.advertised_options
             .as_ref()
             .map(|value| serde_json::from_str(value).map_err(|_| StoreError::Integrity))
@@ -206,7 +278,10 @@ impl ScopeRow {
     }
 
     fn projection(self) -> Result<ConversationModelProjection, StoreError> {
-        let options = self.options()?;
+        let (options, permission_modes) = self
+            .options()?
+            .map(AdvertisedOptions::split)
+            .map_or((None, Vec::new()), |(models, modes)| (Some(models), modes));
         let choice = |id: String, label| ConversationModelChoice {
             capabilities: options
                 .as_ref()
@@ -239,6 +314,7 @@ impl ScopeRow {
             saved_request_id: self.saved_request_id,
             tuning: tuning_from_storage(self.saved_tuning.as_deref())?,
             options,
+            permission_modes,
             recovery_operation_id: self
                 .recovery_operation_id
                 .map(|value| value.to_dto(EntityKind::ConversationOperation)),
@@ -258,10 +334,10 @@ struct SaveRow {
     launch_operation_id: EntityId,
     #[diesel(sql_type = Nullable<Text>)]
     expected_request_id: Option<String>,
-    #[diesel(sql_type = Text)]
-    model_id: String,
-    #[diesel(sql_type = Text)]
-    model_label: String,
+    #[diesel(sql_type = Nullable<Text>)]
+    model_id: Option<String>,
+    #[diesel(sql_type = Nullable<Text>)]
+    model_label: Option<String>,
     #[diesel(sql_type = Nullable<Text>)]
     tuning: Option<String>,
     #[diesel(sql_type = Text)]
@@ -273,10 +349,14 @@ impl SaveRow {
     fn receipt(self) -> Result<ConversationModelSaveReceipt, StoreError> {
         Ok(ConversationModelSaveReceipt {
             request_id: self.request_id,
-            model: ConversationModelChoice {
-                id: self.model_id,
-                label: self.model_label,
-                capabilities: None,
+            model: match (self.model_id, self.model_label) {
+                (Some(id), Some(label)) => Some(ConversationModelChoice {
+                    id,
+                    label,
+                    capabilities: None,
+                }),
+                (None, None) => None,
+                _ => return Err(StoreError::Integrity),
             },
             accepted_at: self.accepted_at,
             tuning: tuning_from_storage(self.tuning.as_deref())?,
@@ -446,10 +526,17 @@ impl Store {
         if let Some(expected) = &draft.expected_request_id {
             request_id(expected)?;
         }
-        if !valid_model_id(&draft.model_id) {
+        let update_model = draft.model_id.is_some();
+        if draft
+            .model_id
+            .as_deref()
+            .is_some_and(|id| !valid_model_id(id))
+            || (update_model && draft.tuning.permission_mode.is_some())
+            || (!update_model
+                && (draft.tuning.permission_mode.is_none() || draft.tuning.has_model_tuning()))
+        {
             return Err(StoreError::InvalidInput);
         }
-        let tuning = tuning_payload(&draft.tuning)?;
         let agent = EntityId::from_dto(EntityKind::Agent, agent_id)?;
         let (conversation, launch) = draft.target.ids()?;
         operation!(self, |connection, dialect| {
@@ -511,37 +598,74 @@ impl Store {
                     return Err(StoreError::InvalidTransition);
                 }
             }
-            let choice = scope
+            let (choices, permission_modes) = scope
                 .options()?
-                .and_then(|list| list.into_iter().find(|item| item.id == draft.model_id))
+                .map(AdvertisedOptions::split)
                 .ok_or(StoreError::InvalidTransition)?;
-            if !draft.tuning.is_inherited()
-                && !choice
-                    .capabilities
-                    .as_ref()
-                    .is_some_and(|options| options.accepts(&draft.tuning))
+            if draft
+                .tuning
+                .permission_mode
+                .is_some_and(|mode| !permission_modes.contains(&mode))
             {
                 return Err(StoreError::InvalidTransition);
             }
-            diesel::sql_query(dialect.query("UPDATE conversation_model_scopes SET saved_model_id=?,saved_model_label=?,saved_tuning=?,saved_request_id=?,recovery_operation_id=NULL WHERE conversation_id=?"))
-                .bind::<Text, _>(&choice.id).bind::<Text, _>(&choice.label)
+            let mut merged = tuning_from_storage(scope.saved_tuning.as_deref())?;
+            let choice = if let Some(id) = &draft.model_id {
+                let choice = choices
+                    .into_iter()
+                    .find(|item| &item.id == id)
+                    .ok_or(StoreError::InvalidTransition)?;
+                if draft.tuning.has_model_tuning()
+                    && !choice
+                        .capabilities
+                        .as_ref()
+                        .is_some_and(|options| options.accepts(&draft.tuning))
+                {
+                    return Err(StoreError::InvalidTransition);
+                }
+                merged.effort.clone_from(&draft.tuning.effort);
+                merged.speed = draft.tuning.speed;
+                Some(choice)
+            } else {
+                merged.permission_mode = draft.tuning.permission_mode;
+                None
+            };
+            let tuning = tuning_payload(&merged)?;
+            let saved_model = choice
+                .as_ref()
+                .map(|model| model.id.as_str())
+                .or(scope.saved_model_id.as_deref());
+            let saved_label = choice
+                .as_ref()
+                .map(|model| model.label.as_str())
+                .or(scope.saved_model_label.as_deref());
+            let recovery = if update_model {
+                None
+            } else {
+                scope.recovery_operation_id
+            };
+            diesel::sql_query(dialect.query("UPDATE conversation_model_scopes SET saved_model_id=?,saved_model_label=?,saved_tuning=?,saved_request_id=?,recovery_operation_id=? WHERE conversation_id=?"))
+                .bind::<Nullable<Text>, _>(saved_model).bind::<Nullable<Text>, _>(saved_label)
                 .bind::<Nullable<Text>, _>(&tuning)
-                .bind::<Text, _>(&draft.request_id).bind::<IdentitySql, _>(conversation)
+                .bind::<Text, _>(&draft.request_id).bind::<Nullable<IdentitySql>, _>(recovery)
+                .bind::<IdentitySql, _>(conversation)
                 .execute(connection).await?;
             diesel::sql_query(dialect.query("INSERT INTO conversation_model_save_receipts (agent_id,request_id,conversation_id,source_snapshot,native_session_id,launch_operation_id,expected_request_id,model_id,model_label,accepted_at,tuning) VALUES (?,?,?,?,?,?,?,?,?,?,?)"))
                 .bind::<IdentitySql, _>(agent).bind::<Text, _>(&draft.request_id)
                 .bind::<IdentitySql, _>(conversation).bind::<Text, _>(draft.target.snapshot.as_str())
                 .bind::<Text, _>(draft.target.native_session.as_str()).bind::<IdentitySql, _>(launch)
-                .bind::<Nullable<Text>, _>(&draft.expected_request_id).bind::<Text, _>(&choice.id)
-                .bind::<Text, _>(&choice.label).bind::<BigInt, _>(now)
-                .bind::<Nullable<Text>, _>(&tuning)
+                .bind::<Nullable<Text>, _>(&draft.expected_request_id)
+                .bind::<Nullable<Text>, _>(choice.as_ref().map(|model| model.id.as_str()))
+                .bind::<Nullable<Text>, _>(choice.as_ref().map(|model| model.label.as_str()))
+                .bind::<BigInt, _>(now)
+                .bind::<Nullable<Text>, _>(tuning_payload(&draft.tuning)?)
                 .execute(connection).await?;
             Ok(ConversationModelSaveReceipt {
                 request_id: draft.request_id.clone(),
-                model: ConversationModelChoice {
+                model: choice.map(|choice| ConversationModelChoice {
                     capabilities: None,
                     ..choice
-                },
+                }),
                 accepted_at: now,
                 tuning: draft.tuning.clone(),
             })
@@ -561,7 +685,10 @@ impl Store {
         {
             return Err(StoreError::InvalidInput);
         }
-        let choices = option_payload(observation.options.as_deref())?;
+        let choices = option_payload(
+            observation.options.as_deref(),
+            &observation.permission_modes,
+        )?;
         let current_id = observation.current.as_ref().map(|value| value.id.as_str());
         let current_label = observation
             .current

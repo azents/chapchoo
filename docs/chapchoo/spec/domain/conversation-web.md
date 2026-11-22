@@ -420,6 +420,14 @@ turn. A qualified failure before start can
 offer **Change model** in the same conversation without preselecting an
 alternative; saving never resends the affected request.
 
+Direct Codex conversations with reported permission modes show **Permissions**
+directly below **Model**. Without a saved choice, the row shows the first
+available mode in this order: **Approve for me**, **Full Access**, **Ask for
+approval**. The permission picker saves through the same target and request
+fences as the model picker, but can save without a model catalog. It neither
+changes model settings nor sends a message.
+The preference applies to new turns, not work already running.
+
 ## Owner supply settings
 
 The activity sheet has a separate Codex setup control. Its supplementary read is

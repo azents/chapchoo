@@ -3,6 +3,7 @@ pub(super) mod events;
 mod forms;
 mod live;
 pub(super) use live::{Connection, LiveThread};
+mod permissions;
 mod questions;
 mod sandbox;
 mod tools;
@@ -22,6 +23,7 @@ struct Thread<'a> {
     link: &'a Client,
     id: NativeConversationId,
     model: Option<String>,
+    full_access: bool,
 }
 
 async fn call(
@@ -44,7 +46,10 @@ async fn initialize(link: &Client, initial_key: Option<&str>) -> Result<(), Erro
         link,
         ProtocolStage::Initialize,
         "initialize",
-        json!({"clientInfo": {"name": "chapchoo", "version": env!("CARGO_PKG_VERSION")}}),
+        json!({
+            "clientInfo": {"name": "chapchoo", "version": env!("CARGO_PKG_VERSION")},
+            "capabilities": {"experimentalApi": true}
+        }),
     )
     .await?;
     link.initialized()?;
@@ -140,6 +145,7 @@ struct TurnOptions<'a> {
     model: Option<&'a str>,
     effort: Option<&'a str>,
     tier: Option<&'a str>,
+    permissions: Option<permissions::Preset>,
 }
 
 const MAX_CANDIDATES: usize = 128;
@@ -284,6 +290,7 @@ impl<'a> Thread<'a> {
             link,
             id: NativeConversationId::parse(id.to_owned()).map_err(|_| Error::Protocol)?,
             model: response["model"].as_str().map(str::to_owned),
+            full_access: response["sandbox"]["type"] == "dangerFullAccess",
         })
     }
 
@@ -366,6 +373,8 @@ impl<'a> Thread<'a> {
             effort: Option<&'a str>,
             #[serde(skip_serializing_if = "Option::is_none")]
             service_tier_for_turn: Option<&'a str>,
+            #[serde(flatten, skip_serializing_if = "Option::is_none")]
+            permissions: Option<permissions::Preset>,
         }
         self.link.enqueue(
             "turn/start",
@@ -376,6 +385,7 @@ impl<'a> Thread<'a> {
                 model: options.model,
                 effort: options.effort,
                 service_tier_for_turn: options.tier,
+                permissions: options.permissions,
             },
         )
     }

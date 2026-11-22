@@ -23,10 +23,18 @@ type ModelTarget = {
 type Edit = {
   target: ModelTarget;
   expectedRequestId: string | null;
+  kind: "model" | "permission";
 };
 
 type Speed = 1 | 2 | 3;
-type Tuning = { effort?: string; speed?: Speed };
+type Permission = 1 | 2 | 3;
+type Tuning = { effort?: string; speed?: Speed; permissionMode?: Permission };
+
+const permissionOrder = [1, 2, 3] as const;
+
+function supportedPermission(value?: number): Permission | null {
+  return permissionOrder.find((mode) => mode === value) ?? null;
+}
 
 function supportedSpeed(value?: number): Speed | null {
   return value === 1 || value === 2 || value === 3 ? value : null;
@@ -109,6 +117,20 @@ export function useModelSelection(
   const choices = stillCurrent ? scoped?.options?.choices : void 0;
   const current = scoped?.current;
   const saved = scoped?.savedTuning;
+  const permissionModes = permissionOrder.filter((mode) =>
+    scoped?.options?.permissionModes.includes(mode),
+  );
+  const permissionLabels = {
+    1: copy.approveForMe,
+    2: copy.fullAccess,
+    3: copy.askForApproval,
+  };
+  const savedPermission = supportedPermission(saved?.permissionMode) ?? void 0;
+  const effectivePermission = savedPermission ?? permissionModes[0];
+  const permissionChoices = permissionModes.map((mode) => ({
+    id: String(mode),
+    label: permissionLabels[mode],
+  }));
   const candidate = choices?.find((choice) => choice.id === draft);
   const capabilities = candidate?.capabilities;
   const speeds = capabilities?.speeds.flatMap((value) => {
@@ -139,18 +161,21 @@ export function useModelSelection(
     query.isError || unavailable ? null : scoped?.recovery?.model;
   const busy = saving.state === "saving";
   const locked = busy || saving.state === "uncertain";
+  const permissionEdit = edit?.kind === "permission";
+  const chosenPermission = tuning.permissionMode;
+  const changed = permissionEdit
+    ? chosenPermission !== void 0 &&
+      permissionModes.includes(chosenPermission) &&
+      chosenPermission !== savedPermission
+    : candidate !== void 0 &&
+      (tuning.effort === void 0 ||
+        capabilities?.efforts.includes(tuning.effort) === true) &&
+      (tuning.speed === void 0 || speeds?.includes(tuning.speed) === true) &&
+      (draft !== current?.id ||
+        tuning.effort !== saved?.effort ||
+        tuning.speed !== saved?.speed);
   const canSave =
-    !unavailable &&
-    !locked &&
-    stillCurrent &&
-    !query.isError &&
-    candidate !== void 0 &&
-    (tuning.effort === void 0 ||
-      capabilities?.efforts.includes(tuning.effort) === true) &&
-    (tuning.speed === void 0 || speeds?.includes(tuning.speed) === true) &&
-    (draft !== current?.id ||
-      tuning.effort !== saved?.effort ||
-      tuning.speed !== saved?.speed);
+    !unavailable && !locked && stillCurrent && !query.isError && changed;
 
   async function save(): Promise<void> {
     if (actionInFlight.current || !canSave) {
@@ -164,11 +189,18 @@ export function useModelSelection(
         agentId,
         requestId,
         target: edit.target,
-        modelId: candidate.id,
-        tuning,
+        ...(!permissionEdit && candidate ? { modelId: candidate.id } : {}),
+        tuning: permissionEdit
+          ? { permissionMode: chosenPermission }
+          : { effort: tuning.effort, speed: tuning.speed },
         expectedRequestId: edit.expectedRequestId ?? void 0,
       });
-      if (receipt.requestId !== requestId || !receipt.model) {
+      if (
+        receipt.requestId !== requestId ||
+        (permissionEdit
+          ? receipt.tuning?.permissionMode !== chosenPermission
+          : !receipt.model)
+      ) {
         setSaving({ state: "uncertain", requestId });
         return;
       }
@@ -184,10 +216,18 @@ export function useModelSelection(
           )
           ? {
               ...previous,
-              current: receipt.model,
-              savedTuning: receipt.tuning,
+              current: permissionEdit ? previous.current : receipt.model,
+              savedTuning: permissionEdit
+                ? {
+                    ...previous.savedTuning,
+                    permissionMode: receipt.tuning?.permissionMode,
+                  }
+                : {
+                    ...receipt.tuning,
+                    permissionMode: previous.savedTuning?.permissionMode,
+                  },
               savedRequestId: receipt.requestId,
-              recovery: void 0,
+              recovery: permissionEdit ? previous.recovery : void 0,
             }
           : previous;
       });
@@ -217,7 +257,7 @@ export function useModelSelection(
         agentId,
         requestId,
       });
-      if (result.receipt?.requestId === requestId && result.receipt.model) {
+      if (result.receipt?.requestId === requestId) {
         setEdit(null);
         setSaving({ state: "idle" });
         await utils.conversations.model.invalidate({ agentId });
@@ -240,7 +280,7 @@ export function useModelSelection(
     }
   }
 
-  function enter(useCurrent: boolean): void {
+  function enter(useCurrent: boolean, kind: Edit["kind"] = "model"): void {
     if (locked || !canEdit) {
       return;
     }
@@ -250,18 +290,21 @@ export function useModelSelection(
         ? {
             effort: saved?.effort,
             speed: supportedSpeed(saved?.speed) ?? void 0,
+            permissionMode: savedPermission,
           }
-        : {},
+        : { permissionMode: savedPermission },
     );
     setEdit({
       target,
       expectedRequestId: scoped?.savedRequestId ?? null,
+      kind,
     });
   }
 
   return {
     copy,
     editing: edit !== null,
+    editKind: edit?.kind,
     canEdit,
     draft,
     choices,
@@ -277,6 +320,19 @@ export function useModelSelection(
     tuning,
     effortChoices,
     speedChoices,
+    permissionChoices,
+    permissionLabel: effectivePermission
+      ? permissionLabels[effectivePermission]
+      : copy.permissionUnavailable,
+    permissionValue: tuning.permissionMode ?? permissionModes[0],
+    canEditPermission: canEdit && permissionModes.length > 0,
+    editPermission: () => enter(true, "permission"),
+    choosePermission: (value: string): void => {
+      setTuning((previous) => ({
+        ...previous,
+        permissionMode: supportedPermission(Number(value)) ?? void 0,
+      }));
+    },
     edit: () => enter(true),
     recover: () => enter(false),
     choose: (id: string): void => {
@@ -311,26 +367,31 @@ export type ModelSelectionControls = ReturnType<typeof useModelSelection>;
 export function ModelSelectionEntry({
   controls,
   buttonRef,
+  kind = "model",
 }: {
   controls: ModelSelectionControls;
   buttonRef?: Ref<HTMLButtonElement>;
+  kind?: "model" | "permission";
 }): ReactElement {
   const { copy } = controls;
+  const permission = kind === "permission";
   return (
     <Button
       variant="default"
       fullWidth
       ref={buttonRef}
-      onClick={controls.edit}
-      disabled={!controls.canEdit}
+      onClick={permission ? controls.editPermission : controls.edit}
+      disabled={permission ? !controls.canEditPermission : !controls.canEdit}
       justify="space-between"
       rightSection={
         <Text size="sm" c="dimmed">
-          {controls.current?.label ?? copy.unknown}
+          {permission
+            ? controls.permissionLabel
+            : (controls.current?.label ?? copy.unknown)}
         </Text>
       }
     >
-      {copy.model}
+      {permission ? copy.permission : copy.model}
     </Button>
   );
 }
@@ -343,6 +404,7 @@ export function ModelSelectionPage({
   actionRef?: Ref<HTMLButtonElement>;
 }): ReactElement {
   const { copy } = controls;
+  const permission = controls.editKind === "permission";
   return (
     <Stack gap="sm">
       <Group>
@@ -366,11 +428,21 @@ export function ModelSelectionPage({
         </Text>
       ) : controls.error || !controls.choices ? (
         <Group justify="space-between">
-          <Text size="sm">{copy.unavailable}</Text>
+          <Text size="sm">
+            {permission ? copy.permissionUnavailable : copy.unavailable}
+          </Text>
           <Button size="xs" variant="subtle" onClick={controls.refresh}>
             {copy.refresh}
           </Button>
         </Group>
+      ) : permission ? (
+        <SingleChoiceRows
+          label={copy.permission}
+          choices={controls.permissionChoices}
+          value={controls.permissionValue?.toString() ?? null}
+          disabled={controls.locked}
+          onChange={controls.choosePermission}
+        />
       ) : controls.choices.length === 0 ? (
         <Text size="sm">{copy.empty}</Text>
       ) : (
@@ -382,7 +454,7 @@ export function ModelSelectionPage({
           onChange={controls.choose}
         />
       )}
-      {controls.effortChoices.length > 0 ? (
+      {!permission && controls.effortChoices.length > 0 ? (
         <SingleChoiceRows
           label={copy.effort}
           choices={controls.effortChoices}
@@ -391,7 +463,7 @@ export function ModelSelectionPage({
           onChange={controls.chooseEffort}
         />
       ) : null}
-      {controls.speedChoices.length > 0 ? (
+      {!permission && controls.speedChoices.length > 0 ? (
         <SingleChoiceRows
           label={copy.speed}
           choices={controls.speedChoices}
@@ -401,7 +473,9 @@ export function ModelSelectionPage({
         />
       ) : null}
       {controls.saving.state === "rejected" ? (
-        <Alert color="red">{copy.rejected}</Alert>
+        <Alert color="red">
+          {permission ? copy.permissionRejected : copy.rejected}
+        </Alert>
       ) : null}
       {controls.saving.state === "uncertain" ? (
         <Alert color="yellow">

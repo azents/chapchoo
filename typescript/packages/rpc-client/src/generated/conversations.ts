@@ -32,6 +32,14 @@ export enum ModelSpeed {
   UNRECOGNIZED = -1,
 }
 
+export enum PermissionMode {
+  PERMISSION_MODE_UNSPECIFIED = 0,
+  PERMISSION_MODE_APPROVE_FOR_ME = 1,
+  PERMISSION_MODE_FULL_ACCESS = 2,
+  PERMISSION_MODE_ASK_FOR_APPROVAL = 3,
+  UNRECOGNIZED = -1,
+}
+
 export enum InstructionSourceKind {
   INSTRUCTION_SOURCE_KIND_UNSPECIFIED = 0,
   INSTRUCTION_SOURCE_KIND_PRODUCT = 1,
@@ -189,6 +197,7 @@ export interface ModelCapabilities {
 export interface ModelTuning {
   effort?: string | undefined;
   speed?: ModelSpeed | undefined;
+  permissionMode?: PermissionMode | undefined;
 }
 
 export interface ModelChoice {
@@ -199,6 +208,7 @@ export interface ModelChoice {
 
 export interface ModelOptions {
   choices: ModelChoice[];
+  permissionModes: PermissionMode[];
 }
 
 export interface OwnerConversationModel {
@@ -220,7 +230,7 @@ export interface OwnerModelSave {
   target: ModelTarget | undefined;
   requestId: string;
   expectedRequestId?: string | undefined;
-  modelId: string;
+  modelId?: string | undefined;
   tuning: ModelTuning | undefined;
 }
 
@@ -703,6 +713,7 @@ export interface ModelStartRequest {
   source: CaptureSource | undefined;
   target: ModelStartTarget | undefined;
   capable: boolean;
+  permissionModeCapable: boolean;
 }
 
 export interface ReservedModelStart {
@@ -1345,7 +1356,7 @@ export const ModelCapabilities: MessageFns<ModelCapabilities> = {
 };
 
 function createBaseModelTuning(): ModelTuning {
-  return { effort: undefined, speed: undefined };
+  return { effort: undefined, speed: undefined, permissionMode: undefined };
 }
 
 export const ModelTuning: MessageFns<ModelTuning> = {
@@ -1355,6 +1366,9 @@ export const ModelTuning: MessageFns<ModelTuning> = {
     }
     if (message.speed !== undefined) {
       writer.uint32(16).int32(message.speed);
+    }
+    if (message.permissionMode !== undefined) {
+      writer.uint32(24).int32(message.permissionMode);
     }
     return writer;
   },
@@ -1388,6 +1402,14 @@ export const ModelTuning: MessageFns<ModelTuning> = {
             message.speed = reader.int32() as any;
             continue;
           }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.permissionMode = reader.int32() as any;
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1407,6 +1429,7 @@ export const ModelTuning: MessageFns<ModelTuning> = {
     const message = createBaseModelTuning();
     message.effort = object.effort ?? undefined;
     message.speed = object.speed ?? undefined;
+    message.permissionMode = object.permissionMode ?? undefined;
     return message;
   },
 };
@@ -1493,13 +1516,20 @@ export const ModelChoice: MessageFns<ModelChoice> = {
 };
 
 function createBaseModelOptions(): ModelOptions {
-  return { choices: [] };
+  return { choices: [], permissionModes: [] };
 }
 
 export const ModelOptions: MessageFns<ModelOptions> = {
   encode(message: ModelOptions, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     for (const v of message.choices) {
       ModelChoice.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.permissionModes.length !== 0) {
+      writer.uint32(18).fork();
+      for (const v of message.permissionModes) {
+        writer.int32(v);
+      }
+      writer.join();
     }
     return writer;
   },
@@ -1525,6 +1555,24 @@ export const ModelOptions: MessageFns<ModelOptions> = {
             message.choices.push(ModelChoice.decode(reader, reader.uint32()));
             continue;
           }
+          case 2: {
+            if (tag === 16) {
+              message.permissionModes.push(reader.int32() as any);
+
+              continue;
+            }
+
+            if (tag === 18) {
+              const end2 = reader.uint32() + reader.pos;
+              while (reader.pos < end2) {
+                message.permissionModes.push(reader.int32() as any);
+              }
+
+              continue;
+            }
+
+            break;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1543,6 +1591,7 @@ export const ModelOptions: MessageFns<ModelOptions> = {
   fromPartial<I extends Exact<DeepPartial<ModelOptions>, I>>(object: I): ModelOptions {
     const message = createBaseModelOptions();
     message.choices = object.choices?.map((e) => ModelChoice.fromPartial(e)) || [];
+    message.permissionModes = object.permissionModes?.map((e) => e) || [];
     return message;
   },
 };
@@ -1754,7 +1803,7 @@ function createBaseOwnerModelSave(): OwnerModelSave {
     target: undefined,
     requestId: "",
     expectedRequestId: undefined,
-    modelId: "",
+    modelId: undefined,
     tuning: undefined,
   };
 }
@@ -1773,7 +1822,7 @@ export const OwnerModelSave: MessageFns<OwnerModelSave> = {
     if (message.expectedRequestId !== undefined) {
       writer.uint32(34).string(message.expectedRequestId);
     }
-    if (message.modelId !== "") {
+    if (message.modelId !== undefined) {
       writer.uint32(42).string(message.modelId);
     }
     if (message.tuning !== undefined) {
@@ -1866,7 +1915,7 @@ export const OwnerModelSave: MessageFns<OwnerModelSave> = {
       : undefined;
     message.requestId = object.requestId ?? "";
     message.expectedRequestId = object.expectedRequestId ?? undefined;
-    message.modelId = object.modelId ?? "";
+    message.modelId = object.modelId ?? undefined;
     message.tuning = (object.tuning !== undefined && object.tuning !== null)
       ? ModelTuning.fromPartial(object.tuning)
       : undefined;
@@ -7866,7 +7915,7 @@ export const ModelStartTarget: MessageFns<ModelStartTarget> = {
 };
 
 function createBaseModelStartRequest(): ModelStartRequest {
-  return { source: undefined, target: undefined, capable: false };
+  return { source: undefined, target: undefined, capable: false, permissionModeCapable: false };
 }
 
 export const ModelStartRequest: MessageFns<ModelStartRequest> = {
@@ -7879,6 +7928,9 @@ export const ModelStartRequest: MessageFns<ModelStartRequest> = {
     }
     if (message.capable !== false) {
       writer.uint32(24).bool(message.capable);
+    }
+    if (message.permissionModeCapable !== false) {
+      writer.uint32(32).bool(message.permissionModeCapable);
     }
     return writer;
   },
@@ -7920,6 +7972,14 @@ export const ModelStartRequest: MessageFns<ModelStartRequest> = {
             message.capable = reader.bool();
             continue;
           }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.permissionModeCapable = reader.bool();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -7944,6 +8004,7 @@ export const ModelStartRequest: MessageFns<ModelStartRequest> = {
       ? ModelStartTarget.fromPartial(object.target)
       : undefined;
     message.capable = object.capable ?? false;
+    message.permissionModeCapable = object.permissionModeCapable ?? false;
     return message;
   },
 };

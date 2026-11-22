@@ -84,7 +84,11 @@ async fn released_resume_preserves_capture_and_answers_scoped_tool_approval() ->
         assert!(thread.models().is_some());
         observations.enable_normal_endings()?;
         let text = ConversationText::parse("Approve the local fixture tool.".into())?;
-        let inserted = tokio::time::timeout(Duration::from_secs(15), thread.enqueue_prompt(&text, None, &Default::default())?)
+        let manual = chapchoo_domain::ConversationModelTuning {
+            permission_mode: Some(chapchoo_domain::ConversationPermissionMode::AskForApproval),
+            ..Default::default()
+        };
+        let inserted = tokio::time::timeout(Duration::from_secs(15), thread.enqueue_prompt(&text, None, &manual)?)
             .await.map_err(|_| "No attributed insertion")??;
         assert!(!inserted.is_empty());
         let (request_id, position) = loop {
@@ -118,6 +122,7 @@ async fn released_resume_preserves_capture_and_answers_scoped_tool_approval() ->
         let supported = astra.capabilities.as_ref().ok_or("Missing model capabilities")?;
         let unsupported = chapchoo_domain::ConversationModelTuning {
             effort: Some("unadvertised".into()), speed: None,
+            ..Default::default()
         };
         assert!(matches!(thread.enqueue_prompt(&text, Some(&astra.id), &unsupported), Err(Error::NotAdmitted)));
         let mut preceding = ending.work.work_id.clone();
@@ -131,6 +136,7 @@ async fn released_resume_preserves_capture_and_answers_scoped_tool_approval() ->
             }
             let tuning = chapchoo_domain::ConversationModelTuning {
                 effort: Some("low".into()), speed: Some(speed),
+                ..Default::default()
             };
             let text = ConversationText::parse(format!("Fixture speed {label}"))?;
             thread.enqueue_prompt(&text, Some(&astra.id), &tuning)?.await?;

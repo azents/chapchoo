@@ -1,5 +1,5 @@
 use super::*;
-use crate::conversation_models::{from_wire_choice, target, wire_tuning};
+use crate::conversation_models::{from_wire_choice, permission_mode, target, wire_tuning};
 use chapchoo_service::{
     ConversationModelObservation, ConversationModelStart, ConversationModelStartAdmission,
     ConversationModelStartOutcome,
@@ -12,12 +12,14 @@ fn origin(value: Option<&wire::CaptureSource>) -> Result<&wire::CaptureSource, S
 fn start(
     value: Option<wire::ModelStartTarget>,
     capable: bool,
+    permission_mode_capable: bool,
 ) -> Result<ConversationModelStart, Status> {
     let value = value.ok_or_else(|| Status::invalid_argument("Model start target is required"))?;
     Ok(ConversationModelStart {
         target: target(value.model_target)?,
         operation_id: value.operation_id,
         capable,
+        permission_mode_capable,
     })
 }
 
@@ -29,14 +31,29 @@ pub(super) async fn observe(
     let credential = actor(&request)?;
     let value = request.into_inner();
     let origin = origin(value.source.as_ref())?;
+    let (options, permission_modes) = match value.options {
+        Some(items) => (
+            Some(
+                items
+                    .choices
+                    .into_iter()
+                    .map(from_wire_choice)
+                    .collect::<Result<Vec<_>, _>>()?,
+            ),
+            items
+                .permission_modes
+                .into_iter()
+                .map(permission_mode)
+                .collect::<Result<Vec<_>, _>>()?,
+        ),
+        None => (None, Vec::new()),
+    };
     let observation = ConversationModelObservation {
         target: target(value.target)?,
         order: value.order,
         current: value.current.map(from_wire_choice).transpose()?,
-        options: value
-            .options
-            .map(|items| items.choices.into_iter().map(from_wire_choice).collect())
-            .transpose()?,
+        options,
+        permission_modes,
         api_key_source: value
             .api_key_source
             .map(|bytes| bytes.try_into())
@@ -59,7 +76,7 @@ pub(super) async fn reserve(
     let credential = actor(&request)?;
     let value = request.into_inner();
     let origin = origin(value.source.as_ref())?;
-    let draft = start(value.target, value.capable)?;
+    let draft = start(value.target, value.capable, value.permission_mode_capable)?;
     let admission = service
         .service
         .reserve_model_start(&source(origin, &credential), &draft)
@@ -89,7 +106,7 @@ pub(super) async fn settle(
     let credential = actor(&request)?;
     let value = request.into_inner();
     let origin = origin(value.source.as_ref())?;
-    let draft = start(value.target, false)?;
+    let draft = start(value.target, false, false)?;
     let outcome = match value.outcome {
         Some(wire::model_start_report::Outcome::InsertedMessageId(id)) => {
             ConversationModelStartOutcome::Inserted(

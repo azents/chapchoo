@@ -87,26 +87,63 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
             speeds: vec![chapchoo_domain::ConversationSpeed::Standard],
         }),
     };
+    let mode = chapchoo_domain::ConversationPermissionMode::ApproveForMe;
     store
         .observe_conversation_model(
             &source,
             &ConversationModelObservation {
                 target: target.clone(),
                 order: 0,
+                current: None,
+                options: Some(Vec::new()),
+                api_key_source: Some(*material.source.as_bytes()),
+                permission_modes: vec![mode],
+            },
+        )
+        .await?;
+    let permission = ConversationModelSave {
+        target: target.clone(),
+        request_id: "save-permission-without-models".into(),
+        expected_request_id: None,
+        model_id: None,
+        tuning: chapchoo_domain::ConversationModelTuning {
+            permission_mode: Some(mode),
+            ..Default::default()
+        },
+    };
+    let permission_receipt = store
+        .save_conversation_model(&owner, &f.agent.id, &permission, f.now)
+        .await?;
+    assert!(permission_receipt.model.is_none());
+    assert_eq!(permission_receipt.tuning, permission.tuning);
+    assert!(
+        store
+            .conversation_model_save_result(&owner, &f.agent.id, &permission.request_id, f.now)
+            .await?
+            .is_some_and(|receipt| receipt.model.is_none() && receipt.tuning == permission.tuning)
+    );
+    store
+        .observe_conversation_model(
+            &source,
+            &ConversationModelObservation {
+                target: target.clone(),
+                order: 1,
                 current: Some(first.clone()),
                 options: Some(vec![first, second.clone()]),
                 api_key_source: Some(*material.source.as_bytes()),
+                permission_modes: vec![mode],
             },
         )
         .await?;
     let saved = ConversationModelSave {
         target: target.clone(),
         request_id: "model-owner-save-b".into(),
-        expected_request_id: None,
-        model_id: second.id.clone(),
+        expected_request_id: Some(permission.request_id.clone()),
+        model_id: Some(second.id.clone()),
         tuning: chapchoo_domain::ConversationModelTuning {
             effort: Some("medium".into()),
             speed: Some(chapchoo_domain::ConversationSpeed::Standard),
+            permission_mode: None,
         },
     };
     assert!(
@@ -118,7 +155,7 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
     let receipt = store
         .save_conversation_model(&owner, &f.agent.id, &saved, f.now)
         .await?;
-    assert_eq!(receipt.model.id, second.id);
+    assert_eq!(receipt.model.ok_or("Missing saved model")?.id, second.id);
     assert_eq!(receipt.tuning, saved.tuning);
     let active_source = ConversationDeliveryTarget {
         snapshot,
@@ -149,17 +186,31 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
         target: target.clone(),
         operation_id: initial.id.clone(),
         capable: true,
+        permission_mode_capable: true,
     };
+    let old_connector = ConversationModelStart {
+        target: target.clone(),
+        operation_id: initial.id.clone(),
+        capable: true,
+        permission_mode_capable: false,
+    };
+    assert!(matches!(
+        store
+            .reserve_conversation_model_start(&source, &old_connector)
+            .await,
+        Err(StoreError::InvalidTransition)
+    ));
     assert!(matches!(
         store.reserve_conversation_model_start(&source, &start).await?,
         ConversationModelStartAdmission::Reserved { model_id: Some(id), tuning }
-            if id == second.id && tuning == saved.tuning
+            if id == second.id && tuning.effort == saved.tuning.effort
+                && tuning.speed == saved.tuning.speed && tuning.permission_mode == Some(mode)
     ));
     let next = ConversationModelSave {
         target: target.clone(),
         request_id: "model-owner-save-a".into(),
         expected_request_id: Some(saved.request_id.clone()),
-        model_id: "fixture-a".into(),
+        model_id: Some("fixture-a".into()),
         tuning: Default::default(),
     };
     assert!(matches!(
@@ -194,13 +245,17 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
             .save_conversation_model(&owner, &f.agent.id, &next, f.now)
             .await?
             .model
+            .ok_or("Missing saved model")?
             .id,
         "fixture-a"
     );
     let repeated = store
         .save_conversation_model(&owner, &f.agent.id, &saved, f.now)
         .await?;
-    assert_eq!(repeated.model.id, second.id);
+    assert_eq!(
+        repeated.model.ok_or("Missing original model")?.id,
+        second.id
+    );
     assert_eq!(repeated.tuning, saved.tuning);
     assert_eq!(
         store
@@ -259,11 +314,12 @@ async fn exercise(store: &Store, f: &Fixture) -> Result<(), TestError> {
             target: target.clone(),
             operation_id: input.id.clone(),
             capable: true,
+            permission_mode_capable: true,
         };
         assert!(matches!(
             store.reserve_conversation_model_start(&source, &start).await?,
             ConversationModelStartAdmission::Reserved { model_id: Some(value), tuning }
-                if value == "fixture-a" && tuning.is_inherited()
+                if value == "fixture-a" && !tuning.has_model_tuning() && tuning.permission_mode == Some(mode)
         ));
         assert!(matches!(
             store

@@ -754,7 +754,7 @@ fn sqlite_goal_projection_and_continuation_admission() -> Result<(), TestError> 
         connection.batch_execute(sql)?;
         Ok(())
     }))?;
-    for expected in ["00000000000032", "00000000000031"] {
+    for expected in ["00000000000033", "00000000000032", "00000000000031"] {
         assert_eq!(
             connection
                 .revert_last_migration(SQLITE_MIGRATIONS)?
@@ -810,7 +810,7 @@ fn postgres_goal_projection_and_continuation_admission() -> Result<(), TestError
                 Ok(())
             })
         }))?;
-        for expected in ["00000000000032", "00000000000031"] {
+        for expected in ["00000000000033", "00000000000032", "00000000000031"] {
             assert_eq!(
                 connection
                     .revert_last_migration(POSTGRES_MIGRATIONS)?

@@ -20,6 +20,14 @@ const english = {
   standard: "Standard",
   fast: "Fast",
   ultrafast: "Ultrafast",
+  permission: "Permissions",
+  changePermission: "Change permissions",
+  permissionUnavailable: "Permission modes unavailable",
+  permissionRejected:
+    "Permissions were not saved. Refresh the choices and try again.",
+  approveForMe: "Approve for me",
+  fullAccess: "Full Access",
+  askForApproval: "Ask for approval",
 };
 type Copy = typeof english;
 const translations: Record<string, Copy> = {
@@ -46,6 +54,14 @@ const translations: Record<string, Copy> = {
     standard: "표준",
     fast: "빠름",
     ultrafast: "매우 빠름",
+    permission: "권한 모드",
+    changePermission: "권한 모드 변경",
+    permissionUnavailable: "사용 가능한 권한 모드 없음",
+    permissionRejected:
+      "권한 모드를 저장하지 못했습니다. 목록을 새로고침한 뒤 다시 시도하세요.",
+    approveForMe: "대신 승인",
+    fullAccess: "전체 접근",
+    askForApproval: "승인 요청",
   },
   "ja-JP": {
     model: "モデル",
@@ -71,6 +87,14 @@ const translations: Record<string, Copy> = {
     standard: "標準",
     fast: "高速",
     ultrafast: "超高速",
+    permission: "権限",
+    changePermission: "権限を変更",
+    permissionUnavailable: "利用可能な権限モードなし",
+    permissionRejected:
+      "権限を保存できませんでした。選択肢を更新して再試行してください。",
+    approveForMe: "代わりに承認",
+    fullAccess: "フルアクセス",
+    askForApproval: "承認を求める",
   },
   "fr-FR": {
     model: "Modèle",
@@ -95,6 +119,14 @@ const translations: Record<string, Copy> = {
     standard: "Standard",
     fast: "Rapide",
     ultrafast: "Ultrarapide",
+    permission: "Autorisations",
+    changePermission: "Modifier les autorisations",
+    permissionUnavailable: "Modes d’autorisation indisponibles",
+    permissionRejected:
+      "Les autorisations n’ont pas été enregistrées. Actualisez la liste et réessayez.",
+    approveForMe: "Approuver pour moi",
+    fullAccess: "Accès complet",
+    askForApproval: "Demander une approbation",
   },
 };
 export function modelSelectionCopy(locale: string): Copy {

@@ -247,6 +247,7 @@ pub struct NativeModelOptions {
     pub option_id: String,
     pub current: Option<NativeModelChoice>,
     pub options: Vec<NativeModelChoice>,
+    pub permission_modes: Vec<chapchoo_domain::ConversationPermissionMode>,
 }
 
 #[derive(Clone)]
@@ -333,6 +334,7 @@ pub(super) fn options(config: &[schema::SessionConfigOption]) -> Option<NativeMo
         option_id: option.config_id.0.to_string(),
         current,
         options,
+        permission_modes: Vec::new(),
     })
 }
 

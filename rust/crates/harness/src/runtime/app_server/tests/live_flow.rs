@@ -51,9 +51,20 @@ async fn new_session_steers_and_stops_only_its_exact_live_turn() -> TestResult {
                         "model/list" | "mcpServerStatus/list" => {
                             json!({"data":[],"nextCursor":null})
                         }
+                        "permissionProfile/list" => json!({"data":[
+                            {"id":":workspace","allowed":true},
+                            {"id":":danger-full-access","allowed":true}
+                        ],"nextCursor":null}),
+                        "experimentalFeature/list" => json!({"data":[
+                            {"name":"guardian_approval","enabled":true}
+                        ],"nextCursor":null}),
+                        "configRequirements/read" => json!({"requirements":null}),
                         "turn/start" | "turn/steer" => {
                             assert_eq!(params["threadId"], "new-root");
                             let (item, result) = if method == "turn/start" {
+                                assert_eq!(params["permissions"], ":workspace");
+                                assert_eq!(params["approvalPolicy"], "on-request");
+                                assert_eq!(params["approvalsReviewer"], "auto_review");
                                 send(&mut write, json!({"method":"turn/started", "params":{
                                 "threadId":"new-root","turn":{"id":"active","status":"inProgress"}
                             }})).await?;
@@ -62,6 +73,7 @@ async fn new_session_steers_and_stops_only_its_exact_live_turn() -> TestResult {
                                 assert_eq!(params["expectedTurnId"], "active");
                                 assert!(params.get("model").is_none());
                                 assert!(params.get("serviceTierForTurn").is_none());
+                                assert!(params.get("permissions").is_none());
                                 ("steered", json!({"turnId":"active"}))
                             };
                             let item = json!({"type":"userMessage","id":item,
@@ -193,6 +205,9 @@ async fn new_session_steers_and_stops_only_its_exact_live_turn() -> TestResult {
                     "thread/start",
                     "thread/name/set",
                     "model/list",
+                    "permissionProfile/list",
+                    "experimentalFeature/list",
+                    "configRequirements/read",
                     "mcpServerStatus/list",
                     "turn/start",
                     "turn/steer",
