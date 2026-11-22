@@ -8,6 +8,86 @@ import {
 } from "./chatContainerFixture";
 import type { Route } from "@playwright/test";
 
+test("permissions can be saved independently of model discovery", async ({
+  page,
+}) => {
+  let savedMode: number | null = null;
+  await page.route("**/api/trpc/**", async (route) => {
+    const method = new URL(route.request().url()).pathname.split("/").at(-1);
+    let value: unknown;
+    switch (method) {
+      case "auth.identity":
+        value = containerUser;
+        break;
+      case "computers.get":
+        if (containerInput.initial.type !== "detail") {
+          throw new Error("Missing fixture Agent");
+        }
+        value = containerInput.initial.agent;
+        break;
+      case "conversations.activity":
+      case "conversations.region":
+        value = containerInput.initialConversation;
+        break;
+      case "conversations.messages":
+        value = containerInput.initialMessages;
+        break;
+      case "conversations.model":
+        value = {
+          target: {
+            conversationId: "conversation",
+            launchOperationId: "fixture-launch",
+            native: { snapshotId: "snapshot", nativeSessionId: "native" },
+          },
+          options: { choices: [], permissionModes: [3, 2, 1] },
+          savedTuning:
+            savedMode === null ? void 0 : { permissionMode: savedMode },
+        };
+        break;
+      case "conversations.saveModel": {
+        const payload = route.request().postDataJSON() as {
+          json: {
+            requestId: string;
+            modelId?: string;
+            tuning: { permissionMode?: number };
+          };
+        };
+        expect(payload.json.modelId).toBeUndefined();
+        expect(payload.json.tuning).toEqual({ permissionMode: 3 });
+        savedMode = 3;
+        value = {
+          requestId: payload.json.requestId,
+          tuning: { permissionMode: savedMode },
+        };
+        break;
+      }
+      default:
+        throw new Error(`Unexpected request: ${method ?? "missing method"}`);
+    }
+    await route.fulfill({
+      json: { result: { data: superjson.serialize(value) } },
+    });
+  });
+  await page.goto(
+    "/iframe.html?id=chat-container-transport--enqueue-failure&viewMode=story",
+  );
+  await page.getByRole("button", { name: "Activity", exact: true }).click();
+  const row = page.getByRole("button", { name: /^Permissions/ });
+  await expect(row).toContainText("Approve for me");
+  await row.click();
+  const picker = page.getByRole("dialog", {
+    name: "Change permissions",
+    exact: true,
+  });
+  await expect(
+    picker.getByRole("radio", { name: "Approve for me" }),
+  ).toBeChecked();
+  await picker.getByText("Ask for approval", { exact: true }).click();
+  await picker.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(row).toContainText("Ask for approval");
+  await expect(row).toBeFocused();
+});
+
 for (const width of [390, 1280]) {
   test(`model picker opens its own page and highlights the selection at ${width}`, async ({
     page,

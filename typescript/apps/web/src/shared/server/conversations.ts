@@ -69,7 +69,7 @@ export const conversationsRouter = router({
           target: modelTarget,
           requestId: id,
           expectedRequestId: id.optional(),
-          modelId: z.string().min(1).max(256),
+          modelId: z.string().min(1).max(256).optional(),
           tuning: z
             .object({
               effort: z.string().min(1).max(256).optional(),

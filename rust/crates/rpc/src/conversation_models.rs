@@ -150,7 +150,7 @@ pub(crate) fn projection(
 pub(crate) fn receipt(value: ConversationModelSaveReceipt) -> wire::ModelSaveReceipt {
     wire::ModelSaveReceipt {
         request_id: value.request_id,
-        model: Some(choice(value.model)),
+        model: value.model.map(choice),
         tuning: wire_tuning(value.tuning),
     }
 }

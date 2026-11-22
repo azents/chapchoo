@@ -356,6 +356,8 @@ order. An explicit choice that is no longer available does not authorize a
 different preset. New starts on the same retained conversation reapply the
 whole preset; `turn/steer` does not change it. If discovery yields no preset,
 a resumed disabled sandbox cannot serve as an implicit default.
+Control refuses to reserve a saved permission choice for an older Connector
+that cannot apply it.
 
 These settings do not change Computer isolation, ownership or server-tool
 authorization. Auto review can deny requests; Full Access does not automatically

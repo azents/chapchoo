@@ -230,7 +230,7 @@ export interface OwnerModelSave {
   target: ModelTarget | undefined;
   requestId: string;
   expectedRequestId?: string | undefined;
-  modelId: string;
+  modelId?: string | undefined;
   tuning: ModelTuning | undefined;
 }
 
@@ -713,6 +713,7 @@ export interface ModelStartRequest {
   source: CaptureSource | undefined;
   target: ModelStartTarget | undefined;
   capable: boolean;
+  permissionModeCapable: boolean;
 }
 
 export interface ReservedModelStart {
@@ -1802,7 +1803,7 @@ function createBaseOwnerModelSave(): OwnerModelSave {
     target: undefined,
     requestId: "",
     expectedRequestId: undefined,
-    modelId: "",
+    modelId: undefined,
     tuning: undefined,
   };
 }
@@ -1821,7 +1822,7 @@ export const OwnerModelSave: MessageFns<OwnerModelSave> = {
     if (message.expectedRequestId !== undefined) {
       writer.uint32(34).string(message.expectedRequestId);
     }
-    if (message.modelId !== "") {
+    if (message.modelId !== undefined) {
       writer.uint32(42).string(message.modelId);
     }
     if (message.tuning !== undefined) {
@@ -1914,7 +1915,7 @@ export const OwnerModelSave: MessageFns<OwnerModelSave> = {
       : undefined;
     message.requestId = object.requestId ?? "";
     message.expectedRequestId = object.expectedRequestId ?? undefined;
-    message.modelId = object.modelId ?? "";
+    message.modelId = object.modelId ?? undefined;
     message.tuning = (object.tuning !== undefined && object.tuning !== null)
       ? ModelTuning.fromPartial(object.tuning)
       : undefined;
@@ -7914,7 +7915,7 @@ export const ModelStartTarget: MessageFns<ModelStartTarget> = {
 };
 
 function createBaseModelStartRequest(): ModelStartRequest {
-  return { source: undefined, target: undefined, capable: false };
+  return { source: undefined, target: undefined, capable: false, permissionModeCapable: false };
 }
 
 export const ModelStartRequest: MessageFns<ModelStartRequest> = {
@@ -7927,6 +7928,9 @@ export const ModelStartRequest: MessageFns<ModelStartRequest> = {
     }
     if (message.capable !== false) {
       writer.uint32(24).bool(message.capable);
+    }
+    if (message.permissionModeCapable !== false) {
+      writer.uint32(32).bool(message.permissionModeCapable);
     }
     return writer;
   },
@@ -7968,6 +7972,14 @@ export const ModelStartRequest: MessageFns<ModelStartRequest> = {
             message.capable = reader.bool();
             continue;
           }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.permissionModeCapable = reader.bool();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -7992,6 +8004,7 @@ export const ModelStartRequest: MessageFns<ModelStartRequest> = {
       ? ModelStartTarget.fromPartial(object.target)
       : undefined;
     message.capable = object.capable ?? false;
+    message.permissionModeCapable = object.permissionModeCapable ?? false;
     return message;
   },
 };

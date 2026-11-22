@@ -82,11 +82,11 @@ impl Store {
                 return Ok(ConversationModelStartAdmission::Ungoverned);
             }
             let retained_tuning = current.and_then(|row| row.saved_tuning.as_deref());
-            let stored = stored_tuning(retained_tuning)?;
-            let model_id = current
-                .filter(|_| !stored.inherit_model)
-                .and_then(|row| row.saved_model_id.clone());
-            let tuning = stored.tuning;
+            let tuning = tuning_from_storage(retained_tuning)?;
+            if tuning.permission_mode.is_some() && !draft.permission_mode_capable {
+                return Err(StoreError::InvalidTransition);
+            }
+            let model_id = current.and_then(|row| row.saved_model_id.clone());
             let inserted = diesel::sql_query(dialect.query(
                 "INSERT INTO conversation_model_starts
                  (conversation_id,operation_id,source_snapshot,native_session_id,execution_id,launch_operation_id,connection_id,model_id,tuning)

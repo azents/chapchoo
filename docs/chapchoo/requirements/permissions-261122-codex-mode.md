@@ -1,6 +1,7 @@
 ---
 title: "Codex Conversation Permission Mode Requirements"
 created: 2026-11-22
+implemented: 2026-11-22
 document_role: primary
 document_type: requirements
 snapshot_id: permissions-261122

@@ -424,7 +424,8 @@ Direct Codex conversations with reported permission modes show **Permissions**
 directly below **Model**. Without a saved choice, the row shows the first
 available mode in this order: **Approve for me**, **Full Access**, **Ask for
 approval**. The permission picker saves through the same target and request
-fences as the model picker, without changing model tuning or sending a message.
+fences as the model picker, but can save without a model catalog. It neither
+changes model settings nor sends a message.
 The preference applies to new turns, not work already running.
 
 ## Owner supply settings

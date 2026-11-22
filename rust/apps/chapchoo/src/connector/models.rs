@@ -247,6 +247,7 @@ impl NativeModelAuthority for Authority {
                             source: Some(self.origin.clone()),
                             target: Some(start_target(start)),
                             capable,
+                            permission_mode_capable: capable,
                         },
                         &self.key,
                     )

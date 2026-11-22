@@ -148,7 +148,12 @@ test("owner follows Conversation Work and inspects native typed-answer records",
     await expect(
       permissions.getByRole("radio", { name: "Approve for me" }),
     ).toBeChecked();
-    await permissions.getByRole("radio", { name: "Ask for approval" }).click();
+    stage = "select-manual-permissions";
+    await permissions.getByText("Ask for approval", { exact: true }).click();
+    await expect(
+      permissions.getByRole("radio", { name: "Ask for approval", exact: true }),
+    ).toBeChecked();
+    stage = "save-native-permissions";
     await permissions
       .getByRole("button", { name: "Save", exact: true })
       .click();
