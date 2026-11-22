@@ -97,6 +97,15 @@ publish a new continuation. Loss of a possibly committed grant does not authoriz
 another native send, and a lost close response retries the close alone. Closing
 an outstanding slot does not depend on a later capture pass succeeding.
 
+Continuation is a system-generated input (`system` origin) sent as native
+`user` input. Its text starts with `[System-generated input]`, followed by
+`kind: continuation`, an empty line, then its existing instructions and
+goal context. The shared renderer writes each metadata entry as `key: value`
+on one line and leaves the body unescaped. This header describes the input;
+it does not confer authority or change the model role. Ordinary Chat input
+is forwarded as original text without a header. Already captured text
+keeps its original form.
+
 The Computer image declares an official Codex `SessionStart(compact)` hook.
 Its relay connects to a per-launch local socket without supplying a target or
 credential. The Connector trusts local invocations, resolves the fixed

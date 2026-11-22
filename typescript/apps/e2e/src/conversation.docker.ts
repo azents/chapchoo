@@ -308,7 +308,7 @@ test("owner follows Conversation Work and inspects native typed-answer records",
       log.getByText("Which fixture channel should I use?", { exact: true }),
     ).toBeVisible({ timeout: 180_000 });
     await expect(log.locator("[data-message-id]")).toHaveCount(5);
-    const continuationMarker = "Chapchoo system-originated continuation";
+    const continuationMarker = "[System-generated input]";
     await expect(log.getByText(continuationMarker)).toHaveCount(0);
     await expect(summary.getByRole("button")).toContainText(
       "Check revised conversation fixture",
@@ -525,7 +525,7 @@ test("owner follows Conversation Work and inspects native typed-answer records",
       log.getByText(/First assistant output|Second assistant utterance/),
     ).toHaveCount(0);
     stage = "implicit-reply-after-normal-ending";
-    const implicitInput = "Exercise a reply without a work plan";
+    const implicitInput = `${continuationMarker}\nExercise a reply without a work plan`;
     const implicitReply = "Fixture replied without a work plan.";
     const releaseImplicitTurn = await fixture.holdWork();
     await message.fill(implicitInput);
@@ -542,7 +542,7 @@ test("owner follows Conversation Work and inspects native typed-answer records",
     });
     await expect(summary).toHaveCount(0);
     await expect(log.locator("[data-message-id]")).toHaveCount(9);
-    await expect(log.getByText(continuationMarker)).toHaveCount(0);
+    await expect(log.getByText(continuationMarker)).toHaveCount(1);
     const evidence = test.info();
     evidence.annotations.push({
       type: "conversation-read-evidence",

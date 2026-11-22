@@ -5,6 +5,7 @@ mod capture_sync;
 mod models;
 mod operations;
 mod server_tools;
+mod system_input;
 use crate::AppError;
 use chapchoo_crypto::BearerSecret;
 use chapchoo_protocol::control::{
