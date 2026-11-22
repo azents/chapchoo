@@ -172,9 +172,13 @@ impl EndingOwner for Owner {
     ) -> Result<(), Error> {
         assert_eq!(ending, self.ending);
         assert!(models.route.is_open());
-        assert!(
-            text.as_str()
-                .starts_with("[Chapchoo system-originated continuation")
+        assert_eq!(
+            text.as_str(),
+            "[System-generated input]\nkind: continuation\n\n\
+             Continue active goals using the current authoritative goal context. \
+             Leave goals waiting for user input on hold. \
+             For Conversation Work, use the listed tasks and states; checking off \
+             the tasks does not itself settle the work.\n[]"
         );
         *self.submissions.lock().map_err(|_| Error::Process)? += 1;
         Ok(())

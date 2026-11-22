@@ -538,11 +538,21 @@ async function request(id, method, params) {
         throw new Error("The saved preferences did not reach the native turn");
       }
       if (
-        prompt?.startsWith(
-          "[Chapchoo system-originated continuation; not a user message]\n",
-        )
+        turnId === "fixture-unanswered-turn" ||
+        turnId === "fixture-refresh-turn"
       ) {
-        const context = JSON.parse(prompt.split("\n").at(-1));
+        const header = "[System-generated input]\nkind: continuation\n\n";
+        if (
+          !prompt?.startsWith(header) ||
+          params.input.length !== 1 ||
+          params.input[0].type !== "text"
+        ) {
+          throw new Error(
+            "Fixture continuation did not use the system input format",
+          );
+        }
+        const body = prompt.slice(header.length);
+        const context = JSON.parse(body.slice(body.indexOf("\n") + 1));
         const [work] = context;
         if (turnId === "fixture-unanswered-turn") {
           if (
@@ -563,7 +573,6 @@ async function request(id, method, params) {
           break;
         }
         if (
-          turnId !== "fixture-refresh-turn" ||
           context.length !== 1 ||
           work.title !== "Check revised conversation fixture" ||
           work.disposition !== "active" ||
@@ -589,7 +598,10 @@ async function request(id, method, params) {
         });
         break;
       }
-      if (prompt === "Exercise a reply without a work plan") {
+      if (
+        prompt ===
+        "[System-generated input]\nExercise a reply without a work plan"
+      ) {
         await workTurn(id, params, "unanswered");
         break;
       }
