@@ -7,6 +7,47 @@ import "conversations.proto";
 service ServerTools {
   rpc Catalog(CatalogRequest) returns (CatalogResponse);
   rpc Invoke(stream InvocationControl) returns (stream InvocationObservation);
+  rpc PrepareExternal(ExternalPreparation) returns (stream ExternalCatalogFrame);
+  rpc InvokeExternal(ExternalInvocation) returns (Final);
+}
+// The published operation is selected on the current component route.
+message ExternalPreparation {
+  CallerScope scope = 1;
+  string execution_id = 2;
+  string operation_id = 3;
+}
+message ExternalCatalogChunk {
+  bytes json = 1;
+  bool final_chunk = 2;
+}
+enum ExternalCatalogFailure {
+  EXTERNAL_CATALOG_FAILURE_UNSPECIFIED = 0;
+  EXTERNAL_CATALOG_FAILURE_DESTINATION = 1;
+  EXTERNAL_CATALOG_FAILURE_CAPACITY = 2;
+  EXTERNAL_CATALOG_FAILURE_UNAVAILABLE = 3;
+  EXTERNAL_CATALOG_FAILURE_AUTHENTICATION = 4;
+  EXTERNAL_CATALOG_FAILURE_PROTOCOL = 5;
+  EXTERNAL_CATALOG_FAILURE_TOOLS_UNAVAILABLE = 6;
+  EXTERNAL_CATALOG_FAILURE_INVALID_RESPONSE = 7;
+  EXTERNAL_CATALOG_FAILURE_TIMEOUT = 8;
+  EXTERNAL_CATALOG_FAILURE_SUPERSEDED = 9;
+}
+message ExternalCatalogFrame {
+  string integration_id = 1;
+  oneof payload {
+    ExternalCatalogChunk catalogue = 2;
+    ExternalCatalogFailure unavailable = 3;
+    // Last frame. An interrupted stream never applies a partial selection.
+    ExternalCatalogEnd end = 4;
+  }
+}
+message ExternalCatalogEnd { bool capacity_limited = 1; }
+message ExternalInvocation {
+  ExternalPreparation preparation = 1;
+  chapchoo.conversations.NativeTarget target = 2;
+  string integration_id = 3;
+  string name = 4;
+  bytes arguments_json = 5;
 }
 message CallerScope {
   chapchoo.conversations.CaptureSource source = 1;
@@ -37,6 +78,14 @@ enum Rejection {
   REJECTION_QUEUE_EXPIRED = 6;
   REJECTION_RESPONSE_EXPIRED = 7;
   REJECTION_AUTHORITY = 8;
+  // External calls only: an upstream failure known to precede dispatch.
+  REJECTION_UPSTREAM_UNAVAILABLE = 9;
+  REJECTION_UPSTREAM_AUTHENTICATION = 10;
+  REJECTION_UPSTREAM_DESTINATION = 11;
+  REJECTION_UPSTREAM_PROTOCOL = 12;
+  REJECTION_UPSTREAM_INVALID_RESPONSE = 13;
+  REJECTION_UPSTREAM_TIMEOUT = 14;
+  REJECTION_UPSTREAM_TOOLS_UNAVAILABLE = 15;
 }
 message Final {
   oneof outcome {

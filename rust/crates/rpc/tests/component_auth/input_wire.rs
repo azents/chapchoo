@@ -246,6 +246,8 @@ pub(super) async fn exercise(
                 result: Some(c::setup_report::Result::Failed(
                     c::SetupFailure::BeforeNativeLaunch as i32,
                 )),
+                application_connection_id: None,
+                external_tools_applied: false,
             },
             context.key,
         )?)

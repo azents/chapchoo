@@ -239,14 +239,14 @@ impl<'a> Thread<'a> {
         id: &NativeConversationId,
         cwd: &Path,
     ) -> Result<Self, Error> {
-        Self::open(link, cwd, Some(id), None).await
+        Self::open(link, cwd, Some(id), &[]).await
     }
 
     async fn open(
         link: &'a Client,
         cwd: &Path,
         existing: Option<&NativeConversationId>,
-        mcp: Option<&crate::NativeMcpDeclaration>,
+        mcp: &[&crate::NativeMcpDeclaration],
     ) -> Result<Self, Error> {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
@@ -263,7 +263,7 @@ impl<'a> Thread<'a> {
             #[serde(skip_serializing_if = "Option::is_none")]
             config: Option<tools::Config<'a>>,
         }
-        let prepared = mcp.map(tools::Prepared::new);
+        let prepared = (!mcp.is_empty()).then(|| tools::Prepared::new(mcp));
         let response = call(
             link,
             ProtocolStage::Session,
@@ -276,8 +276,8 @@ impl<'a> Thread<'a> {
                 cwd,
                 thread_id: existing.map(NativeConversationId::as_str),
                 exclude_turns: existing.map(|_| true),
-                approval_policy: mcp.map(|_| "on-request"),
-                approvals_reviewer: mcp.map(|_| "user"),
+                approval_policy: prepared.as_ref().map(|_| "on-request"),
+                approvals_reviewer: prepared.as_ref().map(|_| "user"),
                 config: prepared.as_ref().map(tools::Prepared::config),
             },
         )

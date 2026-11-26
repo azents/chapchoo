@@ -1,14 +1,62 @@
 use super::*;
 use chapchoo_harness::{
-    NativeAuthenticationBinding, NativeGoalRestore, NativeMcpDeclaration, NativeToolLifetime,
+    NativeAuthenticationBinding, NativeExternalPreparation, NativeExternalSupply,
+    NativeGoalRestore, NativeMcpDeclaration, NativeOptionalTools, NativeToolLifetime,
     NativeToolProvision, NativeToolScope, NativeToolsError, NativeToolsFuture, NativeToolsProvider,
 };
 
 pub(in crate::connector) struct Provider {
     route: CurrentRoute,
+    setup_route: Option<(chapchoo_harness::ContinuationRoute, String)>,
     scope: NativeToolScope,
     ordering: Ordering,
     expected_catalog: Option<rmcp::model::ListToolsResult>,
+    external_request: Option<ExternalRequest>,
+    external: PreparedExternal,
+}
+#[derive(Clone)]
+struct ExternalRequest {
+    source: CaptureSource,
+    execution: String,
+    operation: String,
+}
+impl ExternalRequest {
+    async fn fetch(
+        &self,
+        route: &CurrentRoute,
+        agent: &str,
+        conversation: &str,
+    ) -> PreparedExternal {
+        let selected = match PreparedExternal::fetch(
+            route,
+            self.source.clone(),
+            agent.to_owned(),
+            conversation.to_owned(),
+            self.execution.clone(),
+            self.operation.clone(),
+        )
+        .await
+        {
+            Ok(external) => external,
+            Err(_) => {
+                tracing::debug!("External MCP preparation unavailable");
+                PreparedExternal::transport_unavailable()
+            }
+        };
+        let diagnostics = &selected.diagnostics;
+        if !diagnostics.unavailable.is_empty()
+            || diagnostics.capacity_limited
+            || diagnostics.transport_unavailable
+        {
+            tracing::debug!(
+                unavailable = diagnostics.unavailable.len(),
+                capacity_limited = diagnostics.capacity_limited,
+                transport_unavailable = diagnostics.transport_unavailable,
+                "Optional MCP selection completed with unavailable catalogues"
+            );
+        }
+        selected
+    }
 }
 redacted!(Provider);
 impl Provider {
@@ -60,7 +108,31 @@ impl Provider {
             scope,
             ordering,
             expected_catalog: None,
+            external: PreparedExternal::default(),
+            external_request: None,
+            setup_route: None,
         }
+    }
+    pub(in crate::connector) fn with_setup_route(
+        mut self,
+        route: chapchoo_harness::ContinuationRoute,
+        connection_id: String,
+    ) -> Self {
+        self.setup_route = Some((route, connection_id));
+        self
+    }
+    pub(in crate::connector) fn select_external(
+        mut self,
+        source: CaptureSource,
+        execution: String,
+        operation: String,
+    ) -> Self {
+        self.external_request = Some(ExternalRequest {
+            source,
+            execution,
+            operation,
+        });
+        self
     }
     pub(in crate::connector) fn with_expected_catalog(
         mut self,
@@ -70,8 +142,74 @@ impl Provider {
         Ok(self)
     }
 }
-struct Lifetime(Relay);
+enum OptionalSelection {
+    Pending(ExternalRequest),
+    Selected(PreparedExternal),
+}
+struct Lifetime(Relay, Option<OptionalSelection>);
 impl NativeToolLifetime for Lifetime {
+    fn complete_optional(&mut self) -> NativeToolsFuture<'_, NativeOptionalTools> {
+        Box::pin(async move {
+            let Some(selection) = self.1.take() else {
+                return Err(NativeToolsError::new(
+                    "Optional MCP selection was already consumed".into(),
+                ));
+            };
+            let relay = &mut self.0;
+            let selected = match selection {
+                OptionalSelection::Pending(request) => {
+                    request
+                        .fetch(
+                            &relay.state.route,
+                            &relay.state.recipient.agent_id,
+                            &relay.state.recipient.conversation_id,
+                        )
+                        .await
+                }
+                OptionalSelection::Selected(prepared) => prepared,
+            };
+            relay.install_optional(&selected);
+            let declarations = relay
+                .optional_credentials()
+                .filter_map(|(id, url, bearer)| {
+                    let declaration = BearerSecret::parse(bearer.to_owned())
+                        .map_err(|error| NativeToolsError::new(error.into()))
+                        .and_then(|key| NativeMcpDeclaration::external_http(id, &url, key));
+                    match declaration {
+                        Ok(declaration) => Some((id.to_owned(), declaration)),
+                        Err(_) => {
+                            tracing::debug!("Could not materialize optional local MCP declaration");
+                            None
+                        }
+                    }
+                })
+                .collect::<Vec<_>>();
+            let supply = super::external::effective_supply(
+                declarations
+                    .iter()
+                    .map(|(id, _)| (id, &relay.optional[id].state.catalog)),
+            )
+            .unwrap_or_else(|_| {
+                tracing::debug!("Could not encode adopted external MCP supply");
+                None
+            });
+            Ok(NativeOptionalTools {
+                declarations: declarations
+                    .into_iter()
+                    .map(|(_, declaration)| declaration)
+                    .collect(),
+                supply,
+                preparation: selected.selection,
+            })
+        })
+    }
+    fn bind_external(
+        &self,
+        target: chapchoo_harness::NativeTextTarget,
+        preparation: NativeExternalPreparation,
+    ) {
+        self.0.bind_external(target, preparation);
+    }
     fn quiescent(&self) -> bool {
         self.0.quiescent()
     }
@@ -86,6 +224,45 @@ impl NativeToolLifetime for Lifetime {
     }
 }
 impl NativeToolsProvider for Provider {
+    fn setup_route(&self) -> Option<&chapchoo_harness::ContinuationRoute> {
+        self.setup_route.as_ref().map(|(route, _)| route)
+    }
+    fn setup_connection_id(&self) -> Option<&str> {
+        self.setup_route.as_ref().map(|(_, id)| id.as_str())
+    }
+
+    fn has_pending_external(&self) -> bool {
+        self.external_request.is_some()
+    }
+    fn resolve_external(&self) -> NativeToolsFuture<'_, Option<Arc<dyn NativeToolsProvider>>> {
+        Box::pin(async move {
+            let Some(request) = &self.external_request else {
+                return Ok(None);
+            };
+            let external = request
+                .fetch(
+                    &self.route,
+                    &self.scope.agent_id,
+                    &self.scope.conversation_id,
+                )
+                .await;
+            Ok(Some(Arc::new(Self {
+                route: self.route.clone(),
+                setup_route: self.setup_route.clone(),
+                scope: self.scope.clone(),
+                ordering: self.ordering.clone(),
+                expected_catalog: self.expected_catalog.clone(),
+                external_request: None,
+                external,
+            }) as Arc<dyn NativeToolsProvider>))
+        })
+    }
+    fn external_supply(&self) -> Option<NativeExternalSupply> {
+        self.external.supply
+    }
+    fn external_preparation(&self) -> Option<&NativeExternalPreparation> {
+        self.external.selection.as_ref()
+    }
     fn provide<'a>(
         &'a self,
         binding: &'a NativeAuthenticationBinding,
@@ -98,7 +275,7 @@ impl NativeToolsProvider for Provider {
                     std::io::Error::other("Native tool scope conflicts").into(),
                 ));
             }
-            let mut relay = Relay::start(
+            let mut relay = Relay::start_builtin(
                 self.route.clone(),
                 Recipient {
                     agent_id: self.scope.agent_id.clone(),
@@ -124,7 +301,13 @@ impl NativeToolsProvider for Provider {
             match declaration {
                 Ok(declaration) => Ok(NativeToolProvision::new(
                     declaration,
-                    Box::new(Lifetime(relay)),
+                    Box::new(Lifetime(
+                        relay,
+                        Some(match &self.external_request {
+                            Some(request) => OptionalSelection::Pending(request.clone()),
+                            None => OptionalSelection::Selected(self.external.clone()),
+                        }),
+                    )),
                 )
                 .with_goal_restore(self.goal_restore(binding.conversation_id.clone()))),
                 Err(primary) => {

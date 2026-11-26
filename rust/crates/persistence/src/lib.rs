@@ -75,10 +75,11 @@ pub use conversations::{
     ConversationStopAdmission, ConversationStopReceipt, ConversationStopState, ConversationSummary,
     ConversationWorkSummary, ConversationWorkTarget, EventChunkRead, EventMetadataRead,
     EventPairMetadata, EventPayloadChunk, EventPayloadKind, HarnessSupplyReceipt,
-    HarnessSupplySelection, LiveConversationRequest, MAX_SYSTEM_PROMPT_BYTES,
-    ProjectInstructionEvidence, PublishConversationMessage, QueuedConversationCommand,
-    QueuedSetupContext, RetainedConversationInput, RetryConversationInput, SaveHarnessSupply,
-    SourceBinding,
+    HarnessSupplySelection, LiveConversationRequest, MAX_SYSTEM_PROMPT_BYTES, McpAppliedScope,
+    McpExecutionScope, McpPreparationScope, McpRetainedSelection, ProjectInstructionEvidence,
+    PublishConversationMessage, QueuedConversationCommand, QueuedSetupContext,
+    RetainedConversationInput, RetryConversationInput, SaveHarnessSupply, SavedMcpConnection,
+    SavedMcpPage, SourceBinding,
 };
 pub use conversations::{
     ConversationModelChoice, ConversationModelObservation, ConversationModelProjection,

@@ -1,4 +1,6 @@
 //! Dedicated bounded component tool streams, never Control command frames.
+mod external;
+
 use crate::{ingress, status::status};
 use chapchoo_crypto::SecretDigest;
 use chapchoo_protocol::server_tools::{
@@ -29,6 +31,8 @@ use tonic::{Request, Response, Status, Streaming};
 #[derive(Clone)]
 pub struct ServerToolServices {
     owner: ServerTools,
+    external: Option<chapchoo_service::ExternalMcpRuntime>,
+    external_ingress: Arc<Semaphore>,
     admission: Arc<AtomicBool>,
     ingress: Arc<Semaphore>,
     streams: Arc<Mutex<JoinSet<()>>>,
@@ -43,11 +47,17 @@ impl ServerToolServices {
     pub fn new(owner: ServerTools, admission: Arc<AtomicBool>) -> Self {
         Self {
             owner,
+            external: None,
+            external_ingress: Arc::new(Semaphore::new(24)),
             admission,
             ingress: Arc::new(Semaphore::new(144)),
             streams: Arc::new(Mutex::new(JoinSet::new())),
             failures: Arc::new(std::sync::Mutex::new(Vec::new())),
         }
+    }
+    pub fn with_external(mut self, runtime: chapchoo_service::ExternalMcpRuntime) -> Self {
+        self.external = Some(runtime);
+        self
     }
     pub fn server(&self) -> ServerToolsServer<Self> {
         ServerToolsServer::new(self.clone())
@@ -196,6 +206,22 @@ fn not_executed(mut status: Status, reason: wire::Rejection) -> Status {
 
 #[tonic::async_trait]
 impl WireTools for ServerToolServices {
+    type PrepareExternalStream = external::CatalogStream;
+
+    async fn prepare_external(
+        &self,
+        request: Request<wire::ExternalPreparation>,
+    ) -> Result<Response<Self::PrepareExternalStream>, Status> {
+        external::prepare(self, request).await
+    }
+
+    async fn invoke_external(
+        &self,
+        request: Request<wire::ExternalInvocation>,
+    ) -> Result<Response<wire::Final>, Status> {
+        external::invoke(self, request).await
+    }
+
     async fn catalog(
         &self,
         request: Request<wire::CatalogRequest>,

@@ -15,6 +15,8 @@ use rmcp::{
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio_stream::wrappers::TcpListenerStream;
 
+mod external_wire;
+
 struct ObservedCall {
     agent_id: String,
     conversation_id: String,
@@ -168,24 +170,51 @@ async fn official_sdk_http_round_trip_keeps_native_scope_across_server_key_refre
         current.update(channel.clone(), source.clone(), &key)?;
         let ordering = super::Ordering::default();
         let publication_owner = ordering.open(binding());
+        let lookup = |description: &str| serde_json::from_value(serde_json::json!({
+            "tools": [{"name":"lookup", "description":description, "inputSchema":{"type":"object"}}]
+        }));
+        let prepared = PreparedExternal::fixture(source.clone(), BTreeMap::from([
+            ("external-first".into(), lookup("First integration")?),
+            ("external-second".into(), lookup("Second integration")?),
+        ]))?;
         let relay = Arc::new(tokio::sync::Mutex::new(
-            Relay::start(
+            Relay::start_with_external(
                 current.clone(),
                 Recipient {
                     agent_id: "agent".into(),
                     conversation_id: "conversation".into(),
                 },
                 publication_owner.clone(),
+                &prepared,
             )
             .await?,
         ));
         let cleanup = relay.clone();
         fixture.cleanup(async move { cleanup.lock().await.finish().await });
-        let (url, bearer) = {
+        let (url, bearer, optional) = {
             let relay = relay.lock().await;
-            (relay.url().to_owned(), relay.bearer().to_owned())
+            (relay.url().to_owned(), relay.bearer().to_owned(),
+                relay.optional_credentials().map(|(_, url, key)| (url, key.to_owned())).collect::<Vec<_>>())
         };
         let http = http_client()?;
+        assert_eq!(optional.len(), 2);
+        for ((url, key), expected) in optional.iter().zip(["First integration", "Second integration"]) {
+            assert_eq!(http.post(url).bearer_auth(&bearer).body("{}").send().await?.status(), reqwest::StatusCode::UNAUTHORIZED);
+            let other = &optional[if expected == "First integration" { 1 } else { 0 }].1;
+            assert_eq!(http.post(url).bearer_auth(other).body("{}").send().await?.status(), reqwest::StatusCode::UNAUTHORIZED);
+            let mut config = StreamableHttpClientTransportConfig::with_uri(url.clone());
+            config.auth_header = Some(key.clone());
+            let external = Profile.serve(StreamableHttpClientTransport::with_client(http.clone(), config)).await?;
+            let tools = external.list_all_tools().await?;
+            assert_eq!(tools.len(), 1);
+            assert_eq!(tools[0].name, "lookup");
+            assert_eq!(tools[0].description.as_deref(), Some(expected));
+            // No native target exists yet, so this must fail before Control.
+            let result = external.call_tool(CallToolRequestParams::new("lookup")).await;
+            assert!(matches!(result, Err(rmcp::ServiceError::McpError(error)) if error.message.contains("invocation was not executed")));
+            external.cancel().await?;
+        }
+        assert_eq!(http.post(&url).bearer_auth(&optional[0].1).body("{}").send().await?.status(), reqwest::StatusCode::UNAUTHORIZED);
         assert_eq!(
             http.post(&url).body("{}").send().await?.status(),
             reqwest::StatusCode::UNAUTHORIZED

@@ -24,12 +24,13 @@ pub use runtime::{
     NativeModelObservation, NativeModelOptions, NativeModelReservation, NativeModelStart,
     NativeModelStartOutcome, NativeNormalEnding, NativeObservation, NativeOwner,
     NativePromptAcceptance, NativeReportedOperation, NativeSetupFailure, NativeSetupIntent,
-    NativeSetupObservation, NativeSetupOperation, NativeStopObservation, NativeTextTarget,
-    NativeWorkTarget, Retirement, ScopeEvidence,
+    NativeSetupObservation, NativeSetupOperation, NativeSetupRecovery, NativeSetupRequest,
+    NativeStopObservation, NativeTextTarget, NativeWorkTarget, Retirement, ScopeEvidence,
 };
 pub use server_tools::{
-    NativeGoalContext, NativeGoalRestore, NativeMcpDeclaration, NativeToolLifetime,
-    NativeToolProvision, NativeToolScope, NativeToolsError, NativeToolsFuture, NativeToolsProvider,
+    NativeExternalPreparation, NativeExternalSupply, NativeGoalContext, NativeGoalRestore,
+    NativeMcpDeclaration, NativeOptionalTools, NativeToolLifetime, NativeToolProvision,
+    NativeToolScope, NativeToolsError, NativeToolsFuture, NativeToolsProvider,
 };
 pub use storage::NativeStorage;
 

@@ -6,6 +6,7 @@ use std::io;
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     net::TcpListener,
+    sync::Semaphore,
 };
 use tokio_rustls::TlsAcceptor;
 
@@ -56,6 +57,22 @@ async fn fixture(
     version: &str,
     expected: Result<usize, McpDiscoveryFailure>,
 ) -> Result<(), TestError> {
+    let result = exercise_fixture(replies, version, |client, target, slot| async move {
+        list_tools(client, &target, slot).await
+    })
+    .await?;
+    assert_eq!(result.map(|catalogue| catalogue.tool_count()), expected);
+    Ok(())
+}
+
+async fn exercise_fixture<T, F>(
+    replies: Vec<(&'static str, &'static str, Value)>,
+    version: &str,
+    exercise: impl FnOnce(reqwest::Client, McpTestTarget, OwnedSemaphorePermit) -> F,
+) -> Result<T, TestError>
+where
+    F: Future<Output = T>,
+{
     let (listener, acceptor, client, target) = tls_fixture().await?;
     let slot = Arc::new(Semaphore::new(1)).try_acquire_owned()?;
     let expected_methods = replies
@@ -65,7 +82,7 @@ async fn fixture(
     let version = version.to_owned();
     let server = async move {
         let mut methods = Vec::new();
-        for (_, media, result) in replies {
+        for (expected_method, media, result) in replies {
             let (tcp, _) = listener.accept().await?;
             let mut stream = BufReader::new(acceptor.accept(tcp).await?);
             let mut line = String::new();
@@ -74,6 +91,7 @@ async fn fixture(
             let mut length = None;
             let mut authorized = false;
             let mut mcp_method = None;
+            let mut mcp_name = None;
             loop {
                 line.clear();
                 if stream.read_line(&mut line).await? == 0 {
@@ -87,6 +105,7 @@ async fn fixture(
                         "content-length" => length = Some(value.trim().parse::<usize>()?),
                         "authorization" => authorized = value.trim() == format!("Bearer {TOKEN}"),
                         "mcp-method" => mcp_method = Some(value.trim().to_owned()),
+                        "mcp-name" => mcp_name = Some(value.trim().to_owned()),
                         _ => {}
                     }
                 }
@@ -96,15 +115,25 @@ async fn fixture(
             stream.read_exact(&mut body).await?;
             let body: Value = serde_json::from_slice(&body)?;
             let method = body["method"].as_str().ok_or("missing method")?;
+            assert_eq!(method, expected_method);
             assert_eq!(mcp_method.as_deref(), Some(method));
             assert_eq!(
                 body["params"]["_meta"]["io.modelcontextprotocol/protocolVersion"],
                 "2026-07-28"
             );
-            if methods.len() == 2 {
+            if method == "tools/list" && methods.len() == 2 {
                 assert_eq!(body["params"]["cursor"], "next");
             }
+            if method == "tools/call" {
+                assert_eq!(mcp_name.as_deref(), Some("fixture-tool"));
+                assert_eq!(body["params"]["name"], "fixture-tool");
+                assert_eq!(body["params"]["arguments"], json!({"number":7}));
+            }
             methods.push(method.to_owned());
+            if media == "lost-reply" {
+                stream.get_mut().shutdown().await?;
+                continue;
+            }
             let payload = if method == "server/discover" && result.is_null() {
                 json!({
                     "supportedVersions": [version], "capabilities": {"tools": {}},
@@ -162,11 +191,91 @@ async fn fixture(
         Ok::<_, TestError>(methods)
     };
     let (result, served) = tokio::time::timeout(DISCOVERY_TIMEOUT, async {
-        tokio::join!(list_tools(client, &target, slot), server)
+        tokio::join!(exercise(client, target, slot), server)
     })
     .await?;
-    assert_eq!(result, expected);
     assert_eq!(served?, expected_methods);
+    Ok(result)
+}
+
+async fn invocation_fixture(
+    replies: Vec<(&'static str, &'static str, Value)>,
+) -> Result<ExternalMcpCallOutcome, TestError> {
+    exercise_fixture(replies, "2026-07-28", |client, target, slot| async move {
+        invocation::run(
+            client,
+            target,
+            slot,
+            rmcp::model::CallToolRequestParams::new("fixture-tool")
+                .with_arguments(serde_json::Map::from_iter([("number".into(), json!(7))])),
+            Arc::new(serde_json::Map::new()),
+            Duration::from_secs(2),
+        )
+        .await
+    })
+    .await
+}
+
+#[tokio::test]
+async fn invocation_preserves_structured_only_success_and_tool_failure() -> Result<(), TestError> {
+    let value = json!({"items":[7, false, null]});
+    let outcome = invocation_fixture(vec![
+        ("server/discover", "json", Value::Null),
+        (
+            "tools/call",
+            "event",
+            json!({"resultType":"complete","structuredContent":value}),
+        ),
+    ])
+    .await?;
+    let ExternalMcpCallOutcome::Completed { result_json } = outcome else {
+        return Err(format!("expected structured completion, got {outcome:?}").into());
+    };
+    let result: Value = serde_json::from_slice(&result_json)?;
+    assert_eq!(result["structuredContent"], value);
+    assert_eq!(result["content"], json!([]));
+    let outcome = invocation_fixture(vec![
+        ("server/discover", "json", Value::Null),
+        ("tools/call", "json", json!({"resultType":"complete","isError":true,"content":[{"type":"text","text":"fixture failure"}]})),
+    ]).await?;
+    let ExternalMcpCallOutcome::ToolFailed { result_json } = outcome else {
+        return Err(format!("expected explicit tool failure, got {outcome:?}").into());
+    };
+    let result: Value = serde_json::from_slice(&result_json)?;
+    assert_eq!(result["isError"], true);
+    assert_eq!(result["content"][0]["text"], "fixture failure");
+    Ok(())
+}
+
+#[tokio::test]
+async fn invocation_never_replays_after_lost_reply_or_requests_follow_up() -> Result<(), TestError>
+{
+    assert!(matches!(
+        invocation_fixture(vec![
+            ("server/discover", "json", Value::Null),
+            ("tools/call", "lost-reply", Value::Null),
+        ])
+        .await?,
+        ExternalMcpCallOutcome::Uncertain,
+    ));
+    assert!(matches!(
+        invocation_fixture(vec![
+            ("server/discover", "json", Value::Null),
+            (
+                "tools/call",
+                "json",
+                json!({"resultType":"input_required","inputRequests":{},"requestState":"synthetic"})
+            ),
+        ])
+        .await?,
+        ExternalMcpCallOutcome::UnsupportedResult,
+    ));
+    assert!(matches!(
+        invocation_fixture(vec![("server/discover", "unauthorized", Value::Null)]).await?,
+        ExternalMcpCallOutcome::NotExecuted(ExternalMcpRejection::Upstream(
+            McpDiscoveryFailure::Authentication
+        )),
+    ));
     Ok(())
 }
 
@@ -196,6 +305,25 @@ async fn complete_json_and_sse_catalogue_and_zero_tools() -> Result<(), TestErro
         Ok(0),
     )
     .await
+}
+
+#[tokio::test]
+async fn refuses_the_entire_catalogue_when_sdk_filters_a_tool() -> Result<(), TestError> {
+    for media in ["json", "event"] {
+        fixture(
+            vec![
+                ("server/discover", "json", Value::Null),
+                ("tools/list", media, json!({"tools":[
+                    {"name":"usable","inputSchema":{"type":"object"}},
+                    {"name":"malformed","inputSchema":{"type":"object","x-mcp-header":"invalid-root-placement"}}
+                ]})),
+            ],
+            "2026-07-28",
+            Err(McpDiscoveryFailure::InvalidResponse),
+        )
+        .await?;
+    }
+    Ok(())
 }
 
 #[tokio::test]
@@ -309,7 +437,8 @@ async fn actual_connector_refuses_loopback_resolutions_and_literals() -> Result<
             &named,
             Arc::new(Semaphore::new(1)).try_acquire_owned()?
         )
-        .await,
+        .await
+        .map(|catalogue| catalogue.tool_count()),
         Err(McpDiscoveryFailure::DestinationDenied)
     );
     assert!(

@@ -8,7 +8,7 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::Request;
 
-fn request<T>(value: T, route: &Route) -> Result<Request<T>, AppError> {
+pub(super) fn request<T>(value: T, route: &Route) -> Result<Request<T>, AppError> {
     let mut request = Request::new(value);
     request.metadata_mut().insert(
         "authorization",
@@ -16,14 +16,14 @@ fn request<T>(value: T, route: &Route) -> Result<Request<T>, AppError> {
     );
     Ok(request)
 }
-fn scope(route: &Route, recipient: &Recipient) -> wire::CallerScope {
+pub(super) fn scope(route: &Route, recipient: &Recipient) -> wire::CallerScope {
     wire::CallerScope {
         source: Some(route.source.clone()),
         agent_id: recipient.agent_id.clone(),
         conversation_id: recipient.conversation_id.clone(),
     }
 }
-fn client(route: &Route) -> ServerToolsClient<Channel> {
+pub(super) fn client(route: &Route) -> ServerToolsClient<Channel> {
     ServerToolsClient::new(route.channel.clone())
         .max_decoding_message_size(64 * 1024)
         .max_encoding_message_size(64 * 1024)
@@ -50,19 +50,19 @@ pub(super) async fn catalog(
     }
     Ok(serde_json::from_slice(&value)?)
 }
-fn unavailable() -> ErrorData {
+pub(super) fn unavailable() -> ErrorData {
     ErrorData::internal_error(
         "Tool response transport unavailable; an effect may have occurred",
         None,
     )
 }
-fn representation() -> ErrorData {
+pub(super) fn representation() -> ErrorData {
     ErrorData::internal_error(
         "Tool result cannot be represented; an effect may have occurred",
         None,
     )
 }
-fn opening_error(status: tonic::Status) -> ErrorData {
+pub(super) fn opening_error(status: tonic::Status) -> ErrorData {
     let mut values = status
         .metadata()
         .get_all(wire::NOT_EXECUTED_METADATA)
@@ -206,7 +206,7 @@ fn cancel() -> wire::InvocationControl {
         control: Some(wire::invocation_control::Control::Cancel(())),
     }
 }
-fn rejection(reason: i32) -> ErrorData {
+pub(super) fn rejection(reason: i32) -> ErrorData {
     let message = match wire::Rejection::try_from(reason) {
         Ok(wire::Rejection::UnknownTool) => {
             return ErrorData::invalid_params("Unknown tool; invocation was not executed", None);
@@ -224,6 +224,27 @@ fn rejection(reason: i32) -> ErrorData {
         }
         Ok(wire::Rejection::Authority) => "Tool authority denied; invocation was not executed",
         Ok(wire::Rejection::Closing) => "Tool service is closing; invocation was not executed",
+        Ok(wire::Rejection::UpstreamUnavailable) => {
+            "External tool server unavailable; invocation was not executed. Check that the server is reachable."
+        }
+        Ok(wire::Rejection::UpstreamAuthentication) => {
+            "External tool server rejected authentication; invocation was not executed. Check or replace the Bearer token in the Agent's MCP settings."
+        }
+        Ok(wire::Rejection::UpstreamDestination) => {
+            "External tool server destination was denied; invocation was not executed. Check the public HTTPS endpoint in the Agent's MCP settings."
+        }
+        Ok(wire::Rejection::UpstreamProtocol) => {
+            "External tool server did not negotiate the supported MCP revision; invocation was not executed. Check the server's MCP configuration."
+        }
+        Ok(wire::Rejection::UpstreamInvalidResponse) => {
+            "External tool server sent an invalid setup response; invocation was not executed. Check the server before trying again."
+        }
+        Ok(wire::Rejection::UpstreamTimeout) => {
+            "External tool server timed out during setup; invocation was not executed. Check the server before trying again."
+        }
+        Ok(wire::Rejection::UpstreamToolsUnavailable) => {
+            "External tool server did not expose tools; invocation was not executed. Check which tools the server makes available."
+        }
         _ => "Invalid tool invocation; it was not executed",
     };
     ErrorData::internal_error(message, None)
@@ -232,6 +253,14 @@ fn rejection(reason: i32) -> ErrorData {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn external_authentication_rejection_contains_only_fixed_recovery_guidance() {
+        let reason = rejection(wire::Rejection::UpstreamAuthentication.into());
+        assert!(reason.message.contains("was not executed"));
+        assert!(reason.message.contains("replace the Bearer token"));
+        assert!(reason.data.is_none());
+    }
+
     #[test]
     fn only_an_explicit_opening_marker_establishes_nonexecution() {
         let mut marked = tonic::Status::resource_exhausted("Private detail");

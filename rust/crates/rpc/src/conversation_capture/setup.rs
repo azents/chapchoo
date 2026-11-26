@@ -68,9 +68,15 @@ pub(super) async fn report(
         .source
         .ok_or_else(|| Status::invalid_argument("Setup source is required"))?;
     let outcome = match value.result {
-        Some(wire::setup_report::Result::Ready(value)) => Outcome::SessionReady(target(value)?),
-        Some(wire::setup_report::Result::Failed(value)) => {
-            Outcome::Failed(match wire::SetupFailure::try_from(value) {
+        Some(wire::setup_report::Result::Ready(ready))
+            if !value.external_tools_applied || value.application_connection_id.is_some() =>
+        {
+            Outcome::SessionReady(target(ready)?)
+        }
+        Some(wire::setup_report::Result::Failed(failure))
+            if value.application_connection_id.is_none() && !value.external_tools_applied =>
+        {
+            Outcome::Failed(match wire::SetupFailure::try_from(failure) {
                 Ok(wire::SetupFailure::NotAdmitted) => Failure::NotAdmitted,
                 Ok(wire::SetupFailure::BeforeNativeLaunch) => Failure::BeforeNativeLaunch,
                 Ok(wire::SetupFailure::NativeRejected) => Failure::NativeRejected,
@@ -83,7 +89,11 @@ pub(super) async fn report(
                 }
             })
         }
-        None => return Err(Status::invalid_argument("Setup outcome is required")),
+        _ => {
+            return Err(Status::invalid_argument(
+                "Setup outcome and application connection do not match",
+            ));
+        }
     };
     service
         .service
@@ -95,6 +105,8 @@ pub(super) async fn report(
                 operation_id: &value.operation_id,
             },
             &outcome,
+            value.application_connection_id.as_deref(),
+            value.external_tools_applied,
         )
         .await
         .map_err(status)?;

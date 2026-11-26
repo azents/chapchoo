@@ -502,6 +502,7 @@ fn sqlite_conversation_work_transition() -> Result<(), TestError> {
     rt.block_on(exercise(&store, &fixture))?;
     let mut connection = diesel::SqliteConnection::establish(path.to_str().ok_or("Invalid path")?)?;
     for expected in [
+        "00000000000035",
         "00000000000034",
         "00000000000033",
         "00000000000032",
@@ -542,6 +543,7 @@ fn postgres_conversation_work_transition() -> Result<(), TestError> {
         rt.block_on(exercise(&store, &fixture))?;
         let mut connection = AsyncConnectionWrapper::<AsyncPgConnection>::establish(&url)?;
         for expected in [
+            "00000000000035",
             "00000000000034",
             "00000000000033",
             "00000000000032",

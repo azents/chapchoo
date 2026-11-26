@@ -59,6 +59,7 @@ use session::Session;
 use setup::SetupRegistry;
 pub use setup::{
     NativeSetupFailure, NativeSetupIntent, NativeSetupObservation, NativeSetupOperation,
+    NativeSetupRecovery, NativeSetupRequest,
 };
 pub use stops::NativeStopObservation;
 use stops::StopRegistry;
@@ -235,8 +236,8 @@ enum Command {
         oneshot::Sender<Result<NativeSetupObservation, Error>>,
     ),
     SetupObservation(
-        String,
-        oneshot::Sender<Result<NativeSetupObservation, Error>>,
+        NativeSetupRequest,
+        oneshot::Sender<Result<NativeSetupRecovery, Error>>,
     ),
     Prompt(
         NativeInputOperation,
@@ -355,15 +356,24 @@ impl NativeOwner {
                     },
                     command = receiver.recv() => match command { Some(c)=>c, None=>break },
                     _ = cadence.tick(), if !deferred.is_empty() => {
-                        let expired = deferred[0].deadline <= tokio::time::Instant::now();
-                        if expired || state.refresh_safe() {
-                            let pending = deferred.remove(0);
-                            let outcome = if expired {
-                                state.setups.expire_unstarted(&pending.operation)
-                            } else {
-                                state.setup(pending.operation, pending.authentication, pending.tools).await
-                            };
-                            let _ = pending.result.send(outcome);
+                        discard_withdrawn_setups(&mut deferred);
+                        if deferred.is_empty() {
+                            continue;
+                        }
+                        match deferred[0].progress(tokio::time::Instant::now(), state.refresh_safe()) {
+                            DeferredProgress::Wait => {}
+                            DeferredProgress::ReleaseWaiter => deferred[0].release_waiter(),
+                            progress @ (DeferredProgress::Apply | DeferredProgress::Expire) => {
+                                let pending = deferred.remove(0);
+                                let outcome = if progress == DeferredProgress::Expire {
+                                    state.setups.expire_unstarted(&pending.operation)
+                                } else {
+                                    state.setup(pending.operation, pending.authentication, pending.tools).await
+                                };
+                                if let Some(waiter) = pending.waiter {
+                                    let _ = waiter.result.send(outcome);
+                                }
+                            }
                         }
                         continue;
                     },
@@ -400,28 +410,49 @@ impl NativeOwner {
                         let _ = result.send(state.stop_operation(&id, &target));
                     }
                     Command::Setup(operation, authentication, tools, result) => {
-                        if let Some(pending) = deferred.iter().find(|pending| {
-                            pending.operation.operation_id == operation.operation_id
-                        }) {
-                            let observed = if pending.operation == operation {
-                                Ok(NativeSetupObservation::PossibleForwarding)
-                            } else {
-                                Err(Error::OperationConflict)
-                            };
-                            let _ = result.send(observed);
+                        discard_withdrawn_setups(&mut deferred);
+                        if !setup_route_open(tools.as_ref()) {
+                            let _ = result.send(Err(Error::DeliveryUncertain));
                             continue;
                         }
-                        if state.needs_refresh(&operation) && !state.refresh_safe() {
+                        match state.setups.recover(&operation) {
+                            Ok(Some(known)) => {
+                                let _ = result.send(Ok(known));
+                                continue;
+                            }
+                            Err(error) => {
+                                let _ = result.send(Err(error));
+                                continue;
+                            }
+                            Ok(None) => {}
+                        }
+                        if let Some(pending) = deferred.iter_mut().find(|pending| {
+                            pending.operation.operation_id == operation.operation_id
+                        }) {
+                            if pending.operation != operation {
+                                let _ = result.send(Err(Error::OperationConflict));
+                            } else if pending.waiter.is_none() {
+                                pending.waiter = Some(DeferredWaiter::new(result));
+                            } else {
+                                let _ = result.send(Ok(NativeSetupObservation::PossibleForwarding));
+                            }
+                            continue;
+                        }
+                        if state.requires_idle_application(&operation, tools.as_ref())
+                            && !state.refresh_safe()
+                        {
                             if deferred.len() >= 32 {
                                 let _ = result.send(Err(Error::NotAdmitted));
                             } else {
+                                let preserve_external = state.optional_setup_allowed()
+                                    && (state.has_live_external_supply()
+                                        || tools.has_pending_external());
                                 deferred.push(DeferredSetup {
                                     operation,
                                     authentication,
                                     tools,
-                                    result,
-                                    deadline: tokio::time::Instant::now()
-                                        + Duration::from_secs(300),
+                                    waiter: Some(DeferredWaiter::new(result)),
+                                    preserve_external,
                                 });
                             }
                             continue;
@@ -432,14 +463,21 @@ impl NativeOwner {
                         };
                         let _ = result.send(outcome);
                     }
-                    Command::SetupObservation(id, result) => {
-                        let observed = if deferred
+                    Command::SetupObservation(request, result) => {
+                        discard_withdrawn_setups(&mut deferred);
+                        let observed = if let Some(pending) = deferred
                             .iter()
-                            .any(|pending| pending.operation.operation_id == id)
+                            .find(|pending| pending.operation.operation_id == request.operation_id)
                         {
-                            Ok(NativeSetupObservation::PossibleForwarding)
+                            pending.operation.check_request(&request).map(|()| {
+                                NativeSetupRecovery {
+                                    outcome: NativeSetupObservation::PossibleForwarding,
+                                    connection_id: None,
+                                    external_tools_applied: false,
+                                }
+                            })
                         } else {
-                            state.setups.observe(&id)
+                            state.setups.observe(&request)
                         };
                         let _ = result.send(observed);
                     }
@@ -768,8 +806,67 @@ struct DeferredSetup {
     operation: NativeSetupOperation,
     authentication: Arc<dyn NativeAuthenticationProvider>,
     tools: Arc<dyn crate::NativeToolsProvider>,
+    waiter: Option<DeferredWaiter>,
+    preserve_external: bool,
+}
+fn setup_route_open(tools: &dyn crate::NativeToolsProvider) -> bool {
+    tools.setup_route().is_none_or(ContinuationRoute::is_open)
+}
+fn discard_withdrawn_setups(deferred: &mut Vec<DeferredSetup>) {
+    deferred.retain_mut(|pending| {
+        if setup_route_open(pending.tools.as_ref()) {
+            return true;
+        }
+        // This unstarted local attempt must not produce a terminal report on
+        // the successor route. The exact server operation is still pending.
+        if let Some(waiter) = pending.waiter.take() {
+            let _ = waiter.result.send(Err(Error::DeliveryUncertain));
+        }
+        false
+    });
+}
+struct DeferredWaiter {
     result: oneshot::Sender<Result<NativeSetupObservation, Error>>,
     deadline: tokio::time::Instant,
+}
+impl DeferredWaiter {
+    fn new(result: oneshot::Sender<Result<NativeSetupObservation, Error>>) -> Self {
+        Self {
+            result,
+            deadline: tokio::time::Instant::now() + Duration::from_secs(300),
+        }
+    }
+}
+#[derive(PartialEq, Eq, Debug)]
+enum DeferredProgress {
+    Wait,
+    ReleaseWaiter,
+    Apply,
+    Expire,
+}
+impl DeferredSetup {
+    fn progress(&self, now: tokio::time::Instant, safe: bool) -> DeferredProgress {
+        let expired = self
+            .waiter
+            .as_ref()
+            .is_some_and(|waiter| waiter.deadline <= now);
+        // Timing out an observer cannot revoke the external selection of a
+        // turn which still owns physical work. Preserve the unstarted setup
+        // in the existing bounded queue until its normal application fence.
+        match (self.preserve_external, expired, safe) {
+            (false, true, _) => DeferredProgress::Expire,
+            (_, _, true) => DeferredProgress::Apply,
+            (true, true, false) => DeferredProgress::ReleaseWaiter,
+            (_, _, false) => DeferredProgress::Wait,
+        }
+    }
+    fn release_waiter(&mut self) {
+        if let Some(waiter) = self.waiter.take() {
+            let _ = waiter
+                .result
+                .send(Ok(NativeSetupObservation::PossibleForwarding));
+        }
+    }
 }
 #[derive(Clone, Copy)]
 enum Transport {
@@ -986,14 +1083,24 @@ impl State {
                     .is_some_and(|live| live.id() == session.as_str()) => {}
                 _ => return Err(Error::NotAdmitted),
             }
-            return NativeConversationId::parse(
+            let native_session = NativeConversationId::parse(
                 live.session
                     .as_ref()
                     .ok_or(Error::Protocol)?
                     .id()
                     .to_owned(),
             )
-            .map_err(|_| Error::Protocol);
+            .map_err(|_| Error::Protocol)?;
+            if let Some(provision) = &mut live.tools {
+                provision.bind_external(
+                    NativeTextTarget {
+                        snapshot: source.snapshot()?,
+                        native_session: native_session.clone(),
+                    },
+                    tools.external_preparation(),
+                );
+            }
+            return Ok(native_session);
         }
         self.scope = Some(ScopeEvidence::verify(&self.storage)?);
         // Any partially started preparation is owned by this actor. Failure must
@@ -1048,6 +1155,16 @@ impl State {
                 .await
                 .map_err(Error::ToolsProvision)?,
         );
+        // Only the qualified App Server path may expose external tools.
+        // The stock ACP permission path remains unchanged for built-ins.
+        if matches!(transport, Transport::CodexAppServer) {
+            self.pending_tools
+                .as_mut()
+                .ok_or(Error::Process)?
+                .complete_optional()
+                .await
+                .map_err(Error::ToolsProvision)?;
+        }
         let storage = self.storage.clone();
         let credentials = admitted.credentials;
         // State owns physical completion beyond cancellation of this launch.
@@ -1107,10 +1224,18 @@ impl State {
                 fs::set_permissions(&entrypoint, fs::Permissions::from_mode(0o700))
                     .map_err(|_| Error::Storage)?;
                 let mut command = self.storage.command(&applied.node);
+                let declarations = self
+                    .pending_tools
+                    .as_ref()
+                    .ok_or(Error::NotAdmitted)?
+                    .local_declarations();
                 command
                     .arg(&applied.adapter)
                     .env("CODEX_PATH", entrypoint)
-                    .env("CODEX_CONFIG", native_tool_config());
+                    .env(
+                        "CODEX_CONFIG",
+                        native_tool_config(&declarations).to_string(),
+                    );
                 command
             }
         };
@@ -1230,17 +1355,17 @@ impl State {
                     ready.await.map_err(|_| Error::Protocol)??,
                 )),
                 PendingSession::AppServer(connection, credentials) => {
-                    let declaration = self
+                    let provision = self
                         .live
                         .as_ref()
                         .and_then(|live| live.tools.as_ref())
-                        .ok_or(Error::NotAdmitted)?
-                        .declaration();
+                        .ok_or(Error::NotAdmitted)?;
+                    let declarations = provision.local_declarations();
                     connection
                         .open(
                             &self.storage.workspace(),
                             &context,
-                            declaration,
+                            &declarations,
                             credentials.initial_api_key(),
                             config.empty_scope,
                         )
@@ -1259,14 +1384,20 @@ impl State {
             .capture
             .bind_native(&id)?;
         let live = self.live.as_ref().ok_or(Error::Process)?;
+        let snapshot = live.capture.snapshot()?;
         live.observations
-            .bind(live.capture.snapshot()?, id.clone(), config.empty_scope)?;
-        self.live.as_mut().ok_or(Error::Process)?.session = Some(session);
-        let provision = self
-            .live
-            .as_ref()
-            .and_then(|live| live.tools.as_ref())
-            .ok_or(Error::NotAdmitted)?;
+            .bind(snapshot.clone(), id.clone(), config.empty_scope)?;
+        let live = self.live.as_mut().ok_or(Error::Process)?;
+        live.session = Some(session);
+        let provision = live.tools.as_mut().ok_or(Error::NotAdmitted)?;
+        let preparation = provision.external_preparation().cloned();
+        provision.bind_external(
+            NativeTextTarget {
+                snapshot,
+                native_session: id.clone(),
+            },
+            preparation.as_ref(),
+        );
         tokio::time::timeout_at(deadline, provision.verify())
             .await
             .map_err(|_| Error::ProtocolRejected {
@@ -1406,8 +1537,15 @@ impl State {
         })
     }
 }
-fn native_tool_config() -> &'static str {
-    r#"{"code_mode":{"direct_only_tool_namespaces":["mcp__chapchoo"]},"features":{"code_mode_only_strict_3p_tools":false}}"#
+fn native_tool_config(declarations: &[&crate::NativeMcpDeclaration]) -> serde_json::Value {
+    let namespaces: Vec<_> = declarations
+        .iter()
+        .map(|declaration| format!("mcp__{}", declaration.name()))
+        .collect();
+    serde_json::json!({
+        "code_mode": {"direct_only_tool_namespaces": namespaces},
+        "features": {"code_mode_only_strict_3p_tools": false}
+    })
 }
 
 fn check_source(
@@ -1538,16 +1676,128 @@ async fn retire_scope() -> Result<(), Error> {
 mod tests {
     use super::*;
     #[test]
-    fn actual_start_policy_directly_exposes_only_the_conversation_namespace()
+    fn deferred_refresh_keeps_work_only_on_its_exact_current_route()
     -> Result<(), Box<dyn std::error::Error>> {
-        let config: serde_json::Value = serde_json::from_str(native_tool_config())?;
+        struct UnusedAuth;
+        impl NativeAuthenticationProvider for UnusedAuth {
+            fn acquire(
+                &self,
+                _: chapchoo_domain::LaunchCapture,
+            ) -> crate::NativeAuthenticationFuture<'_, crate::NativeAuthentication> {
+                Box::pin(async { Err(Error::NotAdmitted) })
+            }
+            fn check<'a>(
+                &'a self,
+                _: &'a NativeAuthenticationBinding,
+            ) -> crate::NativeAuthenticationFuture<'a, ()> {
+                Box::pin(async { Err(Error::NotAdmitted) })
+            }
+        }
+        struct RoutedTools(ContinuationRoute);
+        impl crate::NativeToolsProvider for RoutedTools {
+            fn setup_route(&self) -> Option<&ContinuationRoute> {
+                Some(&self.0)
+            }
+            fn provide<'a>(
+                &'a self,
+                _: &'a NativeAuthenticationBinding,
+            ) -> crate::NativeToolsFuture<'a, crate::NativeToolProvision> {
+                Box::pin(async { Err(crate::NativeToolsError::new(Box::new(Error::NotAdmitted))) })
+            }
+        }
+        let first = ContinuationRouteLease::open();
+        let (result, mut observer) = oneshot::channel();
+        let now = tokio::time::Instant::now();
+        let mut pending = DeferredSetup {
+            operation: NativeSetupOperation {
+                operation_id: "fixture-refresh".into(),
+                scope: crate::NativeToolScope {
+                    agent_id: "agent".into(),
+                    conversation_id: "conversation".into(),
+                },
+                supply: HarnessSupply::Managed,
+                intent: NativeSetupIntent::Existing(NativeTextTarget {
+                    snapshot: chapchoo_domain::SnapshotId::parse("snapshot".into())?,
+                    native_session: chapchoo_domain::NativeConversationId::parse("native".into())?,
+                }),
+                instructions: Default::default(),
+                tool_catalog: Vec::new(),
+            },
+            authentication: Arc::new(UnusedAuth),
+            tools: Arc::new(RoutedTools(first.route())),
+            waiter: Some(DeferredWaiter {
+                result,
+                deadline: now + Duration::from_secs(300),
+            }),
+            preserve_external: true,
+        };
+        assert_eq!(pending.progress(now, false), DeferredProgress::Wait);
+        let late = now + Duration::from_secs(301);
+        pending.preserve_external = false;
+        assert_eq!(pending.progress(late, false), DeferredProgress::Expire);
+        pending.preserve_external = true;
         assert_eq!(
-            config,
-            serde_json::json!({
-                "code_mode": {"direct_only_tool_namespaces": ["mcp__chapchoo"]},
-                "features": {"code_mode_only_strict_3p_tools": false}
-            })
+            pending.progress(late, false),
+            DeferredProgress::ReleaseWaiter
         );
+        pending.release_waiter();
+        assert!(matches!(
+            observer.try_recv()?,
+            Ok(NativeSetupObservation::PossibleForwarding)
+        ));
+        assert_eq!(pending.progress(late, false), DeferredProgress::Wait);
+        assert_eq!(pending.progress(late, true), DeferredProgress::Apply);
+        assert_eq!(pending.operation.operation_id, "fixture-refresh");
+        let (result, mut old_waiter) = oneshot::channel();
+        pending.waiter = Some(DeferredWaiter::new(result));
+        let next = ContinuationRouteLease::open();
+        let successor = DeferredSetup {
+            operation: pending.operation.clone(),
+            authentication: pending.authentication.clone(),
+            tools: Arc::new(RoutedTools(next.route())),
+            waiter: None,
+            preserve_external: true,
+        };
+        let mut queue = vec![pending, successor];
+        drop(first);
+        discard_withdrawn_setups(&mut queue);
+        assert_eq!(queue.len(), 1);
+        assert!(matches!(
+            old_waiter.try_recv()?,
+            Err(Error::DeliveryUncertain)
+        ));
+        assert_eq!(queue[0].operation.operation_id, "fixture-refresh");
+        assert_eq!(queue[0].progress(late, true), DeferredProgress::Apply);
+        Ok(())
+    }
+    #[test]
+    fn actual_start_policy_exposes_only_current_managed_mcp_namespaces()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use chapchoo_crypto::BearerSecret;
+        let builtin = crate::NativeMcpDeclaration::http(
+            "http://127.0.0.1:4200/mcp",
+            BearerSecret::generate()?,
+        )?;
+        let optional = crate::NativeMcpDeclaration::external_http(
+            "fixture",
+            "http://127.0.0.1:4200/mcp/fixture",
+            BearerSecret::generate()?,
+        )?;
+        for (declarations, expected) in [
+            (
+                vec![&builtin, &optional],
+                serde_json::json!(["mcp__chapchoo", "mcp__chapchoo_ext_fixture"]),
+            ),
+            (vec![&builtin], serde_json::json!(["mcp__chapchoo"])),
+        ] {
+            assert_eq!(
+                native_tool_config(&declarations),
+                serde_json::json!({
+                    "code_mode": {"direct_only_tool_namespaces": expected},
+                    "features": {"code_mode_only_strict_3p_tools": false}
+                })
+            );
+        }
         Ok(())
     }
 

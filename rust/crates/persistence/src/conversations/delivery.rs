@@ -359,6 +359,24 @@ impl Store {
             {
                 return Err(StoreError::InvalidTransition);
             }
+            let connection_id =
+                EntityId::from_dto(EntityKind::Connection, &expected.component.connection_id)?;
+            if super::project_refresh::external_input!(
+                connection,
+                dialect,
+                agent,
+                id,
+                route._execution_id,
+                draft.target.snapshot.as_str(),
+                draft.target.native_session.as_str()
+            )
+            .is_some_and(|expected| {
+                current.external_input_id != Some(expected)
+                    || operation_id != expected
+                    || current.ready_connection_id != Some(connection_id)
+            }) {
+                return Err(StoreError::InvalidTransition);
+            }
             let selected_operation = current.operation_id;
             let selected = diesel::sql_query(dialect.query("SELECT owner_content,sources_json,rendered_document,applied_snapshot,applied_native_session,applied_at FROM project_instruction_evidence WHERE operation_id=? AND agent_id=? AND conversation_id=? AND execution_id=?"))
                 .bind::<IdentitySql,_>(selected_operation).bind::<IdentitySql,_>(agent)

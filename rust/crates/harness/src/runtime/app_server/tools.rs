@@ -4,43 +4,69 @@ use crate::{Error, NativeMcpDeclaration, runtime::schema};
 use chapchoo_domain::SourcePosition;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::collections::{BTreeMap, BTreeSet};
 use tokio::sync::oneshot;
 use zeroize::Zeroizing;
 
 pub(super) struct Prepared<'a> {
+    servers: Vec<PreparedServer<'a>>,
+}
+
+struct PreparedServer<'a> {
+    name: &'a str,
     url: &'a str,
     authorization: Zeroizing<String>,
 }
 
 impl<'a> Prepared<'a> {
-    pub(super) fn new(declaration: &'a NativeMcpDeclaration) -> Self {
-        let (url, key) = declaration.http_credentials();
+    pub(super) fn new(declarations: &[&'a NativeMcpDeclaration]) -> Self {
         Self {
-            url,
-            authorization: Zeroizing::new(format!("Bearer {}", key.expose())),
+            servers: declarations
+                .iter()
+                .map(|declaration| {
+                    let (url, key) = declaration.http_credentials();
+                    PreparedServer {
+                        name: declaration.name(),
+                        url,
+                        authorization: Zeroizing::new(format!("Bearer {}", key.expose())),
+                    }
+                })
+                .collect(),
         }
     }
 
     pub(super) fn config(&self) -> Config<'_> {
         Config {
-            mcp_servers: Servers {
-                chapchoo: Server {
-                    url: self.url,
-                    http_headers: Headers {
-                        authorization: self.authorization.as_str(),
-                    },
-                    required: true,
-                    default_tools_approval_mode: "prompt",
-                    tools: ToolOverrides {
-                        send: ToolApproval {
-                            approval_mode: "approve",
+            mcp_servers: self
+                .servers
+                .iter()
+                .map(|server| {
+                    let builtin = server.name == "chapchoo";
+                    (
+                        server.name,
+                        Server {
+                            url: server.url,
+                            http_headers: Headers {
+                                authorization: server.authorization.as_str(),
+                            },
+                            required: builtin,
+                            default_tools_approval_mode: "prompt",
+                            tools: builtin.then_some(ToolOverrides {
+                                send: ToolApproval {
+                                    approval_mode: "approve",
+                                },
+                            }),
+                            omit_tools_from: ["code_mode", "deferred"],
                         },
-                    },
-                    omit_tools_from: ["code_mode", "deferred"],
-                },
-            },
+                    )
+                })
+                .collect(),
             code_mode: CodeMode {
-                direct_only_tool_namespaces: ["mcp__chapchoo"],
+                direct_only_tool_namespaces: self
+                    .servers
+                    .iter()
+                    .map(|server| format!("mcp__{}", server.name))
+                    .collect(),
             },
             features: Features {
                 code_mode_only_strict_3p_tools: false,
@@ -51,14 +77,9 @@ impl<'a> Prepared<'a> {
 
 #[derive(Serialize)]
 pub(super) struct Config<'a> {
-    mcp_servers: Servers<'a>,
+    mcp_servers: BTreeMap<&'a str, Server<'a>>,
     code_mode: CodeMode,
     features: Features,
-}
-
-#[derive(Serialize)]
-struct Servers<'a> {
-    chapchoo: Server<'a>,
 }
 
 #[derive(Serialize)]
@@ -67,7 +88,8 @@ struct Server<'a> {
     http_headers: Headers<'a>,
     required: bool,
     default_tools_approval_mode: &'static str,
-    tools: ToolOverrides,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tools: Option<ToolOverrides>,
     omit_tools_from: [&'static str; 2],
 }
 
@@ -89,7 +111,7 @@ struct Headers<'a> {
 
 #[derive(Serialize)]
 struct CodeMode {
-    direct_only_tool_namespaces: [&'static str; 1],
+    direct_only_tool_namespaces: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -339,8 +361,14 @@ impl Approval {
         active_turn: &str,
         request: Value,
     ) -> Result<Option<(Self, super::wire::ServerReply)>, Error> {
-        Ok(Self::decode(&target, active_turn, &request, None)
-            .map(|details| Self::prepare(target, position, active_turn, details)))
+        Ok(Self::decode(
+            &target,
+            active_turn,
+            &request,
+            None,
+            &BTreeSet::from(["chapchoo".to_owned()]),
+        )
+        .map(|details| Self::prepare(target, position, active_turn, details)))
     }
 
     pub(super) fn decode(
@@ -348,6 +376,7 @@ impl Approval {
         active_turn: &str,
         request: &Value,
         file_locations: Option<&str>,
+        mcp_servers: &BTreeSet<String>,
     ) -> Option<ApprovalDetails> {
         request.get("id")?;
         match request["method"].as_str()? {
@@ -382,7 +411,7 @@ impl Approval {
         if !super::valid_key(active_turn)
             || elicitation.thread_id != target.native_session.as_str()
             || elicitation.turn_id.as_deref() != Some(active_turn)
-            || elicitation.server_name != "chapchoo"
+            || !mcp_servers.contains(&elicitation.server_name)
             || elicitation.mode != "form"
             || !elicitation
                 .requested_schema

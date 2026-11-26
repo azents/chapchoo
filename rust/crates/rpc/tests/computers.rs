@@ -304,6 +304,7 @@ fn domain_rpc_keeps_private_owner_authority_and_independent_admin_residual_inven
             Some(auth_wire::delete_result::Outcome::InUse(()))
         ));
         assert!(!created.profile_image_asset_key.is_empty());
+        verify_agent_integrations(&mut agents, &created.id, &user, &foreign).await?;
         let scoped = wire::TeamAgentRequest {
             team_id: team.id.clone(),
             handle: created.handle.clone(),
@@ -641,4 +642,140 @@ fn domain_rpc_keeps_private_owner_authority_and_independent_admin_residual_inven
         drop((agents, computers, catalog, inventory, channel));
         Ok(())
     }))
+}
+
+async fn verify_agent_integrations(
+    agents: &mut wire::agents_client::AgentsClient<tonic::transport::Channel>,
+    agent_id: &str,
+    owner: &BearerSecret,
+    stranger: &BearerSecret,
+) -> Result<(), Error> {
+    use wire::{
+        agent_integration::Settings, agent_integration_change_request::Change,
+        agent_mcp_connection_draft::Authentication, test_mcp_connection_result::Outcome,
+    };
+    let page = wire::AgentIntegrationListRequest {
+        agent_id: agent_id.into(),
+        after: None,
+    };
+    let connection = wire::AgentMcpConnectionDraft {
+        // Saving local syntax is allowed; the actual connection test must deny it.
+        endpoint: "https://127.0.0.1:1/mcp".into(),
+        authentication: Some(Authentication::ReplaceBearer(
+            "synthetic-rpc-mcp-token".into(),
+        )),
+    };
+    assert!(!format!("{connection:?}").contains("synthetic-rpc-mcp-token"));
+    let add = wire::AgentIntegrationChangeRequest {
+        agent_id: agent_id.into(),
+        request_id: "add-fixture-mcp".into(),
+        change: Some(Change::CreateMcp(wire::AgentMcpDraft {
+            display_name: "Fixture MCP".into(),
+            connection: Some(connection.clone()),
+        })),
+    };
+    let test = wire::TestMcpConnectionRequest {
+        agent_id: agent_id.into(),
+        integration_id: None,
+        connection: Some(connection.clone()),
+    };
+    assert_eq!(
+        agents
+            .test_mcp_connection(auth(test.clone(), stranger)?)
+            .await
+            .err()
+            .ok_or("Foreign test should not admit I/O")?
+            .code(),
+        Code::NotFound,
+    );
+    assert_eq!(
+        agents
+            .test_mcp_connection(auth(test, owner)?)
+            .await?
+            .into_inner()
+            .outcome,
+        Some(Outcome::Failure(
+            wire::McpConnectionTestFailure::DestinationDenied.into()
+        )),
+    );
+    assert!(
+        agents
+            .list_integrations(auth(page.clone(), owner)?)
+            .await?
+            .into_inner()
+            .items
+            .is_empty()
+    );
+    let receipt = agents
+        .change_integration(auth(add.clone(), owner)?)
+        .await?
+        .into_inner();
+    assert_eq!(
+        receipt.action,
+        i32::from(wire::AgentIntegrationAction::Create)
+    );
+    let lookup = wire::AgentIntegrationResultRequest {
+        agent_id: agent_id.into(),
+        request_id: add.request_id,
+    };
+    assert_eq!(
+        agents
+            .integration_result(auth(lookup, owner)?)
+            .await?
+            .into_inner()
+            .receipt
+            .as_ref(),
+        Some(&receipt),
+    );
+    assert_eq!(
+        agents
+            .list_integrations(auth(page.clone(), stranger)?)
+            .await
+            .err()
+            .ok_or("Foreign integration listing")?
+            .code(),
+        Code::NotFound,
+    );
+    let saved = agents
+        .list_integrations(auth(page.clone(), owner)?)
+        .await?
+        .into_inner();
+    assert_eq!(saved.items.len(), 1);
+    assert_eq!(saved.items[0].id, receipt.integration_id);
+    assert_eq!(
+        saved.items[0].settings,
+        Some(Settings::Mcp(wire::AgentMcpSettings {
+            endpoint: connection.endpoint,
+            has_bearer: true
+        })),
+    );
+    let remove = wire::AgentIntegrationChangeRequest {
+        agent_id: agent_id.into(),
+        request_id: "delete-fixture-mcp".into(),
+        change: Some(Change::DeleteIntegrationId(receipt.integration_id)),
+    };
+    let deleted = agents
+        .change_integration(auth(remove.clone(), owner)?)
+        .await?
+        .into_inner();
+    assert_eq!(
+        deleted.action,
+        i32::from(wire::AgentIntegrationAction::Delete)
+    );
+    assert_eq!(
+        agents
+            .change_integration(auth(remove, owner)?)
+            .await?
+            .into_inner(),
+        deleted
+    );
+    assert!(
+        agents
+            .list_integrations(auth(page, owner)?)
+            .await?
+            .into_inner()
+            .items
+            .is_empty()
+    );
+    Ok(())
 }

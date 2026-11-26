@@ -1,15 +1,23 @@
 //! Owner-side MCP connection tests. The outbound profile owns network authority.
 
+mod catalogue;
 mod http;
+mod invocation;
+mod runtime;
+mod runtime_catalogues;
 #[cfg(test)]
 mod tests;
 mod wire;
 
 use crate::{AcceptanceTime, ServiceError};
+pub use catalogue::CompleteMcpCatalogue;
 use chapchoo_crypto::SecretDigest;
 use chapchoo_persistence::{McpAuthEdit, McpEndpoint, McpTestTarget, Store};
+pub use invocation::{
+    ExternalMcpCall, ExternalMcpCallOutcome, ExternalMcpInvocation, ExternalMcpRejection,
+};
 use rmcp::{
-    model::{ErrorCode, PaginatedRequestParams, ProtocolVersion, ResultType},
+    model::{ErrorCode, PaginatedRequestParams, ProtocolVersion},
     service::{ClientInitializeError, ClientLifecycleMode, ClientServiceExt},
     transport::{
         DynamicTransportError,
@@ -20,8 +28,13 @@ use rmcp::{
         },
     },
 };
+pub use runtime::{ExternalCatalogue, ExternalCataloguePage, ExternalMcpRuntime};
+pub use runtime_catalogues::{
+    McpCatalogueCandidate, McpCatalogueCandidatePage, McpCatalogueDiscovery, McpPreparationFailure,
+};
 use std::{collections::HashSet, error::Error, sync::Arc, time::Duration};
-use tokio::sync::{OwnedSemaphorePermit, Semaphore};
+use tokio::sync::OwnedSemaphorePermit;
+use tokio::time::Instant;
 
 const MAX_PAGES: usize = 32;
 const MAX_TOOLS: usize = 512;
@@ -58,16 +71,14 @@ pub struct McpTestEdit<'a> {
 #[derive(Clone, Debug)]
 pub struct AgentMcpTest {
     store: Store,
-    http: http::OutboundMcpHttp,
-    admission: Arc<Semaphore>,
+    discovery: McpCatalogueDiscovery,
 }
 
 impl AgentMcpTest {
     pub fn new(store: Store) -> Self {
         Self {
             store,
-            http: http::OutboundMcpHttp::new(),
-            admission: Arc::new(Semaphore::new(16)),
+            discovery: McpCatalogueDiscovery::new(),
         }
     }
 
@@ -89,24 +100,18 @@ impl AgentMcpTest {
                 now.now()?,
             )
             .await?;
-        let Ok(slot) = self.admission.clone().try_acquire_owned() else {
-            return Ok(AgentMcpTestOutcome::Failed(McpDiscoveryFailure::Busy));
-        };
-        Ok(match self.discover(&target, slot).await {
-            Ok(tool_count) => AgentMcpTestOutcome::Listed { tool_count },
-            Err(failure) => AgentMcpTestOutcome::Failed(failure),
-        })
-    }
-
-    async fn discover(
-        &self,
-        target: &McpTestTarget,
-        slot: OwnedSemaphorePermit,
-    ) -> Result<usize, McpDiscoveryFailure> {
-        let client = self.http.client(target)?;
-        tokio::time::timeout(DISCOVERY_TIMEOUT, list_tools(client, target, slot))
-            .await
-            .map_err(|_| McpDiscoveryFailure::TimedOut)?
+        Ok(
+            match self
+                .discovery
+                .fresh(&target, Instant::now() + DISCOVERY_TIMEOUT)
+                .await
+            {
+                Ok(catalogue) => AgentMcpTestOutcome::Listed {
+                    tool_count: catalogue.tool_count(),
+                },
+                Err(failure) => AgentMcpTestOutcome::Failed(failure),
+            },
+        )
     }
 }
 
@@ -114,35 +119,47 @@ async fn list_tools(
     client: reqwest::Client,
     target: &McpTestTarget,
     slot: OwnedSemaphorePermit,
-) -> Result<usize, McpDiscoveryFailure> {
-    let mut config = StreamableHttpClientTransportConfig::with_uri(target.endpoint.url().as_str())
-        .max_concurrent_requests(1)
-        .max_sse_event_size(MAX_CATALOGUE_BYTES)
-        .reinit_on_expired_session(false);
-    config.allow_stateless = true;
-    config.retry_config = Arc::new(NeverRetry::default());
-    let transport = wire::CompleteDiscovery(StreamableHttpClientTransport::with_client(
-        wire::DiscoveryHttp::new(client, slot),
-        config,
-    ));
-    let service = ()
-        .serve_with_lifecycle(
-            transport,
-            ClientLifecycleMode::Discover {
-                preferred_versions: vec![ProtocolVersion::V_2026_07_28],
-            },
-        )
-        .await
-        .map_err(startup_failure)?;
+) -> Result<CompleteMcpCatalogue, McpDiscoveryFailure> {
+    let service = connect(client, target.endpoint.url().as_str(), slot, None).await?;
     let result = list_pages(&service).await;
     // The drop guard also cancels the SDK owner if the enclosing budget expires.
     let _ = service.cancel().await;
     result
 }
 
+async fn connect(
+    client: reqwest::Client,
+    uri: &str,
+    slot: OwnedSemaphorePermit,
+    dispatch: Option<Arc<wire::SingleDispatch>>,
+) -> Result<rmcp::service::RunningService<rmcp::RoleClient, ()>, McpDiscoveryFailure> {
+    let mut config = StreamableHttpClientTransportConfig::with_uri(uri)
+        .max_concurrent_requests(1)
+        .max_sse_event_size(MAX_CATALOGUE_BYTES)
+        .reinit_on_expired_session(false);
+    config.allow_stateless = true;
+    config.retry_config = Arc::new(NeverRetry::default());
+    let lists = wire::ListWitness::default();
+    let transport = wire::CompleteDiscovery(
+        StreamableHttpClientTransport::with_client(
+            wire::ProfileHttp::new(client, slot, lists.clone(), dispatch),
+            config,
+        ),
+        lists,
+    );
+    ().serve_with_lifecycle(
+        transport,
+        ClientLifecycleMode::Discover {
+            preferred_versions: vec![ProtocolVersion::V_2026_07_28],
+        },
+    )
+    .await
+    .map_err(startup_failure)
+}
+
 async fn list_pages(
     peer: &rmcp::service::Peer<rmcp::RoleClient>,
-) -> Result<usize, McpDiscoveryFailure> {
+) -> Result<CompleteMcpCatalogue, McpDiscoveryFailure> {
     let info = peer
         .peer_info()
         .ok_or(McpDiscoveryFailure::InvalidResponse)?;
@@ -151,8 +168,7 @@ async fn list_pages(
     }
     let mut cursor = None;
     let mut cursors = HashSet::new();
-    let mut names = HashSet::new();
-    let mut bytes = 0usize;
+    let mut catalogue = catalogue::CataloguePages::default();
     for _ in 0..MAX_PAGES {
         let page = peer
             .list_tools(
@@ -160,28 +176,8 @@ async fn list_pages(
             )
             .await
             .map_err(list_failure)?;
-        if page
-            .result_type
-            .as_ref()
-            .is_some_and(|kind| kind != &ResultType::COMPLETE)
-        {
-            return Err(McpDiscoveryFailure::InvalidResponse);
-        }
-        // Bound accumulated material rather than only the number of requests.
-        let page_bytes = serde_json::to_vec(&page)
-            .map_err(|_| McpDiscoveryFailure::InvalidResponse)?
-            .len();
-        bytes = bytes.saturating_add(page_bytes);
-        if bytes > MAX_CATALOGUE_BYTES || names.len().saturating_add(page.tools.len()) > MAX_TOOLS {
-            return Err(McpDiscoveryFailure::IncompleteCatalogue);
-        }
-        for tool in page.tools {
-            if tool.name.is_empty() || !names.insert(tool.name) {
-                return Err(McpDiscoveryFailure::InvalidResponse);
-            }
-        }
-        match page.next_cursor {
-            None => return Ok(names.len()),
+        match catalogue.append(page, Instant::now())? {
+            None => return catalogue.finish(),
             Some(next) if !next.is_empty() && cursors.insert(next.clone()) => cursor = Some(next),
             Some(_) => return Err(McpDiscoveryFailure::IncompleteCatalogue),
         }

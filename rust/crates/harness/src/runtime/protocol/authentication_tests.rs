@@ -7,6 +7,34 @@ use chapchoo_crypto::ExternalSecret;
 use std::sync::atomic::{AtomicUsize, Ordering};
 struct CountingProvider(AtomicUsize);
 struct CheckProvider(AtomicUsize);
+struct ReuseTools(crate::ContinuationRoute, &'static str);
+impl crate::NativeToolsProvider for ReuseTools {
+    fn setup_route(&self) -> Option<&crate::ContinuationRoute> {
+        Some(&self.0)
+    }
+    fn setup_connection_id(&self) -> Option<&str> {
+        Some(self.1)
+    }
+    fn has_pending_external(&self) -> bool {
+        true
+    }
+    fn resolve_external(
+        &self,
+    ) -> crate::NativeToolsFuture<'_, Option<Arc<dyn crate::NativeToolsProvider>>> {
+        Box::pin(async {
+            Err(crate::NativeToolsError::new(
+                "ACP must not attempt optional discovery".into(),
+            ))
+        })
+    }
+
+    fn provide<'a>(
+        &'a self,
+        _: &'a NativeAuthenticationBinding,
+    ) -> crate::NativeToolsFuture<'a, crate::NativeToolProvision> {
+        Box::pin(async { Err(crate::NativeToolsError::new("Unexpected tool setup".into())) })
+    }
+}
 impl NativeAuthenticationProvider for CheckProvider {
     fn acquire(
         &self,
@@ -121,6 +149,7 @@ async fn already_live_setup_preserves_applied_credentials_without_calling_new_pr
     let applied_choice = HarnessSupply::Existing(chapchoo_domain::ExistingCodexPath::parse(
         "/owner/codex".into(),
     )?);
+    state.retained_capture = Some(source.clone());
     state.live = Some(Live {
         child,
         protocol: tokio::spawn(async move {
@@ -157,6 +186,65 @@ async fn already_live_setup_preserves_applied_credentials_without_calling_new_pr
         instructions: Default::default(),
         tool_catalog: Vec::new(),
     });
+    let target = NativeTextTarget {
+        snapshot: source.snapshot()?,
+        native_session: id.clone(),
+    };
+    let setup = NativeSetupOperation {
+        operation_id: "reuse-setup".into(),
+        scope: crate::NativeToolScope {
+            agent_id: binding.agent_id.clone(),
+            conversation_id: binding.conversation_id.clone(),
+        },
+        intent: NativeSetupIntent::Existing(target.clone()),
+        supply: applied_choice.clone(),
+        instructions: Default::default(),
+        tool_catalog: Vec::new(),
+    };
+    let first_route = crate::ContinuationRouteLease::open();
+    let original_child = state.live.as_ref().and_then(|live| live.child.id());
+    assert!(original_child.is_some());
+    let ready = state
+        .setup(
+            setup.clone(),
+            provider.clone(),
+            Arc::new(ReuseTools(first_route.route(), "first-route")),
+        )
+        .await?;
+    if let NativeSetupObservation::Failed(failure) = ready {
+        return Err(format!("Live reuse fixture returned {failure:?}").into());
+    }
+    assert_eq!(ready, NativeSetupObservation::Ready(target.clone()));
+    // Lose the publication of Ready and observe the exact command again
+    // without running either physical startup or idle retirement.
+    drop(first_route);
+    let next = crate::ContinuationRouteLease::open();
+    let recovered = state.setups.observe(&NativeSetupRequest {
+        operation_id: setup.operation_id.clone(),
+        scope: setup.scope.clone(),
+        intent: setup.intent.clone(),
+        supply: setup.supply.clone(),
+    })?;
+    assert_eq!(
+        recovered.outcome,
+        NativeSetupObservation::Ready(target.clone())
+    );
+    assert_eq!(recovered.connection_id.as_deref(), Some("first-route"));
+    assert!(!recovered.external_tools_applied);
+    assert_eq!(
+        state
+            .setup(
+                setup,
+                provider.clone(),
+                Arc::new(ReuseTools(next.route(), "next-route"))
+            )
+            .await?,
+        NativeSetupObservation::Ready(target)
+    );
+    assert_eq!(
+        state.live.as_ref().and_then(|live| live.child.id()),
+        original_child
+    );
     let result = state
         .start(
             HarnessSupply::Managed,

@@ -125,6 +125,28 @@ enum Pace {
     Later,
 }
 
+fn setup_pace(
+    refresh: bool,
+    result: &Result<control::ConnectorInvocationResult, tonic::Status>,
+) -> Pace {
+    // A new common refresh already owns one persisted operation. Check its
+    // observed state on the next tick so a fast turn can be followed promptly.
+    // An unresolved repeat follows the normal startup dispatch backoff.
+    if refresh
+        && result.as_ref().is_ok_and(|reply| {
+            reply.outcome == control::ForwardingOutcome::Completed as i32
+                && reply
+                    .result
+                    .as_ref()
+                    .is_some_and(|result| result.admitted == Some(true))
+        })
+    {
+        Pace::Soon
+    } else {
+        Pace::Later
+    }
+}
+
 async fn dispatch_computer(
     computers: &ComputersService,
     conversation: &ConversationService,
@@ -159,7 +181,7 @@ async fn dispatch_computer(
     if admissions.is_empty() {
         return Pace::Soon;
     }
-    let mut attempted = false;
+    let mut pace = Pace::Soon;
     for admission in admissions {
         if stopped(stop) {
             break;
@@ -280,7 +302,6 @@ async fn dispatch_computer(
             tracing::warn!("Connection startup call identity generation failed");
             continue;
         };
-        attempted = true;
         let setup_context = setup_context(context, fresh_native_allowed, require_retained_source);
         let computer = control::ComputerContext {
             computer_id: computer_id.to_owned(),
@@ -322,14 +343,17 @@ async fn dispatch_computer(
         };
         // Delivery owns this call until the peer attempt settles. Stopping the
         // reconciler must not drop it and reconstruct permission from silence.
-        if let Err(error) = delivery
+        let result = delivery
             .connector(invocation, Instant::now() + Duration::from_secs(10))
-            .await
-        {
+            .await;
+        if setup_pace(already_sealed, &result) == Pace::Later {
+            pace = Pace::Later;
+        }
+        if let Err(error) = result {
             tracing::warn!(error = ?error, "Connection startup dispatch failed");
         }
     }
-    if attempted { Pace::Later } else { Pace::Soon }
+    pace
 }
 
 fn call_id() -> Option<String> {
@@ -375,5 +399,34 @@ fn setup_context(
             snapshot_id: snapshot.as_str().into(),
             native_session_id: native_session.as_str().into(),
         }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accepted_new_refresh_observes_next_tick_without_relaxing_startup_recovery() {
+        let reply = |outcome, admitted| {
+            Ok(control::ConnectorInvocationResult {
+                outcome: outcome as i32,
+                result: Some(control::ConnectorResult {
+                    admitted,
+                    ..Default::default()
+                }),
+            })
+        };
+        let accepted = reply(control::ForwardingOutcome::Completed, Some(true));
+        assert!(setup_pace(true, &accepted) == Pace::Soon);
+        assert!(setup_pace(false, &accepted) == Pace::Later);
+        for result in [
+            reply(control::ForwardingOutcome::Completed, Some(false)),
+            reply(control::ForwardingOutcome::Completed, None),
+            reply(control::ForwardingOutcome::Uncertain, Some(true)),
+            Err(tonic::Status::unavailable("Fixture dispatch unavailable")),
+        ] {
+            assert!(setup_pace(true, &result) == Pace::Later);
+        }
     }
 }

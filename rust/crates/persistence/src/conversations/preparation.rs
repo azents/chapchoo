@@ -579,7 +579,40 @@ impl Store {
         draft: &ConversationInputPreparation<'_>,
         outcome: &ConversationPreparationOutcome,
     ) -> Result<(), StoreError> {
+        let connection = matches!(outcome, ConversationPreparationOutcome::SessionReady(_))
+            .then_some(source.connection_id);
+        self.report_conversation_input_preparation(
+            source,
+            draft,
+            outcome,
+            connection,
+            connection.is_some(),
+        )
+        .await
+    }
+    /// The live route authenticates delivery of the report, but the actual
+    /// application may have happened on a previous connection of this owner.
+    pub async fn report_conversation_input_preparation(
+        &self,
+        source: &crate::ConnectorSource<'_>,
+        draft: &ConversationInputPreparation<'_>,
+        outcome: &ConversationPreparationOutcome,
+        application_connection_id: Option<&str>,
+        external_tools_applied: bool,
+    ) -> Result<(), StoreError> {
         let (agent, id, operation) = ids(draft)?;
+        let application_connection = match (outcome, application_connection_id) {
+            (ConversationPreparationOutcome::SessionReady(_), Some(connection)) => {
+                Some(EntityId::from_dto(EntityKind::Connection, connection)?)
+            }
+            (_, None) => None,
+            _ => return Err(StoreError::InvalidInput),
+        };
+        let external_connection = if external_tools_applied {
+            Some(application_connection.ok_or(StoreError::InvalidInput)?)
+        } else {
+            None
+        };
         let (state, snapshot, native, failure) = match outcome {
             ConversationPreparationOutcome::SessionReady(target) => (
                 "READY",
@@ -662,8 +695,9 @@ impl Store {
                 ConversationPreparationState::PossibleForwarding => {}
             }
             if input_exists {
-                diesel::sql_query(dialect.query("UPDATE conversation_input_preparation SET preparation_state=?,ready_snapshot=?,ready_native_session=?,failure_kind=? WHERE operation_id=?"))
-                    .bind::<Text,_>(state).bind::<Nullable<Text>,_>(snapshot).bind::<Nullable<Text>,_>(native).bind::<Nullable<Text>,_>(failure).bind::<IdentitySql,_>(operation).execute(connection).await?;
+                diesel::sql_query(dialect.query("UPDATE conversation_input_preparation SET preparation_state=?,ready_snapshot=?,ready_native_session=?,failure_kind=?,ready_connection_id=? WHERE operation_id=?"))
+                    .bind::<Text,_>(state).bind::<Nullable<Text>,_>(snapshot).bind::<Nullable<Text>,_>(native).bind::<Nullable<Text>,_>(failure)
+                    .bind::<Nullable<IdentitySql>,_>(external_connection).bind::<IdentitySql,_>(operation).execute(connection).await?;
                 if state == "FAILED" {
                     diesel::sql_query(
                         dialect
@@ -674,17 +708,20 @@ impl Store {
                     .await?;
                 }
             } else {
+                // A native-only report keeps the existing Chat readiness
+                // semantics but carries no optional tool application proof.
                 let ready_connection = if state == "READY" {
-                    Some(EntityId::from_dto(
+                    Some(application_connection.unwrap_or(EntityId::from_dto(
                         EntityKind::Connection,
                         source.connection_id,
-                    )?)
+                    )?))
                 } else {
                     None
                 };
-                diesel::sql_query(dialect.query("UPDATE conversation_startups SET preparation_state=?,ready_snapshot=?,ready_native_session=?,failure_kind=?,ready_connection_id=? WHERE operation_id=?"))
+                diesel::sql_query(dialect.query("UPDATE conversation_startups SET preparation_state=?,ready_snapshot=?,ready_native_session=?,failure_kind=?,ready_connection_id=?,external_ready_connection_id=? WHERE operation_id=?"))
                     .bind::<Text,_>(state).bind::<Nullable<Text>,_>(snapshot).bind::<Nullable<Text>,_>(native).bind::<Nullable<Text>,_>(failure)
-                    .bind::<Nullable<IdentitySql>,_>(ready_connection).bind::<IdentitySql,_>(operation).execute(connection).await?;
+                    .bind::<Nullable<IdentitySql>,_>(ready_connection).bind::<Nullable<IdentitySql>,_>(external_connection)
+                    .bind::<IdentitySql,_>(operation).execute(connection).await?;
             }
             if state == "READY" {
                 let applied_at = crate::directory::database_now!(connection, dialect);

@@ -4,6 +4,7 @@ mod answers;
 pub(crate) mod authority;
 mod continuation;
 mod delivery;
+mod external_mcp;
 mod goals;
 mod input_queue;
 mod input_reads;
@@ -58,6 +59,10 @@ pub use delivery::{
     ConversationDeliveryTarget, ConversationForwardingAdmission, ConversationForwardingGrant,
     ConversationInputChunk, ConversationInputDelivery, ConversationInputOutcome,
     ConversationInputReportAcknowledgement, ConversationOperationForwarding,
+};
+pub use external_mcp::{
+    McpAppliedScope, McpExecutionScope, McpPreparationScope, McpRetainedSelection,
+    SavedMcpConnection, SavedMcpPage,
 };
 pub use goals::ConversationGoalChange;
 pub use input_queue::ConversationInputQueueState;

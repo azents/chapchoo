@@ -44,6 +44,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         "chapchoo.conversations.MessageRole",
         "chapchoo.conversations.InstructionSourceKind",
         "chapchoo.server_tools.Rejection",
+        "chapchoo.server_tools.ExternalCatalogFailure",
         "chapchoo.conversations.AnswerDelivery",
         "chapchoo.conversations.RecordKind",
         "chapchoo.conversations.RecordField",
@@ -63,6 +64,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         "chapchoo.computers.Action",
         "chapchoo.computers.Phase",
         "chapchoo.computers.BlockReason",
+        "chapchoo.computers.AgentIntegrationAction",
+        "chapchoo.computers.McpConnectionTestFailure",
     ] {
         generator = generator.enum_attribute(name, "#[derive(Debug)]");
     }

@@ -259,7 +259,8 @@ async fn start_backends(
                 chapchoo_service::ConversationToolBackend::new(conversation_core.clone()),
             )),
             admission.clone(),
-        );
+        )
+        .with_external(chapchoo_service::ExternalMcpRuntime::new(store.clone()));
         let owned = tools.clone();
         let shutdown = stop.clone();
         tasks.spawn(async move {

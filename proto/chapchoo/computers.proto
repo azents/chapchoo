@@ -16,6 +16,10 @@ service Agents {
   rpc SaveSystemPrompt(SaveSystemPromptRequest) returns (SystemPrompt);
   rpc CreationResult(CreationResultRequest) returns (HistoricalCreationResult);
   rpc ForceRemove(ForceRemoveRequest) returns (google.protobuf.Empty);
+  rpc ListIntegrations(AgentIntegrationListRequest) returns (AgentIntegrationList);
+  rpc ChangeIntegration(AgentIntegrationChangeRequest) returns (AgentIntegrationReceipt);
+  rpc IntegrationResult(AgentIntegrationResultRequest) returns (AgentIntegrationResult);
+  rpc TestMcpConnection(TestMcpConnectionRequest) returns (TestMcpConnectionResult);
 }
 service Computers {
   rpc Get(AgentRequest) returns (Computer);
@@ -36,6 +40,74 @@ message AgentHandleRequest { string team_id = 1; string candidate = 2; }
 message HandleAvailability { bool available = 1; }
 message AgentListRequest { string team_id = 1; Page page = 2; }
 message AgentRequest { string agent_id = 1; }
+message AgentIntegrationListRequest { string agent_id = 1; optional string after = 2; }
+message AgentIntegrationList { repeated AgentIntegration items = 1; optional string next_after = 2; }
+message AgentIntegration {
+  string id = 1;
+  string display_name = 2;
+  oneof settings { AgentMcpSettings mcp = 3; }
+}
+message AgentMcpSettings {
+  string endpoint = 1;
+  bool has_bearer = 2;
+}
+message AgentMcpConnectionDraft {
+  string endpoint = 1;
+  oneof authentication {
+    google.protobuf.Empty no_auth = 2;
+    google.protobuf.Empty keep_bearer = 3;
+    string replace_bearer = 4;
+  }
+}
+message AgentMcpDraft { string display_name = 1; AgentMcpConnectionDraft connection = 2; }
+message UpdateAgentMcp { string integration_id = 1; AgentMcpDraft draft = 2; }
+message AgentIntegrationChangeRequest {
+  string agent_id = 1;
+  string request_id = 2;
+  oneof change {
+    AgentMcpDraft create_mcp = 3;
+    UpdateAgentMcp update_mcp = 4;
+    string delete_integration_id = 5;
+  }
+}
+enum AgentIntegrationAction {
+  AGENT_INTEGRATION_ACTION_UNSPECIFIED = 0;
+  AGENT_INTEGRATION_ACTION_CREATE = 1;
+  AGENT_INTEGRATION_ACTION_UPDATE = 2;
+  AGENT_INTEGRATION_ACTION_DELETE = 3;
+}
+message AgentIntegrationReceipt {
+  string integration_id = 1;
+  AgentIntegrationAction action = 2;
+  google.protobuf.Timestamp accepted_at = 3;
+}
+message AgentIntegrationResultRequest { string agent_id = 1; string request_id = 2; }
+// No receipt does not establish nonexecution of a concurrently outstanding write.
+message AgentIntegrationResult { AgentIntegrationReceipt receipt = 1; }
+message TestMcpConnectionRequest {
+  string agent_id = 1;
+  optional string integration_id = 2;
+  AgentMcpConnectionDraft connection = 3;
+}
+enum McpConnectionTestFailure {
+  MCP_CONNECTION_TEST_FAILURE_UNSPECIFIED = 0;
+  MCP_CONNECTION_TEST_FAILURE_DESTINATION_DENIED = 1;
+  MCP_CONNECTION_TEST_FAILURE_BUSY = 2;
+  MCP_CONNECTION_TEST_FAILURE_UNAVAILABLE = 3;
+  MCP_CONNECTION_TEST_FAILURE_AUTHENTICATION = 4;
+  MCP_CONNECTION_TEST_FAILURE_UNSUPPORTED_VERSION = 5;
+  MCP_CONNECTION_TEST_FAILURE_MISSING_DISCOVERY = 6;
+  MCP_CONNECTION_TEST_FAILURE_MISSING_TOOLS_CAPABILITY = 7;
+  MCP_CONNECTION_TEST_FAILURE_INVALID_RESPONSE = 8;
+  MCP_CONNECTION_TEST_FAILURE_INCOMPLETE_CATALOGUE = 9;
+  MCP_CONNECTION_TEST_FAILURE_TIMED_OUT = 10;
+}
+message TestMcpConnectionResult {
+  oneof outcome {
+    uint32 listed_tool_count = 1;
+    McpConnectionTestFailure failure = 2;
+  }
+}
 message SystemPrompt { string content = 1; }
 message SaveSystemPromptRequest { string agent_id = 1; string content = 2; }
 message TeamAgentRequest { string team_id = 1; string handle = 2; }
