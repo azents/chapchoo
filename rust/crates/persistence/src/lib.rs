@@ -36,6 +36,10 @@ pub use computer_executions::{
     ComputerRequest, ExecutionDraft, ExecutionReservation, ExecutionResources, ManagedComputer,
     ManagedResourceKind, NativeRetirementAdmission, ProviderSource,
 };
+pub use computers::integrations::{
+    AgentIntegrationAction, AgentIntegrationChange, AgentIntegrationReceipt, AgentMcpPage,
+    AgentMcpSummary, McpAuthEdit, McpBearer, McpEndpoint, McpSettingsDraft, McpTestTarget,
+};
 pub use computers::{
     AgentRemoval, AgentSummary, ComputerInventorySummary, ComputerSummary, CreateAgentProfile,
     CreateCloudAgent, CreationOutcome, LifecycleRequest, ProviderCapabilities, ProviderChoice,

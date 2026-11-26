@@ -25,7 +25,7 @@ allowed = {
     "chapchoo-persistence": {
         "chapchoo-crypto", "chapchoo-domain", "diesel", "diesel-async",
         "diesel_migrations", "libsqlite3-sys", "thiserror", "zeroize", "tokio",
-        "base64", "tempfile", "serde", "serde_json", "uuid", "getrandom", "any_ascii",
+        "base64", "tempfile", "serde", "serde_json", "uuid", "getrandom", "any_ascii", "url",
     },
     "chapchoo-protocol": {
         "prost", "prost-types", "tonic", "tonic-prost", "tonic-prost-build",
@@ -34,7 +34,9 @@ allowed = {
     "chapchoo-service": {
         "chapchoo-crypto", "chapchoo-domain", "chapchoo-persistence", "tokio",
         "zeroize", "url", "base64", "tempfile", "parking_lot",
-        "agent-client-protocol", "serde", "serde_json",
+        "agent-client-protocol", "serde", "serde_json", "reqwest", "rustls",
+        "rustls-platform-verifier", "thiserror", "rmcp", "futures-util", "mime", "sse-stream",
+        "rcgen", "tokio-rustls",
     },
     "chapchoo-rpc": {
         "chapchoo-crypto", "chapchoo-domain", "chapchoo-protocol", "chapchoo-service",

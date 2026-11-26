@@ -308,6 +308,8 @@ macro_rules! lock_owned_agent_team {
     }};
 }
 
+pub(crate) mod integrations;
+
 #[derive(diesel::QueryableByName)]
 struct RemovedAgentRow {
     #[diesel(sql_type=Text)]

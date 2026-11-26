@@ -3,6 +3,7 @@ mod authentication;
 mod computers;
 mod conversation;
 mod error;
+mod external_mcp;
 mod mail;
 mod password;
 mod server_tools;
@@ -79,6 +80,7 @@ pub use conversation::{
     validate_conversation_answer,
 };
 pub use error::{DomainReason, InfrastructureReport, ServiceError};
+pub use external_mcp::{AgentMcpTest, AgentMcpTestOutcome, McpDiscoveryFailure, McpTestEdit};
 pub use mail::{MailFailure, MailFuture, MailMessage, MailPurpose, Mailer};
 pub use password::PasswordWork;
 pub use server_tools::{
