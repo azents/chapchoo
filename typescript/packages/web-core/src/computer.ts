@@ -1,4 +1,8 @@
 import type * as Wire from "@chapchoo/rpc-client/computers";
+import {
+  AgentIntegrationAction,
+  McpConnectionTestFailure,
+} from "@chapchoo/rpc-client/computers";
 import type { Timestamp } from "@chapchoo/rpc-client/timestamp";
 import { invalidResponse } from "./errors.js";
 import { timestampMilliseconds, validTimestamp } from "./validation.js";
@@ -8,6 +12,112 @@ import { validHandle } from "./handle.js";
 import { authenticationSelection } from "./external-authentication.js";
 import type { AuthenticationSelection } from "./external-authentication.js";
 export type { AgentPaletteKey, AgentProfileImage } from "./agent-profile.js";
+
+export interface McpServerView {
+  id: string;
+  displayName: string;
+  endpoint: string;
+  hasBearer: boolean;
+}
+
+export type McpTestFailure =
+  | "destination"
+  | "busy"
+  | "unavailable"
+  | "authentication"
+  | "unsupportedVersion"
+  | "missingDiscovery"
+  | "missingTools"
+  | "invalidResponse"
+  | "incompleteCatalogue"
+  | "timedOut";
+
+export type McpTestResult =
+  | { type: "listed"; count: number }
+  | { type: "failed"; reason: McpTestFailure };
+
+export interface IntegrationReceiptView {
+  id: string;
+  action: "create" | "update" | "delete";
+}
+
+export function mcpServers(
+  result: Wire.AgentIntegrationList,
+): Page<McpServerView> {
+  return {
+    items: result.items.map((item) => {
+      if (!item.id || !item.displayName || !item.mcp?.endpoint) {
+        invalidResponse();
+      }
+      return {
+        id: item.id,
+        displayName: item.displayName,
+        endpoint: item.mcp.endpoint,
+        hasBearer: item.mcp.hasBearer,
+      };
+    }),
+    nextAfter: result.nextAfter ?? null,
+  };
+}
+
+export function integrationReceipt(
+  value: Wire.AgentIntegrationReceipt,
+): IntegrationReceiptView {
+  const actions = {
+    [AgentIntegrationAction.AGENT_INTEGRATION_ACTION_CREATE]: "create",
+    [AgentIntegrationAction.AGENT_INTEGRATION_ACTION_UPDATE]: "update",
+    [AgentIntegrationAction.AGENT_INTEGRATION_ACTION_DELETE]: "delete",
+  } as const satisfies Partial<
+    Record<AgentIntegrationAction, IntegrationReceiptView["action"]>
+  >;
+  const action = Object.hasOwn(actions, value.action)
+    ? actions[value.action as keyof typeof actions]
+    : undefined;
+  if (!value.integrationId || !action || !validTimestamp(value.acceptedAt)) {
+    invalidResponse();
+  }
+  return { id: value.integrationId, action };
+}
+
+export function mcpTestResult(
+  value: Wire.TestMcpConnectionResult,
+): McpTestResult {
+  if (
+    value.failure === undefined &&
+    value.listedToolCount !== undefined &&
+    Number.isSafeInteger(value.listedToolCount) &&
+    value.listedToolCount >= 0
+  ) {
+    return { type: "listed", count: value.listedToolCount };
+  }
+  const reasons: Partial<Record<McpConnectionTestFailure, McpTestFailure>> = {
+    [McpConnectionTestFailure.MCP_CONNECTION_TEST_FAILURE_DESTINATION_DENIED]:
+      "destination",
+    [McpConnectionTestFailure.MCP_CONNECTION_TEST_FAILURE_BUSY]: "busy",
+    [McpConnectionTestFailure.MCP_CONNECTION_TEST_FAILURE_UNAVAILABLE]:
+      "unavailable",
+    [McpConnectionTestFailure.MCP_CONNECTION_TEST_FAILURE_AUTHENTICATION]:
+      "authentication",
+    [McpConnectionTestFailure.MCP_CONNECTION_TEST_FAILURE_UNSUPPORTED_VERSION]:
+      "unsupportedVersion",
+    [McpConnectionTestFailure.MCP_CONNECTION_TEST_FAILURE_MISSING_DISCOVERY]:
+      "missingDiscovery",
+    [McpConnectionTestFailure.MCP_CONNECTION_TEST_FAILURE_MISSING_TOOLS_CAPABILITY]:
+      "missingTools",
+    [McpConnectionTestFailure.MCP_CONNECTION_TEST_FAILURE_INVALID_RESPONSE]:
+      "invalidResponse",
+    [McpConnectionTestFailure.MCP_CONNECTION_TEST_FAILURE_INCOMPLETE_CATALOGUE]:
+      "incompleteCatalogue",
+    [McpConnectionTestFailure.MCP_CONNECTION_TEST_FAILURE_TIMED_OUT]:
+      "timedOut",
+  };
+  const reason =
+    value.failure === undefined ? undefined : reasons[value.failure];
+  if (value.listedToolCount !== undefined || !reason) {
+    invalidResponse();
+  }
+  return { type: "failed", reason };
+}
 
 export type Power = "running" | "stopped" | "unknown";
 export type Connection = "connected" | "disconnected" | "unknown";

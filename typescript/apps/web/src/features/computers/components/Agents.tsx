@@ -241,6 +241,7 @@ export function Agents(props: AgentsProps): ReactElement {
             <AgentProfile {...props} agent={data.agent} />
             {props.systemPromptControl}
             {props.authenticationControl}
+            {props.integrationControl}
             {data.agent.computer.startDelayed ? (
               <Alert color="yellow" role="status">
                 {c.delayed}

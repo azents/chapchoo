@@ -13,11 +13,13 @@ import {
 import { validHandle } from "@chapchoo/web-core/handle";
 import { call } from "@chapchoo/web-core/rpc";
 import { z } from "zod";
+import { agentIntegrationsRouter } from "@/shared/server/agentIntegrations";
 import { procedure, router } from "@/shared/server/trpc";
 
 const id = z.string().min(1).max(128);
 const page = z.object({ after: id.optional() }).strict();
 export const computersRouter = router({
+  integrations: agentIntegrationsRouter,
   images: procedure
     .input(page)
     .query(({ ctx, input }) =>

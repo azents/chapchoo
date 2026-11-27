@@ -18,6 +18,7 @@ import { AgentAuthenticationPage } from "@/shared/authentications/AgentAuthentic
 import { trpc } from "@/shared/rpc/client";
 import { creationCopy } from "../creationCopy";
 import { computerDetailCopy } from "../detailCopy";
+import { McpServersPage } from "../McpServersPage";
 import { SystemPromptPage } from "../SystemPromptPage";
 import { useComputerActions } from "./useComputerActions";
 import type {
@@ -212,6 +213,13 @@ export function useAgentsContainer({
             agent: data.agent,
             snapshots: data.authenticationSnapshots,
             unavailable: detail.isError || submission.type === "pending",
+          })
+        : null,
+    integrationControl:
+      data.type === "detail" && auth.state.type === "AUTHENTICATED"
+        ? createElement(McpServersPage, {
+            key: `${auth.state.user.id}:${data.agent.id}`,
+            agentId: data.agent.id,
           })
         : null,
     access:
