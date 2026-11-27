@@ -19,6 +19,7 @@ const PROVIDER_BOOTSTRAP: &[u8] = b"chapchoo/provider-bootstrap-authentication";
 const EXTERNAL_AUTH: &[u8] = b"chapchoo/external-authentication";
 const DEVICE_ATTEMPT: &[u8] = b"chapchoo/external-device-attempt";
 const EXTERNAL_REQUEST: &[u8] = b"chapchoo/external-request-fingerprint";
+const MCP_AUTH: &[u8] = b"chapchoo/agent-mcp-authentication";
 const BINDING_CONTEXT: &[u8] = b"chapchoo/fixed-installation-root";
 
 /// Operator-provided root. No replacement, generation or implicit formatting API.
@@ -52,6 +53,7 @@ pub struct CredentialCipher {
     pub(crate) external_auth: Zeroizing<[u8; 32]>,
     pub(crate) device_attempt: Zeroizing<[u8; 32]>,
     pub(crate) external_request: Zeroizing<[u8; 32]>,
+    pub(crate) mcp_auth: Zeroizing<[u8; 32]>,
     encryption: Zeroizing<[u8; 32]>,
     codes: Zeroizing<[u8; 32]>,
     binding: Zeroizing<[u8; 32]>,
@@ -71,6 +73,7 @@ impl CredentialCipher {
             external_auth: derive(EXTERNAL_AUTH)?,
             device_attempt: derive(DEVICE_ATTEMPT)?,
             external_request: derive(EXTERNAL_REQUEST)?,
+            mcp_auth: derive(MCP_AUTH)?,
             encryption: derive(ENCRYPTION)?,
             codes: derive(CODES)?,
             binding: derive(BINDING)?,

@@ -367,6 +367,12 @@ fn sqlite_model_selection_serializes_with_start_and_keeps_exact_receipts() -> Re
     let f = runtime.block_on(fixture(&store))?;
     runtime.block_on(exercise(&store, &f))?;
     let mut connection = diesel::SqliteConnection::establish(path.to_str().ok_or("Invalid path")?)?;
+    assert_eq!(
+        connection
+            .revert_last_migration(SQLITE_MIGRATIONS)?
+            .to_string(),
+        "00000000000034"
+    );
     assert!(connection.revert_last_migration(SQLITE_MIGRATIONS).is_err());
     Ok(())
 }
@@ -395,6 +401,12 @@ fn postgres_model_selection_serializes_with_start_and_keeps_exact_receipts() -> 
         let f = runtime.block_on(fixture(&store))?;
         runtime.block_on(exercise(&store, &f))?;
         let mut connection = AsyncConnectionWrapper::<AsyncPgConnection>::establish(&url)?;
+        assert_eq!(
+            connection
+                .revert_last_migration(POSTGRES_MIGRATIONS)?
+                .to_string(),
+            "00000000000034"
+        );
         assert!(
             connection
                 .revert_last_migration(POSTGRES_MIGRATIONS)

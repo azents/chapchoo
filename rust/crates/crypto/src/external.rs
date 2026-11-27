@@ -41,6 +41,7 @@ impl fmt::Debug for ExternalSecret {
 pub enum ExternalSecretOwner<'a> {
     User(&'a str),
     Team(&'a str),
+    Agent(&'a str),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -48,6 +49,7 @@ pub enum ExternalSecretKind {
     ChatGpt,
     OpenAiApiKey,
     PendingDevice,
+    McpBearer,
 }
 
 /// Stable record/attempt identity and owning scope, not a caller permission.
@@ -63,8 +65,12 @@ impl<'a> ExternalSecretContext<'a> {
         object_id: &'a str,
         kind: ExternalSecretKind,
     ) -> Result<Self, CryptoError> {
-        let owner_id = match owner {
-            ExternalSecretOwner::User(id) | ExternalSecretOwner::Team(id) => id,
+        let owner_id = match (owner, kind) {
+            (ExternalSecretOwner::Agent(id), ExternalSecretKind::McpBearer) => id,
+            (ExternalSecretOwner::Agent(_), _) | (_, ExternalSecretKind::McpBearer) => {
+                return Err(CryptoError::InvalidContext);
+            }
+            (ExternalSecretOwner::User(id) | ExternalSecretOwner::Team(id), _) => id,
         };
         for id in [owner_id, object_id] {
             if id.is_empty()
@@ -87,11 +93,13 @@ impl<'a> ExternalSecretContext<'a> {
         let (scope, id) = match self.owner {
             ExternalSecretOwner::User(id) => (b"user".as_slice(), id),
             ExternalSecretOwner::Team(id) => (b"team".as_slice(), id),
+            ExternalSecretOwner::Agent(id) => (b"agent".as_slice(), id),
         };
         let kind = match self.kind {
             ExternalSecretKind::ChatGpt => b"chatgpt".as_slice(),
             ExternalSecretKind::OpenAiApiKey => b"openai-api-key".as_slice(),
             ExternalSecretKind::PendingDevice => b"pending-device".as_slice(),
+            ExternalSecretKind::McpBearer => b"mcp-bearer".as_slice(),
         };
         let mut bytes = b"chapchoo/external-secret\0".to_vec();
         for part in [scope, id.as_bytes(), self.object_id.as_bytes(), kind] {
@@ -104,6 +112,7 @@ impl<'a> ExternalSecretContext<'a> {
     fn key<'b>(&self, cipher: &'b CredentialCipher) -> &'b [u8] {
         match self.kind {
             ExternalSecretKind::PendingDevice => cipher.device_attempt.as_slice(),
+            ExternalSecretKind::McpBearer => cipher.mcp_auth.as_slice(),
             ExternalSecretKind::ChatGpt | ExternalSecretKind::OpenAiApiKey => {
                 cipher.external_auth.as_slice()
             }

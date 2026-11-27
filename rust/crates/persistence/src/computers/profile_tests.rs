@@ -224,6 +224,8 @@ async fn exercise(store: Store) -> Result<(), TestError> {
     let recovered = present(recovered?)?;
     assert_eq!(first.id, recovered.id);
     assert_eq!(first.computer.id, recovered.computer.id);
+    super::integrations::tests::management_contract(&store, &actor, &other_actor, &first.id, now)
+        .await?;
     let saved = first
         .authentication
         .as_ref()
