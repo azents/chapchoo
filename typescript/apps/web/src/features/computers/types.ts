@@ -37,6 +37,7 @@ export interface AgentsInput {
 }
 export interface AgentsProps extends AgentsInput {
   authenticationControl: ReactNode;
+  integrationControl?: ReactNode;
   systemPromptControl?: ReactNode;
   access: "authorized" | "signedOut" | "unavailable";
   copy: ComputerCopy;

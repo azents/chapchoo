@@ -64,6 +64,60 @@ async function fact(page: Page, label: string, value: string): Promise<void> {
   await dialog.getByRole("button", { name: "Close", exact: true }).click();
 }
 
+async function manageMcpSettings(page: Page): Promise<void> {
+  const settings = page.getByRole("region", {
+    name: "MCP servers",
+    exact: true,
+  });
+  const name = "Acceptance MCP";
+  await settings.getByRole("button", { name: "+ Add", exact: true }).click();
+  const editor = page.getByRole("dialog", {
+    name: "Add MCP server",
+    exact: true,
+  });
+  await editor.getByLabel("Name", { exact: true }).fill(name);
+  await editor
+    .getByLabel("Server URL", { exact: true })
+    .fill("https://127.0.0.1/mcp");
+  await editor
+    .getByLabel("Authentication", { exact: true })
+    .selectOption("bearer");
+  await editor
+    .getByLabel("Bearer token", { exact: true })
+    .fill("synthetic-mcp-acceptance-token");
+  // The fixture intentionally uses an address denied by the production policy.
+  // Testing it should give a typed failure and must not save it.
+  await editor
+    .getByRole("button", { name: "Test connection", exact: true })
+    .click();
+  await expect(
+    editor.getByText("Use a publicly reachable HTTPS server URL.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    settings.getByText("No MCP servers", { exact: true }),
+  ).toBeVisible();
+  await editor.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(editor).toBeHidden();
+  await page.reload();
+  const edit = page.getByRole("dialog", {
+    name: "Edit MCP server",
+    exact: true,
+  });
+  await settings
+    .getByRole("button", { name: `Edit: ${name}`, exact: true })
+    .click();
+  await expect(edit.getByLabel("Bearer token", { exact: true })).toHaveValue(
+    "",
+  );
+  await edit.getByRole("button", { name: "Delete", exact: true }).click();
+  await edit.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(
+    settings.getByText("No MCP servers", { exact: true }),
+  ).toBeVisible();
+}
+
 test("owner manages one Computer while Admin observes independent cleanup inventory", async ({
   assembly,
   browser,
@@ -271,6 +325,7 @@ test("owner manages one Computer while Admin observes independent cleanup invent
     ).toHaveCount(1);
     await fact(owner, "Computer connection", "Connected");
     const detailUrl = owner.url();
+    await manageMcpSettings(owner);
     await expect(
       owner.getByRole("main").getByText("Acceptance key", { exact: true }),
     ).toBeVisible();
