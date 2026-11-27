@@ -156,7 +156,7 @@ pub(super) async fn run(
             Some(dispatch.clone()),
         )
         .await?;
-        let result = async {
+        async {
             if !service
                 .peer_info()
                 .is_some_and(|info| info.capabilities.tools.is_some())
@@ -184,9 +184,9 @@ pub(super) async fn run(
                 _ => ExternalMcpCallOutcome::UnsupportedResult,
             })
         }
-        .await;
-        let _ = service.cancel().await;
-        result
+        // The SDK owner retains the permit through session cleanup. Do not
+        // turn a definitive result into uncertainty while cleanup is pending.
+        .await
     };
     let result = tokio::time::timeout(budget, operation).await;
     let possible = dispatch.close();

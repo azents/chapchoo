@@ -17,7 +17,7 @@ pub use invocation::{
     ExternalMcpCall, ExternalMcpCallOutcome, ExternalMcpInvocation, ExternalMcpRejection,
 };
 use rmcp::{
-    model::{ErrorCode, PaginatedRequestParams, ProtocolVersion},
+    model::{ClientConfig, ErrorCode, PaginatedRequestParams, ProtocolVersion},
     service::{ClientInitializeError, ClientLifecycleMode, ClientServiceExt},
     transport::{
         DynamicTransportError,
@@ -121,10 +121,9 @@ async fn list_tools(
     slot: OwnedSemaphorePermit,
 ) -> Result<CompleteMcpCatalogue, McpDiscoveryFailure> {
     let service = connect(client, target.endpoint.url().as_str(), slot, None).await?;
-    let result = list_pages(&service).await;
-    // The drop guard also cancels the SDK owner if the enclosing budget expires.
-    let _ = service.cancel().await;
-    result
+    // Dropping the service signals the SDK owner, which keeps its HTTP permit
+    // through bounded session cleanup. Cleanup cannot rewrite a completed list.
+    list_pages(&service).await
 }
 
 async fn connect(
@@ -132,29 +131,59 @@ async fn connect(
     uri: &str,
     slot: OwnedSemaphorePermit,
     dispatch: Option<Arc<wire::SingleDispatch>>,
-) -> Result<rmcp::service::RunningService<rmcp::RoleClient, ()>, McpDiscoveryFailure> {
+) -> Result<rmcp::service::RunningService<rmcp::RoleClient, ClientConfig>, McpDiscoveryFailure> {
     let mut config = StreamableHttpClientTransportConfig::with_uri(uri)
         .max_concurrent_requests(1)
         .max_sse_event_size(MAX_CATALOGUE_BYTES)
         .reinit_on_expired_session(false);
     config.allow_stateless = true;
     config.retry_config = Arc::new(NeverRetry::default());
-    let lists = wire::ListWitness::default();
-    let transport = wire::CompleteDiscovery(
-        StreamableHttpClientTransport::with_client(
-            wire::ProfileHttp::new(client, slot, lists.clone(), dispatch),
-            config,
-        ),
-        lists,
-    );
-    ().serve_with_lifecycle(
-        transport,
-        ClientLifecycleMode::Discover {
-            preferred_versions: vec![ProtocolVersion::V_2026_07_28],
-        },
+    let slot = Arc::new(slot);
+    let transport = |negotiation| {
+        let lists = wire::ListWitness::default();
+        wire::CompleteDiscovery(
+            StreamableHttpClientTransport::with_client(
+                wire::ProfileHttp::new(
+                    client.clone(),
+                    slot.clone(),
+                    lists.clone(),
+                    dispatch.clone(),
+                    negotiation,
+                ),
+                config.clone(),
+            ),
+            lists,
+        )
+    };
+    let probe = Arc::new(wire::Probe::default());
+    match ClientConfig::default()
+        .serve_with_lifecycle(
+            transport(wire::Negotiation::Modern(probe.clone())),
+            ClientLifecycleMode::Discover {
+                preferred_versions: vec![ProtocolVersion::V_2026_07_28],
+            },
+        )
+        .await
+    {
+        Ok(service) => return Ok(service),
+        Err(error) if !probe.fallback_allowed() => return Err(startup_failure(error)),
+        Err(_) => {}
+    }
+    let earlier = Arc::new(parking_lot::Mutex::new(wire::Earlier::default()));
+    let mut info = ClientConfig::default();
+    info.protocol_version = ProtocolVersion::V_2025_11_25;
+    info.serve_with_lifecycle(
+        transport(wire::Negotiation::Earlier(earlier.clone())),
+        ClientLifecycleMode::Initialize,
     )
     .await
-    .map_err(startup_failure)
+    .map_err(|error| {
+        if earlier.lock().unsupported_version {
+            McpDiscoveryFailure::UnsupportedVersion
+        } else {
+            startup_failure(error)
+        }
+    })
 }
 
 async fn list_pages(
@@ -230,7 +259,8 @@ fn transport_failure(error: &DynamicTransportError) -> McpDiscoveryFailure {
                 }
                 StreamableHttpError::UnexpectedContentType(_)
                 | StreamableHttpError::Deserialize(_)
-                | StreamableHttpError::Sse(_) => {
+                | StreamableHttpError::Sse(_)
+                | StreamableHttpError::UnexpectedServerResponse(_) => {
                     return McpDiscoveryFailure::InvalidResponse;
                 }
                 StreamableHttpError::Client(request) => {

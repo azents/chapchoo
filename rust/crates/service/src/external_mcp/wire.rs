@@ -3,12 +3,15 @@
 use super::MAX_CATALOGUE_BYTES;
 use futures_util::{StreamExt, stream::BoxStream};
 use parking_lot::Mutex;
-use reqwest::header::{ACCEPT, CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue};
+use reqwest::{
+    StatusCode,
+    header::{ACCEPT, CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue},
+};
 use rmcp::{
     RoleClient,
     model::{
-        ClientJsonRpcMessage, ClientRequest, ErrorData, RequestId, ResultType,
-        ServerJsonRpcMessage, ServerResult,
+        ClientJsonRpcMessage, ClientNotification, ClientRequest, ErrorCode, ErrorData,
+        ProtocolVersion, RequestId, ResultType, ServerJsonRpcMessage, ServerResult,
     },
     transport::{
         Transport,
@@ -24,13 +27,81 @@ use std::{
     io,
     sync::{
         Arc,
-        atomic::{AtomicU8, Ordering},
+        atomic::{AtomicBool, AtomicU8, Ordering},
     },
 };
 use tokio::sync::OwnedSemaphorePermit;
 
 type HttpError = StreamableHttpError<reqwest::Error>;
 type SseBody = BoxStream<'static, Result<Sse, SseError>>;
+
+const SESSION_HEADER: &str = "mcp-session-id";
+const VERSION_HEADER: &str = "mcp-protocol-version";
+// The SDK logs its session identifier; only this adapter handles the real one.
+const LOCAL_SESSION: &str = "external-mcp-session";
+const MAX_SESSION_BYTES: usize = 1024;
+
+#[derive(Default)]
+pub(super) struct Probe(AtomicBool);
+
+impl Probe {
+    pub(super) fn fallback_allowed(&self) -> bool {
+        self.0.load(Ordering::Acquire)
+    }
+
+    fn inspect(&self, status: StatusCode, id: &RequestId, message: Option<&ServerJsonRpcMessage>) {
+        let fallback = match message {
+            Some(ServerJsonRpcMessage::Error(error)) => {
+                let correlated = error.id.as_ref() == Some(id);
+                !modern_rejection(error.error.code)
+                    && (status == StatusCode::BAD_REQUEST && (correlated || error.id.is_none())
+                        || status == StatusCode::OK
+                            && correlated
+                            && error.error.code == ErrorCode::METHOD_NOT_FOUND)
+            }
+            None => status == StatusCode::BAD_REQUEST,
+            Some(_) => false,
+        };
+        if fallback {
+            self.0.store(true, Ordering::Release);
+        }
+    }
+}
+
+fn modern_rejection(code: ErrorCode) -> bool {
+    matches!(
+        code,
+        ErrorCode::UNSUPPORTED_PROTOCOL_VERSION
+            | ErrorCode::MISSING_REQUIRED_CLIENT_CAPABILITY
+            | ErrorCode::HEADER_MISMATCH
+    )
+}
+
+#[derive(Default)]
+pub(super) struct Earlier {
+    version: Option<HeaderValue>,
+    session: Option<HeaderValue>,
+    pub(super) unsupported_version: bool,
+}
+
+#[derive(Clone)]
+pub(super) enum Negotiation {
+    Modern(Arc<Probe>),
+    Earlier(Arc<Mutex<Earlier>>),
+}
+
+#[derive(PartialEq, Eq)]
+enum Method {
+    Discover,
+    Initialize,
+    Initialized,
+    List,
+    Call,
+}
+
+fn outside_profile() -> HttpError {
+    HttpError::UnexpectedServerResponse("outside the MCP request profile".into())
+}
 
 /// Witness of the typed reply before rmcp has filtered its catalogue.
 /// Discovery sends one request at a time and stops on the first failed page.
@@ -63,6 +134,7 @@ pub(super) struct ProfileHttp {
     slot: Arc<OwnedSemaphorePermit>,
     lists: ListWitness,
     dispatch: Option<Arc<SingleDispatch>>,
+    negotiation: Negotiation,
 }
 
 #[derive(Default)]
@@ -99,16 +171,141 @@ impl SingleDispatch {
 impl ProfileHttp {
     pub(super) fn new(
         client: reqwest::Client,
-        slot: OwnedSemaphorePermit,
+        slot: Arc<OwnedSemaphorePermit>,
         lists: ListWitness,
         dispatch: Option<Arc<SingleDispatch>>,
+        negotiation: Negotiation,
     ) -> Self {
         Self {
             client,
-            slot: Arc::new(slot),
+            slot,
             lists,
             dispatch,
+            negotiation,
         }
+    }
+
+    fn method(
+        &self,
+        message: &ClientJsonRpcMessage,
+    ) -> Result<(Method, Option<RequestId>), HttpError> {
+        let earlier = matches!(self.negotiation, Negotiation::Earlier(_));
+        match message {
+            ClientJsonRpcMessage::Request(request) => {
+                let method = match &request.request {
+                    ClientRequest::DiscoverRequest(_) if !earlier => Method::Discover,
+                    ClientRequest::InitializeRequest(_) if earlier => Method::Initialize,
+                    ClientRequest::ListToolsRequest(_) => Method::List,
+                    ClientRequest::CallToolRequest(_) if self.dispatch.is_some() => Method::Call,
+                    _ => return Err(outside_profile()),
+                };
+                Ok((method, Some(request.id.clone())))
+            }
+            ClientJsonRpcMessage::Notification(notification)
+                if earlier
+                    && matches!(
+                        &notification.notification,
+                        ClientNotification::InitializedNotification(_)
+                    ) =>
+            {
+                Ok((Method::Initialized, None))
+            }
+            _ => Err(outside_profile()),
+        }
+    }
+
+    fn earlier_headers(&self, session: Option<&str>) -> Result<HeaderMap, HttpError> {
+        let Negotiation::Earlier(state) = &self.negotiation else {
+            return Err(outside_profile());
+        };
+        let state = state.lock();
+        let version = state.version.as_ref().ok_or_else(outside_profile)?;
+        if session != state.session.as_ref().map(|_| LOCAL_SESSION) {
+            return Err(outside_profile());
+        }
+        let mut headers = HeaderMap::new();
+        headers.insert(VERSION_HEADER, version.clone());
+        if let Some(value) = &state.session {
+            headers.insert(SESSION_HEADER, value.clone());
+        }
+        Ok(headers)
+    }
+
+    fn initialize(
+        &self,
+        message: &ServerJsonRpcMessage,
+        id: &RequestId,
+        session: Option<HeaderValue>,
+    ) -> Result<Option<String>, HttpError> {
+        let Negotiation::Earlier(state) = &self.negotiation else {
+            return Err(outside_profile());
+        };
+        if matches!(message, ServerJsonRpcMessage::Error(error) if error.id.as_ref() == Some(id)) {
+            return Ok(None);
+        }
+        let ServerJsonRpcMessage::Response(response) = message else {
+            return Err(outside_profile());
+        };
+        let ServerResult::InitializeResult(result) = &response.result else {
+            return Err(outside_profile());
+        };
+        if &response.id != id {
+            return Err(outside_profile());
+        }
+        let mut state = state.lock();
+        if ![
+            ProtocolVersion::V_2025_11_25,
+            ProtocolVersion::V_2025_06_18,
+            ProtocolVersion::V_2025_03_26,
+        ]
+        .contains(&result.protocol_version)
+        {
+            state.unsupported_version = true;
+            return Err(outside_profile());
+        }
+        if state.version.is_some() {
+            return Err(outside_profile());
+        }
+        state.version = Some(
+            HeaderValue::from_str(result.protocol_version.as_str())
+                .map_err(|_| outside_profile())?,
+        );
+        state.session = session;
+        Ok(state.session.as_ref().map(|_| LOCAL_SESSION.to_owned()))
+    }
+
+    fn typed_reply(
+        &self,
+        method: Method,
+        id: &RequestId,
+        status: StatusCode,
+        message: ServerJsonRpcMessage,
+        session: Option<HeaderValue>,
+    ) -> Result<StreamableHttpPostResponse, HttpError> {
+        let marker = match method {
+            Method::Discover => {
+                if let Negotiation::Modern(probe) = &self.negotiation {
+                    probe.inspect(status, id, Some(&message));
+                }
+                if matches!(
+                    &message,
+                    ServerJsonRpcMessage::Error(error) if modern_rejection(error.error.code)
+                        && error.id.as_ref() != Some(id)
+                ) {
+                    return Err(HttpError::UnexpectedServerResponse(
+                        "uncorrelated MCP negotiation response".into(),
+                    ));
+                }
+                None
+            }
+            Method::Initialize => self.initialize(&message, id, session)?,
+            Method::List => {
+                self.lists.remember(&message, id);
+                None
+            }
+            _ => None,
+        };
+        Ok(StreamableHttpPostResponse::Json(message, marker))
     }
 }
 
@@ -123,45 +320,32 @@ impl StreamableHttpClient for ProfileHttp {
         auth_header: Option<String>,
         custom_headers: HashMap<HeaderName, HeaderValue>,
     ) -> Result<StreamableHttpPostResponse, HttpError> {
-        let request = match &message {
-            ClientJsonRpcMessage::Request(request)
-                if session_id.is_none() && auth_header.is_none() =>
-            {
-                request
-            }
-            _ => {
-                return Err(HttpError::UnexpectedServerResponse(
-                    "outside the MCP request profile".into(),
-                ));
-            }
-        };
-        let is_call = matches!(&request.request, ClientRequest::CallToolRequest(_));
-        if !matches!(
-            &request.request,
-            ClientRequest::DiscoverRequest(_) | ClientRequest::ListToolsRequest(_)
-        ) && !(is_call && self.dispatch.is_some())
+        let (method, id) = self.method(&message)?;
+        let modern = matches!(self.negotiation, Negotiation::Modern(_));
+        if auth_header.is_some() || session_id.is_some() && (modern || method == Method::Initialize)
         {
-            return Err(HttpError::UnexpectedServerResponse(
-                "outside the MCP request profile".into(),
-            ));
+            return Err(outside_profile());
         }
-        let list_id = match &message {
-            ClientJsonRpcMessage::Request(request)
-                if matches!(request.request, ClientRequest::ListToolsRequest(_)) =>
-            {
-                Some(request.id.clone())
-            }
-            _ => None,
+        let mut headers = if !modern && method != Method::Initialize {
+            self.earlier_headers(session_id.as_deref())?
+        } else {
+            HeaderMap::new()
         };
-        let mut headers = HeaderMap::new();
         for (name, value) in custom_headers {
-            if !matches!(name.as_str(), "mcp-method" | "mcp-protocol-version")
-                && !(is_call
-                    && (name.as_str() == "mcp-name" || name.as_str().starts_with("mcp-param-")))
-            {
-                return Err(HttpError::ReservedHeaderConflict(name.to_string()));
+            match name.as_str() {
+                VERSION_HEADER if !modern => {}
+                "mcp-method" | VERSION_HEADER if modern => {
+                    headers.insert(name, value);
+                }
+                name_text
+                    if modern
+                        && method == Method::Call
+                        && (name_text == "mcp-name" || name_text.starts_with("mcp-param-")) =>
+                {
+                    headers.insert(name, value);
+                }
+                _ => return Err(HttpError::ReservedHeaderConflict(name.to_string())),
             }
-            headers.insert(name, value);
         }
         let outgoing = self
             .client
@@ -171,7 +355,7 @@ impl StreamableHttpClient for ProfileHttp {
             .json(&message)
             .build()
             .map_err(HttpError::Client)?;
-        if is_call
+        if method == Method::Call
             && !self
                 .dispatch
                 .as_ref()
@@ -188,14 +372,21 @@ impl StreamableHttpClient for ProfileHttp {
             .map_err(HttpError::Client)?;
         let status = response.status();
         let failure = || HttpError::HttpStatus(HttpStatusError::new(status.as_u16(), None));
-        if status.is_success() && status != reqwest::StatusCode::OK {
-            return Err(HttpError::UnexpectedServerResponse(
-                "MCP request did not receive a complete HTTP response".into(),
-            ));
+        if method == Method::Initialized && status == StatusCode::ACCEPTED {
+            return Ok(StreamableHttpPostResponse::Accepted);
+        }
+        if status.is_success() && status != StatusCode::OK {
+            return Err(failure());
         }
         if status.is_redirection() || matches!(status.as_u16(), 401 | 403 | 429) {
             return Err(failure());
         }
+        let id = id.as_ref().ok_or_else(failure)?;
+        let session = if method == Method::Initialize && status.is_success() {
+            session_header(response.headers())?
+        } else {
+            None
+        };
         let media = media_type(response.headers());
         if media == Some(Media::Sse) && status.is_success() {
             let slot = self.slot.clone();
@@ -221,53 +412,73 @@ impl StreamableHttpClient for ProfileHttp {
                 });
             let reply =
                 StreamableHttpPostResponse::Sse(SseStream::from_bytes_stream(chunks).boxed(), None);
-            if let Some(id) = list_id {
-                // Lists have no follow-up methods. Use the SDK's typed SSE reply
-                // decoder before admitting the page to its catalogue worker.
+            if method != Method::Call {
                 let (message, _) = reply.expect_initialized::<reqwest::Error>().await?;
-                self.lists.remember(&message, &id);
-                return Ok(StreamableHttpPostResponse::Json(message, None));
+                return self.typed_reply(method, id, status, message, session);
             }
             return Ok(reply);
         }
         if media != Some(Media::Json) {
+            if method == Method::Discover
+                && status == StatusCode::BAD_REQUEST
+                && let Negotiation::Modern(probe) = &self.negotiation
+            {
+                let body = read_body(&mut response).await?;
+                let parsed = serde_json::from_slice(&body).ok();
+                probe.inspect(status, id, parsed.as_ref());
+            }
             return Err(if status.is_success() {
                 HttpError::UnexpectedContentType(None)
             } else {
                 failure()
             });
         }
-        let mut body = Vec::new();
-        while let Some(chunk) = response.chunk().await.map_err(HttpError::Client)? {
-            if body.len().saturating_add(chunk.len()) > MAX_CATALOGUE_BYTES {
-                return Err(HttpError::ResponseBodyTooLarge {
-                    max_size: MAX_CATALOGUE_BYTES,
-                });
-            }
-            body.extend_from_slice(&chunk);
-        }
+        let body = read_body(&mut response).await?;
         let parsed = if status.is_success() {
             serde_json::from_slice(&body)?
         } else {
             match serde_json::from_slice(&body) {
                 Ok(error @ ServerJsonRpcMessage::Error(_)) => error,
-                _ => return Err(failure()),
+                other => {
+                    if method == Method::Discover
+                        && let Negotiation::Modern(probe) = &self.negotiation
+                    {
+                        probe.inspect(status, id, other.as_ref().ok());
+                    }
+                    return Err(failure());
+                }
             }
         };
-        if let Some(id) = list_id {
-            self.lists.remember(&parsed, &id);
-        }
-        Ok(StreamableHttpPostResponse::Json(parsed, None))
+        self.typed_reply(method, id, status, parsed, session)
     }
 
     async fn delete_session(
         &self,
-        _: Arc<str>,
-        _: Arc<str>,
-        _: Option<String>,
+        uri: Arc<str>,
+        session: Arc<str>,
+        auth: Option<String>,
         _: HashMap<HeaderName, HeaderValue>,
     ) -> Result<(), HttpError> {
-        Err(HttpError::ServerDoesNotSupportDeleteSession)
+        if auth.is_some() {
+            return Err(outside_profile());
+        }
+        let response = self
+            .client
+            .delete(uri.as_ref())
+            .headers(self.earlier_headers(Some(session.as_ref()))?)
+            .send()
+            .await
+            .map_err(HttpError::Client)?;
+        match response.status() {
+            status if status.is_success() => Ok(()),
+            StatusCode::METHOD_NOT_ALLOWED | StatusCode::NOT_FOUND => {
+                Err(HttpError::ServerDoesNotSupportDeleteSession)
+            }
+            status => Err(HttpError::HttpStatus(HttpStatusError::new(
+                status.as_u16(),
+                None,
+            ))),
+        }
     }
 
     async fn get_stream(
@@ -281,6 +492,37 @@ impl StreamableHttpClient for ProfileHttp {
         // The discovery profile uses POST responses only.
         Err(HttpError::ServerDoesNotSupportSse)
     }
+}
+
+async fn read_body(response: &mut reqwest::Response) -> Result<Vec<u8>, HttpError> {
+    let mut body = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(HttpError::Client)? {
+        if body.len().saturating_add(chunk.len()) > MAX_CATALOGUE_BYTES {
+            return Err(HttpError::ResponseBodyTooLarge {
+                max_size: MAX_CATALOGUE_BYTES,
+            });
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(body)
+}
+
+fn session_header(headers: &HeaderMap) -> Result<Option<HeaderValue>, HttpError> {
+    let mut entries = headers.get_all(SESSION_HEADER).iter();
+    let Some(value) = entries.next() else {
+        return Ok(None);
+    };
+    let bytes = value.as_bytes();
+    if entries.next().is_some()
+        || bytes.is_empty()
+        || bytes.len() > MAX_SESSION_BYTES
+        || !bytes.iter().all(u8::is_ascii_graphic)
+    {
+        return Err(outside_profile());
+    }
+    let mut value = value.clone();
+    value.set_sensitive(true);
+    Ok(Some(value))
 }
 
 #[derive(PartialEq)]

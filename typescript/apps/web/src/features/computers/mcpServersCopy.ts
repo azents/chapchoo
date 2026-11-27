@@ -38,7 +38,7 @@ const en = {
     authentication:
       "Authentication was rejected. Check or replace the Bearer token.",
     unsupportedVersion:
-      "The server uses an unsupported MCP version. Configure it for 2026-07-28.",
+      "The server uses an unsupported MCP version. Check for a compatible Streamable HTTP endpoint.",
     missingDiscovery:
       "The server doesn’t support MCP discovery. Check the server URL and configuration.",
     missingTools:
@@ -91,7 +91,7 @@ const ko: McpServersCopy = {
     authentication:
       "인증이 거절되었습니다. Bearer 토큰을 확인하거나 교체하세요.",
     unsupportedVersion:
-      "지원하지 않는 MCP 버전입니다. 서버를 2026-07-28 버전으로 설정하세요.",
+      "지원하지 않는 MCP 버전입니다. 호환되는 Streamable HTTP 주소가 있는지 확인하세요.",
     missingDiscovery:
       "서버가 MCP 탐색을 지원하지 않습니다. 서버 URL과 설정을 확인하세요.",
     missingTools:
@@ -144,7 +144,7 @@ const ja: McpServersCopy = {
     authentication:
       "認証が拒否されました。Bearer トークンを確認するか、差し替えてください。",
     unsupportedVersion:
-      "未対応の MCP バージョンです。サーバーを 2026-07-28 に設定してください。",
+      "未対応の MCP バージョンです。互換性のある Streamable HTTP エンドポイントがあるか確認してください。",
     missingDiscovery:
       "サーバーは MCP の検出に対応していません。URL と設定を確認してください。",
     missingTools:
@@ -197,7 +197,7 @@ const fr: McpServersCopy = {
     authentication:
       "L’authentification a été refusée. Vérifiez ou remplacez le jeton Bearer.",
     unsupportedVersion:
-      "Version MCP non prise en charge. Configurez le serveur pour la version 2026-07-28.",
+      "Version MCP non prise en charge. Vérifiez si un point de terminaison Streamable HTTP compatible est disponible.",
     missingDiscovery:
       "Le serveur ne prend pas en charge la découverte MCP. Vérifiez son URL et sa configuration.",
     missingTools:
