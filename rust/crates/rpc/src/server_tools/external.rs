@@ -100,11 +100,13 @@ pub(super) async fn confirm_empty(
         native_session: NativeConversationId::parse(target.native_session_id)
             .map_err(|_| Status::invalid_argument("Invalid reuse session"))?,
     };
-    let _permit = services
-        .external_ingress
-        .clone()
-        .try_acquire_owned()
-        .map_err(|_| Status::resource_exhausted("External tool ingress is full"))?;
+    let Ok(_permit) = services.external_ingress.clone().try_acquire_owned() else {
+        // This request could not record readiness. Return an explicit negative
+        // observation, not a transport error that may hide a committed result.
+        return Ok(Response::new(wire::ExternalEmptyObservation {
+            confirmed_empty: false,
+        }));
+    };
     let confirmed_empty = external
         .confirm_empty(
             &caller.caller.source(),
