@@ -50,6 +50,12 @@ impl server_tools_server::ServerTools for Control {
     ) -> Result<Response<Self::InvokeStream>, Status> {
         Err(Status::unimplemented("Not exercised by this fixture"))
     }
+    async fn confirm_external_empty(
+        &self,
+        _: Request<wire::ExternalEmptyReuse>,
+    ) -> Result<Response<wire::ExternalEmptyObservation>, Status> {
+        Err(Status::unimplemented("Not exercised by this fixture"))
+    }
     async fn prepare_external(
         &self,
         request: Request<wire::ExternalPreparation>,

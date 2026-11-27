@@ -43,6 +43,48 @@ pub(super) struct Registration {
 redacted!(PreparedExternal, Registration);
 
 impl PreparedExternal {
+    pub(super) async fn confirm_empty(
+        current: &CurrentRoute,
+        source: CaptureSource,
+        recipient: Recipient,
+        execution: String,
+        operation: String,
+        target: &NativeTextTarget,
+        observe_only: bool,
+    ) -> Result<bool, AppError> {
+        let route = current.snapshot()?;
+        if route.source != source {
+            return Ok(false);
+        }
+        let selection = selection(source, execution, operation);
+        let mut request = rpc::request(
+            wire::ExternalEmptyReuse {
+                preparation: Some(preparation_request(&selection, &route, &recipient)),
+                target: Some(NativeTarget {
+                    snapshot_id: target.snapshot.as_str().into(),
+                    native_session_id: target.native_session.as_str().into(),
+                }),
+                observe_only,
+            },
+            &route,
+        )?;
+        request.set_timeout(PREPARATION_TIMEOUT);
+        let result = match tokio::time::timeout(
+            PREPARATION_TIMEOUT,
+            rpc::client(&route).confirm_external_empty(request),
+        )
+        .await?
+        {
+            Ok(result) => result.into_inner().confirmed_empty,
+            Err(status) if status.code() == tonic::Code::Unimplemented => false,
+            Err(status) => return Err(status.into()),
+        };
+        if !matches_route(&selection, &current.snapshot()?.source) {
+            return Err("External MCP preparation route changed".into());
+        }
+        Ok(result)
+    }
+
     #[cfg(test)]
     pub(super) fn fixture(
         source: CaptureSource,

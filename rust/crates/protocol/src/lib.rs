@@ -34,6 +34,8 @@ pub mod server_tools {
         InvocationObservation,
         invocation_observation::Observation,
         ExternalPreparation,
+        ExternalEmptyReuse,
+        ExternalEmptyObservation,
         ExternalCatalogChunk,
         ExternalCatalogFrame,
         external_catalog_frame::Payload,

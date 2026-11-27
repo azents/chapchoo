@@ -71,6 +71,16 @@ export interface ExternalPreparation {
   operationId: string;
 }
 
+export interface ExternalEmptyReuse {
+  preparation: ExternalPreparation | undefined;
+  target: NativeTarget | undefined;
+  observeOnly: boolean;
+}
+
+export interface ExternalEmptyObservation {
+  confirmedEmpty: boolean;
+}
+
 export interface ExternalCatalogChunk {
   json: Buffer;
   finalChunk: boolean;
@@ -213,6 +223,144 @@ export const ExternalPreparation: MessageFns<ExternalPreparation> = {
       : undefined;
     message.executionId = object.executionId ?? "";
     message.operationId = object.operationId ?? "";
+    return message;
+  },
+};
+
+function createBaseExternalEmptyReuse(): ExternalEmptyReuse {
+  return { preparation: undefined, target: undefined, observeOnly: false };
+}
+
+export const ExternalEmptyReuse: MessageFns<ExternalEmptyReuse> = {
+  encode(message: ExternalEmptyReuse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.preparation !== undefined) {
+      ExternalPreparation.encode(message.preparation, writer.uint32(10).fork()).join();
+    }
+    if (message.target !== undefined) {
+      NativeTarget.encode(message.target, writer.uint32(18).fork()).join();
+    }
+    if (message.observeOnly !== false) {
+      writer.uint32(24).bool(message.observeOnly);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ExternalEmptyReuse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseExternalEmptyReuse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.preparation = ExternalPreparation.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.target = NativeTarget.decode(reader, reader.uint32());
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.observeOnly = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ExternalEmptyReuse>, I>>(base?: I): ExternalEmptyReuse {
+    return ExternalEmptyReuse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ExternalEmptyReuse>, I>>(object: I): ExternalEmptyReuse {
+    const message = createBaseExternalEmptyReuse();
+    message.preparation = (object.preparation !== undefined && object.preparation !== null)
+      ? ExternalPreparation.fromPartial(object.preparation)
+      : undefined;
+    message.target = (object.target !== undefined && object.target !== null)
+      ? NativeTarget.fromPartial(object.target)
+      : undefined;
+    message.observeOnly = object.observeOnly ?? false;
+    return message;
+  },
+};
+
+function createBaseExternalEmptyObservation(): ExternalEmptyObservation {
+  return { confirmedEmpty: false };
+}
+
+export const ExternalEmptyObservation: MessageFns<ExternalEmptyObservation> = {
+  encode(message: ExternalEmptyObservation, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.confirmedEmpty !== false) {
+      writer.uint32(8).bool(message.confirmedEmpty);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ExternalEmptyObservation {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseExternalEmptyObservation();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.confirmedEmpty = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ExternalEmptyObservation>, I>>(base?: I): ExternalEmptyObservation {
+    return ExternalEmptyObservation.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ExternalEmptyObservation>, I>>(object: I): ExternalEmptyObservation {
+    const message = createBaseExternalEmptyObservation();
+    message.confirmedEmpty = object.confirmedEmpty ?? false;
     return message;
   },
 };
@@ -1097,6 +1245,17 @@ export const ServerToolsService = {
       Buffer.from(ExternalCatalogFrame.encode(value).finish()),
     responseDeserialize: (value: Buffer): ExternalCatalogFrame => ExternalCatalogFrame.decode(value),
   },
+  /** Confirm exact owner reuse without creating a callable binding. */
+  confirmExternalEmpty: {
+    path: "/chapchoo.server_tools.ServerTools/ConfirmExternalEmpty" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ExternalEmptyReuse): Buffer => Buffer.from(ExternalEmptyReuse.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ExternalEmptyReuse => ExternalEmptyReuse.decode(value),
+    responseSerialize: (value: ExternalEmptyObservation): Buffer =>
+      Buffer.from(ExternalEmptyObservation.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ExternalEmptyObservation => ExternalEmptyObservation.decode(value),
+  },
   invokeExternal: {
     path: "/chapchoo.server_tools.ServerTools/InvokeExternal" as const,
     requestStream: false as const,
@@ -1112,6 +1271,8 @@ export interface ServerToolsServer extends UntypedServiceImplementation {
   catalog: handleUnaryCall<CatalogRequest, CatalogResponse>;
   invoke: handleBidiStreamingCall<InvocationControl, InvocationObservation>;
   prepareExternal: handleServerStreamingCall<ExternalPreparation, ExternalCatalogFrame>;
+  /** Confirm exact owner reuse without creating a callable binding. */
+  confirmExternalEmpty: handleUnaryCall<ExternalEmptyReuse, ExternalEmptyObservation>;
   invokeExternal: handleUnaryCall<ExternalInvocation, Final>;
 }
 
@@ -1146,6 +1307,22 @@ export interface ServerToolsClient extends Client {
     metadata?: Metadata,
     options?: Partial<CallOptions>,
   ): ClientReadableStream<ExternalCatalogFrame>;
+  /** Confirm exact owner reuse without creating a callable binding. */
+  confirmExternalEmpty(
+    request: ExternalEmptyReuse,
+    callback: (error: ServiceError | null, response: ExternalEmptyObservation) => void,
+  ): ClientUnaryCall;
+  confirmExternalEmpty(
+    request: ExternalEmptyReuse,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ExternalEmptyObservation) => void,
+  ): ClientUnaryCall;
+  confirmExternalEmpty(
+    request: ExternalEmptyReuse,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ExternalEmptyObservation) => void,
+  ): ClientUnaryCall;
   invokeExternal(
     request: ExternalInvocation,
     callback: (error: ServiceError | null, response: Final) => void,

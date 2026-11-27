@@ -115,6 +115,52 @@ impl ExternalMcpRuntime {
         source: &ConnectorSource<'_>,
         scope: &McpPreparationScope<'_>,
     ) -> Result<ExternalCataloguePage, ServiceError> {
+        self.select(source, scope, None).await
+    }
+
+    /// A complete optional selection may omit individually unavailable
+    /// integrations. Capacity exhaustion or a superseded entry is not proof.
+    pub async fn confirm_empty(
+        &self,
+        source: &ConnectorSource<'_>,
+        scope: &McpAppliedScope<'_>,
+        observe_only: bool,
+    ) -> Result<bool, ServiceError> {
+        if self
+            .store
+            .confirm_empty_mcp_reuse(source, scope, None)
+            .await?
+        {
+            return Ok(true);
+        }
+        if observe_only {
+            return Ok(false);
+        }
+        let mut settings = Vec::new();
+        let page = self
+            .select(source, &scope.preparation, Some(&mut settings))
+            .await?;
+        if page.capacity_limited || !page.catalogues.iter().all(|item| {
+            matches!(
+                item.payload,
+                Err(McpPreparationFailure::Discovery(reason))
+                    if !matches!(reason, McpDiscoveryFailure::Busy | McpDiscoveryFailure::TimedOut)
+            )
+        }) {
+            return Ok(false);
+        }
+        Ok(self
+            .store
+            .confirm_empty_mcp_reuse(source, scope, Some(&settings))
+            .await?)
+    }
+
+    async fn select(
+        &self,
+        source: &ConnectorSource<'_>,
+        scope: &McpPreparationScope<'_>,
+        mut empty_reuse: Option<&mut Vec<(String, SecretDigest)>>,
+    ) -> Result<ExternalCataloguePage, ServiceError> {
         let Ok(_slot) = self.preparation_slots.try_acquire() else {
             return Ok(ExternalCataloguePage {
                 catalogues: Vec::new(),
@@ -135,6 +181,9 @@ impl ExternalMcpRuntime {
                 .await?;
             for item in page.items {
                 let integration_id = item.integration_id;
+                if let Some(settings) = empty_reuse.as_mut() {
+                    settings.push((integration_id.clone(), item.settings_key.clone()));
+                }
                 let payload = item.catalogue.and_then(|catalogue| {
                     let json = catalogue
                         .local_list_json()
@@ -182,7 +231,7 @@ impl ExternalMcpRuntime {
                 .iter()
                 .any(|entry| entry.integration_id == *id && entry.payload.is_ok())
         });
-        if selected.is_empty() {
+        if empty_reuse.is_some() || selected.is_empty() {
             return Ok(ExternalCataloguePage {
                 catalogues: entries,
                 capacity_limited,

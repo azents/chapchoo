@@ -77,9 +77,17 @@ pub trait NativeToolsProvider: Send + Sync {
         None
     }
 
-    /// The existing owner must reach its setup cut before resolving this input.
+    /// Full selection and replacement still require the existing setup cut.
     fn has_pending_external(&self) -> bool {
         false
+    }
+    /// Confirm exact empty owner reuse without making a selection callable.
+    fn confirm_external_empty<'a>(
+        &'a self,
+        _target: &'a NativeTextTarget,
+        _observe_only: bool,
+    ) -> NativeToolsFuture<'a, bool> {
+        Box::pin(async { Ok(false) })
     }
     fn resolve_external(&self) -> NativeToolsFuture<'_, Option<Arc<dyn NativeToolsProvider>>> {
         Box::pin(async { Ok(None) })

@@ -69,11 +69,11 @@ struct IntegrationRow {
 }
 
 #[derive(diesel::QueryableByName)]
-struct SavedRow {
+pub(super) struct SavedRow {
     #[diesel(sql_type = IdentitySql)]
-    id: EntityId,
+    pub(super) id: EntityId,
     #[diesel(embed)]
-    secret: SecretRow,
+    pub(super) secret: SecretRow,
 }
 
 impl McpExecutionScope<'_> {

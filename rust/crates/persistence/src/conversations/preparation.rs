@@ -6,6 +6,10 @@ pub struct ConversationInputPreparation<'a> {
     pub conversation_id: &'a str,
     pub operation_id: &'a str,
 }
+struct EmptyReuse<'a> {
+    execution: EntityId,
+    settings: Option<&'a [(String, SecretDigest)]>,
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConversationPreparationFailure {
     NotAdmitted,
@@ -600,6 +604,60 @@ impl Store {
         application_connection_id: Option<&str>,
         external_tools_applied: bool,
     ) -> Result<(), StoreError> {
+        self.record_preparation(
+            source,
+            draft,
+            outcome,
+            application_connection_id,
+            external_tools_applied,
+            None,
+        )
+        .await
+        .map(|_| ())
+    }
+
+    /// Record a read-only reuse of the exact applied owner only while the entire
+    /// integration set still matches the bounded selection. No invocation or
+    /// input grant is created by this transaction.
+    pub async fn confirm_empty_mcp_reuse(
+        &self,
+        source: &crate::ConnectorSource<'_>,
+        scope: &super::external_mcp::McpAppliedScope<'_>,
+        settings: Option<&[(String, SecretDigest)]>,
+    ) -> Result<bool, StoreError> {
+        if settings.is_some_and(|items| items.len() > 128) {
+            return Err(StoreError::InvalidInput);
+        }
+        self.record_preparation(
+            source,
+            &ConversationInputPreparation {
+                agent_id: scope.preparation.execution.agent_id,
+                conversation_id: scope.preparation.execution.conversation_id,
+                operation_id: scope.preparation.operation_id,
+            },
+            &ConversationPreparationOutcome::SessionReady(scope.target.clone()),
+            Some(source.connection_id),
+            false,
+            Some(EmptyReuse {
+                execution: EntityId::from_dto(
+                    EntityKind::Execution,
+                    scope.preparation.execution.execution_id,
+                )?,
+                settings,
+            }),
+        )
+        .await
+    }
+
+    async fn record_preparation(
+        &self,
+        source: &crate::ConnectorSource<'_>,
+        draft: &ConversationInputPreparation<'_>,
+        outcome: &ConversationPreparationOutcome,
+        application_connection_id: Option<&str>,
+        external_tools_applied: bool,
+        empty_reuse: Option<EmptyReuse<'_>>,
+    ) -> Result<bool, StoreError> {
         let (agent, id, operation) = ids(draft)?;
         let application_connection = match (outcome, application_connection_id) {
             (ConversationPreparationOutcome::SessionReady(_), Some(connection)) => {
@@ -625,6 +683,7 @@ impl Store {
             }
         };
         operation!(self, |connection, dialect| {
+            // This takes the same verified team lock as integration mutation.
             let row = super::records::source_conversation!(connection, dialect, source, id);
             let route = connector!(connection, dialect, source);
             if row.agent_id != agent {
@@ -656,6 +715,78 @@ impl Store {
             };
             if previous.execution_id != route._execution_id {
                 return Err(StoreError::Conflict);
+            }
+            if let Some(EmptyReuse {
+                execution,
+                settings,
+            }) = empty_reuse
+            {
+                #[derive(diesel::QueryableByName)]
+                struct ReuseEvidence {
+                    #[diesel(sql_type = Nullable<IdentitySql>)]
+                    external_input_id: Option<EntityId>,
+                    #[diesel(sql_type = Nullable<IdentitySql>)]
+                    ready_connection_id: Option<EntityId>,
+                    #[diesel(sql_type = Nullable<IdentitySql>)]
+                    external_ready_connection_id: Option<EntityId>,
+                    #[diesel(sql_type = Nullable<IdentitySql>)]
+                    predecessor_external_connection: Option<EntityId>,
+                }
+                if input_exists || execution != route._execution_id || row.source_state != "READY" {
+                    return Ok(false);
+                }
+                let reuse = diesel::sql_query(dialect.query(
+                    "SELECT s.external_input_id,s.ready_connection_id,s.external_ready_connection_id,p.external_ready_connection_id AS predecessor_external_connection
+                     FROM conversation_startups s LEFT JOIN conversation_startups p ON p.operation_id=s.external_predecessor_id
+                     AND p.conversation_id=s.conversation_id AND p.execution_id=s.execution_id
+                     WHERE s.operation_id=? AND s.conversation_id=?"
+                )).bind::<IdentitySql,_>(operation).bind::<IdentitySql,_>(id)
+                    .get_result::<ReuseEvidence>(connection).await?;
+                if reuse.external_input_id.is_none() || reuse.external_ready_connection_id.is_some()
+                {
+                    return Ok(false);
+                }
+                if previous.state()? == ConversationPreparationState::Known(outcome.clone()) {
+                    return Ok(reuse.ready_connection_id == application_connection);
+                }
+                let selected = system_prompts::selected_preparation!(connection, dialect, id)
+                    .ok_or(StoreError::InvalidTransition)?;
+                if selected.operation_id != operation
+                    || selected.execution_id != Some(execution)
+                    || selected.preparation_state != "POSSIBLE"
+                    || reuse.predecessor_external_connection == application_connection
+                {
+                    return Ok(false);
+                }
+                let Some(settings) = settings else {
+                    return Ok(false);
+                };
+                let expected = settings
+                    .iter()
+                    .map(|(id, digest)| (id.as_str(), digest))
+                    .collect::<std::collections::BTreeMap<_, _>>();
+                if expected.len() != settings.len() {
+                    return Err(StoreError::InvalidInput);
+                }
+                let current = diesel::sql_query(dialect.query(
+                    "SELECT i.id,s.endpoint,s.token_nonce,s.token_ciphertext FROM agent_integrations i JOIN agent_mcp_settings s ON s.integration_id=i.id WHERE i.agent_id=? AND i.kind='MCP' ORDER BY i.id LIMIT 129"
+                )).bind::<IdentitySql,_>(agent).load::<super::external_mcp::SavedRow>(connection).await?;
+                if current.len() != settings.len() {
+                    return Ok(false);
+                }
+                for row in current {
+                    let id = row.id.to_dto(EntityKind::AgentIntegration);
+                    let Some(digest) = expected.get(id.as_str()) else {
+                        return Ok(false);
+                    };
+                    if !row
+                        .secret
+                        .settings_key(&self.cipher, draft.agent_id, &id)?
+                        .matches_digest(digest)
+                    {
+                        return Ok(false);
+                    }
+                }
             }
             if !input_exists && let ConversationPreparationOutcome::SessionReady(target) = outcome {
                 let intent = diesel::sql_query(dialect.query(
@@ -689,7 +820,7 @@ impl Store {
             }
             match previous.state()? {
                 ConversationPreparationState::Known(previous) if &previous == outcome => {
-                    return Ok(());
+                    return Ok(true);
                 }
                 ConversationPreparationState::Known(_) => return Err(StoreError::Conflict),
                 ConversationPreparationState::PossibleForwarding => {}
@@ -736,7 +867,7 @@ impl Store {
                 .execute(connection)
                 .await?;
             }
-            Ok(())
+            Ok(true)
         })
     }
     /// Missing preparation facts do not authorize setup; this is a private read.

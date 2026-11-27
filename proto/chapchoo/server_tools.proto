@@ -8,6 +8,8 @@ service ServerTools {
   rpc Catalog(CatalogRequest) returns (CatalogResponse);
   rpc Invoke(stream InvocationControl) returns (stream InvocationObservation);
   rpc PrepareExternal(ExternalPreparation) returns (stream ExternalCatalogFrame);
+  // Confirm exact owner reuse without creating a callable binding.
+  rpc ConfirmExternalEmpty(ExternalEmptyReuse) returns (ExternalEmptyObservation);
   rpc InvokeExternal(ExternalInvocation) returns (Final);
 }
 // The published operation is selected on the current component route.
@@ -16,6 +18,12 @@ message ExternalPreparation {
   string execution_id = 2;
   string operation_id = 3;
 }
+message ExternalEmptyReuse {
+  ExternalPreparation preparation = 1;
+  chapchoo.conversations.NativeTarget target = 2;
+  bool observe_only = 3;
+}
+message ExternalEmptyObservation { bool confirmed_empty = 1; }
 message ExternalCatalogChunk {
   bytes json = 1;
   bool final_chunk = 2;

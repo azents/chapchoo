@@ -215,6 +215,13 @@ impl WireTools for ServerToolServices {
         external::prepare(self, request).await
     }
 
+    async fn confirm_external_empty(
+        &self,
+        request: Request<wire::ExternalEmptyReuse>,
+    ) -> Result<Response<wire::ExternalEmptyObservation>, Status> {
+        external::confirm_empty(self, request).await
+    }
+
     async fn invoke_external(
         &self,
         request: Request<wire::ExternalInvocation>,

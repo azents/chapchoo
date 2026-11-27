@@ -360,7 +360,32 @@ impl NativeOwner {
                         if deferred.is_empty() {
                             continue;
                         }
-                        match deferred[0].progress(tokio::time::Instant::now(), state.refresh_safe()) {
+                        let safe = state.refresh_safe();
+                        let pending = &mut deferred[0];
+                        let now = tokio::time::Instant::now();
+                        let can_confirm = !safe && state.can_reuse_empty_setup(&pending.operation);
+                        if (can_confirm || pending.empty_confirmation_pending)
+                            && pending.next_empty_check.is_none_or(|next| next <= now)
+                            && pending.tools.has_pending_external()
+                        {
+                            pending.next_empty_check = Some(now + Duration::from_secs(15));
+                            let outcome = tokio::select! {
+                                _ = stopping.cancelled() => Err(Error::DeliveryUncertain),
+                                result = state.try_reuse_empty_setup(&pending.operation, pending.tools.as_ref(), !can_confirm) => result,
+                            };
+                            // A negative retry is not evidence that an older
+                            // request cannot still commit. Only exact Ready
+                            // recovery or a withdrawn route ends that lane.
+                            pending.empty_confirmation_pending |= outcome.is_err();
+                            if let Ok(Some(ready)) = outcome {
+                                if let Some(waiter) = deferred.remove(0).waiter {
+                                    let _ = waiter.result.send(Ok(ready));
+                                }
+                                continue;
+                            }
+                        }
+                        let safe = state.refresh_safe() && !deferred[0].empty_confirmation_pending;
+                        match deferred[0].progress(now, safe) {
                             DeferredProgress::Wait => {}
                             DeferredProgress::ReleaseWaiter => deferred[0].release_waiter(),
                             progress @ (DeferredProgress::Apply | DeferredProgress::Expire) => {
@@ -453,6 +478,8 @@ impl NativeOwner {
                                     tools,
                                     waiter: Some(DeferredWaiter::new(result)),
                                     preserve_external,
+                                    next_empty_check: None,
+                                    empty_confirmation_pending: false,
                                 });
                             }
                             continue;
@@ -808,6 +835,8 @@ struct DeferredSetup {
     tools: Arc<dyn crate::NativeToolsProvider>,
     waiter: Option<DeferredWaiter>,
     preserve_external: bool,
+    next_empty_check: Option<tokio::time::Instant>,
+    empty_confirmation_pending: bool,
 }
 fn setup_route_open(tools: &dyn crate::NativeToolsProvider) -> bool {
     tools.setup_route().is_none_or(ContinuationRoute::is_open)
@@ -1730,6 +1759,8 @@ mod tests {
                 deadline: now + Duration::from_secs(300),
             }),
             preserve_external: true,
+            next_empty_check: None,
+            empty_confirmation_pending: false,
         };
         assert_eq!(pending.progress(now, false), DeferredProgress::Wait);
         let late = now + Duration::from_secs(301);
@@ -1757,6 +1788,8 @@ mod tests {
             tools: Arc::new(RoutedTools(next.route())),
             waiter: None,
             preserve_external: true,
+            next_empty_check: None,
+            empty_confirmation_pending: false,
         };
         let mut queue = vec![pending, successor];
         drop(first);

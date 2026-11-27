@@ -74,6 +74,53 @@ pub(super) async fn prepare(
     Ok(Response::new(stream))
 }
 
+pub(super) async fn confirm_empty(
+    services: &ServerToolServices,
+    request: Request<wire::ExternalEmptyReuse>,
+) -> Result<Response<wire::ExternalEmptyObservation>, Status> {
+    services.admit()?;
+    let external = services
+        .external
+        .as_ref()
+        .ok_or_else(|| Status::unimplemented("External tool preparation is unavailable"))?;
+    let credential = ingress::actor(&request)?;
+    let request = request.into_inner();
+    let caller = Preparation::decode(
+        request
+            .preparation
+            .ok_or_else(|| Status::invalid_argument("Preparation is required"))?,
+        credential,
+    )?;
+    let target = request
+        .target
+        .ok_or_else(|| Status::invalid_argument("Reuse target is required"))?;
+    let target = ConversationDeliveryTarget {
+        snapshot: SnapshotId::parse(target.snapshot_id)
+            .map_err(|_| Status::invalid_argument("Invalid reuse snapshot"))?,
+        native_session: NativeConversationId::parse(target.native_session_id)
+            .map_err(|_| Status::invalid_argument("Invalid reuse session"))?,
+    };
+    let _permit = services
+        .external_ingress
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| Status::resource_exhausted("External tool ingress is full"))?;
+    let confirmed_empty = external
+        .confirm_empty(
+            &caller.caller.source(),
+            &McpAppliedScope {
+                preparation: caller.scope(),
+                target: &target,
+            },
+            request.observe_only,
+        )
+        .await
+        .map_err(status)?;
+    Ok(Response::new(wire::ExternalEmptyObservation {
+        confirmed_empty,
+    }))
+}
+
 fn catalogue_frames(page: ExternalCataloguePage) -> Vec<wire::ExternalCatalogFrame> {
     let mut frames = Vec::new();
     use wire::external_catalog_frame::Payload;
