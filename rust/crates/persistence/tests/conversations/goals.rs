@@ -755,6 +755,7 @@ fn sqlite_goal_projection_and_continuation_admission() -> Result<(), TestError> 
         Ok(())
     }))?;
     for expected in [
+        "00000000000035",
         "00000000000034",
         "00000000000033",
         "00000000000032",
@@ -816,6 +817,7 @@ fn postgres_goal_projection_and_continuation_admission() -> Result<(), TestError
             })
         }))?;
         for expected in [
+            "00000000000035",
             "00000000000034",
             "00000000000033",
             "00000000000032",

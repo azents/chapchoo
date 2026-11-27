@@ -79,7 +79,7 @@ async fn released_resume_preserves_capture_and_answers_scoped_tool_approval() ->
         let driven = tokio::spawn(driver);
         let thread = connection.open(&cwd, &NativeContext::Resume {
             session: id.clone(), replay: CaptureReplay::AlreadyCaptured,
-        }, &provision, None, false).await?;
+        }, &[&provision], None, false).await?;
         assert_eq!(thread.id(), id.as_str());
         assert!(thread.models().is_some());
         observations.enable_normal_endings()?;
@@ -186,7 +186,7 @@ async fn released_resume_preserves_capture_and_answers_scoped_tool_approval() ->
         let driver = tokio::spawn(driver);
         // Public API-key login on a private fresh state directory. The value is
         // inert and this child reaches only the fixture server.
-        let thread = connection.open(&fresh_cwd, &NativeContext::New, &provision, Some("fixture-fresh-api-key"), true).await?;
+        let thread = connection.open(&fresh_cwd, &NativeContext::New, &[&provision], Some("fixture-fresh-api-key"), true).await?;
         assert_ne!(thread.id(), id.as_str());
         assert_ne!(fresh_capture.snapshot()?, snapshot);
         observed.enable_normal_endings()?;

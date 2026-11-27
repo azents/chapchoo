@@ -18,6 +18,8 @@ struct RefreshHead {
     sources_json: Option<String>,
     #[diesel(sql_type=Nullable<Binary>)]
     tool_catalog: Option<Vec<u8>>,
+    #[diesel(sql_type=Nullable<IdentitySql>)]
+    applied_operation: Option<EntityId>,
 }
 #[derive(diesel::QueryableByName)]
 struct SavedPrompt {
@@ -30,8 +32,51 @@ struct PossibleInputCount {
     n: i64,
 }
 
+#[derive(diesel::QueryableByName)]
+pub(super) struct ExternalInput {
+    #[diesel(sql_type=IdentitySql)]
+    pub(super) id: EntityId,
+}
+
+// Select queued demand for the common preparation owner, not a forwarding
+// grant. A running turn retains its applied supply.
+macro_rules! external_input {
+    ($cx:expr, $dialect:expr, $agent:expr, $conversation:expr, $execution:expr, $snapshot:expr, $native:expr) => {{
+        diesel::sql_query($dialect.query(
+            "SELECT i.id FROM conversation_inputs i JOIN auth_sessions a ON a.id=i.submitting_session_id
+             WHERE i.conversation_id=? AND i.queue_state='PENDING' AND a.revoked_at IS NULL
+               AND a.expires_at>? AND (i.target_snapshot IS NULL OR i.target_snapshot=?)
+               AND NOT EXISTS(SELECT 1 FROM conversation_input_delivery d WHERE d.operation_id=i.id)
+               AND EXISTS(SELECT 1 FROM agent_integration_receipts r WHERE r.agent_id=?)
+               AND NOT EXISTS(SELECT 1 FROM conversation_native_state n
+                 WHERE n.conversation_id=i.conversation_id AND n.execution_id=? AND n.source_snapshot=?
+                   AND n.native_session_id=? AND n.foreground<>'IDLE')
+               AND NOT EXISTS(SELECT 1 FROM conversation_continuation_inputs q
+                 JOIN conversation_ending_decisions d USING(conversation_id,execution_id,source_snapshot,occurrence_id)
+                 JOIN execution_authentication_applications aa ON aa.operation_id=d.launch_operation_id AND aa.is_current=TRUE
+                 WHERE q.conversation_id=i.conversation_id AND q.execution_id=? AND q.source_snapshot=?
+                   AND d.native_session_id=? AND q.delivery_state<>'CLOSED')
+             ORDER BY i.accepted_at,i.id LIMIT 1",
+        ))
+        .bind::<IdentitySql,_>($conversation)
+        .bind::<BigInt,_>($crate::directory::database_now!($cx,$dialect))
+        .bind::<Text,_>($snapshot)
+        .bind::<IdentitySql,_>($agent)
+        .bind::<IdentitySql,_>($execution)
+        .bind::<Text,_>($snapshot)
+        .bind::<Text,_>($native)
+        .bind::<IdentitySql,_>($execution)
+        .bind::<Text,_>($snapshot)
+        .bind::<Text,_>($native)
+        .get_result::<$crate::conversations::project_refresh::ExternalInput>($cx)
+        .await.optional()?.map(|input| input.id)
+    }};
+}
+pub(super) use external_input;
+
 impl Store {
-    /// Admit one new refresh only for a genuinely different currently desired selection.
+    /// Admit a new common preparation for changed configuration or an eligible
+    /// next input whose external supply has not already been selected.
     pub async fn admit_project_refresh(
         &self,
         expected: &crate::ResolvedRoute,
@@ -119,7 +164,25 @@ impl Store {
             {
                 return Ok(None);
             }
-            let previous = diesel::sql_query(dialect.query("SELECT sources_json,tool_catalog FROM project_instruction_evidence WHERE conversation_id=? AND operation_id=?"))
+            let external_input = external_input!(
+                connection,
+                dialect,
+                agent,
+                conversation,
+                route._execution_id,
+                snapshot,
+                native
+            );
+            let connection_id =
+                EntityId::from_dto(EntityKind::Connection, &expected.component.connection_id)?;
+            let previous = diesel::sql_query(dialect.query(
+                "SELECT sources_json,tool_catalog,
+                  CASE WHEN execution_id=? AND applied_at IS NOT NULL AND applied_snapshot=?
+                    AND applied_native_session=? THEN operation_id ELSE NULL END AS applied_operation
+                 FROM project_instruction_evidence WHERE conversation_id=? AND operation_id=?"
+            ))
+                .bind::<IdentitySql,_>(route._execution_id)
+                .bind::<Text,_>(snapshot).bind::<Text,_>(native)
                 .bind::<IdentitySql,_>(conversation).bind::<IdentitySql,_>(current_preparation.operation_id)
                 .get_result::<RefreshHead>(connection).await.optional()?;
             let previous_instructions = previous
@@ -138,6 +201,10 @@ impl Store {
                     .as_ref()
                     .and_then(|previous| previous.tool_catalog.as_deref())
                     == Some(tool_catalog)
+                && external_input.is_none_or(|input| {
+                    current_preparation.external_input_id == Some(input)
+                        && current_preparation.ready_connection_id == Some(connection_id)
+                })
             {
                 return Ok(None);
             }
@@ -158,10 +225,13 @@ impl Store {
                 .saved
                 .as_ref()
                 .map(|saved| saved.request_id.as_str());
-            diesel::sql_query(dialect.query("INSERT INTO conversation_startups(operation_id,conversation_id,execution_id,supply_kind,executable_path,selection_request_id,preparation_state,fresh_native_allowed,require_retained_source,intended_snapshot,intended_native_session,admitted_at) VALUES(?,?,?,?,?,?,'POSSIBLE',?,?,?,?,?)"))
+            let predecessor = previous.and_then(|previous| previous.applied_operation);
+            diesel::sql_query(dialect.query("INSERT INTO conversation_startups(operation_id,conversation_id,execution_id,supply_kind,executable_path,selection_request_id,preparation_state,fresh_native_allowed,require_retained_source,intended_snapshot,intended_native_session,admitted_at,external_input_id,external_predecessor_id) VALUES(?,?,?,?,?,?,'POSSIBLE',?,?,?,?,?,?,?)"))
                 .bind::<IdentitySql,_>(operation).bind::<IdentitySql,_>(conversation).bind::<IdentitySql,_>(route._execution_id)
                 .bind::<Text,_>(kind).bind::<Nullable<Text>,_>(path).bind::<Nullable<Text>,_>(selection_request)
                 .bind::<Bool,_>(false).bind::<Bool,_>(true).bind::<Text,_>(snapshot).bind::<Text,_>(native).bind::<BigInt,_>(admitted_at)
+                .bind::<Nullable<IdentitySql>,_>(external_input)
+                .bind::<Nullable<IdentitySql>,_>(predecessor)
                 .execute(connection).await?;
             diesel::sql_query(
                 dialect.query("DELETE FROM project_instruction_evidence WHERE agent_id=?"),

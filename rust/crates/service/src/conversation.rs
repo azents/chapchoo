@@ -406,10 +406,18 @@ impl ConversationService {
         source: &ConnectorSource<'_>,
         draft: &chapchoo_persistence::ConversationInputPreparation<'_>,
         outcome: &chapchoo_persistence::ConversationPreparationOutcome,
+        application_connection_id: Option<&str>,
+        external_tools_applied: bool,
     ) -> Result<(), ServiceError> {
         Ok(self
             .store
-            .complete_conversation_input_preparation(source, draft, outcome)
+            .report_conversation_input_preparation(
+                source,
+                draft,
+                outcome,
+                application_connection_id,
+                external_tools_applied,
+            )
             .await?)
     }
     pub fn new(store: Store) -> Self {

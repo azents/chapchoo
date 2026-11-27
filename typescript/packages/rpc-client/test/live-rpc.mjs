@@ -185,6 +185,25 @@ async function main() {
     status.UNAUTHENTICATED,
     "DOMAIN_REASON_INVALID_SESSION",
   );
+  await rejected(
+    () => call(agents, "listIntegrations", { agentId: "untrusted-agent" }),
+    status.UNAUTHENTICATED,
+    "DOMAIN_REASON_INVALID_SESSION",
+  );
+  await rejected(
+    () =>
+      call(
+        agents,
+        "testMcpConnection",
+        {
+          agentId: "untrusted-agent",
+          connection: { endpoint: "http://example.invalid/mcp", noAuth: {} },
+        },
+        administrator.token,
+      ),
+    status.INVALID_ARGUMENT,
+    "DOMAIN_REASON_INVALID_INPUT",
+  );
   const catalogue = await call(
     agents,
     "listProfileImages",

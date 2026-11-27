@@ -12,6 +12,8 @@ use std::sync::{
 };
 use tonic::{Request, Response, Status};
 
+mod integrations;
+
 #[derive(Debug, Clone)]
 pub struct ComputerServices {
     service: Arc<ComputersService>,
@@ -183,6 +185,99 @@ fn next(items: usize, limit: i64, last: Option<&str>) -> Option<String> {
 }
 #[tonic::async_trait]
 impl wire::agents_server::Agents for AgentsAdapter {
+    async fn list_integrations(
+        &self,
+        request: Request<wire::AgentIntegrationListRequest>,
+    ) -> Result<Response<wire::AgentIntegrationList>, Status> {
+        self.0.admit()?;
+        let actor = input::actor(&request)?;
+        let value = request.into_inner();
+        let page = self
+            .0
+            .service
+            .agent_integrations(
+                &actor,
+                &value.agent_id,
+                value.after.as_deref(),
+                AcceptanceTime::System,
+            )
+            .await
+            .map_err(status)?;
+        Ok(Response::new(integrations::list(page)))
+    }
+
+    async fn change_integration(
+        &self,
+        request: Request<wire::AgentIntegrationChangeRequest>,
+    ) -> Result<Response<wire::AgentIntegrationReceipt>, Status> {
+        self.0.admit()?;
+        let actor = input::actor(&request)?;
+        let value = request.into_inner();
+        let change = integrations::change(value.change)?;
+        let receipt = self
+            .0
+            .service
+            .change_agent_integration(
+                &actor,
+                &value.agent_id,
+                &value.request_id,
+                &change,
+                AcceptanceTime::System,
+            )
+            .await
+            .map_err(status)?;
+        Ok(Response::new(integrations::receipt(receipt)?))
+    }
+
+    async fn integration_result(
+        &self,
+        request: Request<wire::AgentIntegrationResultRequest>,
+    ) -> Result<Response<wire::AgentIntegrationResult>, Status> {
+        self.0.admit()?;
+        let actor = input::actor(&request)?;
+        let value = request.into_inner();
+        let receipt = self
+            .0
+            .service
+            .agent_integration_result(
+                &actor,
+                &value.agent_id,
+                &value.request_id,
+                AcceptanceTime::System,
+            )
+            .await
+            .map_err(status)?
+            .map(integrations::receipt)
+            .transpose()?;
+        Ok(Response::new(wire::AgentIntegrationResult { receipt }))
+    }
+
+    async fn test_mcp_connection(
+        &self,
+        request: Request<wire::TestMcpConnectionRequest>,
+    ) -> Result<Response<wire::TestMcpConnectionResult>, Status> {
+        self.0.admit()?;
+        let actor = input::actor(&request)?;
+        let value = request.into_inner();
+        let (endpoint, auth) = integrations::connection(value.connection)?;
+        let outcome = self
+            .0
+            .service
+            .test_mcp_connection(
+                &actor,
+                &value.agent_id,
+                chapchoo_service::McpTestEdit {
+                    integration_id: value.integration_id.as_deref(),
+                    endpoint,
+                    auth,
+                },
+                AcceptanceTime::System,
+            )
+            .await
+            .map_err(status)?;
+        Ok(Response::new(integrations::test_result(outcome)?))
+    }
+
     async fn get_in_team(
         &self,
         request: Request<wire::TeamAgentRequest>,

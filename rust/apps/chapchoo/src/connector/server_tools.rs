@@ -1,5 +1,6 @@
 //! Native-owner-local MCP. Credentials stay in Connector memory; HTTP access
 //! never grants server authority independently of the current component route.
+mod external;
 mod handler;
 mod http;
 mod ordering;
@@ -13,8 +14,9 @@ use crate::AppError;
 use chapchoo_crypto::BearerSecret;
 use chapchoo_protocol::conversations::CaptureSource;
 use std::{
+    collections::BTreeMap,
     fmt,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, OnceLock},
 };
 use tokio::{
     sync::{Notify, Semaphore},
@@ -32,6 +34,7 @@ macro_rules! redacted {
         }
     )+};
 }
+pub(super) use external::PreparedExternal;
 pub(super) use ordering::{Ordering, Ticket};
 pub(super) use provider::Provider;
 use redacted;
@@ -84,6 +87,15 @@ impl CurrentRoute {
     pub(super) fn lease(&self) -> RouteLease {
         RouteLease(self.clone())
     }
+    pub(super) fn setup_route(
+        &self,
+        source: &CaptureSource,
+    ) -> Option<chapchoo_harness::ContinuationRoute> {
+        lock(&self.0)
+            .as_ref()
+            .filter(|(route, _)| &route.source == source)
+            .map(|(route, _)| route.restore_route.clone())
+    }
     fn snapshot(&self) -> Result<Route, AppError> {
         self.try_snapshot()?
             .ok_or("No current server tool route".into())
@@ -125,25 +137,94 @@ struct State {
     catalogued: std::sync::atomic::AtomicBool,
     observed: Notify,
     catalog: rmcp::model::ListToolsResult,
+    external: Option<external::Registration>,
     uncertain_effects: std::sync::atomic::AtomicBool,
 }
 impl State {
+    fn new(
+        route: CurrentRoute,
+        recipient: Recipient,
+        ordering: Arc<ordering::Owner>,
+        key: BearerSecret,
+        stop: CancellationToken,
+        catalog: rmcp::model::ListToolsResult,
+        external: Option<external::Registration>,
+    ) -> Self {
+        let (requests, work, bytes) = if external.is_some() {
+            (8, 4, 1024 * 1024)
+        } else {
+            (128, 128, 8 * 1024 * 1024)
+        };
+        Self {
+            route,
+            recipient,
+            ordering,
+            key,
+            stop,
+            requests: Arc::new(Semaphore::new(requests)),
+            connections: Arc::new(Semaphore::new(requests)),
+            work: Arc::new(Semaphore::new(work)),
+            bytes: Arc::new(Semaphore::new(bytes)),
+            calls: tokio::sync::Mutex::new(JoinSet::new()),
+            failures: Mutex::new(Vec::new()),
+            initialized: std::sync::atomic::AtomicBool::new(false),
+            catalogued: std::sync::atomic::AtomicBool::new(false),
+            observed: Notify::new(),
+            catalog,
+            external,
+            uncertain_effects: std::sync::atomic::AtomicBool::new(false),
+        }
+    }
     fn collect(&self, result: Result<(), JoinError>) {
-        if let Err(error) = result {
+        if let Err(error) = result
+            && self.external.is_none()
+        {
             lock(&self.failures).push(error);
         }
+    }
+    fn calls_quiescent(&self) -> bool {
+        let Ok(mut calls) = self.calls.try_lock() else {
+            return false;
+        };
+        while let Some(result) = calls.try_join_next() {
+            self.collect(result);
+        }
+        calls.is_empty() && lock(&self.failures).is_empty()
     }
 }
 pub(super) struct Relay {
     url: String,
     state: Arc<State>,
-    sessions: Arc<sessions::Sessions>,
+    builtin: http::Endpoint,
+    optional: BTreeMap<String, http::Endpoint>,
+    optional_routes: Arc<OnceLock<BTreeMap<String, http::Endpoint>>>,
+    address: std::net::SocketAddr,
+    applied: Arc<Mutex<Option<external::AppliedSelection>>>,
     listener: Option<JoinHandle<Result<(), AppError>>>,
     cleanup_errors: Vec<AppError>,
 }
 redacted!(Relay);
 impl Relay {
+    #[cfg(test)]
     pub(super) async fn start(
+        route: CurrentRoute,
+        recipient: Recipient,
+        ordering: Arc<ordering::Owner>,
+    ) -> Result<Self, AppError> {
+        Self::start_with_external(route, recipient, ordering, &PreparedExternal::default()).await
+    }
+    #[cfg(test)]
+    pub(super) async fn start_with_external(
+        route: CurrentRoute,
+        recipient: Recipient,
+        ordering: Arc<ordering::Owner>,
+        prepared: &PreparedExternal,
+    ) -> Result<Self, AppError> {
+        let mut relay = Self::start_builtin(route, recipient, ordering).await?;
+        relay.install_optional(prepared);
+        Ok(relay)
+    }
+    pub(super) async fn start_builtin(
         route: CurrentRoute,
         recipient: Recipient,
         ordering: Arc<ordering::Owner>,
@@ -152,35 +233,63 @@ impl Relay {
         handler::validate_catalog(&catalog)?;
         let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await?;
         let address = listener.local_addr()?;
-        let state = Arc::new(State {
+        let stop = CancellationToken::new();
+        let state = Arc::new(State::new(
             route,
             recipient,
             ordering,
-            key: BearerSecret::generate()?,
-            stop: CancellationToken::new(),
-            requests: Arc::new(Semaphore::new(128)),
-            connections: Arc::new(Semaphore::new(128)),
-            work: Arc::new(Semaphore::new(128)),
-            bytes: Arc::new(Semaphore::new(8 * 1024 * 1024)),
-            calls: tokio::sync::Mutex::new(JoinSet::new()),
-            failures: Mutex::new(Vec::new()),
-            initialized: std::sync::atomic::AtomicBool::new(false),
-            catalogued: std::sync::atomic::AtomicBool::new(false),
-            observed: Notify::new(),
+            BearerSecret::generate()?,
+            stop.clone(),
             catalog,
-            uncertain_effects: std::sync::atomic::AtomicBool::new(false),
+            None,
+        ));
+        let applied = Arc::new(Mutex::new(None));
+        let builtin = http::Endpoint::new(address, state.clone());
+        let optional_routes = Arc::new(OnceLock::new());
+        let task = tokio::spawn({
+            let builtin = builtin.clone();
+            let routes = optional_routes.clone();
+            async move { http::serve(listener, stop, builtin, routes).await }
         });
-        let sessions = Arc::new(sessions::Sessions::new());
-        let owner = state.clone();
-        let manager = sessions.clone();
-        let task = tokio::spawn(async move { http::serve(listener, owner, manager).await });
         Ok(Self {
             url: format!("http://{address}/mcp"),
             state,
-            sessions,
+            builtin,
+            optional: BTreeMap::new(),
+            optional_routes,
+            address,
+            applied,
             listener: Some(task),
             cleanup_errors: Vec::new(),
         })
+    }
+    fn install_optional(&mut self, prepared: &PreparedExternal) {
+        let mut routes = BTreeMap::new();
+        for (id, catalog) in &prepared.entries {
+            let registration = external::Registration {
+                id: id.clone(),
+                applied: self.applied.clone(),
+            };
+            let Ok(key) = BearerSecret::generate() else {
+                tracing::warn!("Could not allocate a local external MCP capability");
+                continue;
+            };
+            let endpoint = http::Endpoint::new(
+                self.address,
+                Arc::new(State::new(
+                    self.state.route.clone(),
+                    self.state.recipient.clone(),
+                    self.state.ordering.clone(),
+                    key,
+                    self.state.stop.clone(),
+                    catalog.clone(),
+                    Some(registration),
+                )),
+            );
+            routes.insert(format!("/mcp/{id}"), endpoint.clone());
+            self.optional.insert(id.clone(), endpoint);
+        }
+        let _ = self.optional_routes.set(routes);
     }
     pub(super) fn url(&self) -> &str {
         &self.url
@@ -188,6 +297,25 @@ impl Relay {
     /// Native HTTP setup boundary only. Never log this value or put it in URLs.
     pub(super) fn bearer(&self) -> &str {
         self.state.key.expose()
+    }
+    fn optional_credentials(&self) -> impl Iterator<Item = (&str, String, &str)> {
+        self.optional.iter().map(|(id, endpoint)| {
+            (
+                id.as_str(),
+                format!("{}/{id}", self.url),
+                endpoint.state.key.expose(),
+            )
+        })
+    }
+    fn bind_external(
+        &self,
+        target: chapchoo_harness::NativeTextTarget,
+        preparation: chapchoo_harness::NativeExternalPreparation,
+    ) {
+        *lock(&self.applied) = Some(external::AppliedSelection {
+            target,
+            preparation,
+        });
     }
     pub(super) fn close(&self) {
         self.state.ordering.close();
@@ -201,13 +329,11 @@ impl Relay {
         {
             return false;
         }
-        let Ok(mut calls) = self.state.calls.try_lock() else {
-            return false;
-        };
-        while let Some(result) = calls.try_join_next() {
-            self.state.collect(result);
-        }
-        calls.is_empty() && lock(&self.state.failures).is_empty()
+        self.state.calls_quiescent()
+            && self
+                .optional
+                .values()
+                .all(|endpoint| endpoint.state.calls_quiescent())
     }
     pub(super) async fn verify(&self) -> Result<(), AppError> {
         use std::sync::atomic::Ordering;
@@ -238,8 +364,13 @@ impl Relay {
     }
     pub(super) async fn finish(&mut self) -> Result<(), AppError> {
         self.close();
-        if let Err(error) = self.sessions.close_all().await {
+        if let Err(error) = self.builtin.sessions.close_all().await {
             self.cleanup_errors.push(error);
+        }
+        for endpoint in self.optional.values() {
+            if endpoint.sessions.close_all().await.is_err() {
+                tracing::debug!("Optional native MCP sessions could not be closed cleanly");
+            }
         }
         if let Some(listener) = &mut self.listener {
             let result = listener.await;
@@ -253,6 +384,10 @@ impl Relay {
         let mut tasks = self.state.calls.lock().await;
         while let Some(result) = tasks.join_next().await {
             self.state.collect(result);
+        }
+        for endpoint in self.optional.values() {
+            let mut tasks = endpoint.state.calls.lock().await;
+            while tasks.join_next().await.is_some() {}
         }
         let failures = std::mem::take(&mut *lock(&self.state.failures));
         let mut result = Ok(());

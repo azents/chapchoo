@@ -12,20 +12,36 @@ import {
   Client,
   type ClientDuplexStream,
   type ClientOptions,
+  type ClientReadableStream,
   type ClientUnaryCall,
   type handleBidiStreamingCall,
+  type handleServerStreamingCall,
   type handleUnaryCall,
   makeGenericClientConstructor,
   type Metadata,
   type ServiceError,
   type UntypedServiceImplementation,
 } from "@grpc/grpc-js";
-import { CaptureSource } from "./conversations.js";
+import { CaptureSource, NativeTarget } from "./conversations.js";
 import { Empty } from "./google/protobuf/empty.js";
 
 export const protobufPackage = "chapchoo.server_tools";
 
 export const protobufFileName = "server_tools.proto";
+
+export enum ExternalCatalogFailure {
+  EXTERNAL_CATALOG_FAILURE_UNSPECIFIED = 0,
+  EXTERNAL_CATALOG_FAILURE_DESTINATION = 1,
+  EXTERNAL_CATALOG_FAILURE_CAPACITY = 2,
+  EXTERNAL_CATALOG_FAILURE_UNAVAILABLE = 3,
+  EXTERNAL_CATALOG_FAILURE_AUTHENTICATION = 4,
+  EXTERNAL_CATALOG_FAILURE_PROTOCOL = 5,
+  EXTERNAL_CATALOG_FAILURE_TOOLS_UNAVAILABLE = 6,
+  EXTERNAL_CATALOG_FAILURE_INVALID_RESPONSE = 7,
+  EXTERNAL_CATALOG_FAILURE_TIMEOUT = 8,
+  EXTERNAL_CATALOG_FAILURE_SUPERSEDED = 9,
+  UNRECOGNIZED = -1,
+}
 
 export enum Rejection {
   REJECTION_UNSPECIFIED = 0,
@@ -37,7 +53,49 @@ export enum Rejection {
   REJECTION_QUEUE_EXPIRED = 6,
   REJECTION_RESPONSE_EXPIRED = 7,
   REJECTION_AUTHORITY = 8,
+  /** REJECTION_UPSTREAM_UNAVAILABLE - External calls only: an upstream failure known to precede dispatch. */
+  REJECTION_UPSTREAM_UNAVAILABLE = 9,
+  REJECTION_UPSTREAM_AUTHENTICATION = 10,
+  REJECTION_UPSTREAM_DESTINATION = 11,
+  REJECTION_UPSTREAM_PROTOCOL = 12,
+  REJECTION_UPSTREAM_INVALID_RESPONSE = 13,
+  REJECTION_UPSTREAM_TIMEOUT = 14,
+  REJECTION_UPSTREAM_TOOLS_UNAVAILABLE = 15,
   UNRECOGNIZED = -1,
+}
+
+/** The published operation is selected on the current component route. */
+export interface ExternalPreparation {
+  scope: CallerScope | undefined;
+  executionId: string;
+  operationId: string;
+}
+
+export interface ExternalCatalogChunk {
+  json: Buffer;
+  finalChunk: boolean;
+}
+
+export interface ExternalCatalogFrame {
+  integrationId: string;
+  catalogue?: ExternalCatalogChunk | undefined;
+  unavailable?:
+    | ExternalCatalogFailure
+    | undefined;
+  /** Last frame. An interrupted stream never applies a partial selection. */
+  end?: ExternalCatalogEnd | undefined;
+}
+
+export interface ExternalCatalogEnd {
+  capacityLimited: boolean;
+}
+
+export interface ExternalInvocation {
+  preparation: ExternalPreparation | undefined;
+  target: NativeTarget | undefined;
+  integrationId: string;
+  name: string;
+  argumentsJson: Buffer;
 }
 
 export interface CallerScope {
@@ -77,6 +135,411 @@ export interface InvocationObservation {
   started?: Empty | undefined;
   final?: Final | undefined;
 }
+
+function createBaseExternalPreparation(): ExternalPreparation {
+  return { scope: undefined, executionId: "", operationId: "" };
+}
+
+export const ExternalPreparation: MessageFns<ExternalPreparation> = {
+  encode(message: ExternalPreparation, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.scope !== undefined) {
+      CallerScope.encode(message.scope, writer.uint32(10).fork()).join();
+    }
+    if (message.executionId !== "") {
+      writer.uint32(18).string(message.executionId);
+    }
+    if (message.operationId !== "") {
+      writer.uint32(26).string(message.operationId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ExternalPreparation {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseExternalPreparation();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.scope = CallerScope.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.executionId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.operationId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ExternalPreparation>, I>>(base?: I): ExternalPreparation {
+    return ExternalPreparation.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ExternalPreparation>, I>>(object: I): ExternalPreparation {
+    const message = createBaseExternalPreparation();
+    message.scope = (object.scope !== undefined && object.scope !== null)
+      ? CallerScope.fromPartial(object.scope)
+      : undefined;
+    message.executionId = object.executionId ?? "";
+    message.operationId = object.operationId ?? "";
+    return message;
+  },
+};
+
+function createBaseExternalCatalogChunk(): ExternalCatalogChunk {
+  return { json: Buffer.alloc(0), finalChunk: false };
+}
+
+export const ExternalCatalogChunk: MessageFns<ExternalCatalogChunk> = {
+  encode(message: ExternalCatalogChunk, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.json.length !== 0) {
+      writer.uint32(10).bytes(message.json);
+    }
+    if (message.finalChunk !== false) {
+      writer.uint32(16).bool(message.finalChunk);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ExternalCatalogChunk {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseExternalCatalogChunk();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.json = Buffer.from(reader.bytes());
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.finalChunk = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ExternalCatalogChunk>, I>>(base?: I): ExternalCatalogChunk {
+    return ExternalCatalogChunk.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ExternalCatalogChunk>, I>>(object: I): ExternalCatalogChunk {
+    const message = createBaseExternalCatalogChunk();
+    message.json = object.json ?? Buffer.alloc(0);
+    message.finalChunk = object.finalChunk ?? false;
+    return message;
+  },
+};
+
+function createBaseExternalCatalogFrame(): ExternalCatalogFrame {
+  return { integrationId: "", catalogue: undefined, unavailable: undefined, end: undefined };
+}
+
+export const ExternalCatalogFrame: MessageFns<ExternalCatalogFrame> = {
+  encode(message: ExternalCatalogFrame, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.integrationId !== "") {
+      writer.uint32(10).string(message.integrationId);
+    }
+    if (message.catalogue !== undefined) {
+      ExternalCatalogChunk.encode(message.catalogue, writer.uint32(18).fork()).join();
+    }
+    if (message.unavailable !== undefined) {
+      writer.uint32(24).int32(message.unavailable);
+    }
+    if (message.end !== undefined) {
+      ExternalCatalogEnd.encode(message.end, writer.uint32(34).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ExternalCatalogFrame {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseExternalCatalogFrame();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.integrationId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.catalogue = ExternalCatalogChunk.decode(reader, reader.uint32());
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.unavailable = reader.int32() as any;
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.end = ExternalCatalogEnd.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ExternalCatalogFrame>, I>>(base?: I): ExternalCatalogFrame {
+    return ExternalCatalogFrame.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ExternalCatalogFrame>, I>>(object: I): ExternalCatalogFrame {
+    const message = createBaseExternalCatalogFrame();
+    message.integrationId = object.integrationId ?? "";
+    message.catalogue = (object.catalogue !== undefined && object.catalogue !== null)
+      ? ExternalCatalogChunk.fromPartial(object.catalogue)
+      : undefined;
+    message.unavailable = object.unavailable ?? undefined;
+    message.end = (object.end !== undefined && object.end !== null)
+      ? ExternalCatalogEnd.fromPartial(object.end)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseExternalCatalogEnd(): ExternalCatalogEnd {
+  return { capacityLimited: false };
+}
+
+export const ExternalCatalogEnd: MessageFns<ExternalCatalogEnd> = {
+  encode(message: ExternalCatalogEnd, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.capacityLimited !== false) {
+      writer.uint32(8).bool(message.capacityLimited);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ExternalCatalogEnd {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseExternalCatalogEnd();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.capacityLimited = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ExternalCatalogEnd>, I>>(base?: I): ExternalCatalogEnd {
+    return ExternalCatalogEnd.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ExternalCatalogEnd>, I>>(object: I): ExternalCatalogEnd {
+    const message = createBaseExternalCatalogEnd();
+    message.capacityLimited = object.capacityLimited ?? false;
+    return message;
+  },
+};
+
+function createBaseExternalInvocation(): ExternalInvocation {
+  return { preparation: undefined, target: undefined, integrationId: "", name: "", argumentsJson: Buffer.alloc(0) };
+}
+
+export const ExternalInvocation: MessageFns<ExternalInvocation> = {
+  encode(message: ExternalInvocation, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.preparation !== undefined) {
+      ExternalPreparation.encode(message.preparation, writer.uint32(10).fork()).join();
+    }
+    if (message.target !== undefined) {
+      NativeTarget.encode(message.target, writer.uint32(18).fork()).join();
+    }
+    if (message.integrationId !== "") {
+      writer.uint32(26).string(message.integrationId);
+    }
+    if (message.name !== "") {
+      writer.uint32(34).string(message.name);
+    }
+    if (message.argumentsJson.length !== 0) {
+      writer.uint32(42).bytes(message.argumentsJson);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ExternalInvocation {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseExternalInvocation();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.preparation = ExternalPreparation.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.target = NativeTarget.decode(reader, reader.uint32());
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.integrationId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.name = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.argumentsJson = Buffer.from(reader.bytes());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ExternalInvocation>, I>>(base?: I): ExternalInvocation {
+    return ExternalInvocation.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ExternalInvocation>, I>>(object: I): ExternalInvocation {
+    const message = createBaseExternalInvocation();
+    message.preparation = (object.preparation !== undefined && object.preparation !== null)
+      ? ExternalPreparation.fromPartial(object.preparation)
+      : undefined;
+    message.target = (object.target !== undefined && object.target !== null)
+      ? NativeTarget.fromPartial(object.target)
+      : undefined;
+    message.integrationId = object.integrationId ?? "";
+    message.name = object.name ?? "";
+    message.argumentsJson = object.argumentsJson ?? Buffer.alloc(0);
+    return message;
+  },
+};
 
 function createBaseCallerScope(): CallerScope {
   return { source: undefined, agentId: "", conversationId: "" };
@@ -624,11 +1087,32 @@ export const ServerToolsService = {
       Buffer.from(InvocationObservation.encode(value).finish()),
     responseDeserialize: (value: Buffer): InvocationObservation => InvocationObservation.decode(value),
   },
+  prepareExternal: {
+    path: "/chapchoo.server_tools.ServerTools/PrepareExternal" as const,
+    requestStream: false as const,
+    responseStream: true as const,
+    requestSerialize: (value: ExternalPreparation): Buffer => Buffer.from(ExternalPreparation.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ExternalPreparation => ExternalPreparation.decode(value),
+    responseSerialize: (value: ExternalCatalogFrame): Buffer =>
+      Buffer.from(ExternalCatalogFrame.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ExternalCatalogFrame => ExternalCatalogFrame.decode(value),
+  },
+  invokeExternal: {
+    path: "/chapchoo.server_tools.ServerTools/InvokeExternal" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ExternalInvocation): Buffer => Buffer.from(ExternalInvocation.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ExternalInvocation => ExternalInvocation.decode(value),
+    responseSerialize: (value: Final): Buffer => Buffer.from(Final.encode(value).finish()),
+    responseDeserialize: (value: Buffer): Final => Final.decode(value),
+  },
 } as const;
 
 export interface ServerToolsServer extends UntypedServiceImplementation {
   catalog: handleUnaryCall<CatalogRequest, CatalogResponse>;
   invoke: handleBidiStreamingCall<InvocationControl, InvocationObservation>;
+  prepareExternal: handleServerStreamingCall<ExternalPreparation, ExternalCatalogFrame>;
+  invokeExternal: handleUnaryCall<ExternalInvocation, Final>;
 }
 
 export interface ServerToolsClient extends Client {
@@ -653,6 +1137,30 @@ export interface ServerToolsClient extends Client {
     metadata: Metadata,
     options?: Partial<CallOptions>,
   ): ClientDuplexStream<InvocationControl, InvocationObservation>;
+  prepareExternal(
+    request: ExternalPreparation,
+    options?: Partial<CallOptions>,
+  ): ClientReadableStream<ExternalCatalogFrame>;
+  prepareExternal(
+    request: ExternalPreparation,
+    metadata?: Metadata,
+    options?: Partial<CallOptions>,
+  ): ClientReadableStream<ExternalCatalogFrame>;
+  invokeExternal(
+    request: ExternalInvocation,
+    callback: (error: ServiceError | null, response: Final) => void,
+  ): ClientUnaryCall;
+  invokeExternal(
+    request: ExternalInvocation,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: Final) => void,
+  ): ClientUnaryCall;
+  invokeExternal(
+    request: ExternalInvocation,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: Final) => void,
+  ): ClientUnaryCall;
 }
 
 export const ServerToolsClient = makeGenericClientConstructor(

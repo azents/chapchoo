@@ -1,0 +1,4 @@
+ALTER TABLE conversation_startups DROP COLUMN external_ready_connection_id;
+ALTER TABLE conversation_input_preparation DROP COLUMN ready_connection_id;
+ALTER TABLE conversation_startups DROP COLUMN external_predecessor_id;
+ALTER TABLE conversation_startups DROP COLUMN external_input_id;

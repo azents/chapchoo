@@ -469,6 +469,16 @@ async fn mcp_approval_answers_bind_to_the_exact_capture_and_never_remember() -> 
             "_meta": {"codex_approval_kind":"mcp_tool_call", "tool_name":"inspect", "persist":"always"}
         }
     });
+    let mut external = frame.clone();
+    external["params"]["serverName"] = json!("chapchoo_ext_fixture");
+    external["params"]["_meta"]["tool_name"] = json!("send");
+    let managed = std::collections::BTreeSet::from([
+        "chapchoo".to_owned(),
+        "chapchoo_ext_fixture".to_owned(),
+    ]);
+    assert!(Approval::decode(&target, "live-turn", &external, None, &managed).is_some());
+    assert!(Approval::decode(&target, "different-turn", &external, None, &managed).is_none());
+    assert!(Approval::offer(target.clone(), position.clone(), "live-turn", external)?.is_none());
     for (field, value) in [
         ("threadId", json!("elsewhere")),
         ("turnId", Value::Null),
@@ -524,7 +534,7 @@ async fn mcp_approval_answers_bind_to_the_exact_capture_and_never_remember() -> 
 }
 
 #[tokio::test]
-async fn start_and_resume_require_the_same_launch_local_mcp_declaration() -> TestResult {
+async fn start_and_resume_replace_optional_supply_but_keep_required_send() -> TestResult {
     let (local, remote) = duplex(4096);
     let (read, write) = split(local);
     let (server_read, mut output) = split(remote);
@@ -535,6 +545,11 @@ async fn start_and_resume_require_the_same_launch_local_mcp_declaration() -> Tes
     let bearer = chapchoo_crypto::BearerSecret::generate()?;
     let authorization = zeroize::Zeroizing::new(format!("Bearer {}", bearer.expose()));
     let declaration = crate::NativeMcpDeclaration::http("http://127.0.0.1:12345/mcp", bearer)?;
+    let external = crate::NativeMcpDeclaration::external_http(
+        "fixture",
+        "http://127.0.0.1:12345/mcp/fixture",
+        chapchoo_crypto::BearerSecret::generate()?,
+    )?;
     let server = async {
         for (method, existing) in [("thread/start", false), ("thread/resume", true)] {
             let frame = input.next().await.ok_or("Missing setup request")??;
@@ -558,6 +573,15 @@ async fn start_and_resume_require_the_same_launch_local_mcp_declaration() -> Tes
             assert!(
                 server["http_headers"]["Authorization"].as_str() == Some(authorization.as_str())
             );
+            let optional = &params["config"]["mcp_servers"]["chapchoo_ext_fixture"];
+            if existing {
+                assert!(optional.is_null());
+            } else {
+                assert_eq!(optional["url"], "http://127.0.0.1:12345/mcp/fixture");
+                assert_eq!(optional["required"], false);
+                assert_eq!(optional["default_tools_approval_mode"], "prompt");
+                assert!(optional.get("tools").is_none());
+            }
             send(
                 &mut output,
                 json!({"id":request["id"],"result":{"thread":{"id":"same"}}}),
@@ -567,12 +591,18 @@ async fn start_and_resume_require_the_same_launch_local_mcp_declaration() -> Tes
         Ok::<(), Box<dyn std::error::Error>>(())
     };
     let exercise = async {
-        let original = Thread::open(&link, Path::new("/fixture"), None, Some(&declaration)).await?;
+        let original = Thread::open(
+            &link,
+            Path::new("/fixture"),
+            None,
+            &[&declaration, &external],
+        )
+        .await?;
         let resumed = Thread::open(
             &link,
             Path::new("/fixture"),
             Some(&original.id),
-            Some(&declaration),
+            &[&declaration],
         )
         .await?;
         assert_eq!(resumed.id, original.id);

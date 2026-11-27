@@ -87,6 +87,91 @@ async fn finish(mut state: State) -> Result<(), TestError> {
 }
 
 #[tokio::test]
+async fn deferred_setup_resolves_optional_tools_only_at_the_idle_cut() -> Result<(), TestError> {
+    struct Settings {
+        saved: AtomicUsize,
+        selected: AtomicUsize,
+    }
+    impl crate::NativeToolsProvider for Settings {
+        fn has_pending_external(&self) -> bool {
+            true
+        }
+        fn resolve_external(
+            &self,
+        ) -> crate::NativeToolsFuture<'_, Option<Arc<dyn crate::NativeToolsProvider>>> {
+            Box::pin(async move {
+                self.selected
+                    .store(self.saved.load(Ordering::SeqCst), Ordering::SeqCst);
+                Err(crate::NativeToolsError::new(
+                    "End of selection fixture".into(),
+                ))
+            })
+        }
+        fn provide<'a>(
+            &'a self,
+            _: &'a NativeAuthenticationBinding,
+        ) -> crate::NativeToolsFuture<'a, crate::NativeToolProvision> {
+            Box::pin(async {
+                Err(crate::NativeToolsError::new(
+                    "Unexpected native provision".into(),
+                ))
+            })
+        }
+    }
+    let (_saved, mut state, observations) = live_state().await?;
+    let live = state.live.as_ref().ok_or("Missing fixture owner")?;
+    let operation = NativeSetupOperation {
+        operation_id: "next-preparation".into(),
+        scope: crate::NativeToolScope {
+            agent_id: "agent".into(),
+            conversation_id: "conversation".into(),
+        },
+        supply: HarnessSupply::Managed,
+        intent: NativeSetupIntent::Existing(NativeTextTarget {
+            snapshot: live.capture.snapshot()?,
+            native_session: live
+                .capture
+                .native_session()?
+                .ok_or("Missing fixture session")?,
+        }),
+        instructions: Default::default(),
+        tool_catalog: Vec::new(),
+    };
+    let settings = Arc::new(Settings {
+        saved: AtomicUsize::new(1),
+        selected: AtomicUsize::new(0),
+    });
+    let auth = Arc::new(CountingProvider(AtomicUsize::new(0)));
+    ingest(
+        &state,
+        &observations,
+        "refresh-native",
+        json!({"sessionUpdate":"state_update","state":"running"}),
+    )?;
+    assert!(state.requires_idle_application(&operation, settings.as_ref()));
+    assert!(matches!(
+        state
+            .setup(operation.clone(), auth.clone(), settings.clone())
+            .await,
+        Err(Error::DeliveryUncertain)
+    ));
+    assert_eq!(settings.selected.load(Ordering::SeqCst), 0);
+    settings.saved.store(2, Ordering::SeqCst);
+    ingest(
+        &state,
+        &observations,
+        "refresh-native",
+        json!({"sessionUpdate":"state_update","state":"idle","stopReason":"end_turn"}),
+    )?;
+    assert!(matches!(
+        state.setup(operation, auth, settings.clone()).await,
+        Err(Error::ToolsProvision(_))
+    ));
+    assert_eq!(settings.selected.load(Ordering::SeqCst), 2);
+    finish(state).await
+}
+
+#[tokio::test]
 async fn startup_wire_observations_do_not_prime_the_actor_ending() -> Result<(), TestError> {
     let (_saved, state, observations) = live_state().await?;
     let running = json!({"sessionUpdate":"state_update","state":"running"});

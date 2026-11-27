@@ -26,6 +26,9 @@ url.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+rustls.workspace = true
+rcgen = { version = "0.14.10", default-features = false, features = ["ring"] }
+tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring", "tls12"] }
 
 [lints]
 workspace = true

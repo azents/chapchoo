@@ -126,11 +126,15 @@ pub(super) struct SelectedPreparation {
     pub(super) execution_id: Option<EntityId>,
     #[diesel(sql_type=Text)]
     pub(super) preparation_state: String,
+    #[diesel(sql_type=Nullable<IdentitySql>)]
+    pub(super) external_input_id: Option<EntityId>,
+    #[diesel(sql_type=Nullable<IdentitySql>)]
+    pub(super) ready_connection_id: Option<EntityId>,
 }
 macro_rules! selected_preparation {
     ($connection:expr,$dialect:expr,$conversation:expr) => {
         diesel::sql_query($dialect.query(
-            "SELECT c.current_preparation_operation_id AS operation_id,COALESCE(s.execution_id,p.execution_id,e.execution_id) AS execution_id,COALESCE(s.preparation_state,p.preparation_state,CASE WHEN e.applied_at IS NOT NULL THEN 'READY' ELSE 'FAILED' END) AS preparation_state FROM conversations c LEFT JOIN conversation_startups s ON s.operation_id=c.current_preparation_operation_id LEFT JOIN conversation_input_preparation p ON p.operation_id=c.current_preparation_operation_id LEFT JOIN project_instruction_evidence e ON e.operation_id=c.current_preparation_operation_id AND e.conversation_id=c.id WHERE c.id=? AND c.current_preparation_operation_id IS NOT NULL",
+            "SELECT c.current_preparation_operation_id AS operation_id,COALESCE(s.execution_id,p.execution_id,e.execution_id) AS execution_id,COALESCE(s.preparation_state,p.preparation_state,CASE WHEN e.applied_at IS NOT NULL THEN 'READY' ELSE 'FAILED' END) AS preparation_state,s.external_input_id,s.ready_connection_id FROM conversations c LEFT JOIN conversation_startups s ON s.operation_id=c.current_preparation_operation_id LEFT JOIN conversation_input_preparation p ON p.operation_id=c.current_preparation_operation_id LEFT JOIN project_instruction_evidence e ON e.operation_id=c.current_preparation_operation_id AND e.conversation_id=c.id WHERE c.id=? AND c.current_preparation_operation_id IS NOT NULL",
         ))
         .bind::<IdentitySql,_>($conversation)
         .get_result::<$crate::conversations::system_prompts::SelectedPreparation>($connection)

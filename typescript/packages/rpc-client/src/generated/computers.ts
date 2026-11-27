@@ -26,6 +26,29 @@ export const protobufPackage = "chapchoo.computers";
 
 export const protobufFileName = "computers.proto";
 
+export enum AgentIntegrationAction {
+  AGENT_INTEGRATION_ACTION_UNSPECIFIED = 0,
+  AGENT_INTEGRATION_ACTION_CREATE = 1,
+  AGENT_INTEGRATION_ACTION_UPDATE = 2,
+  AGENT_INTEGRATION_ACTION_DELETE = 3,
+  UNRECOGNIZED = -1,
+}
+
+export enum McpConnectionTestFailure {
+  MCP_CONNECTION_TEST_FAILURE_UNSPECIFIED = 0,
+  MCP_CONNECTION_TEST_FAILURE_DESTINATION_DENIED = 1,
+  MCP_CONNECTION_TEST_FAILURE_BUSY = 2,
+  MCP_CONNECTION_TEST_FAILURE_UNAVAILABLE = 3,
+  MCP_CONNECTION_TEST_FAILURE_AUTHENTICATION = 4,
+  MCP_CONNECTION_TEST_FAILURE_UNSUPPORTED_VERSION = 5,
+  MCP_CONNECTION_TEST_FAILURE_MISSING_DISCOVERY = 6,
+  MCP_CONNECTION_TEST_FAILURE_MISSING_TOOLS_CAPABILITY = 7,
+  MCP_CONNECTION_TEST_FAILURE_INVALID_RESPONSE = 8,
+  MCP_CONNECTION_TEST_FAILURE_INCOMPLETE_CATALOGUE = 9,
+  MCP_CONNECTION_TEST_FAILURE_TIMED_OUT = 10,
+  UNRECOGNIZED = -1,
+}
+
 export enum ComputerKind {
   COMPUTER_KIND_UNSPECIFIED = 0,
   COMPUTER_KIND_CLOUD = 1,
@@ -139,6 +162,79 @@ export interface AgentListRequest {
 
 export interface AgentRequest {
   agentId: string;
+}
+
+export interface AgentIntegrationListRequest {
+  agentId: string;
+  after?: string | undefined;
+}
+
+export interface AgentIntegrationList {
+  items: AgentIntegration[];
+  nextAfter?: string | undefined;
+}
+
+export interface AgentIntegration {
+  id: string;
+  displayName: string;
+  mcp?: AgentMcpSettings | undefined;
+}
+
+export interface AgentMcpSettings {
+  endpoint: string;
+  hasBearer: boolean;
+}
+
+export interface AgentMcpConnectionDraft {
+  endpoint: string;
+  noAuth?: Empty | undefined;
+  keepBearer?: Empty | undefined;
+  replaceBearer?: string | undefined;
+}
+
+export interface AgentMcpDraft {
+  displayName: string;
+  connection: AgentMcpConnectionDraft | undefined;
+}
+
+export interface UpdateAgentMcp {
+  integrationId: string;
+  draft: AgentMcpDraft | undefined;
+}
+
+export interface AgentIntegrationChangeRequest {
+  agentId: string;
+  requestId: string;
+  createMcp?: AgentMcpDraft | undefined;
+  updateMcp?: UpdateAgentMcp | undefined;
+  deleteIntegrationId?: string | undefined;
+}
+
+export interface AgentIntegrationReceipt {
+  integrationId: string;
+  action: AgentIntegrationAction;
+  acceptedAt: Timestamp | undefined;
+}
+
+export interface AgentIntegrationResultRequest {
+  agentId: string;
+  requestId: string;
+}
+
+/** No receipt does not establish nonexecution of a concurrently outstanding write. */
+export interface AgentIntegrationResult {
+  receipt: AgentIntegrationReceipt | undefined;
+}
+
+export interface TestMcpConnectionRequest {
+  agentId: string;
+  integrationId?: string | undefined;
+  connection: AgentMcpConnectionDraft | undefined;
+}
+
+export interface TestMcpConnectionResult {
+  listedToolCount?: number | undefined;
+  failure?: McpConnectionTestFailure | undefined;
 }
 
 export interface SystemPrompt {
@@ -803,6 +899,985 @@ export const AgentRequest: MessageFns<AgentRequest> = {
   fromPartial<I extends Exact<DeepPartial<AgentRequest>, I>>(object: I): AgentRequest {
     const message = createBaseAgentRequest();
     message.agentId = object.agentId ?? "";
+    return message;
+  },
+};
+
+function createBaseAgentIntegrationListRequest(): AgentIntegrationListRequest {
+  return { agentId: "", after: undefined };
+}
+
+export const AgentIntegrationListRequest: MessageFns<AgentIntegrationListRequest> = {
+  encode(message: AgentIntegrationListRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.agentId !== "") {
+      writer.uint32(10).string(message.agentId);
+    }
+    if (message.after !== undefined) {
+      writer.uint32(18).string(message.after);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AgentIntegrationListRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseAgentIntegrationListRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.agentId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.after = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<AgentIntegrationListRequest>, I>>(base?: I): AgentIntegrationListRequest {
+    return AgentIntegrationListRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AgentIntegrationListRequest>, I>>(object: I): AgentIntegrationListRequest {
+    const message = createBaseAgentIntegrationListRequest();
+    message.agentId = object.agentId ?? "";
+    message.after = object.after ?? undefined;
+    return message;
+  },
+};
+
+function createBaseAgentIntegrationList(): AgentIntegrationList {
+  return { items: [], nextAfter: undefined };
+}
+
+export const AgentIntegrationList: MessageFns<AgentIntegrationList> = {
+  encode(message: AgentIntegrationList, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.items) {
+      AgentIntegration.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.nextAfter !== undefined) {
+      writer.uint32(18).string(message.nextAfter);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AgentIntegrationList {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseAgentIntegrationList();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.items.push(AgentIntegration.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.nextAfter = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<AgentIntegrationList>, I>>(base?: I): AgentIntegrationList {
+    return AgentIntegrationList.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AgentIntegrationList>, I>>(object: I): AgentIntegrationList {
+    const message = createBaseAgentIntegrationList();
+    message.items = object.items?.map((e) => AgentIntegration.fromPartial(e)) || [];
+    message.nextAfter = object.nextAfter ?? undefined;
+    return message;
+  },
+};
+
+function createBaseAgentIntegration(): AgentIntegration {
+  return { id: "", displayName: "", mcp: undefined };
+}
+
+export const AgentIntegration: MessageFns<AgentIntegration> = {
+  encode(message: AgentIntegration, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    if (message.displayName !== "") {
+      writer.uint32(18).string(message.displayName);
+    }
+    if (message.mcp !== undefined) {
+      AgentMcpSettings.encode(message.mcp, writer.uint32(26).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AgentIntegration {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseAgentIntegration();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.displayName = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.mcp = AgentMcpSettings.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<AgentIntegration>, I>>(base?: I): AgentIntegration {
+    return AgentIntegration.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AgentIntegration>, I>>(object: I): AgentIntegration {
+    const message = createBaseAgentIntegration();
+    message.id = object.id ?? "";
+    message.displayName = object.displayName ?? "";
+    message.mcp = (object.mcp !== undefined && object.mcp !== null)
+      ? AgentMcpSettings.fromPartial(object.mcp)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseAgentMcpSettings(): AgentMcpSettings {
+  return { endpoint: "", hasBearer: false };
+}
+
+export const AgentMcpSettings: MessageFns<AgentMcpSettings> = {
+  encode(message: AgentMcpSettings, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.endpoint !== "") {
+      writer.uint32(10).string(message.endpoint);
+    }
+    if (message.hasBearer !== false) {
+      writer.uint32(16).bool(message.hasBearer);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AgentMcpSettings {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseAgentMcpSettings();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.endpoint = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.hasBearer = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<AgentMcpSettings>, I>>(base?: I): AgentMcpSettings {
+    return AgentMcpSettings.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AgentMcpSettings>, I>>(object: I): AgentMcpSettings {
+    const message = createBaseAgentMcpSettings();
+    message.endpoint = object.endpoint ?? "";
+    message.hasBearer = object.hasBearer ?? false;
+    return message;
+  },
+};
+
+function createBaseAgentMcpConnectionDraft(): AgentMcpConnectionDraft {
+  return { endpoint: "", noAuth: undefined, keepBearer: undefined, replaceBearer: undefined };
+}
+
+export const AgentMcpConnectionDraft: MessageFns<AgentMcpConnectionDraft> = {
+  encode(message: AgentMcpConnectionDraft, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.endpoint !== "") {
+      writer.uint32(10).string(message.endpoint);
+    }
+    if (message.noAuth !== undefined) {
+      Empty.encode(message.noAuth, writer.uint32(18).fork()).join();
+    }
+    if (message.keepBearer !== undefined) {
+      Empty.encode(message.keepBearer, writer.uint32(26).fork()).join();
+    }
+    if (message.replaceBearer !== undefined) {
+      writer.uint32(34).string(message.replaceBearer);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AgentMcpConnectionDraft {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseAgentMcpConnectionDraft();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.endpoint = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.noAuth = Empty.decode(reader, reader.uint32());
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.keepBearer = Empty.decode(reader, reader.uint32());
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.replaceBearer = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<AgentMcpConnectionDraft>, I>>(base?: I): AgentMcpConnectionDraft {
+    return AgentMcpConnectionDraft.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AgentMcpConnectionDraft>, I>>(object: I): AgentMcpConnectionDraft {
+    const message = createBaseAgentMcpConnectionDraft();
+    message.endpoint = object.endpoint ?? "";
+    message.noAuth = (object.noAuth !== undefined && object.noAuth !== null)
+      ? Empty.fromPartial(object.noAuth)
+      : undefined;
+    message.keepBearer = (object.keepBearer !== undefined && object.keepBearer !== null)
+      ? Empty.fromPartial(object.keepBearer)
+      : undefined;
+    message.replaceBearer = object.replaceBearer ?? undefined;
+    return message;
+  },
+};
+
+function createBaseAgentMcpDraft(): AgentMcpDraft {
+  return { displayName: "", connection: undefined };
+}
+
+export const AgentMcpDraft: MessageFns<AgentMcpDraft> = {
+  encode(message: AgentMcpDraft, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.displayName !== "") {
+      writer.uint32(10).string(message.displayName);
+    }
+    if (message.connection !== undefined) {
+      AgentMcpConnectionDraft.encode(message.connection, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AgentMcpDraft {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseAgentMcpDraft();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.displayName = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.connection = AgentMcpConnectionDraft.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<AgentMcpDraft>, I>>(base?: I): AgentMcpDraft {
+    return AgentMcpDraft.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AgentMcpDraft>, I>>(object: I): AgentMcpDraft {
+    const message = createBaseAgentMcpDraft();
+    message.displayName = object.displayName ?? "";
+    message.connection = (object.connection !== undefined && object.connection !== null)
+      ? AgentMcpConnectionDraft.fromPartial(object.connection)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseUpdateAgentMcp(): UpdateAgentMcp {
+  return { integrationId: "", draft: undefined };
+}
+
+export const UpdateAgentMcp: MessageFns<UpdateAgentMcp> = {
+  encode(message: UpdateAgentMcp, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.integrationId !== "") {
+      writer.uint32(10).string(message.integrationId);
+    }
+    if (message.draft !== undefined) {
+      AgentMcpDraft.encode(message.draft, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UpdateAgentMcp {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseUpdateAgentMcp();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.integrationId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.draft = AgentMcpDraft.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<UpdateAgentMcp>, I>>(base?: I): UpdateAgentMcp {
+    return UpdateAgentMcp.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<UpdateAgentMcp>, I>>(object: I): UpdateAgentMcp {
+    const message = createBaseUpdateAgentMcp();
+    message.integrationId = object.integrationId ?? "";
+    message.draft = (object.draft !== undefined && object.draft !== null)
+      ? AgentMcpDraft.fromPartial(object.draft)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseAgentIntegrationChangeRequest(): AgentIntegrationChangeRequest {
+  return { agentId: "", requestId: "", createMcp: undefined, updateMcp: undefined, deleteIntegrationId: undefined };
+}
+
+export const AgentIntegrationChangeRequest: MessageFns<AgentIntegrationChangeRequest> = {
+  encode(message: AgentIntegrationChangeRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.agentId !== "") {
+      writer.uint32(10).string(message.agentId);
+    }
+    if (message.requestId !== "") {
+      writer.uint32(18).string(message.requestId);
+    }
+    if (message.createMcp !== undefined) {
+      AgentMcpDraft.encode(message.createMcp, writer.uint32(26).fork()).join();
+    }
+    if (message.updateMcp !== undefined) {
+      UpdateAgentMcp.encode(message.updateMcp, writer.uint32(34).fork()).join();
+    }
+    if (message.deleteIntegrationId !== undefined) {
+      writer.uint32(42).string(message.deleteIntegrationId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AgentIntegrationChangeRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseAgentIntegrationChangeRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.agentId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.requestId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.createMcp = AgentMcpDraft.decode(reader, reader.uint32());
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.updateMcp = UpdateAgentMcp.decode(reader, reader.uint32());
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.deleteIntegrationId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<AgentIntegrationChangeRequest>, I>>(base?: I): AgentIntegrationChangeRequest {
+    return AgentIntegrationChangeRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AgentIntegrationChangeRequest>, I>>(
+    object: I,
+  ): AgentIntegrationChangeRequest {
+    const message = createBaseAgentIntegrationChangeRequest();
+    message.agentId = object.agentId ?? "";
+    message.requestId = object.requestId ?? "";
+    message.createMcp = (object.createMcp !== undefined && object.createMcp !== null)
+      ? AgentMcpDraft.fromPartial(object.createMcp)
+      : undefined;
+    message.updateMcp = (object.updateMcp !== undefined && object.updateMcp !== null)
+      ? UpdateAgentMcp.fromPartial(object.updateMcp)
+      : undefined;
+    message.deleteIntegrationId = object.deleteIntegrationId ?? undefined;
+    return message;
+  },
+};
+
+function createBaseAgentIntegrationReceipt(): AgentIntegrationReceipt {
+  return { integrationId: "", action: 0, acceptedAt: undefined };
+}
+
+export const AgentIntegrationReceipt: MessageFns<AgentIntegrationReceipt> = {
+  encode(message: AgentIntegrationReceipt, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.integrationId !== "") {
+      writer.uint32(10).string(message.integrationId);
+    }
+    if (message.action !== 0) {
+      writer.uint32(16).int32(message.action);
+    }
+    if (message.acceptedAt !== undefined) {
+      Timestamp.encode(message.acceptedAt, writer.uint32(26).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AgentIntegrationReceipt {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseAgentIntegrationReceipt();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.integrationId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.action = reader.int32() as any;
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.acceptedAt = Timestamp.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<AgentIntegrationReceipt>, I>>(base?: I): AgentIntegrationReceipt {
+    return AgentIntegrationReceipt.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AgentIntegrationReceipt>, I>>(object: I): AgentIntegrationReceipt {
+    const message = createBaseAgentIntegrationReceipt();
+    message.integrationId = object.integrationId ?? "";
+    message.action = object.action ?? 0;
+    message.acceptedAt = (object.acceptedAt !== undefined && object.acceptedAt !== null)
+      ? Timestamp.fromPartial(object.acceptedAt)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseAgentIntegrationResultRequest(): AgentIntegrationResultRequest {
+  return { agentId: "", requestId: "" };
+}
+
+export const AgentIntegrationResultRequest: MessageFns<AgentIntegrationResultRequest> = {
+  encode(message: AgentIntegrationResultRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.agentId !== "") {
+      writer.uint32(10).string(message.agentId);
+    }
+    if (message.requestId !== "") {
+      writer.uint32(18).string(message.requestId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AgentIntegrationResultRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseAgentIntegrationResultRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.agentId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.requestId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<AgentIntegrationResultRequest>, I>>(base?: I): AgentIntegrationResultRequest {
+    return AgentIntegrationResultRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AgentIntegrationResultRequest>, I>>(
+    object: I,
+  ): AgentIntegrationResultRequest {
+    const message = createBaseAgentIntegrationResultRequest();
+    message.agentId = object.agentId ?? "";
+    message.requestId = object.requestId ?? "";
+    return message;
+  },
+};
+
+function createBaseAgentIntegrationResult(): AgentIntegrationResult {
+  return { receipt: undefined };
+}
+
+export const AgentIntegrationResult: MessageFns<AgentIntegrationResult> = {
+  encode(message: AgentIntegrationResult, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.receipt !== undefined) {
+      AgentIntegrationReceipt.encode(message.receipt, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AgentIntegrationResult {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseAgentIntegrationResult();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.receipt = AgentIntegrationReceipt.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<AgentIntegrationResult>, I>>(base?: I): AgentIntegrationResult {
+    return AgentIntegrationResult.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AgentIntegrationResult>, I>>(object: I): AgentIntegrationResult {
+    const message = createBaseAgentIntegrationResult();
+    message.receipt = (object.receipt !== undefined && object.receipt !== null)
+      ? AgentIntegrationReceipt.fromPartial(object.receipt)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseTestMcpConnectionRequest(): TestMcpConnectionRequest {
+  return { agentId: "", integrationId: undefined, connection: undefined };
+}
+
+export const TestMcpConnectionRequest: MessageFns<TestMcpConnectionRequest> = {
+  encode(message: TestMcpConnectionRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.agentId !== "") {
+      writer.uint32(10).string(message.agentId);
+    }
+    if (message.integrationId !== undefined) {
+      writer.uint32(18).string(message.integrationId);
+    }
+    if (message.connection !== undefined) {
+      AgentMcpConnectionDraft.encode(message.connection, writer.uint32(26).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TestMcpConnectionRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseTestMcpConnectionRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.agentId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.integrationId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.connection = AgentMcpConnectionDraft.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<TestMcpConnectionRequest>, I>>(base?: I): TestMcpConnectionRequest {
+    return TestMcpConnectionRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<TestMcpConnectionRequest>, I>>(object: I): TestMcpConnectionRequest {
+    const message = createBaseTestMcpConnectionRequest();
+    message.agentId = object.agentId ?? "";
+    message.integrationId = object.integrationId ?? undefined;
+    message.connection = (object.connection !== undefined && object.connection !== null)
+      ? AgentMcpConnectionDraft.fromPartial(object.connection)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseTestMcpConnectionResult(): TestMcpConnectionResult {
+  return { listedToolCount: undefined, failure: undefined };
+}
+
+export const TestMcpConnectionResult: MessageFns<TestMcpConnectionResult> = {
+  encode(message: TestMcpConnectionResult, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.listedToolCount !== undefined) {
+      writer.uint32(8).uint32(message.listedToolCount);
+    }
+    if (message.failure !== undefined) {
+      writer.uint32(16).int32(message.failure);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TestMcpConnectionResult {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseTestMcpConnectionResult();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.listedToolCount = reader.uint32();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.failure = reader.int32() as any;
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<TestMcpConnectionResult>, I>>(base?: I): TestMcpConnectionResult {
+    return TestMcpConnectionResult.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<TestMcpConnectionResult>, I>>(object: I): TestMcpConnectionResult {
+    const message = createBaseTestMcpConnectionResult();
+    message.listedToolCount = object.listedToolCount ?? undefined;
+    message.failure = object.failure ?? undefined;
     return message;
   },
 };
@@ -3637,6 +4712,50 @@ export const AgentsService = {
     responseSerialize: (value: Empty): Buffer => Buffer.from(Empty.encode(value).finish()),
     responseDeserialize: (value: Buffer): Empty => Empty.decode(value),
   },
+  listIntegrations: {
+    path: "/chapchoo.computers.Agents/ListIntegrations" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: AgentIntegrationListRequest): Buffer =>
+      Buffer.from(AgentIntegrationListRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): AgentIntegrationListRequest => AgentIntegrationListRequest.decode(value),
+    responseSerialize: (value: AgentIntegrationList): Buffer =>
+      Buffer.from(AgentIntegrationList.encode(value).finish()),
+    responseDeserialize: (value: Buffer): AgentIntegrationList => AgentIntegrationList.decode(value),
+  },
+  changeIntegration: {
+    path: "/chapchoo.computers.Agents/ChangeIntegration" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: AgentIntegrationChangeRequest): Buffer =>
+      Buffer.from(AgentIntegrationChangeRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): AgentIntegrationChangeRequest => AgentIntegrationChangeRequest.decode(value),
+    responseSerialize: (value: AgentIntegrationReceipt): Buffer =>
+      Buffer.from(AgentIntegrationReceipt.encode(value).finish()),
+    responseDeserialize: (value: Buffer): AgentIntegrationReceipt => AgentIntegrationReceipt.decode(value),
+  },
+  integrationResult: {
+    path: "/chapchoo.computers.Agents/IntegrationResult" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: AgentIntegrationResultRequest): Buffer =>
+      Buffer.from(AgentIntegrationResultRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): AgentIntegrationResultRequest => AgentIntegrationResultRequest.decode(value),
+    responseSerialize: (value: AgentIntegrationResult): Buffer =>
+      Buffer.from(AgentIntegrationResult.encode(value).finish()),
+    responseDeserialize: (value: Buffer): AgentIntegrationResult => AgentIntegrationResult.decode(value),
+  },
+  testMcpConnection: {
+    path: "/chapchoo.computers.Agents/TestMcpConnection" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: TestMcpConnectionRequest): Buffer =>
+      Buffer.from(TestMcpConnectionRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): TestMcpConnectionRequest => TestMcpConnectionRequest.decode(value),
+    responseSerialize: (value: TestMcpConnectionResult): Buffer =>
+      Buffer.from(TestMcpConnectionResult.encode(value).finish()),
+    responseDeserialize: (value: Buffer): TestMcpConnectionResult => TestMcpConnectionResult.decode(value),
+  },
 } as const;
 
 export interface AgentsServer extends UntypedServiceImplementation {
@@ -3651,6 +4770,10 @@ export interface AgentsServer extends UntypedServiceImplementation {
   saveSystemPrompt: handleUnaryCall<SaveSystemPromptRequest, SystemPrompt>;
   creationResult: handleUnaryCall<CreationResultRequest, HistoricalCreationResult>;
   forceRemove: handleUnaryCall<ForceRemoveRequest, Empty>;
+  listIntegrations: handleUnaryCall<AgentIntegrationListRequest, AgentIntegrationList>;
+  changeIntegration: handleUnaryCall<AgentIntegrationChangeRequest, AgentIntegrationReceipt>;
+  integrationResult: handleUnaryCall<AgentIntegrationResultRequest, AgentIntegrationResult>;
+  testMcpConnection: handleUnaryCall<TestMcpConnectionRequest, TestMcpConnectionResult>;
 }
 
 export interface AgentsClient extends Client {
@@ -3812,6 +4935,66 @@ export interface AgentsClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: Empty) => void,
+  ): ClientUnaryCall;
+  listIntegrations(
+    request: AgentIntegrationListRequest,
+    callback: (error: ServiceError | null, response: AgentIntegrationList) => void,
+  ): ClientUnaryCall;
+  listIntegrations(
+    request: AgentIntegrationListRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: AgentIntegrationList) => void,
+  ): ClientUnaryCall;
+  listIntegrations(
+    request: AgentIntegrationListRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: AgentIntegrationList) => void,
+  ): ClientUnaryCall;
+  changeIntegration(
+    request: AgentIntegrationChangeRequest,
+    callback: (error: ServiceError | null, response: AgentIntegrationReceipt) => void,
+  ): ClientUnaryCall;
+  changeIntegration(
+    request: AgentIntegrationChangeRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: AgentIntegrationReceipt) => void,
+  ): ClientUnaryCall;
+  changeIntegration(
+    request: AgentIntegrationChangeRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: AgentIntegrationReceipt) => void,
+  ): ClientUnaryCall;
+  integrationResult(
+    request: AgentIntegrationResultRequest,
+    callback: (error: ServiceError | null, response: AgentIntegrationResult) => void,
+  ): ClientUnaryCall;
+  integrationResult(
+    request: AgentIntegrationResultRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: AgentIntegrationResult) => void,
+  ): ClientUnaryCall;
+  integrationResult(
+    request: AgentIntegrationResultRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: AgentIntegrationResult) => void,
+  ): ClientUnaryCall;
+  testMcpConnection(
+    request: TestMcpConnectionRequest,
+    callback: (error: ServiceError | null, response: TestMcpConnectionResult) => void,
+  ): ClientUnaryCall;
+  testMcpConnection(
+    request: TestMcpConnectionRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: TestMcpConnectionResult) => void,
+  ): ClientUnaryCall;
+  testMcpConnection(
+    request: TestMcpConnectionRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: TestMcpConnectionResult) => void,
   ): ClientUnaryCall;
 }
 

@@ -124,6 +124,145 @@ impl Report {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn replacement_route_recovers_setup_without_reopening_preparation() -> Result<(), AppError>
+    {
+        let temporary = tempfile::tempdir()?;
+        let native = chapchoo_harness::NativeOwner::new(chapchoo_harness::NativeStorage::open(
+            temporary.path(),
+        )?)?;
+        let mut operations = Operations::new(native.handle());
+        // The peer cannot serve a setup check or preparation inputs. Recovery
+        // must work from the retained local fact, not a new RPC or setup.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let channel =
+            tonic::transport::Endpoint::from_shared(format!("http://{}", listener.local_addr()?))?
+                .connect_timeout(std::time::Duration::from_millis(100))
+                .connect_lazy();
+        let key = BearerSecret::generate()?;
+        let first = c::CaptureSource {
+            session_id: "session".into(),
+            control_id: "control".into(),
+            connection_id: "first".into(),
+        };
+        let next = c::CaptureSource {
+            connection_id: "next".into(),
+            ..first.clone()
+        };
+        let command = c::SetupCommand {
+            operation_id: "setup".into(),
+            agent_id: "agent".into(),
+            conversation_id: "conversation".into(),
+            supply: Some(c::HarnessSupply {
+                choice: Some(c::harness_supply::Choice::Managed(())),
+            }),
+            context: Some(c::setup_command::Context::Initial(
+                c::InitialNativeContext {
+                    allow_fresh: false,
+                    require_retained_source: true,
+                },
+            )),
+        };
+        let lease = operations.tool_route(channel.clone(), first.clone(), &key)?;
+        let old_route = operations
+            .tools_route
+            .setup_route(&first)
+            .ok_or("Missing fixture route")?;
+        let authentication = super::super::super::authentication::Authentication::new(
+            channel.clone(),
+            first.clone(),
+            &key,
+            &command,
+        )?;
+        let scope = chapchoo_harness::NativeToolScope {
+            agent_id: command.agent_id.clone(),
+            conversation_id: command.conversation_id.clone(),
+        };
+        let tools = super::super::super::server_tools::Provider::new(
+            operations.tools_route.clone(),
+            scope.clone(),
+            operations.ordering.clone(),
+        )
+        .with_setup_route(old_route.clone(), first.connection_id.clone());
+        let setup = NativeSetupRequest {
+            operation_id: command.operation_id.clone(),
+            scope,
+            supply: HarnessSupply::Managed,
+            intent: NativeSetupIntent::Initial {
+                allow_fresh: false,
+                require_retained_source: true,
+            },
+        };
+        let rx = native.handle().admit_setup_with_authentication(
+            NativeSetupOperation {
+                operation_id: setup.operation_id.clone(),
+                scope: setup.scope.clone(),
+                supply: setup.supply.clone(),
+                intent: setup.intent.clone(),
+                instructions: Default::default(),
+                tool_catalog: Vec::new(),
+            },
+            Arc::new(authentication),
+            Arc::new(tools),
+        )?;
+        let outcome = NativeSetupObservation::Failed(NativeSetupFailure::SourceUnavailable);
+        assert_eq!(rx.await??, outcome);
+        // The original result never made it to Control.
+        drop(lease);
+        let _replacement = operations.tool_route(channel.clone(), next.clone(), &key)?;
+        assert!(!old_route.is_open());
+        let mut changed = command.clone();
+        changed.context = Some(c::setup_command::Context::Initial(
+            c::InitialNativeContext {
+                allow_fresh: true,
+                require_retained_source: false,
+            },
+        ));
+        assert!(operations.setup(changed, channel.clone(), next.clone(), &key)?);
+        assert!(
+            operations
+                .tasks
+                .join_next()
+                .await
+                .ok_or("Missing conflict task")??
+                .is_none()
+        );
+        assert!(operations.setup(command, channel, next, &key)?);
+        let (report, _permit) = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            operations.tasks.join_next(),
+        )
+        .await?
+        .ok_or("Missing setup recovery task")??
+        .ok_or("Missing original report")?;
+        let wrong = NativeReportedOperation::Setup {
+            id: setup.operation_id.clone(),
+            result: NativeSetupObservation::Failed(NativeSetupFailure::BeforeNativeLaunch),
+        };
+        assert!(native.handle().admit_reported(wrong)?.await?.is_err());
+        let recovered = native.handle().setup_observation(setup.clone()).await?;
+        assert_eq!(recovered.outcome, outcome);
+        assert_eq!(
+            recovered.connection_id.as_deref(),
+            Some(first.connection_id.as_str())
+        );
+        native
+            .handle()
+            .admit_reported(report.native_report()?)?
+            .await??;
+        assert_eq!(
+            native.handle().setup_observation(setup).await?.outcome,
+            NativeSetupObservation::Unseen
+        );
+        operations.finish().await?;
+        assert_eq!(
+            native.finish().await?,
+            chapchoo_harness::Retirement::NoNativeStarted
+        );
+        Ok(())
+    }
+
     #[tokio::test]
     async fn input_report_retry_holds_invocation_until_ordered_closure() -> Result<(), AppError> {
         let temporary = tempfile::tempdir()?;

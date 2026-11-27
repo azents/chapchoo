@@ -8,47 +8,88 @@ use hyper::{
 };
 use hyper_util::rt::{TokioIo, TokioTimer};
 use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, StreamableHttpService};
-use std::{convert::Infallible, time::Duration};
+use std::{convert::Infallible, net::SocketAddr, time::Duration};
 use tokio::sync::OwnedSemaphorePermit;
 use tower::Service;
 
 type Body = BoxBody<Bytes, Infallible>;
 type Sdk = StreamableHttpService<handler::Handler, sessions::Sessions>;
 struct Reservation {
-    _connection: OwnedSemaphorePermit,
     _request: OwnedSemaphorePermit,
     _bytes: OwnedSemaphorePermit,
 }
+#[derive(Clone)]
+pub(super) struct Endpoint {
+    pub(super) state: Arc<State>,
+    pub(super) sessions: Arc<sessions::Sessions>,
+    sdk: Sdk,
+}
+impl Endpoint {
+    pub(super) fn new(address: SocketAddr, state: Arc<State>) -> Self {
+        let mut config = StreamableHttpServerConfig::default();
+        config.legacy_session_mode = true;
+        config.allowed_hosts = vec![address.to_string()];
+        config.allowed_origins = vec![format!("http://{address}")];
+        config.max_request_body_bytes = 64 * 1024;
+        config.sse_retry = None;
+        config.sse_keep_alive = None;
+        config.cancellation_token = state.stop.clone();
+        let sessions = Arc::new(sessions::Sessions::new());
+        let factory = state.clone();
+        let sdk = StreamableHttpService::new(
+            move || Ok(handler::Handler::new(factory.clone())),
+            sessions.clone(),
+            config,
+        );
+        Self {
+            state,
+            sessions,
+            sdk,
+        }
+    }
+}
+
+struct Connection {
+    // Initially owns a bounded parsing slot. After capability validation the
+    // socket is charged to that endpoint, not to another integration or send.
+    lane: Option<Arc<Semaphore>>,
+    _permit: OwnedSemaphorePermit,
+}
+impl Connection {
+    fn bind(&mut self, lane: &Arc<Semaphore>) -> bool {
+        if self
+            .lane
+            .as_ref()
+            .is_some_and(|owned| Arc::ptr_eq(owned, lane))
+        {
+            return true;
+        }
+        let Ok(permit) = lane.clone().try_acquire_owned() else {
+            return false;
+        };
+        self._permit = permit;
+        self.lane = Some(lane.clone());
+        true
+    }
+}
+
 pub(super) async fn serve(
     listener: tokio::net::TcpListener,
-    state: Arc<State>,
-    sessions: Arc<sessions::Sessions>,
+    stop: CancellationToken,
+    builtin: Endpoint,
+    optional: Arc<OnceLock<BTreeMap<String, Endpoint>>>,
 ) -> Result<(), AppError> {
-    let address = listener.local_addr()?;
-    let mut config = StreamableHttpServerConfig::default();
-    config.legacy_session_mode = true;
-    config.allowed_hosts = vec![address.to_string()];
-    config.allowed_origins = vec![format!("http://{address}")];
-    config.max_request_body_bytes = 64 * 1024;
-    config.sse_retry = None;
-    config.sse_keep_alive = None;
-    config.cancellation_token = state.stop.clone();
-    let factory = state.clone();
-    let sdk = StreamableHttpService::new(
-        move || Ok(handler::Handler::new(factory.clone())),
-        sessions,
-        config,
-    );
+    let parsing = Arc::new(Semaphore::new(128));
     let mut tasks = JoinSet::new();
     let mut result = Ok(());
     loop {
         tokio::select! {
             biased;
-            _ = state.stop.cancelled() => break,
+            _ = stop.cancelled() => break,
             completed = tasks.join_next(), if !tasks.is_empty() => {
                 if let Some(Err(error)) = completed {
                     result = crate::completion::complete(result, Err(error.into()));
-                    state.stop.cancel();
+                    stop.cancel();
                 }
             }
             accepted = listener.accept() => {
@@ -56,30 +97,18 @@ pub(super) async fn serve(
                     Ok((socket, _)) => socket,
                     Err(error) => {
                         result = crate::completion::complete(result, Err(error.into()));
-                        state.stop.cancel();
+                        stop.cancel();
                         break;
                     }
                 };
-                // HTTP/1 owns at most one request at a time. Reserve its maximum
-                // header+body payload before Hyper parses even unauthenticated
-                // headers. The same budget follows SDK request parts/response.
-                let reservation = match (
-                    state.connections.clone().try_acquire_owned(),
-                    state.requests.clone().try_acquire_owned(),
-                    state.bytes.clone().try_acquire_many_owned(80 * 1024),
-                ) {
-                    (Ok(connection), Ok(request), Ok(bytes)) => Arc::new(Reservation {
-                        _connection: connection, _request: request, _bytes: bytes,
-                    }),
-                    _ => { drop(socket); continue; }
-                };
-                let state = state.clone();
-                let sdk = sdk.clone();
+                let Ok(permit) = parsing.clone().try_acquire_owned() else { continue; };
+                let budget = Arc::new(Mutex::new(Connection { lane: None, _permit: permit }));
+                let builtin = builtin.clone();
+                let optional = optional.clone();
+                let stopped = stop.clone();
                 tasks.spawn(async move {
-                    let stopped = state.stop.clone();
-                    let keep = reservation.clone();
                     let service = service_fn(move |request| {
-                        handle(request, state.clone(), sdk.clone(), reservation.clone())
+                        handle(request, builtin.clone(), optional.clone(), budget.clone())
                     });
                     let mut builder = http1::Builder::new();
                     builder.timer(TokioTimer::new()).header_read_timeout(Duration::from_secs(10))
@@ -90,14 +119,16 @@ pub(super) async fn serve(
                         ended = &mut connection => ended,
                         _ = stopped.cancelled() => {
                             connection.as_mut().graceful_shutdown();
-                            connection.await
+                            match tokio::time::timeout(Duration::from_secs(10), connection).await {
+                                Ok(result) => result,
+                                Err(_) => return,
+                            }
                         }
                     };
                     // Client parse/read/disconnect errors do not prove anything
                     // about a separately owned tool effect and contain no safe
                     // operator diagnostics to echo.
                     if ended.is_err() { tracing::debug!("Local MCP HTTP connection ended"); }
-                    drop(keep);
                 });
             }
         }
@@ -117,18 +148,23 @@ fn response(status: StatusCode, message: &'static str) -> Response<Body> {
 }
 async fn handle(
     mut request: Request<Incoming>,
-    state: Arc<State>,
-    mut sdk: Sdk,
-    reservation: Arc<Reservation>,
+    builtin: Endpoint,
+    optional: Arc<OnceLock<BTreeMap<String, Endpoint>>>,
+    connection: Arc<Mutex<Connection>>,
 ) -> Result<Response<Body>, Infallible> {
+    let endpoint = match request.uri().path() {
+        "/mcp" => Some(&builtin),
+        path => optional.get().and_then(|routes| routes.get(path)),
+    };
+    let Some(endpoint) = endpoint.filter(|_| request.uri().query().is_none()) else {
+        return Ok(response(StatusCode::NOT_FOUND, "MCP endpoint not found"));
+    };
+    let state = &endpoint.state;
     if state.stop.is_cancelled() {
         return Ok(response(
             StatusCode::SERVICE_UNAVAILABLE,
             "Native MCP owner retired",
         ));
-    }
-    if request.uri().path() != "/mcp" || request.uri().query().is_some() {
-        return Ok(response(StatusCode::NOT_FOUND, "MCP endpoint not found"));
     }
     let header_bytes = request
         .headers()
@@ -172,6 +208,22 @@ async fn handle(
     {
         return Ok(response(StatusCode::BAD_REQUEST, "Unsupported MCP profile"));
     }
+    let reservation = match (
+        lock(&connection).bind(&state.connections),
+        state.requests.clone().try_acquire_owned(),
+        state.bytes.clone().try_acquire_many_owned(80 * 1024),
+    ) {
+        (true, Ok(request), Ok(bytes)) => Arc::new(Reservation {
+            _request: request,
+            _bytes: bytes,
+        }),
+        _ => {
+            return Ok(response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Local MCP capacity exhausted",
+            ));
+        }
+    };
     request.extensions_mut().insert(reservation.clone());
     let (parts, body) = request.into_parts();
     let bytes = match tokio::time::timeout(
@@ -195,7 +247,7 @@ async fn handle(
         Ok(Ok(bytes)) => bytes.to_bytes(),
     };
     let request = Request::from_parts(parts, Full::new(bytes));
-    let response = match sdk.call(request).await {
+    let response = match endpoint.sdk.clone().call(request).await {
         Ok(response) => response,
         Err(never) => match never {},
     };

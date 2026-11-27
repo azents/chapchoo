@@ -892,7 +892,18 @@ export interface SetupReport {
   conversationId: string;
   operationId: string;
   ready?: NativeTarget | undefined;
-  failed?: SetupFailure | undefined;
+  failed?:
+    | SetupFailure
+    | undefined;
+  /**
+   * Connection on which native Setup applied.
+   * The authenticated carrier may be a later connection recovering the result.
+   */
+  applicationConnectionId?:
+    | string
+    | undefined;
+  /** Positive optional-tool application evidence; requires a Ready and connection. */
+  externalToolsApplied: boolean;
 }
 
 export interface InputCommand {
@@ -10136,7 +10147,16 @@ export const SetupCheck: MessageFns<SetupCheck> = {
 };
 
 function createBaseSetupReport(): SetupReport {
-  return { source: undefined, agentId: "", conversationId: "", operationId: "", ready: undefined, failed: undefined };
+  return {
+    source: undefined,
+    agentId: "",
+    conversationId: "",
+    operationId: "",
+    ready: undefined,
+    failed: undefined,
+    applicationConnectionId: undefined,
+    externalToolsApplied: false,
+  };
 }
 
 export const SetupReport: MessageFns<SetupReport> = {
@@ -10158,6 +10178,12 @@ export const SetupReport: MessageFns<SetupReport> = {
     }
     if (message.failed !== undefined) {
       writer.uint32(48).int32(message.failed);
+    }
+    if (message.applicationConnectionId !== undefined) {
+      writer.uint32(58).string(message.applicationConnectionId);
+    }
+    if (message.externalToolsApplied !== false) {
+      writer.uint32(64).bool(message.externalToolsApplied);
     }
     return writer;
   },
@@ -10223,6 +10249,22 @@ export const SetupReport: MessageFns<SetupReport> = {
             message.failed = reader.int32() as any;
             continue;
           }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.applicationConnectionId = reader.string();
+            continue;
+          }
+          case 8: {
+            if (tag !== 64) {
+              break;
+            }
+
+            message.externalToolsApplied = reader.bool();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -10250,6 +10292,8 @@ export const SetupReport: MessageFns<SetupReport> = {
       ? NativeTarget.fromPartial(object.ready)
       : undefined;
     message.failed = object.failed ?? undefined;
+    message.applicationConnectionId = object.applicationConnectionId ?? undefined;
+    message.externalToolsApplied = object.externalToolsApplied ?? false;
     return message;
   },
 };

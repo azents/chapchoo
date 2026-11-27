@@ -23,6 +23,7 @@ mod display;
 mod email;
 mod form_text;
 mod handle;
+pub mod local_mcp;
 mod password;
 mod project_instructions;
 mod provider_request;

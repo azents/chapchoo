@@ -497,6 +497,11 @@ message SetupReport {
   CaptureSource source = 1;
   string agent_id = 2; string conversation_id = 3; string operation_id = 4;
   oneof result { NativeTarget ready = 5; SetupFailure failed = 6; }
+  // Connection on which native Setup applied.
+  // The authenticated carrier may be a later connection recovering the result.
+  optional string application_connection_id = 7;
+  // Positive optional-tool application evidence; requires a Ready and connection.
+  bool external_tools_applied = 8;
 }
 message InputCommand {
   string agent_id = 1; string conversation_id = 2; string operation_id = 3;

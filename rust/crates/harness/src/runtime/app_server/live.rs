@@ -46,6 +46,7 @@ impl LiveRequest {
 struct Root {
     target: NativeTextTarget,
     insertions: events::Insertions,
+    mcp_servers: std::collections::BTreeSet<String>,
 }
 
 pub(in crate::runtime) struct Connection {
@@ -86,7 +87,7 @@ impl Connection {
         self,
         cwd: &Path,
         context: &NativeContext,
-        mcp: &NativeMcpDeclaration,
+        declarations: &[&NativeMcpDeclaration],
         initial_key: Option<&str>,
         empty_scope: bool,
     ) -> Result<LiveThread, Error> {
@@ -102,7 +103,7 @@ impl Connection {
             } => return Err(Error::CaptureConflict),
         };
         initialize(&self.client, initial_key).await?;
-        let opened = Thread::open(&self.client, cwd, existing, Some(mcp)).await?;
+        let opened = Thread::open(&self.client, cwd, existing, declarations).await?;
         let id = opened.id;
         let full_access_at_open = opened.full_access;
         if existing.is_none() {
@@ -160,6 +161,10 @@ impl Connection {
                     native_session: id.clone(),
                 },
                 insertions: events::Insertions::new(id.clone()),
+                mcp_servers: declarations
+                    .iter()
+                    .map(|declaration| declaration.name().to_owned())
+                    .collect(),
             })
             .map_err(|_| Error::CaptureConflict)?;
         Ok(LiveThread {
@@ -197,7 +202,13 @@ impl Ingress {
                     .as_str()
                     .and_then(|id| changes.get(id))
                     .map(String::as_str);
-                let approval = tools::Approval::decode(&root.target, turn, &frame, locations);
+                let approval = tools::Approval::decode(
+                    &root.target,
+                    turn,
+                    &frame,
+                    locations,
+                    &root.mcp_servers,
+                );
                 let form = match method {
                     "mcpServer/elicitation/request" if approval.is_none() => forms::Form::offer(
                         root.target.native_session.as_str(),

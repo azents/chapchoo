@@ -288,19 +288,9 @@ async fn connected(
                             Some(wire::connector_command::Operation::Input(input))=>Some(operations.input(input,channel.clone(),chapchoo_protocol::conversations::CaptureSource {
                                 session_id:session.into(),control_id:connected.instance_id.clone(),connection_id:connected.connection_id.clone(),
                             },key)?),
-                            Some(wire::connector_command::Operation::Setup(setup))=>{
-                                let mut client=chapchoo_protocol::conversations::connector_capture_client::ConnectorCaptureClient::new(channel.clone())
-                                    .max_decoding_message_size(64*1024).max_encoding_message_size(64*1024);
-                                let check=request(chapchoo_protocol::conversations::SetupCheck {
-                                    source:Some(chapchoo_protocol::conversations::CaptureSource {session_id:session.into(),control_id:connected.instance_id.clone(),connection_id:connected.connection_id.clone()}),
-                                    command:Some(setup.clone()),
-                                },key)?;
-                                if client.check_setup(check).await.is_err() {Some(false)} else {
-                                    Some(operations.setup(setup,channel.clone(),chapchoo_protocol::conversations::CaptureSource {
-                                        session_id:session.into(),control_id:connected.instance_id.clone(),connection_id:connected.connection_id.clone(),
-                                    },key)?)
-                                }
-                            },
+                            Some(wire::connector_command::Operation::Setup(setup))=>Some(operations.setup(setup,channel.clone(),chapchoo_protocol::conversations::CaptureSource {
+                                session_id:session.into(),control_id:connected.instance_id.clone(),connection_id:connected.connection_id.clone(),
+                            },key)?),
                             None=>continue,
                         };
                         sender.try_send(wire::ConnectorFrame{payload:Some(wire::connector_frame::Payload::Result(wire::ConnectorResult{identity:command.identity,execution_id:context.execution_id,ready:true,admitted}))})?;

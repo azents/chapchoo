@@ -8,6 +8,14 @@ pub enum NativeSetupIntent {
     },
     Existing(NativeTextTarget),
 }
+/// The sealed command fields available before reading preparation inputs.
+#[derive(Clone, PartialEq, Eq)]
+pub struct NativeSetupRequest {
+    pub operation_id: String,
+    pub scope: crate::NativeToolScope,
+    pub supply: HarnessSupply,
+    pub intent: NativeSetupIntent,
+}
 #[derive(Clone, PartialEq, Eq)]
 pub struct NativeSetupOperation {
     pub operation_id: String,
@@ -32,22 +40,47 @@ pub enum NativeSetupObservation {
     Ready(NativeTextTarget),
     Failed(NativeSetupFailure),
 }
+pub struct NativeSetupRecovery {
+    pub outcome: NativeSetupObservation,
+    pub connection_id: Option<String>,
+    pub external_tools_applied: bool,
+}
 macro_rules! safe_debug {($($name:ty),+)=>{$(impl fmt::Debug for $name {fn fmt(&self,f:&mut fmt::Formatter<'_>)->fmt::Result {f.write_str(concat!(stringify!($name),"([REDACTED])"))}})+};}
 safe_debug!(
     NativeSetupIntent,
+    NativeSetupRequest,
     NativeSetupOperation,
-    NativeSetupObservation
+    NativeSetupObservation,
+    NativeSetupRecovery
 );
+impl NativeSetupOperation {
+    pub(super) fn check_request(&self, request: &NativeSetupRequest) -> Result<(), Error> {
+        if self.operation_id != request.operation_id
+            || self.scope != request.scope
+            || self.supply != request.supply
+            || self.intent != request.intent
+        {
+            return Err(Error::OperationConflict);
+        }
+        Ok(())
+    }
+}
 #[derive(Default)]
 pub(super) struct SetupRegistry {
-    entries: BTreeMap<String, (NativeSetupOperation, NativeSetupObservation)>,
+    entries: BTreeMap<String, SetupEntry>,
+}
+struct SetupEntry {
+    operation: NativeSetupOperation,
+    outcome: NativeSetupObservation,
+    connection_id: Option<String>,
+    external_tools_applied: bool,
 }
 impl SetupRegistry {
     pub(super) fn expire_unstarted(
         &mut self,
         operation: &NativeSetupOperation,
     ) -> Result<NativeSetupObservation, Error> {
-        if let Some(previous) = self.begin(operation)? {
+        if let Some(previous) = self.begin(operation, None)? {
             return Ok(previous);
         }
         let failure = NativeSetupObservation::Failed(NativeSetupFailure::NotAdmitted);
@@ -69,7 +102,7 @@ impl SetupRegistry {
         if self
             .entries
             .get(id)
-            .is_some_and(|(_, outcome)| outcome != expected)
+            .is_some_and(|entry| &entry.outcome != expected)
         {
             return Err(Error::OperationConflict);
         }
@@ -79,23 +112,23 @@ impl SetupRegistry {
     pub(super) fn begin(
         &mut self,
         operation: &NativeSetupOperation,
+        connection_id: Option<&str>,
     ) -> Result<Option<NativeSetupObservation>, Error> {
         valid_id(&operation.operation_id)?;
-        if let Some((previous, outcome)) = self.entries.get(&operation.operation_id) {
-            if previous != operation {
-                return Err(Error::OperationConflict);
-            }
-            return Ok(Some(outcome.clone()));
+        if let Some(previous) = self.recover(operation)? {
+            return Ok(Some(previous));
         }
         if self.entries.len() >= 256 {
             return Err(Error::NotAdmitted);
         }
         self.entries.insert(
             operation.operation_id.clone(),
-            (
-                operation.clone(),
-                NativeSetupObservation::PossibleForwarding,
-            ),
+            SetupEntry {
+                operation: operation.clone(),
+                outcome: NativeSetupObservation::PossibleForwarding,
+                connection_id: connection_id.map(str::to_owned),
+                external_tools_applied: false,
+            },
         );
         Ok(None)
     }
@@ -104,18 +137,42 @@ impl SetupRegistry {
         id: &str,
         outcome: NativeSetupObservation,
     ) -> Result<(), Error> {
-        let (_, current) = self.entries.get_mut(id).ok_or(Error::OperationConflict)?;
-        *current = outcome;
+        self.entries
+            .get_mut(id)
+            .ok_or(Error::OperationConflict)?
+            .outcome = outcome;
         Ok(())
     }
-    pub(super) fn observe(&self, id: &str) -> Result<NativeSetupObservation, Error> {
-        valid_id(id)?;
-        Ok(self
-            .entries
-            .get(id)
-            .map_or(NativeSetupObservation::Unseen, |(_, outcome)| {
-                outcome.clone()
-            }))
+    pub(super) fn recover(
+        &self,
+        operation: &NativeSetupOperation,
+    ) -> Result<Option<NativeSetupObservation>, Error> {
+        let Some(entry) = self.entries.get(&operation.operation_id) else {
+            return Ok(None);
+        };
+        if &entry.operation != operation {
+            return Err(Error::OperationConflict);
+        }
+        Ok(Some(entry.outcome.clone()))
+    }
+    pub(super) fn observe(
+        &self,
+        request: &NativeSetupRequest,
+    ) -> Result<NativeSetupRecovery, Error> {
+        valid_id(&request.operation_id)?;
+        let Some(entry) = self.entries.get(&request.operation_id) else {
+            return Ok(NativeSetupRecovery {
+                outcome: NativeSetupObservation::Unseen,
+                connection_id: None,
+                external_tools_applied: false,
+            });
+        };
+        entry.operation.check_request(request)?;
+        Ok(NativeSetupRecovery {
+            outcome: entry.outcome.clone(),
+            connection_id: entry.connection_id.clone(),
+            external_tools_applied: entry.external_tools_applied,
+        })
     }
 }
 fn valid_id(id: &str) -> Result<(), Error> {
@@ -140,11 +197,53 @@ impl State {
         if operation.tool_catalog.len() > 48 * 1024 {
             return Err(Error::NotAdmitted);
         }
-        if let Some(previous) = self.setups.begin(&operation)? {
+        if let Some(previous) = self.setups.recover(&operation)? {
+            return Ok(previous);
+        }
+        if !setup_route_open(tools.as_ref())
+            || self.requires_idle_application(&operation, tools.as_ref()) && !self.refresh_safe()
+        {
+            return Err(Error::DeliveryUncertain);
+        }
+        // Do not resolve optional settings while Setup is deferred behind
+        // another turn. Only the configuration owner selects at its cut.
+        let tools = if self.live.is_some() && self.optional_setup_allowed() {
+            tools
+                .resolve_external()
+                .await
+                .map_err(Error::ToolsProvision)?
+                .unwrap_or(tools)
+        } else {
+            tools
+        };
+        let started = match tools.setup_route() {
+            Some(route) => {
+                route.publish(|| self.setups.begin(&operation, tools.setup_connection_id()))
+            }
+            None => self.setups.begin(&operation, None),
+        };
+        if let Some(previous) = started? {
             return Ok(previous);
         }
         let outcome = match self.setup_once(&operation, authentication, tools).await {
-            Ok(target) => NativeSetupObservation::Ready(target),
+            Ok(target) => {
+                let entry = self
+                    .setups
+                    .entries
+                    .get_mut(&operation.operation_id)
+                    .ok_or(Error::OperationConflict)?;
+                entry.external_tools_applied = self
+                    .live
+                    .as_ref()
+                    .and_then(|live| live.tools.as_ref())
+                    .and_then(crate::NativeToolProvision::applied_external)
+                    .is_some_and(|applied| {
+                        applied.operation_id == operation.operation_id
+                            && entry.connection_id.as_deref()
+                                == Some(applied.connection_id.as_str())
+                    });
+                NativeSetupObservation::Ready(target)
+            }
             Err(error) => NativeSetupObservation::Failed(match error {
                 Error::NotAdmitted
                 | Error::UnsupportedRuntime
@@ -179,16 +278,22 @@ impl State {
         authentication: Arc<dyn NativeAuthenticationProvider>,
         tools: Arc<dyn crate::NativeToolsProvider>,
     ) -> Result<NativeTextTarget, Error> {
-        let safe_retirement = self.needs_refresh(operation);
+        if tools
+            .external_preparation()
+            .is_some_and(|preparation| preparation.operation_id != operation.operation_id)
+        {
+            return Err(Error::OperationConflict);
+        }
+        let safe_retirement = self.needs_refresh(operation, tools.as_ref());
+        if self.requires_idle_application(operation, tools.as_ref()) && !self.refresh_safe() {
+            return Err(Error::NotAdmitted);
+        }
         if safe_retirement {
             let live = self.live.as_ref().ok_or(Error::NotAdmitted)?;
             if !operation.scope.matches(&live._authentication) {
                 return Err(Error::OperationConflict);
             }
             let _ = retained_context(&operation.intent, &live.capture)?;
-            if !self.refresh_safe() {
-                return Err(Error::NotAdmitted);
-            }
             self.retire().await?;
         }
         let retained = self.captured_source().await?;
@@ -246,12 +351,45 @@ impl State {
             native_session,
         })
     }
-    pub(super) fn needs_refresh(&self, operation: &NativeSetupOperation) -> bool {
+    pub(super) fn needs_refresh(
+        &self,
+        operation: &NativeSetupOperation,
+        tools: &dyn crate::NativeToolsProvider,
+    ) -> bool {
         self.live.as_ref().is_some_and(|live| {
             live.instructions != operation.instructions
                 || live.tool_catalog != operation.tool_catalog
                 || live.requested_supply != operation.supply
+                || self.optional_setup_allowed()
+                    && live
+                        .tools
+                        .as_ref()
+                        .and_then(crate::NativeToolProvision::external_supply)
+                        != tools.external_supply()
         })
+    }
+    pub(super) fn requires_idle_application(
+        &self,
+        operation: &NativeSetupOperation,
+        tools: &dyn crate::NativeToolsProvider,
+    ) -> bool {
+        self.needs_refresh(operation, tools)
+            || self.optional_setup_allowed()
+                && (self.live.is_some() && tools.has_pending_external()
+                    || self.has_live_external_supply() && tools.external_preparation().is_some())
+    }
+    pub(super) fn optional_setup_allowed(&self) -> bool {
+        !matches!(
+            self.live.as_ref().and_then(|live| live.session.as_ref()),
+            Some(Session::Acp(_))
+        )
+    }
+    pub(super) fn has_live_external_supply(&self) -> bool {
+        self.live
+            .as_ref()
+            .and_then(|live| live.tools.as_ref())
+            .and_then(crate::NativeToolProvision::external_supply)
+            .is_some()
     }
     pub(super) fn refresh_safe(&self) -> bool {
         self.live.as_ref().is_none_or(|live| {
@@ -319,11 +457,15 @@ impl NativeHandle {
             .map_err(|_| Error::NotAdmitted)?;
         Ok(rx)
     }
-    pub async fn setup_observation(&self, id: String) -> Result<NativeSetupObservation, Error> {
-        valid_id(&id)?;
+    /// Recover a retained result without touching authentication, tools, or the live owner.
+    pub async fn setup_observation(
+        &self,
+        request: NativeSetupRequest,
+    ) -> Result<NativeSetupRecovery, Error> {
+        valid_id(&request.operation_id)?;
         let (result, rx) = oneshot::channel();
         self.sender
-            .try_send(Command::SetupObservation(id, result))
+            .try_send(Command::SetupObservation(request, result))
             .map_err(|_| Error::NotAdmitted)?;
         rx.await.map_err(|_| Error::Process)?
     }
@@ -332,6 +474,14 @@ impl NativeHandle {
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    fn request(operation: &NativeSetupOperation) -> NativeSetupRequest {
+        NativeSetupRequest {
+            operation_id: operation.operation_id.clone(),
+            scope: operation.scope.clone(),
+            supply: operation.supply.clone(),
+            intent: operation.intent.clone(),
+        }
+    }
     fn tool_scope() -> crate::NativeToolScope {
         crate::NativeToolScope {
             agent_id: "agent".into(),
@@ -370,7 +520,7 @@ mod tests {
                 require_retained_source: false,
             },
         };
-        registry.begin(&operation)?;
+        registry.begin(&operation, None)?;
         let rejected = NativeSetupObservation::Failed(NativeSetupFailure::NotAdmitted);
         assert!(registry.release_reported("operation", &rejected).is_err());
         registry.completed("operation", rejected.clone())?;
@@ -385,7 +535,7 @@ mod tests {
         registry.release_reported("operation", &rejected)?;
         registry.release_reported("operation", &rejected)?;
         assert!(matches!(
-            registry.observe("operation")?,
+            registry.observe(&request(&operation))?.outcome,
             NativeSetupObservation::Unseen
         ));
         Ok(())
@@ -409,7 +559,7 @@ mod tests {
     -> Result<(), TestError> {
         let mut registry = SetupRegistry::default();
         for index in 0..256 {
-            registry.begin(&operation(&format!("pending-{index}")))?;
+            registry.begin(&operation(&format!("pending-{index}")), None)?;
         }
         assert!(matches!(
             registry.expire_unstarted(&operation("expired")),
@@ -418,7 +568,9 @@ mod tests {
         assert_eq!(registry.entries.len(), 256);
         for index in 0..256 {
             assert!(matches!(
-                registry.observe(&format!("pending-{index}"))?,
+                registry
+                    .observe(&request(&operation(&format!("pending-{index}"))))?
+                    .outcome,
                 NativeSetupObservation::PossibleForwarding
             ));
         }
@@ -441,9 +593,9 @@ mod tests {
     -> Result<(), TestError> {
         let mut registry = SetupRegistry::default();
         let first = operation("operation");
-        assert!(registry.begin(&first)?.is_none());
+        assert!(registry.begin(&first, Some("original"))?.is_none());
         assert!(matches!(
-            registry.begin(&first)?,
+            registry.begin(&first, Some("replacement"))?,
             Some(NativeSetupObservation::PossibleForwarding)
         ));
         let changed = NativeSetupOperation {
@@ -454,7 +606,7 @@ mod tests {
             ..first.clone()
         };
         assert!(matches!(
-            registry.begin(&changed),
+            registry.begin(&changed, Some("replacement")),
             Err(Error::OperationConflict)
         ));
         let changed_scope = NativeSetupOperation {
@@ -465,7 +617,7 @@ mod tests {
             ..first.clone()
         };
         assert!(matches!(
-            registry.begin(&changed_scope),
+            registry.begin(&changed_scope, Some("replacement")),
             Err(Error::OperationConflict)
         ));
         registry.completed(
@@ -473,13 +625,17 @@ mod tests {
             NativeSetupObservation::Failed(NativeSetupFailure::SourceUnavailable),
         )?;
         assert!(matches!(
-            registry.begin(&first)?,
+            registry.begin(&first, Some("replacement"))?,
             Some(NativeSetupObservation::Failed(
                 NativeSetupFailure::SourceUnavailable
             ))
         ));
+        assert_eq!(
+            registry.observe(&request(&first))?.connection_id.as_deref(),
+            Some("original")
+        );
         assert!(matches!(
-            registry.observe("missing")?,
+            registry.observe(&request(&operation("missing")))?.outcome,
             NativeSetupObservation::Unseen
         ));
         Ok(())
@@ -507,9 +663,7 @@ mod tests {
         )?;
         drop(rx);
         assert!(matches!(
-            handle
-                .setup_observation(operation.operation_id.clone())
-                .await?,
+            handle.setup_observation(request(&operation)).await?.outcome,
             NativeSetupObservation::Failed(NativeSetupFailure::SourceUnavailable)
         ));
         assert!(!storage.capture_root().join("current").exists());

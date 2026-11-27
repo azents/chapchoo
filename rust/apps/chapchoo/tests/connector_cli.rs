@@ -5,14 +5,17 @@ use chapchoo_crypto::{
 };
 use chapchoo_domain::{EmailAddress, Password};
 use chapchoo_persistence::{Store, prepare_sqlite};
-use chapchoo_protocol::control as wire;
+use chapchoo_protocol::{computers, control as wire};
 use chapchoo_rpc::{ComponentAuthenticationServices, ComponentConnectionServices};
 use chapchoo_service::{
     AcceptanceTime, AccountsConfig, AccountsService, ComputerRequest, ComputersService,
     CreationOutcome, PasswordWork, ProviderCapabilities, ProviderSource, SessionPolicy,
 };
 use std::{
-    sync::{Arc, atomic::AtomicBool},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+    },
     time::Duration,
 };
 use tokio::{net::TcpListener, process::Command, time::Instant};
@@ -207,12 +210,38 @@ async fn connector_process_exchanges_connects_and_observes_independently_of_prov
             let cleanup = cleanup_connections.drain().await.map_err(Into::into);
             test_support::completed(primary, cleanup)
         });
+        let tools = chapchoo_rpc::ServerToolServices::new(
+            chapchoo_service::ServerTools::new(Arc::new(
+                chapchoo_service::ConversationToolBackend::new(Arc::new(
+                    chapchoo_service::ConversationService::new(store.clone()),
+                )),
+            )),
+            Arc::new(AtomicBool::new(true)),
+        ).with_external(chapchoo_service::ExternalMcpRuntime::new(store.clone()));
+        let tools_owner = tools.clone();
+        fixture.cleanup(async move { tools_owner.finish().await.map_err(|error| -> Error { error.into() }) });
+        let preparations = Arc::new(AtomicUsize::new(0));
+        let invocations = Arc::new(AtomicUsize::new(0));
+        let observe_preparations = preparations.clone();
+        let observe_invocations = invocations.clone();
+        let observe_tools = tower::util::MapRequestLayer::new(move |request: http::Request<tonic::body::Body>| {
+            match request.uri().path() {
+                "/chapchoo.server_tools.ServerTools/PrepareExternal" => { observe_preparations.fetch_add(1, Ordering::AcqRel); }
+                "/chapchoo.server_tools.ServerTools/InvokeExternal" => { observe_invocations.fetch_add(1, Ordering::AcqRel); }
+                _ => {}
+            }
+            request
+        });
+        let agents_server = chapchoo_rpc::ComputerServices::new(app.clone()).agents_server();
         let stopped = fixture.shutdown();
         fixture.server(
             Server::builder()
+                .layer(observe_tools)
                 .add_service(authentication.connector_server())
                 .add_service(connections.connector_server())
                 .add_service(capture_server)
+                .add_service(agents_server)
+                .add_service(tools.server())
                 .serve_with_incoming_shutdown(TcpListenerStream::new(listener), async {
                     let _ = stopped.await;
                 }),
@@ -271,6 +300,21 @@ async fn connector_process_exchanges_connects_and_observes_independently_of_prov
         delivery.register_local(control.id.clone(),peer_channel)?;
         let processor=Arc::new(chapchoo_rpc::ConversationControlProcessor::new(app.clone(),
             Arc::new(chapchoo_service::ConversationService::new(store.clone())),delivery,Arc::new(AtomicBool::new(true))));
+        let channel = tonic::transport::Endpoint::from_shared(endpoint.clone())?.connect().await?;
+        let mut agents = computers::agents_client::AgentsClient::new(channel);
+        use computers::agent_integration_change_request::Change;
+        let pending_integration = agents.change_integration(owner_request(computers::AgentIntegrationChangeRequest {
+            agent_id: agent.id.clone(),
+            request_id: "model-free-add-mcp".into(),
+            change: Some(Change::CreateMcp(computers::AgentMcpDraft {
+                display_name: "Blocked destination fixture".into(),
+                connection: Some(computers::AgentMcpConnectionDraft {
+                    endpoint: "https://127.0.0.1:1/mcp".into(),
+                    authentication: Some(computers::agent_mcp_connection_draft::Authentication::NoAuth(())),
+                }),
+            })),
+        }, &user.token)?).await?.into_inner();
+        let first_preparations = preparations.load(Ordering::Acquire);
         let input_owner=chapchoo_service::ConversationInputService::new(store.clone(),processor.clone(),4)?;
         let setup_input=input_owner.accept(user.token.digest(),chapchoo_persistence::AcceptConversationInput {
             agent_id:agent.id.clone(),conversation_id:Some(accepted.conversation_id.clone()),request_id:"setup-existing".into(),
@@ -293,6 +337,17 @@ async fn connector_process_exchanges_connects_and_observes_independently_of_prov
             }
         }).await??;
         input_owner.finish().await?;
+        assert_eq!(preparations.load(Ordering::Acquire), first_preparations,
+            "Native pre-launch denial must not begin optional discovery");
+        assert_eq!(invocations.load(Ordering::Acquire), 0, "Preparation must not invoke a tool");
+        agents.change_integration(owner_request(computers::AgentIntegrationChangeRequest {
+            agent_id: agent.id.clone(),
+            request_id: "model-free-delete-mcp".into(),
+            change: Some(Change::DeleteIntegrationId(pending_integration.integration_id)),
+        }, &user.token)?).await?;
+        assert!(agents.list_integrations(owner_request(computers::AgentIntegrationListRequest {
+            agent_id: agent.id.clone(), after: None,
+        }, &user.token)?).await?.into_inner().items.is_empty());
         let connector_digest = captured_credential.lock().map_err(|_| "Fixture credential owner is unavailable")?
             .clone().ok_or("Missing presented fixture credential")?;
         conversation_operations::exercise(fixture, conversation_operations::Context {
@@ -359,4 +414,13 @@ async fn connector_process_exchanges_connects_and_observes_independently_of_prov
         Ok(())
     })
     .await
+}
+
+fn owner_request<T>(body: T, owner: &BearerSecret) -> Result<tonic::Request<T>, Error> {
+    let mut request = tonic::Request::new(body);
+    request.metadata_mut().insert(
+        "authorization",
+        format!("Bearer {}", owner.expose()).parse()?,
+    );
+    Ok(request)
 }

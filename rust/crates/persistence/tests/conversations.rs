@@ -7,7 +7,7 @@ macro_rules! isolate_pre_waiting_migration {
             // Remove only new, unpublished fixture Work before exercising older schemas.
             connection.batch_execute("DELETE FROM conversation_goals WHERE EXISTS (SELECT 1 FROM conversation_work_items w WHERE w.conversation_id=conversation_goals.conversation_id AND w.goal_key=conversation_goals.goal_key AND w.title='')")?;
         }
-        for expected in ["00000000000034","00000000000033","00000000000032","00000000000031","00000000000030","00000000000029","00000000000028"] {
+        for expected in ["00000000000035","00000000000034","00000000000033","00000000000032","00000000000031","00000000000030","00000000000029","00000000000028"] {
             if connection.applied_migrations()?.iter().any(|version| version.to_string() == expected) {
                 assert_eq!(connection.revert_last_migration($migrations)?.to_string(), expected);
             }
@@ -136,6 +136,8 @@ mod authentication;
 mod consumed_migration;
 #[path = "conversations/delivery.rs"]
 mod delivery;
+#[path = "conversations/external_mcp.rs"]
+mod external_mcp;
 #[path = "conversations/goals.rs"]
 mod goals;
 #[path = "conversations/input_reads.rs"]
@@ -231,6 +233,7 @@ struct Fixture {
     other_agent: String,
     team_id: String,
     session: String,
+    execution: String,
     control: String,
     connection: String,
     connector: BearerSecret,
@@ -527,6 +530,7 @@ async fn fixture(store: &Store) -> Result<Fixture, TestError> {
         other_agent,
         team_id: team.id,
         session: initial.id,
+        execution: reservation.execution_id,
         control: control.id,
         connection: prepared.owner.connection_id,
         connector: key.token,

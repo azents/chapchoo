@@ -226,7 +226,7 @@ async fn new_session_steers_and_stops_only_its_exact_live_turn() -> TestResult {
                     .open(
                         &storage.workspace(),
                         &NativeContext::New,
-                        &mcp,
+                        &[&mcp],
                         Some("fixture-only"),
                         true,
                     )

@@ -20,7 +20,8 @@ use std::fmt;
 use url::Url;
 use zeroize::Zeroizing;
 
-const PAGE_SIZE: u16 = 100;
+// Keep the worst-case encoded page within the Agents RPC receive budget.
+const PAGE_SIZE: u16 = 10;
 
 #[cfg(test)]
 pub(super) mod tests;
@@ -217,7 +218,7 @@ impl SummaryRow {
 }
 
 #[derive(diesel::QueryableByName)]
-struct SecretRow {
+pub(crate) struct SecretRow {
     #[diesel(sql_type = Text)]
     endpoint: String,
     #[diesel(sql_type = Nullable<Binary>)]
@@ -242,6 +243,40 @@ impl SecretRow {
             (None, None) => Err(StoreError::InvalidInput),
             _ => Err(StoreError::Integrity),
         }
+    }
+
+    pub(crate) fn settings_key(
+        &self,
+        cipher: &CredentialCipher,
+        agent: &str,
+        id: &str,
+    ) -> Result<SecretDigest, StoreError> {
+        Ok(cipher.external_request_fingerprint(
+            &context(agent, id)?,
+            "MCP_SAVED_CONFIGURATION",
+            &[
+                self.endpoint.as_bytes(),
+                self.token_nonce.as_deref().unwrap_or_default(),
+                self.token_ciphertext.as_deref().unwrap_or_default(),
+            ],
+        )?)
+    }
+
+    pub(crate) fn into_target(
+        self,
+        cipher: &CredentialCipher,
+        agent: &str,
+        id: &str,
+    ) -> Result<McpTestTarget, StoreError> {
+        let endpoint = McpEndpoint::parse(&self.endpoint).map_err(|_| StoreError::Integrity)?;
+        let bearer = match (&self.token_nonce, &self.token_ciphertext) {
+            (None, None) => None,
+            (Some(_), Some(_)) => Some(McpBearer::from_secret(
+                cipher.recover_external(&context(agent, id)?, &self.keeper(&endpoint)?)?,
+            )?),
+            _ => return Err(StoreError::Integrity),
+        };
+        Ok(McpTestTarget { endpoint, bearer })
     }
 }
 
@@ -295,7 +330,7 @@ fn protect_settings(
     }
 }
 
-const SECRET_ROW: &str = "SELECT s.endpoint,s.token_nonce,s.token_ciphertext FROM agent_integrations i JOIN agent_mcp_settings s ON s.integration_id=i.id WHERE i.agent_id=? AND i.id=? AND i.kind='MCP'";
+pub(crate) const SECRET_ROW: &str = "SELECT s.endpoint,s.token_nonce,s.token_ciphertext FROM agent_integrations i JOIN agent_mcp_settings s ON s.integration_id=i.id WHERE i.agent_id=? AND i.id=? AND i.kind='MCP'";
 const RECEIPT_ROW: &str = "SELECT payload_fingerprint,integration_id,action,accepted_at FROM agent_integration_receipts WHERE agent_id=? AND request_id=?";
 
 impl Store {

@@ -72,14 +72,20 @@ allowed = {
         "rmcp", "hyper", "hyper-util", "reqwest", "rustls",
     },
 }
+dev_only = {
+    # The held-response fixture starts real TLS; Store never owns runtime I/O.
+    "chapchoo-persistence": {"rcgen", "rustls", "tokio-rustls"},
+}
 for name, dependencies in allowed.items():
     actual = {d["name"] for d in packages[name]["dependencies"]}
-    if actual != dependencies:
+    if actual != dependencies | dev_only.get(name, set()):
         raise SystemExit(f"Unreviewed dependency boundary for {name}: {actual}")
 if set(packages) != set(allowed):
     raise SystemExit("Workspace crate boundary must be reviewed explicitly")
 for name, package in packages.items():
     runtime = {d["name"] for d in package["dependencies"] if d["kind"] != "dev"}
+    if runtime & dev_only.get(name, set()):
+        raise SystemExit(f"Test-only dependency crossed into {name} runtime")
     if name != "chapchoo" and "chapchoo" in runtime:
         raise SystemExit("Reusable crates must not depend on the deployable app")
     if name in {"chapchoo-protocol", "chapchoo-rpc"} and "chapchoo-persistence" in runtime:

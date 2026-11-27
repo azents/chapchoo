@@ -101,9 +101,15 @@ impl ServerHandler for Handler {
                 None,
             ));
         }
-        let catalog = rpc::catalog(&self.state.route, &self.state.recipient)
-            .await
-            .map_err(|_| ErrorData::internal_error("Current tool catalog is unavailable", None))?;
+        let catalog = if self.state.external.is_some() {
+            self.state.catalog.clone()
+        } else {
+            rpc::catalog(&self.state.route, &self.state.recipient)
+                .await
+                .map_err(|_| {
+                    ErrorData::internal_error("Current tool catalog is unavailable", None)
+                })?
+        };
         // Definitions remain fixed for this actual native owner's lifetime.
         if catalog != self.state.catalog {
             return Err(ErrorData::internal_error(
@@ -111,7 +117,11 @@ impl ServerHandler for Handler {
                 None,
             ));
         }
-        self.state.catalogued.store(true, Ordering::Release);
+        if !self.state.catalogued.swap(true, Ordering::AcqRel) && self.state.external.is_some() {
+            // This is an observation of native adoption, not launch readiness
+            // or proof that upstream admission will succeed.
+            tracing::debug!("Native MCP client read an optional catalogue");
+        }
         self.state.observed.notify_waiters();
         Ok(catalog)
     }
@@ -184,14 +194,20 @@ impl ServerHandler for Handler {
         let state = self.state.clone();
         // Snapshot only already-dispatched inputs. Future inputs must not
         // indefinitely extend a call's receipt dependency set.
-        let ordering = state.ordering.snapshot();
+        let ordering = state.external.is_none().then(|| state.ordering.snapshot());
         let (sender, receiver) = oneshot::channel();
         tasks.spawn(async move {
             let _permit = permit;
             let _bytes = bytes;
             let invocation = async {
+                if let Some(external) = &state.external {
+                    return external
+                        .invoke(&state, request.name.into_owned(), arguments)
+                        .await;
+                }
                 let waiting = async {
                     ordering
+                        .ok_or_else(unavailable)?
                         .map_err(|_| unavailable())?
                         .ready()
                         .await

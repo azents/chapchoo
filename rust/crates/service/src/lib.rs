@@ -68,6 +68,11 @@ pub use chapchoo_persistence::{
     SessionResult, SourceBinding, StartDeviceAuthentication, TeamPatch, TeamSummary,
     UpdateAgentProfile, UserSummary,
 };
+pub use chapchoo_persistence::{
+    AgentIntegrationAction, AgentIntegrationChange, AgentIntegrationReceipt, AgentMcpPage,
+    McpAuthEdit, McpBearer, McpEndpoint, McpSettingsDraft,
+};
+pub use chapchoo_persistence::{McpAppliedScope, McpExecutionScope, McpPreparationScope};
 pub use computers::{ComputerPolicy, ComputersService, PreparedComponentConnection};
 pub use conversation::{
     AcceptedConversationAnswer, AcceptedConversationInput, AcceptedConversationStop,
@@ -80,7 +85,12 @@ pub use conversation::{
     validate_conversation_answer,
 };
 pub use error::{DomainReason, InfrastructureReport, ServiceError};
-pub use external_mcp::{AgentMcpTest, AgentMcpTestOutcome, McpDiscoveryFailure, McpTestEdit};
+pub use external_mcp::{
+    AgentMcpTestOutcome, CompleteMcpCatalogue, ExternalCatalogue, ExternalCataloguePage,
+    ExternalMcpCall, ExternalMcpCallOutcome, ExternalMcpInvocation, ExternalMcpRejection,
+    ExternalMcpRuntime, McpCatalogueCandidate, McpCatalogueCandidatePage, McpCatalogueDiscovery,
+    McpDiscoveryFailure, McpPreparationFailure, McpTestEdit,
+};
 pub use mail::{MailFailure, MailFuture, MailMessage, MailPurpose, Mailer};
 pub use password::PasswordWork;
 pub use server_tools::{

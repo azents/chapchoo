@@ -13,6 +13,8 @@ use chapchoo_persistence::{
 use std::fmt;
 use url::Url;
 
+mod integrations;
+
 /// Captured before local stream preparation. Only the service constructs this
 /// admission context; a client cannot assert the expected owner or Connection ID.
 pub struct PreparedComponentConnection {
@@ -87,6 +89,7 @@ impl ComputerPolicy {
 pub struct ComputersService {
     store: Store,
     policy: ComputerPolicy,
+    mcp_test: crate::external_mcp::AgentMcpTest,
 }
 impl fmt::Debug for ComputersService {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -119,6 +122,7 @@ impl ComputersService {
     }
     pub fn new(store: Store) -> Self {
         Self {
+            mcp_test: crate::external_mcp::AgentMcpTest::new(store.clone()),
             store,
             policy: ComputerPolicy::default(),
         }
