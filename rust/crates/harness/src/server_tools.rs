@@ -1,6 +1,7 @@
 //! Consumer-owned MCP declaration and actual native-owner lifetime.
 use crate::{ContinuationRoute, NativeAuthenticationBinding, NativeTextTarget, NativeWorkTarget};
 use chapchoo_crypto::BearerSecret;
+use chapchoo_domain::local_mcp;
 use sha2::{Digest, Sha256};
 use std::{error::Error, fmt, future::Future, pin::Pin, sync::Arc};
 
@@ -126,16 +127,11 @@ impl NativeMcpDeclaration {
     }
     /// The managed namespace is distinct from built-in and display names.
     pub fn external_http(id: &str, url: &str, key: BearerSecret) -> Result<Self, NativeToolsError> {
-        if id.is_empty()
-            || id.len() > 48
-            || !id
-                .bytes()
-                .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'-'))
-        {
+        if !local_mcp::valid_integration_id(id) {
             return Err(invalid_declaration());
         }
         Self::local(
-            format!("chapchoo_ext_{id}"),
+            format!("{}{id}", local_mcp::EXTERNAL_PREFIX),
             &format!("/mcp/{id}"),
             url,
             key,

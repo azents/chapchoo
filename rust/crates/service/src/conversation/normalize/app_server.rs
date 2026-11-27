@@ -1,6 +1,7 @@
 //! App Server message items adapt into the document's existing record fields.
 //! The enclosing normalizer keeps the original wire bytes as a separate pair.
 use super::*;
+use chapchoo_domain::local_mcp;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -113,7 +114,7 @@ pub(super) fn permission(
         .filter(|name| key(name));
     let fields = if let Some(tool) = tool
         && frame.turn_id.as_deref().is_some_and(key)
-        && frame.server_name == "chapchoo"
+        && (frame.server_name == "chapchoo" || local_mcp::is_external_name(&frame.server_name))
         && frame.mode == "form"
         && frame
             .requested_schema

@@ -389,6 +389,29 @@ fn app_server_approval_projects_only_occurrence_scoped_one_time_choices() -> Res
     );
     assert!(projected.meta.is_none());
 
+    for (server, projected) in [
+        ("chapchoo_ext_fixture-id_12", true),
+        ("chapchoo_ext_", false),
+        ("chapchoo_ext_invalid.name", false),
+        ("external-unmanaged", false),
+    ] {
+        let mut external = original.clone();
+        external["params"]["serverName"] = json!(server);
+        let result = normalized(&serde_json::to_vec(&external)?)?;
+        let field = result.records[0]
+            .fields
+            .iter()
+            .find(|field| field.field == Field::Request);
+        assert_eq!(field.is_some(), projected, "{server}");
+        if let Some(field) = field {
+            let request: schema::RequestPermissionRequest =
+                serde_json::from_slice(bytes(&field.change))?;
+            assert_eq!(request.title, "Allow lookup?");
+            assert_eq!(request.options.len(), 2);
+            assert!(request.meta.is_none());
+        }
+    }
+
     let mut ordinary = original.clone();
     ordinary["params"]["_meta"] = serde_json::Value::Null;
     let result = normalized(&serde_json::to_vec(&ordinary)?)?;
