@@ -414,10 +414,7 @@ python scripts/validate_docs.py
 for skill in .claude/skills/*; do
   uv run --locked --project .codex python .claude/skills/skill-creator/scripts/quick_validate.py "$skill"
 done
-python -m unittest discover -s .claude/skills/ci-optimization/scripts -p '*_test.py'
-for skill in convention-audit skill-creator; do
-  uv run --locked --project .codex --with 'pytest==9.1.1' python -m pytest ".claude/skills/$skill/scripts" -q
-done
+uv run --locked --project .codex --with 'pytest==9.1.1' python -m pytest .claude/skills/skill-creator/scripts -q
 ```
 
 CI gives each quality check one owner: the Rust job runs the full Rust gate,
