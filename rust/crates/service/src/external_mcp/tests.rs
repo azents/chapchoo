@@ -10,12 +10,21 @@ use tokio::{
 };
 use tokio_rustls::TlsAcceptor;
 
+mod earlier;
+
 type TestError = Box<dyn Error + Send + Sync>;
 const HOST: &str = "mcp-fixture.invalid";
 const TOKEN: &str = "synthetic-mcp-fixture-bearer";
 
 async fn tls_fixture()
 -> Result<(TcpListener, TlsAcceptor, reqwest::Client, McpTestTarget), TestError> {
+    tls_fixture_for(true, Duration::from_secs(8)).await
+}
+
+async fn tls_fixture_for(
+    bearer: bool,
+    request_timeout: Duration,
+) -> Result<(TcpListener, TlsAcceptor, reqwest::Client, McpTestTarget), TestError> {
     let listener = TcpListener::bind("127.0.0.1:0").await?;
     let address = listener.local_addr()?;
     let cert = rcgen::generate_simple_self_signed(vec![HOST.into()])?;
@@ -35,7 +44,7 @@ async fn tls_fixture()
         .with_no_client_auth();
     let target = McpTestTarget {
         endpoint: McpEndpoint::parse(&format!("https://{HOST}:{}/mcp", address.port()))?,
-        bearer: Some(McpBearer::parse(TOKEN.into())?),
+        bearer: bearer.then(|| McpBearer::parse(TOKEN.into())).transpose()?,
     };
     // Unit fixture trust and address are injected here only. Production uses
     // platform TLS roots and a resolver that never yields loopback addresses.
@@ -43,6 +52,7 @@ async fn tls_fixture()
         .builder(tls, &target)
         .map_err(|_| io::Error::other("could not build fixture HTTP client"))?
         .resolve(HOST, address)
+        .timeout(request_timeout)
         .build()?;
     Ok((
         listener,
@@ -165,6 +175,7 @@ where
                     "application/json",
                     response.to_string(),
                 ),
+                "missing-discover" => ("404 Not Found", "application/json", response.to_string()),
                 "mixed-case" => (
                     "200 OK",
                     "Application/JSON; charset=utf-8",
