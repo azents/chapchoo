@@ -74,10 +74,10 @@ pub(super) async fn prepare(
     Ok(Response::new(stream))
 }
 
-pub(super) async fn confirm_empty(
+pub(super) async fn confirm_reuse(
     services: &ServerToolServices,
-    request: Request<wire::ExternalEmptyReuse>,
-) -> Result<Response<wire::ExternalEmptyObservation>, Status> {
+    request: Request<wire::ExternalReuse>,
+) -> Result<Response<wire::ExternalReuseObservation>, Status> {
     services.admit()?;
     let external = services
         .external
@@ -103,24 +103,38 @@ pub(super) async fn confirm_empty(
     let Ok(_permit) = services.external_ingress.clone().try_acquire_owned() else {
         // This request could not record readiness. Return an explicit negative
         // observation, not a transport error that may hide a committed result.
-        return Ok(Response::new(wire::ExternalEmptyObservation {
-            confirmed_empty: false,
+        return Ok(Response::new(wire::ExternalReuseObservation {
+            confirmed: false,
         }));
     };
-    let confirmed_empty = external
-        .confirm_empty(
+    let applied = match (
+        request.applied_operation_id.as_str(),
+        request.applied_supply.as_slice(),
+    ) {
+        ("", []) => None,
+        (operation, supply) if !request.observe_only => {
+            ingress::id(operation)?;
+            Some((
+                operation,
+                <&[u8; 32]>::try_from(supply)
+                    .map_err(|_| Status::invalid_argument("Invalid applied supply fingerprint"))?,
+            ))
+        }
+        _ => return Err(Status::invalid_argument("Invalid applied supply evidence")),
+    };
+    let confirmed = external
+        .confirm_reuse(
             &caller.caller.source(),
             &McpAppliedScope {
                 preparation: caller.scope(),
                 target: &target,
             },
             request.observe_only,
+            applied,
         )
         .await
         .map_err(status)?;
-    Ok(Response::new(wire::ExternalEmptyObservation {
-        confirmed_empty,
-    }))
+    Ok(Response::new(wire::ExternalReuseObservation { confirmed }))
 }
 
 fn catalogue_frames(page: ExternalCataloguePage) -> Vec<wire::ExternalCatalogFrame> {

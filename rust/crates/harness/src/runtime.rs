@@ -363,7 +363,7 @@ impl NativeOwner {
                         let safe = state.refresh_safe();
                         let pending = &mut deferred[0];
                         let now = tokio::time::Instant::now();
-                        let can_confirm = !safe && state.can_reuse_empty_setup(&pending.operation);
+                        let can_confirm = !safe && state.can_reuse_setup(&pending.operation);
                         if (can_confirm || pending.empty_confirmation_pending)
                             && pending.next_empty_check.is_none_or(|next| next <= now)
                             && pending.tools.has_pending_external()
@@ -371,7 +371,7 @@ impl NativeOwner {
                             pending.next_empty_check = Some(now + Duration::from_secs(15));
                             let outcome = tokio::select! {
                                 _ = stopping.cancelled() => Err(Error::DeliveryUncertain),
-                                result = state.try_reuse_empty_setup(&pending.operation, pending.tools.as_ref(), !can_confirm) => result,
+                                result = state.try_reuse_setup(&pending.operation, pending.tools.as_ref(), !can_confirm) => result,
                             };
                             // A negative retry is not evidence that an older
                             // request cannot still commit. Only exact Ready

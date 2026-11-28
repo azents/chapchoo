@@ -1,14 +1,16 @@
 //! Setup uncertainty exists before a source is READY and is not input delivery.
 use super::*;
+use diesel::sql_types::Bool;
 
 pub struct ConversationInputPreparation<'a> {
     pub agent_id: &'a str,
     pub conversation_id: &'a str,
     pub operation_id: &'a str,
 }
-struct EmptyReuse<'a> {
+struct ExternalReuse<'a> {
     execution: EntityId,
     settings: Option<&'a [(String, SecretDigest)]>,
+    applied_operation: Option<EntityId>,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConversationPreparationFailure {
@@ -619,11 +621,12 @@ impl Store {
     /// Record a read-only reuse of the exact applied owner only while the entire
     /// integration set still matches the bounded selection. No invocation or
     /// input grant is created by this transaction.
-    pub async fn confirm_empty_mcp_reuse(
+    pub async fn confirm_mcp_reuse(
         &self,
         source: &crate::ConnectorSource<'_>,
         scope: &super::external_mcp::McpAppliedScope<'_>,
         settings: Option<&[(String, SecretDigest)]>,
+        applied_operation: Option<&str>,
     ) -> Result<bool, StoreError> {
         if settings.is_some_and(|items| items.len() > 128) {
             return Err(StoreError::InvalidInput);
@@ -638,12 +641,15 @@ impl Store {
             &ConversationPreparationOutcome::SessionReady(scope.target.clone()),
             Some(source.connection_id),
             false,
-            Some(EmptyReuse {
+            Some(ExternalReuse {
                 execution: EntityId::from_dto(
                     EntityKind::Execution,
                     scope.preparation.execution.execution_id,
                 )?,
                 settings,
+                applied_operation: applied_operation
+                    .map(|id| EntityId::from_dto(EntityKind::ConversationOperation, id))
+                    .transpose()?,
             }),
         )
         .await
@@ -656,7 +662,7 @@ impl Store {
         outcome: &ConversationPreparationOutcome,
         application_connection_id: Option<&str>,
         external_tools_applied: bool,
-        empty_reuse: Option<EmptyReuse<'_>>,
+        reuse: Option<ExternalReuse<'_>>,
     ) -> Result<bool, StoreError> {
         let (agent, id, operation) = ids(draft)?;
         let application_connection = match (outcome, application_connection_id) {
@@ -716,10 +722,12 @@ impl Store {
             if previous.execution_id != route._execution_id {
                 return Err(StoreError::Conflict);
             }
-            if let Some(EmptyReuse {
+            let mut retain_external_selection = false;
+            if let Some(ExternalReuse {
                 execution,
                 settings,
-            }) = empty_reuse
+                applied_operation,
+            }) = reuse
             {
                 #[derive(diesel::QueryableByName)]
                 struct ReuseEvidence {
@@ -731,14 +739,18 @@ impl Store {
                     external_ready_connection_id: Option<EntityId>,
                     #[diesel(sql_type = Nullable<IdentitySql>)]
                     predecessor_external_connection: Option<EntityId>,
+                    #[diesel(sql_type = Nullable<IdentitySql>)]
+                    applied_predecessor: Option<EntityId>,
                 }
                 if input_exists || execution != route._execution_id || row.source_state != "READY" {
                     return Ok(false);
                 }
                 let reuse = diesel::sql_query(dialect.query(
-                    "SELECT s.external_input_id,s.ready_connection_id,s.external_ready_connection_id,p.external_ready_connection_id AS predecessor_external_connection
+                    "SELECT s.external_input_id,s.ready_connection_id,s.external_ready_connection_id,
+                       p.external_ready_connection_id AS predecessor_external_connection,p.operation_id AS applied_predecessor
                      FROM conversation_startups s LEFT JOIN conversation_startups p ON p.operation_id=s.external_predecessor_id
                      AND p.conversation_id=s.conversation_id AND p.execution_id=s.execution_id
+                     AND p.preparation_state='READY' AND p.ready_snapshot=s.intended_snapshot AND p.ready_native_session=s.intended_native_session
                      WHERE s.operation_id=? AND s.conversation_id=?"
                 )).bind::<IdentitySql,_>(operation).bind::<IdentitySql,_>(id)
                     .get_result::<ReuseEvidence>(connection).await?;
@@ -754,13 +766,22 @@ impl Store {
                 if selected.operation_id != operation
                     || selected.execution_id != Some(execution)
                     || selected.preparation_state != "POSSIBLE"
-                    || reuse.predecessor_external_connection == application_connection
                 {
                     return Ok(false);
                 }
                 let Some(settings) = settings else {
                     return Ok(false);
                 };
+                match applied_operation {
+                    Some(applied)
+                        if reuse.applied_predecessor == Some(applied)
+                            && reuse.predecessor_external_connection == application_connection =>
+                    {
+                        retain_external_selection = true;
+                    }
+                    None if reuse.predecessor_external_connection != application_connection => {}
+                    _ => return Ok(false),
+                }
                 let expected = settings
                     .iter()
                     .map(|(id, digest)| (id.as_str(), digest))
@@ -849,9 +870,10 @@ impl Store {
                 } else {
                     None
                 };
-                diesel::sql_query(dialect.query("UPDATE conversation_startups SET preparation_state=?,ready_snapshot=?,ready_native_session=?,failure_kind=?,ready_connection_id=?,external_ready_connection_id=? WHERE operation_id=?"))
+                diesel::sql_query(dialect.query("UPDATE conversation_startups SET preparation_state=?,ready_snapshot=?,ready_native_session=?,failure_kind=?,ready_connection_id=?,external_ready_connection_id=?,external_selection_reused=? WHERE operation_id=?"))
                     .bind::<Text,_>(state).bind::<Nullable<Text>,_>(snapshot).bind::<Nullable<Text>,_>(native).bind::<Nullable<Text>,_>(failure)
                     .bind::<Nullable<IdentitySql>,_>(ready_connection).bind::<Nullable<IdentitySql>,_>(external_connection)
+                    .bind::<Bool,_>(retain_external_selection)
                     .bind::<IdentitySql,_>(operation).execute(connection).await?;
             }
             if state == "READY" {

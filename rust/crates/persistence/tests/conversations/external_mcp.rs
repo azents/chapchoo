@@ -576,25 +576,57 @@ async fn exercise(database: FixtureDatabase) -> Result<(), TestError> {
             .await?,
         [true],
     );
+    let unchanged = [(current_setting.id.clone(), key.clone())];
+    assert!(
+        !control
+            .confirm_mcp_reuse(&source, &pending_scope, Some(&unchanged), None)
+            .await?
+    );
+    assert!(
+        !control
+            .confirm_mcp_reuse(&source, &pending_scope, Some(&unchanged), Some(&pending))
+            .await?
+    );
+    assert!(
+        control
+            .confirm_mcp_reuse(&source, &pending_scope, Some(&unchanged), Some(&successor))
+            .await?
+    );
+    assert!(
+        control
+            .confirm_mcp_reuse(&source, &pending_scope, None, None)
+            .await?
+    );
+    assert!(matches!(
+        control
+            .admit_mcp_settings_for_call(&source, &pending_scope, &current_setting.id, &key)
+            .await,
+        Err(StoreError::InvalidTransition)
+    ));
     control
-        .complete_conversation_input_preparation(
-            &source,
-            &ConversationInputPreparation {
-                operation_id: &pending,
-                ..draft
+        .admit_mcp_settings_for_call(&source, &serving_scope, &current_setting.id, &key)
+        .await?;
+    client
+        .change_agent_integration(
+            &owner,
+            &f.agent.id,
+            "edit-after-exact-owner-reuse",
+            &AgentIntegrationChange::UpdateMcp {
+                id: current_setting.id.clone(),
+                draft: mcp_draft(
+                    McpEndpoint::parse("https://edited-after-reuse.invalid/mcp")?,
+                    NEXT_TOKEN,
+                )?,
             },
-            &ConversationPreparationOutcome::SessionReady(target.clone()),
+            f.now,
         )
         .await?;
     assert!(matches!(
         control
             .admit_mcp_settings_for_call(&source, &serving_scope, &current_setting.id, &key)
             .await,
-        Err(StoreError::InvalidTransition)
+        Err(StoreError::Conflict)
     ));
-    control
-        .admit_mcp_settings_for_call(&source, &pending_scope, &current_setting.id, &key)
-        .await?;
     // The report may have committed even if its acknowledgement was lost.
     // After replacement, the exact report is recoverable, but the old
     // Control selection is no longer retained on its original route.
@@ -642,14 +674,14 @@ async fn exercise(database: FixtureDatabase) -> Result<(), TestError> {
     ));
     assert!(
         control
-            .admit_mcp_settings_for_call(&source, &pending_scope, &current_setting.id, &key)
+            .admit_mcp_settings_for_call(&source, &serving_scope, &current_setting.id, &key)
             .await
             .is_err()
     );
     assert_eq!(
         control
             .retained_mcp_selections(&[McpRetainedSelection {
-                preparation: pending_scope.preparation,
+                preparation: serving_scope.preparation,
                 session_id: &f.session,
                 control_id: &f.control,
                 connection_id: &f.connection,
@@ -809,29 +841,29 @@ async fn exercise(database: FixtureDatabase) -> Result<(), TestError> {
     assert!(observed.iter().any(|(id, _)| id == &extra.id));
     assert!(
         !control
-            .confirm_empty_mcp_reuse(&current_source, &final_scope, None)
+            .confirm_mcp_reuse(&current_source, &final_scope, None, None)
             .await?
     );
     assert!(
         !control
-            .confirm_empty_mcp_reuse(&current_source, &final_scope, Some(&observed[..1]))
+            .confirm_mcp_reuse(&current_source, &final_scope, Some(&observed[..1]), None)
             .await?
     );
     assert!(
         control
-            .confirm_empty_mcp_reuse(&next_source, &final_scope, Some(&observed))
+            .confirm_mcp_reuse(&next_source, &final_scope, Some(&observed), None)
             .await
             .is_err()
     );
     observed.reverse();
     assert!(
         control
-            .confirm_empty_mcp_reuse(&current_source, &final_scope, Some(&observed))
+            .confirm_mcp_reuse(&current_source, &final_scope, Some(&observed), None)
             .await?
     );
     assert!(
         control
-            .confirm_empty_mcp_reuse(&current_source, &final_scope, None)
+            .confirm_mcp_reuse(&current_source, &final_scope, None, None)
             .await?
     );
     assert!(matches!(

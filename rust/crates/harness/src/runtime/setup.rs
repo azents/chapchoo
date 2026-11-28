@@ -182,9 +182,8 @@ fn valid_id(id: &str) -> Result<(), Error> {
     Ok(())
 }
 impl State {
-    /// A prepared empty selection has no external relay to rebind. Keep the
-    /// exact owner and publish only setup evidence, never an input grant.
-    pub(super) async fn try_reuse_empty_setup(
+    /// Preserve any existing relay and record only setup evidence.
+    pub(super) async fn try_reuse_setup(
         &mut self,
         operation: &NativeSetupOperation,
         tools: &dyn crate::NativeToolsProvider,
@@ -196,15 +195,31 @@ impl State {
         };
         if !route.is_open()
             || !tools.has_pending_external()
-            || (!observe_only && !self.can_reuse_empty_setup(operation))
+            || (!observe_only && !self.can_reuse_setup(operation))
         {
             return Ok(None);
         }
         let NativeSetupIntent::Existing(target) = &operation.intent else {
             return Ok(None);
         };
+        let applied = if observe_only {
+            None
+        } else {
+            let provision = self
+                .live
+                .as_ref()
+                .and_then(|live| live.tools.as_ref())
+                .ok_or(Error::NotAdmitted)?;
+            match (provision.external_supply(), provision.applied_external()) {
+                (None, None) => None,
+                (Some(supply), Some(preparation)) if preparation.connection_id == connection => {
+                    Some((preparation, supply))
+                }
+                _ => return Ok(None),
+            }
+        };
         if !tools
-            .confirm_external_empty(target, observe_only)
+            .confirm_external_reuse(target, applied, observe_only)
             .await
             .map_err(|_| Error::DeliveryUncertain)?
         {
@@ -221,7 +236,7 @@ impl State {
         })
     }
 
-    pub(super) fn can_reuse_empty_setup(&self, operation: &NativeSetupOperation) -> bool {
+    pub(super) fn can_reuse_setup(&self, operation: &NativeSetupOperation) -> bool {
         let NativeSetupIntent::Existing(target) = &operation.intent else {
             return false;
         };
@@ -245,10 +260,7 @@ impl State {
                             && !session.is_closed()
                             && session.id() == target.native_session.as_str()
                     })
-                    && live
-                        .tools
-                        .as_ref()
-                        .is_some_and(|tools| tools.external_supply().is_none())
+                    && live.tools.as_ref().is_some()
                     && live.observations.current().is_ok_and(|observed| {
                         matches!(
                             observed.foreground,

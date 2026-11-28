@@ -137,7 +137,8 @@ impl Store {
                   JOIN connector_sessions s ON s.id=r.session_id AND s.execution_id=co.current_execution_id
                   LEFT JOIN conversation_startups p ON p.operation_id=c.current_preparation_operation_id
                     AND p.conversation_id=c.id AND p.execution_id=co.current_execution_id
-                    AND p.preparation_state='POSSIBLE' AND c.source_state='READY'
+                    AND (p.preparation_state='POSSIBLE' OR (p.preparation_state='READY' AND p.external_selection_reused=TRUE))
+                    AND c.source_state='READY'
                     AND p.intended_snapshot=c.source_snapshot AND p.intended_native_session=c.native_session_id
                   WHERE c.id=? AND c.agent_id=?
                     AND ? IN (c.current_preparation_operation_id,p.external_predecessor_id)
@@ -339,9 +340,9 @@ impl Store {
                 .ok_or(StoreError::NotFound)?;
             // A possible exact-context refresh can prepare the next supply
             // without revoking the predecessor still serving the current turn.
-            // A ready/failed successor no longer carries that predecessor.
+            // Ready may explicitly preserve that same applied selection.
             let applied = diesel::sql_query(dialect.query(
-                "SELECT COALESCE(e.operation_id,p.external_predecessor_id) AS operation_id
+                "SELECT COALESCE(p.external_predecessor_id,e.operation_id) AS operation_id
                  FROM conversations c
                  JOIN agent_conversations a ON a.agent_id=c.agent_id AND a.conversation_id=c.id
                  LEFT JOIN project_instruction_evidence e
@@ -350,15 +351,17 @@ impl Store {
                    AND e.execution_id=?
                  LEFT JOIN conversation_startups p
                    ON p.operation_id=c.current_preparation_operation_id AND p.conversation_id=c.id
-                   AND p.preparation_state='POSSIBLE' AND p.execution_id=?
+                   AND (p.preparation_state='POSSIBLE' OR
+                        (p.preparation_state='READY' AND p.external_selection_reused=TRUE AND e.operation_id IS NOT NULL))
+                   AND p.execution_id=?
                    AND p.intended_snapshot=c.source_snapshot AND p.intended_native_session=c.native_session_id
                  LEFT JOIN conversation_startups s
-                   ON s.operation_id=COALESCE(e.operation_id,p.external_predecessor_id)
+                   ON s.operation_id=COALESCE(p.external_predecessor_id,e.operation_id)
                    AND s.conversation_id=c.id AND s.execution_id=COALESCE(e.execution_id,p.execution_id)
                  LEFT JOIN conversation_input_preparation i
-                   ON i.operation_id=COALESCE(e.operation_id,p.external_predecessor_id)
+                   ON i.operation_id=COALESCE(p.external_predecessor_id,e.operation_id)
                    AND i.execution_id=COALESCE(e.execution_id,p.execution_id)
-                 WHERE c.id=? AND c.agent_id=? AND COALESCE(e.operation_id,p.external_predecessor_id)=?
+                 WHERE c.id=? AND c.agent_id=? AND COALESCE(p.external_predecessor_id,e.operation_id)=?
                    AND COALESCE(s.external_ready_connection_id,i.ready_connection_id)=?
                    AND c.source_state='READY' AND c.source_snapshot=? AND c.native_session_id=?",
             ))

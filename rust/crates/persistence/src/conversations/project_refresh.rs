@@ -177,9 +177,13 @@ impl Store {
                 EntityId::from_dto(EntityKind::Connection, &expected.component.connection_id)?;
             let previous = diesel::sql_query(dialect.query(
                 "SELECT sources_json,tool_catalog,
-                  CASE WHEN execution_id=? AND applied_at IS NOT NULL AND applied_snapshot=?
-                    AND applied_native_session=? THEN operation_id ELSE NULL END AS applied_operation
-                 FROM project_instruction_evidence WHERE conversation_id=? AND operation_id=?"
+                  CASE WHEN e.execution_id=? AND e.applied_at IS NOT NULL AND e.applied_snapshot=?
+                    AND e.applied_native_session=? THEN COALESCE(
+                      CASE WHEN s.external_selection_reused=TRUE THEN s.external_predecessor_id END,
+                      e.operation_id
+                    ) ELSE NULL END AS applied_operation
+                 FROM project_instruction_evidence e LEFT JOIN conversation_startups s ON s.operation_id=e.operation_id
+                 WHERE e.conversation_id=? AND e.operation_id=?"
             ))
                 .bind::<IdentitySql,_>(route._execution_id)
                 .bind::<Text,_>(snapshot).bind::<Text,_>(native)

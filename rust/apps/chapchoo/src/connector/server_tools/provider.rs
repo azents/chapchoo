@@ -235,25 +235,29 @@ impl NativeToolsProvider for Provider {
     fn has_pending_external(&self) -> bool {
         self.external_request.is_some()
     }
-    fn confirm_external_empty<'a>(
+    fn confirm_external_reuse<'a>(
         &'a self,
         target: &'a NativeTextTarget,
+        applied: Option<(&'a NativeExternalPreparation, NativeExternalSupply)>,
         observe_only: bool,
     ) -> NativeToolsFuture<'a, bool> {
         Box::pin(async move {
             let Some(request) = &self.external_request else {
                 return Ok(false);
             };
-            PreparedExternal::confirm_empty(
+            PreparedExternal::confirm_reuse(
                 &self.route,
-                request.source.clone(),
+                super::external::selection(
+                    request.source.clone(),
+                    request.execution.clone(),
+                    request.operation.clone(),
+                ),
                 Recipient {
                     agent_id: self.scope.agent_id.clone(),
                     conversation_id: self.scope.conversation_id.clone(),
                 },
-                request.execution.clone(),
-                request.operation.clone(),
                 target,
+                applied,
                 observe_only,
             )
             .await
