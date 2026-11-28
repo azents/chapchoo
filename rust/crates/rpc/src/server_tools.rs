@@ -215,6 +215,13 @@ impl WireTools for ServerToolServices {
         external::prepare(self, request).await
     }
 
+    async fn confirm_external_reuse(
+        &self,
+        request: Request<wire::ExternalReuse>,
+    ) -> Result<Response<wire::ExternalReuseObservation>, Status> {
+        external::confirm_reuse(self, request).await
+    }
+
     async fn invoke_external(
         &self,
         request: Request<wire::ExternalInvocation>,

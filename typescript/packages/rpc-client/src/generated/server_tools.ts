@@ -71,6 +71,19 @@ export interface ExternalPreparation {
   operationId: string;
 }
 
+export interface ExternalReuse {
+  preparation: ExternalPreparation | undefined;
+  target: NativeTarget | undefined;
+  observeOnly: boolean;
+  /** Both fields are supplied together for an already applied external selection. */
+  appliedOperationId: string;
+  appliedSupply: Buffer;
+}
+
+export interface ExternalReuseObservation {
+  confirmed: boolean;
+}
+
 export interface ExternalCatalogChunk {
   json: Buffer;
   finalChunk: boolean;
@@ -213,6 +226,174 @@ export const ExternalPreparation: MessageFns<ExternalPreparation> = {
       : undefined;
     message.executionId = object.executionId ?? "";
     message.operationId = object.operationId ?? "";
+    return message;
+  },
+};
+
+function createBaseExternalReuse(): ExternalReuse {
+  return {
+    preparation: undefined,
+    target: undefined,
+    observeOnly: false,
+    appliedOperationId: "",
+    appliedSupply: Buffer.alloc(0),
+  };
+}
+
+export const ExternalReuse: MessageFns<ExternalReuse> = {
+  encode(message: ExternalReuse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.preparation !== undefined) {
+      ExternalPreparation.encode(message.preparation, writer.uint32(10).fork()).join();
+    }
+    if (message.target !== undefined) {
+      NativeTarget.encode(message.target, writer.uint32(18).fork()).join();
+    }
+    if (message.observeOnly !== false) {
+      writer.uint32(24).bool(message.observeOnly);
+    }
+    if (message.appliedOperationId !== "") {
+      writer.uint32(34).string(message.appliedOperationId);
+    }
+    if (message.appliedSupply.length !== 0) {
+      writer.uint32(42).bytes(message.appliedSupply);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ExternalReuse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseExternalReuse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.preparation = ExternalPreparation.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.target = NativeTarget.decode(reader, reader.uint32());
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.observeOnly = reader.bool();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.appliedOperationId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.appliedSupply = Buffer.from(reader.bytes());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ExternalReuse>, I>>(base?: I): ExternalReuse {
+    return ExternalReuse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ExternalReuse>, I>>(object: I): ExternalReuse {
+    const message = createBaseExternalReuse();
+    message.preparation = (object.preparation !== undefined && object.preparation !== null)
+      ? ExternalPreparation.fromPartial(object.preparation)
+      : undefined;
+    message.target = (object.target !== undefined && object.target !== null)
+      ? NativeTarget.fromPartial(object.target)
+      : undefined;
+    message.observeOnly = object.observeOnly ?? false;
+    message.appliedOperationId = object.appliedOperationId ?? "";
+    message.appliedSupply = object.appliedSupply ?? Buffer.alloc(0);
+    return message;
+  },
+};
+
+function createBaseExternalReuseObservation(): ExternalReuseObservation {
+  return { confirmed: false };
+}
+
+export const ExternalReuseObservation: MessageFns<ExternalReuseObservation> = {
+  encode(message: ExternalReuseObservation, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.confirmed !== false) {
+      writer.uint32(8).bool(message.confirmed);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ExternalReuseObservation {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseExternalReuseObservation();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.confirmed = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ExternalReuseObservation>, I>>(base?: I): ExternalReuseObservation {
+    return ExternalReuseObservation.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ExternalReuseObservation>, I>>(object: I): ExternalReuseObservation {
+    const message = createBaseExternalReuseObservation();
+    message.confirmed = object.confirmed ?? false;
     return message;
   },
 };
@@ -1097,6 +1278,17 @@ export const ServerToolsService = {
       Buffer.from(ExternalCatalogFrame.encode(value).finish()),
     responseDeserialize: (value: Buffer): ExternalCatalogFrame => ExternalCatalogFrame.decode(value),
   },
+  /** Confirm exact owner reuse without creating a callable binding. */
+  confirmExternalReuse: {
+    path: "/chapchoo.server_tools.ServerTools/ConfirmExternalReuse" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ExternalReuse): Buffer => Buffer.from(ExternalReuse.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ExternalReuse => ExternalReuse.decode(value),
+    responseSerialize: (value: ExternalReuseObservation): Buffer =>
+      Buffer.from(ExternalReuseObservation.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ExternalReuseObservation => ExternalReuseObservation.decode(value),
+  },
   invokeExternal: {
     path: "/chapchoo.server_tools.ServerTools/InvokeExternal" as const,
     requestStream: false as const,
@@ -1112,6 +1304,8 @@ export interface ServerToolsServer extends UntypedServiceImplementation {
   catalog: handleUnaryCall<CatalogRequest, CatalogResponse>;
   invoke: handleBidiStreamingCall<InvocationControl, InvocationObservation>;
   prepareExternal: handleServerStreamingCall<ExternalPreparation, ExternalCatalogFrame>;
+  /** Confirm exact owner reuse without creating a callable binding. */
+  confirmExternalReuse: handleUnaryCall<ExternalReuse, ExternalReuseObservation>;
   invokeExternal: handleUnaryCall<ExternalInvocation, Final>;
 }
 
@@ -1146,6 +1340,22 @@ export interface ServerToolsClient extends Client {
     metadata?: Metadata,
     options?: Partial<CallOptions>,
   ): ClientReadableStream<ExternalCatalogFrame>;
+  /** Confirm exact owner reuse without creating a callable binding. */
+  confirmExternalReuse(
+    request: ExternalReuse,
+    callback: (error: ServiceError | null, response: ExternalReuseObservation) => void,
+  ): ClientUnaryCall;
+  confirmExternalReuse(
+    request: ExternalReuse,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ExternalReuseObservation) => void,
+  ): ClientUnaryCall;
+  confirmExternalReuse(
+    request: ExternalReuse,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ExternalReuseObservation) => void,
+  ): ClientUnaryCall;
   invokeExternal(
     request: ExternalInvocation,
     callback: (error: ServiceError | null, response: Final) => void,

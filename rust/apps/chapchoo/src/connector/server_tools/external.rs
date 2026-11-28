@@ -43,6 +43,58 @@ pub(super) struct Registration {
 redacted!(PreparedExternal, Registration);
 
 impl PreparedExternal {
+    pub(super) async fn confirm_reuse(
+        current: &CurrentRoute,
+        selection: NativeExternalPreparation,
+        recipient: Recipient,
+        target: &NativeTextTarget,
+        applied: Option<(&NativeExternalPreparation, NativeExternalSupply)>,
+        observe_only: bool,
+    ) -> Result<bool, AppError> {
+        let route = current.snapshot()?;
+        if !matches_route(&selection, &route.source) {
+            return Ok(false);
+        }
+        let (applied_operation_id, applied_supply) = match applied {
+            Some((applied, supply))
+                if matches_route(applied, &route.source)
+                    && applied.execution_id == selection.execution_id =>
+            {
+                (applied.operation_id.clone(), supply.as_bytes().to_vec())
+            }
+            Some(_) => return Ok(false),
+            None => (String::new(), Vec::new()),
+        };
+        let mut request = rpc::request(
+            wire::ExternalReuse {
+                preparation: Some(preparation_request(&selection, &route, &recipient)),
+                target: Some(NativeTarget {
+                    snapshot_id: target.snapshot.as_str().into(),
+                    native_session_id: target.native_session.as_str().into(),
+                }),
+                observe_only,
+                applied_operation_id,
+                applied_supply,
+            },
+            &route,
+        )?;
+        request.set_timeout(PREPARATION_TIMEOUT);
+        let result = match tokio::time::timeout(
+            PREPARATION_TIMEOUT,
+            rpc::client(&route).confirm_external_reuse(request),
+        )
+        .await?
+        {
+            Ok(result) => result.into_inner().confirmed,
+            Err(status) if status.code() == tonic::Code::Unimplemented => false,
+            Err(status) => return Err(status.into()),
+        };
+        if !matches_route(&selection, &current.snapshot()?.source) {
+            return Err("External MCP preparation route changed".into());
+        }
+        Ok(result)
+    }
+
     #[cfg(test)]
     pub(super) fn fixture(
         source: CaptureSource,
@@ -124,7 +176,7 @@ pub(super) fn effective_supply<'a>(
     )))
 }
 
-fn selection(
+pub(super) fn selection(
     source: CaptureSource,
     execution_id: String,
     operation_id: String,

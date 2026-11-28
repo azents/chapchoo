@@ -2,7 +2,6 @@
 use crate::{ContinuationRoute, NativeAuthenticationBinding, NativeTextTarget, NativeWorkTarget};
 use chapchoo_crypto::BearerSecret;
 use chapchoo_domain::local_mcp;
-use sha2::{Digest, Sha256};
 use std::{error::Error, fmt, future::Future, pin::Pin, sync::Arc};
 
 #[derive(Clone, PartialEq, Eq)]
@@ -52,7 +51,14 @@ pub struct NativeExternalSupply([u8; 32]);
 
 impl NativeExternalSupply {
     pub fn from_catalogue(canonical: &[u8]) -> Self {
-        Self(Sha256::digest(canonical).into())
+        Self(chapchoo_crypto::payload_fingerprint(
+            "native-external-supply",
+            &[canonical],
+        ))
+    }
+
+    pub fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
     }
 }
 
@@ -77,9 +83,18 @@ pub trait NativeToolsProvider: Send + Sync {
         None
     }
 
-    /// The existing owner must reach its setup cut before resolving this input.
+    /// Full selection and replacement still require the existing setup cut.
     fn has_pending_external(&self) -> bool {
         false
+    }
+    /// Confirm exact owner reuse without replacing the callable selection.
+    fn confirm_external_reuse<'a>(
+        &'a self,
+        _target: &'a NativeTextTarget,
+        _applied: Option<(&'a NativeExternalPreparation, NativeExternalSupply)>,
+        _observe_only: bool,
+    ) -> NativeToolsFuture<'a, bool> {
+        Box::pin(async { Ok(false) })
     }
     fn resolve_external(&self) -> NativeToolsFuture<'_, Option<Arc<dyn NativeToolsProvider>>> {
         Box::pin(async { Ok(None) })

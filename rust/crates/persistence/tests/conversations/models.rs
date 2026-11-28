@@ -367,7 +367,7 @@ fn sqlite_model_selection_serializes_with_start_and_keeps_exact_receipts() -> Re
     let f = runtime.block_on(fixture(&store))?;
     runtime.block_on(exercise(&store, &f))?;
     let mut connection = diesel::SqliteConnection::establish(path.to_str().ok_or("Invalid path")?)?;
-    for expected in ["00000000000035", "00000000000034"] {
+    for expected in ["00000000000036", "00000000000035", "00000000000034"] {
         assert_eq!(
             connection
                 .revert_last_migration(SQLITE_MIGRATIONS)?
@@ -403,7 +403,7 @@ fn postgres_model_selection_serializes_with_start_and_keeps_exact_receipts() -> 
         let f = runtime.block_on(fixture(&store))?;
         runtime.block_on(exercise(&store, &f))?;
         let mut connection = AsyncConnectionWrapper::<AsyncPgConnection>::establish(&url)?;
-        for expected in ["00000000000035", "00000000000034"] {
+        for expected in ["00000000000036", "00000000000035", "00000000000034"] {
             assert_eq!(
                 connection
                     .revert_last_migration(POSTGRES_MIGRATIONS)?

@@ -182,6 +182,95 @@ fn valid_id(id: &str) -> Result<(), Error> {
     Ok(())
 }
 impl State {
+    /// Preserve any existing relay and record only setup evidence.
+    pub(super) async fn try_reuse_setup(
+        &mut self,
+        operation: &NativeSetupOperation,
+        tools: &dyn crate::NativeToolsProvider,
+        observe_only: bool,
+    ) -> Result<Option<NativeSetupObservation>, Error> {
+        let (Some(route), Some(connection)) = (tools.setup_route(), tools.setup_connection_id())
+        else {
+            return Ok(None);
+        };
+        if !route.is_open()
+            || !tools.has_pending_external()
+            || (!observe_only && !self.can_reuse_setup(operation))
+        {
+            return Ok(None);
+        }
+        let NativeSetupIntent::Existing(target) = &operation.intent else {
+            return Ok(None);
+        };
+        let applied = if observe_only {
+            None
+        } else {
+            let provision = self
+                .live
+                .as_ref()
+                .and_then(|live| live.tools.as_ref())
+                .ok_or(Error::NotAdmitted)?;
+            match (provision.external_supply(), provision.applied_external()) {
+                (None, None) => None,
+                (Some(supply), Some(preparation)) if preparation.connection_id == connection => {
+                    Some((preparation, supply))
+                }
+                _ => return Ok(None),
+            }
+        };
+        if !tools
+            .confirm_external_reuse(target, applied, observe_only)
+            .await
+            .map_err(|_| Error::DeliveryUncertain)?
+        {
+            return Ok(None);
+        }
+        route.publish(|| {
+            if let Some(previous) = self.setups.begin(operation, Some(connection))? {
+                return Ok(Some(previous));
+            }
+            let ready = NativeSetupObservation::Ready(target.clone());
+            self.setups
+                .completed(&operation.operation_id, ready.clone())?;
+            Ok(Some(ready))
+        })
+    }
+
+    pub(super) fn can_reuse_setup(&self, operation: &NativeSetupOperation) -> bool {
+        let NativeSetupIntent::Existing(target) = &operation.intent else {
+            return false;
+        };
+        !self.blocked
+            && self.live.as_ref().is_some_and(|live| {
+                !live.ended.is_cancelled()
+                    && live.instructions == operation.instructions
+                    && live.tool_catalog == operation.tool_catalog
+                    && live.requested_supply == operation.supply
+                    && operation.scope.matches(&live._authentication)
+                    && live
+                        .capture
+                        .snapshot()
+                        .is_ok_and(|snapshot| snapshot == target.snapshot)
+                    && live
+                        .capture
+                        .native_session()
+                        .is_ok_and(|native| native.as_ref() == Some(&target.native_session))
+                    && live.session.as_ref().is_some_and(|session| {
+                        matches!(session, Session::AppServer(_))
+                            && !session.is_closed()
+                            && session.id() == target.native_session.as_str()
+                    })
+                    && live.tools.as_ref().is_some()
+                    && live.observations.current().is_ok_and(|observed| {
+                        matches!(
+                            observed.foreground,
+                            NativeForeground::Idle | NativeForeground::Unknown
+                        )
+                    })
+                    && self.refresh_effects_settled(live)
+            })
+    }
+
     pub(super) async fn setup(
         &mut self,
         operation: NativeSetupOperation,
@@ -258,7 +347,9 @@ impl State {
                 }
                 Error::ToolsProvision(_) => NativeSetupFailure::BeforeNativeLaunch,
                 Error::ToolsVerification(_) => NativeSetupFailure::NativeRejected,
-                Error::ToolsCleanup(_) => NativeSetupFailure::RetirementUnknown,
+                Error::ToolsCleanup(_) | Error::CleanupFailed { .. } => {
+                    NativeSetupFailure::RetirementUnknown
+                }
                 Error::ProtocolRejected { .. } => NativeSetupFailure::NativeRejected,
                 Error::RetirementUnknown | Error::StartAndRetirement { .. } => {
                     NativeSetupFailure::RetirementUnknown
@@ -397,21 +488,25 @@ impl State {
                 .current()
                 .is_ok_and(|observed| observed.foreground == NativeForeground::Idle)
                 && live.observations.quiescent()
-                && (live.tools.is_none()
-                    || live
-                        .observations
-                        .pending_ending()
-                        .is_ok_and(|ending| ending.is_none()))
-                && live
-                    .requests
-                    .try_lock()
-                    .is_ok_and(|requests| requests.is_empty())
-                && self.inputs.is_empty()
-                && live
-                    .tools
-                    .as_ref()
-                    .is_none_or(crate::NativeToolProvision::quiescent)
+                && self.refresh_effects_settled(live)
         })
+    }
+
+    fn refresh_effects_settled(&self, live: &Live) -> bool {
+        (live.tools.is_none()
+            || live
+                .observations
+                .pending_ending()
+                .is_ok_and(|ending| ending.is_none()))
+            && live
+                .requests
+                .try_lock()
+                .is_ok_and(|requests| requests.is_empty())
+            && self.inputs.is_empty()
+            && live
+                .tools
+                .as_ref()
+                .is_none_or(crate::NativeToolProvision::quiescent)
     }
 }
 fn retained_context(

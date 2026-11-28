@@ -167,6 +167,18 @@ uncertain remote effect keeps that owner unsafe even after its local waiter ends
 Only known completion or explicit pre-execution rejection resolves the effect
 boundary. No local timeout manufactures permission to retire started remote work.
 
+For exact live Codex reuse, Control can record the next preparation as Ready
+without replacing its tool selection. A nonempty selection must match the
+original settings, catalogue and applied declaration set on the same Connector
+route. Its callable identity stays on the original setup operation, even across
+repeated reuse. Control checks the entire saved settings set, including
+individually unavailable integrations, in the transaction that records
+readiness. Capacity exhaustion, incomplete selection and a superseded candidate
+do not prove equivalence. Each call still checks current saved settings under
+admission, and readiness records neither a new invocation grant nor an input
+forwarding grant. A lost confirmation cannot by itself permit retirement; the
+exact recorded outcome is recoverable without reapplying settings.
+
 A native identity alone does not guarantee that the engine persisted an empty
 context. Initial product preparation now sets a native title before Ready; the
 released-program fixed-response acceptance checks exact restoration before the

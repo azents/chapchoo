@@ -322,6 +322,15 @@ atomic project publication and exact same-context Resume. Root Idle and metadata
 snapshots alone are not complete work evidence. The bounded deferred setup owner
 continues to handle observation, answer and Stop commands while waiting.
 
+An exact live Codex owner can satisfy a new input-scoped preparation without
+replacing the process or rebinding a tool relay. This requires matching source,
+instructions, built-in catalogue and harness supply, no known active foreground
+or outstanding effects, and
+[Control confirmation](server-tools.md#native-provision-and-verification) that
+the optional selection remains unchanged on the same Connector route. This path
+does not mark the native work inventory complete. Changed supply or a new relay
+binding still uses the existing application fence.
+
 The current capture has an explicit snapshot/native-session manifest and ordered
 JSONL occurrences, with a single writer held through the source lifetime.
 Original UTF-8 envelopes are retained before typed SDK decoding. A supplied actual

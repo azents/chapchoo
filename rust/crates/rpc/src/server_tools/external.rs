@@ -74,6 +74,69 @@ pub(super) async fn prepare(
     Ok(Response::new(stream))
 }
 
+pub(super) async fn confirm_reuse(
+    services: &ServerToolServices,
+    request: Request<wire::ExternalReuse>,
+) -> Result<Response<wire::ExternalReuseObservation>, Status> {
+    services.admit()?;
+    let external = services
+        .external
+        .as_ref()
+        .ok_or_else(|| Status::unimplemented("External tool preparation is unavailable"))?;
+    let credential = ingress::actor(&request)?;
+    let request = request.into_inner();
+    let caller = Preparation::decode(
+        request
+            .preparation
+            .ok_or_else(|| Status::invalid_argument("Preparation is required"))?,
+        credential,
+    )?;
+    let target = request
+        .target
+        .ok_or_else(|| Status::invalid_argument("Reuse target is required"))?;
+    let target = ConversationDeliveryTarget {
+        snapshot: SnapshotId::parse(target.snapshot_id)
+            .map_err(|_| Status::invalid_argument("Invalid reuse snapshot"))?,
+        native_session: NativeConversationId::parse(target.native_session_id)
+            .map_err(|_| Status::invalid_argument("Invalid reuse session"))?,
+    };
+    let Ok(_permit) = services.external_ingress.clone().try_acquire_owned() else {
+        // This request could not record readiness. Return an explicit negative
+        // observation, not a transport error that may hide a committed result.
+        return Ok(Response::new(wire::ExternalReuseObservation {
+            confirmed: false,
+        }));
+    };
+    let applied = match (
+        request.applied_operation_id.as_str(),
+        request.applied_supply.as_slice(),
+    ) {
+        ("", []) => None,
+        (operation, supply) if !request.observe_only => {
+            ingress::id(operation)?;
+            Some((
+                operation,
+                <&[u8; 32]>::try_from(supply)
+                    .map_err(|_| Status::invalid_argument("Invalid applied supply fingerprint"))?,
+            ))
+        }
+        _ => return Err(Status::invalid_argument("Invalid applied supply evidence")),
+    };
+    let confirmed = external
+        .confirm_reuse(
+            &caller.caller.source(),
+            &McpAppliedScope {
+                preparation: caller.scope(),
+                target: &target,
+            },
+            request.observe_only,
+            applied,
+        )
+        .await
+        .map_err(status)?;
+    Ok(Response::new(wire::ExternalReuseObservation { confirmed }))
+}
+
 fn catalogue_frames(page: ExternalCataloguePage) -> Vec<wire::ExternalCatalogFrame> {
     let mut frames = Vec::new();
     use wire::external_catalog_frame::Payload;
