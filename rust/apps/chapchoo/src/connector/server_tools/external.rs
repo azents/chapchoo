@@ -339,7 +339,7 @@ impl Assembly {
                 }
                 bytes.extend(chunk.json);
                 if chunk.final_chunk {
-                    let mut list: ListToolsResult = serde_json::from_slice(bytes)?;
+                    let list: ListToolsResult = serde_json::from_slice(bytes)?;
                     if list.next_cursor.is_some()
                         || list.tools.len() > 512
                         || list.tools.iter().any(|tool| tool.name.is_empty())
@@ -350,9 +350,8 @@ impl Assembly {
                     {
                         return Err("External MCP catalogue is incomplete".into());
                     }
-                    list.result_type = None;
-                    list.ttl_ms = None;
-                    self.entries.insert(id, list);
+                    self.entries
+                        .insert(id, chapchoo_service::native_mcp_list(list));
                     self.partial = None;
                 }
             }

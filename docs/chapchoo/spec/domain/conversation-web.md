@@ -269,8 +269,10 @@ its label. Acknowledgement occurs at latest rather than implying that clicking
 has already completed a smooth return.
 
 The status distinguishes a conversation that has not started, missing saved AI
-authentication, startup in progress, reported startup failure, delivery failure,
-unconfirmed delivery. Known Computer off/start/stop/restart states take
+authentication, startup in progress, reported startup failure, an established
+delivery failure, and a delivery result the server has not received. In the last
+case, the status tells the user to check the chat before sending again rather
+than reporting failure or labeling the missing observation. Known Computer off/start/stop/restart states take
 precedence; replacement is restart to the user. During temporary read errors,
 stale reads, unknown current power or Connector disconnection, the same-source
 retained native foreground remains visible with only a spinner. Cold absence

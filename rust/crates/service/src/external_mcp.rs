@@ -10,7 +10,7 @@ mod tests;
 mod wire;
 
 use crate::{AcceptanceTime, ServiceError};
-pub use catalogue::CompleteMcpCatalogue;
+pub use catalogue::{CompleteMcpCatalogue, native_mcp_list};
 use chapchoo_crypto::SecretDigest;
 use chapchoo_persistence::{McpAuthEdit, McpEndpoint, McpTestTarget, Store};
 pub use invocation::{

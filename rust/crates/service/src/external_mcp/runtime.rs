@@ -407,10 +407,10 @@ fn matches_applied_supply(
         {
             return false;
         }
-        let Ok(value) = serde_json::from_slice::<serde_json::Value>(json) else {
+        let Ok(list) = serde_json::from_slice::<rmcp::model::ListToolsResult>(json) else {
             return false;
         };
-        values.insert(id, value);
+        values.insert(id, super::native_mcp_list(list));
     }
     let Ok(mut value) = serde_json::to_value(values) else {
         return false;
@@ -444,7 +444,13 @@ mod tests {
         let payload = catalogue
             .local_list_json()
             .map_err(|reason| std::io::Error::other(format!("{reason:?}")))?;
-        let mut canonical = serde_json::json!({"integration": serde_json::from_slice::<serde_json::Value>(&payload)?});
+        let mut wire = serde_json::from_slice::<rmcp::model::ListToolsResult>(&payload)?;
+        assert!(wire.result_type.is_some());
+        // Reproduce the existing Connector's local projection independently
+        // so the test also protects rolling upgrades with its old fingerprint.
+        wire.result_type = None;
+        wire.ttl_ms = None;
+        let mut canonical = serde_json::json!({"integration": wire});
         canonical.sort_all_objects();
         let supply = chapchoo_crypto::payload_fingerprint(
             "native-external-supply",

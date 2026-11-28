@@ -55,7 +55,6 @@ export interface ChatCopy {
   retryMessage: string;
   deleteMessage: string;
   deletingMessage: string;
-  deleteUnconfirmed: string;
   older: string;
   history: string;
   plan: string;
@@ -135,7 +134,7 @@ const en: ChatCopy = {
   sourceUnavailable: "{harness} conversation could not be opened",
   retirementUnknown: "Previous {harness} process may still be running",
   deliveryFailed: "Message could not be delivered",
-  deliveryUnconfirmed: "Message delivery not confirmed",
+  deliveryUnconfirmed: "Check the chat before sending again",
   authenticationSettings: "Set up AI authentication",
   stop: "Stop work",
   empty: "What shall we work on today?",
@@ -148,7 +147,6 @@ const en: ChatCopy = {
   retryMessage: "Retry",
   deleteMessage: "Delete",
   deletingMessage: "Deleting…",
-  deleteUnconfirmed: "Deletion not confirmed",
   older: "Load older records",
   history: "Full history",
   plan: "Current plan",
@@ -239,7 +237,7 @@ const ko: ChatCopy = {
   sourceUnavailable: "{harness} 대화를 열지 못했습니다",
   retirementUnknown: "이전 {harness}가 아직 실행 중일 수 있습니다",
   deliveryFailed: "메시지 전달 실패",
-  deliveryUnconfirmed: "메시지 전달 여부 미확인",
+  deliveryUnconfirmed: "다시 보내기 전에 대화 기록을 확인하세요",
   authenticationSettings: "AI 인증 설정",
   stop: "작업 중지",
   empty: "오늘은 어떤 일을 함께 해볼까요?",
@@ -252,7 +250,6 @@ const ko: ChatCopy = {
   retryMessage: "재시도",
   deleteMessage: "삭제",
   deletingMessage: "삭제 중…",
-  deleteUnconfirmed: "삭제 여부 미확인",
   older: "이전 기록 불러오기",
   history: "전체 기록",
   plan: "현재 계획",
@@ -343,7 +340,7 @@ const ja: ChatCopy = {
   sourceUnavailable: "{harness}の会話を開けませんでした",
   retirementUnknown: "以前の{harness}がまだ実行中の可能性があります",
   deliveryFailed: "メッセージを配信できませんでした",
-  deliveryUnconfirmed: "メッセージの配信を確認できません",
+  deliveryUnconfirmed: "再送する前にチャット履歴を確認してください",
   authenticationSettings: "AI認証を設定",
   stop: "作業を停止",
   empty: "今日は何を一緒にしましょうか？",
@@ -356,7 +353,6 @@ const ja: ChatCopy = {
   retryMessage: "再送信",
   deleteMessage: "削除",
   deletingMessage: "削除中…",
-  deleteUnconfirmed: "削除を確認できません",
   older: "以前の記録を読み込む",
   history: "すべての記録",
   plan: "現在の計画",
@@ -449,7 +445,7 @@ const fr: ChatCopy = {
   retirementUnknown:
     "Le processus {harness} précédent est peut-être encore actif",
   deliveryFailed: "Échec de l’envoi du message",
-  deliveryUnconfirmed: "Envoi du message non confirmé",
+  deliveryUnconfirmed: "Vérifiez la conversation avant de renvoyer le message",
   authenticationSettings: "Configurer l’authentification IA",
   stop: "Arrêter le travail",
   empty: "Sur quoi allons-nous travailler aujourd’hui ?",
@@ -462,7 +458,6 @@ const fr: ChatCopy = {
   retryMessage: "Réessayer",
   deleteMessage: "Supprimer",
   deletingMessage: "Suppression…",
-  deleteUnconfirmed: "Suppression non confirmée",
   older: "Charger les anciens éléments",
   history: "Historique complet",
   plan: "Plan actuel",

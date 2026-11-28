@@ -89,7 +89,7 @@ pub use external_mcp::{
     AgentMcpTestOutcome, CompleteMcpCatalogue, ExternalCatalogue, ExternalCataloguePage,
     ExternalMcpCall, ExternalMcpCallOutcome, ExternalMcpInvocation, ExternalMcpRejection,
     ExternalMcpRuntime, McpCatalogueCandidate, McpCatalogueCandidatePage, McpCatalogueDiscovery,
-    McpDiscoveryFailure, McpPreparationFailure, McpTestEdit,
+    McpDiscoveryFailure, McpPreparationFailure, McpTestEdit, native_mcp_list,
 };
 pub use mail::{MailFailure, MailFuture, MailMessage, MailPurpose, Mailer};
 pub use password::PasswordWork;
