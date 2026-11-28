@@ -18,6 +18,7 @@ const CACHE_ENTRIES: usize = 16;
 #[derive(Debug)]
 pub struct McpCatalogueCandidate {
     pub integration_id: String,
+    pub model_slot: u64,
     pub settings_key: SecretDigest,
     pub catalogue: Result<CompleteMcpCatalogue, McpPreparationFailure>,
 }
@@ -120,6 +121,7 @@ impl McpCatalogueDiscovery {
                 };
                 McpCatalogueCandidate {
                     integration_id: saved.integration_id,
+                    model_slot: saved.model_slot,
                     settings_key: saved.settings_key,
                     catalogue: catalogue.map_err(McpPreparationFailure::Discovery),
                 }

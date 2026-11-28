@@ -24,6 +24,26 @@ exempts only its built-in `send` from the Codex tool approval prompt. The
 declaration still defaults to prompting for any other tool on that server.
 This changes the Codex prompt, not the relay's authorization to publish.
 
+For managed external MCP, Control reserves a short Codex server name such as
+`cx4` for that integration when preparing its first catalogue. Each name is
+unique within its Agent. Allocation starts with one digit and grows only when
+shorter slots have all been reserved. Names do not express creation or display
+order, do not change on edit, and are not recycled on integration deletion.
+Codex groups original tool names under `mcp__cx…` on the model wire. New actual
+Codex starts and exact resumes can adopt these names; live reuse leaves the
+existing declarations untouched. ACP still receives only the built-in tools.
+
+The short name is not a routing key or credential. The authenticated loopback
+path and Control calls still use the full integration ID, exact settings and
+current target. The live approval path checks the actual declared server name.
+The thread configuration pins prompting for the selected external raw tool names,
+including any external `send`, while captured approvals can still be read under
+the older `chapchoo_ext_…` names. The `cx` followed by a positive decimal slot
+is reserved for managed external MCP in the Chapchoo Codex profile; other Codex
+configuration must use different server names. Ordinary lower-priority
+tool-specific settings do not override the managed prompt policy.
+Schema rollback refuses to discard a nonempty reservation table.
+
 `send` requires an explicit `action`. User messages open one reply Work without
 a visible plan. A direct `finish` can publish the answer without `continue`.
 The first `continue` publishes a plan and requires a title and the complete

@@ -87,6 +87,8 @@ export interface ExternalReuseObservation {
 export interface ExternalCatalogChunk {
   json: Buffer;
   finalChunk: boolean;
+  /** Stable within the Agent. Zero is absent on older Control versions. */
+  modelSlot: bigint;
 }
 
 export interface ExternalCatalogFrame {
@@ -399,7 +401,7 @@ export const ExternalReuseObservation: MessageFns<ExternalReuseObservation> = {
 };
 
 function createBaseExternalCatalogChunk(): ExternalCatalogChunk {
-  return { json: Buffer.alloc(0), finalChunk: false };
+  return { json: Buffer.alloc(0), finalChunk: false, modelSlot: 0n };
 }
 
 export const ExternalCatalogChunk: MessageFns<ExternalCatalogChunk> = {
@@ -409,6 +411,12 @@ export const ExternalCatalogChunk: MessageFns<ExternalCatalogChunk> = {
     }
     if (message.finalChunk !== false) {
       writer.uint32(16).bool(message.finalChunk);
+    }
+    if (message.modelSlot !== 0n) {
+      if (BigInt.asUintN(64, message.modelSlot) !== message.modelSlot) {
+        throw new globalThis.Error("value provided for field message.modelSlot of type uint64 too large");
+      }
+      writer.uint32(24).uint64(message.modelSlot);
     }
     return writer;
   },
@@ -442,6 +450,14 @@ export const ExternalCatalogChunk: MessageFns<ExternalCatalogChunk> = {
             message.finalChunk = reader.bool();
             continue;
           }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.modelSlot = reader.uint64() as bigint;
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -461,6 +477,7 @@ export const ExternalCatalogChunk: MessageFns<ExternalCatalogChunk> = {
     const message = createBaseExternalCatalogChunk();
     message.json = object.json ?? Buffer.alloc(0);
     message.finalChunk = object.finalChunk ?? false;
+    message.modelSlot = (object.modelSlot !== undefined && object.modelSlot !== null) ? BigInt(object.modelSlot) : 0n;
     return message;
   },
 };

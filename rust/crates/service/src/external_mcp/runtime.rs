@@ -23,6 +23,7 @@ const RETAINED_SELECTIONS: usize = 32;
 #[derive(Clone)]
 pub struct ExternalCatalogue {
     pub integration_id: String,
+    pub model_slot: u64,
     pub payload: Result<Arc<[u8]>, McpPreparationFailure>,
 }
 
@@ -238,6 +239,7 @@ impl ExternalMcpRuntime {
                 });
                 entries.push(ExternalCatalogue {
                     integration_id,
+                    model_slot: item.model_slot,
                     payload,
                 });
             }

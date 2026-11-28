@@ -16,6 +16,7 @@ struct PreparedServer<'a> {
     name: &'a str,
     url: &'a str,
     authorization: Zeroizing<String>,
+    prompted_tools: Option<&'a [String]>,
 }
 
 impl<'a> Prepared<'a> {
@@ -29,6 +30,7 @@ impl<'a> Prepared<'a> {
                         name: declaration.name(),
                         url,
                         authorization: Zeroizing::new(format!("Bearer {}", key.expose())),
+                        prompted_tools: declaration.prompted_tools(),
                     }
                 })
                 .collect(),
@@ -51,11 +53,30 @@ impl<'a> Prepared<'a> {
                             },
                             required: builtin,
                             default_tools_approval_mode: "prompt",
-                            tools: builtin.then_some(ToolOverrides {
-                                send: ToolApproval {
-                                    approval_mode: "approve",
-                                },
-                            }),
+                            tools: if builtin {
+                                BTreeMap::from([(
+                                    "send",
+                                    ToolApproval {
+                                        approval_mode: "approve",
+                                    },
+                                )])
+                            } else {
+                                server
+                                    .prompted_tools
+                                    .unwrap_or_default()
+                                    .iter()
+                                    .map(|name| {
+                                        (
+                                            name.as_str(),
+                                            ToolApproval {
+                                                approval_mode: "prompt",
+                                            },
+                                        )
+                                    })
+                                    .collect()
+                            },
+                            enabled_tools: server.prompted_tools,
+                            disabled_tools: server.prompted_tools.map(|_| []),
                             omit_tools_from: ["code_mode", "deferred"],
                         },
                     )
@@ -88,14 +109,12 @@ struct Server<'a> {
     http_headers: Headers<'a>,
     required: bool,
     default_tools_approval_mode: &'static str,
+    tools: BTreeMap<&'a str, ToolApproval>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tools: Option<ToolOverrides>,
+    enabled_tools: Option<&'a [String]>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    disabled_tools: Option<[String; 0]>,
     omit_tools_from: [&'static str; 2],
-}
-
-#[derive(Serialize)]
-struct ToolOverrides {
-    send: ToolApproval,
 }
 
 #[derive(Serialize)]

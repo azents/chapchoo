@@ -30,6 +30,8 @@ message ExternalReuseObservation { bool confirmed = 1; }
 message ExternalCatalogChunk {
   bytes json = 1;
   bool final_chunk = 2;
+  // Stable within the Agent. Zero is absent on older Control versions.
+  uint64 model_slot = 3;
 }
 enum ExternalCatalogFailure {
   EXTERNAL_CATALOG_FAILURE_UNSPECIFIED = 0;

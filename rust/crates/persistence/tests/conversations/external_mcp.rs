@@ -145,7 +145,64 @@ async fn exercise(database: FixtureDatabase) -> Result<(), TestError> {
         .next()
         .ok_or("Missing saved settings")?;
     assert_eq!(initial.integration_id, saved.id);
+    assert!((1..=9).contains(&initial.model_slot));
     assert!(!format!("{initial:?}").contains(TOKEN));
+    let mut temporary = Vec::new();
+    for index in 0..9 {
+        let created = client
+            .change_agent_integration(
+                &owner,
+                &f.agent.id,
+                &format!("short-mcp-names-{index}"),
+                &create,
+                f.now,
+            )
+            .await?;
+        temporary.push(created.id);
+    }
+    let assigned = control
+        .capture_mcp_settings_for_preparation(&source, &scope, None)
+        .await?;
+    let slots: std::collections::BTreeSet<_> =
+        assigned.items.iter().map(|item| item.model_slot).collect();
+    assert_eq!(slots.len(), 10);
+    assert!((1..=9).all(|slot| slots.contains(&slot)));
+    assert_eq!(slots.iter().filter(|slot| **slot >= 10).count(), 1);
+    for (index, id) in temporary.into_iter().enumerate() {
+        client
+            .change_agent_integration(
+                &owner,
+                &f.agent.id,
+                &format!("delete-short-mcp-names-{index}"),
+                &AgentIntegrationChange::Delete { id },
+                f.now,
+            )
+            .await?;
+    }
+    let replacement = client
+        .change_agent_integration(&owner, &f.agent.id, "short-mcp-names-add", &create, f.now)
+        .await?;
+    let after_delete = control
+        .capture_mcp_settings_for_preparation(&source, &scope, None)
+        .await?;
+    assert_eq!(after_delete.items.len(), 2);
+    let replacement_slot = after_delete
+        .items
+        .iter()
+        .find(|item| item.integration_id == replacement.id)
+        .ok_or("Missing replacement name")?
+        .model_slot;
+    assert!((10..=99).contains(&replacement_slot));
+    assert!(!slots.contains(&replacement_slot));
+    client
+        .change_agent_integration(
+            &owner,
+            &f.agent.id,
+            "delete-short-mcp-names-add",
+            &AgentIntegrationChange::Delete { id: replacement.id },
+            f.now,
+        )
+        .await?;
     let initial_keys = [(saved.id.as_str(), &initial.settings_key)];
     assert_eq!(
         control
@@ -204,6 +261,7 @@ async fn exercise(database: FixtureDatabase) -> Result<(), TestError> {
         .into_iter()
         .next()
         .ok_or("Missing replacement settings")?;
+    assert_eq!(current.model_slot, initial.model_slot);
     let draft = ConversationInputPreparation {
         agent_id: &f.agent.id,
         conversation_id: &conversation.id,

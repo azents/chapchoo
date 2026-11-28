@@ -16,6 +16,7 @@ const PREPARATION_TIMEOUT: Duration = Duration::from_secs(3);
 #[derive(Clone, Default)]
 pub(in crate::connector) struct PreparedExternal {
     pub(super) entries: BTreeMap<String, ListToolsResult>,
+    pub(super) model_slots: BTreeMap<String, u64>,
     pub(super) selection: Option<NativeExternalPreparation>,
     pub(super) supply: Option<NativeExternalSupply>,
     pub(super) diagnostics: SelectionDiagnostics,
@@ -103,6 +104,7 @@ impl PreparedExternal {
         Ok(Self {
             supply: effective_supply(entries.iter())?,
             entries,
+            model_slots: BTreeMap::new(),
             selection: Some(selection(source, "execution".into(), "setup".into())),
             diagnostics: SelectionDiagnostics::default(),
         })
@@ -138,24 +140,26 @@ impl PreparedExternal {
         let mut request =
             rpc::request(preparation_request(&selection, &route, &recipient), &route)?;
         request.set_timeout(PREPARATION_TIMEOUT);
-        let (entries, diagnostics) = tokio::time::timeout(PREPARATION_TIMEOUT, async {
-            let mut stream = rpc::client(&route)
-                .prepare_external(request)
-                .await?
-                .into_inner();
-            let mut assembly = Assembly::default();
-            while let Some(frame) = stream.message().await? {
-                assembly.push(frame)?;
-            }
-            assembly.finish()
-        })
-        .await??;
+        let (entries, model_slots, diagnostics) =
+            tokio::time::timeout(PREPARATION_TIMEOUT, async {
+                let mut stream = rpc::client(&route)
+                    .prepare_external(request)
+                    .await?
+                    .into_inner();
+                let mut assembly = Assembly::default();
+                while let Some(frame) = stream.message().await? {
+                    assembly.push(frame)?;
+                }
+                assembly.finish()
+            })
+            .await??;
         if !matches_route(&selection, &current.snapshot()?.source) {
             return Err("External MCP preparation route changed".into());
         }
         Ok(Self {
             supply: effective_supply(entries.iter())?,
             entries,
+            model_slots,
             selection: Some(selection),
             diagnostics,
         })
@@ -297,13 +301,18 @@ pub(super) fn integration_identity(id: &str) -> bool {
 #[derive(Default)]
 struct Assembly {
     entries: BTreeMap<String, ListToolsResult>,
+    model_slots: BTreeMap<String, u64>,
     unavailable: BTreeMap<String, wire::ExternalCatalogFailure>,
-    partial: Option<(String, Vec<u8>)>,
+    partial: Option<(String, u64, Vec<u8>)>,
     bytes: usize,
     closed: bool,
     capacity_limited: bool,
 }
-type CatalogueProjection = (BTreeMap<String, ListToolsResult>, SelectionDiagnostics);
+type CatalogueProjection = (
+    BTreeMap<String, ListToolsResult>,
+    BTreeMap<String, u64>,
+    SelectionDiagnostics,
+);
 
 impl Assembly {
     fn push(&mut self, frame: wire::ExternalCatalogFrame) -> Result<(), AppError> {
@@ -329,9 +338,12 @@ impl Assembly {
         }
         match frame.payload {
             Some(Payload::Catalogue(chunk)) if !chunk.json.is_empty() => {
-                let (current, bytes) = self.partial.get_or_insert_with(|| (id.clone(), Vec::new()));
+                let (current, slot, bytes) = self
+                    .partial
+                    .get_or_insert_with(|| (id.clone(), chunk.model_slot, Vec::new()));
                 self.bytes = self.bytes.saturating_add(chunk.json.len());
                 if *current != id
+                    || *slot != chunk.model_slot
                     || self.bytes > SELECTION_BYTES
                     || bytes.len().saturating_add(chunk.json.len()) > CATALOGUE_BYTES
                 {
@@ -349,6 +361,14 @@ impl Assembly {
                             .any(|pair| pair[0].name >= pair[1].name)
                     {
                         return Err("External MCP catalogue is incomplete".into());
+                    }
+                    if *slot != 0 {
+                        if chapchoo_domain::local_mcp::short_external_name(*slot).is_none()
+                            || self.model_slots.values().any(|other| other == slot)
+                        {
+                            return Err("Invalid external MCP model slot".into());
+                        }
+                        self.model_slots.insert(id.clone(), *slot);
                     }
                     self.entries
                         .insert(id, chapchoo_service::native_mcp_list(list));
@@ -373,6 +393,7 @@ impl Assembly {
         }
         Ok((
             self.entries,
+            self.model_slots,
             SelectionDiagnostics {
                 unavailable: self.unavailable,
                 capacity_limited: self.capacity_limited,
@@ -500,6 +521,7 @@ mod tests {
             payload: Some(Payload::Catalogue(wire::ExternalCatalogChunk {
                 json: json.to_vec(),
                 final_chunk,
+                model_slot: 0,
             })),
         }
     }
@@ -537,7 +559,8 @@ mod tests {
         assembly.push(unavailable("second"))?;
         assembly.push(chunk("third", br#"{"tools":[]}"#, true))?;
         assembly.push(end())?;
-        let (entries, diagnostics) = assembly.finish()?;
+        let (entries, slots, diagnostics) = assembly.finish()?;
+        assert!(slots.is_empty());
         assert_eq!(entries.len(), 2);
         assert_eq!(
             entries["first"].tools[0].description.as_deref(),

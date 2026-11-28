@@ -150,6 +150,7 @@ fn catalogue_frames(page: ExternalCataloguePage) -> Vec<wire::ExternalCatalogFra
                         payload: Some(Payload::Catalogue(wire::ExternalCatalogChunk {
                             json: json.to_vec(),
                             final_chunk: chunks.peek().is_none(),
+                            model_slot: item.model_slot,
                         })),
                     });
                 }
@@ -302,14 +303,17 @@ mod tests {
             catalogues: vec![
                 ExternalCatalogue {
                     integration_id: "chunked".into(),
+                    model_slot: 1,
                     payload: Ok(Arc::from(vec![42; CHUNK_BYTES + 1])),
                 },
                 ExternalCatalogue {
                     integration_id: "empty".into(),
+                    model_slot: 2,
                     payload: Ok(Arc::from(&b"{\"tools\":[]}"[..])),
                 },
                 ExternalCatalogue {
                     integration_id: "failed".into(),
+                    model_slot: 3,
                     payload: Err(McpPreparationFailure::Superseded),
                 },
             ],

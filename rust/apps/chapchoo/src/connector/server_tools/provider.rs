@@ -173,9 +173,19 @@ impl NativeToolLifetime for Lifetime {
             let declarations = relay
                 .optional_credentials()
                 .filter_map(|(id, url, bearer)| {
+                    let slot = selected.model_slots.get(id).copied().unwrap_or_default();
+                    let tools = relay.optional[id]
+                        .state
+                        .catalog
+                        .tools
+                        .iter()
+                        .map(|tool| tool.name.to_string())
+                        .collect();
                     let declaration = BearerSecret::parse(bearer.to_owned())
                         .map_err(|error| NativeToolsError::new(error.into()))
-                        .and_then(|key| NativeMcpDeclaration::external_http(id, &url, key));
+                        .and_then(|key| {
+                            NativeMcpDeclaration::external_http(id, slot, &url, key, tools)
+                        });
                     match declaration {
                         Ok(declaration) => Some((id.to_owned(), declaration)),
                         Err(_) => {
