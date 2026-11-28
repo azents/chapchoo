@@ -98,3 +98,17 @@ void test("initial absence invents no previous state and confirmed failures are 
     assert.equal(value.refreshing, false);
   }
 });
+
+void test("an unknown delivery outcome directs the user to the chat without reporting failure", () => {
+  assert.deepEqual(
+    chatStatus({
+      ...base,
+      foreground: "unavailable",
+      activity: "deliveryUnconfirmed",
+    }),
+    {
+      label: "다시 보내기 전에 대화 기록을 확인하세요",
+      refreshing: false,
+    },
+  );
+});

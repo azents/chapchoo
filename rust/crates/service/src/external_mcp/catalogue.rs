@@ -6,6 +6,15 @@ use tokio::time::Instant;
 // Cap process-local reuse even when a peer advertises very long freshness.
 const MAX_REUSE: Duration = Duration::from_secs(15 * 60);
 
+/// Native 2025-profile lists omit the upstream result envelope's completion
+/// and freshness fields. Tool definitions are preserved byte-for-byte in the
+/// typed representation used to compare and apply the selection.
+pub fn native_mcp_list(mut list: ListToolsResult) -> ListToolsResult {
+    list.result_type = None;
+    list.ttl_ms = None;
+    list
+}
+
 /// Complete normalized tool supply. Expiry is not part of its representation.
 #[derive(Clone)]
 pub struct CompleteMcpCatalogue {
