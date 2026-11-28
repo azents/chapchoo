@@ -1813,13 +1813,15 @@ mod tests {
         )?;
         let optional = crate::NativeMcpDeclaration::external_http(
             "fixture",
+            4,
             "http://127.0.0.1:4200/mcp/fixture",
             BearerSecret::generate()?,
+            vec!["lookup".into()],
         )?;
         for (declarations, expected) in [
             (
                 vec![&builtin, &optional],
-                serde_json::json!(["mcp__chapchoo", "mcp__chapchoo_ext_fixture"]),
+                serde_json::json!(["mcp__chapchoo", "mcp__cx4"]),
             ),
             (vec![&builtin], serde_json::json!(["mcp__chapchoo"])),
         ] {

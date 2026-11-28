@@ -470,14 +470,16 @@ async fn mcp_approval_answers_bind_to_the_exact_capture_and_never_remember() -> 
         }
     });
     let mut external = frame.clone();
-    external["params"]["serverName"] = json!("chapchoo_ext_fixture");
+    external["params"]["serverName"] = json!("cx4");
     external["params"]["_meta"]["tool_name"] = json!("send");
-    let managed = std::collections::BTreeSet::from([
-        "chapchoo".to_owned(),
-        "chapchoo_ext_fixture".to_owned(),
-    ]);
+    let managed = std::collections::BTreeSet::from(["chapchoo".to_owned(), "cx4".to_owned()]);
     assert!(Approval::decode(&target, "live-turn", &external, None, &managed).is_some());
     assert!(Approval::decode(&target, "different-turn", &external, None, &managed).is_none());
+    for name in ["cx7", "chapchoo_ext_fixture"] {
+        let mut stale = external.clone();
+        stale["params"]["serverName"] = json!(name);
+        assert!(Approval::decode(&target, "live-turn", &stale, None, &managed).is_none());
+    }
     assert!(Approval::offer(target.clone(), position.clone(), "live-turn", external)?.is_none());
     for (field, value) in [
         ("threadId", json!("elsewhere")),
@@ -547,8 +549,10 @@ async fn start_and_resume_replace_optional_supply_but_keep_required_send() -> Te
     let declaration = crate::NativeMcpDeclaration::http("http://127.0.0.1:12345/mcp", bearer)?;
     let external = crate::NativeMcpDeclaration::external_http(
         "fixture",
+        4,
         "http://127.0.0.1:12345/mcp/fixture",
         chapchoo_crypto::BearerSecret::generate()?,
+        vec!["send".into(), "lookup.with.dot".into()],
     )?;
     let server = async {
         for (method, existing) in [("thread/start", false), ("thread/resume", true)] {
@@ -573,14 +577,33 @@ async fn start_and_resume_replace_optional_supply_but_keep_required_send() -> Te
             assert!(
                 server["http_headers"]["Authorization"].as_str() == Some(authorization.as_str())
             );
-            let optional = &params["config"]["mcp_servers"]["chapchoo_ext_fixture"];
+            let optional = &params["config"]["mcp_servers"]["cx4"];
+            assert_eq!(
+                params["config"]["code_mode"]["direct_only_tool_namespaces"],
+                if existing {
+                    json!(["mcp__chapchoo"])
+                } else {
+                    json!(["mcp__chapchoo", "mcp__cx4"])
+                }
+            );
             if existing {
                 assert!(optional.is_null());
             } else {
                 assert_eq!(optional["url"], "http://127.0.0.1:12345/mcp/fixture");
                 assert_eq!(optional["required"], false);
                 assert_eq!(optional["default_tools_approval_mode"], "prompt");
-                assert!(optional.get("tools").is_none());
+                assert_eq!(
+                    optional["tools"],
+                    json!({
+                        "send":{"approval_mode":"prompt"},
+                        "lookup.with.dot":{"approval_mode":"prompt"},
+                    })
+                );
+                assert_eq!(
+                    optional["enabled_tools"],
+                    json!(["send", "lookup.with.dot"])
+                );
+                assert_eq!(optional["disabled_tools"], json!([]));
             }
             send(
                 &mut output,

@@ -134,6 +134,7 @@ pub struct NativeMcpDeclaration {
     name: String,
     url: reqwest::Url,
     key: BearerSecret,
+    prompted_tools: Option<Vec<String>>,
 }
 impl NativeMcpDeclaration {
     /// Validate the declaration before handing any physical owner to a provision.
@@ -141,16 +142,24 @@ impl NativeMcpDeclaration {
         Self::local("chapchoo".into(), "/mcp", url, key)
     }
     /// The managed namespace is distinct from built-in and display names.
-    pub fn external_http(id: &str, url: &str, key: BearerSecret) -> Result<Self, NativeToolsError> {
+    pub fn external_http(
+        id: &str,
+        slot: u64,
+        url: &str,
+        key: BearerSecret,
+        tools: Vec<String>,
+    ) -> Result<Self, NativeToolsError> {
         if !local_mcp::valid_integration_id(id) {
             return Err(invalid_declaration());
         }
-        Self::local(
-            format!("{}{id}", local_mcp::EXTERNAL_PREFIX),
-            &format!("/mcp/{id}"),
-            url,
-            key,
-        )
+        let name = if slot == 0 {
+            format!("{}{id}", local_mcp::LEGACY_EXTERNAL_PREFIX)
+        } else {
+            local_mcp::short_external_name(slot).ok_or_else(invalid_declaration)?
+        };
+        let mut declaration = Self::local(name, &format!("/mcp/{id}"), url, key)?;
+        declaration.prompted_tools = Some(tools);
+        Ok(declaration)
     }
     fn local(
         name: String,
@@ -170,10 +179,18 @@ impl NativeMcpDeclaration {
         {
             return Err(invalid_declaration());
         }
-        Ok(Self { name, url, key })
+        Ok(Self {
+            name,
+            url,
+            key,
+            prompted_tools: None,
+        })
     }
     pub(crate) fn name(&self) -> &str {
         &self.name
+    }
+    pub(crate) fn prompted_tools(&self) -> Option<&[String]> {
+        self.prompted_tools.as_deref()
     }
     pub(crate) fn wire(&self) -> agent_client_protocol::v2::schema::McpServer {
         use agent_client_protocol::v2::schema;

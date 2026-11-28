@@ -390,6 +390,11 @@ fn app_server_approval_projects_only_occurrence_scoped_one_time_choices() -> Res
     assert!(projected.meta.is_none());
 
     for (server, projected) in [
+        ("cx7", true),
+        ("cx10", true),
+        ("cx0", false),
+        ("cx07", false),
+        ("cx10000000000", false),
         ("chapchoo_ext_fixture-id_12", true),
         ("chapchoo_ext_", false),
         ("chapchoo_ext_invalid.name", false),

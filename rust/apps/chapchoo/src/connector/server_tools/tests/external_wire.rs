@@ -102,6 +102,7 @@ impl server_tools_server::ServerTools for Control {
                 payload: Some(Payload::Catalogue(wire::ExternalCatalogChunk {
                     json: bytes.to_vec(),
                     final_chunk: index + 1 == count,
+                    model_slot: 7,
                 })),
             })
         }));

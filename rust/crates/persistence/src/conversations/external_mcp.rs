@@ -9,6 +9,8 @@ use diesel::QueryableByName;
 
 const PAGE_SIZE: u16 = 16;
 
+mod keys;
+
 #[derive(Debug)]
 pub struct McpExecutionScope<'a> {
     pub agent_id: &'a str,
@@ -52,6 +54,7 @@ struct AppliedPreparation {
 #[derive(Debug)]
 pub struct SavedMcpConnection {
     pub integration_id: String,
+    pub model_slot: u64,
     pub settings_key: SecretDigest,
     pub target: McpTestTarget,
 }
@@ -249,7 +252,7 @@ impl Store {
         let cursor = after
             .map(|id| EntityId::from_dto(EntityKind::AgentIntegration, id))
             .transpose()?;
-        let mut rows = operation!(self, |connection, dialect| {
+        let (mut rows, model_slots) = operation!(self, |connection, dialect| {
             check_mcp_preparation!(
                 connection,
                 dialect,
@@ -266,13 +269,18 @@ impl Store {
             let sql = format!(
                 "SELECT i.id,s.endpoint,s.token_nonce,s.token_ciphertext FROM agent_integrations i JOIN agent_mcp_settings s ON s.integration_id=i.id WHERE i.agent_id=? AND i.kind='MCP' AND (CAST(? AS {id_type}) IS NULL OR i.id>?) ORDER BY i.id LIMIT ?"
             );
-            Ok(diesel::sql_query(dialect.query(&sql))
+            let rows = diesel::sql_query(dialect.query(&sql))
                 .bind::<IdentitySql, _>(agent)
                 .bind::<Nullable<IdentitySql>, _>(cursor)
                 .bind::<Nullable<IdentitySql>, _>(cursor)
                 .bind::<BigInt, _>(i64::from(PAGE_SIZE) + 1)
                 .load::<SavedRow>(connection)
-                .await?)
+                .await?;
+            let mut model_slots = Vec::with_capacity(rows.len());
+            for row in rows.iter().take(usize::from(PAGE_SIZE)) {
+                model_slots.push(keys::get_or_reserve!(connection, dialect, agent, row.id)?);
+            }
+            Ok((rows, model_slots))
         })?;
         let has_more = rows.len() > usize::from(PAGE_SIZE);
         rows.truncate(usize::from(PAGE_SIZE));
@@ -284,9 +292,11 @@ impl Store {
         };
         let items = rows
             .into_iter()
-            .map(|row| {
+            .zip(model_slots)
+            .map(|(row, model_slot)| {
                 let id = row.id.to_dto(EntityKind::AgentIntegration);
                 Ok(SavedMcpConnection {
+                    model_slot,
                     settings_key: row.secret.settings_key(
                         &self.cipher,
                         scope.execution.agent_id,
